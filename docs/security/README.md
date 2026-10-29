@@ -54,7 +54,7 @@ the record that found it. The notes below the table name each such finding.
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 2 ⁷ |
 | HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
-| Blocking HTTP client | [http-client.md](http-client.md) | `std/net/http-client.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 2 |
+| Blocking HTTP client | [http-client.md](http-client.md) | `std/net/http-client.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 2 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
@@ -75,7 +75,7 @@ the record that found it. The notes below the table name each such finding.
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 35 / 127** | **0 / 0 / 1 / 26** |
+| **Total** ⁸ | | | **3 / 10 / 35 / 128** | **0 / 0 / 1 / 26** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation

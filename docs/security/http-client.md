@@ -16,9 +16,9 @@ wait has a deadline, and `totalTimeoutMs` bounds a whole fetch, so a server
 that drips its body cannot hold one forever. A body is capped by
 `maxBodyBytes` and by what `readAll` is asked for. A redirect is followed only
 when asked, never from https to http, and to another origin only when asked
-too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. One
-finding was fixed while the module was written (HF-1, Low); two are open
-(HF-2 and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
+too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. Two
+findings were fixed while the module was written (HF-1 and HF-4, Low); two
+are open (HF-2 and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
 server's chain is checked under the caller's roots, or the system's, at the
 wall clock's time and for the URL's host before a byte of the request is
 sent; no root to trust is a refusal before any connection; there is no switch
@@ -69,6 +69,7 @@ for the end of a body.
 | --- | --- | --- | --- | --- |
 | HF-1 | Low | `std/net/http-client.ts` (`HttpClient.readBody`) | A reader whose body had ended answered the client's latest error, not its own: once a later fetch failed, a body already read to its end answered that failure on its next `read`, so a program could take a whole body for a failed one, and a failed one could answer 0 after a later success. | **Fixed** before the module shipped: the client keeps the body's own failure in `bodyError`, set where that body fails and cleared when the next one opens. Before, `a body read to its end answers 0 again` failed; after, it passes. |
 | HF-2 | Low | `std/net/http-client.ts` (`HttpClient.fetch`) | With `crossOriginRedirects` set, a hop to another origin drops `Authorization`, `Proxy-Authorization`, `Cookie` and `Host`, but a credential the caller sends under another name (`X-Api-Key`, `Private-Token`) goes on to the new origin. | **Open, accepted.** The client cannot know which of a caller's fields is a secret. The option is off by default, and the guide says to leave it off for a request that carries a credential in a field of its own. |
+| HF-4 | Low | `std/net/http-client.ts` (`httpFetch`) | `httpFetch` closed its client only when the fetch failed. After a success its connection stayed open, over https without a `close_notify`, until the process exited, and nothing could reach the client to close it: a CLI looping over `httpFetch` held a socket for every fetch, and the server never learned the session ended cleanly. | **Fixed** before the module shipped: `httpFetch`'s client is marked `once` and `release` closes it whole when its body ends, fails, or is refused past `readAll`'s limit. Before, `and once its body is read, it ends the connection with a close_notify` (in `net_http_fetch_tls`) failed; after, it passes. |
 | HF-3 | Low | `std/net/http-client.ts` (`HttpClient.fetch`, `send`, `dial`) | Each fetch makes its field arrays, its response, the response's copies of the parser's fields, the lookup's address arrays and its error text afresh, so they stay in the arena until the program resets it, as HC-1 records for the parser beneath. Bounded for each fetch by `maxRedirects + 1` heads of `HTTP_CLIENT_MAX_HEADERS` fields within the parser's caps. | **Open, accepted for now.** A long-running program fetches inside an arena it resets; a per-connection arena closes it with HC-1. |
 
 ## Fuzzing
@@ -124,7 +125,10 @@ Content-Length past maxBodyBytes is HTTP_E_BODY_TOO_LARGE before the body is
 read`, `and a chunked body is cut off as it passes maxBodyBytes`); `readAll`
 refuses a body past its own limit and reads one exactly at it whole (`and so
 is one past readAll's limit`, `while one exactly at the limit is read whole`).
-A stream is handed out as it arrives (`an event stream's first event is read
+A body that failed, cut short or refused, answers the same error on every later
+read (`and the body answers that error again when read after it`, twice), and
+one read two bytes at a time is whole (`a body read two bytes at a time is
+read whole`). A stream is handed out as it arrives (`an event stream's first event is read
 while the server holds the stream open`).
 
 **Keep-alive cannot mix responses.** A second fetch reuses the connection
@@ -135,22 +139,27 @@ left unread answers an error once the next fetch starts`, `and the next fetch
 went on a new connection`); a body read to its end answers 0 again (HF-1). A
 kept connection the server closed is retried once for a GET and never for a
 POST (`a GET on it is sent again on a fresh connection`, `a POST on it is not
-sent twice: it fails with HTTP_E_IO`).
+sent twice: it fails with HTTP_E_IO`). A response that says `Connection:
+close` ends its connection even when the server leaves the socket open (`a
+response that says Connection: close is read`, `and its connection is not used
+again, though the server left it open`).
 
 **Redirects.** Not followed by default (`a redirect is not followed by
 default`); followed, bounded by `maxRedirects` (`a redirect loop is
-HTTP_E_TOO_MANY_REDIRECTS after maxRedirects`); refused to another origin, to
+HTTP_E_TOO_MANY_REDIRECTS after maxRedirects`, `exactly maxRedirects
+redirects are followed`, `and one more is HTTP_E_TOO_MANY_REDIRECTS`); refused to another origin, to
 a scheme other than http or https, and from http to https unless
 `crossOriginRedirects` is set (`a redirect to another origin is refused by
 default`, `and so is one to an ftp URL`, `and one from http to https, which is
-another origin`). Allowed to another origin, the hop drops `Authorization` and
-`Cookie` and sends the new origin's `Host` (`without Authorization or
-Cookie`, `with the new origin's Host and the caller's other fields`). A hop
+another origin`). Allowed to another origin, the hop drops `Authorization`,
+`Proxy-Authorization` and `Cookie` and sends the new origin's `Host`
+(`without Authorization, Proxy-Authorization or Cookie`, `with the new origin's Host and the caller's other fields`). A hop
 from https to http is refused whatever the options say (`a redirect from
 https to http is refused even with crossOriginRedirects`, below). The method and body
 change as RFC 9110 §15.4 says (`a POST redirected by 303 becomes a GET without
 its body`, `and so does one redirected by 302`, `307 keeps the method and the
-body`, `and so does 308, its relative Location resolved`).
+body`, `and so does 308, its relative Location resolved`), and a HEAD stays a
+HEAD through a 303 (`a HEAD redirected by 303 stays a HEAD`).
 
 **Proxies.** `HTTP_PROXY` is ignored under CGI (`proxy variables: HTTP_PROXY
 is ignored under CGI (httpoxy)`); https never falls back to the http proxy
@@ -172,7 +181,11 @@ frozen in `certs.ts`; the client trusts only the test's root through
 (`an https fetch from a server the roots trust answers`, `and the next fetch
 reuses the TLS connection`); an IP literal is matched against the
 certificate's IP name (`an IP literal is matched against the certificate's IP
-name, on its own connection`). Every certificate the roots do not vouch for,
+name, on its own connection`). A client reads its roots once: a root file
+changed under it does not change what its next connection trusts (`a client
+reads its roots once, not again for each connection`). `httpFetch` ends its
+connection with a `close_notify` once its body is read (HF-4; `and once its
+body is read, it ends the connection with a close_notify`). Every certificate the roots do not vouch for,
 for this host, now, is `HTTP_E_CERTIFICATE` (`an expired certificate is
 HTTP_E_CERTIFICATE`, `a certificate for another name is HTTP_E_CERTIFICATE`,
 `a chain to a root the client does not trust is HTTP_E_CERTIFICATE`, `and so
@@ -183,7 +196,13 @@ HTTP_E_CERTIFICATE`, `and no connection was opened for it`). A server that
 does not speak TLS is `HTTP_E_TLS` (`a server that does not speak TLS is
 HTTP_E_TLS`), and a body the path cuts off without a `close_notify` is an
 error, never a short body (`a body cut off without a close_notify is
-HTTP_E_TLS, not a short body`). A redirect from https to http is refused even
+HTTP_E_TLS, not a short body`), while a body with no length ends cleanly at
+the server's `close_notify` (`a body with no length ends at the server's
+close_notify`). A pooled TLS connection the server dropped is retried on a
+new one (`a pooled TLS connection the server dropped is retried on a new
+one`), and a server silent through the handshake is a read timeout, not a TLS
+failure (`a server that never answers the handshake is HTTP_E_READ_TIMEOUT`).
+A redirect from https to http is refused even
 when cross-origin hops are allowed (`a redirect from https to http is refused
 even with crossOriginRedirects`), and https through a proxy is a `CONNECT`
 tunnel with TLS to the origin inside it (`https through an http proxy is a

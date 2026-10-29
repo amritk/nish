@@ -40,7 +40,8 @@ the response's head is in: `status`, `reason`, the `url` that answered and
 `header(name)`, in any case. The body is read through `res.body`:
 `readAll(limit)` answers it whole, or null past `limit` or on a failure, and
 `read(buf, off, n)` answers the next bytes as they arrive, 0 at the end and a
-negative code on a failure, for a stream you want as it comes. A request
+negative code on a failure, for a stream you want as it comes. Once the body
+ends or fails, `httpFetch` closes its connection; read it to the end. A request
 carries a body when you set `req.body`, with its `Content-Length` sent for
 you. A header value holding a line break, or a method that is not a token, is
 refused before a byte is sent.
