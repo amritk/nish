@@ -84,7 +84,7 @@ function builtinPanicKind(name: string): i32 -> @builtinPanicKind [exported]
   stackSites=0 stackLocals=0
   callee +0:8 isNetExport -> @isNetExport
   callee +0:29 isTermExport -> @isTermExport
-  callee +0:52 netRangeBuffer -> @netRangeBuffer
+  callee +0:77 netRangeBuffer -> @netRangeBuffer
 function sortByPosition(sites: PanicSite[]): void -> @sortByPosition
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

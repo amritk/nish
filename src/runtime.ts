@@ -443,7 +443,11 @@ export class RuntimeTable {
     // but not `willreturn` for the reason above (an `open` or a `write` to a
     // FIFO or a full pipe waits). Each only reads its array.
     this.add(
-      mayNotReturn("nish_rename", `declare noundef i32 @nish_rename(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+      mayNotReturn(
+        "nish_rename",
+        `declare noundef i32 @nish_rename(${STR_NOCAP}, ${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
     )
     this.add(mayNotReturn("nish_unlink", `declare noundef i32 @nish_unlink(${STR_NOCAP})`, EFFECT_WRITE))
     this.add(

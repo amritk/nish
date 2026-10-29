@@ -27,6 +27,17 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 `totalMemory`) to size a pool of workers; see
 [Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
 
+`nish:fs` is where a program replaces a file in one step: write the new
+contents beside the target, then `renameSync` the temporary over it, so a
+reader sees the old file or the new one and never half of either.
+`renameSync`, `unlinkSync` and `writeFileBytesSync` answer a number instead
+of exiting: `0` (or the bytes written) on success and a negative errno on
+failure, such as `-2` for a missing path or `-18` when the two names are on
+different filesystems, so the program decides what to say. Bytes that are
+not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
+through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
+[File I/O](../../LANGUAGE.md#file-io).
+
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
