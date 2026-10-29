@@ -22,7 +22,7 @@ the memory each response's fields leave in the arena.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1-client.ts` | `http1WriteRequestHead`, `http1RequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientPutHead`, `http1ClientListHas`); `Http1ResponseParser` (`expect`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`) and its helpers (`http1ClientReserve`, `http1ClientClamp`, `http1ClientFail`, `http1ClientStartHead`, `http1ClientStartResponse`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientDigitAt`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientConnectionHas`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientCloseBody`, `http1ClientNext`) |
+| `std/net/http1-client.ts` | `http1WriteRequestHead`, `http1RequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientPutHead`, `http1ClientListHas`); `Http1ResponseParser` (`expect`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`) and its helpers (`http1ClientReserve`, `http1ClientClamp`, `http1ClientFail`, `http1ClientStartHead`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientDigitAt`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientConnectionHas`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientCloseBody`, `http1ClientNext`), and the byte and text helpers both halves use (`http1ClientDigits`, `http1ClientPutDecimal`, `http1ClientIsSchemeByte`, `http1ClientIsComma`, `http1ClientTrimStart`, `http1ClientTrimEnd`) |
 
 Out of scope: `std/net/http1.ts`, whose byte classes, text helpers and chunk
 writers the client imports and whose record is
@@ -106,7 +106,8 @@ an HTTP/1.0 response (`HTTP1_E_CODING`), a bare LF anywhere a line ends
 (`HTTP1_E_BARE_LF`), an obs-fold, whitespace before the colon, a control
 byte in a value (`HTTP1_E_FIELD`), a chunk size with no digits, a `0x`, BWS
 with no extension, a control byte in an extension, chunk data longer than
-its size or followed by anything but CRLF (`HTTP1_E_CHUNK`), and a 101 the
+its size or followed by anything but CRLF (`HTTP1_E_CHUNK`, but a bare LF
+there is `HTTP1_E_BARE_LF`, even after data that ends in CR), and a 101 the
 client never asks for (`HTTP1_E_SWITCH`) — each `refused with N (…)` line.
 A 2xx to CONNECT is a tunnel whose framing fields are ignored (RFC 9110
 §9.3.6), and any other answer to CONNECT has a body like any response.
@@ -179,8 +180,8 @@ counted in 64 bits before a byte is written, so `HTTP1_NO_ROOM` (one byte
 short, a negative offset, an offset past the end) and `HTTP1_REFUSED` leave
 the buffer untouched (`and writes nothing`), and `http1RequestHead` answers
 `null` for a head past 2^30 bytes, the most one array holds, rather than
-wrapping its size (`refused: a head past 2^30 bytes`, sixteen fields sharing
-one 64 MiB value). The server parser of
+wrapping its size (`refused: a head past 2^30 bytes`, thirty-two fields
+sharing one 64 MiB value, past 2^31 in all). The server parser of
 `nish/net/http1` reads what the writer writes (`the server parser reads the
 head`).
 

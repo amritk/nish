@@ -366,6 +366,35 @@ const headerText = (p: Http1ResponseParser, name: string): string => {
   return v === null ? "null" : v;
 };
 
+/** The transcript of `text` fed whole to `p`, with `a`'s expect said for the first response only. */
+const firstAsked = (p: Http1ResponseParser, text: string, a: Ask): string => {
+  const data: u8[] = bytesOf(text);
+  const t: Transcript = new Transcript();
+  const start: i32 = 0;
+  p.expect(a.head, a.connect);
+  p.feed(data, start, toI32(data.length));
+  drain(p, t, false, false);
+  return ending(p, t);
+};
+
+/**
+ * Checks that `text`, whose header sections each meet a limit of `cap`
+ * exactly, ends `ends` responses under it, and none under `cap - 1`.
+ */
+const atCapEach = (t: Suite, name: string, which: i32, cap: i32, text: string, ends: i32, code: i32): void => {
+  t.eqStr(`${name}: each exactly at the limit`, outcomeOf(limitedParser(which, cap), text, plain()), `ends ${ends}, error 0`);
+  t.eqStr(`${name}: each one past it`, outcomeOf(limitedParser(which, cap - 1), text, plain()), `ends 0, error ${code}`);
+};
+
+/** What the parser holds once `text`, a kept-alive response and a malformed status line, is read. */
+const afterSecondLine = (text: string): string => {
+  const p: Http1ResponseParser = corpusParser();
+  outcomeOf(p, text, plain());
+  const keep: string = p.keepAlive() ? "keep" : "close";
+  const framing: string = p.chunked ? "chunked" : `length ${p.contentLength}`;
+  return `${p.status} 1.${p.minor} "${p.reason}" [${fieldsOf(p)}] ${framing} bodyLen ${p.bodyLen} ${keep}, error ${p.error}`;
+};
+
 /** Every request byte, as text, or "null" for a refusal. */
 const headText = (head: u8[] | null): string => (head === null ? "null" : textOf(head, 0, toI32(head.length)));
 
@@ -964,15 +993,16 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr("refused: names and values of different lengths", headText(http1RequestHead("GET", "/", ["Host", "Accept"], ["example.com"], none)), "null");
   const belowNone: i64 = -3;
   t.eqStr("refused: a body length below -2", requestWith("POST", "/", "", "", belowNone), "null");
-  // Sixteen fields sharing one 64 MiB value pass every per-field check but
-  // sum past the 2^30-byte head an array holds.
+  // Thirty-two fields sharing one 64 MiB value pass every per-field check but
+  // sum past the 2^30-byte head an array holds, and past 2^31 too, where an
+  // i32 sum would wrap.
   let wide: string = "a";
   for (let i: i32 = 0; i < 26; i += 1) {
     wide = `${wide}${wide}`;
   }
   const wideNames: string[] = ["Host"];
   const wideValues: string[] = ["example.com"];
-  for (let i: i32 = 0; i < 16; i += 1) {
+  for (let i: i32 = 0; i < 32; i += 1) {
     wideNames.push("X");
     wideValues.push(wide);
   }
@@ -1009,6 +1039,174 @@ export const http1ClientChecks = (): i32 => {
   t.ok("as a chunked POST", server.chunked && server.method === "POST" && server.target === "/upload");
   t.eqI32("with its body", server.next(), HTTP1_BODY);
   t.eqI32("to its end", server.next(), HTTP1_END);
+
+  // --- The mutation sweep's survivors -----------------------------------------
+  // Each check below fails under a mechanical mutant of the parser or the
+  // writer that every other check passes: an operand of `&&` or `||` deleted,
+  // a comparison's boundary moved by one, or a reset or clamp dropped.
+  // `docs/security/http1-client.md` → "Every condition is observed" lists the
+  // mutants that change nothing a caller can see, and why.
+
+  // The status line: 599 is the last status a response may carry.
+  accepted(t, "a status of 599", "HTTP/1.1 599 Last\r\nContent-Length: 0\r\n\r\n", plain());
+
+  // A negative limit is clamped to 0, so an empty line is within it and is
+  // refused as a status line; read unclamped, even an empty line is over it.
+  const belowZero: i32 = -5;
+  t.eqStr("a negative status-line limit is clamped to 0", outcomeOf(limitedParser(zero, belowZero), "\r\n", plain()), `ends 0, error ${HTTP1_E_STATUS_LINE}`);
+
+  // `expect` mid-response does nothing: the response that is being read
+  // answers the request it answered.
+  const midResponse: Http1ResponseParser = corpusParser();
+  const midwayText: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
+  midResponse.expect(false, false);
+  midResponse.feed(midwayText, zero, toI32(midwayText.length));
+  t.eqI32("expect mid-response: the head", midResponse.next(), HTTP1_HEAD);
+  midResponse.expect(false, true);
+  t.eqI32("expect mid-response: the body", midResponse.next(), HTTP1_BODY);
+  t.eqI32("expect mid-response: an end, not a tunnel", midResponse.next(), HTTP1_END);
+  t.eqI32("expect mid-response: then waiting for the next", midResponse.next(), HTTP1_NEED_MORE);
+
+  // A response's end forgets its `expect`: the next response answers a GET
+  // unless the caller says otherwise.
+  t.eqStr(
+    "a response after a HEAD's, with no fresh expect, has its body",
+    firstAsked(corpusParser(), "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc", toHead()),
+    '200 1.1 keep length -1 [content-length=3]\nbody ""\n200 1.1 keep length 3 [content-length=3]\nbody "abc"\nneeds more'
+  );
+  t.eqStr(
+    "a 2xx after a refused CONNECT's, with no fresh expect, is no tunnel",
+    firstAsked(corpusParser(), "HTTP/1.1 407 No\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", toConnect()),
+    '407 1.1 keep length 0 [content-length=0]\nbody ""\n200 1.1 keep length 0 [content-length=0]\nbody ""\nneeds more'
+  );
+  // A 300 to CONNECT is a redirect, not a tunnel.
+  t.eqStr(
+    "a 300 to CONNECT is read as a response",
+    transcriptWith(corpusParser(), "HTTP/1.1 300 Elsewhere\r\nContent-Length: 0\r\n\r\n", toConnect()),
+    '300 1.1 keep length 0 [content-length=0]\nbody ""\nneeds more'
+  );
+
+  // Bytes fed after `finish()` are dropped, even before `next()` reads the close.
+  const afterFinish: Http1ResponseParser = corpusParser();
+  const afterFinishHead: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhel");
+  const afterFinishRest: u8[] = bytesOf("lo");
+  afterFinish.expect(false, false);
+  afterFinish.feed(afterFinishHead, zero, toI32(afterFinishHead.length));
+  afterFinish.finish();
+  afterFinish.feed(afterFinishRest, zero, toI32(afterFinishRest.length));
+  t.eqI32("bytes fed after finish() are dropped", toI32(afterFinish.buffered()), toI32(afterFinishHead.length));
+  const afterFinishLog: Transcript = new Transcript();
+  drain(afterFinish, afterFinishLog, false, false);
+  t.eqStr("so the body is cut short", ending(afterFinish, afterFinishLog), `200 1.1 keep length 5 [content-length=5]\npartial body "hel"\nerror ${HTTP1_E_TRUNCATED}`);
+
+  // Each response's header section has its own byte and field budget, and so
+  // does a final response after a 1xx.
+  const twice: string = `HTTP/1.1 200 OK\r\n${head1}HTTP/1.1 200 OK\r\n${head1}`;
+  atCapEach(t, "the header section, of each of two responses", toI32(1), toI32(head1.length), twice, toI32(2), HTTP1_E_HEADER_LIMIT);
+  const hint1: string = "X-Hint: 000000000\r\nX-Padding: abcdefgh\r\n\r\n";
+  atCapEach(t, "the header section, of a 1xx and its final response", toI32(1), toI32(head1.length), `HTTP/1.1 103 Hints\r\n${hint1}HTTP/1.1 200 OK\r\n${head1}`, toI32(1), HTTP1_E_HEADER_LIMIT);
+  const threeFields: string = "HTTP/1.1 200 OK\r\nA: 1\r\nB: 2\r\nContent-Length: 0\r\n\r\n";
+  atCapEach(t, "the field count, of each of two responses", toI32(2), toI32(3), `${threeFields}${threeFields}`, toI32(2), HTTP1_E_COUNT_LIMIT);
+  atCapEach(t, "the field count, of a 1xx and its final response", toI32(2), toI32(3), `HTTP/1.1 103 Hints\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n${threeFields}`, toI32(1), HTTP1_E_COUNT_LIMIT);
+  // And its own body budget: 40 bytes each, under smallParser's 64 apiece.
+  const forty: string = repeat("x", toI32(40));
+  const chunked40: string = `HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n28\r\n${forty}\r\n0\r\n\r\n`;
+  t.eqStr("a chunked body budget, for each of two responses", outcomeOf(smallParser(), `${chunked40}${chunked40}`, plain()), "ends 2, error 0");
+
+  // A status line read after a kept-alive response starts from nothing: a
+  // malformed one leaves no status, reason, version, field or framing of the
+  // response before it.
+  t.eqStr(
+    "a malformed status line after a 1.0 keep-alive response",
+    afterSecondLine("HTTP/1.0 404 Gone\r\nConnection: keep-alive\r\nContent-Length: 3\r\n\r\nabcHTTP/1.1 2x0 Bad\r\n"),
+    `0 1.1 "" [] length -1 bodyLen 0 close, error ${HTTP1_E_STATUS_LINE}`
+  );
+  t.eqStr(
+    "a malformed status line after a chunked response",
+    afterSecondLine("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\nHTTP/1.1 2x0 Bad\r\n"),
+    `0 1.1 "" [] length -1 bodyLen 0 close, error ${HTTP1_E_STATUS_LINE}`
+  );
+  const between: Http1ResponseParser = corpusParser();
+  const betweenText: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nX-A: 1\r\n");
+  between.expect(false, false);
+  between.feed(betweenText, zero, toI32(betweenText.length));
+  between.next();
+  between.next();
+  t.ok("the first response may be followed by another", between.keepAlive());
+  between.expect(false, false);
+  t.eqI32("the second's head is not in yet", between.next(), HTTP1_NEED_MORE);
+  t.ok("and until it is, keepAlive() is false", !between.keepAlive());
+
+  // A refusal is never followed by a request on the same connection.
+  const refusal: Http1ResponseParser = smallParser();
+  outcomeOf(refusal, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n41\r\n", plain());
+  t.eqI32("a chunk over the body limit is refused", refusal.error, HTTP1_E_BODY_LIMIT);
+  t.ok("and the connection is not kept alive", !refusal.keepAlive());
+
+  // A line cut by a feed that moves the live bytes down is still found.
+  const moved: string = `HTTP/1.1 200 OK\r\nContent-Length: 980\r\n\r\n${repeat("y", toI32(980))}`;
+  const movedData: u8[] = bytesOf(`${moved}HTTP/1.1 204 None\r\n\r\n`);
+  const movedCut: i32 = toI32(moved.length) + 10;
+  t.eqStr(
+    "a status line split by a feed that moves the buffer",
+    transcriptSplitAt(movedData, movedCut, plain()),
+    `200 1.1 keep length 980 [content-length=980]\nbody "${repeat("y", toI32(980))}"\n204 1.1 keep length -1 []\nbody ""\nneeds more`
+  );
+
+  // A bare LF where a line starts: the stream's first byte, and the CRLF
+  // after chunk data whose last byte is a CR.
+  refused(t, "an LF as the stream's first byte", "\nHTTP/1.1 200 OK\r\n\r\n", plain(), HTTP1_E_BARE_LF);
+  refused(t, "a bare LF after chunk data that ends in CR", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabc\r\n0\r\n\r\n", plain(), HTTP1_E_BARE_LF);
+
+  // `header` answers the first of a repeated field, and `null` for none.
+  const twoOf: Http1ResponseParser = corpusParser();
+  const twoOfText: u8[] = bytesOf("HTTP/1.1 200 OK\r\nX-A: first\r\nx-a: second\r\nContent-Length: 0\r\n\r\n");
+  twoOf.expect(false, false);
+  twoOf.feed(twoOfText, zero, toI32(twoOfText.length));
+  twoOf.next();
+  t.eqStr("header() answers the first of two fields", headerText(twoOf, "X-A"), "first");
+  t.eqStr("header() answers null for an absent field", headerText(twoOf, "X-B"), "null");
+
+  // Framing: a Content-Length byte just below the digits, a list that starts
+  // with 0, 2^53 given twice, and Connection words in other fields or in 1.0.
+  refused(t, "a Content-Length with a / after its digits", "HTTP/1.1 200 OK\r\nContent-Length: 1/\r\n\r\n", plain(), HTTP1_E_LENGTH);
+  refused(t, "a Content-Length list of 0 and 5", "HTTP/1.1 200 OK\r\nContent-Length: 0, 5\r\n\r\n", plain(), HTTP1_E_LENGTH);
+  const largestBody: i64 = 9007199254740992;
+  const atMaxBody: Http1ResponseParser = new Http1ResponseParser(toI32(64), toI32(512), toI32(16), largestBody, toI32(128));
+  t.eqStr(
+    "a Content-Length of 2^53 given twice, to a HEAD",
+    transcriptWith(atMaxBody, "HTTP/1.1 200 OK\r\nContent-Length: 9007199254740992, 9007199254740992\r\n\r\n", toHead()),
+    '200 1.1 keep length -1 [content-length=9007199254740992, 9007199254740992]\nbody ""\nneeds more'
+  );
+  t.eqStr("a close in another field keeps a 1.1 response alive", transcriptWith(corpusParser(), "HTTP/1.1 200 OK\r\nX-A: close\r\nContent-Length: 0\r\n\r\n", plain()), '200 1.1 keep length 0 [x-a=close; content-length=0]\nbody ""\nneeds more');
+  t.eqStr(
+    "a 1.0 response listing keep-alive and close closes",
+    transcriptWith(corpusParser(), "HTTP/1.0 200 OK\r\nConnection: keep-alive, close\r\nContent-Length: 0\r\n\r\n", plain()),
+    '200 1.0 close length 0 [connection=keep-alive, close; content-length=0]\nbody ""\nclosed'
+  );
+
+  // The writer: a two-digit Content-Length, every scheme byte and the bytes
+  // next to their ranges, the first letter's range, and CONNECT's ports.
+  t.eqStr("a POST of 10 bytes says Content-Length: 10", requestWith("POST", "/", "", "", toI64(10)), "POST / HTTP/1.1\r\nHost: example.com\r\nContent-Length: 10\r\n\r\n");
+  const nameOnly: string[] = ["Host"];
+  const hostOnly: string[] = ["example.com"];
+  const okTargets: string[] = ["azAZ09+-.:x", "a:x", "z:x", "A:x", "Z:x"];
+  for (const target of okTargets) {
+    t.ok(`the absolute-form target ${target} is written`, http1RequestHead("GET", target, nameOnly, hostOnly, none) !== null);
+  }
+  const badTargets: string[] = ["a{:x", "a`:x", "a[:x", "a@:x", "a/:x", "a;:x", "a,:x", "a*:x", "{:x", "[:x", "@:x", "`:x"];
+  for (const target of badTargets) {
+    t.ok(`the target ${target} is refused`, http1RequestHead("GET", target, nameOnly, hostOnly, none) === null);
+  }
+  const okPorts: string[] = ["h:65535", "a:9", "a:1", "a:90", "host:65530"];
+  for (const target of okPorts) {
+    t.ok(`CONNECT ${target} is written`, http1RequestHead("CONNECT", target, nameOnly, hostOnly, none) !== null);
+  }
+  const badPorts: string[] = ["a/b:80", "a:8.0", "a:", ":80", "a:123456"];
+  for (const target of badPorts) {
+    t.ok(`CONNECT ${target} is refused`, http1RequestHead("CONNECT", target, nameOnly, hostOnly, none) === null);
+  }
+  t.ok("a field whose value is upgrade is written when it is not Connection", requestWith("GET", "/", "X-A", "upgrade", none) !== "null");
 
   t.eqI32("HTTP1_E_NONE is 0, before anything goes wrong", smallParser().error, HTTP1_E_NONE);
   return t.done();

@@ -381,7 +381,7 @@ export const http1WriteRequestHead = (
   if (need < toI64(0)) {
     return HTTP1_REFUSED
   }
-  if (at < 0 || at > toI32(out.length) || need > toI64(toI32(out.length) - at)) {
+  if (at < 0 || need > toI64(toI32(out.length) - at)) {
     return HTTP1_NO_ROOM
   }
   return http1ClientPutHead(out, at, method, target, names, values, bodyLength)
@@ -554,7 +554,6 @@ export class Http1ResponseParser {
     this.body = this.buf
     this.names = []
     this.values = []
-    http1ClientStartResponse(this)
   }
 
   /**
@@ -610,7 +609,6 @@ export class Http1ResponseParser {
       return http1ClientNext(this)
     }
     if (this.state === HTTP1_CLIENT_S_STATUS_LINE && this.informational === 0 && this.end === this.start) {
-      this.state = HTTP1_CLIENT_S_CLOSED
       return HTTP1_CLOSED
     }
     return http1ClientFail(this, HTTP1_E_TRUNCATED, "the connection closed before the response ended")
@@ -680,8 +678,6 @@ const http1ClientReserve = (p: Http1ResponseParser, len: i32): void => {
     copyBytes(buf, 0, old, from, live)
   }
   p.buf = buf
-  p.lineStart -= from
-  p.lineEnd -= from
   p.scan -= from
   p.start = 0
   p.end = live
@@ -700,9 +696,8 @@ const http1ClientFail = (p: Http1ResponseParser, code: i32, text: string): i32 =
   return HTTP1_ERROR
 }
 
-/** Clears the per-response fields and waits for a status line. */
+/** Clears the per-response fields for the status line just taken. */
 const http1ClientStartHead = (p: Http1ResponseParser): void => {
-  p.state = HTTP1_CLIENT_S_STATUS_LINE
   p.status = 0
   p.reason = ""
   p.minor = 1
@@ -715,14 +710,6 @@ const http1ClientStartHead = (p: Http1ResponseParser): void => {
   p.bodyTotal = toI64(0)
   p.sectionBytes = 0
   p.fieldCount = 0
-}
-
-/** Clears the per-request fields too: the next response answers a new request. */
-const http1ClientStartResponse = (p: Http1ResponseParser): void => {
-  http1ClientStartHead(p)
-  p.informational = 0
-  p.wasHead = false
-  p.wasConnect = false
 }
 
 /**
@@ -748,7 +735,6 @@ const http1ClientTakeLine = (p: Http1ResponseParser, limit: i32, overCode: i32, 
       p.lineStart = p.start
       p.lineEnd = i - 1
       p.start = i + 1
-      p.scan = i + 1
       return HTTP1_CLIENT_LINE
     }
     i += 1
@@ -898,8 +884,7 @@ const http1ClientLengthList = (value: string, seen: i64): i64 => {
           v = HTTP1_CLIENT_MAX_BODY + toI64(1)
         }
       }
-      const saturated: boolean = v > HTTP1_CLIENT_MAX_BODY || found > HTTP1_CLIENT_MAX_BODY
-      if (found >= toI64(0) && (found !== v || saturated)) {
+      if (found >= toI64(0) && (found !== v || v > HTTP1_CLIENT_MAX_BODY)) {
         return toI64(-2)
       }
       found = v
@@ -977,7 +962,6 @@ const http1ClientEndOfHead = (p: Http1ResponseParser): i32 => {
   if (p.wasConnect && status < 300) {
     // RFC 9110 §9.3.6: a 2xx to CONNECT has no content, and its framing
     // fields are ignored; what follows the head is the tunnel's.
-    p.persistent = false
     p.state = HTTP1_CLIENT_S_MESSAGE_END
     return HTTP1_HEAD
   }
@@ -1116,7 +1100,6 @@ const http1ClientBodyWindow = (p: Http1ResponseParser, after: i32): i32 => {
   p.bodyOff = p.start
   p.bodyLen = take
   p.start += take
-  p.scan = p.start
   p.left = p.left - toI64(take)
   p.bodyTotal = p.bodyTotal + toI64(take)
   if (p.left === toI64(0)) {
@@ -1218,7 +1201,7 @@ const http1ClientNext = (p: Http1ResponseParser): i32 => {
         break
       }
       case HTTP1_CLIENT_S_MESSAGE_END: {
-        if (p.wasConnect && p.status >= 200 && p.status < 300) {
+        if (p.wasConnect && p.status < 300) {
           p.state = HTTP1_CLIENT_S_TUNNEL
         } else if (!p.persistent) {
           p.state = HTTP1_CLIENT_S_CLOSED

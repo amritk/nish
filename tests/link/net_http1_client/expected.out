@@ -277,5 +277,71 @@ PASS  the server parser reads the head
 PASS  as a chunked POST
 PASS  with its body
 PASS  to its end
+PASS  accepted: a status of 599
+PASS  a negative status-line limit is clamped to 0
+PASS  expect mid-response: the head
+PASS  expect mid-response: the body
+PASS  expect mid-response: an end, not a tunnel
+PASS  expect mid-response: then waiting for the next
+PASS  a response after a HEAD's, with no fresh expect, has its body
+PASS  a 2xx after a refused CONNECT's, with no fresh expect, is no tunnel
+PASS  a 300 to CONNECT is read as a response
+PASS  bytes fed after finish() are dropped
+PASS  so the body is cut short
+PASS  the header section, of each of two responses: each exactly at the limit
+PASS  the header section, of each of two responses: each one past it
+PASS  the header section, of a 1xx and its final response: each exactly at the limit
+PASS  the header section, of a 1xx and its final response: each one past it
+PASS  the field count, of each of two responses: each exactly at the limit
+PASS  the field count, of each of two responses: each one past it
+PASS  the field count, of a 1xx and its final response: each exactly at the limit
+PASS  the field count, of a 1xx and its final response: each one past it
+PASS  a chunked body budget, for each of two responses
+PASS  a malformed status line after a 1.0 keep-alive response
+PASS  a malformed status line after a chunked response
+PASS  the first response may be followed by another
+PASS  the second's head is not in yet
+PASS  and until it is, keepAlive() is false
+PASS  a chunk over the body limit is refused
+PASS  and the connection is not kept alive
+PASS  a status line split by a feed that moves the buffer
+PASS  refused with 3 (a line ended in a bare LF): an LF as the stream's first byte
+PASS  refused with 3 (a line ended in a bare LF): a bare LF after chunk data that ends in CR
+PASS  header() answers the first of two fields
+PASS  header() answers null for an absent field
+PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length with a / after its digits
+PASS  refused with 8 (Content-Length values that differ, or one past 2^53 given twice): a Content-Length list of 0 and 5
+PASS  a Content-Length of 2^53 given twice, to a HEAD
+PASS  a close in another field keeps a 1.1 response alive
+PASS  a 1.0 response listing keep-alive and close closes
+PASS  a POST of 10 bytes says Content-Length: 10
+PASS  the absolute-form target azAZ09+-.:x is written
+PASS  the absolute-form target a:x is written
+PASS  the absolute-form target z:x is written
+PASS  the absolute-form target A:x is written
+PASS  the absolute-form target Z:x is written
+PASS  the target a{:x is refused
+PASS  the target a`:x is refused
+PASS  the target a[:x is refused
+PASS  the target a@:x is refused
+PASS  the target a/:x is refused
+PASS  the target a;:x is refused
+PASS  the target a,:x is refused
+PASS  the target a*:x is refused
+PASS  the target {:x is refused
+PASS  the target [:x is refused
+PASS  the target @:x is refused
+PASS  the target `:x is refused
+PASS  CONNECT h:65535 is written
+PASS  CONNECT a:9 is written
+PASS  CONNECT a:1 is written
+PASS  CONNECT a:90 is written
+PASS  CONNECT host:65530 is written
+PASS  CONNECT a/b:80 is refused
+PASS  CONNECT a:8.0 is refused
+PASS  CONNECT a: is refused
+PASS  CONNECT :80 is refused
+PASS  CONNECT a:123456 is refused
+PASS  a field whose value is upgrade is written when it is not Connection
 PASS  HTTP1_E_NONE is 0, before anything goes wrong
-http1-client: 280 passed, 0 failed, 0 skipped
+http1-client: 346 passed, 0 failed, 0 skipped
