@@ -267,5 +267,23 @@ export const main = (): number => {
     conn.consume(conn.outputEnd - conn.outputStart)
     t.eqI32("h1 later: once sent, gzip fits", conn.respondEncoded(200, names, values, body, 0, 5221, enc, HTTP_CODING_GZIP), 0)
   }
+  {
+    // H1_AGAIN behind a response that is half sent: the output was moved up
+    // to make room, and what is left queued is exactly the unsent rest.
+    const small = new Http1Config()
+    small.outputSize = 4096
+    const conn = request(t, "h1 half sent", small, "GET", "accept-encoding: gzip\r\n")
+    t.eqI32("h1 half sent: the first answer", conn.respondEncoded(200, names, values, body, 0, 1500, enc, HTTP_CODING_IDENTITY), 0)
+    const second: u8[] = ascii("GET /again HTTP/1.1\r\nhost: example.com\r\n\r\n")
+    conn.feed(second, 0, toI32(second.length))
+    t.eqI32("h1 half sent: the first request ends", conn.next(), H1_END)
+    t.eqI32("h1 half sent: a second request", conn.next(), H1_REQUEST)
+    conn.consume(1000)
+    const live: i32 = conn.outputEnd - conn.outputStart
+    const unsent: string = textOf(conn.output, conn.outputStart, conn.outputEnd)
+    t.eqI32("h1 half sent: a body that does not fit is H1_AGAIN", conn.respondEncoded(200, names, values, body, 0, 3500, enc, HTTP_CODING_IDENTITY), H1_AGAIN)
+    t.eqI32("h1 half sent: only the unsent rest is queued", conn.outputEnd - conn.outputStart, live)
+    t.ok("h1 half sent: and it is those bytes", textOf(conn.output, conn.outputStart, conn.outputEnd) === unsent)
+  }
   return t.done()
 }
