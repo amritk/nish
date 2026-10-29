@@ -52,6 +52,8 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
 | [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
+| [`nish/net/dns-message`](#nishnetdns-message) | `dnsBuildQuery` and `dnsParseReply`: one DNS question as bytes, and the A or AAAA addresses a reply gives it, following its CNAME chain, with every count and pointer bounded |
+| [`nish/net/dns-config`](#nishnetdns-config) | `dnsParseResolvConf` and `dnsParseHosts`: `/etc/resolv.conf` and `/etc/hosts` read into fixed tables; `dnsHostsFind` and `dnsParseAddress` |
 
 ## `nish/testing`
 
@@ -1969,6 +1971,108 @@ binary. The `name` you give `urlQueryFind` or `urlQueryGet` is ASCII: the
 native build compares it with the key's bytes and Node with its UTF-16 code
 units, so a non-ASCII name answers differently on the two. Nothing here looks
 for a `#`, which is never part of a request target.
+
+## `nish/net/dns-message`
+
+A DNS lookup is one UDP datagram out and one back. `nish/net/dns-message` writes
+the first and reads the second; it opens no socket, so you send and receive
+the bytes yourself. `dnsBuildQuery(out, id, name, qtype)` writes a question for
+`name` of type `DNS_TYPE_A` or `DNS_TYPE_AAAA`, with recursion asked for, and
+answers its length: `out` of `DNS_QUERY_MAX_BYTES` (271) always has room. A
+name that is not one (an empty label, a label over 63 bytes, a name over 253,
+a byte outside printable ASCII) answers a negative `DNS_ERR_*` instead. Pick
+`id` at random for each query: it is half of what keeps a forged reply out.
+
+`dnsParseReply(msg, len, query, queryLen, port, reply)` reads a reply into a
+`DnsReply` you make once and reuse. It answers the reply's RCODE
+(`DNS_NOERROR`, `DNS_NXDOMAIN`, `DNS_SERVFAIL`, `DNS_REFUSED`) or a negative
+`DNS_ERR_*`: a reply whose ID, question or flags do not match your query is
+refused before a record is read, so read it as "not my answer" and keep
+waiting. On `DNS_NOERROR`, `reply.count` addresses are in `reply.addresses`,
+18 bytes each, the form `nish:net` connects to, with `port` written in; at
+most `DNS_MAX_ANSWERS` (8) are kept and `reply.dropped` counts the rest. When
+`reply.truncated` is set, nothing was read: ask again over TCP.
+
+```ts nish:ok
+import {
+  DNS_ERR_NOT_REPLY,
+  DNS_QUERY_MAX_BYTES,
+  DNS_TYPE_A,
+  DnsReply,
+  dnsBuildQuery,
+  dnsParseReply,
+} from "nish/net/dns-message";
+
+export const main = (): i32 => {
+  const query: u8[] = new Array<u8>(DNS_QUERY_MAX_BYTES);
+  const n: i32 = dnsBuildQuery(query, 0x1234, "example.com", DNS_TYPE_A);
+  console.log(`${n} bytes`);
+  // A reply that is only an echo of the query has QR clear: not a reply.
+  const reply = new DnsReply();
+  const status: i32 = dnsParseReply(query, n, query, n, 443, reply);
+  console.log(`${status === DNS_ERR_NOT_REPLY ? "not a reply" : "read"}`);
+  return 0;
+};
+```
+
+```console
+$ nish run lookup.ts
+29 bytes
+not a reply
+```
+
+**A CNAME chain is followed inside the one reply.** An address is kept only
+when its owner is the name you asked, or the last name a CNAME record before
+it pointed to; a record for any other name is read past. Compression pointers
+must point backwards, at most 16 deep, and a name never grows past 255 bytes,
+so no reply makes the parser loop or read outside `msg[0, len)`.
+
+## `nish/net/dns-config`
+
+`nish/net/dns-config` reads `/etc/resolv.conf` and `/etc/hosts` from bytes you
+have already read, into tables of fixed size. `dnsParseResolvConf(b, off, len,
+config)` fills a `DnsConfig`: up to three `servers` (18 bytes each, on port
+53), up to six `search` domains in 256 bytes, and `ndots`, `timeout` and
+`attempts` from `options`, each clamped (0 to 15, 1 to 30, 1 to 5). A file
+with no usable `nameserver` gives 127.0.0.1 and ::1, as glibc does.
+`dnsParseHosts(b, off, len, hosts)` fills a `DnsHosts`, and
+`dnsHostsFind(hosts, name, qtype, port, out, max)` writes the addresses it
+gives `name`, without case, in file order, and answers how many.
+
+```ts nish:ok
+import { DnsHosts, dnsHostsFind, dnsParseHosts } from "nish/net/dns-config";
+import { DNS_TYPE_A } from "nish/net/dns-message";
+
+const bytesOf = (text: string): u8[] => {
+  const out: u8[] = [];
+  const n: i32 = toI32(text.length);
+  for (let i: i32 = 0; i < n; i++) {
+    out.push(toU8(text.charCodeAt(i)));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const file = bytesOf("127.0.0.1 localhost\n::1 localhost\n192.0.2.7 Build.Lan build # CI\n");
+  const hosts = new DnsHosts();
+  dnsParseHosts(file, 0, toI32(file.length), hosts);
+  const out: u8[] = new Array<u8>(4 * 18);
+  console.log(`${dnsHostsFind(hosts, "BUILD", DNS_TYPE_A, 22, out, 4)} address, ${out[15]}`);
+  return 0;
+};
+```
+
+```console
+$ nish run hosts.ts
+1 address, 7
+```
+
+Neither file is trusted to be small: what does not fit a table is dropped and
+counted (`droppedServers`, `droppedSearch`, `droppedEntries`, `droppedNames`),
+and a line over 1024 bytes is skipped whole and counted in `skippedLines`. An
+address is a strict literal: `010.0.0.1` and `fe80::1%eth0` are refused, not
+read as octal or with a zone. `dnsParseAddress` is the same reader, for a
+literal anywhere in your own bytes.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports
