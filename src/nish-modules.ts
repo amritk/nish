@@ -119,10 +119,10 @@ export const nishModuleExports = (specifier: string): string => {
     return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, monotonicNanos, signalFd, readSignal, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+    return "netAddress, netResolve, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -149,6 +149,9 @@ export const nishModuleExports = (specifier: string): string => {
 export const netSignature = (name: string): string => {
   if (name === "netAddress") {
     return "wsi"
+  }
+  if (name === "netResolve") {
+    return "wsii"
   }
   if (name === "netLocalPort" || name === "netClose" || name === "connectResult") {
     return "i"
@@ -200,7 +203,7 @@ export const netSignature = (name: string): string => {
  * size, ECN bits, a loop, readiness events, a token, a timeout).
  */
 export const NET_INT: i32 = 105
-/** `s`: a `string`, a numeric host. */
+/** `s`: a `string`, a host: numeric, or a name `netResolve` looks up. */
 export const NET_STRING: i32 = 115
 /** `w`: a `u8[]` the call writes. */
 const NET_WRITTEN: i32 = 119
@@ -308,6 +311,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "availableParallelism" ||
       name === "totalMemory" ||
       name === "monotonicNanos" ||
+      name === "wallClockNanos" ||
       name === "signalFd" ||
       name === "readSignal"
     ) {

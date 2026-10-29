@@ -351,7 +351,7 @@ const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
 const RUNTIME_HOST_TEXT_BUDGET = 768
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
- * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
+ * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netResolve`, `netLocalPort`, `tcpListen`,
  * `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`, then `udpBind`,
  * `udpSendTo` and `udpRecvFrom`, then the readiness loop: `pollCreate`, `pollAdd`,
  * `pollModify`, `pollRemove` and `pollWait`.
@@ -361,7 +361,8 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * control messages were added (the ceiling went from 1,024 to 2,048), and
  * **2,071 bytes** the same day once the epoll loop was added (2,048 to 2,304), and
  * **2,335 bytes** on 2026-10-20 once `tcpListenFlags` and its `SO_REUSEPORT` were
- * added (2,304 to 2,560).
+ * added (2,304 to 2,560), and **2,864 bytes** on 2026-10-29 once `netResolve`'s
+ * `getaddrinfo` was added (2,560 to 3,072) from a file that had drifted to 2,520.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -369,7 +370,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 2560
+const NET_TEXT_BUDGET = 3072
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`

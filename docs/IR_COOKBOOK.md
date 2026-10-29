@@ -22005,6 +22005,102 @@ attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-net-reuseport -->
 
+### `nish:net`: `netResolve`
+
+A host name to addresses, through `getaddrinfo` with `SOCK_STREAM` and
+`AI_ADDRCONFIG`. Each address it writes is the 18-byte form `netAddress` writes
+and `tcpConnect` reads, so the first answer is a `tcpConnect` argument as it
+stands. It is one call into `runtime/runtime-net.c`, a write as every `nish:net`
+call is, and `nounwind` alone: unlike `netAddress` the lookup reads files and
+may wait on a resolver over the network, so it does not keep `willreturn`. The
+host travels as `tcpListen`'s does, and the runtime refuses an empty one, one
+longer than 253 bytes or one with a NUL before libc sees it, so the IR carries
+no check of its own
+([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+
+<!-- cookbook:begin builtin-net-resolve -->
+```ts
+// `netResolve`, a host name to addresses through `getaddrinfo`. Each address
+// is the 18-byte form `netAddress` writes and `tcpConnect` reads, so a lookup
+// feeds a connect with nothing in between. It lowers to one call into
+// runtime-net.c, `nounwind` alone: the lookup may wait on a resolver.
+import { netResolve, tcpConnect } from "nish:net"
+
+export const dial = (host: string, port: i32): i32 => {
+  const addrs: u8[] = new Array<u8>(18)
+  const n = netResolve(addrs, host, port, 0)
+  return n < 1 ? n : tcpConnect(addrs)
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noundef i32 @nish_net_resolve(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish_tcp_connect(%struct.nish_array* noundef nonnull align 8 nocapture readonly) #1
+
+define noundef i32 @dial(i8* noundef nonnull noalias readonly align 8 nocapture %host, i32 noundef %port) #0 {
+entry:
+  %addrs.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [18 x i8], align 8
+  %n.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 18, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 18, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast [18 x i8]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %2, i8 0, i64 18, i1 false), !alias.scope !4, !noalias !3
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %addrs.addr, align 8
+  %4 = load %struct.nish_array*, %struct.nish_array** %addrs.addr, align 8
+  %5 = call i32 @nish_net_resolve(%struct.nish_array* %4, i8* %host, i32 %port, i32 0)
+  store i32 %5, i32* %n.addr, align 4
+  %6 = load i32, i32* %n.addr, align 4
+  %7 = icmp slt i32 %6, 1
+  br i1 %7, label %cond.true, label %cond.false
+
+cond.true:
+  %8 = load i32, i32* %n.addr, align 4
+  br label %cond.end
+
+cond.false:
+  %9 = load %struct.nish_array*, %struct.nish_array** %addrs.addr, align 8
+  %10 = call i32 @nish_tcp_connect(%struct.nish_array* %9)
+  br label %cond.end
+
+cond.end:
+  %11 = phi i32 [ %8, %cond.true ], [ %10, %cond.false ]
+  ret i32 %11
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-resolve -->
+
 ### `nish:net`: `pollCreate`, `pollAdd` and `pollWait`
 
 The readiness loop (WP34 N5), one call into `runtime/runtime-net.c` each,
@@ -23026,6 +23122,43 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end builtin-driver -->
 
+### The wall clock
+
+`wallClockNanos` is `monotonicNanos` on `CLOCK_REALTIME`: one call answering an
+`i64`, `willreturn` and a write, so two reads never fold into one. The division
+is the checked `i64` one, with nothing to check: the divisor is a constant that
+is neither zero nor `-1`.
+
+<!-- cookbook:begin builtin-wall-clock -->
+```ts
+// `wallClockNanos`, `CLOCK_REALTIME` in nanoseconds since the epoch: the same
+// one call as `monotonicNanos`, on the other clock.
+import { wallClockNanos } from "nish:process"
+
+export const seconds = (): i64 => wallClockNanos() / 1000000000
+```
+
+```llvm
+declare i64 @nish_wall_clock_nanos() #0
+
+define noundef i64 @seconds() #0 {
+entry:
+  %0 = call i64 @nish_wall_clock_nanos()
+  %1 = sdiv i64 %0, 1000000000
+  ret i64 %1
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-wall-clock -->
+
 ### Reading the environment
 
 `getenv` is the only environment read the language has, and it is a call rather
@@ -23902,6 +24035,7 @@ declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #3
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #3
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_monotonic_nanos() #2
+declare i64 @nish_wall_clock_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #3
@@ -23921,6 +24055,7 @@ declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size(
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #3
 declare noundef i32 @nish_set_terminal_restore(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
+declare noundef i32 @nish_net_resolve(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #3
 declare noundef i32 @nish_net_local_port(i32 noundef) #2
 declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_tcp_listen_flags(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #2

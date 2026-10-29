@@ -276,6 +276,15 @@ function monotonicNanos() {
 }
 
 /**
+ * `wallClockNanos()`: the wall clock in nanoseconds since the epoch, a BigInt
+ * like `monotonicNanos`'s. Node's wall clock is `Date.now`, whole
+ * milliseconds, so the last six digits are zeros where a native run has them.
+ */
+function wallClockNanos() {
+  return BigInt(Date.now()) * 1000000n;
+}
+
+/**
  * `statMtimeSync(path)`: Node's `mtimeMs` for the path, or NaN when it cannot
  * be stat'd, which is the native answer too. `mtimeMs` is the same arithmetic
  * `runtime-host.c` does, so the two print the same digits, fraction and all.
@@ -357,6 +366,7 @@ const CALLS = {
   availableParallelism,
   totalMemory,
   monotonicNanos,
+  wallClockNanos,
   statMtimeSync,
   lstatOwnerModeSync,
   geteuid,

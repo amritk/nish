@@ -545,11 +545,17 @@ nish_array *nish_readdir(const nish_str *path) {
    backwards and make an elapsed time negative. Only the difference between two
    reads means anything — the origin is arbitrary and is not comparable across
    processes or machines — and an i64 of nanoseconds is 292 years of it. */
-int64_t nish_monotonic_nanos(void) {
+static int64_t nish_clock_nanos(clockid_t clock) {
   struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
+  clock_gettime(clock, &ts);
   return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
+int64_t nish_monotonic_nanos(void) { return nish_clock_nanos(CLOCK_MONOTONIC); }
+
+/* `wallClockNanos()`: `CLOCK_REALTIME`, nanoseconds since the Unix epoch, for
+   dating an event. It steps when the system time is set, so a duration is
+   `monotonicNanos`'s to measure. */
+int64_t nish_wall_clock_nanos(void) { return nish_clock_nanos(CLOCK_REALTIME); }
 
 /* A C string copied into the arena, or NULL for NULL: the shape of every
    answer libc hands back by pointer, `getenv`'s here and `realpath`'s below. */

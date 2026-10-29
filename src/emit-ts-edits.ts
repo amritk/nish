@@ -121,7 +121,7 @@ const AMBIENT_NAMES: string =
   " write writeError panic readFileSync readFileSyncOrNull" +
   " readFileBytesSync writeFileSync appendFileSync mkdirSync" +
   " isDirectorySync readdirSync realpathSync getenv spawnSync spawnSyncTo" +
-  " spawn kill waitPid availableParallelism totalMemory monotonicNanos" +
+  " spawn kill waitPid availableParallelism totalMemory monotonicNanos wallClockNanos" +
   " statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64" +
   " toF64 f64ToBits f32ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero" +
   " Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode" +

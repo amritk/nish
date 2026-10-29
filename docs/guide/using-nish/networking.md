@@ -26,8 +26,9 @@ the ones a loop branches on are the same on every platform:
 | `-111` | the connection was refused |
 | `-22` | a bad argument: a host that is not a numeric address, a flag that does not exist |
 
-Hosts are numeric literals, `"127.0.0.1"` or `"::1"`, because there is no name
-resolution. `"::"` listens on every address, IPv4 and IPv6 both.
+The calls that open a socket take numeric hosts, `"127.0.0.1"` or `"::1"`;
+`netResolve` turns a name into those, [below](#looking-a-name-up-netresolve).
+`"::"` listens on every address, IPv4 and IPv6 both.
 
 ## A server
 
@@ -133,6 +134,54 @@ export const main = (): i32 => {
 A program can watch both listeners in one loop, as in the server above, and
 accept from whichever is ready. A server that wants both the shared port and
 its small answers sent at once opens each listener with `3`.
+
+## Looking a name up: `netResolve`
+
+`netResolve(out, host, port, family)` asks the system's resolver for `host`'s
+addresses and writes each one, with `port`, into `out` as the 18-byte address
+`tcpConnect` takes: the first at `out[0]`, the next at `out[18]`, and so on, in
+the order the resolver gave them. It answers how many it wrote, which is no
+more than fit in `out`. `family` is `0` for any address, `4` for IPv4 only and
+`6` for IPv6 only. A numeric host is answered as itself, with no lookup.
+
+| Answer | Meaning |
+| --- | --- |
+| `-1001` | there is no such name |
+| `-1002` | the resolver did not answer this time; trying again later may work |
+| `-1003` | the lookup failed some other way |
+| `-22` | an empty host, one longer than 253 bytes or with a NUL in it, a port outside `0` to `65535`, a family other than `0`, `4` and `6`, or an `out` shorter than 18 bytes |
+
+```ts nish:ok
+import { netClose, netResolve, tcpConnect } from "nish:net";
+
+export const main = (): i32 => {
+  // Room for four addresses.
+  const addrs = new Array<u8>(18 * 4);
+  const n = netResolve(addrs, "localhost", 8080, 0);
+  if (n < 0) {
+    return 1;
+  }
+  console.log(`found an address: ${n >= 1}`); // true
+  // `tcpConnect` reads the first 18 bytes: the resolver's first answer.
+  const fd = tcpConnect(addrs);
+  if (fd >= 0) {
+    netClose(fd);
+  }
+  return 0;
+};
+```
+
+Three things to know before you rely on it:
+
+- **It waits.** The lookup reads `/etc/hosts` and may ask a DNS server over the
+  network, and the call does not return until it has an answer or gives up,
+  which can take seconds. A server should resolve the names it needs before it
+  starts its loop, not inside it.
+- **The answer is not proof.** The addresses come from `/etc/hosts` and the
+  resolver `/etc/resolv.conf` names, unauthenticated: whoever controls those,
+  or the network between you and the resolver, can answer with any address.
+  Check who you reached the way TLS does, with a certificate, when it matters.
+- **Native only.** As with every `nish:net` call, a `wasm32` build refuses it.
 
 ## A server on every core: `nish/net/prefork`
 
