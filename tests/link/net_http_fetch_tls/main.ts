@@ -95,6 +95,8 @@ class Servers {
   head: string = "";
   tunnel: boolean = false;
   connections: i32 = 0;
+  /** Whether `/alert-once` has answered with an alert yet. */
+  alerted: boolean = false;
   /** The connections whose client ended them with a close_notify. */
   notified: i32[];
   buf: u8[];
@@ -205,6 +207,13 @@ class Servers {
         this.reply(site, slot, "stale");
         site.server.flush(slot);
         site.server.connection(slot).abort();
+        site.server.close(slot);
+        return false;
+      }
+      if (line.startsWith("GET /alert-once ") && !this.alerted) {
+        this.alerted = true;
+        site.server.connection(slot).fail(80);
+        site.server.flush(slot);
         site.server.close(slot);
         return false;
       }
@@ -489,7 +498,10 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   }
   t.check(cut.errorText.indexOf("close_notify") >= 0, "and the error says the close_notify never came");
   const whole: HttpClient = new HttpClient(options);
-  t.check(bodyOf(whole.fetch(get(`${good}/until-close`))) === "until close", "a body with no length ends at the server's close_notify");
+  const ended: HttpResponse | null = whole.fetch(get(`${good}/until-close`));
+  t.check(bodyOf(ended) === "until close", "a body with no length ends at the server's close_notify");
+  const again: u8[] = new Array<u8>(16);
+  t.check(ended !== null && ended.body.read(again, 0, 16) === 0 && whole.error === 0, "and read again, it answers 0 with no error");
   const stale: HttpClient = new HttpClient(options);
   const s1: HttpResponse | null = stale.fetch(get(`${good}/stale`));
   const s1Body: string = bodyOf(s1);
@@ -497,6 +509,14 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   t.check(s1Body === "stale" && bodyOf(s2) === "GET /fresh HTTP/1.1" && conn(s2) !== conn(s1), "a pooled TLS connection the server dropped is retried on a new one");
   if (s2 === null) {
     console.log(`  error ${stale.error}: ${stale.errorText}`);
+  }
+  const alerting: HttpClient = new HttpClient(options);
+  const a1: HttpResponse | null = alerting.fetch(get(`${good}/warm`));
+  const a1Body: string = bodyOf(a1);
+  const a2: HttpResponse | null = alerting.fetch(get(`${good}/alert-once`));
+  t.check(a1Body === "GET /warm HTTP/1.1" && bodyOf(a2) === "GET /alert-once HTTP/1.1" && conn(a2) !== conn(a1), "a pooled TLS connection the server ends with an alert is retried on a new one");
+  if (a2 === null) {
+    console.log(`  error ${alerting.error}: ${alerting.errorText}`);
   }
   const silent: i32 = tcpListen("127.0.0.1", 0, 8);
   const quiet: HttpOptions = trusting(trusted);

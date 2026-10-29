@@ -17,10 +17,12 @@ PASS  a server that does not speak TLS is HTTP_E_TLS
 PASS  a body cut off without a close_notify is HTTP_E_TLS, not a short body
 PASS  and the error says the close_notify never came
 PASS  a body with no length ends at the server's close_notify
+PASS  and read again, it answers 0 with no error
 PASS  a pooled TLS connection the server dropped is retried on a new one
+PASS  a pooled TLS connection the server ends with an alert is retried on a new one
 PASS  a server that never answers the handshake is HTTP_E_READ_TIMEOUT
 PASS  a redirect from https to http is refused even with crossOriginRedirects
 PASS  and the error says why
 PASS  https through an http proxy is a CONNECT tunnel, then TLS to the origin
 PASS  and the tunnelled connection is reused
-http fetch tls: 25 passed, 0 failed, 0 skipped
+http fetch tls: 27 passed, 0 failed, 0 skipped

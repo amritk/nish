@@ -30,9 +30,11 @@ PASS  a caller's Host is sent in place of the URL's
 PASS  a body left unread answers an error once the next fetch starts
 PASS  and the next fetch went on a new connection
 PASS  a body read to its end answers 0 again
+PASS  a read asking for two bytes of a longer body answers two
 PASS  a body read two bytes at a time is read whole
 PASS  a response that says Connection: close is read
 PASS  and its connection is not used again, though the server left it open
+PASS  a POST after it goes on a new connection, with no retry needed
 PASS  the server answers and then closes the kept connection
 PASS  a GET on it is sent again on a fresh connection
 PASS  a POST on it is not sent twice: it fails with HTTP_E_IO
@@ -53,6 +55,7 @@ PASS  and so is a relative one
 PASS  a server that never answers is HTTP_E_READ_TIMEOUT
 PASS  after readTimeoutMs
 PASS  a body dripped a byte at a time is cut off by totalTimeoutMs
+PASS  and the error says the fetch ran past totalTimeoutMs
 PASS  after totalTimeoutMs, counted from the start of the fetch
 PASS  a listener whose backlog is full is HTTP_E_CONNECT_TIMEOUT
 PASS  a port nothing listens on is HTTP_E_REFUSED
@@ -87,4 +90,4 @@ PASS  a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED
 PASS  an https server that hangs up on the ClientHello is HTTP_E_TLS
 PASS  an event stream's first event is read while the server holds the stream open
 PASS  and the next one, the stream ending with the connection
-http fetch: 89 passed, 0 failed, 0 skipped
+http fetch: 92 passed, 0 failed, 0 skipped

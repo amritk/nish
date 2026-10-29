@@ -430,6 +430,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const pieces: HttpResponse | null = client.fetch(get(`${base}/hello`));
   let pieced: string = "";
   let piece: i32 = pieces !== null ? pieces.body.read(buf, 0, 2) : -1;
+  t.check(piece === 2, "a read asking for two bytes of a longer body answers two");
   while (piece > 0 && pieces !== null) {
     pieced = pieced + String.fromBytes(buf, 0, piece);
     piece = pieces.body.read(buf, 0, 2);
@@ -439,6 +440,10 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(bodyOf(closing) === "closing", "a response that says Connection: close is read");
   const reopened: HttpResponse | null = client.fetch(get(`${base}/hello`));
   t.check(bodyOf(reopened) === "hello" && conn(reopened) !== conn(closing), "and its connection is not used again, though the server left it open");
+  const closed: HttpResponse | null = client.fetch(get(`${base}/close-header`));
+  bodyOf(closed);
+  const posted: HttpResponse | null = client.fetch(post(`${base}/echo`, "after"));
+  t.check(bodyOf(posted).endsWith("\r\n\r\nafter") && conn(posted) !== conn(closed), "a POST after it goes on a new connection, with no retry needed");
 
   // --- a stale kept-alive connection
   const s1: HttpResponse | null = client.fetch(get(`${base}/stale`));
@@ -494,6 +499,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t0 = monotonicNanos();
   const drip: HttpResponse | null = tc.fetch(get(`${base}/drip`));
   t.check(drip !== null && drip.body.readAll(4096) === null && tc.error === HTTP_E_TOTAL_TIMEOUT, "a body dripped a byte at a time is cut off by totalTimeoutMs");
+  t.check(tc.errorText.indexOf("ran past 400 ms") >= 0, "and the error says the fetch ran past totalTimeoutMs");
   const dripMs: i64 = (monotonicNanos() - t0) / toI64(1000000);
   t.check(dripMs >= toI64(390) && dripMs < toI64(3000), "after totalTimeoutMs, counted from the start of the fetch");
   const listener: i32 = tcpListen("127.0.0.1", 0, 0);
