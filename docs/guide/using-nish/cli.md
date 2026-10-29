@@ -84,6 +84,12 @@ likely to add to it:
   arm64) and the stack protector in the C runtime. You do not need a flag for
   it, and `node scripts/check-hardening.mjs <binary>` in a checkout reads the
   protections back from a binary's headers.
+  On Linux every native binary also carries a GNU build id (an
+  `NT_GNU_BUILD_ID` note; `readelf -n app` shows it), which `perf`, `gdb` and
+  debuginfod use to match a binary with its debug information. The id is a
+  hash of the binary's bytes, so linking the same program twice gives the
+  same id, while two different builds (a `-g` link and a plain one, or two
+  profiles) give different ones.
 - **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
   CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
   tight loops faster. It is the one level `nish` accepts; anything else, and
@@ -93,6 +99,22 @@ likely to add to it:
   that stay on machines you know; ship anything else without it.
 - **`-g`** — DWARF debug info, so `gdb` and `lldb` step through your `.ts`
   source.
+
+  To ship a binary without its debug information and keep that information
+  beside it, split the `-g` build rather than linking twice, since a second
+  link would carry a different build id:
+
+  ```sh
+  nish app.ts --link app -g
+  objcopy --only-keep-debug app app.debug
+  strip -g app
+  objcopy --add-gnu-debuglink=app.debug app
+  ```
+
+  `app` and `app.debug` share one build id, so `gdb`, debuginfod or
+  `perf buildid-cache -a app.debug` match the shipped `app` with the DWARF
+  in `app.debug`, and source lines come back for it. (`strip -g` keeps the
+  symbol table, so function names resolve without the debug file.)
 - **`--number-mode f64`** — makes a bare `number` a 64-bit float rather than
   the default `i32`. Code that spells its widths (`i32`, `f64`) means the same
   thing in both modes.

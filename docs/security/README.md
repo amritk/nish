@@ -68,6 +68,7 @@ the record that found it. The notes below the table name each such finding.
 | PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
+| P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | **Total** ⁸ | | | **3 / 10 / 32 / 118** | **0 / 0 / 0 / 10** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -226,6 +227,8 @@ the record that found it. The notes below the table name each such finding.
     tables and the BREACH class of length leaks, are accepted, with the reason
     in their record, and are not counted. COMP-1 to COMP-7 and COMP-10 are
     properties checked and found to hold.
+20. P384-1 to P384-3 are properties checked and recorded, not findings: high
+    `s` accepted, variable time on public input, and digest truncation.
 
 ## Fuzzed
 
