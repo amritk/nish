@@ -3,6 +3,7 @@ name: TLS 1.3 client role (WP34 N13, issue 480)
 overview: Add the TLS 1.3 client — a sans-IO TlsClient beside TlsServer, a TCP carrier and a blocking connect helper — together with the RSA and P-384 verifiers, RFC 5280 path validation, hostname checks and a system trust store it needs, each with its security record and guide text.
 stages:
   - id: pubkey-verify
+    status: cancelled
     title: "feat(crypto): RSA PKCS#1 v1.5 and PSS verification, ECDSA P-384 verification"
     goal: Public-key signature verification for the web PKI — RSA (PKCS#1 v1.5 and PSS, SHA-256/384/512) and ECDSA P-384 with SHA-384 — in pure Nish, verify-only
     verification: npm run check && npm run lint && node scripts/security-scope.mjs && node tests/run.js crypto_rsa && node tests/run.js crypto_p384
@@ -22,6 +23,7 @@ stages:
       - id: verify-guide
         content: Document nish/crypto/rsa and nish/crypto/p384 in the guide standard-library page and std/README.md — see Stage pubkey-verify
   - id: x509-path
+    status: cancelled
     title: "feat(crypto): RFC 5280 path validation, hostname verification and a system trust store"
     goal: Validate a server's certificate chain against a trust store and a host name, refusing every bad-certificate class the issue and its comment list
     verification: npm run check && npm run lint && node scripts/security-scope.mjs && node tests/run.js x509
@@ -71,7 +73,7 @@ stages:
     verification: npm run check && npm run lint && node scripts/security-scope.mjs && node tests/run.js net_tls_client && node tests/run.js net_tls_tcp
     todos:
       - id: tcp-authenticate
-        content: Add tlsClientAuthenticate in std/net/tls/verify.ts running x509ValidatePath and the CertificateVerify signature check by scheme — see Stage tls-client-tcp
+        content: Add tlsClientAuthenticate in std/net/tls/verify.ts running pkiVerifyServer (run 987) and the CertificateVerify signature check by scheme — see Stage tls-client-tcp
       - id: tcp-carrier
         content: Add TlsTcpClient in std/net/tls-tcp.ts on tcpConnect and the poll loop, authenticating on every connection — see Stage tls-client-tcp
       - id: tcp-blocking
@@ -85,6 +87,8 @@ stages:
 ---
 
 # TLS 1.3 client role — issue #480
+
+> **Re-scoped 2026-10-29T00:30Z (owner decision).** Two other runs started at the same time and overlap: amritk/nish#987 (`tls-chain-validation`) builds RSA, P-384, the x509 extensions, the trust store (`pki-roots.ts`) and path validation (`pki.ts`), and amritk/nish#989 builds RSA and P-384 again. This run yields all of that to #987. Stages `pubkey-verify` and `x509-path` are **cancelled** (their branches are kept). `tls-client-core` is unchanged. `tls-client-tcp` authenticates through #987's interface (below) and starts once #987's `pki` stage and this run's `tls-client-core` have merged. The `x509-path` and `pubkey-verify` sections below are kept as a record, not as work.
 
 ## Context
 
@@ -125,8 +129,16 @@ export class TlsClient {
   authenticate(ok: boolean): i32; alpn(): string; state: i32
 }
 
+// From run 987 (tls-chain-validation), which this run consumes instead of building:
+//   std/crypto/pki.ts        PkiTrustStore, pkiTrustStore(roots), pkiVerifyServer(chain, hostname, nowMs, store): PkiResult, pkiReason(code)
+//   std/crypto/pki-roots.ts  pkiLoadSystemRoots(): PkiRoots (SSL_CERT_FILE / SSL_CERT_DIR, then the system bundles), pkiLoadRoots(file, dirs, bundles)
+//   std/crypto/rsa.ts        rsaParsePublicKey, rsaVerifyPss(key, hash, saltLen, msg, sig)
+//   std/crypto/p384.ts       p384VerifySha384(pub, msg, sig)
+//   std/crypto/x509.ts       X509Certificate key-algorithm fields (X509_KEY_P256 / _P384 / _RSA)
+// The authoritative shapes are in feature/tls-chain-validation/plan:.claude/plans/tls-chain-validation.plan.md and on main once merged.
+
 // std/net/tls/verify.ts (tls-client-tcp)
-export const tlsClientAuthenticate = (client: TlsClient, trust: X509TrustStore, nowSeconds: i64): i32   // calls client.authenticate
+export const tlsClientAuthenticate = (client: TlsClient, store: PkiTrustStore, nowMs: i64): i32   // calls client.authenticate
 ```
 
 ## Shared registries
@@ -177,10 +189,10 @@ Adding a module or a record touches files every stage appends one row to. Each i
 
 ## Stage tls-client-tcp
 
-**Owns:** `std/net/tls-tcp.ts`, `std/net/tls/verify.ts`, `docs/security/tls.md`, `docs/guide/using-nish/tls-client.md`, `docs/guide/using-nish/networking.md`, `tests/link/net_tls_client_tcp*/**`, `tests/link/net_loopback/**`, plus its rows in the shared registries. **Starts after** x509-path and tls-client-core merge (it consumes both interfaces; pubkey-verify is already in by then).
+**Owns:** `std/net/tls-tcp.ts`, `std/net/tls/verify.ts`, `docs/security/tls.md`, `docs/guide/using-nish/tls-client.md`, `docs/guide/using-nish/networking.md`, `tests/link/net_tls_client_tcp*/**`, `tests/link/net_loopback/**`, plus its rows in the shared registries. **Starts after** tls-client-core and run 987's `pki` stage (with its `rsa`, `p384`, `x509-ext` and `roots`) have merged to main.
 
-- `tlsClientAuthenticate`: `x509ValidatePath(peerCertificates, trust, serverName, now)`, then the CertificateVerify signature with the leaf key by scheme (P-256, P-384, RSA-PSS rsae; anything else refused), then `client.authenticate(...)` with the right alert (`bad_certificate`, `certificate_expired`, `unknown_ca`, `decrypt_error`).
-- `TlsTcpClient`: `connect(addr, config, trust)` on `tcpConnect` + `connectResult`, readable/writable/flush/interest/read/write/keyUpdate/shutdown/close shaped like `TlsTcpServer`; randomness from the runtime's CSPRNG; authentication always runs, with the system store unless a store is passed.
+- `tlsClientAuthenticate`: `pkiVerifyServer(peerCertificates, serverName, nowMs, store)`, then the CertificateVerify signature with the leaf key by scheme (P-256, P-384, RSA-PSS rsae; anything else refused), then `client.authenticate(...)` with the right alert (`bad_certificate`, `certificate_expired`, `unknown_ca`, `decrypt_error`).
+- `TlsTcpClient`: `connect(addr, config, trust)` on `tcpConnect` + `connectResult`, readable/writable/flush/interest/read/write/keyUpdate/shutdown/close shaped like `TlsTcpServer`; randomness from the runtime's CSPRNG; authentication always runs, with `pkiLoadSystemRoots()` unless a store is passed.
 - `tlsConnect(addr, serverName, alpn, timeoutMs)`: blocking connect and handshake for a program without a loop, with its own small poll loop and a timeout (TLS-4 is the server's missing timeout; the client does not repeat it). Numeric addresses only until name resolution lands; say so in the guide.
 
 ## Tests
