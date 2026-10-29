@@ -7,10 +7,13 @@ import { Suite } from "nish/testing";
 import { YcCase, ycLoadCases } from "./cases";
 import { ycComparerChecks } from "./checks";
 import { YC_NODE_BUDGET } from "./compare";
-import { ycJsonDocument, ycVerdict } from "./run";
+import { ycJsonDocument, ycRoundTrip, ycVerdict } from "./run";
 
 /** How many cases pass: a change that moves it updates it here. */
 const YC_PINNED_PASSES: i32 = 400;
+
+/** How many cases' expected JSON nish/yaml-write writes as YAML that reads back as the same JSON. */
+const YC_PINNED_ROUND_TRIPS: i32 = 271;
 
 /** The cases that fail, each as its id, the error it fails on and why. */
 const ycExpectedFailures = (): string[] => [
@@ -30,6 +33,12 @@ const ycPrintFailures = (cases: YcCase[]): number => {
     }
   }
   console.log(`${passed} of ${cases.length} pass`);
+  for (const c of cases) {
+    const why = ycRoundTrip(c, json, YC_NODE_BUDGET);
+    if (why !== "" && why !== "-") {
+      console.log(`${c.key} round trip: ${why}`);
+    }
+  }
   return 0;
 };
 
@@ -117,5 +126,22 @@ export const main = (): number => {
   t.eqI32("every case passes but the expected failures", regressions, 0);
   console.log(`${passed} of ${cases.length} cases pass`);
   t.eqI32("the pass count is the pinned one", passed, YC_PINNED_PASSES);
+  // JSON -> stringifyYaml -> parseYaml is the JSON again, for every case with JSON.
+  let written: i32 = 0;
+  let trips: i32 = 0;
+  for (const c of cases) {
+    const why = ycRoundTrip(c, json, YC_NODE_BUDGET);
+    if (why === "-") {
+      continue;
+    }
+    written += 1;
+    if (why === "") {
+      trips += 1;
+    } else {
+      t.fail(`${c.key}'s JSON round trips through nish/yaml-write`, why);
+    }
+  }
+  console.log(`${trips} of ${written} cases' JSON round trips through nish/yaml-write`);
+  t.eqI32("the round-trip count is the pinned one", trips, YC_PINNED_ROUND_TRIPS);
   return t.done();
 };
