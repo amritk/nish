@@ -1595,6 +1595,9 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
+| `nish/crypto/rsa` | RSA signature verification: `rsaParsePublicKey(spki)` and `rsaVerifyPkcs1(key, hashId, msg, sig)` / `rsaVerifyPss(key, hashId, msg, sig)` with `RSA_SHA256`, `RSA_SHA384` or `RSA_SHA512` |
+| `nish/crypto/p384` | P-384 ECDSA verification: `p384VerifySha384(pub, msg, sig)`, `p384VerifySha256` and `p384Verify(pub, digest, sig)` |
+| `nish/crypto/bignum` | the variable-time modular arithmetic `rsa` and `p384` share, for public values only |
 
 ```ts nish:ok
 import { base64urlEncode } from "nish/crypto/base64url";
@@ -1649,6 +1652,20 @@ use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
 `ed25519`, which came later, has been through a security audit (`ed25519` is
 recorded as a change after its area's audit); the records are in
 [docs/security/](../../security/README.md).
+
+`nish/crypto/rsa` and `nish/crypto/p384` only verify: they check a
+signature someone else made, over a certificate or a TLS handshake, and hold
+no private key. An RSA key comes in as the DER SubjectPublicKeyInfo a
+certificate carries; a P-384 key as the 97-byte uncompressed point, and a
+signature as `r` and `s`, 48 bytes each.
+
+Each answers `false` (`rsaParsePublicKey`: `null`) for anything it does not
+take, never a panic: an RSA modulus outside 2048 to 8192 bits, an exponent
+that is even, below 3 or above 2^32, a signature of the wrong length, a PSS
+signature whose salt is not as long as the digest or whose MGF1 hash is not
+the message's, a P-384 key off the curve. Both run in variable time, which is
+sound because everything they handle is public; the record is
+[crypto-rsa.md](../../security/crypto-rsa.md).
 
 ## `nish/net`
 

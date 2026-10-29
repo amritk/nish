@@ -1,0 +1,136 @@
+PASS  RSA_SHA256 is 0
+PASS  RSA_SHA384 is 1
+PASS  RSA_SHA512 is 2
+PASS  RSA_MIN_BITS is 2048
+PASS  RSA_MAX_BITS is 8192
+PASS  spkiOf rebuilds crafted key 0 byte for byte
+PASS  a 2048-bit key has 2048 bits
+PASS  and signatures of 256 bytes
+PASS  and is not PSS-only
+PASS  an empty input is refused
+PASS  a lone tag is refused
+PASS  a byte after the SubjectPublicKeyInfo is refused
+PASS  a SubjectPublicKeyInfo one byte short is refused
+PASS  a SET for the outer SEQUENCE is refused
+PASS  a two-byte length cut short is refused
+PASS  a one-byte long-form length cut short is refused
+PASS  a long-form length below 0x80 is refused
+PASS  a two-byte length below 0x100 is refused
+PASS  an indefinite length is refused
+PASS  a three-byte length is refused
+PASS  an AlgorithmIdentifier that runs past the key is refused
+PASS  an eight-byte OID is refused
+PASS  sha256WithRSAEncryption is refused
+PASS  an OID off the PKCS #1 arc is refused
+PASS  rsaEncryption without its NULL is refused
+PASS  rsaEncryption with a NULL holding a byte is refused
+PASS  rsaEncryption with a SEQUENCE for parameters is refused
+PASS  rsaEncryption with a second NULL is refused
+PASS  id-RSASSA-PSS without parameters is a key
+PASS  id-RSASSA-PSS with RSASSA-PSS-params is a key
+PASS  id-RSASSA-PSS with NULL parameters is refused
+PASS  id-RSASSA-PSS with a byte after its parameters is refused
+PASS  withKey rebuilds the key
+PASS  an OCTET STRING for the BIT STRING is refused
+PASS  a BIT STRING with an unused bit is refused
+PASS  an empty BIT STRING is refused
+PASS  a SET for RSAPublicKey is refused
+PASS  keyOf rebuilds the key
+PASS  an RSAPublicKey without e is refused
+PASS  an RSAPublicKey with a third INTEGER is refused
+PASS  a negative modulus is refused
+PASS  a modulus with a needless zero byte is refused
+PASS  a zero exponent is refused
+PASS  an empty INTEGER is refused
+PASS  an OCTET STRING for the modulus is refused
+PASS  a 2047-bit modulus is refused
+PASS  an 8192-bit modulus is a key
+PASS  an 8193-bit modulus is refused
+PASS  an even modulus is refused
+PASS  e = 1 is refused
+PASS  e = 2 is refused
+PASS  e = 3 is a key
+PASS  e = 65536 is refused
+PASS  e = 2^32 - 1 is a key
+PASS  e = 2^32 + 1 is refused
+PASS  e = 2^33 + 1 is refused
+PASS  a six-byte e is refused
+PASS  crafted key 1 has 2049 bits
+PASS  and signatures of 257 bytes
+PASS  PKCS#1 v1.5 SHA-256 verifies
+PASS  PKCS#1 v1.5 SHA-384 verifies
+PASS  PKCS#1 v1.5 SHA-512 verifies
+PASS  PKCS#1 v1.5 with the DigestInfo's NULL left out is refused
+PASS  PKCS#1 v1.5 with block type 02 is refused
+PASS  PKCS#1 v1.5 with a padding byte FE is refused
+PASS  PKCS#1 v1.5 with 8 bytes after the digest is refused
+PASS  PKCS#1 v1.5 with a top byte of 01 is refused
+PASS  PKCS#1 v1.5 under the 2049-bit key verifies
+PASS  PSS SHA-256 with a 32-byte salt verifies
+PASS  PSS SHA-384 with a 48-byte salt verifies
+PASS  PSS SHA-512 with a 64-byte salt verifies
+PASS  PSS SHA-256 with no salt is refused
+PASS  PSS SHA-256 with a 20-byte salt is refused
+PASS  PSS SHA-256 with a 48-byte salt is refused
+PASS  PSS SHA-256 with MGF1 over SHA-1 is refused
+PASS  PSS SHA-256 with MGF1 over SHA-384 is refused
+PASS  PSS with the trailer BB is refused
+PASS  PSS with maskedDB's top bit set is refused
+PASS  PSS with a padding byte 01 is refused
+PASS  PSS with the separator 02 is refused
+PASS  PSS with H over another salt is refused
+PASS  PSS under the 2049-bit key verifies
+PASS  PSS under the 2049-bit key with the top byte 01 is refused
+PASS  PSS SHA-256 as the cryptography package signs it verifies
+PASS  PKCS#1 v1.5 SHA-256 as the cryptography package signs it verifies
+PASS  a valid PKCS#1 v1.5 SHA-256 signature does not verify as SHA-384
+PASS  nor as SHA-512
+PASS  nor of another message
+PASS  nor under the 2049-bit key
+PASS  a valid PSS SHA-256 signature does not verify as SHA-384
+PASS  nor of another message
+PASS  nor as PKCS#1 v1.5
+PASS  hash id 3 is refused by rsaVerifyPkcs1
+PASS  hash id -1 is refused by rsaVerifyPkcs1
+PASS  hash id 3 is refused by rsaVerifyPss
+PASS  a 255-byte signature is refused by rsaVerifyPkcs1
+PASS  a 257-byte signature, a zero in front, is refused by rsaVerifyPkcs1
+PASS  a 257-byte signature, a zero in front, is refused by rsaVerifyPss
+PASS  an empty signature is refused
+PASS  s = n is refused by rsaVerifyPkcs1
+PASS  s = n is refused by rsaVerifyPss
+PASS  s = 2^2048 - 1 is refused
+PASS  s = 0 is refused
+PASS  s = 1 is refused
+PASS  s = n - 1 is refused
+PASS  a PSS-only key refuses a valid PKCS#1 v1.5 signature
+PASS  and verifies a valid PSS signature
+PASS  as does one with RSASSA-PSS-params
+PASS  which also refuses PKCS#1 v1.5
+cavp SigVer15: 108 cases, 18 valid verified, 90 invalid refused, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  cavp SigVer15: every case answers what the file expects
+cavp SigVerPSS: 108 cases, 9 valid verified, 90 invalid refused, 9 valid under other PSS parameters refused, 0 invalid under the file's salt verified under this module's, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  cavp SigVerPSS: every case answers what the file expects
+wycheproof rsa_signature_2048_sha256: 259 cases, 9 valid verified, 249 invalid refused, 0 on a refused key, 1 acceptable (0 verified, 1 refused)
+PASS  wycheproof rsa_signature_2048_sha256: every case answers what the file expects
+wycheproof rsa_signature_2048_sha512: 259 cases, 8 valid verified, 250 invalid refused, 0 on a refused key, 1 acceptable (0 verified, 1 refused)
+PASS  wycheproof rsa_signature_2048_sha512: every case answers what the file expects
+wycheproof rsa_signature_3072_sha384: 259 cases, 7 valid verified, 251 invalid refused, 0 on a refused key, 1 acceptable (0 verified, 1 refused)
+PASS  wycheproof rsa_signature_3072_sha384: every case answers what the file expects
+wycheproof rsa_signature_4096_sha512: 259 cases, 7 valid verified, 251 invalid refused, 0 on a refused key, 1 acceptable (0 verified, 1 refused)
+PASS  wycheproof rsa_signature_4096_sha512: every case answers what the file expects
+wycheproof rsa_signature_8192_sha512: 259 cases, 7 valid verified, 251 invalid refused, 0 on a refused key, 1 acceptable (0 verified, 1 refused)
+PASS  wycheproof rsa_signature_8192_sha512: every case answers what the file expects
+wycheproof rsa_pss_2048_sha256_mgf1_32: 108 cases, 63 valid verified, 45 invalid refused, 0 valid under other PSS parameters refused, 0 invalid under the file's salt verified under this module's, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof rsa_pss_2048_sha256_mgf1_32: every case answers what the file expects
+wycheproof rsa_pss_2048_sha384_mgf1_48: 141 cases, 95 valid verified, 46 invalid refused, 0 valid under other PSS parameters refused, 0 invalid under the file's salt verified under this module's, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof rsa_pss_2048_sha384_mgf1_48: every case answers what the file expects
+wycheproof rsa_pss_3072_sha256_mgf1_32: 108 cases, 63 valid verified, 45 invalid refused, 0 valid under other PSS parameters refused, 0 invalid under the file's salt verified under this module's, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof rsa_pss_3072_sha256_mgf1_32: every case answers what the file expects
+wycheproof rsa_pss_4096_sha512_mgf1_64: 179 cases, 132 valid verified, 47 invalid refused, 0 valid under other PSS parameters refused, 0 invalid under the file's salt verified under this module's, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof rsa_pss_4096_sha512_mgf1_64: every case answers what the file expects
+wycheproof rsa_pss_2048_sha256_mgf1_0: 103 cases, 0 valid verified, 41 invalid refused, 61 valid under other PSS parameters refused, 1 invalid under the file's salt verified under this module's, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof rsa_pss_2048_sha256_mgf1_0: every case answers what the file expects
+wycheproof rsa_pss_misc: 90 cases, 3 valid verified, 0 invalid refused, 87 valid under other PSS parameters refused, 0 invalid under the file's salt verified under this module's, 0 on a refused key, 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof rsa_pss_misc: every case answers what the file expects
+rsa: 122 passed, 0 failed, 0 skipped

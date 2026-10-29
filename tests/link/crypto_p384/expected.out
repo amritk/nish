@@ -1,0 +1,48 @@
+PASS  P384_SCALAR_SIZE is 48
+PASS  P384_POINT_SIZE is 97
+PASS  P384_SIGNATURE_SIZE is 96
+PASS  SHA-384 verifies
+PASS  SHA-384 with s replaced by n - s verifies
+PASS  SHA-256 verifies
+PASS  SHA-512, its leftmost 384 bits verifies
+PASS  a 20-byte digest verifies
+PASS  a 1-byte digest verifies
+PASS  a digest of 48 FF bytes, above n verifies
+PASS  SHA-384 under the key G (private key 1) verifies
+PASS  under the key G, a digest of n - r and s = 1, which sums to the identity is refused
+PASS  its twin with a digest of n - r + 1, which sums to G is refused
+PASS  p384VerifySha384 verifies the SHA-384 signature
+PASS  and refuses the SHA-256 one
+PASS  p384VerifySha256 verifies the SHA-256 signature
+PASS  and refuses the SHA-384 one
+PASS  a signature of another message is refused
+PASS  as is one under another key
+PASS  the key split and joined verifies
+PASS  a 96-byte key is refused
+PASS  a 98-byte key is refused
+PASS  a 49-byte compressed key is refused
+PASS  an empty key is refused
+PASS  prefix 02 on 97 bytes is refused
+PASS  prefix 03 on 97 bytes is refused
+PASS  prefix 00 on 97 bytes is refused
+PASS  G as a key verifies its crafted signature
+PASS  x = p is refused
+PASS  y = p is refused
+PASS  (Gx, Gy + 1), off the curve, is refused
+PASS  (0, 0), off the curve, is refused
+PASS  the signature split and joined verifies
+PASS  a 95-byte signature is refused
+PASS  a 97-byte signature is refused
+PASS  an empty signature is refused
+PASS  r = 0 is refused
+PASS  s = 0 is refused
+PASS  r = n is refused
+PASS  s = n is refused
+PASS  r = p is refused
+cavp SigVer: 30 cases, 6 valid verified, 24 invalid refused (all 24 by p384Verify), 0 acceptable (0 verified, 0 refused)
+PASS  cavp SigVer: every case answers what the file expects
+wycheproof ecdsa_secp384r1_sha384_p1363: 280 cases, 193 valid verified, 87 invalid refused (all 87 by p384Verify), 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof ecdsa_secp384r1_sha384_p1363: every case answers what the file expects
+wycheproof ecdsa_secp384r1_sha256: 472 cases, 162 valid verified, 310 invalid refused (234 by the DER reader, 76 by p384Verify), 0 acceptable (0 verified, 0 refused)
+PASS  wycheproof ecdsa_secp384r1_sha256: every case answers what the file expects
+p384: 44 passed, 0 failed, 0 skipped
