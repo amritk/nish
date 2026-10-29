@@ -127,6 +127,27 @@ PASS  at WAIT_AUTH: the content's prefix
 PASS  at WAIT_AUTH: the signature is DER r and s
 PASS  at WAIT_AUTH: the signature verifies under the leaf's key
 PASS  at WAIT_AUTH: not over other content
+PASS  a new client: START
+PASS  a new client: nothing to send at the application level
+PASS  a started client
+PASS  a started client: WAIT_SERVER_HELLO
+PASS  a second start
+PASS  a second start: failed
+PASS  a second start: keeps its alert
+PASS  a second start: start answers the alert
+PASS  after the ServerHello: WAIT_ENCRYPTED_EXTENSIONS
+PASS  after EncryptedExtensions: WAIT_CERTIFICATE
+PASS  after the Certificate: WAIT_CERTIFICATE_VERIFY
+PASS  a verdict before one is due
+PASS  a verdict before one is due: failed
+PASS  a verdict before one is due: keeps its alert
+PASS  a verdict before one is due: authenticate answers the alert
+PASS  an IP literal: 127.0.0.1
+PASS  an IP literal: ::1
+PASS  an IP literal: 1234
+PASS  not an IP literal: localhost
+PASS  not an IP literal: a.b
+PASS  not an IP literal: the empty name
 PASS  Certificate before EncryptedExtensions
 PASS  Certificate before EncryptedExtensions: failed
 PASS  Certificate before EncryptedExtensions: keeps its alert
@@ -166,6 +187,9 @@ PASS  a Certificate entry with an extension: keeps its alert
 PASS  a CertificateVerify cut short
 PASS  a CertificateVerify cut short: failed
 PASS  a CertificateVerify cut short: keeps its alert
+PASS  a CertificateVerify with a scheme not offered
+PASS  a CertificateVerify with a scheme not offered: failed
+PASS  a CertificateVerify with a scheme not offered: keeps its alert
 PASS  a CertificateVerify with bytes after it
 PASS  a CertificateVerify with bytes after it: failed
 PASS  a CertificateVerify with bytes after it: keeps its alert
@@ -175,6 +199,16 @@ PASS  the caller's own alert: keeps its alert
 PASS  an alert out of range
 PASS  an alert out of range: failed
 PASS  an alert out of range: keeps its alert
+PASS  alert 0
+PASS  alert 0: failed
+PASS  alert 0: keeps its alert
+PASS  alert 256
+PASS  alert 256: failed
+PASS  alert 256: keeps its alert
+PASS  alert 255
+PASS  alert 255: failed
+PASS  alert 255: keeps its alert
+PASS  alert 255: authenticate answers it
 PASS  a refusal before one is due
 PASS  a refusal before one is due: failed
 PASS  a refusal before one is due: keeps its alert
@@ -187,4 +221,4 @@ PASS  a NewSessionTicket with no ticket: keeps its alert
 PASS  a wiped client
 PASS  a wiped client: failed
 PASS  a wiped client: keeps its alert
-tls client refusals: 189 passed, 0 failed, 0 skipped
+tls client refusals: 223 passed, 0 failed, 0 skipped

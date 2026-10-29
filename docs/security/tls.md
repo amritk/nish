@@ -854,7 +854,8 @@ pool was 11.7 MB at 1,024 slots, 7 kB a slot where it was 23
 ## The client
 
 `TlsClient` and `TlsRecordClient` (#480's tls-client-core stage). Each
-property is pinned by a test that fails if it stops holding.
+property below names the test that fails if it stops holding; what no test
+drives yet is listed last, under "Not pinned".
 
 **A full handshake against `TlsServer`, per suite** (`net_tls_client_handshake`,
 `net_tls_client_record`): the client's ClientHello is read by `TlsServer`,
@@ -897,21 +898,30 @@ chain"); `reject(alert)` sends the caller's alert ("the caller's own alert"),
 `bad_certificate` for one outside 1 to 255 ("an alert out of range"), and
 `internal_error` before a verdict is due ("a refusal before one is due");
 through `TlsRecordClient` the server reads the caller's alert
-(`net_tls_client_record`, "refusal: the server reads it").
+(`net_tls_client_record`, "refusal: the server reads it"). The states between
+are pinned one message at a time: `START` before `start()`,
+`WAIT_SERVER_HELLO` after it, then `WAIT_ENCRYPTED_EXTENSIONS`,
+`WAIT_CERTIFICATE` and `WAIT_CERTIFICATE_VERIFY` ("after the ServerHello: …",
+"after EncryptedExtensions: …", "after the Certificate: …"); a second
+`start()` or an `authenticate(true)` before `WAIT_AUTH` is `internal_error`,
+and a failed client answers its alert to both ("a second start", "a verdict
+before one is due"). `tlsClientIsIpLiteral`, which decides whether
+`server_name` is sent, is pinned on `127.0.0.1`, `::1`, `1234`, `localhost`,
+`a.b` and the empty name.
 
-**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 189 checks;
+**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 223 checks;
 each case checks the alert, that the client is `FAILED`, and that a later call
 answers the same alert):
 
 | Server's flight | Alert |
 | --- | --- |
 | Extensions cut short; a message longer than the input could hold; a Certificate with no entries; a CertificateVerify cut short or with bytes after it; a NewSessionTicket with no ticket | `decode_error` |
-| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the TLS 1.2 or TLS 1.1 downgrade sentinel; a `legacy_version` other than 0x0303; `supported_versions` selecting anything but 0x0304; non-null compression; an extension known but out of place (ALPN in the ServerHello, `key_share` in EncryptedExtensions, RFC 8446 §4.2); a secp256r1 share off the curve or compressed; an all-zero x25519 share; a retry with neither `key_share` nor `cookie`; a Certificate with a request context | `illegal_parameter` |
+| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the TLS 1.2 or TLS 1.1 downgrade sentinel; a `legacy_version` other than 0x0303; `supported_versions` selecting anything but 0x0304; non-null compression; an extension known but out of place (ALPN in the ServerHello, `key_share` in EncryptedExtensions, RFC 8446 §4.2); a secp256r1 share off the curve or compressed; an all-zero x25519 share; a retry with neither `key_share` nor `cookie`; a Certificate with a request context; a CertificateVerify scheme the client did not offer | `illegal_parameter` |
 | No `supported_versions` | `protocol_version` |
 | No `key_share` | `missing_extension` |
 | `server_name` acknowledged when none was sent; ALPN when none was offered; an unknown extension in the ServerHello or EncryptedExtensions; a Certificate entry with an extension | `unsupported_extension` |
 | Bytes after the ServerHello at its level; a second retry; EncryptedExtensions at the Initial level; Certificate before EncryptedExtensions; a Finished first; a CertificateRequest | `unexpected_message` |
-| A retry cookie too long for the second ClientHello's extensions to hold; any message to a client already wiped | `internal_error` |
+| A retry cookie too long for the second ClientHello's extensions to hold; any message to a client already wiped; a second `start()`; a verdict before one is due | `internal_error` |
 | A bad server Finished | `decrypt_error` |
 
 **The Finished and the session id are compared with `timingSafeEqualAt`**
@@ -928,7 +938,9 @@ all-zero check (TLS-8).
 
 **The record layer** mirrors `TlsRecordServer`: the compatibility
 `change_cipher_spec` is sent once, and the server's is tolerated only between
-its ServerHello and its Finished, never mid-message, and counted with the
+its ServerHello and its Finished (every handshake in `net_tls_client_record`
+carries one, since the client sends a session id and `TlsRecordServer` answers
+it in compatibility mode), never mid-message, and counted with the
 other records that carry nothing (`idle`) (§D.4), against the server's
 `TLS_RECORD_IDLE_LIMIT`, a cap no client test drives — `net_tls_client_record`
 refuses one before any handshake record, one mid-message and one after the
@@ -939,15 +951,44 @@ wipes the write direction; the server's `close_notify` ends reading and wipes
 the read direction once the handshake is done, and before that fails the
 connection like any other alert, so a handshake the caller never authenticated
 cannot end as a clean end of stream; a stream cut off without one is a
-truncation. `close` before the client's Finished is sealed — even once the
-server's Finished has opened the connection — wipes the read keys and
-everything `TlsClient` holds, which a wiped `TlsClient` answers with
-`internal_error` from then on ("close before the verdict", "a wiped client").
+truncation. `close` before the client's Finished is sealed wipes the read
+keys and everything `TlsClient` holds, which a wiped `TlsClient` answers with
+`internal_error` from then on ("close before the verdict", "a wiped client");
+the test closes at `WAIT_AUTH`, and the same path once the server's Finished
+has opened the connection, which needs a full output buffer to reach, is
+not driven.
 
 **Fuzzed** by `tls-server-flight` (Fuzzing, above), whose seeds are each
 message of a real server flight, a retry with and without a cookie, a
 downgraded ServerHello, and a ServerHello fed to `TlsClient` whole and byte by
 byte.
+
+**Not pinned.** The 2026-10 sweep of every public member against the tests
+left these with no check that fails if they break; each is a test to add, not
+a claim this page makes:
+- `TlsClient`'s constructor refusing a bad random or key length, an empty or
+  unknown group list, a `shareGroup` not in `groups`, or an over-long ALPN or
+  server name; and the caller's key arrays reading zero after it (only the
+  wipe count in `tests/wipes/tls.js` sees that);
+- a narrowed `config.suites`; a key share of the wrong length; an
+  EncryptedExtensions cut short or with a duplicate extension; `server_name`
+  acknowledged after one was sent; a Finished of the wrong length or with
+  bytes after it; a `receive` window outside its array;
+- the exporter secret compared with the server's (only the application and
+  handshake secrets are), and the secrets reading zero after a refusal
+  (only wipe counts);
+- in `TlsRecordClient`: `authenticate(true)`'s answer and
+  `authenticate(false)` reaching the server as `bad_certificate`; the count
+  of `change_cipher_spec` records the client sends; a malformed
+  `change_cipher_spec` and the idle cap; `user_canceled` and a malformed
+  alert; a KeyUpdate split across records or of the wrong length,
+  `keyUpdate(false)`; a NewSessionTicket at the record level; `write`
+  after `close` or failure, chunking past 2^14, the automatic KeyUpdate at
+  the record limit, `padding`; `read` and `receive` windows, back-pressure
+  with full buffers, `space()`; `TLS_RECORD_WANT_READ` and
+  `TLS_RECORD_WANT_WRITE` from `interest()`; data written before `close`
+  arriving ahead of its `close_notify`;
+- TLS-9's alert in the clear (open, above).
 
 **The wipes survive `opt -O2`.** `tls: the client's wipes survive opt -O2
 (both private keys, the ECDHE, early, handshake and traffic secrets, the

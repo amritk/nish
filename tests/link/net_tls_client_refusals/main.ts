@@ -20,10 +20,15 @@ import {
 import {
   TLS_CLIENT_STATE_CONNECTED,
   TLS_CLIENT_STATE_FAILED,
+  TLS_CLIENT_STATE_START,
   TLS_CLIENT_STATE_WAIT_AUTH,
+  TLS_CLIENT_STATE_WAIT_CERTIFICATE,
+  TLS_CLIENT_STATE_WAIT_CERTIFICATE_VERIFY,
   TLS_CLIENT_STATE_WAIT_ENCRYPTED_EXTENSIONS,
+  TLS_CLIENT_STATE_WAIT_SERVER_HELLO,
   TlsClient,
   TlsClientConfig,
+  tlsClientIsIpLiteral,
 } from "nish/net/tls/client";
 import { tlsEarlySecret, tlsHandshakeSecretHeld } from "nish/net/tls/schedule";
 import { Secret, secret, wipe } from "nish:secret";
@@ -544,6 +549,29 @@ export const main = (): i32 => {
   flipped[100] = toU8(toI32(flipped[100]) ^ 1);
   t.ok("at WAIT_AUTH: not over other content", !p256VerifySha256(leafPublic(), flipped, raw));
 
+  // Each message of a real flight moves the client one state on.
+  const unstarted = new TlsClient(new TlsClientConfig("localhost", ["h2"]), counting(1, 32), counting(0x40, 32), counting(0x60, 32));
+  t.eqI32("a new client: START", unstarted.state, TLS_CLIENT_STATE_START);
+  t.eqI32("a new client: nothing to send at the application level", toI32(unstarted.takeOutput(TLS_LEVEL_APPLICATION).length), ZERO);
+  t.eqI32("a started client", unstarted.start(), ZERO);
+  t.eqI32("a started client: WAIT_SERVER_HELLO", unstarted.state, TLS_CLIENT_STATE_WAIT_SERVER_HELLO);
+  refused(t, "a second start", unstarted, unstarted.start(), TLS_ALERT_INTERNAL_ERROR);
+  t.eqI32("a second start: start answers the alert", unstarted.start(), TLS_ALERT_INTERNAL_ERROR);
+  t.eqI32("after the ServerHello: WAIT_ENCRYPTED_EXTENSIONS", realUpTo(0).client.state, TLS_CLIENT_STATE_WAIT_ENCRYPTED_EXTENSIONS);
+  t.eqI32("after EncryptedExtensions: WAIT_CERTIFICATE", realUpTo(1).client.state, TLS_CLIENT_STATE_WAIT_CERTIFICATE);
+  t.eqI32("after the Certificate: WAIT_CERTIFICATE_VERIFY", realUpTo(2).client.state, TLS_CLIENT_STATE_WAIT_CERTIFICATE_VERIFY);
+  real = realUpTo(2);
+  refused(t, "a verdict before one is due", real.client, real.client.authenticate(true), TLS_ALERT_INTERNAL_ERROR);
+  t.eqI32("a verdict before one is due: authenticate answers the alert", real.client.authenticate(true), TLS_ALERT_INTERNAL_ERROR);
+
+  // An IP literal is any name with a colon, or one of only digits and dots.
+  t.ok("an IP literal: 127.0.0.1", tlsClientIsIpLiteral("127.0.0.1"));
+  t.ok("an IP literal: ::1", tlsClientIsIpLiteral("::1"));
+  t.ok("an IP literal: 1234", tlsClientIsIpLiteral("1234"));
+  t.ok("not an IP literal: localhost", !tlsClientIsIpLiteral("localhost"));
+  t.ok("not an IP literal: a.b", !tlsClientIsIpLiteral("a.b"));
+  t.ok("not an IP literal: the empty name", !tlsClientIsIpLiteral(""));
+
   // Out of order and the Finished, against a real server's flight.
   real = new Real();
   feed(real.client, TLS_LEVEL_INITIAL, real.serverHello);
@@ -604,6 +632,11 @@ export const main = (): i32 => {
   const verify: u8[] = realBody(real, 2);
   refused(t, "a CertificateVerify cut short", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(15, part(verify, 0, toI32(verify.length) - 1))), TLS_ALERT_DECODE_ERROR);
   real = realUpTo(2);
+  const unoffered: u8[] = part(verify, 0, toI32(verify.length));
+  unoffered[0] = 0x02;
+  unoffered[1] = 0x01;
+  refused(t, "a CertificateVerify with a scheme not offered", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(15, unoffered)), TLS_ALERT_ILLEGAL_PARAMETER);
+  real = realUpTo(2);
   const longer: u8[] = part(verify, 0, toI32(verify.length));
   longer.push(0x00);
   refused(t, "a CertificateVerify with bytes after it", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(15, longer)), TLS_ALERT_DECODE_ERROR);
@@ -613,6 +646,13 @@ export const main = (): i32 => {
   refused(t, "the caller's own alert", real.client, real.client.reject(CERTIFICATE_EXPIRED), CERTIFICATE_EXPIRED);
   real = realUpTo(3);
   refused(t, "an alert out of range", real.client, real.client.reject(300), TLS_ALERT_BAD_CERTIFICATE);
+  real = realUpTo(3);
+  refused(t, "alert 0", real.client, real.client.reject(0), TLS_ALERT_BAD_CERTIFICATE);
+  real = realUpTo(3);
+  refused(t, "alert 256", real.client, real.client.reject(256), TLS_ALERT_BAD_CERTIFICATE);
+  real = realUpTo(3);
+  refused(t, "alert 255", real.client, real.client.reject(255), 255);
+  t.eqI32("alert 255: authenticate answers it", real.client.authenticate(true), 255);
   c = fresh();
   refused(t, "a refusal before one is due", c, c.reject(CERTIFICATE_EXPIRED), TLS_ALERT_INTERNAL_ERROR);
 
