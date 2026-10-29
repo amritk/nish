@@ -2164,7 +2164,7 @@ and their `.ll` goldens are byte-identical files.
   `` Module `nish/toml` is not part of the standard library (it has:
   collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
   crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256,
-  crypto/pki-roots, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
+  crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
   testing, text, threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
@@ -2210,9 +2210,11 @@ and their `.ll` goldens are byte-identical files.
   `ct` (constant-time compare), `base64url`, `x25519`, `ed25519` (Ed25519
   signatures), `chacha20poly1305` (ChaCha20-Poly1305), `aes` (AES-128 and
   AES-256 with GCM), `p256` (P-256 ECDSA), `p384` (P-384 ECDSA
-  verification), `x509` (DER, PEM and
-  self-signed P-256 certificates) and `pki-roots` (the trust anchors from
-  `SSL_CERT_FILE`, `SSL_CERT_DIR` or the system bundle; native only) (`tests/link/crypto_base64url` is the case
+  verification), `rsa` (RSA signature verification), `x509` (DER, PEM and
+  self-signed P-256 certificates), `pki-roots` (the trust anchors from
+  `SSL_CERT_FILE`, `SSL_CERT_DIR` or the system bundle; native only) and
+  `pki` (RFC 5280 path validation and RFC 6125 hostname matching of a TLS
+  server's chain) (`tests/link/crypto_base64url` is the case
   that resolves a nested specifier). Each is ordinary Nish source under the
   rules above, and a byte string is a `u8[]`. They are written branch-free on
   secret data, and WP34 N6's disassembly check (`tests/ct-asm.js`) verifies
@@ -6377,7 +6379,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
@@ -7321,6 +7323,7 @@ something that is not valid UTF-8 comes back as those bytes, exactly as
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `monotonicNanos(): i64` | `CLOCK_MONOTONIC` in nanoseconds. The origin is arbitrary, so only the **difference** between two reads means anything: it is not comparable between two processes or two machines, and it is not a date | write | `io_monotonic`; `reject_monotonic_arity` |
+| `wallClockNanos(): i64` | `CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC: a timestamp, `Date.now`'s clock at a nanosecond's grain and as an `i64`. It can go backwards when the system time is set, so a duration is `monotonicNanos`'s job, not this one's. Not refused on wasm, as the monotonic clock is not | write | `wall_clock`; `reject_wall_clock_arity` |
 
 It is an `i64` in both number modes and not a `number`, because a `number` is an
 `i32` by default and would overflow inside a tenth of a second, and an `f64`
@@ -7509,7 +7512,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
+| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (no `nish:net` call looks one up; [`nish/net/dns`](../std/net/dns.ts) resolves it first), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
 | `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flags add: `3` is both. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
@@ -7788,7 +7791,9 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   `reject_net_reuseport_wasm`, `reject_net_set_option_wasm`). The freestanding `--profile wasm` link, which
   takes IR compiled for the host, has no `runtime-net.c` either, so a program
   that calls one fails there at the link, on the undefined `nish_` symbol.
-- **Not yet.** There is no name resolution (`reject_net_unknown_export`), no
+- **Not yet.** No `nish:net` call resolves a name (`reject_net_unknown_export`):
+  the stub resolver is the library module `nish/net/dns`, which drives these
+  calls on the program's own loop. There is no
   `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
   but `pollWait`'s timeout. A program that does not want a loop can still wait
   for a connection, a byte or a datagram by calling again on `-11`, as
@@ -9099,7 +9104,7 @@ policy](#the-capability-policy); without one, the set is a report.
 
 | Capability | Builtins |
 | --- | --- |
-| `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
+| `clock` | `Date.now`, `monotonicNanos`, `wallClockNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
 | `entropy` | `crypto.getRandomValues`, `Math.random` (`caps_entropy`) |
 | `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |

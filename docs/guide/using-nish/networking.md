@@ -26,8 +26,10 @@ the ones a loop branches on are the same on every platform:
 | `-111` | the connection was refused |
 | `-22` | a bad argument: a host that is not a numeric address, a flag that does not exist |
 
-Hosts are numeric literals, `"127.0.0.1"` or `"::1"`, because there is no name
-resolution. `"::"` listens on every address, IPv4 and IPv6 both.
+Hosts are numeric literals, `"127.0.0.1"` or `"::1"`: the socket calls never
+look a name up. To reach a name, resolve it first with
+[`nish/net/dns`](#names-nishnetdns). `"::"` listens on every address, IPv4 and
+IPv6 both.
 
 ## A server
 
@@ -261,6 +263,84 @@ export const main = (): number => {
 ```
 
 SIGTERM and SIGINT still stop the workers that are left, and still give `-1`.
+
+## Names: `nish/net/dns`
+
+A socket call takes an address. `nish/net/dns` turns a name into addresses
+without leaving your loop: a `DnsClient` joins the loop you made with
+`pollCreate`, under a range of tokens of its own, sends its queries on sockets
+it opens, and answers each lookup with the 18-byte addresses `tcpConnect` and
+`udpSendTo` take, the port you gave already in them. Your loop hands it the
+tokens it owns and the time; it never waits and never reads the clock itself,
+so a slow lookup costs your other sockets nothing.
+
+```ts nish:ok
+import { DnsClient } from "nish/net/dns";
+import { DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver";
+import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
+import { pollCreate, pollWait, tcpConnect } from "nish:net";
+import { monotonicNanos } from "nish:process";
+
+export const main = (): i32 => {
+  // No file read here: an empty resolv.conf means the servers on 127.0.0.1 and ::1.
+  const config = new DnsConfig();
+  dnsParseResolvConf(new Array<u8>(0), 0, 0, config);
+  const loop: i32 = pollCreate();
+  const dns = new DnsClient(new DnsResolver(config, null, 4), loop, 1000);
+  const lookup: i32 = dns.start("example.com", 443, monotonicNanos());
+  if (lookup < 0) {
+    console.log(`not started: ${lookup}`);
+    return 1;
+  }
+  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  const ttls: i32[] = new Array<i32>(16);
+  const ready: i32[] = new Array<i32>(16);
+  let found: i32 = dns.result(lookup, out, ttls);
+  while (found === DNS_RESOLVE_PENDING) {
+    const count: i32 = pollWait(loop, ready, dns.timeoutMs(monotonicNanos(), -1));
+    const now: i64 = monotonicNanos();
+    for (let k: i32 = 0; k < count; k++) {
+      if (dns.owns(ready[2 * k])) {
+        dns.ready(ready[2 * k], ready[2 * k + 1], now);
+      }
+    }
+    dns.tick(now);
+    found = dns.result(lookup, out, ttls);
+  }
+  if (found <= 0) {
+    console.log(`no address: ${found}`);
+    return 1;
+  }
+  // The first address, port 443 already in it, is what tcpConnect takes.
+  const addr: u8[] = new Array<u8>(DNS_ADDRESS_BYTES);
+  for (let i: i32 = 0; i < DNS_ADDRESS_BYTES; i++) {
+    addr[i] = out[i];
+  }
+  const fd: i32 = tcpConnect(addr);
+  console.log(`${found} addresses, connecting: ${fd >= 0}`);
+  return 0;
+};
+```
+
+`start` answers a lookup number, or a negative code when it cannot start one:
+`-44` every slot is in use, and `-1` to `-6` (`DNS_ERR_*` of
+`nish/net/dns-message`) the name is not one, such as `""` or a label over 63
+bytes. Check it before you pass it to `result`, which panics on a number that is
+not a lookup.
+
+A lookup answers its address count, A records first, or a negative code:
+`-41` the name has no address (it does not exist, or exists with no A or AAAA
+record), `-42` no server answered, `-43` an alias chain ran past eight aliases
+or led back to the name asked (a loop inside one reply reads as `-41`), and from
+`resolveHost` `-45` its time ran out. Another negative number is the errno of a
+socket or of `pollWait` that failed. `resolveHost` answers `start`'s codes too,
+and waits for both the A and the AAAA answer, so one family that answered is
+not returned on its own when the time runs out. `localhost`, an address literal and a name in the hosts table answer
+at once, with no packet. For a command-line tool or a program's start-up,
+`resolveHost(name, timeoutMs, port, out, ttls)` reads `/etc/resolv.conf` and
+`/etc/hosts` and blocks until the lookup ends. The
+[standard library page](standard-library.md#nishnetdns) has both in full.
 
 ## Trusting a peer's address
 

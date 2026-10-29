@@ -112,7 +112,7 @@
  * functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
-import { Secret, expose, exposeWith, wipe } from "nish:secret"
+import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 import { SHA256_BLOCK, SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { timingSafeEqual } from "nish/crypto/ct"
 
@@ -5266,6 +5266,68 @@ const p256PublicKeyExposed = (priv: u8[]): u8[] | null => {
   const encoded: u8[] = p256EncodePoint(point)
   p256WipePoint(point)
   return encoded
+}
+
+/**
+ * The ECDH shared secret of `priv` and the peer's public key `peerPoint`
+ * (SEC 1 §3.3.1): the 32-byte big-endian x coordinate of `priv * peerPoint`,
+ * as TLS 1.3 uses it (RFC 8446 §7.4.2). Answers `null` unless `priv` is a
+ * private key `p256PublicKey` would take and `peerPoint` is a 65-byte
+ * uncompressed point on the curve, and for a product at infinity, which a
+ * valid key and point cannot give. An x of zero is a point like any other
+ * and is answered.
+ */
+export const p256Ecdh = (priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> | null => {
+  const shared: u8[] | null = exposeWith(priv, peerPoint, p256EcdhExposed)
+  if (shared === null) {
+    return null
+  }
+  return secret(shared)
+}
+
+/**
+ * `p256Ecdh` on the plain key, for `exposeWith` to run. The scratch, the
+ * product and every limb of `X / Z` follow the key, so all are wiped; the
+ * inversion is written out here, rather than through `p256AffineX`, so that its
+ * accumulator and Z's inverse are this function's to wipe.
+ */
+const p256EcdhExposed = (priv: u8[], peerPoint: u8[]): u8[] | null => {
+  if (!p256ScalarInRange(priv)) {
+    return null
+  }
+  const peer: P256ProjectivePoint | null = p256DecodePoint(peerPoint)
+  if (peer === null) {
+    return null
+  }
+  const point = new P256ProjectivePoint()
+  const scratch = new P256PointScratch()
+  p256ScalarMult(point, priv, peer, scratch)
+  p256WipeScratch(scratch)
+  const infinity: boolean = p256FiatNonzero(point.z) === 0
+  // 1 / Z as Z^(p - 2), as p256FieldInvert computes it, over limbs wiped below.
+  const e: u32[] = p256Prime()
+  e[0] = 0xfffffffd
+  const acc: u32[] = p256Limbs()
+  p256FiatSetOne(acc)
+  for (let i: i32 = 255; i >= 0; i--) {
+    p256FiatSquare(acc, acc)
+    if (p256Bit(e, i)) {
+      p256FiatMul(acc, acc, point.z)
+    }
+  }
+  const x: u32[] = p256Limbs()
+  p256FiatMul(x, point.x, acc)
+  p256FiatMul(x, x, p256PlainOne())
+  const out: u8[] = new Array<u8>(P256_SCALAR_SIZE)
+  p256LimbsToBytes(out, 0, x)
+  wipe(x)
+  wipe(acc)
+  p256WipePoint(point)
+  if (infinity) {
+    wipe(out)
+    return null
+  }
+  return out
 }
 
 /**

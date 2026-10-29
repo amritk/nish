@@ -1,0 +1,6 @@
+PASS  warm-up: 300 lookups each give two addresses
+PASS  soak: 2000 more each give two addresses
+PASS  soak: the server answered both queries of every lookup
+PASS  soak: Arena.used() flat over 2000 lookups past warm-up
+PASS  soak: no lookup timed out
+dns soak: 5 passed, 0 failed, 0 skipped
