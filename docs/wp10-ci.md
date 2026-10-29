@@ -41,7 +41,7 @@ them for review.
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
-| `runner (shard <i>/4)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a quarter of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, with `--shard <i>/4`. A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
+| `runner (shard <i>/2)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs half of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, four runners at once (`scripts/nish-runner-parallel.mjs --shard <i>/2`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
 | `lint` | Ubuntu | `npm ls --package-lock-only` (skipped on tags, on `release/next` and on the Release PR's merge-queue run), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
 
@@ -92,49 +92,71 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
 
 - **`test`**, four ways. `node tests/run.js --shard <i>/<n>` splits the suite.
   Every shard builds stage1 and runs everything before the `tests/link/`
-  programs, which is under two minutes. Shard 1 runs every section after them
-  but the dealt ones (`DEALT_SECTIONS` in `tests/run.js`: WP14 self-hosting and
-  crypto-bench), together with the link programs whose output a later check
-  reads (`LINK_READ_LATER`). The dealt sections and the remaining link programs
-  are dealt by cost: `tests/shard-costs.json` holds the seconds each took in a
-  CI shard, and `linkShard` in `tests/run.js` gives each, largest first, to the
-  shard with the least so far, shard 1 starting from its own sections' cost.
-  The deal is deterministic, so every shard computes the same one; a link
-  program missing from the table costs the table's median. Every shard but 1
-  stops once its share is done. What a shard leaves to another is counted as
-  **delegated** and names the shard that proves it, so no shard's summary
-  claims checks it did not make.
+  programs but the two sections there that are dealt (`term-io` and
+  `--emit-ts`), about two minutes. Shard 1 runs every section after them but
+  the dealt ones, together with the link programs whose output a later check
+  reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
+  `tests/run.js`: term-io, `--emit-ts`, WP14 self-hosting, crypto-bench, the
+  sanitizer and fuzz replays, the Nish runner's `pop` run, WP9 bench, the
+  runtime cache, SQLite linking and the WP13 differential) and the remaining
+  link programs are dealt by cost: `tests/shard-costs.json` holds the seconds
+  each took in a CI shard, and `linkShard` in `tests/run.js` gives each,
+  largest first, to the shard with the least so far, shard 1 starting from its
+  own sections' cost. A link program costs at least half a second (a rejection
+  a twentieth), whatever the table says or whether it names the program at
+  all. The deal is deterministic, so every shard computes the same one. Every
+  shard but 1 stops once its share is done. What a shard leaves to another is
+  counted as **delegated** and names the shard that proves it, so no shard's
+  summary claims checks it did not make. A dealt section works in a directory
+  of its own and reads nothing another section writes, since the shard that
+  runs it runs none of the others it used to run beside.
 
   Regenerate the table when a shard drifts more than about a fifth from the
   others: the costs are the gaps between consecutive programs' last lines in a
-  CI shard's log, and `shardOne`, `selfHosting` and `cryptoBench` the spans of
-  those sections (`shardOne` without crypto-bench's, plus shard 1's steps
-  after the suite). Runners differ in speed by nearly a factor of two (one built
-  stage1 in 34 s where its siblings took 57-61 s), so read a span only from a
-  shard whose stage1 build and pre-link sections took as long as the other
-  shards': a shard on a fast runner finishes early on any table. The link
-  programs run `defaultJobs()` at a time and print in order, each once it and
-  every program before it are done, so a gap is a program's share of its
-  shard's pooled wall clock rather than its own run time: one that finished
-  behind a slower predecessor reads near 0. A shard's gaps still add up to its
-  link wall clock, which is what the deal balances. The table is measured from
-  [run 40093958447](https://github.com/amritk/nish/actions/runs/40093958447)
-  (`0a1cbcd`, the pool on top of #909's cheaper link profile): its shards built
-  stage1 in 39-55 s and ran the pre-link sections in 123-192 s (shards 2 and 4
-  on the slower runners), then spent 512, 344, 223 and 254 s on the link
-  programs and the dealt sections (jobs of 719, 617, 411 and 538 s). The 719
-  link programs came to 431 s of wall clock in all, but the serial table it ran
-  on dealt them unevenly, 254 s to shard 4 against 76-86 s to shards 2 and 3.
-  Dealt again on the regenerated table (`shardOne` 496 s, `selfHosting` 137 s,
-  `cryptoBench` 268 s), the same costs come to 512 s on shard 1 and 273 s on
-  each of the others. Shard 1's own sections are the floor no deal moves, so a
-  regeneration evens out shards 2-4 and leaves the longest job where it is. The
-  shard-1
-  steps after the suite that require a `PASS` line (`simd`, the AES kernels,
-  `cpu-level`) grep the Test step's log for it rather than running their
-  section again.
-- **`runner`**, four ways. `build/nish-runner --shard <i>/<n>` deals the cases
-  and link programs the runner selects round-robin.
+  CI shard's log, `shardOne` the span of shard 1's sections after the link
+  programs that are not dealt, plus its steps after the suite, and each dealt
+  section's entry the span of its lines in the shard that ran it. Runners
+  differ in speed by nearly a factor of two (one built stage1 in 34 s where
+  its siblings took 57-61 s), so read a span only from a shard whose stage1
+  build and pre-link sections took as long as the other shards': a shard on a
+  fast runner finishes early on any table. The link programs run
+  `defaultJobs()` at a time and print in order, each once it and every program
+  before it are done, so a gap is a program's share of its shard's pooled wall
+  clock rather than its own run time: one that finished behind a slower
+  predecessor reads near 0, which is why the deal puts a floor under it. A
+  shard's gaps still add up to its link wall clock, which is what the deal
+  balances.
+
+  The table is measured from
+  [run 40820090678](https://github.com/amritk/nish/actions/runs/40820090678)
+  (`b290fe2`). On the table before it, its `test` shards took 20.0, 14.8, 11.6
+  and 7.8 minutes. Two things made shard 1 the longest by six minutes. Every
+  shard ran `term-io` (56 s) and the `--emit-ts` corpus (110 s) before its link
+  programs, so each spent about five minutes there rather than two. And shard
+  1's own sections had grown from 475 s to 791 s, a floor no deal moved; six
+  of them, 344 s together, now are dealt instead (`sanitizers` 80 s,
+  `nishRunner` 31 s, `bench` 84 s, `runtimeCache` 36 s, `sqliteLink` 66 s,
+  `differential` 48 s), which leaves `shardOne` at 484 s. Shards 2-4 were
+  uneven for a third reason: 632 of the 806 link programs read 0 in the old
+  table or were not in it, every one of them was dealt to shard 2 (634
+  programs, against 69 and 79), and those that link cost about half a second
+  each there. Dealt again on the regenerated table, with the floor, every
+  shard carries 570 s after its pre-link sections.
+
+  The shard-1 steps after the suite that require a `PASS` line (`simd`, the
+  AES kernels, `cpu-level`) grep the Test step's log for it rather than
+  running their section again, so those sections stay in shard 1.
+- **`runner`**, two ways, and four processes in each.
+  `scripts/nish-runner-parallel.mjs --shard <i>/<n>` starts `defaultJobs()`
+  runners, each on a slice `build/nish-runner --shard` deals round-robin, so
+  job `i` runs exactly the programs `--shard <i>/<n>` names. Each process
+  runs in a directory of its own under `build/nish-runner-parallel/` that
+  links to the checkout, because the runner addresses its work and `build/test`
+  by relative path and `io_nish_import` and `io_nish_import_global` write the
+  same file there by design. One runner at a time left three of a runner's
+  four cores idle: in run 40820090678 the four jobs took 13.1, 13.0, 8.8 and
+  8.3 minutes, and the split was even -- 212 cases each, 290 s of them on
+  shards 1 and 2 and 160 s on 3 and 4, which were faster machines.
 - **`runtime-net`**, three ways. `node tests/run.js net_ --shard <i>/3` is a
   filtered run, which deals only the link programs its filter selects and
   starts shard 1 at nothing, so each mac shard gets about a third of the 188
@@ -333,6 +355,13 @@ single spans were shard 1's sections after the link programs (475 s, with 21 s
 of steps after the suite), crypto-bench (268 s, shard 2) and WP14
 self-hosting (137 s, shard 3). The longest `test` job took 11 min 59 s, on
 shard 1.
+
+Six weeks later, in
+[run 40820090678](https://github.com/amritk/nish/actions/runs/40820090678),
+the longest `test` job took 20 min 0 s, again shard 1: 5.6 minutes before the
+link programs, which every shard repeated, and 13.2 after them, which shard 1
+alone ran. [Shards](#shards-and-time-limits) says what moved where. The
+`runner` job was the next longest at 13 min 6 s, on one core of four.
 
 ## Running the same steps locally
 
