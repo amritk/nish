@@ -833,6 +833,22 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
       `call i32 ${emitter.useRuntime("nish_write_file_bytes")}(i8* ${path}, ${ARRAY_STRUCT}* ${bytes})`
     )
   }
+  // The mode is an `i32` beside the strings.
+  if (name === "writeFileSyncMode" || name === "createFileExclusiveSync" || name === "mkdirSyncMode") {
+    const args = expr.children[1].children
+    const path = emitter.emitExpression(args[0])
+    if (name === "mkdirSyncMode") {
+      const mode = emitter.emitExpression(args[1])
+      return emitter.fn.emitValue(
+        `call i32 ${emitter.useRuntime("nish_mkdir_mode")}(i8* ${path}, i32 ${mode})`
+      )
+    }
+    const data = emitter.emitExpression(args[1])
+    const mode = emitter.emitExpression(args[2])
+    const fn = name === "writeFileSyncMode" ? "nish_write_file_mode" : "nish_create_file_exclusive"
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime(fn)}(i8* ${path}, i8* ${data}, i32 ${mode})`)
+  }
+
   // WP14 D4: the two host calls a self-hosted driver needs to link its output.
   if (name === "mkdirSync") {
     return emitter.fn.emitValue(
@@ -1122,6 +1138,18 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "writeFileBytesSync") {
     out.push("nish_write_file_bytes")
+    return out
+  }
+  if (name === "writeFileSyncMode") {
+    out.push("nish_write_file_mode")
+    return out
+  }
+  if (name === "createFileExclusiveSync") {
+    out.push("nish_create_file_exclusive")
+    return out
+  }
+  if (name === "mkdirSyncMode") {
+    out.push("nish_mkdir_mode")
     return out
   }
   // `writeBytes` checks its range as `netWrite` does.
