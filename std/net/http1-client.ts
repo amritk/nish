@@ -36,11 +36,13 @@
  * `HTTP1_END` (the response is complete; with `keepAlive()` the next one
  * follows), `HTTP1_UPGRADE` (a CONNECT was answered with 2xx and the
  * connection is a tunnel now: `tunnelBytes()` answers what was fed past the
- * head), `HTTP1_CLOSED` (the connection is done) and `HTTP1_ERROR`. The last
- * three repeat on every later call. Only complete lines are acted on, body
- * bytes are counted, never guessed, and every refusal is decided by the same
- * byte wherever the input was cut, so the sequence of events, the
- * concatenated body and the error code do not depend on the split —
+ * head), `HTTP1_CLOSED` (the connection is done: the server closed it
+ * between responses, or the last response was not kept alive) and
+ * `HTTP1_ERROR`. The last three repeat on every later call. Only complete
+ * lines are acted on, body bytes are counted, never guessed, and every
+ * refusal is decided by the same byte wherever the input was cut, so the
+ * sequence of events, the concatenated body and the error code do not depend
+ * on the split —
  * `tests/link/net_http1_client` feeds a corpus at every split point.
  *
  * **How a response ends** (RFC 9112 §6.3): a response to HEAD, a 1xx, 204 or
@@ -55,13 +57,14 @@
  * (an obs-fold, whitespace before the colon, a control byte in a value), a 101
  * (this client never asks to switch protocols), `Transfer-Encoding` together
  * with `Content-Length`, a transfer coding other than one `chunked` or one in
- * an HTTP/1.0 response, a `Content-Length` that is not one value, a malformed
- * chunk, a status line, header section, field count, body or trailer section
- * over the caller's limit, a chunk-size line over `HTTP1_MAX_CHUNK_LINE` and
- * more than `HTTP1_MAX_INFORMATIONAL` interim responses. Each of these is a
- * response-smuggling or a resource shape, and each is refused rather than
- * repaired: a client that repairs one differently from a proxy disagrees with
- * it about where the next response starts. An error is final.
+ * an HTTP/1.0 response, a `Content-Length` that is not a decimal or whose
+ * repeats disagree, a malformed chunk, a status line, header section, field
+ * count, body or trailer section over the caller's limit, a chunk-size line
+ * over `HTTP1_MAX_CHUNK_LINE` and more than `HTTP1_MAX_INFORMATIONAL` interim
+ * responses. Each of these is a response-smuggling or a resource shape, and
+ * each is refused rather than repaired: a client that repairs one differently
+ * from a proxy disagrees with it about where the next response starts. An
+ * error is final.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.

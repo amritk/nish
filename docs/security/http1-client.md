@@ -47,7 +47,7 @@ writer to send is checked so that its strings cannot end a line.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`, `http1ClientStartHead`, `Http1ResponseParser.reason` and `errorText`) | Each response's field names and values, and its reason phrase, are kept as strings, and the arrays that hold them are made again for each response, so they stay in the arena until the program resets it. Measured at 59,392 bytes over 1,000 kept-alive responses of 83 bytes with three fields. It is bounded for each response by `maxHeaderBytes` (and by `HTTP1_MAX_INFORMATIONAL` interim heads for each request), and the number of responses is the number the program reads: a server that sends responses nobody asked for is read only by a program that keeps calling `next()` past the response it awaited. | **Open, accepted for now.** A per-connection arena closes it, as for H1-3 and TLS-3; so would spans into the input, as the server parser keeps with `keepText` off, at the price of a `header()` that answers a window instead of a string. |
+| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`, `http1ClientStartHead`, `Http1ResponseParser.reason` and `errorText`) | Each response's field names and values, and its reason phrase, are kept as strings, and the arrays that hold them are made again for each response, so they stay in the arena until the program resets it. Measured at 59,392 bytes over 1,000 kept-alive responses of 83 bytes with three fields. It is bounded for each response by `maxStatusLine + maxHeaderBytes`, the reason phrase being kept too (and by `HTTP1_MAX_INFORMATIONAL` interim heads for each request), and the number of responses is the number the program reads: a server that sends responses nobody asked for is read only by a program that keeps calling `next()` past the response it awaited. | **Open, accepted for now.** A per-connection arena closes it, as for H1-3 and TLS-3; so would spans into the input, as the server parser keeps with `keepText` off, at the price of a `header()` that answers a window instead of a string. |
 
 ## Fuzzing
 
@@ -141,7 +141,13 @@ each request). Negative limits are clamped to 0, each `i32` limit to 2^30 and
 `i32` limit at 2^31 - 1 and `maxBody` at 2^62 an ordinary response is read,
 a `Content-Length` of 2^53 is a head and one of 2^53 + 1 is over the body
 limit (`the largest limits read an ordinary response`, `one of 2^53 + 1 is
-over it`). A length past 2^63 or a chunk size past 64 bits is over the body
+over it`), and a chunked body with trailers is read (`the largest limits read
+a chunked body and its trailers`), where an unclamped trailer limit plus one
+would wrap. Each negative limit is shown alone, the others sane (`a negative
+maxBody is 0: a Content-Length of 0 is read`). A line longer than what the
+lines before it left of its section's budget is refused as it is found,
+whether it ends in CRLF, in a bare LF or not yet (`a field line past what the
+section has left, ended in a bare LF`, and the trailer's). A length past 2^63 or a chunk size past 64 bits is over the body
 limit, not wrapped. A `Content-Length` past 2^53 given more than once is
 refused as values that differ, whatever the values, since two saturated
 values cannot be compared, on a 304 too. A
@@ -171,15 +177,21 @@ LF or another control byte; not exactly one `Host`; the caller's own
 names and values of different lengths; a body length below -2. The head is
 counted in 64 bits before a byte is written, so `HTTP1_NO_ROOM` (one byte
 short, a negative offset, an offset past the end) and `HTTP1_REFUSED` leave
-the buffer untouched (`and writes nothing`). The server parser of
+the buffer untouched (`and writes nothing`), and `http1RequestHead` answers
+`null` for a head past 2^30 bytes, the most one array holds, rather than
+wrapping its size (`refused: a head past 2^30 bytes`, sixteen fields sharing
+one 64 MiB value). The server parser of
 `nish/net/http1` reads what the writer writes (`the server parser reads the
 head`).
 
 **A window outside the buffer panics.** `feed` with a window outside its
-array is the program's mistake and panics before anything is read:
-`tests/link/net_http1_client_feed_window`, run as
-`link/net_http1_client_feed_window: exits with 1 and stdout matches
-expected.out`.
+array is the program's mistake and panics before anything is read, whichever
+bound it breaks: past the end (`tests/link/net_http1_client_feed_window`), a
+negative offset whose end is inside the array
+(`tests/link/net_http1_client_feed_window_off`) and a negative length
+(`tests/link/net_http1_client_feed_window_len`), each run as
+`link/<name>: exits with 1 and stdout matches expected.out`, with the panic's
+text pinned by its `expected.stderr`.
 
 **What no check reaches.** Every branch of `std/net/http1-client.ts` is run
 by the checks above but these, measured with V8 coverage on the module's
@@ -190,3 +202,12 @@ return of `http1ClientPutField` for a field index out of range, whose
 callers pass only indexes they loop over, and the `: buf.length` arm of the
 line-end clamps in `http1ClientStatusLine`, `http1ClientFieldLine` and
 `http1ClientChunkSize`, whose line end the parser found inside the buffer.
+
+**Every condition is observed.** Each refusal and clamp was deleted in turn
+and the checks run, and each deletion fails one. Three cannot, since
+deleting them changes nothing a caller sees: the lower clamp of the `i32`
+limits (a negative limit and 0 refuse the same input with the same code), the upper clamp
+of `maxHeaders` (it is only compared, never added to) and the status line's
+`b - a < 12` length test (a shorter line puts its CR where a later byte test
+already fails). They stay as the guards the overflow arithmetic and the
+bounds of `buf` rest on.

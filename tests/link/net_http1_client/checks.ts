@@ -614,6 +614,18 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "a status code run into its reason", "HTTP/1.1 2040 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
   refused(t, "a control byte in the reason", "HTTP/1.1 204 No\u0001Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
   refused(t, "a non-digit minor version", "HTTP/1.x 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "a status line one byte short of a status code", "HTTP/1.1 20\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "XTTP for HTTP", "XTTP/1.1 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "HXTP for HTTP", "HXTP/1.1 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "HTXP for HTTP", "HTXP/1.1 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "HTTX for HTTP", "HTTX/1.1 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "no slash after HTTP", "HTTP-1.1 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "a non-digit major version", "HTTP/x.1 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "no dot in the version", "HTTP/1-1 204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "no space after the version", "HTTP/1.1X204 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "a non-digit first status digit", "HTTP/1.1 X04 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "a non-digit second status digit", "HTTP/1.1 2/4 No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
+  refused(t, "a non-digit third status digit", "HTTP/1.1 20/ No Content\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
   refused(t, "HTTP/2.0", "HTTP/2.0 204 No Content\r\n\r\n", plain(), HTTP1_E_VERSION);
   refused(t, "HTTP/0.9", "HTTP/0.9 204 No Content\r\n\r\n", plain(), HTTP1_E_VERSION);
   refused(t, "a status line ended in a bare LF", "HTTP/1.1 204 No Content\n\r\n", plain(), HTTP1_E_BARE_LF);
@@ -756,6 +768,17 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr("tunnelBytes() holds what was fed past the head, then and later", textOf(tunnelled, zero, toI32(tunnelled.length)), "abcd");
   t.ok("a tunnel is not kept alive", !tunnel.keepAlive());
   t.eqI32("tunnelBytes() outside a tunnel is empty", toI32(smallParser().tunnelBytes().length), zero);
+  const midway: Http1ResponseParser = smallParser();
+  const partBody: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhel");
+  midway.feed(partBody, zero, toI32(partBody.length));
+  t.eqI32("a response part-read", midway.next(), HTTP1_HEAD);
+  t.eqI32("tunnelBytes() mid-response is empty, with bytes buffered", toI32(midway.tunnelBytes().length), zero);
+  const notConnect: Http1ResponseParser = smallParser();
+  const pastEnd: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\nabcd");
+  notConnect.feed(pastEnd, zero, toI32(pastEnd.length));
+  t.eqI32("a 200 to a request that was not CONNECT", notConnect.next(), HTTP1_HEAD);
+  t.eqI32("ends", notConnect.next(), HTTP1_END);
+  t.eqI32("tunnelBytes() after it is empty, with bytes past it buffered", toI32(notConnect.tunnelBytes().length), zero);
 
   // --- The limits ------------------------------------------------------------
   const status20: string = "HTTP/1.1 204 OKAYYYY";
@@ -788,6 +811,41 @@ export const http1ClientChecks = (): i32 => {
   );
   const zeroLimits: Http1ResponseParser = new Http1ResponseParser(toI32(-5), toI32(-5), toI32(-5), toI64(-5), toI32(-5));
   t.eqStr("negative limits are clamped to 0", outcomeOf(zeroLimits, "HTTP/1.1 204 No Content\r\n\r\n", plain()), `ends 0, error ${HTTP1_E_STATUS_LINE_LIMIT}`);
+  // One negative limit at a time, the others sane: each reads as 0.
+  const minusFive: i32 = -5;
+  t.eqStr("a negative maxHeaderBytes is 0", outcomeOf(limitedParser(toI32(1), minusFive), "HTTP/1.1 204 No Content\r\n\r\n", plain()), `ends 0, error ${HTTP1_E_HEADER_LIMIT}`);
+  t.eqStr("a negative maxHeaders is 0: no field", outcomeOf(limitedParser(toI32(2), minusFive), "HTTP/1.1 204 No Content\r\n\r\n", plain()), "ends 1, error 0");
+  t.eqStr("but one", outcomeOf(limitedParser(toI32(2), minusFive), "HTTP/1.1 204 No Content\r\nA: 1\r\n\r\n", plain()), `ends 0, error ${HTTP1_E_COUNT_LIMIT}`);
+  t.eqStr(
+    "a negative maxBody is 0: a Content-Length of 0 is read",
+    transcriptWith(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", plain()),
+    "200 1.1 keep length 0 [content-length=0]\nbody \"\"\nneeds more"
+  );
+  t.eqStr(
+    "an empty chunked body",
+    transcriptWith(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", plain()),
+    "200 1.1 keep chunked [transfer-encoding=chunked]\nbody \"\"\nneeds more"
+  );
+  t.eqStr("an empty body read until close", transcriptWith(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\n\r\n", closing()), "200 1.1 close length -1 []\nbody \"\"\nclosed");
+  t.eqStr("but a byte of body is over it", outcomeOf(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nx", plain()), `ends 0, error ${HTTP1_E_BODY_LIMIT}`);
+  t.eqStr(
+    "a negative maxTrailerBytes is 0",
+    outcomeOf(limitedParser(toI32(4), minusFive), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", plain()),
+    `ends 0, error ${HTTP1_E_TRAILER_LIMIT}`
+  );
+
+  // A line longer than what is left of its section's budget is refused as it
+  // is found, before its bare LF is judged; the budget is what the lines
+  // before it left.
+  const longField: string = `X-Long: ${repeat("a", 245)}`;
+  refused(t, "a field line past what the section has left, ended in a bare LF", `HTTP/1.1 200 OK\r\nA: 1\r\n${longField}\n\r\n`, plain(), HTTP1_E_HEADER_LIMIT);
+  refused(t, "the same line, ended in CRLF", `HTTP/1.1 200 OK\r\nA: 1\r\n${longField}\r\n\r\n`, plain(), HTTP1_E_HEADER_LIMIT);
+  refused(t, "the same line, its end not yet arrived", `HTTP/1.1 200 OK\r\nA: 1\r\n${longField}`, plain(), HTTP1_E_HEADER_LIMIT);
+  const longTrailer: string = `X-Long: ${repeat("a", 53)}`;
+  const chunkedEnd: string = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nA: 1\r\n";
+  refused(t, "a trailer line past what the section has left, ended in a bare LF", `${chunkedEnd}${longTrailer}\n\r\n`, plain(), HTTP1_E_TRAILER_LIMIT);
+  refused(t, "the same trailer, ended in CRLF", `${chunkedEnd}${longTrailer}\r\n\r\n`, plain(), HTTP1_E_TRAILER_LIMIT);
+  refused(t, "the same trailer, its end not yet arrived", `${chunkedEnd}${longTrailer}`, plain(), HTTP1_E_TRAILER_LIMIT);
 
   // The upper clamps: an i32 limit to 2^30, so that a line's limit plus one
   // does not wrap, and maxBody to 2^53.
@@ -807,6 +865,11 @@ export const http1ClientChecks = (): i32 => {
     "one of 2^53 + 1 is over it",
     transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nContent-Length: 9007199254740993\r\n\r\n", plain()),
     `error ${HTTP1_E_BODY_LIMIT}`
+  );
+  t.eqStr(
+    "the largest limits read a chunked body and its trailers",
+    transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\nX-T: 1\r\n\r\n", plain()),
+    '200 1.1 keep chunked [transfer-encoding=chunked]\nbody "ok"\nneeds more'
   );
 
   const chunkLine: string = `1;${repeat("a", HTTP1_MAX_CHUNK_LINE - 2)}`;
@@ -901,6 +964,19 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr("refused: names and values of different lengths", headText(http1RequestHead("GET", "/", ["Host", "Accept"], ["example.com"], none)), "null");
   const belowNone: i64 = -3;
   t.eqStr("refused: a body length below -2", requestWith("POST", "/", "", "", belowNone), "null");
+  // Sixteen fields sharing one 64 MiB value pass every per-field check but
+  // sum past the 2^30-byte head an array holds.
+  let wide: string = "a";
+  for (let i: i32 = 0; i < 26; i += 1) {
+    wide = `${wide}${wide}`;
+  }
+  const wideNames: string[] = ["Host"];
+  const wideValues: string[] = ["example.com"];
+  for (let i: i32 = 0; i < 16; i += 1) {
+    wideNames.push("X");
+    wideValues.push(wide);
+  }
+  t.eqStr("refused: a head past 2^30 bytes", headText(http1RequestHead("GET", "/", wideNames, wideValues, none)), "null");
 
   const names: string[] = ["Host", "Accept"];
   const values: string[] = ["example.com", "*/*"];

@@ -60,6 +60,18 @@ PASS  refused with 1 (a malformed status line): a lowercase protocol name
 PASS  refused with 1 (a malformed status line): a status code run into its reason
 PASS  refused with 1 (a control character in the reason phrase): a control byte in the reason
 PASS  refused with 1 (a malformed status line): a non-digit minor version
+PASS  refused with 1 (a malformed status line): a status line one byte short of a status code
+PASS  refused with 1 (a malformed status line): XTTP for HTTP
+PASS  refused with 1 (a malformed status line): HXTP for HTTP
+PASS  refused with 1 (a malformed status line): HTXP for HTTP
+PASS  refused with 1 (a malformed status line): HTTX for HTTP
+PASS  refused with 1 (a malformed status line): no slash after HTTP
+PASS  refused with 1 (a malformed status line): a non-digit major version
+PASS  refused with 1 (a malformed status line): no dot in the version
+PASS  refused with 1 (a malformed status line): no space after the version
+PASS  refused with 1 (a malformed status line): a non-digit first status digit
+PASS  refused with 1 (a malformed status line): a non-digit second status digit
+PASS  refused with 1 (a malformed status line): a non-digit third status digit
 PASS  refused with 2 (an HTTP major version other than 1): HTTP/2.0
 PASS  refused with 2 (an HTTP major version other than 1): HTTP/0.9
 PASS  refused with 3 (a line ended in a bare LF): a status line ended in a bare LF
@@ -153,6 +165,11 @@ PASS  and again
 PASS  tunnelBytes() holds what was fed past the head, then and later
 PASS  a tunnel is not kept alive
 PASS  tunnelBytes() outside a tunnel is empty
+PASS  a response part-read
+PASS  tunnelBytes() mid-response is empty, with bytes buffered
+PASS  a 200 to a request that was not CONNECT
+PASS  ends
+PASS  tunnelBytes() after it is empty, with bytes past it buffered
 PASS  the status line: exactly at the limit
 PASS  the status line: one past it
 PASS  the header section: exactly at the limit
@@ -175,9 +192,24 @@ PASS  the trailer section: one past it
 PASS  a Content-Length over the body limit on a response to HEAD is not refused
 PASS  a Content-Length past 2^63 is over the body limit, not wrapped
 PASS  negative limits are clamped to 0
+PASS  a negative maxHeaderBytes is 0
+PASS  a negative maxHeaders is 0: no field
+PASS  but one
+PASS  a negative maxBody is 0: a Content-Length of 0 is read
+PASS  an empty chunked body
+PASS  an empty body read until close
+PASS  but a byte of body is over it
+PASS  a negative maxTrailerBytes is 0
+PASS  refused with 12 (a header section over the limit): a field line past what the section has left, ended in a bare LF
+PASS  refused with 12 (a header section over the limit): the same line, ended in CRLF
+PASS  refused with 12 (a header section over the limit): the same line, its end not yet arrived
+PASS  refused with 15 (a trailer section over the limit): a trailer line past what the section has left, ended in a bare LF
+PASS  refused with 15 (a trailer section over the limit): the same trailer, ended in CRLF
+PASS  refused with 15 (a trailer section over the limit): the same trailer, its end not yet arrived
 PASS  the largest limits read an ordinary response
 PASS  a Content-Length of 2^53 is under a clamped maxBody
 PASS  one of 2^53 + 1 is over it
+PASS  the largest limits read a chunked body and its trailers
 PASS  a chunk-size line of exactly HTTP1_MAX_CHUNK_LINE (4096) bytes
 PASS  one byte longer
 PASS  exactly HTTP1_MAX_INFORMATIONAL (32) interim responses
@@ -230,6 +262,7 @@ PASS  refused: no Host
 PASS  refused: two Hosts
 PASS  refused: names and values of different lengths
 PASS  refused: a body length below -2
+PASS  refused: a head past 2^30 bytes
 PASS  http1WriteRequestHead fills a buffer exactly its size
 PASS  with the same bytes
 PASS  at an offset it answers where it ends
@@ -245,4 +278,4 @@ PASS  as a chunked POST
 PASS  with its body
 PASS  to its end
 PASS  HTTP1_E_NONE is 0, before anything goes wrong
-http1-client: 247 passed, 0 failed, 0 skipped
+http1-client: 280 passed, 0 failed, 0 skipped

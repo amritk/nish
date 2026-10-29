@@ -109,11 +109,11 @@ the body on its own:
 | Event | What it means |
 | --- | --- |
 | `HTTP1_INFORMATIONAL` | an interim 1xx response was read; `status` and the fields are its, and the final response follows. It comes from `nish/net/http1-client` |
-| `HTTP1_HEAD` | the final response's status line and fields are in: `status`, `reason`, `minor` (the HTTP minor version), `names` and `values` (names in lowercase), `header(name)` (any case), `contentLength` (-1 without one) |
+| `HTTP1_HEAD` | the final response's status line and fields are in: `status`, `reason`, `minor` (the HTTP minor version), `names` and `values` (names in lowercase), `header(name)` (any case), `contentLength` (the body's length, or -1 when the response is not framed by one; it is always -1 for a response to HEAD, a 204, a 304 and a 2xx to CONNECT, which have no body, so read `header("content-length")` there) |
 | `HTTP1_BODY` | some body bytes, de-chunked: `body[bodyOff .. bodyOff + bodyLen)`, valid until the next call |
 | `HTTP1_END` | the response is complete, trailers included |
 | `HTTP1_UPGRADE` | a `CONNECT` was answered with 2xx and the connection is a tunnel: `tunnelBytes()` answers what was fed past the head |
-| `HTTP1_CLOSED` | the server closed the connection between responses |
+| `HTTP1_CLOSED` | the connection is done: the server closed it between responses, or the response before was not kept alive (`keepAlive()` false) and nothing more can follow it |
 | `HTTP1_ERROR` | the response is refused: `error` holds the code and `errorText` says why |
 
 `HTTP1_UPGRADE`, `HTTP1_CLOSED` and `HTTP1_ERROR` are final: every later call
@@ -184,7 +184,8 @@ answers: feed what the socket gave you, then drain `next()`, and the parser
 never holds more than a line in progress.
 
 Each response's reason phrase and fields are kept as strings in the arena
-until your program resets it, at most `maxHeaderBytes` for each response.
+until your program resets it, at most `maxStatusLine + maxHeaderBytes` for
+each response.
 
 ## Where next
 
