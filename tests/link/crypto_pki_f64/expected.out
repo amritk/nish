@@ -92,10 +92,11 @@ PASS  an excluded iPAddress
 PASS  an IPv4 address under IPv6 subtrees
 PASS  a name that only ends in a permitted one
 PASS  a wildcard over an excluded subtree
+PASS  a wildcard below an excluded subtree
 PASS  a wildcard over a permitted subtree
 PASS  a dNSName subtree of . excludes every name
 PASS  a self-issued leaf outside a permitted subject
-pki name constraints (f64 mode): 13 passed, 0 failed, 0 skipped
+pki name constraints (f64 mode): 14 passed, 0 failed, 0 skipped
 PASS  an empty chain
 PASS  a leaf that is no certificate
 PASS  an intermediate that is no certificate

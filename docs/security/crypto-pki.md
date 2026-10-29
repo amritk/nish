@@ -424,11 +424,11 @@ checked against those sections clause by clause, then by mutation, one
 mutant at a time: `pki.ts` was edited, the test program was rebuilt in the
 debug profile and run, and the file was then restored. A mutant is killed
 when a named check fails, the debug profile panics, or the run does not
-finish within 600 seconds. 84 mutants were run, of three forms:
+finish within 600 seconds. 85 mutants were run, of three forms:
 
 - 62 replace a refusal rule by its accepting form, so that the rule never
   refuses;
-- 16 narrow or delete a rule an accepting form leaves untested: the
+- 17 narrow or delete a rule an accepting form leaves untested: the
   serverAuth clauses of both EKU rules, an excluded dNSName or iPAddress
   subtree that always matches, a permitted directoryName that never does,
   each wildcard branch of the dNSName constraint check, the empty subtree,
@@ -438,7 +438,7 @@ finish within 600 seconds. 84 mutants were run, of three forms:
 - 6 change the RSA wiring: the weak-key bound, the PSS dispatch, each hash
   mapping, and each verdict made `PKI_OK`.
 
-79 were killed, every one of the narrowing forms among them, and one,
+80 were killed, every one of the narrowing forms among them, and one,
 `int-sig`, by not finishing: without the counted signature check the
 `PKI_MAX_SIGNATURES` test's search has no budget. The other five are
 equivalent:
@@ -621,14 +621,19 @@ one with a minimum or maximum other than the default, refuses the chain.
 A dNSName subtree holds its own name and every name below it, by whole
 labels. A subtree of `.` holds every name. A wildcard SAN holds every name
 one label below its base, so it is outside a permitted subtree that holds
-only some of them, and inside an excluded subtree that holds any of them.
+only some of them. It is inside an excluded subtree that holds its base,
+such as `org` for `*.example.org`, and inside one anywhere below its base:
+`www.example.org`, which is one of its names, and also `a.www.example.org`,
+which none of its names is. Refusing the deeper case is stricter than the
+RFC asks, and fails closed.
 
 Tests:
 
 - `name constraints the leaf meets`, `name constraints, by address` and
   `excluded dNSName and iPAddress subtrees the leaf misses`
 - `a wildcard at a permitted subtree`, `a wildcard over a permitted subtree`
-  and `a wildcard over an excluded subtree`
+  `a wildcard over an excluded subtree` and `a wildcard below an excluded
+  subtree`
 - `a dNSName subtree of . permits every name` and
   `a dNSName subtree of . excludes every name`
 - `a directoryName constraint skips a self-issued CA` and

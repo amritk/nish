@@ -66,6 +66,7 @@ import {
   INT_NC_WILDEX,
   INT_NC_WILDPERM,
   INT_NC_WILDPERM_OK,
+  INT_NC_WILDUP,
   INT_NOBC,
   INT_NOCA,
   INT_NOKCS,
@@ -389,6 +390,7 @@ export const constraints = (mode: string): i32 => {
   eqCode(s, "an IPv4 address under IPv6 subtrees", verify([LEAF, INT_NC_IP6], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a name that only ends in a permitted one", verify([LEAF_SUFFIX, INT_NC_OK], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a wildcard over an excluded subtree", verify([LEAF, INT_NC_WILDEX], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "a wildcard below an excluded subtree", verify([LEAF, INT_NC_WILDUP], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a wildcard over a permitted subtree", verify([LEAF, INT_NC_WILDPERM], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a dNSName subtree of . excludes every name", verify([LEAF, INT_NC_DOTEXCL], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a self-issued leaf outside a permitted subject", verify([LEAF_SELFISS, INT_NC_OK], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
