@@ -611,29 +611,29 @@ const URL_MAX_PORT: i32 = 65535
 export class Url {
   /** Lower-cased, without its `:`: `http`. */
   scheme: string = ""
-  /** True when the URL has a `//` authority; `mailto:a@b` has none and `file:///x` has an empty one. */
-  hasAuthority: boolean = false
   /** The userinfo before its first `:`, as written; empty when there is none. */
   username: string = ""
   /** The userinfo after its first `:`, as written; empty when there is none. */
   password: string = ""
   /** A lower-cased reg-name, a dotted IPv4 address, or an IPv6 address without its brackets. */
   host: string = ""
-  /** 0 to 65535, or -1 when the URL names none; `urlOrigin` supplies the scheme's default. */
-  port: i32 = -1
   /** With its dot segments removed; empty, or starting with `/` when there is an authority. */
   path: string = ""
   /** Without its `?`, or null when there is no `?`. */
   query: string | null = null
   /** Without its `#`, or null when there is no `#`. */
   fragment: string | null = null
+  /** 0 to 65535, or -1 when the URL names none; `urlOrigin` supplies the scheme's default. */
+  port: i32 = -1
+  /** True when the URL has a `//` authority; `mailto:a@b` has none and `file:///x` has an empty one. */
+  hasAuthority: boolean = false
 }
 
 /** `bytes[a, b)` as a string with A to Z lower-cased. */
 const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
   const out: u8[] = new Array<u8>(b - a)
   let i: i32 = a
-  while (i >= 0 && i < b && i - a < toI32(out.length)) {
+  while (i >= 0 && i < b && i < toI32(bytes.length) && i - a < toI32(out.length)) {
     const c: i32 = toI32(bytes[i])
     out[i - a] = c >= 65 && c <= 90 ? toU8(c + 32) : toU8(c)
     i += 1
@@ -644,7 +644,7 @@ const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
 /** The first `c` in `bytes[a, b)`, or `b`. */
 const urlFind = (bytes: u8[], a: i32, b: i32, c: i32): i32 => {
   let i: i32 = a
-  while (i >= 0 && i < b && toI32(bytes[i]) !== c) {
+  while (i >= 0 && i < b && i < toI32(bytes.length) && toI32(bytes[i]) !== c) {
     i += 1
   }
   return i
@@ -669,17 +669,22 @@ const urlIsIpv4 = (bytes: u8[], a: i32, b: i32): boolean => {
   while (parts < 4) {
     const start: i32 = i
     let value: i32 = 0
-    while (i < b && i - start < 4 && urlIsDigit(toI32(bytes[i]))) {
+    while (i >= 0 && i < b && i < toI32(bytes.length) && i - start < 4 && urlIsDigit(toI32(bytes[i]))) {
       value = value * 10 + toI32(bytes[i]) - 48
       i += 1
     }
     const digits: i32 = i - start
-    if (digits === 0 || digits > 3 || value > 255 || (digits > 1 && toI32(bytes[start]) === 48)) {
+    if (
+      digits === 0 ||
+      digits > 3 ||
+      value > 255 ||
+      (digits > 1 && start >= 0 && start < toI32(bytes.length) && toI32(bytes[start]) === 48)
+    ) {
       return false
     }
     parts += 1
     if (parts < 4) {
-      if (i >= b || toI32(bytes[i]) !== URL_DOT) {
+      if (i < 0 || i >= b || i >= toI32(bytes.length) || toI32(bytes[i]) !== URL_DOT) {
         return false
       }
       i += 1
@@ -704,13 +709,13 @@ const urlIsIpv6 = (bytes: u8[], a: i32, b: i32): boolean => {
   }
   while (i < b) {
     const start: i32 = i
-    while (i < b && urlHexValue(toI32(bytes[i])) >= 0) {
+    while (i >= 0 && i < b && i < toI32(bytes.length) && urlHexValue(toI32(bytes[i])) >= 0) {
       i += 1
     }
     if (i === start) {
       return false
     }
-    if (i < b && toI32(bytes[i]) === URL_DOT) {
+    if (i >= 0 && i < b && i < toI32(bytes.length) && toI32(bytes[i]) === URL_DOT) {
       if (!urlIsIpv4(bytes, start, b)) {
         return false
       }
@@ -721,12 +726,12 @@ const urlIsIpv6 = (bytes: u8[], a: i32, b: i32): boolean => {
         return false
       }
       groups += 1
-      if (i < b) {
+      if (i >= 0 && i < b && i < toI32(bytes.length)) {
         if (toI32(bytes[i]) !== URL_COLON || i + 1 === b) {
           return false
         }
         i += 1
-        if (toI32(bytes[i]) === URL_COLON) {
+        if (i < toI32(bytes.length) && toI32(bytes[i]) === URL_COLON) {
           if (elided) {
             return false
           }
@@ -761,12 +766,12 @@ const urlLooksNumeric = (bytes: u8[], a: i32, b: i32): boolean => {
   let i: i32 = start
   if (end - start >= 2 && toI32(bytes[start]) === 48 && (toI32(bytes[start + 1]) | 32) === 120) {
     i = start + 2
-    while (i < end && urlHexValue(toI32(bytes[i])) >= 0) {
+    while (i >= 0 && i < end && i < toI32(bytes.length) && urlHexValue(toI32(bytes[i])) >= 0) {
       i += 1
     }
     return i === end
   }
-  while (i < end && urlIsDigit(toI32(bytes[i]))) {
+  while (i >= 0 && i < end && i < toI32(bytes.length) && urlIsDigit(toI32(bytes[i]))) {
     i += 1
   }
   return i === end
@@ -806,7 +811,7 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
   } else {
     portAt = urlFind(bytes, h, b, URL_COLON)
     let i: i32 = h
-    while (i < portAt && urlIsUnreserved(toI32(bytes[i]))) {
+    while (i >= 0 && i < portAt && i < toI32(bytes.length) && urlIsUnreserved(toI32(bytes[i]))) {
       i += 1
     }
     if (i < portAt) {
@@ -820,7 +825,7 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
   if (portAt + 1 < b) {
     let port: i32 = 0
     let i: i32 = portAt + 1
-    while (i < b) {
+    while (i >= 0 && i < b && i < toI32(bytes.length)) {
       const c: i32 = toI32(bytes[i])
       if (!urlIsDigit(c)) {
         return false
@@ -950,7 +955,7 @@ const urlRemoveDotSegments = (s: string): string => {
   const n: i32 = toI32(s.length)
   const out: string[] = []
   let i: i32 = 0
-  while (i < n) {
+  while (i >= 0 && i < n) {
     if (toI32(s.charCodeAt(i)) !== URL_SLASH) {
       const j: i32 = urlSlashFrom(s, i, n)
       if (urlDotSegment(s, i, j) > 0) {
