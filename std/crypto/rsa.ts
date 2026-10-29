@@ -145,9 +145,13 @@ const rsaModulusOk = (n: u8[]): boolean => {
 const rsaLimbsFromBytes = (bytes: u8[], limbs: i32): u32[] => {
   const out: u32[] = new Array<u32>(limbs)
   const len: i32 = toI32(bytes.length)
+  const outLen: i32 = toI32(out.length)
   for (let i: i32 = 0; i < len; i++) {
     const at: i32 = i >> 2
-    out[at] = out[at] | (toU32(bytes[len - 1 - i]) << (toU32(i & 3) << toU32(3)))
+    // Always true, since the caller sized `limbs` to hold `bytes`; the guard is the bounds proof.
+    if (at < outLen) {
+      out[at] = out[at] | (toU32(bytes[len - 1 - i]) << (toU32(i & 3) << toU32(3)))
+    }
   }
   return out
 }
@@ -155,15 +159,22 @@ const rsaLimbsFromBytes = (bytes: u8[], limbs: i32): u32[] => {
 /** The low `k` bytes of the number in `limbs`, big-endian. */
 const rsaBytesFromLimbs = (limbs: u32[], k: i32): u8[] => {
   const out: u8[] = new Array<u8>(k)
+  const limbLen: i32 = toI32(limbs.length)
   for (let i: i32 = 0; i < k; i++) {
     const at: i32 = i >> 2
-    out[k - 1 - i] = toU8(limbs[at] >>> (toU32(i & 3) << toU32(3)))
+    // Always true for the callers' k = key.size; the guard is the bounds proof.
+    if (at < limbLen) {
+      out[k - 1 - i] = toU8(limbs[at] >>> (toU32(i & 3) << toU32(3)))
+    }
   }
   return out
 }
 
 /** Whether the `count`-limb number `a` is below `n`. */
 const rsaLess = (a: u32[], n: u32[], count: i32): boolean => {
+  if (count > toI32(a.length) || count > toI32(n.length)) {
+    return false
+  }
   for (let i: i32 = count - 1; i >= 0; i--) {
     if (a[i] !== n[i]) {
       return a[i] < n[i]
@@ -174,6 +185,9 @@ const rsaLess = (a: u32[], n: u32[], count: i32): boolean => {
 
 /** `a -= n` over `count` limbs, wrapping: the caller knows the answer fits. */
 const rsaSubInPlace = (a: u32[], n: u32[], count: i32): void => {
+  if (count > toI32(a.length) || count > toI32(n.length)) {
+    return
+  }
   let borrow: u64 = 0
   for (let i: i32 = 0; i < count; i++) {
     const d: u64 = toU64(a[i]) - toU64(n[i]) - borrow
@@ -204,10 +218,11 @@ const rsaNegInverse = (n0: u32): u32 => {
  */
 const rsaMontRR = (n: u32[], count: i32): u32[] => {
   const r: u32[] = new Array<u32>(count)
+  const rLen: i32 = toI32(r.length)
   r[0] = 1
   for (let step: i32 = 0; step < 64 * count; step++) {
     let carry: u32 = 0
-    for (let i: i32 = 0; i < count; i++) {
+    for (let i: i32 = 0; i < rLen; i++) {
       const word: u32 = r[i]
       r[i] = (word << 1) | carry
       carry = word >>> 31
@@ -235,7 +250,20 @@ const rsaMontRR = (n: u32[], count: i32): u32[] => {
 const rsaMontMul = (key: RsaPublicKey, out: u32[], a: u32[], b: u32[], t: u32[]): void => {
   const count: i32 = key.limbCount
   const n: u32[] = key.limbs
-  for (let j: i32 = 0; j < count + 2; j++) {
+  // Never taken for a key from rsaPublicKeyFromParts and the arrays its callers
+  // size; the guard is the bounds proof for every index below.
+  if (
+    count < 1 ||
+    count > toI32(n.length) ||
+    count > toI32(a.length) ||
+    count > toI32(b.length) ||
+    count > toI32(out.length) ||
+    count + 2 > toI32(t.length)
+  ) {
+    return
+  }
+  const tLen: i32 = toI32(t.length)
+  for (let j: i32 = 0; j < tLen; j++) {
     t[j] = 0
   }
   for (let i: i32 = 0; i < count; i++) {
@@ -276,7 +304,8 @@ const rsaPublicOp = (key: RsaPublicKey, s: u32[]): u32[] => {
   const x: u32[] = new Array<u32>(count)
   rsaMontMul(key, x, s, key.rr, t)
   const acc: u32[] = new Array<u32>(count)
-  for (let j: i32 = 0; j < count; j++) {
+  const accLen: i32 = toI32(acc.length)
+  for (let j: i32 = 0; j < accLen && j < toI32(x.length); j++) {
     acc[j] = x[j]
   }
   const e: u32 = key.exponent
@@ -383,12 +412,14 @@ export const rsaVerifyPkcs1Digest = (key: RsaPublicKey, hash: i32, digest: u8[],
   // k is at least 256 and tLen at most 83, so the padding string is far
   // longer than the 8 octets §9.2 step 3 asks of it.
   const expected: u8[] = new Array<u8>(k)
+  const eLen: i32 = toI32(expected.length)
   expected[1] = 0x01
-  for (let i: i32 = 2; i < k - tLen - 1; i++) {
+  for (let i: i32 = 2; i < k - tLen - 1 && i < eLen; i++) {
     expected[i] = 0xff
   }
   const prefix: u8[] = rsaDigestInfoPrefix(hash)
-  for (let i: i32 = 0; i < RSA_DIGEST_INFO_PREFIX; i++) {
+  const pLen: i32 = toI32(prefix.length)
+  for (let i: i32 = 0; i < RSA_DIGEST_INFO_PREFIX && i < pLen; i++) {
     expected[k - tLen + i] = prefix[i]
   }
   for (let i: i32 = 0; i < hLen; i++) {
@@ -411,18 +442,29 @@ export const rsaVerifyPkcs1 = (key: RsaPublicKey, hash: i32, msg: u8[], sig: u8[
  */
 const rsaMgf1 = (hash: i32, seed: u8[], seedAt: i32, hLen: i32, len: i32): u8[] => {
   const out: u8[] = new Array<u8>(len)
+  const outLen: i32 = toI32(out.length)
   const block: u8[] = new Array<u8>(hLen + 4)
+  const blockLen: i32 = toI32(block.length)
+  // Never taken for the callers' checked hash and hLen; the guard is the
+  // bounds proof for the counter bytes below.
+  if (hLen < 1 || hLen + 3 >= blockLen) {
+    return out
+  }
   for (let i: i32 = 0; i < hLen; i++) {
     block[i] = seed[seedAt + i]
   }
   let done: i32 = 0
-  for (let counter: i32 = 0; done < len; counter++) {
+  for (let counter: i32 = 0; done < outLen; counter++) {
     block[hLen] = toU8(counter >> 24)
     block[hLen + 1] = toU8(counter >> 16)
     block[hLen + 2] = toU8(counter >> 8)
     block[hLen + 3] = toU8(counter)
     const h: u8[] = rsaHash(hash, block)
-    for (let j: i32 = 0; j < hLen && done < len; j++) {
+    const hHave: i32 = toI32(h.length)
+    if (hHave < hLen) {
+      return out
+    }
+    for (let j: i32 = 0; j < hHave && j < hLen && done < outLen; j++) {
       out[done] = h[j]
       done++
     }
@@ -483,12 +525,13 @@ export const rsaVerifyPssDigest = (
   // Steps 7 to 10: unmask DB, clear those bits, and check that it is
   // PS || 0x01 || salt with PS all zero and the salt exactly saltLen bytes.
   const db: u8[] = rsaMgf1(hash, m, off + dbLen, hLen, dbLen)
-  for (let i: i32 = 0; i < dbLen; i++) {
+  const dbHave: i32 = toI32(db.length)
+  for (let i: i32 = 0; i < dbLen && i < dbHave; i++) {
     db[i] = db[i] ^ m[off + i]
   }
   db[0] = db[0] & topMask
   const psLen: i32 = dbLen - saltLen - 1
-  for (let i: i32 = 0; i < psLen; i++) {
+  for (let i: i32 = 0; i < psLen && i < dbHave; i++) {
     if (db[i] !== 0) {
       return false
     }
@@ -498,7 +541,8 @@ export const rsaVerifyPssDigest = (
   }
   // Steps 12 to 14: H' = Hash(00 x 8 || mHash || salt), compared with H.
   const mPrime: u8[] = new Array<u8>(8 + hLen + saltLen)
-  for (let i: i32 = 0; i < hLen; i++) {
+  const mPrimeLen: i32 = toI32(mPrime.length)
+  for (let i: i32 = 0; i < hLen && 8 + i < mPrimeLen; i++) {
     mPrime[8 + i] = digest[i]
   }
   for (let i: i32 = 0; i < saltLen; i++) {
@@ -586,7 +630,8 @@ const rsaDerPositive = (der: u8[], at: i32, length: i32): u8[] | null => {
     from = at + 1
   }
   const out: u8[] = new Array<u8>(at + length - from)
-  for (let i: i32 = 0; i < at + length - from; i++) {
+  const outLen: i32 = toI32(out.length)
+  for (let i: i32 = 0; i < outLen; i++) {
     out[i] = der[from + i]
   }
   return out
