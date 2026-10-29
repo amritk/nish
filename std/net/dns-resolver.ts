@@ -316,10 +316,10 @@ export class DnsResolver {
    * `DNS_CLOSE`. A send writes `meta[1]` bytes to `out` from offset 0 (TCP's
    * with their two-byte length) and the server's address to `to`, and draws
    * the query `id`, which must be new and random for each send since it is
- * half of what keeps an off-path spoofer out; it also replaces whatever socket the query held, so
-   * the driver closes that one first. Panics when `out` is shorter than
-   * `DNS_OUTGOING_MAX_BYTES`, `to` shorter than 18 bytes or `meta` than 2,
-   * or when `id` is not 16 bits.
+   * half of what keeps an off-path spoofer out; it also replaces whatever
+   * socket the query held, so the driver closes that one first. Panics when
+   * `out` is shorter than `DNS_OUTGOING_MAX_BYTES`, `to` shorter than 18
+   * bytes or `meta` than 2, or when `id` is not 16 bits.
    */
   nextOutgoing(out: u8[], to: u8[], meta: i32[], id: i32): i32 {
     if (id < 0 || id > 0xffff) {
