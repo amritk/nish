@@ -445,7 +445,7 @@ export class HttpClient {
     this.deadline = total > 0 ? monotonicNanos() + toI64(total) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
     let url: Url | null = urlParse(req.url)
     if (url === null || (url.scheme !== "http" && url.scheme !== "https")) {
-      this.fail(HTTP_E_URL, `not an absolute http or https URL: ${httpClientRedact(req.url)}`)
+      this.fail(HTTP_E_URL, `not an absolute http or https URL: ${httpClientRedact(url)}`)
       return null
     }
     let method: string = req.method
@@ -466,23 +466,23 @@ export class HttpClient {
       if (!this.options.followRedirects || location === null || !httpClientIsRedirect(res.status)) {
         return res
       }
+      const next: Url | null = urlResolve(url, location)
       if (hops >= this.options.maxRedirects) {
         return this.refuse(
           HTTP_E_TOO_MANY_REDIRECTS,
-          `more than ${this.options.maxRedirects} redirects, the last to ${httpClientRedact(location)}`
+          `more than ${this.options.maxRedirects} redirects, the last to ${httpClientRedact(next)}`
         )
       }
-      const next: Url | null = urlResolve(url, location)
       if (next === null || (next.scheme !== "http" && next.scheme !== "https")) {
         return this.refuse(
           HTTP_E_REDIRECT_REFUSED,
-          `a redirect to ${httpClientRedact(location)}, which is not an http or https URL`
+          `a redirect to ${httpClientRedact(next)}, which is not an http or https URL`
         )
       }
       if (url.scheme === "https" && next.scheme === "http") {
         return this.refuse(
           HTTP_E_REDIRECT_REFUSED,
-          `a redirect from https to http (${httpClientRedact(location)})`
+          `a redirect from https to http (${httpClientRedact(next)})`
         )
       }
       const from: string | null = urlOrigin(url)
@@ -491,7 +491,7 @@ export class HttpClient {
         if (!this.options.crossOriginRedirects) {
           return this.refuse(
             HTTP_E_REDIRECT_REFUSED,
-            `a redirect to another origin (${httpClientRedact(location)})`
+            `a redirect to another origin (${httpClientRedact(next)})`
           )
         }
         // Credentials were meant for the first origin, not for wherever it points.
@@ -577,7 +577,9 @@ export class HttpClient {
       if (proxy === null) {
         this.fail(
           HTTP_E_PROXY,
-          `the proxy setting is not an http:// URL with a host: ${httpClientRedact(proxyText)}`
+          `the proxy setting is not an http:// URL with a host: ${httpClientRedact(
+            urlParse(proxyText.indexOf("://") >= 0 ? proxyText : "http://" + proxyText)
+          )}`
         )
         return false
       }
@@ -798,7 +800,7 @@ export class HttpClient {
     if (head === null) {
       this.fail(
         HTTP_E_REQUEST,
-        `the request ${method} ${httpClientRedact(target)} was refused: a bad method, target or header field`
+        `the request ${method} ${httpClientRedact(url)} was refused: a bad method, target or header field`
       )
       return null
     }
@@ -1587,29 +1589,22 @@ const httpClientUrlText = (url: Url): string => {
 }
 
 /**
- * A URL as an error may echo it: without the userinfo, which can hold a
- * password, nor the query and fragment, which can hold a token; `?...` marks
- * where they were cut. Works on the text, so a URL that does not parse is
- * cut too: everything before the last `@` after the scheme goes first, a
- * password with a raw `/`, `?` or `#` in it included, at the cost of a host
- * when a path or query has an `@`; then the query and fragment.
+ * A URL as an error may name it, built from its parsed scheme, host, port and
+ * path alone, so no userinfo, query or fragment reaches `errorText` whatever
+ * the text holds; `?...` marks a query or fragment left out. A URL that does
+ * not parse, or has no host, is not echoed at all: a scan of the raw text
+ * cannot tell a password's `@`, `?` or `/` from a query's.
  */
-const httpClientRedact = (text: string): string => {
-  const scheme: i32 = toI32(text.indexOf("://"))
-  const start: i32 = scheme >= 0 ? scheme + 3 : 0
-  let rest: i32 = start
-  let at: i32 = toI32(text.indexOf("@", start))
-  while (at >= 0) {
-    rest = at + 1
-    at = toI32(text.indexOf("@", rest))
+const httpClientRedact = (u: Url | null): string => {
+  if (u === null) {
+    return "(a URL that does not parse)"
   }
-  const bare: string = rest > start ? text.slice(0, start) + text.slice(rest) : text
-  let cut: i32 = toI32(bare.indexOf("?"))
-  const fragment: i32 = toI32(bare.indexOf("#"))
-  if (fragment >= 0 && (cut < 0 || fragment < cut)) {
-    cut = fragment
+  if (!u.hasAuthority || u.host === "") {
+    return "(a URL without a host)"
   }
-  return cut >= 0 ? `${bare.slice(0, cut)}?...` : bare
+  const port: string = u.port >= 0 ? `:${u.port}` : ""
+  const cut: string = u.query !== null || u.fragment !== null ? "?..." : ""
+  return `${u.scheme}://${httpClientHostText(u.host)}${port}${u.path}${cut}`
 }
 
 /**

@@ -238,6 +238,8 @@ class Server {
       this.respond(c, "302 Found", `Location: http://127.0.0.1:${this.portB}/echo\r\n`, redirect);
     } else if (path === "/to-other-cred") {
       this.respond(c, "302 Found", `Location: http://who:hunter2@127.0.0.1:${this.portB}/echo?token=s3cr3t\r\n`, redirect);
+    } else if (path === "/to-at-query") {
+      this.respond(c, "302 Found", `Location: http://127.0.0.1:${this.portB}/cb?user=a@b&access_token=s3cr3t\r\n`, redirect);
     } else if (path === "/to-ftp") {
       this.respond(c, "302 Found", "Location: ftp://127.0.0.1/file\r\n", redirect);
     } else if (path === "/to-https") {
@@ -621,7 +623,15 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(fails(client, client.fetch(new HttpRequest("GE T", `${base}/`)), HTTP_E_REQUEST), "and so is a method that is not a token");
   t.check(fails(client, client.fetch(get("ftp://me:hunter2@127.0.0.1/?token=s3cr3t")), HTTP_E_URL), "an ftp URL is HTTP_E_URL");
   t.check(client.errorText.endsWith(": ftp://127.0.0.1/?..."), "and the error names it without its password or query");
-  t.check(fails(client, client.fetch(get("ftp://me:hun?ter2#x@127.0.0.1/?token=s3cr3t")), HTTP_E_URL) && client.errorText.endsWith(": ftp://127.0.0.1/?...") && client.errorText.indexOf("hun") < 0, "and without a password that holds a ? or #");
+  t.check(fails(client, client.fetch(get("ftp://127.0.0.1/p?email=a@b.com&token=s3cr3t")), HTTP_E_URL) && client.errorText.endsWith(": ftp://127.0.0.1/p?...") && client.errorText.indexOf("s3cr3t") < 0, "and without a query that holds an @");
+  t.check(fails(client, client.fetch(get("ftp://127.0.0.1/p#a@b&token=s3cr3t")), HTTP_E_URL) && client.errorText.endsWith(": ftp://127.0.0.1/p?...") && client.errorText.indexOf("s3cr3t") < 0, "or a fragment that holds an @");
+  t.check(fails(client, client.fetch(get("ftp://127.0.0.1/p@x/q?token=s3cr3t")), HTTP_E_URL) && client.errorText.endsWith(": ftp://127.0.0.1/p@x/q?...") && client.errorText.indexOf("s3cr3t") < 0, "and with its path whole when the path holds an @");
+  const tricky: string[] = ["http://me:hun://ter2@127.0.0.1/", "http://me:hun/ter2@127.0.0.1/", "http://me:hun?ter2@127.0.0.1/", "http://me:hun#ter2@127.0.0.1/", "http://me:hun@ter2@127.0.0.1/?token=s3cr3t"];
+  let hidden: boolean = true;
+  for (let i: i32 = 0; i < toI32(tricky.length); i += 1) {
+    hidden = hidden && fails(client, client.fetch(get(tricky[i])), HTTP_E_URL) && client.errorText.endsWith(": (a URL that does not parse)") && client.errorText.indexOf("hun") < 0 && client.errorText.indexOf("ter2") < 0;
+  }
+  t.check(hidden, "a URL whose password holds ://, /, ?, # or @ does not parse, and the error does not echo it");
   t.check(fails(client, client.fetch(get("/relative")), HTTP_E_URL), "and so is a relative one");
 
   // --- timeouts and failures to connect
@@ -710,7 +720,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   limitOpts.maxRedirects = 3;
   const lc: HttpClient = new HttpClient(limitOpts);
   t.check(fails(lc, lc.fetch(get(`${base}/loop`)), HTTP_E_TOO_MANY_REDIRECTS), "a redirect loop is HTTP_E_TOO_MANY_REDIRECTS after maxRedirects");
-  t.check(lc.errorText.endsWith("the last to /loop?..."), "and the error names its Location without the fragment");
+  t.check(lc.errorText.endsWith(`the last to ${base}/loop?...`), "and the error names its Location without the fragment");
   t.check(bodyOf(lc.fetch(get(`${base}/hops-3`))) === "landed", "exactly maxRedirects redirects are followed");
   t.check(fails(lc, lc.fetch(get(`${base}/hops-4`)), HTTP_E_TOO_MANY_REDIRECTS), "and one more is HTTP_E_TOO_MANY_REDIRECTS");
   const headed: HttpResponse | null = rc.fetch(new HttpRequest("HEAD", `${base}/to-method-303`));
@@ -724,6 +734,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   other.header("X-Kept", "yes");
   t.check(fails(rc, rc.fetch(other), HTTP_E_REDIRECT_REFUSED), "a redirect to another origin is refused by default");
   t.check(fails(rc, rc.fetch(get(`${base}/to-other-cred`)), HTTP_E_REDIRECT_REFUSED) && rc.errorText.endsWith(`(http://127.0.0.1:${portB}/echo?...)`), "and named without its password or query");
+  t.check(fails(rc, rc.fetch(get(`${base}/to-at-query`)), HTTP_E_REDIRECT_REFUSED) && rc.errorText.endsWith(`(http://127.0.0.1:${portB}/cb?...)`) && rc.errorText.indexOf("s3cr3t") < 0, "and named without a query that holds an @");
   t.check(fails(rc, rc.fetch(get(`${base}/to-ftp`)), HTTP_E_REDIRECT_REFUSED), "and so is one to an ftp URL");
   t.check(fails(rc, rc.fetch(get(`${base}/to-https`)), HTTP_E_REDIRECT_REFUSED), "and one from http to https, which is another origin");
   t.check(fails(rc, rc.fetch(get(`${base}/to-cred`)), HTTP_E_REDIRECT_REFUSED) && rc.errorText.indexOf("ftp://127.0.0.1/file?...") >= 0, "a refused Location is named without its password or query");
@@ -754,6 +765,10 @@ const runClient = (portA: i32, portB: i32): i32 => {
   viaProxy.setProxies("ftp://user:hunter2@127.0.0.1:1/?token=s3cr3t", "", "");
   t.check(fails(viaProxy, viaProxy.fetch(get("http://example.test/")), HTTP_E_PROXY), "a proxy that is not http:// is HTTP_E_PROXY");
   t.check(viaProxy.errorText.endsWith(": ftp://127.0.0.1:1/?...") && viaProxy.errorText.indexOf("hunter2") < 0, "and the error names it without its password or query");
+  viaProxy.setProxies("user:hun://ter2@127.0.0.1:3128", "", "");
+  t.check(fails(viaProxy, viaProxy.fetch(get("http://example.test/")), HTTP_E_PROXY) && viaProxy.errorText.endsWith(": (a URL without a host)") && viaProxy.errorText.indexOf("hun") < 0 && viaProxy.errorText.indexOf("ter2") < 0, "a scheme-less proxy setting with :// in its password is not echoed");
+  viaProxy.setProxies("http://user:hun ter2@[127.0.0.1:3128/?token=s3cr3t", "", "");
+  t.check(fails(viaProxy, viaProxy.fetch(get("http://example.test/")), HTTP_E_PROXY) && viaProxy.errorText.endsWith(": (a URL that does not parse)") && viaProxy.errorText.indexOf("ter2") < 0 && viaProxy.errorText.indexOf("s3cr3t") < 0, "nor is one that does not parse");
   viaProxy.setProxies("", `http://user:pass@127.0.0.1:${portA}`, "");
   t.check(fails(viaProxy, viaProxy.fetch(get("https://example.test/")), HTTP_E_TLS), "an https fetch through a proxy is tunnelled with CONNECT, the proxy authorised");
   viaProxy.setProxies("", `http://user:pass@127.0.0.1:${portA}`, "");

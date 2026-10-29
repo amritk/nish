@@ -67,7 +67,10 @@ PASS  and the error names its target without the query
 PASS  and so is a method that is not a token
 PASS  an ftp URL is HTTP_E_URL
 PASS  and the error names it without its password or query
-PASS  and without a password that holds a ? or #
+PASS  and without a query that holds an @
+PASS  or a fragment that holds an @
+PASS  and with its path whole when the path holds an @
+PASS  a URL whose password holds ://, /, ?, # or @ does not parse, and the error does not echo it
 PASS  and so is a relative one
 PASS  a server that never answers is HTTP_E_READ_TIMEOUT
 PASS  after readTimeoutMs
@@ -97,6 +100,7 @@ PASS  and one more is HTTP_E_TOO_MANY_REDIRECTS
 PASS  a HEAD redirected by 303 stays a HEAD
 PASS  a redirect to another origin is refused by default
 PASS  and named without its password or query
+PASS  and named without a query that holds an @
 PASS  and so is one to an ftp URL
 PASS  and one from http to https, which is another origin
 PASS  a refused Location is named without its password or query
@@ -109,10 +113,12 @@ PASS  a caller's Proxy-Authorization goes to the proxy in place of the userinfo'
 PASS  a host in NO_PROXY is fetched directly
 PASS  a proxy that is not http:// is HTTP_E_PROXY
 PASS  and the error names it without its password or query
+PASS  a scheme-less proxy setting with :// in its password is not echoed
+PASS  nor is one that does not parse
 PASS  an https fetch through a proxy is tunnelled with CONNECT, the proxy authorised
 PASS  a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED
 PASS  an https server that hangs up on the ClientHello is HTTP_E_TLS
 PASS  an event stream's first event is read while the server holds the stream open
 PASS  an empty read answers 0 at once, waiting for nothing
 PASS  and the next one, the stream ending with the connection
-http fetch: 117 passed, 0 failed, 0 skipped
+http fetch: 123 passed, 0 failed, 0 skipped
