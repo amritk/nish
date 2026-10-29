@@ -208,6 +208,14 @@ Rows do not say which format they are in; the program knows which of its
 binds asked for binary and reads that execution's rows with
 `conn.binary`, whose `failed` is set as `conn.text.failed` is.
 
+A [`PgBatcher`](#batching-keyed-reads) whose `PgBatchConfig` sets `binary` does
+the same for each of its batches: `take` opens the bind with
+`bindStartBinary`, so every row comes in binary, and `row` reads the routing
+ordinal, the last column, with `binaryInt` (an `int8`, the `unnest` ordinal
+PostgreSQL sends in binary). It saves and restores `binary.failed` as it
+does `text.failed` for a text batch, so the program's own decoding is left as
+it was. A batch that leaves `binary` false is unchanged.
+
 ## Statements, groups and pipelining
 
 Every statement goes through the extended protocol, so parameters never meet

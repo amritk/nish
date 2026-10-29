@@ -81,7 +81,8 @@
  * A `text` column is the same bytes in either format, so `columnText` and the
  * column windows read it unchanged. The program knows which of its binds
  * asked for which, and reads each execution's rows with the matching
- * decoders.
+ * decoders. A `PgBatcher` with `binary` set opens each batch this way and
+ * reads its routing ordinal with `binaryInt`, so its rows are binary too.
  *
  * **Authentication.** SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`).
  * The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a
@@ -1937,8 +1938,10 @@ export class PgConnection {
    * `binary.timestamp`. A `text` column's bytes are the same in either
    * format, so `columnText` and the column windows read it as before; a
    * `text[]` or `numeric` column comes in PostgreSQL's binary layout, which
-   * no decoder here reads. Its `bindEnd()` writes two bytes more, kept free
-   * under `maxOutput` from here on. False as `prepare` is.
+   * no decoder here reads. `PgBatcher` opens its batches with this when its
+   * `binary` is set, and reads their routing ordinals with `binaryInt`. Its
+   * `bindEnd()` writes two bytes more, kept free under `maxOutput` from here
+   * on. False as `prepare` is.
    */
   bindStartBinary(name: string): boolean {
     return this.openBind(name, true)
@@ -2863,6 +2866,8 @@ export class PgBatchConfig {
   queueBytes: i32 = 65536
   /** The most executions in flight at once. */
   runs: i32 = 16
+  /** Whether every row of a batch comes in binary format, read with the binary decoders and its ordinal by `binaryInt`; false for text. */
+  binary: boolean = false
 }
 
 /** One execution's requests, grouped by key, and how far its rows have been routed. */
@@ -2913,7 +2918,10 @@ class PgBatchRun {
  * connection to `fail(run)`; after each, `next(run)` answers events until
  * `PG_BATCH_NONE`, `tag` naming the request each is about. Every row goes to
  * every request for its key, and every request gets one last event:
- * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`.
+ * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`. A batch with
+ * `binary` set comes in binary format: its rows are read with the binary
+ * decoders, `binaryInt` for each ordinal, and the caller's `binary.failed`
+ * is left as it was.
  *
  * Nothing outlives its execution: a run is free again once the events
  * `end` or `fail` owe are answered, and its handle is then spent. What the
@@ -2960,6 +2968,7 @@ export class PgBatcher {
   private readonly keyType: i32
   private readonly maxRequests: i32
   private readonly maxBytes: i32
+  private readonly binary: boolean
   private storeEnd: i32 = 0
   private head: i32 = 0
   private count: i32 = 0
@@ -2997,6 +3006,7 @@ export class PgBatcher {
     this.keyType = keyType
     this.maxRequests = maxRequests
     this.maxBytes = config.maxBytes
+    this.binary = config.binary
     this.name = config.name
     const type: string = keyType === PG_BATCH_INT ? "int8" : "text"
     const order: string = config.orderBy.length > 0 ? `, ${config.orderBy}` : ""
@@ -3164,7 +3174,7 @@ export class PgBatcher {
         break
       }
     }
-    if (r < 0 || !conn.bindStart(this.name)) {
+    if (r < 0 || !(this.binary ? conn.bindStartBinary(this.name) : conn.bindStart(this.name))) {
       return -1
     }
     if (!conn.arrayStart()) {
@@ -3296,7 +3306,14 @@ export class PgBatcher {
     const last: i32 = conn.columns - 1
     let ordinal: i64 = 0
     let bad: boolean = last < 0 || conn.isNull(last)
-    if (!bad) {
+    if (!bad && this.binary) {
+      // Read without touching `binary.failed`, which belongs to the program's own decoding.
+      const failed: boolean = conn.binary.failed
+      conn.binary.failed = false
+      ordinal = conn.binaryInt(last)
+      bad = conn.binary.failed
+      conn.binary.failed = failed
+    } else if (!bad) {
       // Read without touching `text.failed`, which belongs to the program's own decoding.
       const failed: boolean = conn.text.failed
       conn.text.failed = false

@@ -8,5 +8,19 @@ text: 32767 32767 9223372036854775807 false 0.1 [] 1999-12-31T23:59:59.999Z 1999
 text: -32768 -32768 9007199254740993 NULL NULL NULL 2024-02-29T23:59:59.999Z 2024-02-29T23:59:59.999Z
 text: 0 0 -1 true 0 [x] 0001-01-01T00:00:00.000Z 0001-01-01T00:00:00.000Z
 text: 1 1 1 false 1e+300 [y] ? ? (failed)
+stamps_binary 0: 2025-12-31T23:59:59.000Z
+stamps_binary 3: 2025-12-31T23:59:59.000Z
+stamps_binary 0 done
+stamps_binary 3 done
+stamps_binary 1: 2024-01-02T03:04:05.123Z
+stamps_binary 1 done
+stamps_binary 2 missing
+stamps_text 0: 2025-12-31T23:59:59.000Z
+stamps_text 3: 2025-12-31T23:59:59.000Z
+stamps_text 0 done
+stamps_text 3 done
+stamps_text 1: 2024-01-02T03:04:05.123Z
+stamps_text 1 done
+stamps_text 2 missing
 request 0 done
 exit 0
