@@ -10085,6 +10085,22 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
   )
 }
 
+// `nish/crypto/pki` reads no file, so a wasm32 build that imports it without
+// `nish/crypto/pki-roots` compiles: a TLS client there brings its own roots.
+if (!only || "crypto_pki".includes(only)) {
+  const entry = path.join(linkDir, "crypto_pki", "wasm-only.ts")
+  const outDir = path.join(buildDir, "pki-only-wasm") + path.sep
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const r = fs.existsSync(entry)
+    ? spawnSync(NISH, [entry, "--target", "wasm32", "-o", outDir], { cwd: root, encoding: "utf8" })
+    : null
+  check(
+    "crypto_pki: a wasm32 build importing nish/crypto/pki without pki-roots compiles",
+    r !== null && r.status === 0,
+    r === null ? "no such fixture: tests/link/crypto_pki/wasm-only.ts" : r.stderr
+  )
+}
+
 // #628: P-256's fixed-base comb (`p256BaseMult`, which `p256PublicKey` and
 // `p256Sign` use) against its variable-base window (`p256ScalarMult` on G, which
 // `p256Verify` uses), byte for byte, on Wycheproof's scalars, RFC 6979 A.2.5's,
