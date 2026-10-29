@@ -5,8 +5,8 @@
 // client alone for a third-party server: it runs `tlsConnectWith` to
 // 127.0.0.1:<port> and prints one line of what the handshake reached. The
 // `net_tls_client_tcp` block of tests/run.js drives that mode against
-// openssl s_server. With `exchange <port> <reply> <last>` it runs
-// `tlsConnect` to that port with the blocking calls alone, as `exchange`
+// openssl s_server. With `exchange <port> <how> <reply> <last>` it opens
+// a client to that port and uses the blocking calls alone, as `exchange`
 // below says.
 //
 // The loopback server sends `chain.ts`'s leaves, and the client trusts only
@@ -102,7 +102,7 @@ const loopbackChecks = (t: Suite): void => {
   t.eqBool("open: alpn chosen", good.conn.tls.alpnChosen === "http/1.1", true);
   t.eqBool("open: the server chose it", lb.chose === "http/1.1", true);
   t.eqBool("open: the server saw the name", lb.sawName === "localhost", true);
-  t.eqBool("open: the server read the ping, then data under each next key of the client's", lb.serverGot === "ping!?", true);
+  t.eqBool("open: the server read all the client sent, across its key updates", lb.serverGot === "ping!?", true);
   t.eqBool("open: the client read the pong", lb.clientGot === "pong", true);
   t.eqBool("open: close_notify ends the client's stream", lb.clientEnded, true);
   t.eqI32("open: socket closed", good.fd(), -1);
@@ -190,6 +190,15 @@ const connectChecks = (t: Suite): void => {
   t.eqBool("connect: waited the timeout", elapsedMs >= toI64(300), true);
   t.eqBool("connect: and not much more", elapsedMs < toI64(3000), true);
   t.eqI32("connect: timed out, closed", waited.fd(), -1);
+  // The blocking calls on a client straight from `new`: each drives the handshake, which never ends.
+  const buf: u8[] = new Array<u8>(16);
+  const reading: TlsTcpClient = new TlsTcpClient(addr, new TlsClientConfig("localhost", ["h2"]), trust);
+  t.eqI32("connect: readWait straight after new times out", reading.readWait(buf, 0, 16, 200), TLS_TCP_TIMED_OUT);
+  t.eqBool("connect: and is still not open", reading.open(), false);
+  reading.close();
+  const writing: TlsTcpClient = new TlsTcpClient(addr, new TlsClientConfig("localhost", ["h2"]), trust);
+  t.eqI32("connect: writeAll before the handshake times out", writing.writeAll(buf, 0, 16, 200), TLS_TCP_TIMED_OUT);
+  writing.close();
   netClose(silent);
 };
 
@@ -220,16 +229,16 @@ const verifyChecks = (t: Suite): void => {
   const trust: TlsClientTrust = rootTrust(t);
   const roots: X509Certificate[] = [];
   const untrusted = new TlsClientTrust(roots);
-  const june2026: i64 = toI64(1780272000) * toI64(1000);
+  const june2027: i64 = toI64(1811808000) * toI64(1000);
   const june2025: i64 = toI64(1748736000) * toI64(1000);
   const good: u8[][] = [goodLeaf()];
   const expired: u8[][] = [expiredLeaf()];
-  t.eqI32("chain: good", tlsClientChain(good, "localhost", june2026, trust), 0);
-  t.eqI32("chain: by its address", tlsClientChain(good, "127.0.0.1", june2026, trust), 0);
-  t.eqI32("chain: another name", tlsClientChain(good, "other.test", june2026, trust), TLS_ALERT_BAD_CERTIFICATE);
+  t.eqI32("chain: good", tlsClientChain(good, "localhost", june2027, trust), 0);
+  t.eqI32("chain: by its address", tlsClientChain(good, "127.0.0.1", june2027, trust), 0);
+  t.eqI32("chain: another name", tlsClientChain(good, "other.test", june2027, trust), TLS_ALERT_BAD_CERTIFICATE);
   t.eqI32("chain: not yet valid", tlsClientChain(good, "localhost", june2025, trust), TLS_ALERT_CERTIFICATE_EXPIRED);
-  t.eqI32("chain: expired", tlsClientChain(expired, "localhost", june2026, trust), TLS_ALERT_CERTIFICATE_EXPIRED);
-  t.eqI32("chain: an unknown root", tlsClientChain(good, "localhost", june2026, untrusted), TLS_ALERT_UNKNOWN_CA);
+  t.eqI32("chain: expired", tlsClientChain(expired, "localhost", june2027, trust), TLS_ALERT_CERTIFICATE_EXPIRED);
+  t.eqI32("chain: an unknown root", tlsClientChain(good, "localhost", june2027, untrusted), TLS_ALERT_UNKNOWN_CA);
   const selfSigned: u8[][] = [leafCertificate()];
   t.eqI32("chain: a self-signed leaf with no extensions is bad_certificate", tlsClientChain(selfSigned, "localhost", toI64(1767225700) * toI64(1000), trust), TLS_ALERT_BAD_CERTIFICATE);
 };
@@ -275,28 +284,46 @@ const ascii = (text: string): u8[] => {
 };
 
 /**
- * Exchange mode: `tlsConnect` to a third-party server for `localhost`, with
- * the blocking calls alone. Writes "ping", sends a KeyUpdate asking for the
+ * Exchange mode: a client to a third-party server for `localhost` with the
+ * blocking calls alone, opened by `tlsConnect` (`how` is "connect") or by
+ * `new TlsTcpClient` and a first `readWait` that drives its handshake
+ * ("fresh"). Waits 300 ms for data the server never sends, then refuses a
+ * window outside its data. Writes "ping", sends a KeyUpdate asking for the
  * server's and writes "after" under its new key; reads until `reply` comes
  * (the server's KeyUpdates handled on the way), writes `last` under the key
  * it answered any request with, and reads to the end of the server's
- * stream. Prints one line of how far it got: each call's answer, the
+ * stream; closes, and reads and writes once more. Prints one line of how far
+ * it got: whether the last flight was still queued, each call's answer, the
  * KeyUpdates it read, and how the stream ended.
  */
-const exchange = (port: i32, reply: string, last: string): i32 => {
+const exchange = (port: i32, how: string, reply: string, last: string): i32 => {
   const addr: u8[] = new Array<u8>(18);
   netAddress(addr, "127.0.0.1", port);
-  const client: TlsTcpClient = tlsConnect(addr, "localhost", [], 10000);
+  const buf: u8[] = new Array<u8>(64);
+  const fresh: boolean = how === "fresh";
+  const client: TlsTcpClient = fresh
+    ? new TlsTcpClient(addr, new TlsClientConfig("localhost", []), tlsClientSystemTrust())
+    : tlsConnect(addr, "localhost", [], 10000);
+  let idle: i32 = 0;
+  if (fresh) {
+    idle = client.readWait(buf, 0, 64, 2000);
+  }
   if (!client.open()) {
     console.log(`failed ${client.failure()}`);
+    client.close();
     return 0;
+  }
+  // Straight after `tlsConnect`, nothing of the handshake is still queued.
+  const queued: boolean = client.sending();
+  if (!fresh) {
+    idle = client.readWait(buf, 0, 64, 300);
   }
   const ping: u8[] = ascii("ping\n");
   const after: u8[] = ascii("after\n");
+  const window: i32 = client.writeAll(ping, 3, 5, 1000);
   const wrote: i32 = client.writeAll(ping, 0, toI32(ping.length), 10000);
   const updated: i32 = client.keyUpdate(true);
   const wroteAfter: i32 = client.writeAll(after, 0, toI32(after.length), 10000);
-  const buf: u8[] = new Array<u8>(64);
   let got: string = "";
   let n: i32 = 1;
   while (n > 0 && got.indexOf(reply) < 0) {
@@ -312,17 +339,19 @@ const exchange = (port: i32, reply: string, last: string): i32 => {
   while (end > 0) {
     end = client.readWait(buf, 0, 64, 10000);
   }
-  console.log(
-    `open wrote ${wrote} update ${updated} wrote ${wroteAfter} read ${got.indexOf(reply) >= 0 ? reply : "-"} server updates ${updates} wrote ${wroteBye} end ${end}`
-  );
   client.close();
+  const readClosed: i32 = client.readWait(buf, 0, 64, 1000);
+  const wroteClosed: i32 = client.writeAll(ping, 0, toI32(ping.length), 1000);
+  console.log(
+    `open queued ${queued} idle ${idle} window ${window} wrote ${wrote} update ${updated} wrote ${wroteAfter} read ${got.indexOf(reply) >= 0 ? reply : "-"} server updates ${updates} wrote ${wroteBye} end ${end} closed ${readClosed} ${wroteClosed}`
+  );
   return 0;
 };
 
 export const main = (): i32 => {
-  if (process.argv.length === 5 && process.argv[1] === "exchange") {
+  if (process.argv.length === 6 && process.argv[1] === "exchange") {
     const port: i32 = decimal(process.argv[2]);
-    return port > 0 ? exchange(port, process.argv[3], process.argv[4]) : 2;
+    return port > 0 ? exchange(port, process.argv[3], process.argv[4], process.argv[5]) : 2;
   }
   if (process.argv.length === 6 && process.argv[1] === "connect") {
     const port: i32 = decimal(process.argv[2]);

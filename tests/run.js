@@ -3399,7 +3399,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     // client against it: its mode, the port, then `args`. Each of `steps` is
     // a pattern and a line: once the server's output so far matches the
     // pattern, the line goes to its stdin, in order. The answer is the
-    // client's exit status and output.
+    // client's exit status and output, and how many steps fired.
     const issuers = { rsaleaf: "rsaca", p384leaf: "p384ca" }
     const handshake = async (leaf, server, mode, args, steps = []) => {
       const s = spawn(
@@ -3450,7 +3450,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
       s.kill("SIGKILL")
       await ended
       clearTimeout(killer)
-      return client
+      return { ...client, stepped: step }
     }
     // 4865, 4866 and 4867 are TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384 and
     // TLS_CHACHA20_POLY1305_SHA256; 29 is X25519 and 23 secp256r1; 1027, 1283 and
@@ -3516,20 +3516,25 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     // request is read past it: "bye" is what lets `q` through. Its one
     // KeyUpdate read stands for both, openssl folding the answer it owed into
     // the request. `-rev` answers each line reversed, under the KeyUpdate it
-    // owed, and ends with close_notify on reading CLOSE.
+    // owed, and ends with close_notify on reading CLOSE. Every step has to
+    // have fired: the last, on "bye", is s_server's own word that it read
+    // the data sent under the client's answering key. Before any of it the
+    // client waits out 300 ms of silence (the `fresh` one its whole first
+    // readWait, which drives the handshake) and is refused a window past
+    // its data; after closing, a read and a write each answer how it ended.
     const exchanges = [
-      ["data, KeyUpdate both ways and a close with no close_notify", [],
+      ["data, KeyUpdate both ways and a close with no close_notify", [], "connect",
         [[/after\n/, "K\n"], [/SSL_do_handshake -> 1\n/, "pong\n"], [/bye\n/, "q\n"]], "pong", "bye",
-        "open wrote 5 update 0 wrote 6 read pong server updates 1 wrote 4 end -104"],
-      ["data, a KeyUpdate answered and close_notify", ["-rev"], [], "retfa", "CLOSE",
-        "open wrote 5 update 0 wrote 6 read retfa server updates 1 wrote 6 end 0"],
+        "open queued false idle -110 window -22 wrote 5 update 0 wrote 6 read pong server updates 1 wrote 4 end -104 closed -104 -32"],
+      ["a client from new, data, a KeyUpdate answered and close_notify", ["-rev"], "fresh", [], "retfa", "CLOSE",
+        "open queued false idle -110 window -22 wrote 5 update 0 wrote 6 read retfa server updates 1 wrote 6 end 0 closed -32 -32"],
     ]
-    for (const [what, server, steps, reply, last, want] of exchanges) {
-      const got = await handshake("p256", ["-tls1_3", ...server], "exchange", [reply, last], steps)
+    for (const [what, server, how, steps, reply, last, want] of exchanges) {
+      const got = await handshake("p256", ["-tls1_3", ...server], "exchange", [how, reply, last], steps)
       check(
-        `net_tls_client_tcp: openssl s_server, tlsConnect and the blocking calls, ${what}`,
-        got.status === 0 && got.stdout === `${want}\n`,
-        `exit ${got.status}\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
+        `net_tls_client_tcp: openssl s_server, the blocking calls, ${what}`,
+        got.status === 0 && got.stdout === `${want}\n` && got.stepped === steps.length,
+        `exit ${got.status}, ${got.stepped} of ${steps.length} steps\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
       )
     }
   }

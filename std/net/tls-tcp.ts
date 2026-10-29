@@ -1,7 +1,10 @@
 /**
  * `nish/net/tls-tcp` — TLS 1.3 over TCP (WP34 T2): a pool of server
  * connections on `nish:net`, each a `TlsRecordServer` driving a `TlsServer`,
- * for a program that owns its readiness loop.
+ * for a program that owns its readiness loop; and `TlsTcpClient`, one
+ * client connection that authenticates the server (`nish/net/tls/verify`)
+ * and is driven by the same kind of loop or, through `tlsConnect`,
+ * `readWait` and `writeAll`, by none (its own comment, below, says how).
  *
  *     const listener = tcpListen("0.0.0.0", 8443, 128);
  *     const tls = new TlsTcpServer(config, listener, 64);
@@ -968,9 +971,13 @@ export class TlsTcpClient {
    * Writes all of `data[off .. off + len)` and waits up to `timeoutMs`
    * milliseconds, in a loop of the client's own, until the socket has taken
    * every byte of it: `len`, or — some of it perhaps sent — `TLS_TCP_TIMED_OUT`,
-   * -32 once the client has closed, -104 once the connection has failed,
-   * -22 for a window outside `data`, or the loop's failure. It drives the
-   * handshake too, so it may follow `new TlsTcpClient` directly.
+   * -32 when the client had closed or failed before the call, -104 when the
+   * connection fails during it, -22 for a window outside `data`, or the
+   * loop's failure. It drives the handshake too, so it may follow
+   * `new TlsTcpClient` directly. A timed-out call does not say how much was
+   * sent, and the same bytes written again would reach the server twice:
+   * once the handshake is done, a timeout leaves the stream unusable, and
+   * the client is for `close`.
    */
   writeAll(data: u8[], off: i32, len: i32, timeoutMs: i32): i32 {
     const end: i64 = tlsTcpDeadline(timeoutMs)
@@ -1083,9 +1090,11 @@ export class TlsTcpClient {
 
   /**
    * Closes the client's side (§6.1): a `close_notify` after whatever is
-   * already written, sent as the socket takes it. The connection reads on
-   * until the server's own `close_notify`; call `close` once the interest
-   * says `TLS_RECORD_DONE`, or reads answer 0. Answers the interest.
+   * already written, sent as the socket takes it. The client does not wait
+   * for the server's own `close_notify`: data already read off the socket
+   * still reads, and once the `close_notify` is sent the interest says
+   * `TLS_RECORD_DONE` and `readWait` answers -32; call `close` then.
+   * Answers the interest.
    */
   shutdown(): i32 {
     this.conn.close()
@@ -1162,8 +1171,12 @@ const tlsConnectBy = (addr: u8[], config: TlsClientConfig, trust: TlsClientTrust
     if (turned === TLS_RECORD_DONE) {
       break
     }
+    // A refusal whose alert could not be flushed in time is still the
+    // refusal: the timeout is the reason only while the handshake lives.
     if (turned < 0) {
-      client.connectError = turned
+      if (client.conn.state !== TLS_RECORD_STATE_FAILED) {
+        client.connectError = turned
+      }
       break
     }
   }

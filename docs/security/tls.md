@@ -1024,8 +1024,7 @@ application data past an unauthenticated server and none can skip the step.
 (`net_tls_client_tcp`): an ECDSA P-256 signature over the content verifies,
 and is refused over other content, under the P-384 or RSA-PSS scheme, under
 Ed25519 (never offered) and when empty; a server whose CertificateVerify
-signs other bytes is refused with `decrypt_error`, which the server reads,
-which the server reads. An empty chain is `bad_certificate`, and so is a
+signs other bytes is refused with `decrypt_error`, which the server reads. An empty chain is `bad_certificate`, and so is a
 self-signed leaf with no extensions that the store does not hold.
 
 **Against openssl s_server** (tests/run.js, "`nish/net/tls-tcp`'s client,
@@ -1043,22 +1042,28 @@ client's only root, read through `tlsClientSystemTrust` from
 `localhost` in its CN alone with no subjectAltName, are refused with
 `bad_certificate` after the signature verified.
 
-**`tlsConnect` and the blocking calls against openssl s_server** (the same
-block, "tlsConnect and the blocking calls"): a program with no loop of its
-own runs `tlsConnect`, `writeAll`, `keyUpdate` and `readWait` alone. It
-writes, sends a KeyUpdate asking for the server's and writes under its new
-key, which the server reads; it reads s_server's KeyUpdate asking for its
-own (`K`) and answers it, which the server shows by reading the next line
-under that key; `-rev` answers the KeyUpdate it owed and the data, and its
-close_notify ends the client's stream as 0; the default mode's `q`, which
-closes TCP with no close_notify, is read as the failure it is, -104, not as
-an end.
+**The blocking calls against openssl s_server** (the same block, "the
+blocking calls"): a program with no loop of its own runs `tlsConnect` (or
+`new TlsTcpClient` and a first `readWait`, which drives the handshake),
+`writeAll`, `keyUpdate` and `readWait` alone. Straight after `tlsConnect`
+nothing is still queued (`sending()` is false). A `readWait` with nothing
+to read answers `-110` after its timeout and the connection goes on to
+carry everything after it; a `writeAll` window past its data answers -22.
+It writes, sends a KeyUpdate asking for the server's and writes under its
+new key, which the server reads; it reads s_server's KeyUpdate asking for
+its own (`K`) and answers it, and the server reads the next line under
+that key — the harness requires every step it sends s_server to have
+fired, the last on that line; `-rev` answers the KeyUpdate it owed and the
+data, and its close_notify ends the client's stream as 0; the default
+mode's `q`, which closes TCP with no close_notify, is read as the failure
+it is, -104, not as an end. After `close`, `readWait` answers how the
+stream ended (-104 failed, -32 otherwise) and `writeAll` -32.
 
 **Against `TlsTcpServer` over loopback** (`net_tls_client_tcp`): the verdict
 reaches the server as an alert, ALPN and the name reach it, an IP literal
 sends no `server_name` and is matched against the leaf's iPAddress, a chain
 that also carries its root opens, application data goes both ways ("open:
-the server read the ping, then data under each next key of the client's",
+the server read all the client sent, across its key updates",
 "open: the client read the pong"), a KeyUpdate asking for the peer's goes
 each way and is answered ("keyupdate: the client read the server's answer
 and its request", "keyupdate: the server read the client's request and its
@@ -1072,7 +1077,9 @@ are refused with the alerts above, and the server reads each.
 **`tlsConnect` is bounded** (`net_tls_client_tcp`): a refused connection
 answers `-111`, an address shorter than `nish:net`'s answers `-22`, and a
 listener that never answers is given up on after the timeout (`-110`), with
-the elapsed time checked on both sides; the socket is closed on each. A
+the elapsed time checked on both sides; the socket is closed on each.
+Against the same listener, a `readWait` straight after `new TlsTcpClient`
+and a `writeAll` before the handshake ends each answer `-110`. A
 config the client refuses (an empty ALPN protocol) is never dialled: it
 answers its alert, `internal_error`, with no socket.
 
@@ -1086,8 +1093,11 @@ refused with `decrypt_error` before a chain that would also fail is looked
 at (the forged case has a good chain); the rsa_pss_pss schemes, which are
 never offered and so refused; a KeyUpdate that does not ask for the
 peer's, from either end; name resolution, which the client does not do
-(the address is numeric and the TLS name is always the caller's); and any
-public host.
+(the address is numeric and the TLS name is always the caller's); any
+public host; a `writeAll` that times out part way through a message, which
+leaves the stream unusable, as its comment says; and a refusal of the
+server's certificate whose alert cannot be flushed before the deadline,
+which `tlsConnect` answers with the alert, not `-110`.
 
 ## What is not checked here
 

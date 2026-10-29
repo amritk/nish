@@ -20329,8 +20329,8 @@ function tlsConnectBy(addr: u8[], config: TlsClientConfig, trust: TlsClientTrust
   callee +12:28 TlsTcpClient.sending -> @nish.TlsTcpClient.sending
   local +13:11 turned: i32 (const)
   callee +13:25 TlsTcpClient.turn -> @nish.TlsTcpClient.turn
-  callee +23:8 TlsTcpClient.open -> @nish.TlsTcpClient.open
-  callee +24:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
+  callee +27:8 TlsTcpClient.open -> @nish.TlsTcpClient.open
+  callee +28:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
 module std/net/tls/client.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import expose from "nish:secret" -> generic function expose

@@ -3,7 +3,7 @@ PASS  open: suite negotiated
 PASS  open: alpn chosen
 PASS  open: the server chose it
 PASS  open: the server saw the name
-PASS  open: the server read the ping, then data under each next key of the client's
+PASS  open: the server read all the client sent, across its key updates
 PASS  open: the client read the pong
 PASS  open: close_notify ends the client's stream
 PASS  open: socket closed
@@ -43,6 +43,9 @@ PASS  connect: timed out
 PASS  connect: waited the timeout
 PASS  connect: and not much more
 PASS  connect: timed out, closed
+PASS  connect: readWait straight after new times out
+PASS  connect: and is still not open
+PASS  connect: writeAll before the handshake times out
 PASS  verify: P-256 verifies
 PASS  verify: other content
 PASS  verify: P-384 scheme on a P-256 key
@@ -57,4 +60,4 @@ PASS  chain: not yet valid
 PASS  chain: expired
 PASS  chain: an unknown root
 PASS  chain: a self-signed leaf with no extensions is bad_certificate
-tls client tcp: 59 passed, 0 failed, 0 skipped
+tls client tcp: 62 passed, 0 failed, 0 skipped

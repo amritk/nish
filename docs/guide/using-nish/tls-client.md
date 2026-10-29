@@ -78,13 +78,13 @@ waiting calls, each bounded by its own `timeoutMs`:
 
 | Call | Answers |
 | --- | --- |
-| `writeAll(data, off, len, timeoutMs)` | `len` once the socket has taken every byte; `-110` if the time ran out (some may be sent), `-104` if the connection failed, `-32` once it is closed, `-22` for a window outside `data` |
+| `writeAll(data, off, len, timeoutMs)` | `len` once the socket has taken every byte; `-110` if the time ran out (some may be sent, so close the client: writing the same bytes again would send them twice), `-104` if the connection failed during the call, `-32` once it is closed or had failed, `-22` for a window outside `data` |
 | `readWait(buf, off, len, timeoutMs)` | the bytes read; `0` at the end of the server's stream (its close_notify); `-110` if nothing came in time (the connection stays usable); `-104` if it failed, which includes the TCP connection ending with no close_notify; `-32` once it is closed |
 
 Both handle a KeyUpdate from the server on the way. Once open, `read`,
 `write`, `keyUpdate`, `shutdown` and `close` answer as the `nish:net` calls
 do without waiting (`read` and `write` answer `-11` when they would block,
-and `read` answers `-32` after `close`), and `interest()`, `readable()` and
+and `read` answers `-32` after `close`; after `shutdown` the client does not wait for the server's close_notify, and `readWait` answers `-32` once its own is sent), and `interest()`, `readable()` and
 `writable()` let the client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
 config, trust, timeoutMs)` takes a whole `TlsClientConfig` (to offer P-256,
 say) and the roots to trust; `tlsConnect` reads the system's roots on every
