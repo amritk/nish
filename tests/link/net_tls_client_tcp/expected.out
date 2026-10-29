@@ -1,0 +1,62 @@
+PASS  handshake before connect
+PASS  read before connect
+PASS  write before connect
+PASS  a name, not an address
+PASS  and no socket kept
+PASS  close before connect, twice
+PASS  a port nobody listens on
+PASS  and its socket closed
+PASS  a deadline already gone
+PASS  and its socket closed
+PASS  connect
+PASS  a second connect
+PASS  keeps the first socket
+PASS  read during the handshake
+PASS  a server that never answers
+PASS  waited the deadline out
+PASS  and not much longer
+PASS  and the socket kept
+PASS  write after close
+PASS  handshake after close
+PASS  carrier: connect
+PASS  carrier: a handshake that cannot finish yet
+PASS  carrier: handshake
+PASS  carrier: open
+PASS  carrier: suite
+PASS  carrier: one chain check
+PASS  carrier: one signature check
+PASS  carrier: handshake again
+PASS  carrier: write
+PASS  carrier: the echo's length
+PASS  carrier: the echo
+PASS  carrier: a read with nothing sent
+PASS  carrier: waited the deadline out
+PASS  carrier: still open
+PASS  carrier: a read of nothing
+PASS  carrier: write after a timeout
+PASS  carrier: echoed after a timeout
+PASS  carrier: the server's close_notify
+PASS  carrier: seen as closed
+PASS  carrier: and again
+PASS  carrier: closed
+PASS  carrier: keys wiped
+PASS  carrier: no failure in the server
+PASS  whole: connect
+PASS  whole: handshake
+PASS  whole: ALPN
+PASS  whole: the server saw the close_notify
+PASS  whole: no failure in the server
+PASS  refused chain: connect
+PASS  refused chain: unknown_ca
+PASS  refused chain: failed
+PASS  refused chain: the signature not checked
+PASS  refused chain: a read
+PASS  refused chain: a write
+PASS  refused chain: handshake again
+PASS  TLS 1.2 server: connect
+PASS  TLS 1.2 server: accepted
+PASS  TLS 1.2 server: protocol_version
+PASS  a server that hangs up: connect
+PASS  a server that hangs up: accepted
+PASS  a server that hangs up: reset
+nish/net/tls-tcp-client: 61 passed, 0 failed, 0 skipped
