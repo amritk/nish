@@ -1619,8 +1619,10 @@ const x509ReadKeyUsage = (der: u8[], start: i32, end: i32, out: X509Certificate)
   if (bits === null || bits.end !== end || !x509DerBitStringSound(der, bits)) {
     return false
   }
+  // An empty BIT STRING (n = 0) needs no test of its own: its unused-bits
+  // count is held to 0, so the bit check below finds no bit set.
   const n: i32 = bits.end - bits.start - 1
-  if (n < 1 || n > 2) {
+  if (n > 2) {
     return false
   }
   const unused: i32 = toI32(der[bits.start])

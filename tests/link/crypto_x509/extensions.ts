@@ -110,6 +110,15 @@ const composeNamed = (issuer: string, subject: string, alg: string, spki: string
       FULL_SIGNATURE
   )
 
+/** FULL_DER's fields under the version field `version` (empty for v1), with `tail` after the key. */
+const composeVersion = (version: string, tail: string): string =>
+  der(
+    "30",
+    der("30", `${version}${FULL_SERIAL}${FULL_ALGORITHM}${FULL_ISSUER}${FULL_VALIDITY}${FULL_SUBJECT}${FULL_SPKI}${tail}`) +
+      FULL_ALGORITHM +
+      FULL_SIGNATURE
+  )
+
 /** `composeNamed` with FULL_DER's own subject. */
 const compose = (issuer: string, alg: string, spki: string, tail: string): string =>
   composeNamed(issuer, FULL_SUBJECT, alg, spki, tail)
@@ -439,6 +448,12 @@ const algorithmSuite = (): i32 => {
   t.eqI32("sha256WithRSAEncryption with its NULL absent", sigAlgOf(der("30", der("06", "2a864886f70d01010b"))), X509_SIG_UNKNOWN)
   t.eqI32("sha256WithRSAEncryption with a NULL that has contents", sigAlgOf(der("30", der("06", "2a864886f70d01010b") + "050100")), X509_SIG_UNKNOWN)
   t.eqI32("sha256WithRSAEncryption with an element after its NULL", sigAlgOf(der("30", der("06", "2a864886f70d01010b") + "05000500")), X509_SIG_UNKNOWN)
+  t.eqI32(
+    "sha256WithRSAEncryption with PSS parameters is not PSS",
+    sigAlgOf(der("30", der("06", "2a864886f70d01010b") + pssParams(h256, h256, salt32))),
+    X509_SIG_UNKNOWN
+  )
+  t.eqI32("PSS: an element after the parameters", sigAlgOf(der("30", der("06", PSS_OID) + pssParams(h256, h256, salt32) + "0500")), X509_SIG_UNKNOWN)
   t.eqI32("ecdsa-with-SHA256 absent", sigAlgOf(der("30", der("06", "2a8648ce3d040302"))), X509_SIG_ECDSA_SHA256)
   t.eqI32("ecdsa-with-SHA256 with a NULL", sigAlgOf(hashAlg("2a8648ce3d040302")), X509_SIG_UNKNOWN)
   t.eqI32("ecdsa-with-SHA384 with a NULL", sigAlgOf(hashAlg("2a8648ce3d040303")), X509_SIG_UNKNOWN)
@@ -481,6 +496,18 @@ const extensionSuite = (): i32 => {
     reads(withExtensions(der("30", "0600" + der("04", "0500"))))
   )
   t.ok("an OID outside 2.5.29 ending in basicConstraints' arc is not basicConstraints", readsOne("2a0313", "0500"))
+  t.ok("an extnID with an inner 0x80 octet reads", readsOne("2a03818001", "0500"))
+  // A basicConstraints value with cA TRUE under OIDs one clause short of
+  // id-ce-basicConstraints: each is an unknown extension, nothing decoded.
+  const caValue: string = der("30", "0101ff")
+  const ca: X509Certificate | null = readOne(OID_BC, false, caValue)
+  t.ok("cA TRUE under 2.5.29.19 is a CA", ca !== null && ca.bcPresent && ca.bcCa)
+  const fourOctets: X509Certificate | null = readOne("551d1301", false, caValue)
+  t.ok("2.5.29.19.1, four octets, is not basicConstraints", fourOctets !== null && !fourOctets.bcPresent && !fourOctets.bcCa)
+  const arc30: X509Certificate | null = readOne("551e13", false, caValue)
+  t.ok("2.5.30.19, outside 2.5.29, is not basicConstraints", arc30 !== null && !arc30.bcPresent && !arc30.bcCa)
+  const arc1: X509Certificate | null = readOne("2a1d13", false, caValue)
+  t.ok("1.2.29.19, outside 2.5, is not basicConstraints", arc1 !== null && !arc1.bcPresent && !arc1.bcCa)
   refuses(
     t,
     "a duplicate extension",
@@ -518,8 +545,25 @@ const extensionSuite = (): i32 => {
     reads(withExtensions(der("30", der("06", OID_BC) + "0101ff" + der("03", "00" + bc))))
   )
   refuses(t, "a decoded value with trailing bytes", readsOne(OID_BC, bc), readsOne(OID_BC, bc + "0500"))
+  refuses(
+    t,
+    "critical a two-octet BOOLEAN",
+    reads(withExtensions(goodBc)),
+    reads(withExtensions(der("30", der("06", OID_BC) + "0102ffff" + der("04", bc))))
+  )
+  const v2: string = "a003020101"
+  const extensions: string = der("a3", der("30", goodBc))
+  t.ok("a v1 certificate reads", reads(composeVersion("", "")))
+  refuses(t, "an issuerUniqueID in a v1 certificate", reads(composeVersion(v2, der("81", "00"))), reads(composeVersion("", der("81", "00"))))
+  refuses(t, "a subjectUniqueID in a v1 certificate", reads(composeVersion(v2, der("82", "00"))), reads(composeVersion("", der("82", "00"))))
+  refuses(t, "extensions in a v2 certificate", reads(composeVersion(FULL_VERSION, extensions)), reads(composeVersion(v2, extensions)))
 
   refuses(t, "an empty subjectAltName", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, der("30", "")))
+  refuses(t, "a subjectAltName with trailing bytes", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, `${SAN_GOOD}0500`))
+  const x400: X509Certificate | null = readOne(OID_SAN, false, der("30", der("a3", "3000")))
+  t.ok("an x400Address is counted, not read", x400 !== null && x400.sanOther === 1)
+  const edi: X509Certificate | null = readOne(OID_SAN, false, der("30", der("a5", der("a1", der("0c", "61")))))
+  t.ok("an ediPartyName is counted, not read", edi !== null && edi.sanOther === 1)
   refuses(t, "a 5-octet iPAddress", readsOne(OID_SAN, der("30", der("87", "c0000201"))), readsOne(OID_SAN, der("30", der("87", "c000020100"))))
   refuses(t, "a dNSName with an octet above 0x7f", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, der("30", der("82", "612ef4657374"))))
   refuses(t, "a dNSName with a NUL", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, der("30", der("82", "61002e74657374"))))
@@ -528,6 +572,7 @@ const extensionSuite = (): i32 => {
   refuses(t, "an empty dNSName", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, der("30", der("82", ""))))
   const otherName: string = der("a0", der("06", "2a03") + der("a0", der("0c", "61")))
   refuses(t, "an otherName that is not an OID and a value", readsOne(OID_SAN, der("30", otherName)), readsOne(OID_SAN, der("30", der("a0", "ffff"))))
+  refuses(t, "an otherName whose type-id is not an OID", readsOne(OID_SAN, der("30", otherName)), readsOne(OID_SAN, der("30", der("a0", der("04", "2a03") + der("a0", der("0c", "61"))))))
   refuses(t, "an otherName with a padded type-id", readsOne(OID_SAN, der("30", otherName)), readsOne(OID_SAN, der("30", der("a0", der("06", "2a8003") + der("a0", der("0c", "61"))))))
   refuses(t, "an otherName with bytes after its value", readsOne(OID_SAN, der("30", otherName)), readsOne(OID_SAN, der("30", der("a0", der("06", "2a03") + der("a0", der("0c", "61")) + "0500"))))
   refuses(t, "a registeredID whose last octet continues", readsOne(OID_SAN, der("30", der("88", "2a03"))), readsOne(OID_SAN, der("30", der("88", "2a83"))))
@@ -539,6 +584,7 @@ const extensionSuite = (): i32 => {
     readsOne(OID_SAN, der("30", der("a4", FULL_SUBJECT))),
     readsOne(OID_SAN, der("30", der("a4", der("30", der("31", "")))))
   )
+  refuses(t, "a directoryName with bytes after its Name", readsOne(OID_SAN, der("30", der("a4", FULL_SUBJECT))), readsOne(OID_SAN, der("30", der("a4", `${FULL_SUBJECT}0500`))))
 
   const path3: X509Certificate | null = readOne(OID_BC, true, der("30", "0101ff020103"))
   t.ok("cA and pathLen 3 read", path3 !== null && path3.bcPathLen === 3)
@@ -549,6 +595,7 @@ const extensionSuite = (): i32 => {
   refuses(t, "a pathLenConstraint that is not an INTEGER", readsOne(OID_BC, der("30", "0101ff020100")), readsOne(OID_BC, der("30", "0101ff0a0100")))
   refuses(t, "cA spelled FALSE", readsOne(OID_BC, bc), readsOne(OID_BC, der("30", "010100")))
   refuses(t, "cA spelled 01", readsOne(OID_BC, der("30", "0101ff")), readsOne(OID_BC, der("30", "010101")))
+  refuses(t, "cA a two-octet BOOLEAN", readsOne(OID_BC, der("30", "0101ff")), readsOne(OID_BC, der("30", "0102ffff")))
   refuses(t, "an element after pathLenConstraint", readsOne(OID_BC, der("30", "0101ff020100")), readsOne(OID_BC, der("30", "0101ff0201000500")))
 
   const decipher: X509Certificate | null = readOne(OID_KU, true, "0303070080")
@@ -558,18 +605,23 @@ const extensionSuite = (): i32 => {
   refuses(t, "a keyUsage of three octets", readsOne(OID_KU, "0303070080"), readsOne(OID_KU, "030407800080"))
   refuses(t, "a keyUsage bit past decipherOnly", readsOne(OID_KU, "0303070080"), readsOne(OID_KU, "0303060040"))
   refuses(t, "a keyUsage with an unused bit set", readsOne(OID_KU, "03020780"), readsOne(OID_KU, "03020781"))
+  refuses(t, "a keyUsage with trailing bytes", readsOne(OID_KU, "03020780"), readsOne(OID_KU, "030207800500"))
+  // Bit 32 alone: a 32-bit mask would wrap it to digitalSignature.
+  refuses(t, "a keyUsage of five octets", readsOne(OID_KU, "03020780"), readsOne(OID_KU, "0306070000000080"))
 
   const serverAuth: string = der("06", "2b06010505070301")
   const ekuAny: X509Certificate | null = readOne(OID_EKU, false, der("30", der("06", "551d2500")))
   t.ok("anyExtendedKeyUsage read", ekuAny !== null && ekuAny.ekuAny && !ekuAny.ekuServerAuth)
   refuses(t, "an empty extKeyUsage", readsOne(OID_EKU, der("30", serverAuth)), readsOne(OID_EKU, der("30", "")))
   refuses(t, "an extKeyUsage holding a NULL", readsOne(OID_EKU, der("30", serverAuth)), readsOne(OID_EKU, der("30", serverAuth + "0500")))
+  refuses(t, "an extKeyUsage with trailing bytes", readsOne(OID_EKU, der("30", serverAuth)), readsOne(OID_EKU, der("30", serverAuth) + "0500"))
   refuses(t, "an extKeyUsage with a padded OID", readsOne(OID_EKU, der("30", serverAuth)), readsOne(OID_EKU, der("30", der("06", "2b0601058005070301"))))
 
   const dnsTree: string = der("30", der("82", "612e74657374"))
   const nc: X509Certificate | null = readOne(OID_NC, true, der("30", der("a1", dnsTree)))
   t.ok("excluded only", nc !== null && toI32(nc.ncPermitted.length) === 0 && toI32(nc.ncExcluded.length) === 1)
   refuses(t, "an empty nameConstraints", readsOne(OID_NC, der("30", der("a0", dnsTree))), readsOne(OID_NC, der("30", "")))
+  refuses(t, "a nameConstraints with trailing bytes", readsOne(OID_NC, der("30", der("a0", dnsTree))), readsOne(OID_NC, der("30", der("a0", dnsTree)) + "0500"))
   refuses(t, "an empty permittedSubtrees", readsOne(OID_NC, der("30", der("a0", dnsTree))), readsOne(OID_NC, der("30", der("a0", ""))))
   refuses(t, "an empty excludedSubtrees", readsOne(OID_NC, der("30", der("a1", dnsTree))), readsOne(OID_NC, der("30", der("a1", ""))))
   refuses(
@@ -616,6 +668,7 @@ const extensionSuite = (): i32 => {
   t.ok("a URI subtree is unsupported", other !== null && other.ncUnsupported)
 
   refuses(t, "a subjectKeyIdentifier that is not an OCTET STRING", readsOne(OID_SKI, der("04", "0102")), readsOne(OID_SKI, der("03", "000102")))
+  refuses(t, "a subjectKeyIdentifier with trailing bytes", readsOne(OID_SKI, der("04", "0102")), readsOne(OID_SKI, der("04", "0102") + "0500"))
   refuses(t, "an empty subjectKeyIdentifier", readsOne(OID_SKI, der("04", "01")), readsOne(OID_SKI, der("04", "")))
   refuses(t, "an empty keyIdentifier", readsOne(OID_AKI, der("30", der("80", "01"))), readsOne(OID_AKI, der("30", der("80", ""))))
   const issuerSerial: string = der("a1", der("a4", FULL_ISSUER)) + der("82", "01")
@@ -624,6 +677,7 @@ const extensionSuite = (): i32 => {
   refuses(t, "a non-minimal authorityCertSerialNumber", readsOne(OID_AKI, der("30", issuerSerial)), readsOne(OID_AKI, der("30", der("a1", der("a4", FULL_ISSUER)) + der("82", "0001"))))
   refuses(t, "an authorityCertIssuer with no serial", readsOne(OID_AKI, der("30", issuerSerial)), readsOne(OID_AKI, der("30", der("a1", der("a4", FULL_ISSUER)))))
   refuses(t, "an authorityCertSerialNumber with no issuer", readsOne(OID_AKI, der("30", der("80", "01") + issuerSerial)), readsOne(OID_AKI, der("30", der("80", "01") + der("82", "01"))))
+  refuses(t, "an authorityKeyIdentifier with bytes after it", readsOne(OID_AKI, der("30", der("80", "01"))), readsOne(OID_AKI, der("30", der("80", "01")) + "0500"))
   refuses(t, "an authorityKeyIdentifier with trailing bytes", readsOne(OID_AKI, der("30", der("80", "01"))), readsOne(OID_AKI, der("30", der("80", "01") + "0500")))
   refuses(t, "an authorityKeyIdentifier that is not a SEQUENCE", readsOne(OID_AKI, der("30", der("80", "01"))), readsOne(OID_AKI, der("31", der("80", "01"))))
   return t.done()
@@ -680,6 +734,7 @@ const nameSuite = (): i32 => {
   t.eqBool("CN=a is not a prefix of O=nish, ...", x509NameIsPrefix(fromHex(der("30", der("31", cn))), name), false)
   t.eqBool("an RDN that only starts the same is not a prefix", x509NameIsPrefix(fromHex(der("30", der("31", o))), fromHex(der("30", der("31", o + cn)))), false)
   t.eqBool("a base that is not a Name", x509NameIsPrefix(fromHex(der("30", der("31", ""))), name), false)
+  t.eqBool("a base with bytes after its Name", x509NameIsPrefix(fromHex(`${der("30", der("31", o))}0500`), name), false)
   t.eqBool("the empty Name against a name with an empty RDN", x509NameIsPrefix(fromHex("3000"), fromHex("30023100")), false)
   t.eqBool("a name that is not a Name", x509NameIsPrefix(base, fromHex(`${FULL_SUBJECT}00`)), false)
   t.ok("x509NameEqual is byte for byte", x509NameEqual(fromHex(FULL_SUBJECT), name))

@@ -1016,9 +1016,9 @@ function x509ReadKeyUsage(der: u8[], start: i32, end: i32, out: X509Certificate)
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerBitStringSound#0
   pointer out: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -26:9 bits: X509DerElement | null (const)
-  callee -26:39 x509DerExpect -> @nish.x509DerExpect
-  callee -25:45 x509DerBitStringSound -> @nish.x509DerBitStringSound
+  local -28:9 bits: X509DerElement | null (const)
+  callee -28:39 x509DerExpect -> @nish.x509DerExpect
+  callee -27:45 x509DerBitStringSound -> @nish.x509DerBitStringSound
   local -22:9 n: i32 (const)
   local -18:9 unused: i32 (const)
   local -14:7 mask: i32 (let)
