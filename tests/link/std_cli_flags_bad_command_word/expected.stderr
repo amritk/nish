@@ -1,0 +1,1 @@
+nish/cli-flags: a command word has no leading '-', got "--add" in "remote --add"
