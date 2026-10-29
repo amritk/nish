@@ -43,6 +43,7 @@
 import { sha256 } from "nish/crypto/sha256"
 import { sha384, sha512 } from "nish/crypto/sha512"
 import { timingSafeEqual } from "nish/crypto/ct"
+import { copyBytes, setU32BE } from "nish/bytes"
 import {
   BnModulus,
   bnCompare,
@@ -175,10 +176,9 @@ const rsaDerPositive = (der: u8[], c: RsaDerCursor): u8[] => {
     }
     at = at + 1
   }
-  for (let i: i32 = at; i < end; i++) {
-    out.push(der[i])
-  }
-  return out
+  const value: u8[] = new Array<u8>(end - at)
+  copyBytes(value, 0, der, at, end - at)
+  return value
 }
 
 /**
@@ -321,24 +321,21 @@ const rsaOpen = (key: RsaPublicKey, sig: u8[]): u8[] => {
   return bnToBytes(s, key.size)
 }
 
-/** The DER DigestInfo of RFC 8017 §9.2 note 1, up to the digest, for `hashId`. */
-const rsaDigestInfoPrefix = (hashId: i32): u8[] => {
-  if (hashId === RSA_SHA256) {
-    return [
-      0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00,
-      0x04, 0x20,
-    ]
-  }
-  if (hashId === RSA_SHA384) {
-    return [
-      0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05, 0x00,
-      0x04, 0x30,
-    ]
-  }
-  return [
-    0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00,
-    0x04, 0x40,
+/**
+ * The DER DigestInfo of RFC 8017 §9.2 note 1, up to the digest, for a
+ * SHA-2 digest of `hLength` bytes (32, 48 or 64). The three differ only in
+ * the outer length, the last arc of the hash's OID (2.16.840.1.101.3.4.2.1,
+ * .2 or .3) and the digest's length.
+ */
+const rsaDigestInfoPrefix = (hLength: i32): u8[] => {
+  const prefix: u8[] = [
+    0x30, 0x00, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x00, 0x05, 0x00,
+    0x04, 0x00,
   ]
+  prefix[1] = toU8(hLength + 17)
+  prefix[14] = toU8((hLength - 16) >> 4)
+  prefix[18] = toU8(hLength)
+  return prefix
 }
 
 /**
@@ -361,19 +358,17 @@ export const rsaVerifyPkcs1 = (key: RsaPublicKey, hashId: i32, msg: u8[], sig: u
     return false
   }
   // EM = 00 01 FF .. FF 00 DigestInfo digest, the FF run filling the rest.
-  const prefix: u8[] = rsaDigestInfoPrefix(hashId)
-  const tail: i32 = toI32(prefix.length) + toI32(digest.length)
-  const expected: u8[] = [0x00, 0x01]
-  for (let i: i32 = 2; i < key.size - tail - 1; i++) {
-    expected.push(0xff)
+  const hLength: i32 = toI32(digest.length)
+  const prefix: u8[] = rsaDigestInfoPrefix(hLength)
+  const pLength: i32 = toI32(prefix.length)
+  const ff: u8 = 0xff
+  const expected: u8[] = new Array<u8>(key.size)
+  expected[1] = 0x01
+  for (let i: i32 = 2; i < key.size - pLength - hLength - 1; i++) {
+    expected[i] = ff
   }
-  expected.push(0x00)
-  for (let i: i32 = 0; i < toI32(prefix.length); i++) {
-    expected.push(prefix[i])
-  }
-  for (let i: i32 = 0; i < toI32(digest.length); i++) {
-    expected.push(digest[i])
-  }
+  copyBytes(expected, key.size - hLength - pLength, prefix, 0, pLength)
+  copyBytes(expected, key.size - hLength, digest, 0, hLength)
   return timingSafeEqual(em, expected)
 }
 
@@ -383,20 +378,11 @@ export const rsaVerifyPkcs1 = (key: RsaPublicKey, hashId: i32, msg: u8[], sig: u
  */
 const rsaMgf1 = (hashId: i32, seed: u8[], length: i32): u8[] => {
   const out: u8[] = []
-  const block: u8[] = []
-  for (let i: i32 = 0; i < toI32(seed.length); i++) {
-    block.push(seed[i])
-  }
-  block.push(0)
-  block.push(0)
-  block.push(0)
-  block.push(0)
   const at: i32 = toI32(seed.length)
-  for (let counter: i32 = 0; toI32(out.length) < length; counter++) {
-    block[at] = toU8(counter >> 24)
-    block[at + 1] = toU8((counter >> 16) & 0xff)
-    block[at + 2] = toU8((counter >> 8) & 0xff)
-    block[at + 3] = toU8(counter & 0xff)
+  const block: u8[] = new Array<u8>(at + 4)
+  copyBytes(block, 0, seed, 0, at)
+  for (let counter: u32 = 0; toI32(out.length) < length; counter++) {
+    setU32BE(block, at, counter)
     const digest: u8[] = rsaHash(hashId, block)
     for (let i: i32 = 0; i < toI32(digest.length) && toI32(out.length) < length; i++) {
       out.push(digest[i])
@@ -442,10 +428,8 @@ export const rsaVerifyPss = (key: RsaPublicKey, hashId: i32, msg: u8[], sig: u8[
   if ((toI32(opened[skip]) & (full ^ topMask)) !== 0) {
     return false
   }
-  const h: u8[] = []
-  for (let i: i32 = 0; i < hLength; i++) {
-    h.push(opened[skip + dbLength + i])
-  }
+  const h: u8[] = new Array<u8>(hLength)
+  copyBytes(h, 0, opened, skip + dbLength, hLength)
   const db: u8[] = rsaMgf1(hashId, h, dbLength)
   for (let i: i32 = 0; i < dbLength; i++) {
     db[i] = db[i] ^ opened[skip + i]
@@ -462,12 +446,8 @@ export const rsaVerifyPss = (key: RsaPublicKey, hashId: i32, msg: u8[], sig: u8[
     return false
   }
   // H' = Hash(00 x 8 || mHash || salt).
-  const mPrime: u8[] = [0, 0, 0, 0, 0, 0, 0, 0]
-  for (let i: i32 = 0; i < hLength; i++) {
-    mPrime.push(mHash[i])
-  }
-  for (let i: i32 = dbLength - sLength; i < dbLength; i++) {
-    mPrime.push(db[i])
-  }
+  const mPrime: u8[] = new Array<u8>(8 + hLength + sLength)
+  copyBytes(mPrime, 8, mHash, 0, hLength)
+  copyBytes(mPrime, 8 + hLength, db, dbLength - sLength, sLength)
   return timingSafeEqual(rsaHash(hashId, mPrime), h)
 }
