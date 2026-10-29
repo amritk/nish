@@ -114,7 +114,12 @@ PASS  and between them the TLS slot holds no output buffer
 PASS  and the arena did not move (0 bytes)
 PASS  Connection: close over TLS ends with close_notify
 PASS  then the end of the stream, not a reset, while the slot waits for the client to hang up
-PASS  and once it does, the slot is closed
+PASS  a byte the client trickles to the lingering slot is drained without moving its idle clock
+PASS  so idleTimeout still bounds the linger
+PASS  and the slot is closed
+PASS  a client that will flood the linger completes the handshake
+PASS  its Connection: close ends with close_notify, and the slot lingers
+PASS  a client that sends more than the linger limit after the close is closed anyway
 PASS  a client offering no ALPN completes the handshake
 PASS  and is served HTTP/1.1
 PASS  an idle TLS slot is closed past idleTimeout
@@ -222,4 +227,4 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 224 passed, 0 failed, 0 skipped
+http1 server: 229 passed, 0 failed, 0 skipped

@@ -101,6 +101,7 @@ import { TLS_MAX_RECORD } from "nish/net/tls/record"
 import { TlsTicketKeyInfo, TlsTicketStrikes } from "nish/net/tls/ticket"
 import {
   TLS_RECORD_AGAIN,
+  TLS_RECORD_DATA,
   TLS_RECORD_DONE,
   TLS_RECORD_INVALID,
   TLS_RECORD_STATE_CLOSED,
@@ -367,8 +368,8 @@ export class TlsTcpServer {
   /**
    * The socket of `slot` is readable: reads it until it would block or the
    * connection has no room, handing each read to the connection, then sends
-   * what that produced. Answers the connection's `interest`; a free slot
-   * answers `TLS_RECORD_DONE`.
+   * what that produced. Answers the connection's `interest`, or, while the
+   * slot lingers, what `drain` answers; a free slot answers `TLS_RECORD_DONE`.
    */
   readable(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -409,18 +410,21 @@ export class TlsTcpServer {
 
   /**
    * Writes the connection's output until the socket would block or it is all
-   * sent, and answers its `interest`; once the connection is over, the slot
-   * lingers (`linger`). A slot never built answers `TLS_RECORD_DONE`.
+   * sent, and answers its `interest`; once the connection is over and the
+   * program has read what the client sent, the slot lingers (`linger`). A
+   * free slot answers `TLS_RECORD_DONE`.
    */
   flush(slot: i32): i32 {
-    if (slot < 0 || slot >= toI32(this.fds.length) || slot >= toI32(this.connections.length)) {
+    if (!this.holds(slot)) {
       return TLS_RECORD_DONE
     }
     if (this.lingered[slot] !== TLS_TCP_LIVE) {
       return this.lingerInterest(slot)
     }
     const wants: i32 = this.send(slot)
-    return (wants & TLS_RECORD_DONE) !== 0 ? this.linger(slot) : wants
+    // Application data still unread keeps the connection, and its keys, until
+    // the program reads it: lingering gives back the buffer that holds it.
+    return (wants & TLS_RECORD_DONE) !== 0 && (wants & TLS_RECORD_DATA) === 0 ? this.linger(slot) : wants
   }
 
   /** Writes `slot`'s output until the socket would block or it is all sent; answers the connection's `interest`. */
@@ -480,6 +484,15 @@ export class TlsTcpServer {
         n > 0 && this.lingered[slot] + n <= TLS_TCP_LINGER_LIMIT ? this.lingered[slot] + n : TLS_TCP_LINGERED
     }
     return TLS_RECORD_DONE
+  }
+
+  /**
+   * Whether `slot` lingers: its connection is over and it waits for the
+   * client to hang up. A carrier's idle clock does not move for what a
+   * lingering slot drains, so its idle timeout bounds the wait.
+   */
+  lingering(slot: i32): boolean {
+    return this.holds(slot) && this.lingered[slot] >= 0
   }
 
   /** A lingering `slot`'s interest: to be read, or `TLS_RECORD_DONE` once its linger is over. */
@@ -627,7 +640,9 @@ export class TlsTcpServer {
    * Closes the server's side of `slot`'s connection (§6.1): a `close_notify`
    * after whatever is already written, sent as the socket takes it. The slot
    * stays the program's until its interest says `TLS_RECORD_DONE` — every
-   * byte is sent — and the program calls `close`. Answers the interest.
+   * byte is sent and, once the slot lingers (`linger`), the client has hung
+   * up — and the program calls `close`. Meanwhile the interest asks for the
+   * socket to be read. Answers the interest.
    */
   shutdown(slot: i32): i32 {
     if (!this.holds(slot)) {

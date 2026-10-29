@@ -983,9 +983,35 @@ export const serverChecks = (): i32 => {
   s.response(new ClientReader(false));
   t.ok("Connection: close over TLS ends with close_notify", s.alerts.join(",") === "1 0" && lb.awaitEnd(s.index));
   t.ok("then the end of the stream, not a reset, while the slot waits for the client to hang up", lb.peers[s.index].failure === 0 && lb.secure.busy() === 1);
-  const closedBeforeHangUp: i32 = lb.closed;
-  lb.hangUp(s.index);
-  t.ok("and once it does, the slot is closed", lb.awaitClosed(closedBeforeHangUp + 1) && lb.secure.busy() === 0);
+  let lingerSlot: i32 = toI32(-1);
+  for (let k: i32 = 0; k < toI32(lb.secure.connections.length); k++) {
+    if (lb.secure.holds(k)) {
+      lingerSlot = k;
+    }
+  }
+  const lingerSince: i64 = lingerSlot >= 0 ? lb.secure.connection(lingerSlot).lastActive : toI64(-1);
+  lb.send(s.index, ascii("x"));
+  lb.settle();
+  t.ok(
+    "a byte the client trickles to the lingering slot is drained without moving its idle clock",
+    lingerSlot >= 0 && lb.secure.tls.lingering(lingerSlot) && lb.secure.connection(lingerSlot).lastActive === lingerSince
+  );
+  t.eqI32("so idleTimeout still bounds the linger", lb.secure.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
+  t.ok("and the slot is closed", !lb.secure.holds(lingerSlot) && lb.secure.busy() === 0);
+
+  const flood = new TlsClient(lb);
+  t.ok("a client that will flood the linger completes the handshake", flood.handshake([H1_ALPN]));
+  flood.send("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
+  flood.response(new ClientReader(false));
+  t.ok("its Connection: close ends with close_notify, and the slot lingers", lb.awaitEnd(flood.index) && lb.secure.busy() === 1);
+  const junk: u8[] = [];
+  for (let k: i32 = 0; k < 70000; k++) {
+    junk.push(toU8(120));
+  }
+  const closedBeforeFlood: i32 = lb.closed;
+  lb.send(flood.index, junk);
+  t.ok("a client that sends more than the linger limit after the close is closed anyway", lb.awaitClosed(closedBeforeFlood + 1) && lb.secure.busy() === 0);
+  lb.hangUp(flood.index);
 
   const n = new TlsClient(lb);
   const noAlpn: string[] = [];
