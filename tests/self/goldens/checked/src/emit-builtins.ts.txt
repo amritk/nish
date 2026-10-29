@@ -588,8 +588,8 @@ function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: string): 
   sharedWrite: via emitConversion
   escaping: name
   calls: Emitter.declareType Emitter.emitExpression Emitter.typeOf Emitter.useRuntime IRFunction.emit IRFunction.emitValue builtinConversionTarget callIntrinsic emitCStringCopy emitConversion emitCtEq emitCtSelect emitNetCall emitPanic emitParseCall emitStreamWrite emitUncheckedElement emitWrapping firstArgument internalErrorFor isNetExport nish_exit nish_panic_index nish_str_concat nish_str_eq stringArgs
-  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitConversion#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitCtSelect#0 emitCtEq#0 emitUncheckedElement#0 emitWrapping#0 emitWrapping#0 emitWrapping#0 emitCStringCopy#0 Emitter.emitExpression#0 emitParseCall#0 Emitter.emitExpression#0 callIntrinsic#0 emitParseCall#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 emitParseCall#0 emitConversion#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 emitStreamWrite#0 emitStreamWrite#0 emitPanic#0 emitNetCall#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 emitNetCall#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0 emitCtSelect#1 emitCtEq#1 emitUncheckedElement#1 emitWrapping#1 emitWrapping#1 emitWrapping#1 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 Emitter.typeOf#1 Emitter.typeOf#1 firstArgument#0 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 stringArgs#1 stringArgs#1 firstArgument#0 emitStreamWrite#1 emitStreamWrite#1 emitPanic#1 emitNetCall#1 firstArgument#0 firstArgument#0 firstArgument#0 stringArgs#1 emitNetCall#1
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitConversion#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitCtSelect#0 emitCtEq#0 emitUncheckedElement#0 emitWrapping#0 emitWrapping#0 emitWrapping#0 emitCStringCopy#0 Emitter.emitExpression#0 emitParseCall#0 Emitter.emitExpression#0 callIntrinsic#0 emitParseCall#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 emitParseCall#0 emitConversion#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 emitStreamWrite#0 emitStreamWrite#0 emitPanic#0 emitNetCall#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 emitNetCall#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0 emitCtSelect#1 emitCtEq#1 emitUncheckedElement#1 emitWrapping#1 emitWrapping#1 emitWrapping#1 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 Emitter.typeOf#1 Emitter.typeOf#1 firstArgument#0 firstArgument#0 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 stringArgs#1 stringArgs#1 firstArgument#0 emitStreamWrite#1 emitStreamWrite#1 emitPanic#1 emitNetCall#1 firstArgument#0 firstArgument#0 firstArgument#0 stringArgs#1 emitNetCall#1
   stackSites=0 stackLocals=0
   local +0:9 target: i32 (const)
   callee +0:18 builtinConversionTarget -> @builtinConversionTarget
@@ -692,79 +692,86 @@ function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: string): 
   callee +140:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee +143:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee +143:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +150:5 Emitter.declareType -> @Emitter.declareType
-  callee +151:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +152:32 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +152:70 stringArgs -> @stringArgs
-  callee +157:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +157:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +161:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +161:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +165:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +166:26 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +166:63 stringArgs -> @stringArgs
+  local +146:11 n: string (const)
+  callee +146:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +146:38 firstArgument -> @firstArgument
+  callee +147:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +147:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +150:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +150:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +157:5 Emitter.declareType -> @Emitter.declareType
+  callee +158:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +159:32 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +159:70 stringArgs -> @stringArgs
+  callee +164:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +164:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +168:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +168:45 Emitter.useRuntime -> @Emitter.useRuntime
   callee +172:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +173:19 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +173:58 stringArgs -> @stringArgs
-  callee +177:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +177:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +177:82 stringArgs -> @stringArgs
-  callee +182:5 Emitter.declareType -> @Emitter.declareType
-  callee +183:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +184:32 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +184:78 stringArgs -> @stringArgs
-  callee +191:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +192:22 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +192:63 stringArgs -> @stringArgs
-  callee +196:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +196:45 Emitter.useRuntime -> @Emitter.useRuntime
-  local +199:11 fd: string (const)
-  callee +199:16 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +199:39 firstArgument -> @firstArgument
-  callee +200:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +200:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +206:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +207:19 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +207:66 stringArgs -> @stringArgs
-  callee +211:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +211:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +214:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +215:26 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +215:70 stringArgs -> @stringArgs
-  callee +221:5 Emitter.declareType -> @Emitter.declareType
-  local +222:11 bytes: string (const)
-  callee +222:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +222:42 firstArgument -> @firstArgument
-  callee +223:5 IRFunction.emit -> @IRFunction.emit
-  callee +223:34 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +227:12 emitStreamWrite -> @emitStreamWrite
-  callee +230:12 emitStreamWrite -> @emitStreamWrite
-  callee +233:12 emitPanic -> @emitPanic
-  callee +240:12 emitNetCall -> @emitNetCall
-  local +243:11 timeout: string (const)
-  callee +243:21 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +243:44 firstArgument -> @firstArgument
-  callee +244:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +244:52 Emitter.useRuntime -> @Emitter.useRuntime
-  local +247:11 fd: string (const)
-  callee +247:16 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +247:39 firstArgument -> @firstArgument
-  callee +248:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +248:52 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +251:5 Emitter.declareType -> @Emitter.declareType
-  callee +252:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +252:58 Emitter.useRuntime -> @Emitter.useRuntime
-  local +255:11 on: string (const)
-  callee +255:16 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +255:39 firstArgument -> @firstArgument
-  callee +256:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +256:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +173:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +173:63 stringArgs -> @stringArgs
+  callee +179:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +180:19 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +180:58 stringArgs -> @stringArgs
+  callee +184:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +184:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +184:82 stringArgs -> @stringArgs
+  callee +189:5 Emitter.declareType -> @Emitter.declareType
+  callee +190:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +191:32 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +191:78 stringArgs -> @stringArgs
+  callee +198:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +199:22 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +199:63 stringArgs -> @stringArgs
+  callee +203:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +203:45 Emitter.useRuntime -> @Emitter.useRuntime
+  local +206:11 fd: string (const)
+  callee +206:16 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +206:39 firstArgument -> @firstArgument
+  callee +207:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +207:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +213:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +214:19 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +214:66 stringArgs -> @stringArgs
+  callee +218:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +218:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +221:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +222:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +222:70 stringArgs -> @stringArgs
+  callee +228:5 Emitter.declareType -> @Emitter.declareType
+  local +229:11 bytes: string (const)
+  callee +229:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +229:42 firstArgument -> @firstArgument
+  callee +230:5 IRFunction.emit -> @IRFunction.emit
+  callee +230:34 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +234:12 emitStreamWrite -> @emitStreamWrite
+  callee +237:12 emitStreamWrite -> @emitStreamWrite
+  callee +240:12 emitPanic -> @emitPanic
+  callee +247:12 emitNetCall -> @emitNetCall
+  local +250:11 timeout: string (const)
+  callee +250:21 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +250:44 firstArgument -> @firstArgument
+  callee +251:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +251:52 Emitter.useRuntime -> @Emitter.useRuntime
+  local +254:11 fd: string (const)
+  callee +254:16 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +254:39 firstArgument -> @firstArgument
+  callee +255:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +255:52 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +258:5 Emitter.declareType -> @Emitter.declareType
   callee +259:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +260:19 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +260:70 stringArgs -> @stringArgs
-  callee +263:7 isNetExport -> @isNetExport
-  callee +264:12 emitNetCall -> @emitNetCall
-  callee +266:16 internalErrorFor -> @internalErrorFor
+  callee +259:58 Emitter.useRuntime -> @Emitter.useRuntime
+  local +262:11 on: string (const)
+  callee +262:16 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +262:39 firstArgument -> @firstArgument
+  callee +263:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +263:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +266:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +267:19 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +267:70 stringArgs -> @stringArgs
+  callee +270:7 isNetExport -> @isNetExport
+  callee +271:12 emitNetCall -> @emitNetCall
+  callee +273:16 internalErrorFor -> @internalErrorFor
 function isSpawnCall(program: CheckedProgram, call: Node): boolean -> @isSpawnCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -798,10 +805,10 @@ function identifierBuiltinCalleesNamed(program: CheckedProgram, table: TypeTable
   callee +6:18 builtinConversionTarget -> @builtinConversionTarget
   local +8:11 intrinsic: string (const)
   callee +8:40 conversionIntrinsic -> @conversionIntrinsic
-  callee +143:5 panicTailCallees -> @panicTailCallees
-  callee +174:7 isNetExport -> @isNetExport
-  callee +175:14 netSymbol -> @netSymbol
-  callee +176:9 netRangeBuffer -> @netRangeBuffer
+  callee +151:5 panicTailCallees -> @panicTailCallees
+  callee +182:7 isNetExport -> @isNetExport
+  callee +183:14 netSymbol -> @netSymbol
+  callee +184:9 netRangeBuffer -> @netRangeBuffer
 function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emitNetCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitIndex
