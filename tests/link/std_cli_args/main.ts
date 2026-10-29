@@ -250,6 +250,7 @@ const errors = (t: Suite, api: Api): void => {
     ["p", "tag"],
     ["users", "keys", "list", "1", "--lxyzt"],
     ["users", "keys", "list", "1", "--rax-ouxpux"],
+    ["users", "keys", "list", "1", "--rxx-ouxpux"],
   ]
   const want: string[] = [
     "api users: unknown command 'kyes' (did you mean 'keys'?)",
@@ -279,6 +280,7 @@ const errors = (t: Suite, api: Api): void => {
     "api projects tag: missing argument <project>",
     "api users keys list: unknown flag --lxyzt",
     "api users keys list: unknown flag --rax-ouxpux (did you mean --raw-output?)",
+    "api users keys list: unknown flag --rxx-ouxpux",
   ]
   const hints: string[] = [
     "Run 'api users --help' for usage.",
@@ -306,6 +308,7 @@ const errors = (t: Suite, api: Api): void => {
     "Run 'api users keys list --help' for usage.",
     "Run 'api projects tag --help' for usage.",
     "Run 'api projects tag --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
     "Run 'api users keys list --help' for usage.",
     "Run 'api users keys list --help' for usage.",
   ]

@@ -186,6 +186,10 @@ PASS  errors: users keys list 1 --rax-ouxpux: kind
 PASS  errors: users keys list 1 --rax-ouxpux: exit code
 PASS  errors: users keys list 1 --rax-ouxpux: message
 PASS  errors: users keys list 1 --rax-ouxpux: hint
+PASS  errors: users keys list 1 --rxx-ouxpux: kind
+PASS  errors: users keys list 1 --rxx-ouxpux: exit code
+PASS  errors: users keys list 1 --rxx-ouxpux: message
+PASS  errors: users keys list 1 --rxx-ouxpux: hint
 PASS  errors: the first error wins
 PASS  errors: an unknown command stops the descent
 PASS  errors: a flag error keeps the descent, first error
@@ -221,4 +225,4 @@ PASS  wide: a middle flag
 PASS  wide: its last flag
 PASS  wide: every parse finds it
 PASS  wide: a parse is under 10 µs
-std/cli-args: 223 passed, 0 failed, 0 skipped
+std/cli-args: 227 passed, 0 failed, 0 skipped

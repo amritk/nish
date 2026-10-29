@@ -1181,7 +1181,7 @@ description)` one every command accepts, before, between or after the
 verbs. `argument(cmd, spec, description)` declares the next positional
 argument. `defaultValue`, `required`, `repeatable` and `negatable` refine a
 flag, and `epilog(handle, text)` ends a command's help with a paragraph.
-`-h`/`--help` (anywhere), `-v`/`--version` (at the root) and the word `help`
+`-h`/`--help` (anywhere before `--`), `-v`/`--version` (at the root) and the word `help`
 as the first command are built in; `help users kyes`, naming no command, is
 the unknown-command error rather than help.
 
