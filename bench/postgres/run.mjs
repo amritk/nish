@@ -103,7 +103,7 @@ const LDFLAGS =
         "-Wl,--gc-sections",
         "-Wl,--as-needed",
         "-Wl,-O2",
-        "-Wl,--build-id=none",
+        "-Wl,--build-id=sha1",
         "-s",
         ...(spawnSync("ld.lld", ["--version"]).status === 0 ? ["-fuse-ld=lld"] : []),
       ]
