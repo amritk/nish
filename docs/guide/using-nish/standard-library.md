@@ -2045,8 +2045,8 @@ start-up still takes grows with it: the tables sized from the cap, such as an
 TLS 1.3, sans-IO like the server. `nish/net/tls/verify` checks the server for
 them (`tlsClientAuthenticate`), and `nish/net/tls-tcp`'s `TlsTcpClient` and
 blocking `tlsConnect` put the client on a TCP socket and check the server
-themselves; until the PKI module ships every server is refused with
-`unknown_ca`. [TLS client](tls-client.md) shows them.
+themselves, against the system's roots or ones you name.
+[TLS client](tls-client.md) shows them.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)

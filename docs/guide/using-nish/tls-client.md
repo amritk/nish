@@ -51,7 +51,7 @@ closed:
 | --- | --- |
 | `-110` | the time ran out |
 | `-111`, `-22`, other negatives | `nish:net`'s error from connecting or reading |
-| `42` `bad_certificate` | no certificate, or a leaf whose key is not P-256, P-384 or RSA of 2048 bits or more |
+| `42` `bad_certificate` | no certificate, a leaf whose key is not P-256, P-384 or RSA of 2048 bits or more, a leaf that does not name the server you asked for, or a chain broken another way |
 | `45` `certificate_expired` | a certificate in the chain is outside its validity |
 | `48` `unknown_ca` | the chain does not reach a root you trust |
 | `51` `decrypt_error` | the server's signature does not verify under its certificate's key |
@@ -66,12 +66,18 @@ call, so a program that connects often reads them once and passes them here.
 `new TlsTcpClient(addr, config, trust)` starts
 the same connection without blocking, for a loop you already run.
 
-**The server is always checked, and for now always refused.** The roots are
-the system's (`tlsClientSystemTrust()`, which honours `SSL_CERT_FILE` and
-`SSL_CERT_DIR`). The signature check is complete, but the chain check waits
-on the PKI module: until it ships, every server is refused with `48`
-`unknown_ca`, so `tlsConnect` opens no connection yet. There is no option to
-skip the check.
+**The server is always checked.** Its signature must verify under its
+certificate's key, and its chain must lead to a root you trust, with every
+certificate on it valid now and the name you passed in the leaf's
+subjectAltName (an IP address against its IP entries; the certificate's
+common name is never read). `tlsConnect` trusts the system's roots
+(`tlsClientSystemTrust()`, which honours `SSL_CERT_FILE` and
+`SSL_CERT_DIR`). To trust others, such as your own CA for a test server,
+build the trust from their certificates with `new TlsClientTrust(roots)`
+(each an `X509Certificate` from `nish/crypto/x509`), or from a
+`nish/crypto/pki-roots` bundle with `tlsClientTrust(roots)`, and pass it to
+`tlsConnectWith`. There is no option to skip the check: a server you cannot
+authenticate is reached by trusting its root, never around it.
 
 ## Starting a handshake
 
