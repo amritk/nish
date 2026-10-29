@@ -228,6 +228,12 @@ declare function write(s: string): void;
 /** `s` to stderr, likewise. */
 declare function writeError(s: string): void;
 /**
+ * `bytes[off .. off + len)` to stdout, every byte as it is, partial writes and
+ * interruptions retried: the count, or a negative errno. A range outside
+ * `bytes` panics, as `dst.set` does. The shape is `netWrite`'s.
+ */
+declare function writeBytes(bytes: readonly u8[], off: i32, len: i32): i32;
+/**
  * `message` and a newline to stderr, then exit 1. Terminates control flow, so
  * it is `never`: that is what lets `tsc` agree that a function ending in a
  * `panic` returns, and that `x` is not null after `if (x === null) { panic(...); }`
@@ -257,6 +263,19 @@ declare function readFileBytesSync(path: string): u8[] | null;
 declare function writeFileSync(path: string, data: string): void;
 /** `data` added at the end of the file, with the same refusal of a symbolic link. */
 declare function appendFileSync(path: string, data: string): void;
+/**
+ * The file's contents replaced by `bytes`, created at 0644 when missing, with
+ * the same refusal of a symbolic link: the byte count, or a negative errno.
+ * Never an exit.
+ */
+declare function writeFileBytesSync(path: string, bytes: readonly u8[]): i32;
+/**
+ * `from` moved to `to`, replacing a file there in one step on one file system:
+ * 0, or a negative errno (-18 across file systems, -2 for a missing `from`).
+ */
+declare function renameSync(from: string, to: string): i32;
+/** The name `path` removed: 0, or a negative errno. A directory is refused, not removed. */
+declare function unlinkSync(path: string): i32;
 /** One directory, not recursive; whether a directory is there afterwards. */
 declare function mkdirSync(path: string): boolean;
 /** Whether a directory is at `path` right now. One `stat`, and never an exit. */
@@ -456,6 +475,12 @@ declare module "nish:fs" {
   export function writeFileSync(path: string, data: string): void;
   /** Refuses a symbolic link as the last component of the path, as the global does. */
   export function appendFileSync(path: string, data: string): void;
+  /** The byte count, or a negative errno; refuses a symbolic link as `writeFileSync` does. */
+  export function writeFileBytesSync(path: string, bytes: readonly u8[]): i32;
+  /** 0, or a negative errno: -18 across file systems. */
+  export function renameSync(from: string, to: string): i32;
+  /** 0, or a negative errno: a directory is refused, not removed. */
+  export function unlinkSync(path: string): i32;
   /** `true` when the directory was created, `false` when it already existed. */
   export function mkdirSync(path: string): boolean;
   export function isDirectorySync(path: string): boolean;
@@ -583,6 +608,11 @@ declare module "nish:io" {
   export function write(s: string): void;
   /** The same, on stderr. */
   export function writeError(s: string): void;
+  /**
+   * `bytes[off .. off + len)` to stdout, every byte as it is: the count, or a
+   * negative errno. A range outside `bytes` panics, as `dst.set` does.
+   */
+  export function writeBytes(bytes: readonly u8[], off: i32, len: i32): i32;
   /** `message` to stderr, then exit 1. A terminator, as `process.exit` is. */
   export function panic(message: string): never;
 }
