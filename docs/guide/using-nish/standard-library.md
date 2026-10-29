@@ -1592,6 +1592,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
+| `nish/crypto/rsa` | RSA signature verification, PKCS#1 v1.5 and PSS over SHA-256/384/512, under a PKCS#1 public key: `rsaParsePublicKey`, `rsaVerifyPkcs1v15`, `rsaVerifyPss` |
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |

@@ -1,0 +1,74 @@
+PASS  key A reads
+PASS  key A has 2048 bits
+PASS  key A's exponent is 01 00 01
+PASS  key A's modulus has no leading zero
+PASS  the rebuilt key A reads
+PASS  RSA_MIN_BITS is 1024
+PASS  RSA_MAX_BITS is 8192
+PASS  an outer tag other than SEQUENCE is refused
+PASS  a length of 81 and less than 0x80 is refused
+PASS  a length of 82 and less than 0x100 is refused
+PASS  a three-octet length is refused
+PASS  a long-form length octet read as a short one is refused
+PASS  a SEQUENCE length one short is refused
+PASS  a byte after the SEQUENCE is refused
+PASS  a byte inside the SEQUENCE after e is refused
+PASS  a modulus that is not an INTEGER is refused
+PASS  an exponent that is not an INTEGER is refused
+PASS  an empty exponent is refused
+PASS  a negative modulus is refused
+PASS  an exponent with a needless leading zero is refused
+PASS  a key one byte short is refused
+PASS  an empty key is refused
+PASS  an even modulus is refused
+PASS  a 1023-bit modulus is refused
+PASS  a 1024-bit modulus reads
+PASS  an 8192-bit modulus reads
+PASS  an 8193-bit modulus is refused
+PASS  an even exponent is refused
+PASS  the exponent 1 is refused
+PASS  the exponent 3 reads
+PASS  the exponent 2^32 - 1 reads, its leading zero dropped
+PASS  the exponent 2^32 + 1 is refused
+PASS  PKCS#1 v1.5 SHA-256 verifies
+PASS  PKCS#1 v1.5 SHA-384 verifies
+PASS  PKCS#1 v1.5 SHA-512 verifies
+PASS  a SHA-256 signature does not verify as SHA-384
+PASS  another message is refused
+PASS  the hash id 0 is refused
+PASS  the hash id 4 is refused
+PASS  a signature with a zero byte in front is refused
+PASS  a signature that starts with a zero byte verifies
+PASS  that signature without its zero byte is refused
+PASS  an empty signature is refused
+PASS  a signature plus n is refused
+PASS  a padding byte of FE is refused
+PASS  block type 02 is refused
+PASS  a DigestInfo without NULL parameters is refused
+PASS  the SHA-384 OID over a SHA-256 digest is refused
+PASS  bytes after the digest are refused
+PASS  PKCS#1 v1.5 verifies under a 2049-bit key
+PASS  PKCS#1 v1.5 verifies under e = 2^32 - 5
+PASS  a modulus with room for seven FFs is refused
+PASS  PSS SHA-256 with a 32-byte salt verifies
+PASS  PSS SHA-256 with no salt verifies
+PASS  PSS SHA-384 with a 48-byte salt verifies
+PASS  PSS SHA-512 with a 64-byte salt verifies
+PASS  PSS with a salt length one short is refused
+PASS  PSS with a salt length one long is refused
+PASS  PSS under another hash is refused
+PASS  PSS of another message is refused
+PASS  PSS with the hash id 0 is refused
+PASS  PSS with a salt length of -1 is refused
+PASS  PSS of a block of zeros alone with a salt length of -1 is refused
+PASS  PSS with a salt length near 2^31 is refused
+PASS  PSS with a signature a byte long is refused
+PASS  PSS ending in bb is refused
+PASS  PSS with the masked block's top bit set is refused
+PASS  PSS with a padding byte of 01 is refused
+PASS  PSS with 02 before the salt is refused
+PASS  PSS verifies under a 2049-bit key
+PASS  a 2049-bit key's signature of 2^2048 plus a block is refused
+PASS  PSS SHA-512 verifies under a 1024-bit key
+PASS  a salt too long for a 1024-bit key and SHA-512 is refused
+rsa: 73 passed, 0 failed, 0 skipped

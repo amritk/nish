@@ -42,6 +42,7 @@ the record that found it. The notes below the table name each such finding.
 | --- | --- | --- | ---: | ---: |
 | AEADs | [crypto-aead.md](crypto-aead.md) | `std/crypto/chacha20poly1305.ts`, `std/crypto/aes.ts`, `runtime/runtime-aes.c` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 1 |
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, `std/crypto/ed25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
+| RSA signatures | [crypto-rsa.md](crypto-rsa.md) | `std/crypto/rsa.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 0 / 9 | 0 / 0 / 0 / 0 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 17 ² | 0 / 0 / 0 / 1 |
@@ -223,6 +224,10 @@ the record that found it. The notes below the table name each such finding.
     rebuilding the decoder's tables and the BREACH class of length leaks, are
     accepted, with the reason in their record, and are not counted. COMP-1 to
     COMP-7 and COMP-10 are properties checked and found to hold.
+20. RSA-1, RSA-3 and RSA-4 (Low), the DigestInfo without its NULL refused,
+    the key-size and exponent caps, and a message over 2^31 − 1 bytes
+    panicking in the hash, are accepted, with the reason in their record, and
+    are not counted. RSA-2 and RSA-5 are properties checked and found to hold.
 
 ## Fuzzed
 
