@@ -16,7 +16,6 @@ import { Suite } from "nish/testing"
 const WARMUP: i32 = 300
 const MEASURED: i32 = 2000
 const SERVER_TOKEN: i32 = 1
-const WOULD_BLOCK: i32 = -11
 
 /** The loopback server: one socket, one buffer, an answer written over the query. */
 class Server {
@@ -40,7 +39,7 @@ class Server {
  */
 const serve = (s: Server): void => {
   let len: i32 = udpRecvFrom(s.fd, s.buf, 0, 400, s.from, s.meta)
-  while (len !== WOULD_BLOCK) {
+  while (len >= 0) {
     if (len >= 17) {
       // The question's type is the two bytes after its name, which ends at the first zero label.
       let at: i32 = 12

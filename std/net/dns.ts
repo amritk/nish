@@ -16,9 +16,6 @@
  * three, so a lookup costs a server nothing while it waits. Each send's
  * query ID is drawn from `crypto.getRandomValues`.
  *
- * This is the non-blocking resolver. `netResolve`, where a build has it, is
- * the C library's `getaddrinfo`, which blocks the thread that calls it.
- *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
@@ -368,10 +365,11 @@ const dnsClientWrite = (c: DnsClient, q: i32, fd: i32, nowNanos: i64): void => {
 /**
  * The bytes waiting on query `q`'s connection, to the core, until none are or
  * the try ends. The end of the stream, or a hang-up with nothing left to
- * read, before the reply is whole fails the try.
+ * read, before the reply is whole fails the try. A try the core ended stops
+ * the reading, though the next one may open its socket on the same fd.
  */
 const dnsClientReadStream = (c: DnsClient, q: i32, fd: i32, hungUp: boolean, nowNanos: i64): void => {
-  while (c.fds[q] === fd) {
+  while (c.fds[q] === fd && c.fdState[q] === DNS_FD_TCP_READ) {
     const n: i32 = netRead(fd, c.buf, 0, DNS_UDP_MAX_REPLY)
     if (n === -11 && !hungUp) {
       return
@@ -391,6 +389,8 @@ const dnsClientReadStream = (c: DnsClient, q: i32, fd: i32, hungUp: boolean, now
  * `out` and its TTL in seconds into `ttls`: the count, or a negative
  * `DNS_RESOLVE_*` code, `DNS_RESOLVE_TIMEOUT` once `timeoutMs` has passed,
  * or the negative errno of a poll loop that cannot be made or waited on.
+ * It waits for both the A and the AAAA answer, so a family that answered is
+ * not returned on its own once `timeoutMs` passes: it is `DNS_RESOLVE_TIMEOUT`.
  *
  * **It blocks the thread** until the lookup ends, on a loop of its own, so
  * it is for a CLI or a program's start-up; a server resolves with a

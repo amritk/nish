@@ -79,6 +79,13 @@ PASS  search: NXDOMAIN and no server for the other family move on
 PASS  search: and the name under a later domain resolves
 PASS  search: with no later answer, the unreachable family's error stands
 PASS  search: after every candidate was asked
+PASS  search: NXDOMAIN from both moves to foo.b.test
+PASS  search: NODATA and an unreachable family after an NXDOMAIN candidate is DNS_RESOLVE_NO_ANSWER
+PASS  search: with no third candidate asked
+PASS  slot reuse: a lookup NXDOMAIN under every candidate
+PASS  slot reuse: the next lookup takes the same slot
+PASS  slot reuse: its unreachable servers are DNS_RESOLVE_NO_ANSWER
+PASS  slot reuse: with no second candidate asked
 PASS  search: a suffix that makes the name over 255 bytes is skipped
 PASS  timeout: nothing before the deadline
 PASS  timeout: both queries at the deadline
@@ -93,6 +100,9 @@ PASS  attempts: no deadline is left
 PASS  servfail: the next server is asked at once
 PASS  servfail: the first server's late reply is dropped by its source
 PASS  servfail: and its answer is the lookup's
+PASS  formerr: the next server is asked at once
+PASS  formerr: it is not counted as malformed
+PASS  notimp: fails the server too
 PASS  servfail: an A answer stands when AAAA reached no server
 PASS  servfail: with no address, no server is DNS_RESOLVE_NO_ANSWER
 PASS  busy: every slot taken is DNS_RESOLVE_BUSY
@@ -108,4 +118,4 @@ PASS  cancel: before any send, the sends owed become closes
 PASS  cancel: and nothing was sent
 PASS  ipv6 server: sent to its address
 PASS  close: DNS_CLOSE is its own kind
-dns-resolver: 110 passed, 0 failed, 0 skipped
+dns-resolver: 120 passed, 0 failed, 0 skipped

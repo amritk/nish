@@ -301,6 +301,7 @@ export const main = (): number => {
     t.eqI32("localhost: nothing to send", take(r, 1).q, -1)
     const m: i32 = r.start("Foo.LocalHost.", 80, zero)
     t.eqI32("localhost: a name under it, in any case and with the root's dot", resultOf(r, m).count, 2)
+    drain(r, 1)
     t.eqI32("localhost: still no packet sent", r.sent, 0)
     const x: i32 = r.start("xlocalhost", 80, zero)
     t.eqI32("localhost: xlocalhost is not it, and is asked of the server", resultOf(r, x).count, DNS_RESOLVE_PENDING)
@@ -320,6 +321,7 @@ export const main = (): number => {
       listed(resultOf(r, r.start("::1", 443, zero))),
       "00000000000000000000000000000001" + "01bb/0"
     )
+    drain(r, 1)
     t.eqI32("literal: no packet sent", r.sent, 0)
   }
   {
@@ -331,6 +333,7 @@ export const main = (): number => {
       A80(5) + "/0 " + AAAA80(5) + "/0"
     )
     t.eqStr("hosts: an alias", listed(resultOf(r, r.start("db", 80, zero))), A80(5) + "/0")
+    drain(r, 1)
     t.eqI32("hosts: no packet sent", r.sent, 0)
     t.eqI32("hosts: every answered slot is free once read", r.active(), 0)
   }
@@ -676,6 +679,50 @@ export const main = (): number => {
     t.eqI32("search: after every candidate was asked", r.sent, 2 + 2 + 6)
   }
   {
+    // A query's NXDOMAIN is its current name's: an earlier candidate's must
+    // not move the search past a name that exists.
+    const r: DnsResolver = new DnsResolver(config(ONE + "search a.test b.test\noptions attempts:1\n"), null, 4)
+    const l: i32 = r.start("foo", 80, zero)
+    const a: Sent = take(r, 1)
+    const b: Sent = take(r, 2)
+    answer(r, a, reply(a, NXDOMAIN, 0, new Array<u8>(0)), zero)
+    answer(r, b, reply(b, NXDOMAIN, 0, new Array<u8>(0)), zero)
+    const c1: Sent = takeSend(r, 3)
+    const c2: Sent = takeSend(r, 4)
+    const c: Sent = c1.q % 2 === 0 ? c1 : c2
+    t.eqStr("search: NXDOMAIN from both moves to foo.b.test", asks(c), "foo.b.test A")
+    answer(r, c, reply(c, OK, 0, new Array<u8>(0)), zero)
+    r.tick(second * toI64(60))
+    t.eqI32(
+      "search: NODATA and an unreachable family after an NXDOMAIN candidate is DNS_RESOLVE_NO_ANSWER",
+      resultOf(r, l).count,
+      DNS_RESOLVE_NO_ANSWER
+    )
+    drain(r, 5)
+    t.eqI32("search: with no third candidate asked", r.sent, 4)
+  }
+  {
+    // One slot, so the second lookup reuses the queries the first left NXDOMAIN.
+    const r: DnsResolver = new DnsResolver(config(ONE + "search a.test\noptions attempts:1\n"), null, 1)
+    const l: i32 = r.start("x", 80, zero)
+    let n: i32 = 0
+    while (n < 4) {
+      const e: Sent = takeSend(r, 1 + n)
+      answer(r, e, reply(e, NXDOMAIN, 0, new Array<u8>(0)), zero)
+      n += 1
+    }
+    t.eqI32("slot reuse: a lookup NXDOMAIN under every candidate", resultOf(r, l).count, DNS_RESOLVE_NOT_FOUND)
+    drain(r, 10)
+    const m: i32 = r.start("y", 80, zero)
+    t.eqI32("slot reuse: the next lookup takes the same slot", m, l)
+    takeSend(r, 20)
+    takeSend(r, 21)
+    r.tick(second * toI64(60))
+    t.eqI32("slot reuse: its unreachable servers are DNS_RESOLVE_NO_ANSWER", resultOf(r, m).count, DNS_RESOLVE_NO_ANSWER)
+    drain(r, 30)
+    t.eqI32("slot reuse: with no second candidate asked", r.sent, 6)
+  }
+  {
     let suffix: string = "s"
     while (suffix.length < 248) {
       suffix = suffix + ".s"
@@ -740,6 +787,18 @@ export const main = (): number => {
     answer(r, c, reply(c, OK, 1, record("www.test", DNS_TYPE_A, 30, v4(192, 0, 2, 4))), zero)
     answer(r, b, reply(b, NXDOMAIN, 0, new Array<u8>(0)), zero)
     t.eqStr("servfail: and its answer is the lookup's", listed(resultOf(r, l)), A80(4) + "/30")
+  }
+  {
+    const r: DnsResolver = new DnsResolver(config(TWO), null, 4)
+    r.start("www.test", 80, zero)
+    const a: Sent = take(r, 1)
+    take(r, 2)
+    answer(r, a, reply(a, 0x8181, 0, new Array<u8>(0)), zero)
+    const c: Sent = take(r, 3)
+    t.eqStr("formerr: the next server is asked at once", `${c.q}:` + toHex(c.to, 0, DNS_ADDRESS_BYTES), "0:" + SERVER_2)
+    t.eqI32("formerr: it is not counted as malformed", r.droppedMalformed, 0)
+    answer(r, c, reply(c, 0x8184, 0, new Array<u8>(0)), zero)
+    t.eqI32("notimp: fails the server too", r.serverFailures, 2)
   }
   {
     const r: DnsResolver = new DnsResolver(config(ONE + "options attempts:1\n"), null, 4)

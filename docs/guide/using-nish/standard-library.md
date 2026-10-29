@@ -2295,9 +2295,13 @@ address count, A first, 18 bytes each with `port` written in, and each TTL in
 seconds: the smallest TTL of the address records, not of the CNAMEs that led to
 them. A failure is `DNS_RESOLVE_NOT_FOUND` (the name has no address: NXDOMAIN,
 or NODATA, a name with no A or AAAA record), `DNS_RESOLVE_NO_ANSWER` (no server
-answered), `DNS_RESOLVE_CNAME` (an alias
-chain looped or ran past 8), or `DNS_RESOLVE_BUSY` from `start` when every slot
-is taken.
+answered) or `DNS_RESOLVE_CNAME` (an alias chain ran past 8, or led back to
+the name asked across replies; a loop inside one reply is
+`DNS_RESOLVE_NOT_FOUND`). `start` itself answers a negative code when it
+cannot begin: `DNS_RESOLVE_BUSY` when every slot is taken, or the `DNS_ERR_*`
+code of `nish/net/dns-message` for a name that is not one, such as `""` or a
+label over 63 bytes. Check it before you pass it to `result`, which panics on a
+number that is not a lookup.
 
 `localhost`, an address literal and a name your hosts table has answer at once,
 with no packet sent:
@@ -2368,6 +2372,10 @@ export const main = (): i32 => {
   const loop: i32 = pollCreate();
   const client = new DnsClient(new DnsResolver(config, null, 4), loop, 100);
   const lookup: i32 = client.start("example.com", 443, monotonicNanos());
+  if (lookup < 0) {
+    console.log(`not started: ${lookup}`);
+    return 1;
+  }
   const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
   const ttls: i32[] = new Array<i32>(16);
   const ready: i32[] = new Array<i32>(16);
@@ -2393,8 +2401,10 @@ export const main = (): i32 => {
 `/etc/resolv.conf` and `/etc/hosts` read for you, on a loop of its own: **it
 blocks** until the lookup ends or `timeoutMs` passes
 (`DNS_RESOLVE_TIMEOUT`), so it is for a command-line tool or a program's
-start-up, not a server's loop. A `pollWait` that fails cancels the lookup and
-its negative errno is the answer. `dnsLookupWith` is the same with a
+start-up, not a server's loop. It waits for both the A and the AAAA answer, so
+a family that answered is not returned on its own when `timeoutMs` passes. A
+`pollWait` that fails cancels the lookup and its negative errno is the answer;
+a name `start` refuses answers `start`'s code. `dnsLookupWith` is the same with a
 configuration you give it.
 
 ```ts nish:ok
@@ -2417,8 +2427,7 @@ $ nish run host.ts
 A program that uses `DnsClient` reports `net` and `entropy` under
 `--emit-capabilities`, the IDs being random; `resolveHost` adds `fs.read` for
 the two files and `clock` for its deadline. Both are native only, as every
-`nish:net` call is. `netResolve`, where a build has it, is the C library's
-`getaddrinfo` instead: it follows `nsswitch.conf`, and it blocks.
+`nish:net` call is.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports

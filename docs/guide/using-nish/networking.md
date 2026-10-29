@@ -253,6 +253,10 @@ export const main = (): i32 => {
   const loop: i32 = pollCreate();
   const dns = new DnsClient(new DnsResolver(config, null, 4), loop, 1000);
   const lookup: i32 = dns.start("example.com", 443, monotonicNanos());
+  if (lookup < 0) {
+    console.log(`not started: ${lookup}`);
+    return 1;
+  }
   const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
   const ttls: i32[] = new Array<i32>(16);
   const ready: i32[] = new Array<i32>(16);
@@ -283,11 +287,20 @@ export const main = (): i32 => {
 };
 ```
 
+`start` answers a lookup number, or a negative code when it cannot start one:
+`-44` every slot is in use, and `-1` to `-6` (`DNS_ERR_*` of
+`nish/net/dns-message`) the name is not one, such as `""` or a label over 63
+bytes. Check it before you pass it to `result`, which panics on a number that is
+not a lookup.
+
 A lookup answers its address count, A records first, or a negative code:
 `-41` the name has no address (it does not exist, or exists with no A or AAAA
-record), `-42` no server answered, `-43` an alias chain looped, and from
+record), `-42` no server answered, `-43` an alias chain ran past eight aliases
+or led back to the name asked (a loop inside one reply reads as `-41`), and from
 `resolveHost` `-45` its time ran out. Another negative number is the errno of a
-socket or of `pollWait` that failed. `localhost`, an address literal and a name in the hosts table answer
+socket or of `pollWait` that failed. `resolveHost` answers `start`'s codes too,
+and waits for both the A and the AAAA answer, so one family that answered is
+not returned on its own when the time runs out. `localhost`, an address literal and a name in the hosts table answer
 at once, with no packet. For a command-line tool or a program's start-up,
 `resolveHost(name, timeoutMs, port, out, ttls)` reads `/etc/resolv.conf` and
 `/etc/hosts` and blocks until the lookup ends. The

@@ -37,8 +37,7 @@ DNS-1's follow-up and fixed one Medium finding of its own, DNS-5.
 | `std/net/dns-config.ts` | `dnsParseAddress`, `dnsParseResolvConf`, `dnsParseHosts`, `dnsHostsFind`; `DnsConfig`, `DnsHosts`; the helpers `dnsConfigCheckWindow`, `dnsIsBlank`, `dnsHexValue`, `dnsParseIpv4`, `dnsParseIpv6`, `dnsIsIpv4`, `dnsLineEnd`, `dnsCommentCut`, `dnsWordEnd`, `dnsWordIs`, `dnsOption`, `dnsAddSearch`, `dnsResolvLine`, `dnsAddHostName`, `dnsHostsLine`, `dnsHostNameIs` |
 
 Out of scope: `nish:net`'s sockets and readiness loop, which have their own
-record; `netResolve`, the C library's blocking `getaddrinfo`, which is not
-this resolver; DNSSEC, which a stub resolver that trusts its recursive server
+record; DNSSEC, which a stub resolver that trusts its recursive server
 does not validate; and every record type but A, AAAA and CNAME, which is read
 past.
 
@@ -198,7 +197,11 @@ genuine address stands`). A reply after the query is done, or a datagram once
 it moved to TCP, is counted and not read (`drop: a reply after the query is done
 is counted, not read`, `tc: a datagram once the query moved to TCP is dropped`),
 and a server that failed is not heard from again (`servfail: the first server's
-late reply is dropped by its source`).
+late reply is dropped by its source`). A reply that passes those checks with an
+RCODE the resolver does not read, FORMERR or NOTIMP, fails the server at once
+rather than waiting out its deadline (`formerr: the next server is asked at
+once`, `formerr: it is not counted as malformed`, `notimp: fails the server
+too`).
 
 **The ID and the source port vary** (DNS-1). Each send carries the ID the
 caller gives `nextOutgoing`, a TCP retry a new one (`udp: the A query carries
@@ -232,7 +235,9 @@ DNS_TCP_MAX_REPLY fails the server, and the next is asked over UDP`, `tc: a
 reply still truncated fails the server, and the next is asked over UDP`, `tc: a
 reply with another ID fails the server, and the next is asked over UDP`, `tc: a
 refused or broken connection fails the server`). Bytes after the reply is whole
-are ignored (`tc: bytes after the query is done are ignored`). A UDP read is at
+are ignored (`tc: bytes after the query is done are ignored`). `DnsClient`
+stops reading a stream once the core has ended its try, so a hang-up seen on
+that connection is not held against a next try that reopens on the same fd. A UDP read is at
 most `DNS_UDP_MAX_REPLY` (4096) bytes; a longer datagram is cut, fails to parse
 and is dropped.
 
@@ -253,7 +258,13 @@ server reached for the other moves on too, keeping that error should no later
 candidate answer, so one unreachable family cannot end the search on the first
 candidate (`search: NXDOMAIN and no server for the other family move on`,
 `search: and the name under a later domain resolves`, `search: with no later
-answer, the unreachable family's error stands`); a suffix that makes the name
+answer, the unreachable family's error stands`). The NXDOMAIN that moves it is
+the current name's own: each query clears it as it asks a new name, so an
+earlier candidate's, or an earlier lookup's in the same slot, cannot carry the
+search past a name that exists (`search: NODATA and an unreachable family after
+an NXDOMAIN candidate is DNS_RESOLVE_NO_ANSWER`, `search: with no third
+candidate asked`, `slot reuse: its unreachable servers are
+DNS_RESOLVE_NO_ANSWER`, `slot reuse: with no second candidate asked`); a suffix that makes the name
 over 255 bytes is skipped (`search: under ndots, each suffix and then the
 name`, `search: at ndots, the name first`, `search: a trailing dot is the name
 alone`, `search: NODATA is DNS_RESOLVE_NOT_FOUND`, `search: and stops the

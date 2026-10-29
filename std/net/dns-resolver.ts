@@ -40,6 +40,7 @@ import {
   DNS_ADDRESS_BYTES,
   DNS_ERR_ID,
   DNS_ERR_QUESTION,
+  DNS_ERR_RCODE,
   DNS_MAX_ANSWERS,
   DNS_MAX_LABEL_BYTES,
   DNS_MAX_NAME_BYTES,
@@ -386,7 +387,8 @@ export class DnsResolver {
    * A datagram of `len` bytes from `buf[0]` that arrived from `from` on query
    * `q`'s socket at `nowNanos`. One from another address or port than the
    * server's, with another ID or question, or malformed, is dropped and
-   * counted, and the query keeps waiting. Panics when `q` is not a query or
+   * counted, and the query keeps waiting. One that answers the query with an
+   * RCODE the resolver does not read, FORMERR or NOTIMP, fails the server. Panics when `q` is not a query or
    * `len` is outside `buf`.
    */
   receive(q: i32, buf: u8[], len: i32, from: u8[], nowNanos: i64): void {
@@ -419,6 +421,8 @@ export class DnsResolver {
       this.droppedId = dnsResolverCount(this.droppedId)
     } else if (status === DNS_ERR_QUESTION) {
       this.droppedQuestion = dnsResolverCount(this.droppedQuestion)
+    } else if (status === DNS_ERR_RCODE) {
+      dnsResolverServerFailed(this, q, nowNanos)
     } else if (status < 0) {
       this.droppedMalformed = dnsResolverCount(this.droppedMalformed)
     } else if (this.reply.truncated) {
@@ -844,6 +848,8 @@ const dnsResolverAsk = (r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void
   setU16BE(query, 12 + length, toU16(qtype))
   setU16BE(query, 14 + length, toU16(1))
   r.queryLength[q] = 16 + length
+  // Only this name's reply may say NXDOMAIN, not an earlier candidate's or lookup's.
+  r.nxdomain[q] = false
   r.server[q] = 0
   r.round[q] = 0
   dnsResolverSend(r, q, DNS_Q_UDP, nowNanos)
