@@ -838,7 +838,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     const path = emitter.emitExpression(args[0])
     if (name === "mkdirSyncMode") {
       const mode = emitter.emitExpression(args[1])
-      return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_mkdir_mode")}(i8* ${path}, i32 ${mode})`)
+      return emitter.fn.emitValue(
+        `call i32 ${emitter.useRuntime("nish_mkdir_mode")}(i8* ${path}, i32 ${mode})`
+      )
     }
     const data = emitter.emitExpression(args[1])
     const mode = emitter.emitExpression(args[2])

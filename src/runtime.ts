@@ -474,7 +474,11 @@ export class RuntimeTable {
       )
     )
     this.add(
-      mayNotReturn("nish_mkdir_mode", `declare noundef i32 @nish_mkdir_mode(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
+      mayNotReturn(
+        "nish_mkdir_mode",
+        `declare noundef i32 @nish_mkdir_mode(${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
     )
     this.add(
       mayNotReturn(
