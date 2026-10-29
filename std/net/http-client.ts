@@ -428,6 +428,8 @@ export class HttpClient {
   lost: boolean = false
   /** Whether the latest response's body is unread. */
   bodyOpen: boolean = false
+  /** Whether this is `httpFetch`'s client, closed whole once its one body is done with. */
+  once: boolean = false
 
   constructor(options: HttpOptions) {
     this.options = options
@@ -1233,14 +1235,14 @@ export class HttpClient {
     while (this.pendLen === 0) {
       const event: i32 = this.pump()
       if (event < 0) {
-        this.drop()
+        this.release()
         this.bodyError = this.error
         return -this.error
       }
       if (event === HTTP1_END) {
         this.bodyOpen = false
-        if (!this.parser.keepAlive()) {
-          this.drop()
+        if (this.once || !this.parser.keepAlive()) {
+          this.release()
         }
         return 0
       }
@@ -1256,9 +1258,18 @@ export class HttpClient {
     return take
   }
 
+  /** Closes the connection a body is done with, and `httpFetch`'s whole client with it. */
+  release(): void {
+    if (this.once) {
+      this.close()
+    } else {
+      this.drop()
+    }
+  }
+
   /** `readAll`'s refusal: the body passed the caller's limit. */
   refuseBody(limit: i32): void {
-    this.drop()
+    this.release()
     this.fail(HTTP_E_BODY_TOO_LARGE, `the body is larger than the ${limit} bytes asked for`)
     this.bodyError = HTTP_E_BODY_TOO_LARGE
   }
@@ -1287,6 +1298,7 @@ export class HttpClient {
  */
 export const httpFetch = (req: HttpRequest, options: HttpOptions): HttpResponse | null => {
   const client: HttpClient = new HttpClient(options)
+  client.once = true
   const res: HttpResponse | null = client.fetch(req)
   if (res === null) {
     client.close()

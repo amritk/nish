@@ -1,7 +1,9 @@
 PASS  an https fetch from a server the roots trust answers
 PASS  and the next fetch reuses the TLS connection
 PASS  an IP literal is matched against the certificate's IP name, on its own connection
+PASS  a client reads its roots once, not again for each connection
 PASS  httpFetch fetches over https too
+PASS  and once its body is read, it ends the connection with a close_notify
 PASS  an expired certificate is HTTP_E_CERTIFICATE
 PASS  and the error says the certificate was refused
 PASS  a certificate for another name is HTTP_E_CERTIFICATE
@@ -14,8 +16,11 @@ PASS  and no connection was opened for it
 PASS  a server that does not speak TLS is HTTP_E_TLS
 PASS  a body cut off without a close_notify is HTTP_E_TLS, not a short body
 PASS  and the error says the close_notify never came
+PASS  a body with no length ends at the server's close_notify
+PASS  a pooled TLS connection the server dropped is retried on a new one
+PASS  a server that never answers the handshake is HTTP_E_READ_TIMEOUT
 PASS  a redirect from https to http is refused even with crossOriginRedirects
 PASS  and the error says why
 PASS  https through an http proxy is a CONNECT tunnel, then TLS to the origin
 PASS  and the tunnelled connection is reused
-http fetch tls: 20 passed, 0 failed, 0 skipped
+http fetch tls: 25 passed, 0 failed, 0 skipped

@@ -8,8 +8,11 @@
 // of the connection it came on, so the child sees a TLS connection reused,
 // and sees that a refused fetch never opened one. `/cut` sends half a body
 // and drops the TCP connection without a close_notify: a truncation.
+// `/until-close` sends a body that ends at the server's close_notify,
+// `/stale` drops the connection after a whole reply, and `/notified-N` says
+// whether connection N ended with the client's close_notify.
 
-import { HTTP_E_CERTIFICATE, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
+import { HTTP_E_CERTIFICATE, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
 import { kill, monotonicNanos, platform, spawn, waitPid } from "nish:process";
 import { realpathSync, writeFileSync } from "nish:fs";
@@ -38,7 +41,7 @@ const asciiBytes = (s: string): u8[] => {
 
 const GOOD: i32 = 0;
 const SITES: i32 = 4;
-const SLOTS: i32 = 4;
+const SLOTS: i32 = 8;
 /** Poll tokens: a site's listener, the proxy's listener and its two ends, and a site's slot. */
 const LISTEN_TOKEN: i32 = 10;
 const PROXY_LISTEN: i32 = 20;
@@ -92,11 +95,14 @@ class Servers {
   head: string = "";
   tunnel: boolean = false;
   connections: i32 = 0;
+  /** The connections whose client ended them with a close_notify. */
+  notified: i32[];
   buf: u8[];
 
   constructor() {
     this.loop = pollCreate();
     this.buf = new Array<u8>(16384);
+    this.notified = [];
     this.sites = [];
     this.sites.push(new Site([goodLeaf()]));
     this.sites.push(new Site([expiredLeaf()]));
@@ -137,6 +143,9 @@ class Servers {
     while ((wants & TLS_RECORD_DATA) !== 0 && (wants & TLS_RECORD_DONE) === 0) {
       const n: i32 = site.server.read(slot, this.buf, 0, toI32(this.buf.length));
       if (n <= 0) {
+        if (n === 0) {
+          this.notified.push(site.ids[slot]);
+        }
         wants = site.server.shutdown(slot);
         break;
       }
@@ -153,7 +162,24 @@ class Servers {
     pollModify(this.loop, site.server.fd(slot), wants & 3, SLOT_TOKEN + index * 100 + slot);
   }
 
-  /** Answers every whole request head the slot has read; false once `/cut` has closed it. */
+  /** Writes a 200 reply carrying `body` and the connection's number. */
+  reply(site: Site, slot: i32, body: string): void {
+    const bytes: u8[] = asciiBytes(`HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nX-Conn: ${site.ids[slot]}\r\n\r\n${body}`);
+    site.server.write(slot, bytes, 0, toI32(bytes.length));
+  }
+
+  /** Whether connection `id` ended with a close_notify, reading what its slot still holds first. */
+  wasNotified(id: i32): boolean {
+    const site: Site = this.sites[GOOD];
+    for (let s: i32 = 0; s < SLOTS; s++) {
+      if (site.server.holds(s) && site.ids[s] === id) {
+        this.drive(GOOD, s, 1);
+      }
+    }
+    return this.notified.indexOf(id) >= 0;
+  }
+
+  /** Answers every whole request head the slot has read; false once a path has closed it. */
   answer(site: Site, slot: i32): boolean {
     let end: i32 = toI32(site.got[slot].indexOf("\r\n\r\n"));
     while (end >= 0) {
@@ -169,14 +195,32 @@ class Servers {
         site.server.close(slot);
         return false;
       }
+      if (line.startsWith("GET /until-close ")) {
+        const rest: u8[] = asciiBytes("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nuntil close");
+        site.server.write(slot, rest, 0, toI32(rest.length));
+        site.server.close(slot);
+        return false;
+      }
+      if (line.startsWith("GET /stale ")) {
+        this.reply(site, slot, "stale");
+        site.server.flush(slot);
+        site.server.connection(slot).abort();
+        site.server.close(slot);
+        return false;
+      }
+      if (line.startsWith("GET /notified-")) {
+        const id: i32 = parsePort(line.slice(14, toI32(line.indexOf(" HTTP/"))));
+        this.reply(site, slot, this.wasNotified(id) ? "yes" : "no");
+        end = toI32(site.got[slot].indexOf("\r\n\r\n"));
+        continue;
+      }
       if (line.startsWith("GET /tohttp ")) {
         const moved: u8[] = asciiBytes("HTTP/1.1 301 Moved Permanently\r\nLocation: http://localhost:1/\r\nContent-Length: 0\r\n\r\n");
         site.server.write(slot, moved, 0, toI32(moved.length));
         end = toI32(site.got[slot].indexOf("\r\n\r\n"));
         continue;
       }
-      const reply: u8[] = asciiBytes(`HTTP/1.1 200 OK\r\nContent-Length: ${line.length}\r\nX-Conn: ${site.ids[slot]}\r\n\r\n${line}`);
-      site.server.write(slot, reply, 0, toI32(reply.length));
+      this.reply(site, slot, line);
       end = toI32(site.got[slot].indexOf("\r\n\r\n"));
     }
     return true;
@@ -399,8 +443,14 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   t.check(bodyOf(b) === "GET /again HTTP/1.1" && conn(b) === conn(a), "and the next fetch reuses the TLS connection");
   const ip: HttpResponse | null = client.fetch(get(`https://127.0.0.1:${ports[0]}/ip`));
   t.check(bodyOf(ip) === "GET /ip HTTP/1.1" && conn(ip) !== conn(b), "an IP literal is matched against the certificate's IP name, on its own connection");
+  writeFileSync(trusted, strangerRootPem);
+  const cached: HttpResponse | null = client.fetch(get(`${good}/cached`));
+  t.check(bodyOf(cached) === "GET /cached HTTP/1.1" && conn(cached) !== conn(ip), "a client reads its roots once, not again for each connection");
+  writeFileSync(trusted, trustedRootPem);
   const once: HttpResponse | null = httpFetch(get(`${good}/once`), options);
   t.check(bodyOf(once) === "GET /once HTTP/1.1", "httpFetch fetches over https too");
+  const told: HttpResponse | null = client.fetch(get(`${good}/notified-${conn(once)}`));
+  t.check(bodyOf(told) === "yes", "and once its body is read, it ends the connection with a close_notify");
 
   // --- certificates that are refused
   const expired: HttpClient = new HttpClient(options);
@@ -416,7 +466,8 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   t.check(fails(system, system.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "the system roots do not trust the test's root");
 
   // --- no roots at all: refused before any connection
-  const before: HttpResponse | null = client.fetch(get(`${good}/before`));
+  const fresh: HttpClient = new HttpClient(options);
+  const before: HttpResponse | null = fresh.fetch(get(`${good}/before`));
   bodyOf(before);
   const none: HttpClient = new HttpClient(trusting(missing));
   t.check(fails(none, none.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "with no root certificate to trust, https is HTTP_E_CERTIFICATE");
@@ -437,6 +488,22 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
     console.log(`  error ${cut.error}: ${cut.errorText}`);
   }
   t.check(cut.errorText.indexOf("close_notify") >= 0, "and the error says the close_notify never came");
+  const whole: HttpClient = new HttpClient(options);
+  t.check(bodyOf(whole.fetch(get(`${good}/until-close`))) === "until close", "a body with no length ends at the server's close_notify");
+  const stale: HttpClient = new HttpClient(options);
+  const s1: HttpResponse | null = stale.fetch(get(`${good}/stale`));
+  const s1Body: string = bodyOf(s1);
+  const s2: HttpResponse | null = stale.fetch(get(`${good}/fresh`));
+  t.check(s1Body === "stale" && bodyOf(s2) === "GET /fresh HTTP/1.1" && conn(s2) !== conn(s1), "a pooled TLS connection the server dropped is retried on a new one");
+  if (s2 === null) {
+    console.log(`  error ${stale.error}: ${stale.errorText}`);
+  }
+  const silent: i32 = tcpListen("127.0.0.1", 0, 8);
+  const quiet: HttpOptions = trusting(trusted);
+  quiet.readTimeoutMs = 300;
+  const mute: HttpClient = new HttpClient(quiet);
+  t.check(fails(mute, mute.fetch(get(`https://127.0.0.1:${netLocalPort(silent)}/`)), HTTP_E_READ_TIMEOUT), "a server that never answers the handshake is HTTP_E_READ_TIMEOUT");
+  netClose(silent);
 
   // --- a redirect down to http
   const downgrade: HttpOptions = trusting(trusted);
