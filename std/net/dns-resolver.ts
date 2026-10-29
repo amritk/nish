@@ -29,7 +29,9 @@
  * `crypto.getRandomValues`, which a `wasm32` build cannot reach, so this
  * module asks for none and a test can script its IDs.
  *
- * Every buffer is made in the constructor, so a lookup allocates nothing.
+ * Every buffer is made in the constructor; a lookup allocates only the
+ * sixteen transient bytes `dnsParseAddress` takes to test a name for an
+ * address literal.
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
@@ -59,7 +61,11 @@ export const DNS_RESOLVE_PENDING: i32 = -40
 export const DNS_RESOLVE_NOT_FOUND: i32 = -41
 /** No server gave an answer: each timed out, failed or was refused, `attempts` rounds over. */
 export const DNS_RESOLVE_NO_ANSWER: i32 = -42
-/** The CNAME chain loops back to the name asked, or needs more than `DNS_RESOLVER_MAX_CNAME_HOPS` queries. */
+/**
+ * The CNAME chain loops across queries back to a name already asked, or needs
+ * more than `DNS_RESOLVER_MAX_CNAME_HOPS` queries. A loop closed inside one
+ * reply is `DNS_RESOLVE_NOT_FOUND`, as that reply names no address.
+ */
 export const DNS_RESOLVE_CNAME: i32 = -43
 /** `start` found every lookup slot in use. */
 export const DNS_RESOLVE_BUSY: i32 = -44
@@ -139,6 +145,8 @@ export class DnsResolver {
   /** The candidate a lookup is asking, by `dnsResolverCandidate`'s order, and how many it has. */
   candidate: i32[]
   candidates: i32[]
+  /** The error a lookup ends with if no later candidate answers: a family that reached no server while the other was NXDOMAIN, or 0. */
+  fallback: i32[]
   dots: i32[]
   lookupState: i32[]
   lookupResult: i32[]
@@ -223,6 +231,7 @@ export class DnsResolver {
     this.absolute = new Array<boolean>(maxLookups)
     this.candidate = new Array<i32>(maxLookups)
     this.candidates = new Array<i32>(maxLookups)
+    this.fallback = new Array<i32>(maxLookups)
     this.dots = new Array<i32>(maxLookups)
     this.lookupState = new Array<i32>(maxLookups)
     this.lookupResult = new Array<i32>(maxLookups)
@@ -300,6 +309,7 @@ export class DnsResolver {
     this.absolute[l] = toI32(name.charCodeAt(toI32(name.length) - 1)) === 46
     this.dots[l] = dots
     this.candidate[l] = 0
+    this.fallback[l] = 0
     this.candidates[l] = this.absolute[l] ? 1 : this.config.searchCount + 1
     this.lookupPort[l] = port
     this.lookupState[l] = DNS_L_RUNNING
@@ -364,7 +374,7 @@ export class DnsResolver {
           to[i] = this.config.servers[from + i]
           i += 1
         }
-        this.sent += 1
+        this.sent = dnsResolverCount(this.sent)
         return q
       }
       k += 1
@@ -385,14 +395,14 @@ export class DnsResolver {
       panic("DnsResolver.receive: len is outside buf, or from is shorter than 18 bytes")
     }
     if (this.state[q] !== DNS_Q_UDP) {
-      this.droppedMalformed += 1
+      this.droppedMalformed = dnsResolverCount(this.droppedMalformed)
       return
     }
     const at: i32 = this.server[q] * DNS_ADDRESS_BYTES
     let i: i32 = 0
     while (i < DNS_ADDRESS_BYTES && i < toI32(from.length)) {
       if (from[i] !== this.config.servers[at + i]) {
-        this.droppedSource += 1
+        this.droppedSource = dnsResolverCount(this.droppedSource)
         return
       }
       i += 1
@@ -406,13 +416,13 @@ export class DnsResolver {
       this.reply
     )
     if (status === DNS_ERR_ID) {
-      this.droppedId += 1
+      this.droppedId = dnsResolverCount(this.droppedId)
     } else if (status === DNS_ERR_QUESTION) {
-      this.droppedQuestion += 1
+      this.droppedQuestion = dnsResolverCount(this.droppedQuestion)
     } else if (status < 0) {
-      this.droppedMalformed += 1
+      this.droppedMalformed = dnsResolverCount(this.droppedMalformed)
     } else if (this.reply.truncated) {
-      this.tcpRetries += 1
+      this.tcpRetries = dnsResolverCount(this.tcpRetries)
       dnsResolverSend(this, q, DNS_Q_TCP, nowNanos)
     } else {
       dnsResolverAnswer(this, q, status, nowNanos)
@@ -488,7 +498,7 @@ export class DnsResolver {
     let q: i32 = 0
     while (q < n) {
       if ((this.state[q] === DNS_Q_UDP || this.state[q] === DNS_Q_TCP) && this.deadline[q] <= nowNanos) {
-        this.timeouts += 1
+        this.timeouts = dnsResolverCount(this.timeouts)
         dnsResolverServerFailed(this, q, nowNanos)
       }
       q += 1
@@ -583,7 +593,10 @@ const dnsResolverCheckQuery = (r: DnsResolver, q: i32, who: string): void => {
   }
 }
 
-/** Whether `name` is `localhost` or a name under it, in any case, with or without the root's dot. */
+/** `n` plus one, held at the i32 maximum, so a counter a peer drives never overflows. */
+const dnsResolverCount = (n: i32): i32 => (n < 2147483647 ? n + 1 : n)
+
+/** Whether `name` is `localhost` or a name under it, in any case, with or without the root's dot, and with no empty label before `localhost`. */
 const dnsResolverIsLocalhost = (name: string): boolean => {
   let n: i32 = toI32(name.length)
   if (n > 0 && toI32(name.charCodeAt(n - 1)) === 46) {
@@ -591,6 +604,10 @@ const dnsResolverIsLocalhost = (name: string): boolean => {
   }
   const word: string = "localhost"
   if (n < 9 || (n > 9 && toI32(name.charCodeAt(n - 10)) !== 46)) {
+    return false
+  }
+  // `.localhost` and `x..localhost` have an empty label, so are no name.
+  if (n === 10 || (n > 10 && toI32(name.charCodeAt(n - 11)) === 46)) {
     return false
   }
   let i: i32 = 0
@@ -847,7 +864,7 @@ const dnsResolverSend = (r: DnsResolver, q: i32, how: i32, nowNanos: i64): void 
  * `DNS_RESOLVE_NO_ANSWER`.
  */
 const dnsResolverServerFailed = (r: DnsResolver, q: i32, nowNanos: i64): void => {
-  r.serverFailures += 1
+  r.serverFailures = dnsResolverCount(r.serverFailures)
   r.server[q] = r.server[q] + 1
   if (r.server[q] >= r.config.serverCount) {
     r.server[q] = 0
@@ -900,7 +917,7 @@ const dnsResolverAnswer = (r: DnsResolver, q: i32, status: i32, nowNanos: i64): 
     return
   }
   r.hops[q] = r.hops[q] + 1
-  r.cnameQueries += 1
+  r.cnameQueries = dnsResolverCount(r.cnameQueries)
   const length: i32 = dnsResolverNameLength(reply.chain)
   let i: i32 = 0
   while (i < length) {
@@ -938,11 +955,15 @@ const dnsResolverSameName = (a: u8[], b: u8[]): boolean => {
  * `DNS_RESOLVE_*` code; once its lookup's other query has too, the lookup
  * finishes, or moves to its next candidate name when both found nothing.
  *
- * Addresses from either query make the answer. Otherwise a query that
- * reached no server, or a broken CNAME chain, is the lookup's error, since
- * the name may well exist. Otherwise the name has no address: NXDOMAIN from
- * both sends the search to its next candidate, and NODATA ends it, as musl's
- * resolver does, since the name exists and only lacks the type asked.
+ * Addresses from either query make the answer. NXDOMAIN names the name,
+ * not a type, so NXDOMAIN from either query with the other reaching no server
+ * or breaking its CNAME chain sends the search to its next candidate, keeping
+ * that error as the lookup's if no later candidate answers: a network that
+ * drops AAAA queries still finds a name under a later search domain. Without
+ * an NXDOMAIN, such an error is the lookup's, since the name may well exist.
+ * Otherwise the name has no address: NXDOMAIN from both moves the search on,
+ * and NODATA ends it, as musl's resolver does, since the name exists and only
+ * lacks the type asked.
  */
 const dnsResolverDone = (r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): void => {
   if (r.state[q] === DNS_Q_UDP || r.state[q] === DNS_Q_TCP) {
@@ -964,19 +985,25 @@ const dnsResolverDone = (r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): v
     dnsResolverFinish(r, l, four + six)
     return
   }
+  let error: i32 = 0
   if (v4 === DNS_RESOLVE_NO_ANSWER || v4 === DNS_RESOLVE_CNAME) {
-    dnsResolverFinish(r, l, v4)
+    error = v4
+  } else if (v6 === DNS_RESOLVE_NO_ANSWER || v6 === DNS_RESOLVE_CNAME) {
+    error = v6
+  }
+  const named: boolean = r.nxdomain[a] || r.nxdomain[a + 1]
+  if (error !== 0 && !named) {
+    dnsResolverFinish(r, l, error)
     return
   }
-  if (v6 === DNS_RESOLVE_NO_ANSWER || v6 === DNS_RESOLVE_CNAME) {
-    dnsResolverFinish(r, l, v6)
-    return
+  if (error !== 0 && r.fallback[l] === 0) {
+    r.fallback[l] = error
   }
-  if (r.nxdomain[a] && r.nxdomain[a + 1]) {
+  if (error !== 0 || (r.nxdomain[a] && r.nxdomain[a + 1])) {
     r.candidate[l] = r.candidate[l] + 1
     if (dnsResolverNextCandidate(r, l, nowNanos)) {
       return
     }
   }
-  dnsResolverFinish(r, l, DNS_RESOLVE_NOT_FOUND)
+  dnsResolverFinish(r, l, r.fallback[l] !== 0 ? r.fallback[l] : DNS_RESOLVE_NOT_FOUND)
 }

@@ -281,6 +281,19 @@ const serverOpen = (s: Server, loop: i32): i32 => {
   return 0
 }
 
+/** How many of `xs` are one more than the one before, as a counter's would be. */
+const steps = (xs: i32[]): i32 => {
+  let n: i32 = 0
+  let i: i32 = 1
+  while (i < xs.length) {
+    if (xs[i] === xs[i - 1] + 1) {
+      n += 1
+    }
+    i += 1
+  }
+  return n
+}
+
 /** Datagrams waiting on the dead server, read and counted, never answered. */
 const deadQueries = (s: Server): i32 => {
   let n: i32 = 0
@@ -561,8 +574,11 @@ export const main = (): number => {
   t.eqStr("flood: the genuine address stands", listed(flooded), "00000000000000000000ffffc00002050050/100")
   t.eqI32("flood: every forged datagram is droppedSource", c.resolver.droppedSource - sourceBefore, FLOOD)
 
-  // Every UDP query went from a fresh socket with a fresh ID.
+  // Every query went from a socket of its own with a fresh ID: one socket per
+  // query the server saw, so neither a lookup's A and AAAA nor two tries share one.
+  t.eqI32("vary: a socket opened per query", c.socketsOpened, s.udpQueries + s.tcpQueries)
   t.ok("vary: IDs differ between queries", distinct(s.ids) > s.ids.length / 2)
+  t.ok("vary: IDs are not a counter", steps(s.ids) < s.ids.length / 2)
   t.ok("vary: source ports differ between queries", distinct(s.ports) > s.ports.length / 2)
   t.eqI32("client: no socket failed", c.socketFailures, 0)
 
@@ -586,18 +602,36 @@ export const main = (): number => {
   t.eqI32("attempts: two tries per type", deadQueries(s), 4)
   t.ok("attempts: two timeouts long", gone.millis >= 2000)
 
-  // The blocking calls: a hosts-file name and localhost with no packet, and a timeout.
+  // A hosts-file name and localhost with no packet, on the program's loop and
+  // pointed at this server: the client opens no socket and the server sees nothing.
   const queriesBefore: i32 = s.udpQueries + s.tcpQueries
   const hosts: DnsHosts = new DnsHosts()
   const hostsText: u8[] = ascii("192.0.2.9 printer.lan\n")
   dnsParseHosts(hostsText, 0, toI32(hostsText.length), hosts)
+  const local: DnsClient = new DnsClient(new DnsResolver(live, hosts, 2), loop, 400)
+  const printer: Answer = run(s, local, loop, local.start("printer.lan", 80, monotonicNanos()), monotonicNanos())
+  t.eqStr("hosts: printer.lan from the hosts file", listed(printer), "00000000000000000000ffffc00002090050/0")
+  const loopback: Answer = run(s, local, loop, local.start("localhost", 80, monotonicNanos()), monotonicNanos())
+  t.eqStr("localhost: 127.0.0.1 then ::1", listed(loopback), `${LOOPBACK4}0050/0 ` + "00000000000000000000000000000001" + "0050/0")
+  t.eqI32("no packet: the client opened no socket", local.socketsOpened, 0)
+
+  // The blocking calls, which run a loop of their own, so the server is
+  // drained after them: a query sent by mistake waits in its socket till then.
   const out: u8[] = new Array<u8>(32 * DNS_ADDRESS_BYTES)
   const ttls: i32[] = new Array<i32>(32)
-  t.eqI32("hosts: printer.lan from the hosts file", dnsLookupWith(live, hosts, "printer.lan", 1000, 80, out, ttls), 1)
+  t.eqI32("hosts: dnsLookupWith answers printer.lan", dnsLookupWith(live, hosts, "printer.lan", 1000, 80, out, ttls), 1)
   t.eqStr("hosts: its address", toHex(out, 0, DNS_ADDRESS_BYTES), "00000000000000000000ffffc00002090050")
+  t.eqI32("localhost: dnsLookupWith answers two", dnsLookupWith(live, null, "localhost", 1000, 80, out, ttls), 2)
   t.eqI32("localhost: resolveHost answers two", resolveHost("localhost", 1000, 80, out, ttls), 2)
   t.eqStr("localhost: 127.0.0.1 first", toHex(out, 0, DNS_ADDRESS_BYTES), `${LOOPBACK4}0050`)
   t.eqStr("localhost: then ::1", toHex(out, DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES), "00000000000000000000000000000001" + "0050")
+  serverUdp(s)
+  serverAccept(s, loop)
+  let slot: i32 = 0
+  while (slot < CONNS) {
+    serverStream(s, slot)
+    slot += 1
+  }
   t.eqI32("no packet: the server saw nothing", s.udpQueries + s.tcpQueries, queriesBefore)
   const silentConfig: DnsConfig = config(deadOnly, [s.deadPort])
   t.eqI32("timeout: dnsLookupWith gives up", dnsLookupWith(silentConfig, null, "www.test", 300, 80, out, ttls), DNS_RESOLVE_TIMEOUT)

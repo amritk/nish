@@ -63,7 +63,6 @@ is trusted; its mistakes panic.
 | DNS-2 | Low | `std/net/dns-message.ts` (`dnsBuildQuery`, `dnsSameName`) | The question's name is written as the program gave it and compared without case, so the 0x20 bits of the name add no entropy against a spoofer. | **Accepted.** RFC 4343 asks for comparison without case, and a recursive server that does not echo the case exactly would make a case-exact check refuse true answers. |
 | DNS-3 | Low | `std/net/dns-message.ts` (`dnsParseReply`) | A CNAME whose owner is the chain's end moves the chain to any target, and an address for that target is kept, whatever zone it is in. A lying recursive server can answer anything. | **Accepted.** The recursive server is the stub's trust anchor, as it is glibc's and musl's; what the chain prevents is an address for a name off the chain, which is read past (`built CNAME off the chain: no address`). |
 | DNS-4 | Low | `std/net/dns-config.ts` (`dnsParseIpv4`, `dnsParseIpv6`) | The address literal is read by the module's own parser, not by `nish:net`'s `netAddress`, which a std module that must compile on `wasm32` may not import. Two readers of one literal could drift. | **Accepted.** Both are strict: four decimal parts without a leading zero, or RFC 4291 §2.2's text form with at most one `::` and an optional IPv4 tail, no zone and no brackets; every edge is pinned (`ipv4: *`, `ipv6: *`). |
-
 | DNS-5 | Medium | `std/net/dns.ts` (`dnsClientReadDatagrams`) | `DnsClient.ready` read datagrams from a query's socket until none was waiting, so a flood sent faster than the client parsed it held the caller's loop inside `ready` for as long as it lasted: every other descriptor on the loop starved. | **Fixed.** One `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32); the loop is level-triggered, so the rest wait for the next `pollWait`. Before: `flood: one ready reads DNS_CLIENT_MAX_DATAGRAMS` failed with 40 of 40 forged datagrams read in one call; after, 32, and the genuine reply behind the flood still answers (`flood: the genuine address stands`). |
 
 ## Properties verified
@@ -249,7 +248,12 @@ reaches the chain's end, so the codec keeps no address and it reads as NODATA.
 **The search list is bounded.** A name with fewer dots than `ndots` is tried
 under each suffix and then alone, one at or over it first; a trailing dot is
 the name alone; NXDOMAIN moves to the next candidate and NODATA stops the
-search, as musl's does, since the name exists; a suffix that makes the name
+search, as musl's does, since the name exists; NXDOMAIN for one family with no
+server reached for the other moves on too, keeping that error should no later
+candidate answer, so one unreachable family cannot end the search on the first
+candidate (`search: NXDOMAIN and no server for the other family move on`,
+`search: and the name under a later domain resolves`, `search: with no later
+answer, the unreachable family's error stands`); a suffix that makes the name
 over 255 bytes is skipped (`search: under ndots, each suffix and then the
 name`, `search: at ndots, the name first`, `search: a trailing dot is the name
 alone`, `search: NODATA is DNS_RESOLVE_NOT_FOUND`, `search: and stops the
@@ -259,9 +263,14 @@ bytes is skipped`).
 **No packet for a name the machine answers.** `localhost`, a name under it and
 an address literal answer at once, and a name in `hosts` answers from the
 table with TTL 0; `xlocalhost` and `localhost.example` are asked of the server
-(`localhost: still no packet sent`, `localhost: xlocalhost is not it, and is
-asked of the server`, `literal: no packet sent`, `hosts: no packet sent`; `no
-packet: the server saw nothing`).
+A name with an empty label under it, `.localhost` or `x..localhost`, is
+refused (`localhost: still no packet sent`, `localhost: xlocalhost is not it, and is
+asked of the server`, `localhost: .localhost is not it`, `localhost: nor
+x..localhost`, `literal: no packet sent`, `hosts: no packet sent`). Over
+sockets, a `DnsClient` answering `localhost` and a hosts name opens no socket,
+and the server, drained after every blocking call, saw no query (`no packet:
+the client opened no socket`, `no packet: the server saw nothing`); both fail
+when either short-circuit is removed.
 
 **State is fixed at construction.** A resolver holds 1 to
 `DNS_RESOLVER_MAX_LOOKUPS` (64) lookups of two queries each, every buffer sized
@@ -276,7 +285,20 @@ over 2000 lookups past warm-up`).
 **The loop is never held** (DNS-5). One `DnsClient.ready` reads at most
 `DNS_CLIENT_MAX_DATAGRAMS` (32) datagrams (`flood: one ready reads
 DNS_CLIENT_MAX_DATAGRAMS`, `flood: every forged datagram is droppedSource`);
-a TCP read stops at `DNS_TCP_MAX_REPLY` and its two length bytes.
+a TCP read stops at `DNS_TCP_MAX_REPLY` and its two length bytes. A
+`pollWait` that fails inside `resolveHost` or `dnsLookupWith` cancels the
+lookup and answers its errno, rather than spinning until the deadline. Every
+counter saturates at 2,147,483,647, so a long-lived client's counts never wrap
+negative.
+
+**The configuration files are read whole.** `resolveHost` reads
+`/etc/resolv.conf` and `/etc/hosts` with `readFileBytesSync`, which has no
+bounded form, and `nish:fs` has no size call to check first. Both files are
+root-owned on every system the client runs on, and the parsers keep at most
+`DNS_MAX_SERVERS` servers, `DNS_MAX_SEARCH` domains and
+`DNS_HOSTS_MAX_ENTRIES` hosts entries, whatever the file's length; only the
+read itself grows with the file. Accepted; a caller who distrusts the files
+reads them itself and calls `dnsLookupWith`.
 
 **The core reaches no capability.** `dns-resolver.ts` imports no `nish:*`
 module and builds for `wasm32`

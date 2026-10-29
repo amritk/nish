@@ -6,6 +6,14 @@
 security record is `docs/security/dns.md`. The anchors below are at `c8a00d6`,
 from when this was a proposal.
 
+**As built**, the design below changed in four places. The resolver honours
+`search`, `ndots`, `timeout` and `attempts` from `resolv.conf`, which the
+proposal left for later, and `resolveHost` adds a blocking lookup for a
+command-line tool or a program's start-up; both were asked for while the stage
+was in review. The core (`dns-resolver.ts`) imports no `nish:*` module and builds
+for `wasm32`, so only the driver is native. A CNAME chain is cut at 8 queries
+(`DNS_RESOLVER_MAX_CNAME_HOPS`).
+
 `nish:net` takes address literals only. `netAddress` answers `-22` for a name
 ("there is no DNS", `docs/LANGUAGE.md:6783`), the "Not yet" bullet says so
 (`docs/LANGUAGE.md:7025`), and `reject_net_unknown_export` pins that

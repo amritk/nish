@@ -308,6 +308,9 @@ export const main = (): number => {
     const y: i32 = r.start("localhost.example", 80, zero)
     t.eqI32("localhost: localhost.example is not it either", resultOf(r, y).count, DNS_RESOLVE_PENDING)
     r.cancel(y)
+    // An empty label before `localhost` is no name: refused, not answered as loopback.
+    t.ok("localhost: .localhost is not it", r.start(".localhost", 80, zero) < 0)
+    t.ok("localhost: nor x..localhost", r.start("x..localhost", 80, zero) < 0)
   }
   {
     const r: DnsResolver = new DnsResolver(config(ONE), null, 4)
@@ -443,8 +446,13 @@ export const main = (): number => {
     }
     answer(r, b, reply(b, OK, 0, new Array<u8>(0)), zero)
     t.eqStr("tc: a TCP reply read one byte at a time answers", listed(resultOf(r, l)), A80(3) + "/10 " + A80(4) + "/10")
-    r.receiveStream(c.q, one, 1, zero)
-    t.ok("tc: bytes after the query is done are ignored", r.active() === 0)
+    drain(r, 20)
+    // A length under 12 would fail the server and ask the next, were it read.
+    const late: u8[] = [toU8(0), toU8(5)]
+    const failures: i32 = r.serverFailures
+    r.receiveStream(c.q, late, 2, zero)
+    t.eqI32("tc: bytes after the query is done are ignored", r.serverFailures, failures)
+    t.eqStr("tc: and owe the driver nothing", drain(r, 30), "")
   }
   {
     // Each TCP stream that cannot carry a true reply fails the server, and the
@@ -562,6 +570,7 @@ export const main = (): number => {
   }
   {
     // h0 → h1 → … : the chain of DNS_RESOLVER_MAX_CNAME_HOPS answers, one more is an error.
+    t.eqI32("cname: the bound is 8", DNS_RESOLVER_MAX_CNAME_HOPS, 8)
     let hops: i32 = DNS_RESOLVER_MAX_CNAME_HOPS
     while (hops <= DNS_RESOLVER_MAX_CNAME_HOPS + 1) {
       const r: DnsResolver = new DnsResolver(config(ONE), null, 4)
@@ -634,6 +643,37 @@ export const main = (): number => {
     answer(r, b, reply(b, OK, 0, new Array<u8>(0)), zero)
     t.eqI32("search: NODATA is DNS_RESOLVE_NOT_FOUND", resultOf(r, l).count, DNS_RESOLVE_NOT_FOUND)
     t.eqI32("search: and stops the search, since the name exists", r.sent, 2)
+  }
+  {
+    // NXDOMAIN names the name, not a type, so one family's NXDOMAIN moves the
+    // search on though the other reached no server, whose error stands if no
+    // later candidate answers.
+    const r: DnsResolver = new DnsResolver(config(ONE + "search a.test b.test\noptions attempts:1\n"), null, 4)
+    const l: i32 = r.start("x", 80, zero)
+    const a: Sent = take(r, 1)
+    const b: Sent = take(r, 2)
+    answer(r, a, reply(a, NXDOMAIN, 0, new Array<u8>(0)), zero)
+    answer(r, b, reply(b, SERVFAIL, 0, new Array<u8>(0)), zero)
+    const c1: Sent = takeSend(r, 3)
+    const c2: Sent = takeSend(r, 4)
+    const c: Sent = c1.q < c2.q ? c1 : c2
+    const d: Sent = c1.q < c2.q ? c2 : c1
+    t.eqStr("search: NXDOMAIN and no server for the other family move on", asks(c) + ", " + asks(d), "x.b.test A, x.b.test AAAA")
+    answer(r, c, reply(c, OK, 1, record("x.b.test", DNS_TYPE_A, 30, v4(192, 0, 2, 7))), zero)
+    answer(r, d, reply(d, OK, 0, new Array<u8>(0)), zero)
+    t.eqStr("search: and the name under a later domain resolves", listed(resultOf(r, l)), A80(7) + "/30")
+    drain(r, 5)
+    const m: i32 = r.start("y", 80, zero)
+    let n: i32 = 0
+    while (n < 3) {
+      const e1: Sent = takeSend(r, 10 + 2 * n)
+      const e2: Sent = takeSend(r, 11 + 2 * n)
+      answer(r, e1, reply(e1, e1.q % 2 === 0 ? NXDOMAIN : SERVFAIL, 0, new Array<u8>(0)), zero)
+      answer(r, e2, reply(e2, e2.q % 2 === 0 ? NXDOMAIN : SERVFAIL, 0, new Array<u8>(0)), zero)
+      n += 1
+    }
+    t.eqI32("search: with no later answer, the unreachable family's error stands", resultOf(r, m).count, DNS_RESOLVE_NO_ANSWER)
+    t.eqI32("search: after every candidate was asked", r.sent, 2 + 2 + 6)
   }
   {
     let suffix: string = "s"

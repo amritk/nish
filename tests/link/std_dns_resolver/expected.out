@@ -4,6 +4,8 @@ PASS  localhost: a name under it, in any case and with the root's dot
 PASS  localhost: still no packet sent
 PASS  localhost: xlocalhost is not it, and is asked of the server
 PASS  localhost: localhost.example is not it either
+PASS  localhost: .localhost is not it
+PASS  localhost: nor x..localhost
 PASS  literal: 192.0.2.1
 PASS  literal: ::1
 PASS  literal: no packet sent
@@ -42,6 +44,7 @@ PASS  tc: to the same server
 PASS  tc: a datagram once the query moved to TCP is dropped
 PASS  tc: a TCP reply read one byte at a time answers
 PASS  tc: bytes after the query is done are ignored
+PASS  tc: and owe the driver nothing
 PASS  tc: a length under 12 fails the server, and the next is asked over UDP
 PASS  tc: a length over DNS_TCP_MAX_REPLY fails the server, and the next is asked over UDP
 PASS  tc: a reply still truncated fails the server, and the next is asked over UDP
@@ -59,6 +62,7 @@ PASS  cname: one query followed it
 PASS  cname: its addresses answer the lookup
 PASS  cname: a chain back to the name asked is DNS_RESOLVE_CNAME
 PASS  cname: and asked it once more, not again
+PASS  cname: the bound is 8
 PASS  cname: a chain of DNS_RESOLVER_MAX_CNAME_HOPS queries answers
 PASS  cname: 8 hops asked at most DNS_RESOLVER_MAX_CNAME_HOPS queries
 PASS  cname: one hop more is DNS_RESOLVE_CNAME
@@ -71,6 +75,10 @@ PASS  search: and NXDOMAIN ends it
 PASS  search: with no other candidate asked
 PASS  search: NODATA is DNS_RESOLVE_NOT_FOUND
 PASS  search: and stops the search, since the name exists
+PASS  search: NXDOMAIN and no server for the other family move on
+PASS  search: and the name under a later domain resolves
+PASS  search: with no later answer, the unreachable family's error stands
+PASS  search: after every candidate was asked
 PASS  search: a suffix that makes the name over 255 bytes is skipped
 PASS  timeout: nothing before the deadline
 PASS  timeout: both queries at the deadline
@@ -100,4 +108,4 @@ PASS  cancel: before any send, the sends owed become closes
 PASS  cancel: and nothing was sent
 PASS  ipv6 server: sent to its address
 PASS  close: DNS_CLOSE is its own kind
-dns-resolver: 102 passed, 0 failed, 0 skipped
+dns-resolver: 110 passed, 0 failed, 0 skipped

@@ -2158,7 +2158,8 @@ name's A and AAAA records and gives you the addresses. It opens no socket,
 reads no clock and reads no file, so it builds for `wasm32` too; you, or
 [`nish/net/dns`](#nishnetdns), move its bytes. `new DnsResolver(config, hosts,
 maxLookups)` makes every buffer it will need, for up to `maxLookups` lookups at
-once (1 to 64), so a lookup allocates nothing.
+once (1 to 64), so a lookup allocates only the sixteen bytes an address
+literal is parsed into.
 
 `start(name, port, nowNanos)` begins a lookup and answers its slot.
 `nextOutgoing(out, to, meta, id)` says what to do next, a query to send over
@@ -2167,8 +2168,10 @@ time; `receive` and `receiveStream` take what came back; `tick(nowNanos)` moves
 on from a server that did not answer by `nextDeadlineNanos()`. `result(lookup,
 out, ttls)` answers `DNS_RESOLVE_PENDING` while the lookup runs, then the
 address count, A first, 18 bytes each with `port` written in, and each TTL in
-seconds. A failure is `DNS_RESOLVE_NOT_FOUND` (the name does not exist),
-`DNS_RESOLVE_NO_ANSWER` (no server answered), `DNS_RESOLVE_CNAME` (an alias
+seconds: the smallest TTL of the address records, not of the CNAMEs that led to
+them. A failure is `DNS_RESOLVE_NOT_FOUND` (the name has no address: NXDOMAIN,
+or NODATA, a name with no A or AAAA record), `DNS_RESOLVE_NO_ANSWER` (no server
+answered), `DNS_RESOLVE_CNAME` (an alias
 chain looped or ran past 8), or `DNS_RESOLVE_BUSY` from `start` when every slot
 is taken.
 
@@ -2203,7 +2206,10 @@ than the server's, or with another ID or question, is dropped and counted
 waiting for the true one. A truncated reply is asked again over TCP, once; a
 server that does not answer in `timeout` seconds gives way to the next, for
 `attempts` rounds; a name with fewer dots than `ndots` is tried with each
-`search` domain. Every lookup ends.
+`search` domain. When one family answers NXDOMAIN and the other reached no
+server, the next candidate is tried, and if none answers the lookup ends with
+the unreachable family's error. Every counter stops at 2,147,483,647 rather
+than wrapping. Every lookup ends.
 
 ## `nish/net/dns`
 
@@ -2263,7 +2269,8 @@ export const main = (): i32 => {
 `/etc/resolv.conf` and `/etc/hosts` read for you, on a loop of its own: **it
 blocks** until the lookup ends or `timeoutMs` passes
 (`DNS_RESOLVE_TIMEOUT`), so it is for a command-line tool or a program's
-start-up, not a server's loop. `dnsLookupWith` is the same with a
+start-up, not a server's loop. A `pollWait` that fails cancels the lookup and
+its negative errno is the answer. `dnsLookupWith` is the same with a
 configuration you give it.
 
 ```ts nish:ok

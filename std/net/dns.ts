@@ -97,6 +97,8 @@ export class DnsClient {
   tokenBase: i32 = 0
   /** Sockets that could not be opened, written or connected, each a failed try. */
   socketFailures: i32 = 0
+  /** Sockets opened, UDP and TCP, one per try. */
+  socketsOpened: i32 = 0
 
   /**
    * A client for `resolver` whose sockets join the loop `loop` under tokens
@@ -256,7 +258,7 @@ const dnsClientClose = (c: DnsClient, q: i32): void => {
 
 /** Fails query `q`'s try because its socket did: closes it, if it opened, and tells the core. */
 const dnsClientFail = (c: DnsClient, q: i32, nowNanos: i64): void => {
-  c.socketFailures += 1
+  c.socketFailures = dnsClientCount(c.socketFailures)
   dnsClientClose(c, q)
   c.resolver.fail(q, nowNanos)
 }
@@ -273,6 +275,9 @@ const dnsClientIsV4 = (to: u8[]): boolean => {
   return to.length >= 12 && to[10] === 0xff && to[11] === 0xff
 }
 
+/** `n` plus one, held at the i32 maximum, so a counter never overflows. */
+const dnsClientCount = (n: i32): i32 => (n < 2147483647 ? n + 1 : n)
+
 /** Sends `c.out` to `c.to` from a new socket on a port the kernel picks, watched for reading. */
 const dnsClientSendUdp = (c: DnsClient, q: i32, nowNanos: i64): void => {
   const fd: i32 = udpBind(dnsClientIsV4(c.to) ? "0.0.0.0" : "::", 0, 0)
@@ -280,6 +285,7 @@ const dnsClientSendUdp = (c: DnsClient, q: i32, nowNanos: i64): void => {
     dnsClientFail(c, q, nowNanos)
     return
   }
+  c.socketsOpened = dnsClientCount(c.socketsOpened)
   c.fds[q] = fd
   c.fdState[q] = DNS_FD_UDP
   const length: i32 = c.meta[1]
@@ -298,6 +304,7 @@ const dnsClientOpenTcp = (c: DnsClient, q: i32, nowNanos: i64): void => {
     dnsClientFail(c, q, nowNanos)
     return
   }
+  c.socketsOpened = dnsClientCount(c.socketsOpened)
   c.fds[q] = fd
   c.fdState[q] = DNS_FD_TCP_WRITE
   const length: i32 = c.meta[1]
@@ -382,7 +389,8 @@ const dnsClientReadStream = (c: DnsClient, q: i32, fd: i32, hungUp: boolean, now
  * The addresses of `name`, looked up as `/etc/resolv.conf` and `/etc/hosts`
  * say (either missing means the defaults), each 18 bytes with `port` into
  * `out` and its TTL in seconds into `ttls`: the count, or a negative
- * `DNS_RESOLVE_*` code, `DNS_RESOLVE_TIMEOUT` once `timeoutMs` has passed.
+ * `DNS_RESOLVE_*` code, `DNS_RESOLVE_TIMEOUT` once `timeoutMs` has passed,
+ * or the negative errno of a poll loop that cannot be made or waited on.
  *
  * **It blocks the thread** until the lookup ends, on a loop of its own, so
  * it is for a CLI or a program's start-up; a server resolves with a
@@ -448,6 +456,12 @@ export const dnsLookupWith = (
     }
     const own: i32 = toI32((end - now + 999999) / 1000000)
     const count: i32 = pollWait(loop, ready, client.timeoutMs(now, own))
+    if (count < 0) {
+      // A signal answers 0, so a negative count is the loop failing: waiting again would spin.
+      client.cancel(lookup, now)
+      status = count
+      break
+    }
     const after: i64 = monotonicNanos()
     let k: i32 = 0
     while (k < count && 2 * k + 1 < toI32(ready.length)) {

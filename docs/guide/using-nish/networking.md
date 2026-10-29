@@ -284,8 +284,10 @@ export const main = (): i32 => {
 ```
 
 A lookup answers its address count, A records first, or a negative code:
-`-41` the name does not exist, `-42` no server answered, `-43` an alias chain
-looped. `localhost`, an address literal and a name in the hosts table answer
+`-41` the name has no address (it does not exist, or exists with no A or AAAA
+record), `-42` no server answered, `-43` an alias chain looped, and from
+`resolveHost` `-45` its time ran out. Another negative number is the errno of a
+socket or of `pollWait` that failed. `localhost`, an address literal and a name in the hosts table answer
 at once, with no packet. For a command-line tool or a program's start-up,
 `resolveHost(name, timeoutMs, port, out, ttls)` reads `/etc/resolv.conf` and
 `/etc/hosts` and blocks until the lookup ends. The

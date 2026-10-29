@@ -19,7 +19,9 @@ PASS  spoof: another question is droppedQuestion
 PASS  flood: one ready reads DNS_CLIENT_MAX_DATAGRAMS
 PASS  flood: the genuine address stands
 PASS  flood: every forged datagram is droppedSource
+PASS  vary: a socket opened per query
 PASS  vary: IDs differ between queries
+PASS  vary: IDs are not a counter
 PASS  vary: source ports differ between queries
 PASS  client: no socket failed
 PASS  dead server: the next one answers
@@ -30,10 +32,14 @@ PASS  attempts: NO_ANSWER after every try
 PASS  attempts: two tries per type
 PASS  attempts: two timeouts long
 PASS  hosts: printer.lan from the hosts file
+PASS  localhost: 127.0.0.1 then ::1
+PASS  no packet: the client opened no socket
+PASS  hosts: dnsLookupWith answers printer.lan
 PASS  hosts: its address
+PASS  localhost: dnsLookupWith answers two
 PASS  localhost: resolveHost answers two
 PASS  localhost: 127.0.0.1 first
 PASS  localhost: then ::1
 PASS  no packet: the server saw nothing
 PASS  timeout: dnsLookupWith gives up
-dns: 38 passed, 0 failed, 0 skipped
+dns: 44 passed, 0 failed, 0 skipped
