@@ -9695,7 +9695,7 @@ if (!only || "std_text_index_of_any".includes(only)) {
   // the non-ASCII edge's byte offsets, which the native build and this one both
   // count in UTF-8 bytes and Node in UTF-16 units, so it is held to its
   // expected.out here and natively, and never run under Node above.
-  const wasiNames = ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset"]
+  const wasiNames = ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset", "std_dns_config", "std_dns_message"]
   if (WASI_SYSROOT && has("wasm-ld")) {
     for (const name of wasiNames) {
       const wasiDir = path.join(buildDir, `wasi_${name}`)
