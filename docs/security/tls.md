@@ -129,7 +129,8 @@ resumption", what the tests pin and where the code departs from the design.
 | `std/net/tls/record-server.ts` (T2) | `TlsRecordServer`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sendKeyUpdate`, `keyUpdate`, `read`, `write`, `close`, `sealClose`, `sign`, `resume`, `issue`, `end`, `checkTruncation`, `abort`, `fail`, `wipeKeys`, `wipe`, `wipeTraffic`, `wipeRead`, `wipeWrite` |
 | `std/net/tls/client.ts` (the client) | `TlsClientConfig`, `tlsClientIsIpLiteral`, `TlsClient` (`start`, `writeHello`, `receive`, `drain`, `handleMessage`, `checkHello`, `handleServerHello`, `handleRetry`, `exchangeKeys`, `handleEncryptedExtensions`, `handleCertificate`, `handleCertificateVerify`, `authenticate`, `reject`, `handleFinished`, `handleTicket`, `peerCertificates`, `verifyScheme`, `verifyContent`, `verifySignature`, `alpn`, `expectedLevel`, `startTranscript`, `reserveInput`, `reserveOutput`, `takeOutput`, `clearOutput`, `sent`, `secrets`, `known`, `readKnown`, `writeKnown`, `fail`, `wipeKeys`, `wipeUnpicked`, `wipeSecret`, `wipe`) and the helpers under it (`tlsClientConfigFits`, `tlsClientKnowsSuite`, `tlsClientKnowsGroup`, `tlsClientIsAscii`; it shares `tlsIsZeroSecret` and `tlsZeroHeld` with `nish/net/tls` and `tlsCopyWindow` with the codec) |
 | `std/net/tls/record-client.ts` (the client) | `TlsRecordClient`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sealChangeCipherSpec`, `sealQueue`, `sealRecord`, `sealWith`, `sendKeyUpdate`, `keyUpdate`, `authenticate`, `reject`, `interest`, `read`, `write`, `consume`, `close`, `sealClose`, `sendAlert`, `end`, `checkTruncation`, `abort`, `fail`, `wipe`, `wipeRead`, `wipeWrite`; `tlsClientInstallHeld`, `tlsClientAdvanceHeld` |
-| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close` |
+| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close`; for the client, `TlsTcpClient` (`fd`, `open`, `failure`, `interest`, `connected`, `readable`, `writable`, `flush`, `read`, `write`, `keyUpdate`, `shutdown`, `close`), `tlsConnect` and `tlsConnectWith` |
+| `std/net/tls/verify.ts` (the client) | `tlsVerifyCertificateVerify`, `tlsVerifyKeyUsable`, `tlsClientChain`, `tlsClientVerdict`, `tlsClientAuthenticate`, `TlsClientTrust`, `tlsClientTrust`, `tlsClientSystemTrust` |
 
 Out of scope: the primitives underneath (`nish/crypto/*`, each with its own
 record in this directory, the HMAC and HKDF scratch the schedule runs in
@@ -169,8 +170,12 @@ the CertificateVerify scheme, the signed content and the signature at
 `WAIT_AUTH` and goes no further until `authenticate(true)`; a caller that
 answers it without checking the chain against its trust anchors, the host
 name and the signature under the leaf's key has authenticated nobody. The
-default API that calls `authenticate` for the program lands with #480's
-tls-client-tcp stage; until then every caller is a direct one.
+default API is `nish/net/tls/verify`'s `tlsClientAuthenticate`, which
+`TlsTcpClient` and `tlsConnect` call for the program: it checks the
+CertificateVerify under the leaf's key and then the chain, through
+`nish/crypto/pki`'s `pkiVerifyServer`, against the system's roots
+(`tlsClientSystemTrust`) or a store the caller names. A direct caller of `TlsRecordClient` still answers
+`WAIT_AUTH` itself.
 
 ## Findings
 
@@ -1006,6 +1011,101 @@ record layer has installed it; `fail` and `TlsRecordClient`'s `fail`,
 reach is what TLS-1 lists for the server: registers and spills while HMAC,
 HKDF and AEAD run, and the plain clone `tlsClientInstallHeld` and
 `tlsClientAdvanceHeld` `secureZero` before their arena block ends.
+
+## The client carrier and verify
+
+`TlsTcpClient`, `tlsConnect` and `tlsConnectWith` (`nish/net/tls-tcp`) and
+`nish/net/tls/verify` (#480's tls-client-tcp stage). The carrier owns one
+non-blocking socket and a `TlsRecordClient`; at `TLS_RECORD_AUTH` it calls
+`tlsClientAuthenticate` itself with the wall clock, so no program reaches
+application data past an unauthenticated server and none can skip the step.
+
+**The CertificateVerify is checked under the leaf's key, before the chain**
+(`net_tls_client_tcp`): an ECDSA P-256 signature over the content verifies,
+and is refused over other content, under the P-384 or RSA-PSS scheme, under
+Ed25519 (never offered) and when empty; a server whose CertificateVerify
+signs other bytes is refused with `decrypt_error`, which the server
+reads. An empty chain is `bad_certificate`, and so is a self-signed leaf
+with no extensions that the store does not hold.
+
+**Against openssl s_server** (tests/run.js, "`nish/net/tls-tcp`'s client,
+against openssl s_server"; a CA and P-256, P-384 and RSA-2048 leaves made at
+run time): each of the three suites, an X25519 and a P-256 share, a
+HelloRetryRequest to P-256, ALPN `h2` and `http/1.1` chosen and a server
+with no common protocol answering `no_application_protocol`, SNI picking the
+second certificate and an unknown name answered `unrecognized_name`, the
+CertificateVerify under a P-384 leaf (ECDSA P-384) and an RSA leaf (RSA-PSS
+rsae), a P-256 leaf under a P-384 intermediate and an RSA-PSS leaf under an
+RSA intermediate (the intermediate sent as `-cert_chain`), and a TLS 1.2-only
+server refused with `protocol_version`, each against the run's CA as the
+client's only root, read through `tlsClientSystemTrust` from
+`SSL_CERT_FILE`; a name the leaf does not carry, and a leaf that names
+`localhost` in its CN alone with no subjectAltName, are refused with
+`bad_certificate` after the signature verified.
+
+**The blocking calls against openssl s_server** (the same block, "the
+blocking calls"): a program with no loop of its own runs `tlsConnect` (or
+`new TlsTcpClient` and a first `readWait`, which drives the handshake),
+`writeAll`, `keyUpdate` and `readWait` alone. Straight after `tlsConnect`
+nothing is still queued (`sending()` is false). A `readWait` with nothing
+to read answers `-110` after its timeout and the connection goes on to
+carry everything after it; a `writeAll` window past its data answers -22.
+It writes, sends a KeyUpdate asking for the server's and writes under its
+new key, which the server reads; it reads s_server's KeyUpdate asking for
+its own (`K`) and answers it, and the server reads the next line under
+that key — the harness requires every step it sends s_server to have
+fired, the last on that line; `-rev` answers the KeyUpdate it owed and the
+data, and its close_notify ends the client's stream as 0; the default
+mode's `q`, which closes TCP with no close_notify, is read as the failure
+it is, -104, not as an end. After `close`, `readWait` answers how the
+stream ended (-104 failed, -32 otherwise) and `writeAll` -32.
+
+**Against `TlsTcpServer` over loopback** (`net_tls_client_tcp`): the verdict
+reaches the server as an alert, ALPN and the name reach it, an IP literal
+sends no `server_name` and is matched against the leaf's iPAddress, a chain
+that also carries its root opens, application data goes both ways ("open:
+the server read all the client sent, across its key updates",
+"open: the client read the pong"), a KeyUpdate asking for the peer's goes
+each way and is answered ("keyupdate: the client read the server's answer
+and its request", "keyupdate: the server read the client's request and its
+answer"), the server's
+`close_notify` ends the client's stream ("open: close_notify ends the
+client's stream"), the client ends closed with `TLS_RECORD_DONE`, and a read
+after `close` answers -32. A
+wrong host, an untrusted root, an expired leaf and a forged CertificateVerify
+are refused with the alerts above, and the server reads each.
+
+**`tlsConnect` is bounded** (`net_tls_client_tcp`): a refused connection
+answers `-111`, an address shorter than `nish:net`'s answers `-22`, and a
+listener that never answers is given up on after the timeout (`-110`), with
+the elapsed time checked on both sides; the socket is closed on each.
+Against the same listener, a `readWait` straight after `new TlsTcpClient`
+and a `writeAll` before the handshake ends each answer `-110`. A
+config the client refuses (an empty ALPN protocol) is never dialled: it
+answers its alert, `internal_error`, with no socket.
+
+**Not exercised.** That the server reads the client's own `close_notify`
+(each test checks only that the client ends closed); the system's root
+store as `tlsConnect` finds it with no `SSL_CERT_FILE` (the distribution's
+bundle, or `SSL_CERT_DIR`), since no test dials a public host; an empty
+`serverName`; a leaf with no usable key (RSA under 2048 bits, Ed25519),
+which the code answers `bad_certificate`; that a forged CertificateVerify is
+refused with `decrypt_error` before a chain that would also fail is looked
+at (the forged case has a good chain); the rsa_pss_pss schemes, which are
+never offered and so refused; a KeyUpdate that does not ask for the
+peer's, from either end; name resolution, which the client does not do
+(the address is numeric and the TLS name is always the caller's); any
+public host; a `writeAll` that times out part way through a message, which
+leaves the stream unusable, as its comment says; and a refusal of the
+server's certificate whose alert cannot be flushed before the deadline,
+which `tlsConnect` answers with the alert, not `-110`; a `writeAll` that
+answers -104 because the connection fails during the call (the tests pin
+only the -32 of a call on a client already closed or failed); `shutdown`
+followed by `readWait`, which answers -32 once the `close_notify` is sent,
+and data already read off the socket still reading after `shutdown`; and
+`tlsConnect`'s wait for its last flight when that write would block
+(`-11`): the client's Finished always leaves in the same flush, so the
+tests pin that nothing is queued when `tlsConnect` returns, not that path.
 
 ## What is not checked here
 

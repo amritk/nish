@@ -2957,6 +2957,12 @@ const DECLARED = [
     why: "a new program: the server flights the TLS client refuses, each with its alert, which the reference compiler refuses because its std/ has no nish/net/tls/client",
   },
   {
+    program: "tests/link/net_tls_client_tcp/main.ts",
+    file: "exit",
+    changelog: "The TLS client over TCP, server authentication and a blocking connect",
+    why: "a new program: TlsTcpClient against TlsTcpServer over loopback, tlsConnect's failures and the CertificateVerify check, which the reference compiler refuses because its std/ has no nish/net/tls-tcp client or nish/net/tls/verify",
+  },
+  {
     program: "tests/link/net_tls_record_f64/main.ts",
     file: "exit",
     changelog: "records over TCP (WP34 T2)",
