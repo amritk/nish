@@ -56,7 +56,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 1 ¹⁰ |
-| Percent-decoding and query strings | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
+| Percent-decoding, query strings and URL parsing | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
 | Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ¹⁴ |
@@ -67,11 +67,11 @@ the record that found it. The notes below the table name each such finding.
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
 | PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
-| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
+| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | DNS message codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 31 / 121** | **0 / 0 / 0 / 12** |
+| **Total** ⁸ | | | **3 / 10 / 33 / 121** | **0 / 0 / 0 / 12** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -183,10 +183,13 @@ the record that found it. The notes below the table name each such finding.
     of one. Each is counted as a fixed Low.
     QUIC-10 (Low), ECN counts parsed and ignored, was closed by #914, which
     has the carriers mark ECT(0); it is counted as a fixed Low.
-12. URL-1, URL-2 and URL-3 (Low) are accepted, with the reason in their
-    record, and are not counted: the byte API's output is not checked as
-    UTF-8, a refused decode leaves the bytes before the refusal written, and
-    a repeated key is answered by its first value.
+12. URL-1 to URL-8 (Low) are accepted, with the reason in their record, and
+    are not counted: the byte API's output is not checked as UTF-8, a
+    refused decode leaves the bytes before the refusal written, a repeated
+    key is answered by its first value, an IPv6 host is compared as written,
+    `user:@` writes back as `user@`, an empty http path stays empty, the
+    URL parser leaves the input's length to its caller, and a host's
+    trailing dot is kept, so `a.com.` is its own origin.
 13. ROUTE-1 to ROUTE-7 are the shapes an attacker's target can take, checked
     and found to hold, and are not findings. ROUTE-8 (Low), dot segments
     matched as bytes, and ROUTE-9 (Low), the path matched before it is
@@ -222,10 +225,13 @@ the record that found it. The notes below the table name each such finding.
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
     does. BCRYPT-5 is a property checked and found to hold, not a finding.
-19. COMP-8 (Low) and COMP-9 (Medium), a stream of small dynamic blocks
-    rebuilding the decoder's tables and the BREACH class of length leaks, are
-    accepted, with the reason in their record, and are not counted. COMP-1 to
-    COMP-7 and COMP-10 are properties checked and found to hold.
+19. COMP-11 and COMP-12 (Medium), stale bytes queued by `respondEncoded`
+    after `H1_AGAIN` and a `GzipWriter` panic inside its own bound, were
+    found by a review of the first version and fixed. COMP-8 (Low) and COMP-9
+    (Medium), a stream of small dynamic blocks rebuilding the decoder's
+    tables and the BREACH class of length leaks, are accepted, with the reason
+    in their record, and are not counted. COMP-1 to COMP-7 and COMP-10 are
+    properties checked and found to hold.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
 21. PKI-R6 and PKI-R7 (Low) are accepted, with the reason in their record, and

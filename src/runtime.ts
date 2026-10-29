@@ -776,6 +776,14 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `netSetOption`: one `setsockopt`, which never waits.
+    this.add(
+      plain(
+        "nish_net_set_option",
+        "declare noundef i32 @nish_net_set_option(i32 noundef, i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
     this.add(
       new RuntimeFunction(
         "nish_net_close",
