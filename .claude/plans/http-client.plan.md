@@ -20,13 +20,13 @@ stages:
         content: Extend docs/security/url.md scope and findings, and the nish/net/url section of the standard-library guide page — see Stage url
         status: pending
   - id: host-builtins
-    title: "feat(runtime): netResolve in nish:net and a wall clock in nish:process"
-    goal: A Nish program can resolve a host name to numeric addresses and read the wall-clock time, so the client can dial names and X.509 validity can be checked
-    verification: npm run check && npm run lint && node tests/run.js net_resolve && node tests/run.js wall_clock && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node scripts/security-scope.mjs
+    title: "feat(runtime): a wall clock in nish:process"
+    goal: A Nish program can read the wall-clock time, so certificate validity can be checked against now (name resolution moved to run 986)
+    verification: npm run check && npm run lint && node tests/run.js wall_clock && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node scripts/security-scope.mjs
     todos:
       - id: hb-resolve
-        content: Add netResolve(host, port, family) to nish:net over getaddrinfo in runtime/runtime-net.c, answering numeric addresses netAddress accepts — see Stage host-builtins
-        status: pending
+        content: Name resolution moved to run 986 (WP45 std/net/dns stub resolver) — see Rescope 2026-10-29
+        status: cancelled
       - id: hb-clock
         content: Add a wall-clock builtin (Unix seconds and nanoseconds) to nish:process — see Stage host-builtins
         status: pending
@@ -38,6 +38,7 @@ stages:
         status: pending
   - id: pubkey-verify
     title: "feat(stdlib): RSA and ECDSA P-384 signature verification"
+    status: cancelled
     goal: std/crypto verifies RSA PKCS#1 v1.5 and RSA-PSS signatures (SHA-256/384/512) and ECDSA P-384 signatures, which WebPKI chains and TLS 1.3 CertificateVerify need
     verification: npm run check && npm run lint && node tests/run.js crypto_rsa && node tests/run.js crypto_p384 && node scripts/security-scope.mjs && node docs/check-links.mjs
     todos:
@@ -75,6 +76,7 @@ stages:
         status: pending
   - id: tls-client
     title: "feat(stdlib): TLS 1.3 client handshake, records and TCP carrier"
+    status: cancelled
     goal: std/net has a TLS 1.3 client that completes a handshake with SNI and ALPN, delegates certificate and CertificateVerify checks to a caller-supplied authenticator, and runs blocking over a nish:net socket with timeouts
     verification: npm run check && npm run lint && node tests/run.js net_tls && node scripts/security-scope.mjs && node docs/check-links.mjs
     todos:
@@ -98,6 +100,7 @@ stages:
         status: pending
   - id: x509-path
     title: "feat(stdlib): X.509 path validation for WebPKI server certificates"
+    status: cancelled
     goal: std/crypto can decide whether a server's chain is valid for a host name at a given time against a set of trusted roots, and check a TLS 1.3 CertificateVerify signature with the leaf key
     verification: npm run check && npm run lint && node tests/run.js crypto_x509 && node scripts/security-scope.mjs && node docs/check-links.mjs
     todos:
@@ -118,11 +121,11 @@ stages:
         status: pending
   - id: http-fetch
     title: "feat(stdlib): httpFetch, a blocking HTTP/1.1 client for CLIs"
-    goal: httpFetch(request, options) fetches an http or https URL over DNS, TCP and TLS with timeouts, keep-alive, redirects, proxies and a streaming body reader
+    goal: httpFetch(request, options) fetches an http or https URL over run 986's resolver, TCP and run 993's TLS client (with run 987's chain validation) with timeouts, keep-alive, redirects, proxies and a streaming body reader
     verification: npm run check && npm run lint && node tests/run.js net_http_fetch && npm run smoke && node scripts/security-scope.mjs && node docs/check-links.mjs
     todos:
       - id: hf-dial
-        content: Add the dialer in std/net/http-client.ts — netResolve, non-blocking connect with connect timeout across addresses, TLS via TlsTcpClient with a WebPKI authenticator built on x509VerifyServerChain — see Stage http-fetch
+        content: Add the dialer in std/net/http-client.ts — run 986's std/net/dns resolver, non-blocking connect with connect timeout across addresses, TLS via run 993's TCP carrier with run 987's chain validation — see Stage http-fetch
         status: pending
       - id: hf-roots
         content: Load trust roots from SSL_CERT_FILE or the system bundle paths and take the time from the wall-clock builtin — see Stage http-fetch
@@ -161,6 +164,18 @@ stages:
 | RSA, P-384 | [std/crypto/x509.ts](../../std/crypto/x509.ts) `x509VerifySignature` handles ecdsa-sha256 on P-256 only | pubkey-verify |
 | path validation | no SAN, hostname, validity, constraints or root store | x509-path |
 | a TLS client | [std/net/tls.ts](../../std/net/tls.ts) and [std/net/tls-tcp.ts](../../std/net/tls-tcp.ts) are server-only; `tls/codec.ts`, `tls/schedule.ts` and `tls/record.ts` are reusable | tls-client |
+
+## Rescope 2026-10-29
+
+Owner decision at 01:25Z. Other runs are building some of these pieces, so this run yields them and consumes their results.
+
+| Piece | Built by | This run |
+| --- | --- | --- |
+| RSA, P-384, X.509 extensions, roots, path validation | [#987](https://github.com/amritk/nish/issues/987) tls-chain-validation | pubkey-verify and x509-path **cancelled** (PR #1008 left open as superseded) |
+| TLS 1.3 client core and TCP carrier | [#993](https://github.com/amritk/nish/issues/993) tls-client | tls-client **cancelled** (WIP kept on its branch) |
+| name resolution | [#986](https://github.com/amritk/nish/issues/986) wp45-dns (`std/net/dns` stub resolver, per `docs/wp45-name-resolution.md`, which rejects `getaddrinfo`) | host-builtins keeps **only the wall clock** |
+
+http-fetch now starts after url, host-builtins and http1-sansio have merged **and** #986's resolver, #987's pki and #993's TCP carrier are on `main`. It is written against their interfaces as merged: it reads them on `main` and does not redefine them. The `TlsServerAuthenticator` sketch below is superseded by whatever #993 and #987 ship. If #993's carrier already validates the chain through #987, http-fetch only supplies roots, the time and the host name. Sections below for the cancelled stages are kept for the record.
 
 ## Approach
 
