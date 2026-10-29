@@ -105,10 +105,19 @@ const editDistance = (a: string, b: string, rows: i32[][]): i32 => {
       panic("cli-args: edit distance rows too short")
     }
     into[0] = i
-    for (let j: i32 = 1; j <= n && j < toI32(into.length) && j < toI32(above.length) && j < toI32(twoUp.length); j++) {
+    for (
+      let j: i32 = 1;
+      j <= n && j < toI32(into.length) && j < toI32(above.length) && j < toI32(twoUp.length);
+      j++
+    ) {
       const cost: i32 = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1
       let d = minI32(minI32(above[j] + 1, into[j - 1] + 1), above[j - 1] + cost)
-      if (i > 1 && j > 1 && a.charCodeAt(i - 1) === b.charCodeAt(j - 2) && a.charCodeAt(i - 2) === b.charCodeAt(j - 1)) {
+      if (
+        i > 1 &&
+        j > 1 &&
+        a.charCodeAt(i - 1) === b.charCodeAt(j - 2) &&
+        a.charCodeAt(i - 2) === b.charCodeAt(j - 1)
+      ) {
         d = minI32(d, twoUp[j - 2] + 1)
       }
       into[j] = d
@@ -613,7 +622,11 @@ export class Cli {
         names.push(this.cmdName[c])
       }
     }
-    for (let i: i32 = 0; withAliases && i < toI32(this.aliasName.length) && i < toI32(this.aliasOwner.length); i++) {
+    for (
+      let i: i32 = 0;
+      withAliases && i < toI32(this.aliasName.length) && i < toI32(this.aliasOwner.length);
+      i++
+    ) {
       const owner: i32 = this.aliasOwner[i]
       if (owner >= 0 && owner < toI32(this.cmdParent.length) && this.cmdParent[owner] === cmd) {
         names.push(this.aliasName[i])
@@ -664,7 +677,10 @@ export class Cli {
   /** Records `token` as no command `r`'s group holds, with the nearest one that it does. */
   unknownCommand(r: ParseResult, token: string): void {
     const near = closest(token, this.childNames(r.command, true))
-    r.fail(r.command, near.length > 0 ? `unknown command '${token}' (did you mean '${near}'?)` : `unknown command '${token}'`)
+    r.fail(
+      r.command,
+      near.length > 0 ? `unknown command '${token}' (did you mean '${near}'?)` : `unknown command '${token}'`
+    )
   }
 
   /** Records `--name`, `--name=value`, `--name value` or `--no-name` from `token`; answers the next index. */
@@ -978,8 +994,10 @@ export class ParseResult {
       last = a
       a = cli.argNext[a]
     }
-    const taken: i32 =
-      last < 0 ? 0 : cli.argVariadic[last] ? toI32(this.positionalValues.length) : cli.argIndex[last] + 1
+    let taken: i32 = 0
+    if (last >= 0) {
+      taken = cli.argVariadic[last] ? toI32(this.positionalValues.length) : cli.argIndex[last] + 1
+    }
     if (this.message.length === 0 && taken < toI32(this.positionalValues.length) && taken >= 0) {
       this.fail(cmd, `unexpected argument '${this.positionalValues[taken]}'`)
     }
