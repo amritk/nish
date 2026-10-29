@@ -27,22 +27,27 @@
  * first, or a pool certificate, whose subject is the child's issuer Name byte
  * for byte, and whose subjectKeyIdentifier, when both it and the child's
  * authorityKeyIdentifier are present, is that identifier. A certificate is
- * never twice in a path. A path ends at a root, which is a name and a key
- * (RFC 5280 §6.1.1): its own signature, validity and extensions are not read.
- * Every check of an intermediate is made as it is added, against the
- * certificates below it, so a refusal ends that branch at once. When no path
- * is accepted, the reason is that of the attempt that got nearest a root: one
+ * never twice in a path. A path ends at a root, whose own signature is not
+ * read, but whose validity, critical extensions, basicConstraints,
+ * extKeyUsage, name constraints and key identifiers are checked as an
+ * intermediate's are, as x509-limbo's cases ask. Every check of an issuer is
+ * made as it is added, against the certificates below it, so a refusal ends
+ * that branch at once; the leaf's profile (CA/Browser Forum Baseline
+ * Requirements §7.1) is checked once a path is found. When no path is
+ * accepted, the reason is that of the attempt that got nearest a root: one
  * that reached a root beats any that did not, a longer one a shorter, and the
  * first found a later one of the same length.
  *
  * Revocation (CRLs, OCSP, Certificate Transparency), certificate policies,
- * RFC 5280 §7.1's Name folding and a root's own name constraints are not
+ * RFC 5280 §7.1's Name folding and an extension's criticality are not
  * checked; each is a finding of docs/security/crypto-pki.md. Nothing here is
  * secret — certificates, names and public keys — so nothing is wiped.
  *
  * Written for this module from RFC 5280 (§4.2 and §6.1), RFC 6125 (§6.4),
  * RFC 4291 §2.2 and RFC 3986 §3.2.2 (address literals), RFC 5758, RFC 8017
- * and RFC 4055 (the signature algorithms) and RFC 8032 (Ed25519).
+ * and RFC 4055 (the signature algorithms), RFC 8032 (Ed25519) and the
+ * Baseline Requirements §7.1, and checked against x509-limbo
+ * (tests/link/crypto_pki_limbo).
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -88,7 +93,11 @@ import {
 
 /** The chain leads to a trusted root, every check passed and the leaf names the host. */
 export const PKI_OK: i32 = 0
-/** The chain is empty, or a certificate in it is not one `x509ParseCertificate` reads. */
+/**
+ * The chain is empty, a certificate in it is not one `x509ParseCertificate`
+ * reads, or a certificate on the path breaks the profile a server's chain
+ * keeps: a key identifier, serial number or dNSName.
+ */
 export const PKI_ERR_MALFORMED: i32 = 1
 /** A certificate's notAfter is before the instant given. */
 export const PKI_ERR_EXPIRED: i32 = 2
@@ -102,19 +111,19 @@ export const PKI_ERR_BAD_SIGNATURE: i32 = 5
 export const PKI_ERR_NOT_CA: i32 = 6
 /** An issuer's pathLenConstraint is fewer than the intermediates below it. */
 export const PKI_ERR_PATH_LENGTH: i32 = 7
-/** An issuer's keyUsage lacks keyCertSign, or the leaf's lacks digitalSignature. */
+/** An issuer's keyUsage lacks keyCertSign, or the leaf's lacks digitalSignature or has keyCertSign. */
 export const PKI_ERR_KEY_USAGE: i32 = 8
-/** An extKeyUsage lacks serverAuth. */
+/** An extKeyUsage lacks serverAuth, the leaf's allows any, or the root has one. */
 export const PKI_ERR_EXT_KEY_USAGE: i32 = 9
 /** A certificate carries a critical extension `nish/crypto/x509` does not decode. */
 export const PKI_ERR_UNKNOWN_CRITICAL: i32 = 10
-/** A name below an issuer is outside its nameConstraints, or they are of a form not checked. */
+/** A name below an issuer is outside its nameConstraints, they are of a form not checked, or the leaf has some. */
 export const PKI_ERR_NAME_CONSTRAINTS: i32 = 11
 /** The leaf's subjectAltName does not name the host. */
 export const PKI_ERR_HOSTNAME: i32 = 12
-/** An RSA key is shorter than `PKI_MIN_RSA_BITS`. */
+/** An RSA key is shorter than `PKI_MIN_RSA_BITS`, or its modulus is not a whole number of bytes. */
 export const PKI_ERR_WEAK_KEY: i32 = 13
-/** A signature algorithm is SHA-1, unknown, or not one the issuer's key makes. */
+/** A signature algorithm is SHA-1, unknown, or not one the issuer's key makes, or the leaf's key is of no type offered. */
 export const PKI_ERR_UNSUPPORTED_ALGORITHM: i32 = 14
 /** The chain or a path is longer than its bound. */
 export const PKI_ERR_CHAIN_TOO_LONG: i32 = 15
@@ -504,19 +513,29 @@ export const pkiMatchHostname = (leaf: X509Certificate, hostname: string): boole
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether an RSA key is fit to sign or serve, as a code: one
+ * `rsaParsePublicKey` refused is a bad signature, and one shorter than
+ * `PKI_MIN_RSA_BITS`, or whose modulus is not a whole number of bytes, a weak
+ * key.
+ */
+const pkiRsaKeyCode = (key: RsaPublicKey | null): i32 => {
+  if (key === null) {
+    return PKI_ERR_BAD_SIGNATURE
+  }
+  return key.bits < PKI_MIN_RSA_BITS || key.bits % 8 !== 0 ? PKI_ERR_WEAK_KEY : PKI_OK
+}
+
+/**
  * An RSA signature of `cert` under `issuer`'s key, PKCS#1 v1.5 or PSS as
- * `cert.sigAlg` names. A key `rsaParsePublicKey` refuses is a bad signature,
- * and one shorter than `PKI_MIN_RSA_BITS` a weak key. `X509_HASH_` and
+ * `cert.sigAlg` names. The key is checked by `pkiRsaKeyCode` first. `X509_HASH_` and
  * `RSA_HASH_` number SHA-256, SHA-384 and SHA-512 alike, so `pssHash` passes
  * straight through.
  */
 const pkiRsaCode = (cert: X509Certificate, issuer: X509Certificate): i32 => {
   const key: RsaPublicKey | null = rsaParsePublicKey(issuer.publicKey)
-  if (key === null) {
-    return PKI_ERR_BAD_SIGNATURE
-  }
-  if (key.bits < PKI_MIN_RSA_BITS) {
-    return PKI_ERR_WEAK_KEY
+  const fit: i32 = pkiRsaKeyCode(key)
+  if (key === null || fit !== PKI_OK) {
+    return fit
   }
   const alg: i32 = cert.sigAlg
   if (alg === X509_SIG_RSA_PSS) {
@@ -793,14 +812,37 @@ const pkiTimeCode = (c: X509Certificate, nowMs: i64): i32 => {
 }
 
 /**
- * The checks of the intermediate `cand` added above the path: room for a root
- * above it, its validity, its critical extensions, that it is a CA that may
- * sign certificates for a server, its pathLenConstraint against the
- * intermediates below it, its name constraints, and last — the only check
- * that costs — its signature over `child`.
+ * The key identifiers an issuer `cand` must carry (RFC 5280 §4.2.1.1 and
+ * §4.2.1.2), as a code: a subjectKeyIdentifier, and an
+ * authorityKeyIdentifier unless it is self-issued, even on a root. A self-issued root's
+ * authorityKeyIdentifier, when present, is its own subjectKeyIdentifier.
  */
-const pkiIntermediateCode = (s: PkiSearch, child: X509Certificate, cand: X509Certificate): i32 => {
-  if (toI32(s.path.length) + 2 > PKI_MAX_PATH) {
+const pkiKeyIdsCode = (cand: X509Certificate, root: boolean): i32 => {
+  const skid: u8[] | null = cand.skid
+  const akid: u8[] | null = cand.akid
+  if (skid === null) {
+    return PKI_ERR_MALFORMED
+  }
+  if (!pkiSelfIssued(cand)) {
+    return akid === null ? PKI_ERR_MALFORMED : PKI_OK
+  }
+  return root && akid !== null && !pkiBytesEqual(akid, skid) ? PKI_ERR_MALFORMED : PKI_OK
+}
+
+/**
+ * The checks of the issuer `cand` added above the path, a root of the store
+ * when `root` holds and an intermediate otherwise: its validity, its critical
+ * extensions, that it is a CA, its extKeyUsage, its name constraints, its
+ * signature over `child` — the only check that costs — and, once that
+ * verifies, its key identifiers, so a wrong key reads as a signature. An
+ * intermediate also needs room for a root above it, a keyUsage that allows
+ * keyCertSign and a pathLenConstraint that covers the intermediates below it;
+ * a root's keyUsage and pathLenConstraint are not read, as RFC 5280 §6.1
+ * reads none of a trust anchor's, and it may carry no extKeyUsage at all.
+ */
+const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certificate, root: boolean): i32 => {
+  // No intermediate is added past PKI_MAX_PATH - 1, so a root always fits.
+  if (!root && toI32(s.path.length) + 2 > PKI_MAX_PATH) {
     return PKI_ERR_CHAIN_TOO_LONG
   }
   const time: i32 = pkiTimeCode(cand, s.nowMs)
@@ -813,13 +855,13 @@ const pkiIntermediateCode = (s: PkiSearch, child: X509Certificate, cand: X509Cer
   if (cand.version !== 2 || !cand.bcPresent || !cand.bcCa) {
     return PKI_ERR_NOT_CA
   }
-  if (cand.keyUsage >= 0 && (cand.keyUsage & X509_KU_KEY_CERT_SIGN) === 0) {
+  if (!root && cand.keyUsage >= 0 && (cand.keyUsage & X509_KU_KEY_CERT_SIGN) === 0) {
     return PKI_ERR_KEY_USAGE
   }
-  if (cand.ekuPresent && !cand.ekuServerAuth && !cand.ekuAny) {
+  if (cand.ekuPresent && (root || (!cand.ekuServerAuth && !cand.ekuAny))) {
     return PKI_ERR_EXT_KEY_USAGE
   }
-  if (cand.bcPathLen >= 0) {
+  if (!root && cand.bcPathLen >= 0) {
     let below: i32 = 0
     for (let i: i32 = 1; i < toI32(s.path.length); i++) {
       if (!pkiSelfIssued(s.path[i])) {
@@ -834,7 +876,8 @@ const pkiIntermediateCode = (s: PkiSearch, child: X509Certificate, cand: X509Cer
   if (names !== PKI_OK) {
     return names
   }
-  return pkiCheckSignature(s, child, cand)
+  const signature: i32 = pkiCheckSignature(s, child, cand)
+  return signature !== PKI_OK ? signature : pkiKeyIdsCode(cand, root)
 }
 
 /** Keeps `code` as the answer when its attempt, `score` long, got nearer a root than any before it. */
@@ -875,8 +918,7 @@ const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
     if (roots !== undefined) {
       for (const root of roots) {
         if (pkiCandidate(s, child, root)) {
-          // pkiIntermediateCode adds no intermediate past PKI_MAX_PATH - 1, so a root always fits.
-          const code: i32 = pkiCheckSignature(s, child, root)
+          const code: i32 = pkiIssuerCode(s, child, root, true)
           if (s.spent) {
             return false
           }
@@ -890,7 +932,7 @@ const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
     }
     for (const cand of s.pool) {
       if (x509NameEqual(cand.subject, child.issuer) && pkiCandidate(s, child, cand)) {
-        const code: i32 = pkiIntermediateCode(s, child, cand)
+        const code: i32 = pkiIssuerCode(s, child, cand, false)
         if (s.spent) {
           return false
         }
@@ -913,10 +955,88 @@ const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
   return false
 }
 
+// ---------------------------------------------------------------------------
+// The leaf's profile (CA/Browser Forum Baseline Requirements §7.1)
+// ---------------------------------------------------------------------------
+
+/** Whether `c`'s serial number is 1 to 20 octets and not zero (RFC 5280 §4.1.2.2). */
+const pkiSerialSound = (c: X509Certificate): boolean => {
+  const n: i32 = toI32(c.serial.length)
+  if (n < 1 || n > 20) {
+    return false
+  }
+  for (let i: i32 = 0; i < n; i++) {
+    if (c.serial[i] !== 0) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether the dNSName `san` is one a server's certificate may carry: a valid
+ * DNS name of letters, digits and hyphens, after one trailing dot, or `*.`
+ * before one.
+ */
+const pkiSanDnsSound = (san: string): boolean => {
+  const name: string = pkiStripDot(san)
+  const n: i32 = toI32(name.length)
+  const wild: boolean = n >= 2 && toI32(name.charCodeAt(0)) === 42 && toI32(name.charCodeAt(1)) === 46
+  return name.indexOf("_") < 0 && pkiValidDns(wild ? name.slice(2, n) : name)
+}
+
+/**
+ * Whether the leaf's own key is one a server may hold, as a code: RSA of
+ * `PKI_MIN_RSA_BITS` or more in whole bytes, P-256, P-384 or Ed25519.
+ */
+const pkiSubscriberKeyCode = (leaf: X509Certificate): i32 => {
+  const type: i32 = leaf.keyType
+  if (type === X509_KEY_RSA) {
+    return pkiRsaKeyCode(rsaParsePublicKey(leaf.publicKey))
+  }
+  return type === X509_KEY_P256 || type === X509_KEY_P384 || type === X509_KEY_ED25519
+    ? PKI_OK
+    : PKI_ERR_UNSUPPORTED_ALGORITHM
+}
+
+/**
+ * The checks of the leaf's profile, once a path above it is found: no keyCertSign
+ * and no nameConstraints, no `anyExtendedKeyUsage`, a key a server may
+ * hold, a sound serial number, an authorityKeyIdentifier unless it is
+ * self-issued, and dNSNames of letters, digits and hyphens. The common name
+ * is not read: limbo's own passing cases carry ones their subjectAltName
+ * lacks.
+ */
+const pkiLeafProfileCode = (leaf: X509Certificate): i32 => {
+  if (leaf.keyUsage >= 0 && (leaf.keyUsage & X509_KU_KEY_CERT_SIGN) !== 0) {
+    return PKI_ERR_KEY_USAGE
+  }
+  if (leaf.ncPresent) {
+    return PKI_ERR_NAME_CONSTRAINTS
+  }
+  if (leaf.ekuAny) {
+    return PKI_ERR_EXT_KEY_USAGE
+  }
+  const key: i32 = pkiSubscriberKeyCode(leaf)
+  if (key !== PKI_OK) {
+    return key
+  }
+  if (!pkiSerialSound(leaf) || (leaf.akid === null && !pkiSelfIssued(leaf))) {
+    return PKI_ERR_MALFORMED
+  }
+  for (const d of leaf.sanDns) {
+    if (!pkiSanDnsSound(d)) {
+      return PKI_ERR_MALFORMED
+    }
+  }
+  return PKI_OK
+}
+
 /**
  * The checks of the leaf alone: its validity, its critical extensions, that
  * it is not a CA, that its key may sign a TLS handshake and is meant for a
- * server, and that it names the host.
+ * server, and that it names the host. Its profile is judged after the path
+ * search, so a path's reason comes first.
  */
 const pkiLeafCode = (leaf: X509Certificate, hostname: string, nowMs: i64): i32 => {
   const time: i32 = pkiTimeCode(leaf, nowMs)
@@ -1021,7 +1141,8 @@ export const pkiVerifyServer = (
   const s = new PkiSearch(store, pool, dns === null ? "" : dns, nowMs)
   s.path.push(leaf)
   if (pkiExtend(s, leaf)) {
-    return new PkiResult(PKI_OK, s.path)
+    const profile: i32 = pkiLeafProfileCode(leaf)
+    return profile === PKI_OK ? new PkiResult(PKI_OK, s.path) : new PkiResult(profile, none)
   }
   return new PkiResult(s.spent ? PKI_ERR_BUDGET : s.bestCode, none)
 }
@@ -1032,7 +1153,7 @@ export const pkiReason = (code: i32): string => {
     return "the chain is trusted and names the host"
   }
   if (code === PKI_ERR_MALFORMED) {
-    return "the chain is empty or holds a certificate that does not parse"
+    return "the chain is empty, or holds a certificate that does not parse or breaks the server profile"
   }
   if (code === PKI_ERR_EXPIRED) {
     return "a certificate has expired"
@@ -1068,7 +1189,7 @@ export const pkiReason = (code: i32): string => {
     return "the certificate does not name the host"
   }
   if (code === PKI_ERR_WEAK_KEY) {
-    return "an RSA key is shorter than 2048 bits"
+    return "an RSA key is shorter than 2048 bits or not a whole number of bytes"
   }
   if (code === PKI_ERR_UNSUPPORTED_ALGORITHM) {
     return "a signature algorithm is not supported"

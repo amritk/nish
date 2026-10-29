@@ -1,0 +1,671 @@
+cve::cve-2024-0567: FAILURE ERR_MALFORMED, limbo says SUCCESS: kept, PKI-25
+cve::cve-2025-61727: FAILURE ERR_NAME_CONSTRAINTS
+cve::cve-2025-61727-nc-permits-variant: FAILURE ERR_NAME_CONSTRAINTS
+invalid::invalid-issuer-key: FAILURE ERR_BAD_SIGNATURE
+pathlen::ee-with-intermediate-pathlen-0: SUCCESS
+pathlen::ee-with-intermediate-pathlen-1: SUCCESS
+pathlen::ee-with-intermediate-pathlen-2: SUCCESS
+pathlen::validation-ignores-pathlen-in-leaf: FAILURE ERR_NOT_CA, limbo says SUCCESS: kept, PKI-25
+pathlen::intermediate-violates-pathlen-0: FAILURE ERR_PATH_LENGTH
+pathlen::intermediate-pathlen-may-increase: SUCCESS
+pathlen::intermediate-pathlen-too-long: FAILURE ERR_PATH_LENGTH
+pathlen::self-issued-certs-pathlen: SUCCESS
+pathological::multiple-chains-expired-intermediate: SUCCESS
+pathological::intermediate-cycle-distinct-cas: FAILURE ERR_UNTRUSTED
+pathological::intermediate-cycle-same-logical-ca: FAILURE ERR_UNTRUSTED
+pathological::nc-dos-1: FAILURE ERR_BUDGET
+pathological::nc-dos-2: FAILURE ERR_BUDGET
+pathological::nc-dos-3: FAILURE ERR_HOSTNAME
+pathological::pathological-chain-distinct-subject-distinct-key: FAILURE ERR_MALFORMED
+pathological::pathological-chain-same-subject-distinct-key: FAILURE ERR_BUDGET
+pathological::pathological-chain-distinct-subject-same-key: FAILURE ERR_MALFORMED
+pathological::pathological-chain-same-subject-same-key: FAILURE ERR_BUDGET
+rfc5280::aki::critical-aki: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::aki::leaf-missing-aki: FAILURE ERR_MALFORMED
+rfc5280::aki::intermediate-missing-aki: FAILURE ERR_MALFORMED
+rfc5280::aki::self-signed-root-missing-aki: SUCCESS
+rfc5280::aki::cross-signed-root-missing-aki: FAILURE ERR_MALFORMED
+rfc5280::eku::ee-wrong-eku: FAILURE ERR_EXT_KEY_USAGE
+rfc5280::eku::ee-without-eku: SUCCESS
+rfc5280::eku::ee-eku-empty: FAILURE ERR_MALFORMED
+rfc5280::nc::permitted-dns-mismatch: FAILURE ERR_HOSTNAME
+rfc5280::nc::excluded-dns-match: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::permitted-dns-match: SUCCESS
+rfc5280::nc::permitted-dns-match-noncritical: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::nc::permitted-dns-match-more: SUCCESS
+rfc5280::nc::excluded-dns-match-second: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::permitted-ip-mismatch: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::excluded-ipv4-match: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::excluded-ipv6-match: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::permitted-ipv4-match: SUCCESS
+rfc5280::nc::permitted-ipv6-match: SUCCESS
+rfc5280::nc::permitted-dn-mismatch: FAILURE ERR_HOSTNAME
+rfc5280::nc::excluded-dn-match: FAILURE ERR_HOSTNAME
+rfc5280::nc::permitted-dn-match-subject-san-mismatch: FAILURE ERR_HOSTNAME
+rfc5280::nc::excluded-dn-match-sub-mismatch: FAILURE ERR_HOSTNAME
+rfc5280::nc::permitted-self-issued: FAILURE ERR_NAME_CONSTRAINTS, limbo says SUCCESS: kept, PKI-25
+rfc5280::nc::excluded-self-issued-leaf: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::excluded-match-permitted-and-excluded: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::permitted-empty-sequence-excluded-nonempty: FAILURE ERR_MALFORMED
+rfc5280::nc::permitted-nonempty-excluded-nonempty: SUCCESS
+rfc5280::nc::permitted-nonempty-excluded-empty-sequence: FAILURE ERR_MALFORMED
+rfc5280::nc::permitted-different-constraint-type: SUCCESS
+rfc5280::nc::excluded-different-constraint-type: SUCCESS
+rfc5280::nc::invalid-dnsname-wildcard: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::invalid-dnsname-leading-period: SUCCESS, limbo says FAILURE: kept, PKI-31
+rfc5280::nc::invalid-ipv4-address: FAILURE ERR_UNTRUSTED
+rfc5280::nc::invalid-ipv6-address: FAILURE ERR_UNTRUSTED
+rfc5280::nc::not-allowed-in-ee-noncritical: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::not-allowed-in-ee-critical: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::intermediate-with-san-rejected-by-intermediate-nc: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::intermediate-with-san-rejected-by-root-nc: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::restrictive-permits-in-intermediates-narrows: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::restrictive-permits-in-intermediates-widens: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::nc-permits-invalid-dns-san: FAILURE ERR_MALFORMED
+rfc5280::nc::nc-permits-invalid-ip-san: FAILURE ERR_MALFORMED
+rfc5280::nc::nc-forbids-alternate-chain-ica: SUCCESS
+rfc5280::nc::nc-forbids-same-chain-ica: SUCCESS
+rfc5280::nc::nc-permits-email-domain-rejects-subdomain: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::nc-permits-email-subdomains-rejects-apex: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::nc-permits-uri-host-rejects-subdomain: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::nc-permits-uri-subdomains-rejects-apex: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::nc-forbids-othername: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::nc::nc-forbids-othername-noop: FAILURE ERR_NAME_CONSTRAINTS, limbo says SUCCESS: kept, PKI-25
+rfc5280::nc::nc-forbids-dnsname-wildcard-san: FAILURE ERR_NAME_CONSTRAINTS
+rfc5280::pc::ica-noncritical-pc: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::san::malformed: FAILURE ERR_MALFORMED
+rfc5280::san::noncritical-with-empty-subject: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::san::underscore-dns: FAILURE ERR_MALFORMED
+rfc5280::san::ip-in-dns: FAILURE ERR_HOSTNAME
+rfc5280::serial::too-long: FAILURE ERR_MALFORMED
+rfc5280::serial::zero: FAILURE ERR_MALFORMED
+rfc5280::serial::negative: FAILURE ERR_UNKNOWN_CRITICAL
+rfc5280::ski::critical-ski: FAILURE ERR_UNTRUSTED
+rfc5280::ski::root-missing-ski: FAILURE ERR_MALFORMED
+rfc5280::ski::intermediate-missing-ski: FAILURE ERR_MALFORMED
+rfc5280::validity::expired-root: FAILURE ERR_EXPIRED
+rfc5280::validity::expired-intermediate: FAILURE ERR_EXPIRED
+rfc5280::validity::expired-leaf: FAILURE ERR_EXPIRED
+rfc5280::validity::notbefore-exact: SUCCESS
+rfc5280::validity::notbefore-fractional: FAILURE ERR_NOT_YET_VALID
+rfc5280::validity::notafter-exact: SUCCESS
+rfc5280::validity::notafter-fractional: FAILURE ERR_EXPIRED, limbo says SUCCESS: kept, PKI-25
+rfc5280::validity::expired-1-second: FAILURE ERR_EXPIRED
+rfc5280::validity::expired-5-seconds: FAILURE ERR_EXPIRED
+rfc5280::validity::not-yet-valid-1-second: FAILURE ERR_NOT_YET_VALID
+rfc5280::validity::not-yet-valid-5-seconds: FAILURE ERR_NOT_YET_VALID
+rfc5280::ee-empty-issuer: FAILURE ERR_UNTRUSTED
+rfc5280::ca-empty-subject: FAILURE ERR_UNTRUSTED
+rfc5280::unknown-critical-extension-ee: FAILURE ERR_UNKNOWN_CRITICAL
+rfc5280::unknown-critical-extension-root: FAILURE ERR_UNKNOWN_CRITICAL
+rfc5280::unknown-critical-extension-unrelated-root: SUCCESS
+rfc5280::unknown-critical-extension-unrelated-intermediate: SUCCESS
+rfc5280::unknown-critical-extension-intermediate: FAILURE ERR_UNKNOWN_CRITICAL
+rfc5280::chain-untrusted-root: FAILURE ERR_UNTRUSTED
+rfc5280::intermediate-ca-without-ca-bit: FAILURE ERR_NOT_CA
+rfc5280::intermediate-ca-missing-basic-constraints: FAILURE ERR_UNTRUSTED
+rfc5280::root-missing-basic-constraints: FAILURE ERR_NOT_CA
+rfc5280::root-non-critical-basic-constraints: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::root-inconsistent-ca-extensions: FAILURE ERR_UNTRUSTED
+rfc5280::ica-ku-keycertsign: FAILURE ERR_UNTRUSTED
+rfc5280::leaf-ku-keycertsign: FAILURE ERR_KEY_USAGE
+rfc5280::ee-aia: SUCCESS
+rfc5280::ee-critical-aia-invalid: FAILURE ERR_UNKNOWN_CRITICAL
+rfc5280::duplicate-extensions: FAILURE ERR_MALFORMED
+rfc5280::no-keyusage: SUCCESS
+rfc5280::no-basicconstraints: SUCCESS
+rfc5280::mismatching-signature-algorithm: FAILURE ERR_MALFORMED
+rfc5280::ca-as-leaf: FAILURE ERR_NOT_CA, limbo says SUCCESS: kept, PKI-25
+rfc5280::ca-as-leaf-wrong-san: FAILURE ERR_NOT_CA
+rfc5280::root-and-intermediate-swapped: SUCCESS
+webpki::aki::root-with-aki-missing-keyidentifier: SUCCESS, limbo says FAILURE: kept, PKI-27
+webpki::aki::root-with-aki-authoritycertissuer: FAILURE ERR_UNTRUSTED
+webpki::aki::root-with-aki-authoritycertserialnumber: FAILURE ERR_UNTRUSTED
+webpki::aki::root-with-aki-all-fields: SUCCESS, limbo says FAILURE: kept, PKI-27
+webpki::aki::root-with-aki-ski-mismatch: FAILURE ERR_MALFORMED
+webpki::cn::ipv4-hex-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::ipv4-leading-zeros-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::ipv6-uppercase-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::ipv6-uncompressed-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::ipv6-non-rfc5952-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::punycode-not-in-san: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::utf8-vs-punycode-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::not-in-san: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::cn::case-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
+webpki::eku::ee-anyeku: FAILURE ERR_EXT_KEY_USAGE
+webpki::eku::ee-critical-eku: SUCCESS, limbo says FAILURE: kept, PKI-26
+webpki::eku::ee-without-eku: SUCCESS, limbo says FAILURE: kept, PKI-30
+webpki::eku::root-has-eku: FAILURE ERR_EXT_KEY_USAGE
+webpki::nc::permitted-dns-match-noncritical: SUCCESS
+webpki::nc::intermediate-permitted-excluded-subtrees-both-null: FAILURE ERR_MALFORMED
+webpki::nc::intermediate-permitted-excluded-subtrees-both-empty-sequences: FAILURE ERR_MALFORMED
+webpki::nc::nc-permits-dns-san-pattern: SUCCESS
+webpki::san::exact-dns-san: SUCCESS
+webpki::san::exact-localhost-ip-san: SUCCESS
+webpki::san::mismatch-domain-san: FAILURE ERR_HOSTNAME
+webpki::san::mismatch-subdomain-san: FAILURE ERR_HOSTNAME
+webpki::san::mismatch-subdomain-apex-san: FAILURE ERR_HOSTNAME
+webpki::san::mismatch-apex-subdomain-san: FAILURE ERR_HOSTNAME
+webpki::san::public-suffix-wildcard-san: FAILURE ERR_HOSTNAME
+webpki::san::public-suffix-multi-label-wildcard-san: SUCCESS, limbo says FAILURE: kept, PKI-28
+webpki::san::public-suffix-private-namespace-wildcard-san: SUCCESS, limbo says FAILURE: kept, PKI-28
+webpki::san::leftmost-wildcard-san: SUCCESS
+webpki::san::wildcard-embedded-leftmost-san: FAILURE ERR_HOSTNAME
+webpki::san::wildcard-not-in-leftmost-san: FAILURE ERR_HOSTNAME
+webpki::san::wildcard-match-across-labels-san: FAILURE ERR_HOSTNAME
+webpki::san::wildcard-embedded-ulabel-san: FAILURE ERR_HOSTNAME
+webpki::san::unicode-emoji-san: FAILURE ERR_MALFORMED
+webpki::san::no-san: FAILURE ERR_HOSTNAME
+webpki::san::san-critical-with-nonempty-subject: SUCCESS, limbo says FAILURE: kept, PKI-26
+webpki::san::san-wildcard-only: FAILURE ERR_HOSTNAME
+webpki::san::san-wildcard-only-tld: FAILURE ERR_HOSTNAME
+webpki::explicit-curve: FAILURE ERR_UNSUPPORTED_ALGORITHM
+webpki::cryptographydotio-chain: SUCCESS
+webpki::cryptographydotio-chain-missing-intermediate: FAILURE ERR_UNTRUSTED
+webpki::malformed-aia: SUCCESS, limbo says FAILURE: kept, PKI-27
+webpki::forbidden-p192-root: FAILURE ERR_UNSUPPORTED_ALGORITHM
+webpki::forbidden-p192-leaf: FAILURE ERR_UNSUPPORTED_ALGORITHM
+webpki::forbidden-dsa-root: FAILURE ERR_UNSUPPORTED_ALGORITHM
+webpki::forbidden-dsa-leaf: FAILURE ERR_UNSUPPORTED_ALGORITHM
+webpki::forbidden-weak-rsa-key-in-root: FAILURE ERR_WEAK_KEY
+webpki::forbidden-weak-rsa-in-leaf: FAILURE ERR_WEAK_KEY
+webpki::forbidden-rsa-not-divisible-by-8-in-root: FAILURE ERR_WEAK_KEY
+webpki::forbidden-rsa-key-not-divisible-by-8-in-leaf: FAILURE ERR_WEAK_KEY
+webpki::v1-cert: FAILURE ERR_HOSTNAME
+webpki::ee-basicconstraints-ca: FAILURE ERR_NOT_CA
+webpki::ca-as-leaf: FAILURE ERR_NOT_CA
+bettertls::nameconstraints::tc0: SUCCESS
+bettertls::nameconstraints::tc20: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc40: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc60: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc80: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc100: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc120: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc140: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc160: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc180: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc200: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc220: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc240: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc260: SUCCESS
+bettertls::nameconstraints::tc280: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc300: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc320: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc340: SUCCESS
+bettertls::nameconstraints::tc360: SUCCESS
+bettertls::nameconstraints::tc380: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc400: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc420: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc440: SUCCESS
+bettertls::nameconstraints::tc460: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc480: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc500: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc520: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc540: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc600: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc620: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc640: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc660: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc680: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc700: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc720: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc740: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc760: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc780: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc800: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc820: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc860: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc880: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc900: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc920: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc940: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc960: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc980: SUCCESS
+bettertls::nameconstraints::tc1000: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1020: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1040: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1060: SUCCESS
+bettertls::nameconstraints::tc1080: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1100: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1120: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1140: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1160: SUCCESS
+bettertls::nameconstraints::tc1180: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1200: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1220: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1240: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1260: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1300: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1320: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1340: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1360: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1380: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1400: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1420: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1440: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1460: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1480: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1500: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1520: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1540: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1600: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1620: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1640: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1660: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1680: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1700: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1720: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1740: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1760: SUCCESS
+bettertls::nameconstraints::tc1780: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1800: SUCCESS
+bettertls::nameconstraints::tc1820: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1840: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1860: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1880: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1900: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1920: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1940: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc1960: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc1980: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2000: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2020: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2040: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2060: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2080: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2100: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2120: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2140: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2160: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2180: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2200: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2220: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2240: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2260: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2300: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2320: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2340: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2360: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2380: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2400: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2420: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2440: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2460: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2480: SUCCESS
+bettertls::nameconstraints::tc2500: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2520: SUCCESS
+bettertls::nameconstraints::tc2540: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2560: SUCCESS
+bettertls::nameconstraints::tc2580: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2600: SUCCESS
+bettertls::nameconstraints::tc2620: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2640: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2660: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc2680: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2700: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2720: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2740: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2760: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2780: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2800: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2820: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2860: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2880: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2900: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2920: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2940: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2960: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc2980: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3000: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3020: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3040: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3060: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3080: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3100: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3120: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3140: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3160: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3180: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3200: SUCCESS
+bettertls::nameconstraints::tc3220: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3240: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3260: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3280: SUCCESS
+bettertls::nameconstraints::tc3300: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3320: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3340: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3360: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3380: SUCCESS
+bettertls::nameconstraints::tc3400: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3420: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3440: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3460: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3480: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3500: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3520: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3540: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3600: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3620: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3640: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3660: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3680: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3700: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3720: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3740: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3760: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3780: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3800: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3820: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3860: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3880: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc3900: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3920: SUCCESS
+bettertls::nameconstraints::tc3940: SUCCESS
+bettertls::nameconstraints::tc3960: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc3980: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4000: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4020: SUCCESS
+bettertls::nameconstraints::tc4040: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4060: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4080: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4100: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4120: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4140: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4160: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4180: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4200: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4220: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4240: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4260: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4300: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4320: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4340: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4360: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4380: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4400: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4420: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4440: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4460: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4480: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4500: SUCCESS
+bettertls::nameconstraints::tc4520: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4540: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4600: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4620: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4640: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4660: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4680: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4700: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4720: SUCCESS
+bettertls::nameconstraints::tc4740: SUCCESS
+bettertls::nameconstraints::tc4760: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4780: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc4800: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4820: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4860: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4880: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4900: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4920: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4940: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc4960: SUCCESS
+bettertls::nameconstraints::tc4980: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5000: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5020: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5040: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5060: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5080: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5100: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5120: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5140: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5160: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5180: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5200: SUCCESS
+bettertls::nameconstraints::tc5220: SUCCESS
+bettertls::nameconstraints::tc5240: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5260: SUCCESS
+bettertls::nameconstraints::tc5280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5300: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5320: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5340: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5360: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5380: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5400: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5420: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5440: SUCCESS
+bettertls::nameconstraints::tc5460: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5480: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5500: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5520: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5540: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5600: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5620: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5640: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5660: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5680: SUCCESS
+bettertls::nameconstraints::tc5700: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5720: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5740: SUCCESS
+bettertls::nameconstraints::tc5760: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5780: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5800: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5820: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5860: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5880: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5900: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc5920: SUCCESS
+bettertls::nameconstraints::tc5940: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5960: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc5980: SUCCESS
+bettertls::nameconstraints::tc6000: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6020: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6040: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6060: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6080: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6100: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6120: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6140: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6160: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6180: SUCCESS
+bettertls::nameconstraints::tc6200: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6220: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6240: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6260: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6300: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6320: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6340: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6360: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6380: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6400: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6420: SUCCESS
+bettertls::nameconstraints::tc6440: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6460: SUCCESS
+bettertls::nameconstraints::tc6480: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6500: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6520: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6540: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6600: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6620: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6640: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6660: SUCCESS
+bettertls::nameconstraints::tc6680: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6700: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6720: SUCCESS
+bettertls::nameconstraints::tc6740: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6760: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6780: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6800: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6820: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6860: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6880: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc6900: SUCCESS
+bettertls::nameconstraints::tc6920: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6940: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6960: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc6980: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7000: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7020: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7040: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7060: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7080: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7100: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7120: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7140: SUCCESS
+bettertls::nameconstraints::tc7160: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7180: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7200: SUCCESS
+bettertls::nameconstraints::tc7220: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7240: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7260: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7300: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7320: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7340: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7360: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7380: SUCCESS
+bettertls::nameconstraints::tc7400: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7420: SUCCESS
+bettertls::nameconstraints::tc7440: SUCCESS
+bettertls::nameconstraints::tc7460: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7480: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7500: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7520: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7540: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7600: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7620: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7640: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7660: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7680: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7700: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7720: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7740: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7760: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7780: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7800: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7820: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7860: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7880: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7900: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7920: SUCCESS
+bettertls::nameconstraints::tc7940: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc7960: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc7980: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8000: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8020: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8040: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8060: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8080: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8100: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8120: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8140: SUCCESS
+bettertls::nameconstraints::tc8160: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8180: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8200: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8220: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8240: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8260: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8300: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8320: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8340: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8360: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8380: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8400: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8420: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8440: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8460: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8480: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8500: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8520: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8540: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8560: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8580: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8600: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8620: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8640: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8660: FAILURE ERR_NAME_CONSTRAINTS
+bettertls::nameconstraints::tc8680: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8700: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8720: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8740: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8760: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8780: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8800: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8820: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8840: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8860: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8880: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc8900: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8920: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8940: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8960: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc8980: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9000: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9020: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9040: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9060: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9080: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9100: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9120: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9140: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9160: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9180: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9200: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9220: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9240: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9260: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9280: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9300: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9320: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9340: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9360: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9380: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9400: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9420: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9440: FAILURE ERR_HOSTNAME
+bettertls::nameconstraints::tc9460: FAILURE ERR_MALFORMED
+bettertls::nameconstraints::tc9480: FAILURE ERR_MALFORMED
+bettertls::pathbuilding::tc0: SUCCESS
+bettertls::pathbuilding::tc20: SUCCESS
+bettertls::pathbuilding::tc40: FAILURE ERR_NOT_CA
+bettertls::pathbuilding::tc60: SUCCESS
+bettertls::pathbuilding::tc80: FAILURE ERR_UNSUPPORTED_ALGORITHM
+online::akamai.com: SUCCESS
+online::bing.com: SUCCESS
+online::fastly.com: SUCCESS
+online::s3.amazonaws.com: SUCCESS
+online::aws.amazon.com: SUCCESS
+online::docs.python.org: SUCCESS
+online::amazon.com: SUCCESS
+online::facebook.com: SUCCESS
+online::google.com: SUCCESS
+online::storage.googleapis.com: SUCCESS
+online::apple.com: SUCCESS
+online::cloudflare.com: SUCCESS
+online::microsoft.com: SUCCESS
+online::stackoverflow.com: SUCCESS
+x509-limbo: 670 cases, 116 accepted, 641 as limbo says, 29 divergences kept

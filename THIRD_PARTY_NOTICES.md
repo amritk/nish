@@ -198,6 +198,21 @@ changed, as the licence's section 4 asks of a modified file.
 Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof.
 ```
 
+### `tests/link/crypto_pki_limbo/LICENSE-x509-limbo`
+
+[x509-limbo](https://github.com/C2SP/x509-limbo)'s certificate path
+validation cases, whose `bettertls::` cases come from Netflix's
+[BetterTLS](https://github.com/Netflix/bettertls), under the Apache License,
+Version 2.0, with a copy of the licence text beside them. The two files in
+[`tests/link/crypto_pki_limbo/`](tests/link/crypto_pki_limbo/) that hold them
+are rewritten from upstream's `limbo.json` as Nish source by `generate.mjs`
+there; each names the upstream file, commit and SHA-256 it was taken from and
+says what was changed, as the licence's section 4 asks of a modified file.
+
+```notice
+Test cases from x509-limbo (https://github.com/C2SP/x509-limbo), whose BetterTLS cases come from Netflix's BetterTLS (https://github.com/Netflix/bettertls). Copyright the x509-limbo authors. Used under the Apache License, Version 2.0; see tests/link/crypto_pki_limbo/LICENSE-x509-limbo.
+```
+
 ### `std/crypto/LICENSE-bearssl`
 
 [BearSSL](https://www.bearssl.org/), Copyright (c) 2016 Thomas Pornin, under
@@ -421,6 +436,8 @@ Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see 
 | `tests/link/crypto_wycheproof_rsa/pkcs1v15_4096.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all the cases of `rsa_signature_4096_sha256_test.json`, `_sha384_test.json` and `_sha512_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_rsa/pkcs1v15_8192.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all the cases of `rsa_signature_8192_sha256_test.json`, `_sha384_test.json` and `_sha512_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_rsa/pss.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all the cases of the eight `rsa_pss_<bits>_<hash>_mgf1_<salt>_test.json` files and 18 of the 150 of `rsa_pss_misc_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
+| `tests/link/crypto_pki_limbo/cases.ts` | x509-limbo `limbo.json` at `1080e565`: the 670 server-authentication cases `generate.mjs` keeps, without their descriptions, keys and metadata, as Nish source | Apache-2.0 | `tests/link/crypto_pki_limbo/LICENSE-x509-limbo` |
+| `tests/link/crypto_pki_limbo/certs.ts` | x509-limbo `limbo.json` at `1080e565`: every certificate those cases name, once each, as base64 DER | Apache-2.0 | `tests/link/crypto_pki_limbo/LICENSE-x509-limbo` |
 | `tests/json-suite/test-parsing.txt` | JSONTestSuite `test_parsing/` at `1ef36fa`: all 318 files (95 `y_`, 188 `n_`, 35 `i_`), packed one per line by `tests/json-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/json-suite/LICENSE-jsontestsuite` |
 | `tests/yaml-suite/cases.txt` | yaml-test-suite (npm `yaml-test-suite@0.1.0`): all 402 cases (350 files), packed one per line by `tests/yaml-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/yaml-suite/LICENSE-yaml-test-suite` |
 | `tests/json-conformance/test262.txt` | test262 `test/built-ins/JSON/parse` and `test/built-ins/JSON/stringify` at `2e0a567`: the 772 `JSON.parse` and `JSON.stringify` calls of 64 files that are about JSON text, each with the answer the file's assertions require, extracted by `tests/json-conformance/extract.js` | BSD-3-Clause | `tests/json-conformance/LICENSE-test262` |

@@ -69,7 +69,7 @@ nearest a root.
 | Code | Meaning |
 | --- | --- |
 | `PKI_OK` | the chain is trusted and names the host |
-| `PKI_ERR_MALFORMED` | the chain is empty, or a certificate does not parse |
+| `PKI_ERR_MALFORMED` | the chain is empty, a certificate does not parse, or one breaks the profile a server's chain keeps: a missing key identifier, a zero or overlong serial number, a DNS name with an underscore |
 | `PKI_ERR_EXPIRED` | a certificate's validity ended before `nowMs` |
 | `PKI_ERR_NOT_YET_VALID` | a certificate's validity starts after `nowMs` |
 | `PKI_ERR_UNTRUSTED` | no path leads to a root of the store |
@@ -81,7 +81,7 @@ nearest a root.
 | `PKI_ERR_UNKNOWN_CRITICAL` | a certificate has a critical extension this module does not know |
 | `PKI_ERR_NAME_CONSTRAINTS` | a name is outside what an issuer may certify, an issuer excludes a directory name, or it constrains a name form this module does not check |
 | `PKI_ERR_HOSTNAME` | the server's certificate does not name the host |
-| `PKI_ERR_WEAK_KEY` | a key is too small (an RSA key of 1024 to 2047 bits) |
+| `PKI_ERR_WEAK_KEY` | a key is too small (an RSA key of 1024 to 2047 bits), or an RSA modulus is not a whole number of bytes |
 | `PKI_ERR_UNSUPPORTED_ALGORITHM` | a signature or key algorithm is not supported, SHA-1 among them |
 | `PKI_ERR_CHAIN_TOO_LONG` | the chain or a path is longer than its bound |
 | `PKI_ERR_BUDGET` | checking would take more work than its bound allows |
@@ -108,10 +108,22 @@ certificate's signature verifies under another's key.
 
 - **Revocation.** Neither CRLs nor OCSP are read, so a certificate revoked
   before it expires is still accepted.
-- **A root's own constraints.** A root is a name and a key: its validity,
-  extensions and name constraints are not read.
+- **Whether an extension is critical.** A known extension is read whether
+  it is marked critical or not, so a certificate the profile says must mark
+  one is not refused for leaving it unmarked.
 - **Certificate policies** are not processed.
 - **The common name** is never read as a hostname.
+
+A root is checked as an issuer is: an expired root, one without
+basicConstraints, one with an extended key usage and one whose name
+constraints the server's names break are refused, and so is a root without
+a subject key identifier. A TLS-inspection proxy's root that carries an
+extended key usage therefore anchors nothing. The server's certificate is
+checked against the CA/Browser Forum's profile: it may not sign
+certificates, carry name constraints or allow any extended key usage, and its
+key must be RSA of 2048 bits or more, P-256, P-384 or Ed25519. The checks
+follow the x509-limbo test suite, and the cases where they differ are
+listed in the security record.
 
 The security record,
 [crypto-pki.md](../../security/crypto-pki.md#path-validation-nishcryptopki),
