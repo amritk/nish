@@ -32,7 +32,13 @@ import {
   TLS_CONTENT_HANDSHAKE,
   TlsRecordProtection,
 } from "nish/net/tls/record";
-import { TLS_RECORD_DONE, TLS_RECORD_INVALID, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN } from "nish/net/tls/record-server";
+import {
+  TLS_RECORD_DONE,
+  TLS_RECORD_INVALID,
+  TLS_RECORD_STATE_FAILED,
+  TLS_RECORD_STATE_OPEN,
+  TLS_RECORD_WANT_READ
+} from "nish/net/tls/record-server";
 import { TLS_TCP_POOL_FULL, TlsTcpServer } from "nish/net/tls-tcp";
 import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, tcpConnect, tcpListen } from "nish:net";
 import { toHex } from "../crypto_x509/hex";
@@ -296,10 +302,22 @@ export const tcpChecks = (): i32 => {
   read.install(suite, nextTrafficCopy(32, serverThird));
   t.eqStr("and comes under the next key", shown(openOne(read, nextRecord(lb, b))), `23 ${toHex(ascii("x2"))}`);
 
-  t.eqI32("the program shuts the connection down", lb.server.shutdown(ZERO), TLS_RECORD_DONE);
+  // The client's last record is still unread when the program shuts the
+  // connection down. A socket closed over it would answer with a reset,
+  // which can overtake the close_notify (Chromium's ERR_CONNECTION_RESET).
+  lb.send(b, sealOne(write, TLS_CONTENT_APPLICATION_DATA, ascii("late"), ZERO));
+  const closing: i32 = lb.server.shutdown(ZERO);
+  if ((closing & TLS_RECORD_DONE) !== 0) {
+    // What a program does with done, and what the server did before it lingered.
+    lb.server.close(ZERO);
+  }
+  t.eqI32("the program shuts the connection down with the client's last record unread: the slot waits to read", closing, TLS_RECORD_WANT_READ);
   t.eqStr("the client reads the server's close_notify", shown(openOne(read, nextRecord(lb, b))), "21 0100");
-  lb.serve(ZERO, toI32(2));
-  t.ok("and, once it is done, the program closes the socket", lb.awaitEnd(b) && lb.server.busy() === 0);
+  t.ok("then the end of the stream, not a reset", lb.awaitEnd(b) && lb.peers[b].failure === 0 && toI32(lb.peers[b].got.length) === 0);
+  t.ok("the slot holds no key while it waits for the client to hang up", lb.server.holds(ZERO) && lb.server.busy() === 1 && lb.server.interest(ZERO) === TLS_RECORD_WANT_READ);
+  const closedBefore: i32 = lb.closed;
+  lb.hangUp(b);
+  t.ok("and, once the client hangs up, the program closes the socket", lb.awaitClosed(closedBefore + 1) && lb.server.busy() === 0);
 
   // --- 3. The pool -------------------------------------------------------------------
   const c: i32 = lb.connect();
