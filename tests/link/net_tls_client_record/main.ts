@@ -13,6 +13,7 @@ import {
   TLS_RECORD_DONE,
   TLS_RECORD_SIGN,
   TLS_RECORD_STATE_CLOSED,
+  TLS_RECORD_STATE_FAILED,
   TLS_RECORD_STATE_OPEN,
   TlsRecordServer,
 } from "nish/net/tls/record-server";
@@ -199,5 +200,13 @@ export const main = (): i32 => {
   serverFirst.run();
   t.ok("close: server saw it", serverFirst.server.peerClosed);
   serverFirst.wipe();
+
+  // close_notify before the server is authenticated is an error, not an end of stream.
+  const early = new TlsRecordClient(new TlsClient(new TlsClientConfig("localhost", ["h2"]), bytes(1), bytes(0x40), bytes(0x60)));
+  const closeNotify: u8[] = [0x15, 0x03, 0x03, 0x00, 0x02, 0x01, 0x00];
+  early.receive(closeNotify, ZERO, toI32(closeNotify.length));
+  t.eqI32("early close: failed", early.state, TLS_RECORD_STATE_FAILED);
+  t.ok("early close: not an end of stream", !early.peerClosed);
+  t.eqI32("early close: the server's alert", early.peerAlert, ZERO);
   return t.done();
 };

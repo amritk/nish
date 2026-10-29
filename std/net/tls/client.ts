@@ -219,6 +219,24 @@ export const tlsClientIsIpLiteral = (name: string): boolean => {
  * share's group among the groups, every ALPN protocol 1 to 255 bytes, and a
  * server name of at most 253 bytes.
  */
+/**
+ * The ClientHello's bytes before its extensions, less the session id and
+ * suites: the message header (4), version (2), random (32), the session id's
+ * length (1), the suites' length (2), compression (2) and the extensions'
+ * own length (2).
+ */
+const TLS_CLIENT_HELLO_FIXED: i32 = 45
+
+/** Whether every character of `text` is ASCII, so it goes on the wire a byte each as it is. */
+const tlsClientIsAscii = (text: string): boolean => {
+  for (let k: i32 = 0; k < toI32(text.length); k++) {
+    if (toI32(text.charCodeAt(k)) > 127) {
+      return false
+    }
+  }
+  return true
+}
+
 const tlsClientConfigFits = (config: TlsClientConfig): boolean => {
   if (toI32(config.suites.length) === 0 || toI32(config.groups.length) === 0) {
     return false
@@ -237,11 +255,11 @@ const tlsClientConfigFits = (config: TlsClientConfig): boolean => {
     return false
   }
   for (const protocol of config.alpn) {
-    if (toI32(protocol.length) < 1 || toI32(protocol.length) > 255) {
+    if (toI32(protocol.length) < 1 || toI32(protocol.length) > 255 || !tlsClientIsAscii(protocol)) {
       return false
     }
   }
-  return toI32(config.serverName.length) <= TLS_CLIENT_SERVER_NAME_MAX
+  return toI32(config.serverName.length) <= TLS_CLIENT_SERVER_NAME_MAX && tlsClientIsAscii(config.serverName)
 }
 
 /** Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`). */
@@ -336,7 +354,10 @@ export class TlsClient {
     const x25519Length: i32 = toI32(x25519Private.length)
     const p256Length: i32 = toI32(p256Private.length)
     this.config = config
-    this.clientRandom = clientRandom
+    this.clientRandom =
+      toI32(clientRandom.length) === TLS_RANDOM_SIZE
+        ? tlsClientCopy(clientRandom, TLS_CLIENT_FROM, TLS_RANDOM_SIZE)
+        : []
     this.x25519Key = secret(new Array<u8>(X25519_SIZE))
     this.p256Key = secret(new Array<u8>(P256_SCALAR_SIZE))
     exposeWith(this.x25519Key, x25519Private, tlsHeldCopyIn)
@@ -345,7 +366,7 @@ export class TlsClient {
     secureZero(p256Private)
     // Public, and derived from the public random, so it gives nothing away;
     // its only job is to make the hello look like a resumption (§D.4).
-    this.sessionId = tlsClientCopy(clientRandom, TLS_CLIENT_FROM, TLS_CLIENT_SESSION_ID_SIZE)
+    this.sessionId = tlsClientCopy(this.clientRandom, TLS_CLIENT_FROM, TLS_CLIENT_SESSION_ID_SIZE)
     this.transcript = new TlsTranscript(0)
     this.firstHello = []
     this.input = new Array<u8>(1024)
@@ -362,7 +383,7 @@ export class TlsClient {
     this.hashes = new Array<u8>(SHA384_SIZE)
     this.shareGroup = config.shareGroup
     if (
-      toI32(clientRandom.length) !== TLS_RANDOM_SIZE ||
+      toI32(this.clientRandom.length) !== TLS_RANDOM_SIZE ||
       x25519Length !== X25519_SIZE ||
       p256Length !== P256_SCALAR_SIZE ||
       !tlsClientConfigFits(config)
@@ -392,7 +413,9 @@ export class TlsClient {
   /**
    * Writes a ClientHello with a share of `shareGroup` and the cookie, if any,
    * after what the Initial output holds, and answers where it ends; -1 when
-   * the key for the share gives no public key.
+   * the key for the share gives no public key, or when the extensions would
+   * pass the 65,535 bytes their length can say (a HelloRetryRequest's cookie
+   * near that size).
    */
   writeHello(): i32 {
     const share: u8[] | null =
@@ -417,6 +440,11 @@ export class TlsClient {
       this.config.alpn,
       this.cookie
     )
+    const before: i32 =
+      TLS_CLIENT_HELLO_FIXED + toI32(this.sessionId.length) + 2 * toI32(this.config.suites.length)
+    if (length - before > 65535) {
+      return -1
+    }
     this.reserveOutput(at + length)
     const end: i32 = tlsWriteClientHello(
       this.outputInitial,
@@ -856,6 +884,10 @@ export class TlsClient {
     }
     if (view.hasAlpn) {
       const chosen: string = tlsWindowString(view.data, view.alpnAt, view.alpnLength)
+      if (toI32(this.config.alpn.length) === 0) {
+        // An extension the client never sent (§4.2).
+        return TLS_ALERT_UNSUPPORTED_EXTENSION
+      }
       if (this.config.alpn.indexOf(chosen) < 0) {
         // RFC 7301 §3.2 leaves the alert open; a protocol never offered is
         // a value the client cannot accept.
@@ -997,7 +1029,8 @@ export class TlsClient {
    * The caller's verdict on the server's chain and signature, at
    * `TLS_CLIENT_STATE_WAIT_AUTH`: `true` goes on to the server's Finished,
    * reading what was held meanwhile; `false` is `reject(bad_certificate)`.
-   * Answers 0 or the alert; in any other state, `internal_error`.
+   * Answers 0 or the alert; in any other state the client fails with
+   * `internal_error`.
    */
   authenticate(ok: boolean): i32 {
     if (!ok) {
@@ -1022,7 +1055,7 @@ export class TlsClient {
    * caller's reason (`bad_certificate`, `certificate_expired`,
    * `unknown_ca`, `decrypt_error`…): the client fails with it and answers it.
    * An alert outside 1 to 255 is taken as `bad_certificate`. In any other
-   * state, `internal_error`.
+   * state the client fails with `internal_error`.
    */
   reject(alert: i32): i32 {
     if (this.state === TLS_CLIENT_STATE_FAILED) {

@@ -26,6 +26,7 @@ const SUPPORTED_VERSIONS: i32 = 0x002b;
 const KEY_SHARE: i32 = 0x0033;
 const ALPN: i32 = 0x0010;
 const SERVER_NAME: i32 = 0x0000;
+const COOKIE: i32 = 0x002c;
 const AES_128: i32 = 0x1301;
 const AES_256: i32 = 0x1302;
 const CCM: i32 = 0x1304;
@@ -247,6 +248,14 @@ export const main = (): i32 => {
   c = twoGroups(TLS_GROUP_X25519);
   feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, join([retryShare(TLS_GROUP_SECP256R1), versions()])));
   refused(t, "a suite changed after the retry", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_256, join([share(TLS_GROUP_SECP256R1, leafPublic()), versions()]))), TLS_ALERT_ILLEGAL_PARAMETER);
+  // A cookie so long that the hello echoing it cannot say its extensions' length.
+  c = twoGroups(TLS_GROUP_X25519);
+  const cookie: u8[] = [];
+  u16(cookie, 65400);
+  for (let k: i32 = 0; k < 65400; k++) {
+    cookie.push(toU8(k & 0xff));
+  }
+  refused(t, "a cookie too long to echo", c, feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, join([retryShare(TLS_GROUP_SECP256R1), versions(), ext(COOKIE, cookie)]))), TLS_ALERT_INTERNAL_ERROR);
 
   // secp256r1: the share is offered and taken, but no ECDH computes it.
   c = twoGroups(TLS_GROUP_SECP256R1);
@@ -255,6 +264,9 @@ export const main = (): i32 => {
   // EncryptedExtensions.
   c = afterHello();
   refused(t, "unoffered ALPN", c, feed(c, TLS_LEVEL_HANDSHAKE, encryptedExtensions(alpnOf("spdy/3"))), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = started(new TlsClientConfig("localhost", []));
+  feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, goodExts()));
+  refused(t, "ALPN when none was offered", c, feed(c, TLS_LEVEL_HANDSHAKE, encryptedExtensions(alpnOf("h2"))), TLS_ALERT_UNSUPPORTED_EXTENSION);
   const config = new TlsClientConfig("127.0.0.1", ["h2"]);
   c = started(config);
   feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, goodExts()));

@@ -48,4 +48,7 @@ PASS  ku: client reads
 PASS  close: client saw it
 PASS  close: read is end
 PASS  close: server saw it
-tls record client: 50 passed, 0 failed, 0 skipped
+PASS  early close: failed
+PASS  early close: not an end of stream
+PASS  early close: the server's alert
+tls record client: 53 passed, 0 failed, 0 skipped

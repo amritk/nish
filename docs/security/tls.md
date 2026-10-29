@@ -873,7 +873,7 @@ the chain, scheme, signed content and signature, and reads no Finished until
 `authenticate(false)` sends `bad_certificate` ("the caller refuses the
 chain"); `reject(alert)` sends the caller's alert.
 
-**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 70 checks;
+**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 76 checks;
 each case checks the alert, that the client is `FAILED`, and that a later call
 answers the same alert):
 
@@ -883,9 +883,9 @@ answers the same alert):
 | A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the downgrade sentinel | `illegal_parameter` |
 | No `supported_versions` | `protocol_version` |
 | No `key_share` | `missing_extension` |
-| `server_name` acknowledged when none was sent | `unsupported_extension` |
+| `server_name` acknowledged when none was sent; ALPN when none was offered | `unsupported_extension` |
 | Bytes after the ServerHello at its level; a second retry; EncryptedExtensions at the Initial level; Certificate before EncryptedExtensions; a Finished first | `unexpected_message` |
-| A secp256r1 share (TLS-7) | `internal_error` |
+| A secp256r1 share (TLS-7); a retry cookie too long for the second ClientHello's extensions to hold | `internal_error` |
 | A bad server Finished | `decrypt_error` |
 
 **The Finished and the session id are compared in constant time**
@@ -899,7 +899,10 @@ its ServerHello and its Finished, never mid-message, and counted with the
 other records that carry nothing (`idle`) (§D.4); a KeyUpdate from the server is answered, and no more than
 `TLS_RECORD_MAX_KEY_UPDATES` are taken; `close` seals `close_notify` and
 wipes the write direction; the server's `close_notify` ends reading and wipes
-the read direction; a stream cut off without one is a truncation.
+the read direction once the handshake is done, and before that fails the
+connection like any other alert, so a handshake the caller never authenticated
+cannot end as a clean end of stream; a stream cut off without one is a
+truncation.
 
 **Fuzzed** by `tls-server-flight` (Fuzzing, above), whose seeds are each
 message of a real server flight, a retry with and without a cookie, a

@@ -42,12 +42,18 @@ PASS  a second retry: keeps its alert
 PASS  a suite changed after the retry
 PASS  a suite changed after the retry: failed
 PASS  a suite changed after the retry: keeps its alert
+PASS  a cookie too long to echo
+PASS  a cookie too long to echo: failed
+PASS  a cookie too long to echo: keeps its alert
 PASS  a P-256 key share
 PASS  a P-256 key share: failed
 PASS  a P-256 key share: keeps its alert
 PASS  unoffered ALPN
 PASS  unoffered ALPN: failed
 PASS  unoffered ALPN: keeps its alert
+PASS  ALPN when none was offered
+PASS  ALPN when none was offered: failed
+PASS  ALPN when none was offered: keeps its alert
 PASS  server_name acknowledged unsent
 PASS  server_name acknowledged unsent: failed
 PASS  server_name acknowledged unsent: keeps its alert
@@ -68,4 +74,4 @@ PASS  a bad Finished: keeps its alert
 PASS  the caller refuses the chain
 PASS  the caller refuses the chain: failed
 PASS  the caller refuses the chain: keeps its alert
-tls client refusals: 70 passed, 0 failed, 0 skipped
+tls client refusals: 76 passed, 0 failed, 0 skipped

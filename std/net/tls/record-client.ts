@@ -570,16 +570,18 @@ export class TlsRecordClient {
 
   /**
    * An alert, `scratch[0 .. length)` (§6): two bytes, or `decode_error`.
-   * `close_notify` ends the server's stream and wipes the read direction,
-   * `user_canceled` is passed over, and any other description ends the
-   * connection with nothing more sent and every key wiped.
+   * `close_notify` once the handshake is done ends the server's stream and
+   * wipes the read direction, `user_canceled` is passed over, and any other
+   * description — `close_notify` during the handshake among them, so a
+   * connection that never authenticated cannot end like one that did — ends
+   * the connection with nothing more sent and every key wiped.
    */
   handleAlert(length: i32): i32 {
     if (length !== 2) {
       return TLS_ALERT_DECODE_ERROR
     }
     const description: i32 = toI32(this.scratch[1])
-    if (description === TLS_ALERT_CLOSE_NOTIFY) {
+    if (description === TLS_ALERT_CLOSE_NOTIFY && this.state !== TLS_RECORD_STATE_HANDSHAKE) {
       this.peerClosed = true
       this.wipeRead()
       return 0
@@ -767,11 +769,15 @@ export class TlsRecordClient {
    * refusal from `seal` itself fails the connection.
    */
   sealWith(protection: TlsRecordProtection, type: i32, data: u8[], off: i32, len: i32): boolean {
-    const room: i32 = this.recordRoom(len)
+    const sealed: boolean = protection.isProtected()
+    const padding: i32 = sealed ? this.padding : 0
+    const room: i32 = sealed
+      ? TLS_RECORD_HEADER_SIZE + len + 1 + padding + TLS_RECORD_TAG_SIZE
+      : TLS_RECORD_HEADER_SIZE + len
     if (!this.outputHasRoom(room)) {
       return false
     }
-    const n: i32 = protection.seal(type, data, off, len, this.writePadding(), this.output, this.outputEnd)
+    const n: i32 = protection.seal(type, data, off, len, padding, this.output, this.outputEnd)
     if (n < 0) {
       this.fail(-n)
       return false
@@ -1101,8 +1107,8 @@ export class TlsRecordClient {
    * CertificateVerify, while `interest` says `TLS_RECORD_AUTH`
    * (`TlsClient.authenticate`): `true` reads on to the server's Finished and
    * seals the client's; `false` fails the connection with `bad_certificate`
-   * sent. Answers 0, or the alert the connection failed with —
-   * `internal_error` when no verdict is due.
+   * sent. Answers 0, or the alert the connection failed with — a verdict
+   * given before one is due fails it with `internal_error`.
    */
   authenticate(ok: boolean): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
