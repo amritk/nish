@@ -2209,8 +2209,9 @@ and their `.ll` goldens are byte-identical files.
   one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
   `ct` (constant-time compare), `base64url`, `x25519`, `ed25519` (Ed25519
   signatures), `chacha20poly1305` (ChaCha20-Poly1305), `aes` (AES-128 and
-  AES-256 with GCM), `p256` (P-256 ECDSA), `p384` (P-384 ECDSA verification) and `x509` (DER, PEM and
-  self-signed P-256 certificates) (`tests/link/crypto_base64url` is the case
+  AES-256 with GCM), `p256` (P-256 ECDSA), `p384` (P-384 ECDSA
+  verification) and `x509` (DER, PEM and self-signed P-256 certificates)
+  (`tests/link/crypto_base64url` is the case
   that resolves a nested specifier). Each is ordinary Nish source under the
   rules above, and a byte string is a `u8[]`. They are written branch-free on
   secret data, and WP34 N6's disassembly check (`tests/ct-asm.js`) verifies
