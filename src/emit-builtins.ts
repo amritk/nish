@@ -47,7 +47,7 @@ import { N_IDENT, Node } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isWasmBuild } from "./visibility"
-import { rangedStoreOf } from "./emit-util"
+import { builtinNameOf, rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
 import {
@@ -897,6 +897,19 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
       `call i32 ${emitter.useRuntime("nish_spawn_child")}(${ARRAY_STRUCT}* ${argv})`
     )
   }
+  // The four headers, emitted left to right: the runtime reads the vector and
+  // `stdin`, and appends to the two output arrays as a `push` would.
+  if (name === "spawnPiped") {
+    emitter.declareType(ARRAY_TYPE)
+    const args = expr.children[1].children
+    const argv = emitter.emitExpression(args[0])
+    const input = emitter.emitExpression(args[1])
+    const out = emitter.emitExpression(args[2])
+    const err = emitter.emitExpression(args[3])
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_spawn_piped")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${input}, ${ARRAY_STRUCT}* ${out}, ${ARRAY_STRUCT}* ${err})`
+    )
+  }
   if (name === "kill" || name === "waitPid") {
     const args = expr.children[1].children
     const pid = emitter.emitExpression(args[0])
@@ -1058,19 +1071,20 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
 
 /** The other half of the pair above, in the same order. */
 /**
- * A call of the `spawnSync`, `spawnSyncTo` or `spawn` builtin (not of a user
+ * A call of the `spawnSync`, `spawnSyncTo`, `spawn` or `spawnPiped` builtin (not of a user
  * function that happens to be called any of them, which wins the name as every
  * identifier builtin loses it). `attributes.ts` asks, because the argument escapes into
  * the runtime: the spawn path copies each element's bytes pointer into an arena
- * vector that outlives the call. It answers for all three names, because all
- * three reach that same C.
+ * vector that outlives the call. It answers for all four names, because all
+ * four reach that same C.
  */
 export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
   if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
     return false
   }
-  return callee.text === "spawnSync" || callee.text === "spawnSyncTo" || callee.text === "spawn"
+  const name = builtinNameOf(program, call)
+  return name === "spawnSync" || name === "spawnSyncTo" || name === "spawn" || name === "spawnPiped"
 }
 
 export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] =>
@@ -1172,6 +1186,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "spawn") {
     out.push("nish_spawn_child")
+    return out
+  }
+  if (name === "spawnPiped") {
+    out.push("nish_spawn_piped")
     return out
   }
   if (name === "kill") {

@@ -567,6 +567,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "poll" ||
   name === "popen" ||
   name === "posix_memalign" ||
+  name === "posix_spawn_file_actions_adddup2" ||
   name === "posix_spawn_file_actions_addopen" ||
   name === "posix_spawn_file_actions_destroy" ||
   name === "posix_spawn_file_actions_init" ||
@@ -598,6 +599,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "pthread_mutex_init" ||
   name === "pthread_mutex_lock" ||
   name === "pthread_mutex_unlock" ||
+  name === "pthread_sigmask" ||
   name === "putc" ||
   name === "putc_unlocked" ||
   name === "putchar" ||
@@ -677,7 +679,10 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sigemptyset" ||
   name === "sigfillset" ||
   name === "signal" ||
+  name === "sigismember" ||
+  name === "sigpending" ||
   name === "sigprocmask" ||
+  name === "sigwait" ||
   name === "sin" ||
   name === "sincos" ||
   name === "sincosf" ||

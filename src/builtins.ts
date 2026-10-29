@@ -13,7 +13,8 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
-import { readonlyWriteMessage } from "./arrays"
+import { typedArrayElement } from "./annotations"
+import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
 import { internalErrorFor } from "./ice"
@@ -184,6 +185,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "geteuid" ||
     name === "isExecutableSync" ||
     name === "spawn" ||
+    name === "spawnPiped" ||
     name === "kill" ||
     name === "waitPid" ||
     name === "availableParallelism" ||
@@ -1106,6 +1108,20 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     return T_I32
   }
+  // `spawnSync` with the child's three streams on pipes: `stdin` is read and
+  // never written, so a `readonly u8[]` is accepted there, and the two output
+  // arrays are appended to, so they are written arrays as `push`'s receiver
+  // is. The status is `i32` in either number mode, as `spawn`'s pid is. On
+  // wasm there is no child to start.
+  if (name === "spawnPiped") {
+    if (checkBuiltinArity(ctx, call, name, args, 4) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
+      checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
+      checkBuffer(ctx, args.children[2], scope, name, T_U8, true)
+      checkBuffer(ctx, args.children[3], scope, name, T_U8, true)
+    }
+    return T_I32
+  }
   if (name === "kill" || name === "waitPid") {
     if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_I32)
@@ -1278,7 +1294,22 @@ const checkBuffer = (
 ): void => {
   const want = ctx.table.arrayOf(element)
   const got = checkExpression(ctx, arg, scope, want)
-  if (got === T_ERROR || got === want) {
+  if (got === T_ERROR) {
+    return
+  }
+  // `spawnPiped` appends to its two output arrays, so one spelled with a
+  // typed-array name is refused as `push` refuses that receiver: the name
+  // promises a length that never changes, and the TypeScript the program is
+  // emitted to would throw on the append.
+  const alias = written && name === "spawnPiped" ? typedArraySpelling(ctx, arg, scope) : ""
+  if (typedArrayElement(alias) >= 0) {
+    ctx.error(
+      arg,
+      `\`${name}\` appends to this array, spelled \`${alias}\`, whose length is fixed: declare it \`u8[]\``
+    )
+    return
+  }
+  if (got === want) {
     return
   }
   const readonlyWant = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === element

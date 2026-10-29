@@ -132,8 +132,17 @@ const RUNTIME_TEXT_BUDGET = 3698
  * `nish_create_file_exclusive` 12 each, and `nish_mkdir_mode` 72. They are file calls
  * beside `nish_put_file` and `nish_put_all`, which they reuse, so they belong in this
  * file. The budget is the next 256-byte boundary above the measurement, leaving 154.
+ *
+ * **Raised to 4,608 for `spawnPiped`**, measured **4,450 bytes** on 2026-10-29 with
+ * clang 18.1.3 on linux-x64, from 3,174 on `main`: under `-ffunction-sections`,
+ * `nish_spawn_piped` 1,082 (three pipes, the `poll` loop that writes stdin while it reads
+ * both outputs, the 16 MiB cap and SIGPIPE blocked on the calling thread,
+ * docs/security/runtime.md RT-27 to RT-31), `nish_pipe` 109 (close-on-exec ends off descriptors 0 to 2), and
+ * `nish_spawn_start` 284 to 365 for the descriptors it now hands the child and the failed `dup2` action it refuses; the rest is
+ * layout. The poll loop is the cost of not deadlocking against a child that writes before
+ * it has read everything. The budget is the next 256-byte boundary, leaving 158.
  */
-const RUNTIME_OS_TEXT_BUDGET = 3328
+const RUNTIME_OS_TEXT_BUDGET = 4608
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
