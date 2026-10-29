@@ -18,7 +18,7 @@ function contains(hay: readonly u8[], needle: readonly u8[]): boolean -> @contai
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn_piped
-  calls: contains nish_array_grow nish_panic_overflow nish_panic_slice nish_print nish_spawn_piped nish_str_concat nish_str_from_i32 nish_str_new same
+  calls: contains nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_print nish_spawn_piped nish_str_concat nish_str_from_i32 nish_str_new same
   stackSites=0 stackLocals=0
   local +0:9 all: u8[] (const)
   local +1:12 i: i32 (let)
@@ -31,14 +31,20 @@ function main(): i32 -> @nish_main [exported entry]
   local +15:9 back: u8[] (const)
   local +16:9 bigStatus: i32 (const)
   callee +17:51 same -> @same
-  local +20:9 none: u8[] (const)
-  local +21:9 out: u8[] (const)
-  local +22:9 err: u8[] (const)
-  local +23:9 split: i32 (const)
-  local +40:9 flood: u8[] (const)
-  local +41:9 floodStatus: i32 (const)
-  local +46:9 secret: u8[] (const)
-  local +47:9 word: string (const)
-  local +48:12 i: i32 (let)
-  local +51:9 seen: u8[] (const)
-  callee +54:34 contains -> @contains
+  local +21:9 twice: u8[] (const)
+  local +22:12 i: i32 (let)
+  local +26:7 halves: boolean (let)
+  local +27:12 i: i32 (let)
+  local +33:9 none: u8[] (const)
+  local +34:9 out: u8[] (const)
+  local +35:9 err: u8[] (const)
+  local +36:9 split: i32 (const)
+  local +57:9 flood: u8[] (const)
+  local +58:9 floodStatus: i32 (const)
+  local +63:9 fds: u8[] (const)
+  local +64:9 probe: string (const)
+  local +70:9 secret: u8[] (const)
+  local +71:9 word: string (const)
+  local +72:12 i: i32 (let)
+  local +75:9 seen: u8[] (const)
+  callee +78:34 contains -> @contains
