@@ -3306,6 +3306,176 @@ if (!only || "net_tls_tcp".includes(only)) {
   }
 }
 
+// ---- `nish/net/tls-tcp`'s client, against openssl s_server ----------------------
+//
+// What the loopback program in `tests/link/net_tls_client_tcp` cannot say:
+// that the Nish client completes a handshake with a TLS 1.3 server somebody
+// else wrote, under each suite and group, through a HelloRetryRequest, with
+// ALPN and SNI, and that it checks a P-256, a P-384 and an RSA-PSS
+// CertificateVerify from that server. A test CA is made here at run time, and
+// three leaves for `localhost` under it; the client trusts the CA through
+// `SSL_CERT_FILE`. The program in `connect` mode prints one line of what the
+// handshake reached: its state, then the suite, the group, whether it retried,
+// the CertificateVerify scheme and the protocol ALPN chose.
+//
+// Until `nish/crypto/pki` lands (#1027) the client's chain step refuses every
+// chain with unknown_ca (48), so every handshake that reaches the verdict
+// fails with 48 after its CertificateVerify verified: a signature that did
+// not would be decrypt_error (51). The data, KeyUpdate (`k`, `K`) and
+// close_notify cases need a chain the client accepts and are not written yet;
+// `docs/security/tls.md` lists them as open. openssl is on CI's runners, so a
+// missing one is a failure here rather than a skip.
+if (!only || "net_tls_client_tcp".includes(only)) {
+  const dir = path.join(buildDir, "net-tls-client")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_tls_client_tcp", "main.ts"),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_tls_client_tcp"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const openssl = "openssl"
+  // The CA and its three leaves, each for `localhost`, valid for a day.
+  const pki = (args) => spawnSync(openssl, args, { cwd: dir, encoding: "utf8" })
+  const made = () => {
+    const ca = pki([
+      "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
+      "-keyout", "ca.key", "-out", "ca.pem", "-subj", "/CN=nish test CA", "-days", "2",
+      "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign",
+    ])
+    if (ca.status !== 0) {
+      return `the CA: ${ca.stderr}`
+    }
+    fs.writeFileSync(path.join(dir, "leaf.ext"), "subjectAltName=DNS:localhost\nbasicConstraints=CA:FALSE\n")
+    const leaves = [
+      ["p256", ["ec", "-pkeyopt", "ec_paramgen_curve:P-256"]],
+      ["p384", ["ec", "-pkeyopt", "ec_paramgen_curve:P-384"]],
+      ["rsa", ["rsa:2048"]],
+    ]
+    for (const [name, key] of leaves) {
+      const csr = pki([
+        "req", "-new", "-newkey", ...key, "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`, "-subj", "/CN=localhost",
+      ])
+      const signed = pki([
+        "x509", "-req", "-in", `${name}.csr`, "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial",
+        "-out", `${name}.pem`, "-days", "1", "-extfile", "leaf.ext",
+      ])
+      if (csr.status !== 0 || signed.status !== 0) {
+        return `the ${name} leaf: ${csr.stderr}${signed.stderr}`
+      }
+    }
+    return ""
+  }
+  const madeErr = has(openssl) ? made() : "missing: openssl"
+  if (
+    check("net_tls_client_tcp: the client links", built.status === 0, String(built.stderr)) &&
+    check("net_tls_client_tcp: openssl is on PATH and makes the test CA", madeErr === "", madeErr)
+  ) {
+    // One s_server for one connection, with `leaf` and the CA as its chain and
+    // `server`'s flags, and the client in connect mode against it. The answer
+    // is the client's exit status and output.
+    const handshake = async (leaf, server, name, alpn, groups) => {
+      const s = spawn(
+        openssl,
+        [
+          "s_server", "-accept", "0", "-naccept", "1",
+          "-cert", `${leaf}.pem`, "-key", `${leaf}.key`, "-cert_chain", "ca.pem", ...server,
+        ],
+        { cwd: dir, stdio: ["pipe", "pipe", "pipe"] }
+      )
+      const killer = setTimeout(() => s.kill("SIGKILL"), 30000)
+      const ended = new Promise((resolve) => s.on("close", resolve))
+      let out = ""
+      const port = await new Promise((resolve) => {
+        s.stdout.on("data", (chunk) => {
+          out += chunk
+          const m = /ACCEPT \S*:(\d+)\n/.exec(out)
+          if (m !== null) {
+            resolve(Number(m[1]))
+          }
+        })
+        s.on("close", () => resolve(0))
+      })
+      const client =
+        port === 0
+          ? { status: -1, stdout: "", stderr: `s_server did not listen: ${out}` }
+          : await new Promise((resolve) => {
+              const c = spawn(exe, ["connect", String(port), name, alpn, groups], {
+                cwd: dir,
+                env: { ...process.env, SSL_CERT_FILE: path.join(dir, "ca.pem") },
+                stdio: ["ignore", "pipe", "pipe"],
+              })
+              let stdout = ""
+              let stderr = ""
+              c.stdout.on("data", (chunk) => {
+                stdout += chunk
+              })
+              c.stderr.on("data", (chunk) => {
+                stderr += chunk
+              })
+              c.on("close", (status) => resolve({ status, stdout, stderr }))
+            })
+      s.kill("SIGKILL")
+      await ended
+      clearTimeout(killer)
+      return client
+    }
+    // 4865, 4866 and 4867 are TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384 and
+    // TLS_CHACHA20_POLY1305_SHA256; 29 is X25519 and 23 secp256r1; 1027, 1283 and
+    // 2052 are ecdsa_secp256r1_sha256, ecdsa_secp384r1_sha384 and
+    // rsa_pss_rsae_sha256. The SNI case has s_server answer `localhost` with
+    // its second certificate, the P-384 leaf, and refuse any other name with
+    // unrecognized_name (112): the scheme says the name was sent and matched.
+    const sni = ["-tls1_3", "-servername", "localhost", "-servername_fatal", "-cert2", "p384.pem", "-key2", "p384.key"]
+    const cases = [
+      ["TLS_AES_128_GCM_SHA256", "p256", ["-tls1_3", "-ciphersuites", "TLS_AES_128_GCM_SHA256"], "localhost", "-", "x25519",
+        "failed 48 suite 4865 group 29 retried false scheme 1027 alpn -"],
+      ["TLS_AES_256_GCM_SHA384", "p256", ["-tls1_3", "-ciphersuites", "TLS_AES_256_GCM_SHA384"], "localhost", "-", "x25519",
+        "failed 48 suite 4866 group 29 retried false scheme 1027 alpn -"],
+      ["TLS_CHACHA20_POLY1305_SHA256", "p256", ["-tls1_3", "-ciphersuites", "TLS_CHACHA20_POLY1305_SHA256"], "localhost", "-", "x25519",
+        "failed 48 suite 4867 group 29 retried false scheme 1027 alpn -"],
+      ["a P-256 key share", "p256", ["-tls1_3", "-groups", "P-256"], "localhost", "-", "p256",
+        "failed 48 suite 4865 group 23 retried false scheme 1027 alpn -"],
+      ["a HelloRetryRequest from X25519 to P-256", "p256", ["-tls1_3", "-groups", "P-256"], "localhost", "-", "both",
+        "failed 48 suite 4865 group 23 retried true scheme 1027 alpn -"],
+      ["ALPN h2", "p256", ["-tls1_3", "-alpn", "h2"], "localhost", "http/1.1,h2", "x25519",
+        "failed 48 suite 4865 group 29 retried false scheme 1027 alpn h2"],
+      ["ALPN http/1.1", "p256", ["-tls1_3", "-alpn", "http/1.1"], "localhost", "h2,http/1.1", "x25519",
+        "failed 48 suite 4865 group 29 retried false scheme 1027 alpn http/1.1"],
+      ["no common ALPN protocol", "p256", ["-tls1_3", "-alpn", "http/1.1"], "localhost", "h2", "x25519",
+        "failed 120 suite 0 group 29 retried false scheme 0 alpn -"],
+      ["SNI for localhost", "p256", sni, "localhost", "-", "x25519",
+        "failed 48 suite 4865 group 29 retried false scheme 1283 alpn -"],
+      ["SNI for another name", "p256", sni, "other.test", "-", "x25519",
+        "failed 112 suite 0 group 29 retried false scheme 0 alpn -"],
+      ["a P-384 leaf", "p384", ["-tls1_3"], "localhost", "-", "x25519",
+        "failed 48 suite 4865 group 29 retried false scheme 1283 alpn -"],
+      ["an RSA-PSS leaf", "rsa", ["-tls1_3"], "localhost", "-", "x25519",
+        "failed 48 suite 4865 group 29 retried false scheme 2052 alpn -"],
+      // A server that speaks only TLS 1.2 answers the TLS 1.3-only ClientHello
+      // with protocol_version (70).
+      ["TLS 1.2 only", "p256", ["-tls1_2"], "localhost", "-", "x25519",
+        "failed 70 suite 0 group 29 retried false scheme 0 alpn -"],
+    ]
+    for (const [what, leaf, server, name, alpn, groups, want] of cases) {
+      const got = await handshake(leaf, server, name, alpn, groups)
+      check(
+        `net_tls_client_tcp: openssl s_server, ${what}: the handshake reaches the verdict it should`,
+        got.status === 0 && got.stdout === `${want}\n`,
+        `exit ${got.status}\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
+      )
+    }
+  }
+}
+
 // ---- A `nish:` import is the same builtin, not another one -----------------------
 // The whole claim a builtin module makes: importing a name *renames* a builtin
 // rather than introducing one, so the program that imports and the program that

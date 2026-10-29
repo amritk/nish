@@ -1,0 +1,35 @@
+PASS  verdict: not open
+PASS  verdict: the stub's unknown_ca
+PASS  verdict: the server reads it
+PASS  verdict: suite negotiated
+PASS  verdict: alpn read before the verdict
+PASS  verdict: the server chose it
+PASS  verdict: the server saw the name
+PASS  verdict: socket closed
+PASS  verdict: done
+PASS  verdict: no wake lost
+PASS  literal: refused at the chain
+PASS  literal: no server_name
+PASS  alpn: the server's no_application_protocol
+PASS  alpn: no wake lost
+PASS  forged: decrypt_error
+PASS  forged: the server reads it
+PASS  forged: no wake lost
+PASS  connect: refused
+PASS  connect: refused, not open
+PASS  connect: refused, closed
+PASS  connect: a short address
+PASS  connect: a short address is done
+PASS  connect: timed out
+PASS  connect: waited the timeout
+PASS  connect: and not much more
+PASS  connect: timed out, closed
+PASS  verify: P-256 verifies
+PASS  verify: other content
+PASS  verify: P-384 scheme on a P-256 key
+PASS  verify: RSA-PSS scheme on a P-256 key
+PASS  verify: ed25519, never offered
+PASS  verify: an empty signature
+PASS  chain: none is bad_certificate
+PASS  chain: the stub refuses
+tls client tcp: 34 passed, 0 failed, 0 skipped
