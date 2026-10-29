@@ -175,227 +175,227 @@ function Style.sgr(this: Style, text: string, codes: string): string -> @Style.s
 function Style.black(this: Style, text: string): string -> @Style.black [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.red(this: Style, text: string): string -> @Style.red [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.green(this: Style, text: string): string -> @Style.green [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.yellow(this: Style, text: string): string -> @Style.yellow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.blue(this: Style, text: string): string -> @Style.blue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.magenta(this: Style, text: string): string -> @Style.magenta [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.cyan(this: Style, text: string): string -> @Style.cyan [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.white(this: Style, text: string): string -> @Style.white [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightBlack(this: Style, text: string): string -> @Style.brightBlack [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightRed(this: Style, text: string): string -> @Style.brightRed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightGreen(this: Style, text: string): string -> @Style.brightGreen [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightYellow(this: Style, text: string): string -> @Style.brightYellow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightBlue(this: Style, text: string): string -> @Style.brightBlue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightMagenta(this: Style, text: string): string -> @Style.brightMagenta [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightCyan(this: Style, text: string): string -> @Style.brightCyan [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.brightWhite(this: Style, text: string): string -> @Style.brightWhite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBlack(this: Style, text: string): string -> @Style.bgBlack [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgRed(this: Style, text: string): string -> @Style.bgRed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgGreen(this: Style, text: string): string -> @Style.bgGreen [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgYellow(this: Style, text: string): string -> @Style.bgYellow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBlue(this: Style, text: string): string -> @Style.bgBlue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgMagenta(this: Style, text: string): string -> @Style.bgMagenta [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgCyan(this: Style, text: string): string -> @Style.bgCyan [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgWhite(this: Style, text: string): string -> @Style.bgWhite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightBlack(this: Style, text: string): string -> @Style.bgBrightBlack [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightRed(this: Style, text: string): string -> @Style.bgBrightRed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightGreen(this: Style, text: string): string -> @Style.bgBrightGreen [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightYellow(this: Style, text: string): string -> @Style.bgBrightYellow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightBlue(this: Style, text: string): string -> @Style.bgBrightBlue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightMagenta(this: Style, text: string): string -> @Style.bgBrightMagenta [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightCyan(this: Style, text: string): string -> @Style.bgBrightCyan [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bgBrightWhite(this: Style, text: string): string -> @Style.bgBrightWhite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: Style.paint
-  pointer this: size=88 writesThrough=false captured=false passedTo=Style.paint#0
+  calls: Style.sgr
+  pointer this: size=88 writesThrough=false captured=false passedTo=Style.sgr#0
   stackSites=0 stackLocals=0
-  callee +0:12 Style.paint -> @Style.paint
+  callee +0:12 Style.sgr -> @Style.sgr
 function Style.bold(this: Style, text: string): string -> @Style.bold [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text

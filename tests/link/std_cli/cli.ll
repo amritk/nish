@@ -272,7 +272,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.black(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.10 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.10 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -280,7 +280,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.red(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.11 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.11 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -288,7 +288,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.green(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.12 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.12 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -296,7 +296,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.yellow(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.3 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -304,7 +304,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.blue(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.13 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.13 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -312,7 +312,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.magenta(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.14 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.14 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -320,7 +320,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.cyan(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -328,7 +328,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.white(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.15 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.15 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -336,7 +336,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightBlack(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.16 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.16 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -344,7 +344,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightRed(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.17 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.17 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -352,7 +352,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightGreen(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.18 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.18 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -360,7 +360,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightYellow(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.19 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.19 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -368,7 +368,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightBlue(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.20 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.20 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -376,7 +376,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightMagenta(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.21 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.21 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -384,7 +384,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightCyan(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.22 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.22 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -392,7 +392,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.brightWhite(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.23 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.23 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -400,7 +400,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBlack(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.24 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.24 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -408,7 +408,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgRed(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.25 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.25 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -416,7 +416,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgGreen(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.26 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.26 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -424,7 +424,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgYellow(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.27 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.27 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -432,7 +432,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBlue(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.28 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.28 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -440,7 +440,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgMagenta(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.29 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.29 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -448,7 +448,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgCyan(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.30 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.30 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -456,7 +456,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgWhite(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.31 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.31 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -464,7 +464,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightBlack(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.32 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.32 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -472,7 +472,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightRed(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.33 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.33 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -480,7 +480,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightGreen(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.34 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.34 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -488,7 +488,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightYellow(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.35 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.35 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -496,7 +496,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightBlue(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.36 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.36 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -504,7 +504,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightMagenta(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.37 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.37 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -512,7 +512,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightCyan(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.38 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.38 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }
@@ -520,7 +520,7 @@ entry:
 define noundef nonnull align 8 i8* @nish.Style.bgBrightWhite(%struct.Style* noundef nonnull readonly align 8 dereferenceable(88) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = call i8* @nish.Style.paint(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.39 to i8*), i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*))
+  %1 = call i8* @nish.Style.sgr(%struct.Style* %this, i8* %text, i8* bitcast ({ i64, [4 x i8] }* @.str.39 to i8*))
   %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   ret i8* %2
 }

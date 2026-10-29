@@ -131,17 +131,18 @@ export class Style {
   constructor(on: boolean, colour: boolean) {
     this.on = on
     this.colour = colour
+    // Bold magenta, spelled out: a template here would allocate per Style.
     this.headingThemed = "1;35"
-    this.headingMono = "1"
+    this.headingMono = SGR_BOLD
     this.nameThemed = "1;35"
-    this.nameMono = "1"
-    this.flagThemed = "36"
-    this.flagMono = "1"
-    this.metaThemed = "33"
-    this.metaMono = "4"
+    this.nameMono = SGR_BOLD
+    this.flagThemed = SGR_CYAN
+    this.flagMono = SGR_BOLD
+    this.metaThemed = SGR_YELLOW
+    this.metaMono = SGR_UNDERLINE
     // Faint rather than bright black, which Solarized makes the background;
     // plain without colour, where the bold flags already stand apart from it.
-    this.dimThemed = "2"
+    this.dimThemed = SGR_FAINT
     this.dimMono = ""
   }
 
@@ -195,167 +196,168 @@ export class Style {
     return this.paint(text, codes, "")
   }
 
-  // The colour painters paint nothing under the failsafe, which has no
-  // colours to show; the attribute painters paint under both.
+  // The colour painters go through `sgr`, so the failsafe, which has no
+  // colours to show, paints none of them; the attribute painters paint under
+  // both.
 
   /** `text` in the theme's black. */
   black(text: string): string {
-    return this.paint(text, SGR_BLACK, "")
+    return this.sgr(text, SGR_BLACK)
   }
 
   /** `text` in the theme's red. */
   red(text: string): string {
-    return this.paint(text, SGR_RED, "")
+    return this.sgr(text, SGR_RED)
   }
 
   /** `text` in the theme's green. */
   green(text: string): string {
-    return this.paint(text, SGR_GREEN, "")
+    return this.sgr(text, SGR_GREEN)
   }
 
   /** `text` in the theme's yellow. */
   yellow(text: string): string {
-    return this.paint(text, SGR_YELLOW, "")
+    return this.sgr(text, SGR_YELLOW)
   }
 
   /** `text` in the theme's blue. */
   blue(text: string): string {
-    return this.paint(text, SGR_BLUE, "")
+    return this.sgr(text, SGR_BLUE)
   }
 
   /** `text` in the theme's magenta. */
   magenta(text: string): string {
-    return this.paint(text, SGR_MAGENTA, "")
+    return this.sgr(text, SGR_MAGENTA)
   }
 
   /** `text` in the theme's cyan. */
   cyan(text: string): string {
-    return this.paint(text, SGR_CYAN, "")
+    return this.sgr(text, SGR_CYAN)
   }
 
   /** `text` in the theme's white. */
   white(text: string): string {
-    return this.paint(text, SGR_WHITE, "")
+    return this.sgr(text, SGR_WHITE)
   }
 
   /** `text` in the theme's bright black (gray). */
   brightBlack(text: string): string {
-    return this.paint(text, SGR_BRIGHT_BLACK, "")
+    return this.sgr(text, SGR_BRIGHT_BLACK)
   }
 
   /** `text` in the theme's bright red. */
   brightRed(text: string): string {
-    return this.paint(text, SGR_BRIGHT_RED, "")
+    return this.sgr(text, SGR_BRIGHT_RED)
   }
 
   /** `text` in the theme's bright green. */
   brightGreen(text: string): string {
-    return this.paint(text, SGR_BRIGHT_GREEN, "")
+    return this.sgr(text, SGR_BRIGHT_GREEN)
   }
 
   /** `text` in the theme's bright yellow. */
   brightYellow(text: string): string {
-    return this.paint(text, SGR_BRIGHT_YELLOW, "")
+    return this.sgr(text, SGR_BRIGHT_YELLOW)
   }
 
   /** `text` in the theme's bright blue. */
   brightBlue(text: string): string {
-    return this.paint(text, SGR_BRIGHT_BLUE, "")
+    return this.sgr(text, SGR_BRIGHT_BLUE)
   }
 
   /** `text` in the theme's bright magenta. */
   brightMagenta(text: string): string {
-    return this.paint(text, SGR_BRIGHT_MAGENTA, "")
+    return this.sgr(text, SGR_BRIGHT_MAGENTA)
   }
 
   /** `text` in the theme's bright cyan. */
   brightCyan(text: string): string {
-    return this.paint(text, SGR_BRIGHT_CYAN, "")
+    return this.sgr(text, SGR_BRIGHT_CYAN)
   }
 
   /** `text` in the theme's bright white. */
   brightWhite(text: string): string {
-    return this.paint(text, SGR_BRIGHT_WHITE, "")
+    return this.sgr(text, SGR_BRIGHT_WHITE)
   }
 
   /** `text` on the theme's black. */
   bgBlack(text: string): string {
-    return this.paint(text, SGR_BG_BLACK, "")
+    return this.sgr(text, SGR_BG_BLACK)
   }
 
   /** `text` on the theme's red. */
   bgRed(text: string): string {
-    return this.paint(text, SGR_BG_RED, "")
+    return this.sgr(text, SGR_BG_RED)
   }
 
   /** `text` on the theme's green. */
   bgGreen(text: string): string {
-    return this.paint(text, SGR_BG_GREEN, "")
+    return this.sgr(text, SGR_BG_GREEN)
   }
 
   /** `text` on the theme's yellow. */
   bgYellow(text: string): string {
-    return this.paint(text, SGR_BG_YELLOW, "")
+    return this.sgr(text, SGR_BG_YELLOW)
   }
 
   /** `text` on the theme's blue. */
   bgBlue(text: string): string {
-    return this.paint(text, SGR_BG_BLUE, "")
+    return this.sgr(text, SGR_BG_BLUE)
   }
 
   /** `text` on the theme's magenta. */
   bgMagenta(text: string): string {
-    return this.paint(text, SGR_BG_MAGENTA, "")
+    return this.sgr(text, SGR_BG_MAGENTA)
   }
 
   /** `text` on the theme's cyan. */
   bgCyan(text: string): string {
-    return this.paint(text, SGR_BG_CYAN, "")
+    return this.sgr(text, SGR_BG_CYAN)
   }
 
   /** `text` on the theme's white. */
   bgWhite(text: string): string {
-    return this.paint(text, SGR_BG_WHITE, "")
+    return this.sgr(text, SGR_BG_WHITE)
   }
 
   /** `text` on the theme's bright black. */
   bgBrightBlack(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_BLACK, "")
+    return this.sgr(text, SGR_BG_BRIGHT_BLACK)
   }
 
   /** `text` on the theme's bright red. */
   bgBrightRed(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_RED, "")
+    return this.sgr(text, SGR_BG_BRIGHT_RED)
   }
 
   /** `text` on the theme's bright green. */
   bgBrightGreen(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_GREEN, "")
+    return this.sgr(text, SGR_BG_BRIGHT_GREEN)
   }
 
   /** `text` on the theme's bright yellow. */
   bgBrightYellow(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_YELLOW, "")
+    return this.sgr(text, SGR_BG_BRIGHT_YELLOW)
   }
 
   /** `text` on the theme's bright blue. */
   bgBrightBlue(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_BLUE, "")
+    return this.sgr(text, SGR_BG_BRIGHT_BLUE)
   }
 
   /** `text` on the theme's bright magenta. */
   bgBrightMagenta(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_MAGENTA, "")
+    return this.sgr(text, SGR_BG_BRIGHT_MAGENTA)
   }
 
   /** `text` on the theme's bright cyan. */
   bgBrightCyan(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_CYAN, "")
+    return this.sgr(text, SGR_BG_BRIGHT_CYAN)
   }
 
   /** `text` on the theme's bright white. */
   bgBrightWhite(text: string): string {
-    return this.paint(text, SGR_BG_BRIGHT_WHITE, "")
+    return this.sgr(text, SGR_BG_BRIGHT_WHITE)
   }
 
   /** `text` bold. */
