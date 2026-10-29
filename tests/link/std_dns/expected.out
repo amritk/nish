@@ -1,0 +1,36 @@
+PASS  udp: www.test has two addresses
+PASS  udp: A then AAAA, with their TTLs
+PASS  udp: two queries over UDP
+PASS  absolute: www.test. resolves
+PASS  nxdomain: nowhere.test is NOT_FOUND
+PASS  tc: big.test answered over TCP
+PASS  tc: two truncated datagrams
+PASS  tc: both retried over TCP
+PASS  tc: tcpRetries counts them
+PASS  cname: alias.test reaches www.test's two addresses
+PASS  cname: the A record is www.test's
+PASS  search: host is host.zone.test
+PASS  concurrent: www.test
+PASS  concurrent: big.test
+PASS  spoof: the genuine address stands
+PASS  spoof: another port is droppedSource
+PASS  spoof: another ID is droppedId
+PASS  spoof: another question is droppedQuestion
+PASS  vary: IDs differ between queries
+PASS  vary: source ports differ between queries
+PASS  client: no socket failed
+PASS  dead server: the next one answers
+PASS  dead server: both queries timed out there
+PASS  dead server: after its timeout
+PASS  dead server: asked once per type
+PASS  attempts: NO_ANSWER after every try
+PASS  attempts: two tries per type
+PASS  attempts: two timeouts long
+PASS  hosts: printer.lan from the hosts file
+PASS  hosts: its address
+PASS  localhost: resolveHost answers two
+PASS  localhost: 127.0.0.1 first
+PASS  localhost: then ::1
+PASS  no packet: the server saw nothing
+PASS  timeout: dnsLookupWith gives up
+dns: 35 passed, 0 failed, 0 skipped
