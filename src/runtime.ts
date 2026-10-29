@@ -438,8 +438,8 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
-    // `renameSync`, `unlinkSync` and `writeFileBytesSync` (runtime-os.c) and
-    // `writeBytes` (runtime.c): an errno for an answer rather than an exit,
+    // `renameSync`, `unlinkSync`, `writeFileBytesSync` and `writeBytes`
+    // (runtime-os.c): an errno for an answer rather than an exit,
     // but not `willreturn` for the reason above (an `open` or a `write` to a
     // FIFO or a full pipe waits). Each only reads its array.
     this.add(

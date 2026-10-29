@@ -1283,9 +1283,8 @@ export const identifierBuiltinCalleesNamed = (
 // ---- WP34 N5: `nish:net` -------------------------------------------------------------------
 
 /**
- * One call into runtime-net.c (runtime-term.c for `readStdin`, runtime.c for
- * `writeBytes`), its
- * arguments emitted left to right as every call's are and passed as
+ * One call into runtime-net.c (runtime-term.c for `readStdin`, runtime-os.c
+ * for `writeBytes`), its arguments emitted left to right as every call's are and passed as
  * `bufferSignature` spells them: an `i32` as itself, a
  * string as its `i8*`, a `u8[]` (or `meta`'s `i32[]`) as its header, whose
  * `len` and `data` the runtime reads, and an offset or a length (`n`) widened

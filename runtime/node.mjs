@@ -82,35 +82,25 @@ function negErrno(e) {
   return -(os.constants.errno[e.code] ?? 22);
 }
 
-/** `renameSync(from, to)`: 0, or a negative errno (-18 across file systems). */
-function renameSync(from, to) {
+/** `ok` when `f` returns, or the negative errno of what it threw. */
+function errnoOr(ok, f) {
   try {
-    fs.renameSync(from, to);
-    return 0;
+    f();
+    return ok;
   } catch (e) {
     return negErrno(e);
   }
 }
+
+/** `renameSync(from, to)`: 0, or a negative errno (-18 across file systems). */
+const renameSync = (from, to) => errnoOr(0, () => fs.renameSync(from, to));
 
 /** `unlinkSync(path)`: 0, or a negative errno; a directory is refused, not removed. */
-function unlinkSync(path) {
-  try {
-    fs.unlinkSync(path);
-    return 0;
-  } catch (e) {
-    return negErrno(e);
-  }
-}
+const unlinkSync = (path) => errnoOr(0, () => fs.unlinkSync(path));
 
 /** `writeFileBytesSync(path, bytes)`: the byte count, or a negative errno; mode 0644 and `WRITE_FLAGS`. */
-function writeFileBytesSync(path, bytes) {
-  try {
-    fs.writeFileSync(path, Uint8Array.from(bytes), { flag: WRITE_FLAGS, mode: 0o644 });
-    return bytes.length;
-  } catch (e) {
-    return negErrno(e);
-  }
-}
+const writeFileBytesSync = (path, bytes) =>
+  errnoOr(bytes.length, () => fs.writeFileSync(path, Uint8Array.from(bytes), { flag: WRITE_FLAGS, mode: 0o644 }));
 
 /**
  * `writeBytes`'s write, after the core checked the range `[from, to)`: every
@@ -119,12 +109,9 @@ function writeFileBytesSync(path, bytes) {
  */
 function writeBytes(bytes, from, to) {
   const buf = Uint8Array.from(bytes.slice(from, to));
-  try {
+  return errnoOr(buf.length, () => {
     for (let at = 0; at < buf.length; ) at += fs.writeSync(1, buf, at, buf.length - at);
-    return buf.length;
-  } catch (e) {
-    return negErrno(e);
-  }
+  });
 }
 
 /**
@@ -289,12 +276,7 @@ function spawnSyncTo(argv, out, err) {
  */
 function kill(pid, sig) {
   if (pid <= 0 || !(sig === 0 || sig === 2 || sig === 9 || sig === 15)) return -22;
-  try {
-    process.kill(pid, sig);
-    return 0;
-  } catch (e) {
-    return negErrno(e);
-  }
+  return errnoOr(0, () => process.kill(pid, sig));
 }
 
 /**
