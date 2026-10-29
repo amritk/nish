@@ -1646,9 +1646,10 @@ export const main = (): i32 => {
 A function that returns `u8[] | null` answers `null` for an input it refuses —
 a bad key length, a tag that does not verify — so narrow the result before you
 use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
-`x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1`, and
-`ed25519` and `p384`, which came later, has been through a security audit (`ed25519` and `p384` are
-recorded as changes after their area's audit); the records are in
+`x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but
+`sha1`, `ed25519` and `p384` has been through a security audit; `ed25519` and
+`p384` came later and are recorded as changes after their area's audit. The
+records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`

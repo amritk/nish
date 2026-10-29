@@ -29,7 +29,7 @@ import {
   wycheproofEcdsaP384Sha384P1363Cases,
 } from "../crypto_wycheproof/ecdsa_secp384r1_sha384_p1363";
 import { CavpEcdsaCase, cavpEcdsaP384Sha384Cases } from "../crypto_cavp_p384/sigver";
-import { fromHex, toHex } from "./hex";
+import { fromHex, toHex } from "../crypto_p256/hex";
 
 /** The bytes of an ASCII string, for the RFC's messages. */
 const ascii = (text: string): u8[] => {

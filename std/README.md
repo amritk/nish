@@ -42,11 +42,11 @@ The first lanes of [WP34](../docs/wp34-hosting-cs.md) §5: K1's hashes, MACs and
 key derivation, K2's and K3's AEADs, K4's key exchange, K5's signatures and
 K6's certificates, in
 pure Nish (decision S1), each module imported by its own specifier. Every one
-is written from its specification, with two exceptions that keep their
-upstream notice: `crypto/aes.ts`'s `ghashMul32` is adapted from BearSSL, and
+is written from its specification, with three exceptions that keep their
+upstream notice: `crypto/aes.ts`'s `ghashMul32` is adapted from BearSSL,
 `crypto/p256.ts`'s field and scalar arithmetic is ported from fiat-crypto and
-its nonce's safegcd inversion from libsecp256k1, and `crypto/p384.ts`'s from
-fiat-crypto too
+its nonce's safegcd inversion from libsecp256k1, and `crypto/p384.ts`'s field
+and scalar arithmetic is ported from fiat-crypto too
 ([`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)). Each reproduces its
 specification's published vectors in its `tests/link/crypto_*` programs. The
 performance gate compiles every module with no diagnostics under both

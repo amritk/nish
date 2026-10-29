@@ -8359,13 +8359,18 @@ const p384MulAddInto = (
  * Montgomery domain. The identity has no affine form; callers rule it out.
  */
 const p384Affine = (x: u32[], y: u32[], p: P384ProjectivePoint): void => {
+  const zInverse: u32[] = p384AffineX(x, p)
+  p384FiatMul(y, p.y, zInverse)
+  p384FiatMul(y, y, p384PlainOne())
+}
+
+/** `p384Affine`'s x alone, all a verify compares; answers 1 / Z in the Montgomery domain for `p384Affine`. */
+const p384AffineX = (x: u32[], p: P384ProjectivePoint): u32[] => {
   const zInverse: u32[] = p384Limbs()
-  const one: u32[] = p384PlainOne()
   p384FieldInvert(zInverse, p.z)
   p384FiatMul(x, p.x, zInverse)
-  p384FiatMul(x, x, one)
-  p384FiatMul(y, p.y, zInverse)
-  p384FiatMul(y, y, one)
+  p384FiatMul(x, x, p384PlainOne())
+  return zInverse
 }
 
 /**
@@ -8505,8 +8510,7 @@ export const p384Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
     return false
   }
   const x: u32[] = p384Limbs()
-  const y: u32[] = p384Limbs()
-  p384Affine(x, y, sum)
+  p384AffineX(x, sum)
   p384ReduceOnce(x, x, p384Order())
   const vBytes: u8[] = new Array<u8>(48)
   p384LimbsToBytes(vBytes, 0, x)
