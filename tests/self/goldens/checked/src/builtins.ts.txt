@@ -14,6 +14,7 @@ import isTermExport from "./nish-modules" -> function @isTermExport
 import isUnsafeExport from "./nish-modules" -> function @isUnsafeExport
 import NET_STRING from "./nish-modules" -> const NET_STRING
 import NET_WORDS from "./nish-modules" -> const NET_WORDS
+import netOption from "./nish-modules" -> function @netOption
 import netSignature from "./nish-modules" -> function @netSignature
 import unsafeModule from "./nish-modules" -> function @unsafeModule
 import N_CALL from "./nodes" -> const N_CALL
@@ -222,20 +223,21 @@ function unsafeImportMessage(name: string): string -> @unsafeImportMessage
 function checkNamespaceProperty(ctx: CheckContext, expr: Node, namespace: string, member: string): i32 -> @checkNamespaceProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: namespace
-  calls: CheckContext.errorType TypeTable.arrayOf cryptoRefusal dateRefusal isNamespace nish_panic_index nish_str_concat nish_str_eq
+  escaping: member namespace
+  calls: CheckContext.errorType TypeTable.arrayOf cryptoRefusal dateRefusal isNamespace netOption nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
   callee -5:14 CheckContext.errorType -> @CheckContext.errorType
   callee +1:12 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee +13:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +13:32 dateRefusal -> @dateRefusal
-  callee +16:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +16:32 cryptoRefusal -> @cryptoRefusal
-  callee +18:8 isNamespace -> @isNamespace
-  callee +19:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +21:10 CheckContext.errorType -> @CheckContext.errorType
+  callee +14:27 netOption -> @netOption
+  callee +18:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +18:32 dateRefusal -> @dateRefusal
+  callee +21:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +21:32 cryptoRefusal -> @cryptoRefusal
+  callee +23:8 isNamespace -> @isNamespace
+  callee +24:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +26:10 CheckContext.errorType -> @CheckContext.errorType
 function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 -> @unknownBuiltin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType

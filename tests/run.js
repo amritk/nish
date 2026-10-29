@@ -2482,6 +2482,35 @@ if (!only || "net_tcp_connect".includes(only)) {
   )
 }
 
+// `netSetOption` under the prelude, by its global spelling for the reason
+// `net_tcp_reuseport`'s check gives: the call throws, naming itself, and the
+// five option ids read as the numbers a native build folds them to
+// (`tests/cases/net_set_option` is the native half).
+if (!only || "net_set_option".includes(only)) {
+  const optionDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(optionDir, { recursive: true })
+  const idsEntry = path.join(optionDir, "option-ids.ts")
+  fs.writeFileSync(
+    idsEntry,
+    "export const main = (): number => " +
+      "NET_TCP_NODELAY * 10000 + NET_TCP_QUICKACK * 1000 + NET_SO_KEEPALIVE * 100 + NET_SO_SNDBUF * 10 + NET_SO_RCVBUF === 12345 ? 0 : 1;\n"
+  )
+  const ids = runUnderPrelude(idsEntry, [])
+  check(
+    "net_set_option: under the prelude the option ids read 1 to 5, as natively",
+    ids.status === 0,
+    shown(ids)
+  )
+  const setEntry = path.join(optionDir, "set-option.ts")
+  fs.writeFileSync(setEntry, "export const main = (): number => netSetOption(3, NET_TCP_NODELAY, 1);\n")
+  const loudSet = runUnderPrelude(setEntry, [])
+  check(
+    "net_set_option: under the prelude netSetOption fails loudly rather than answering",
+    loudSet.status !== 0 && loudSet.stderr.includes("`netSetOption` has no synchronous reading under Node"),
+    shown(loudSet)
+  )
+}
+
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
 //
 // `tests/cases/net_udp_echo` binds, prints its port and echoes each datagram to
