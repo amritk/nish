@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "entry": "caps_fs_replace.ts",
+  "deterministic": false,
+  "capabilities": ["fs.write"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["fs.write"],
+      "modules": [
+        {
+          "path": "caps_fs_replace.ts",
+          "capabilities": ["fs.write"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["fs.write"],
+              "witnesses": {
+                "fs.write": [
+                  { "function": "main", "at": "caps_fs_replace.ts:17:16", "calls": "replace" },
+                  { "function": "replace", "at": "caps_fs_replace.ts:8:3", "calls": "unlinkSync" }
+                ]
+              },
+              "panics": [
+                { "kind": "slice", "at": "caps_fs_replace.ts:18:3", "proven": false }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
