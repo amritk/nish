@@ -1,0 +1,73 @@
+PASS  P384_SCALAR_SIZE is 48 bytes
+PASS  P384_POINT_SIZE is 97 bytes
+PASS  P384_SIGNATURE_SIZE is 96 bytes
+PASS  A.2.6 SHA-384 "sample" verifies
+PASS  A.2.6 SHA-384 "test" verifies
+PASS  p384Verify of the SHA-384 verifies
+PASS  "sample"'s signature does not verify "test"
+PASS  a flipped bit in r is refused
+PASS  a flipped bit in s is refused
+PASS  a flipped bit in the message is refused
+PASS  another key does not verify it
+PASS  (r, n - s) of "sample" verifies as well: ECDSA is malleable
+wycheproof ecdsa_secp384r1_sha384_p1363: 280 cases, 193 valid verified, 87 invalid refused, 0 acceptable, 0 filtered out
+PASS  wycheproof sha384_p1363: every case answers what the file expects
+cavp SigVer [P-384,SHA-384]: 15 cases, 3 P verified, 12 F refused
+PASS  cavp SigVer: every case answers what the file expects
+PASS  a key with a flipped bit in y is off the curve
+PASS  a key with a flipped bit in x is off the curve
+PASS  a key with prefix 0x03 is refused
+PASS  a compressed key, 0x03 then x, is refused
+PASS  the identity's SEC 1 encoding, 0x00, is refused
+PASS  97 zero bytes are refused
+PASS  0x04 then (0, 0) is refused
+PASS  a 96-byte key is refused
+PASS  a 98-byte key is refused
+PASS  the point (2, y) verifies its signature
+PASS  the same point with x = 2 + p is refused
+PASS  a key with x = p is refused
+PASS  a key with y = p is refused
+PASS  r = 0 is refused
+PASS  s = 0 is refused
+PASS  r = n is refused
+PASS  s = n is refused
+PASS  r = n + 1 is refused
+PASS  s = n + 1 is refused
+PASS  a 95-byte signature is refused
+PASS  a 97-byte signature is refused
+PASS  a sum u1 G + u2 Q at the identity is refused
+PASS  a signature whose u1 G equals u2 Q (the sum is a doubling) verifies
+PASS  a 64-byte digest verifies as its leftmost 48 bytes
+PASS  a 2-byte digest is the value 0x0102
+PASS  and so is the same value in 48 bytes
+PASS  the signature of the digest 0 verifies (u1 = 0)
+PASS  the digest n verifies as the digest 0
+PASS  the signature of 5 verifies
+PASS  and under the digest n + 5
+PASS  1 G + 0 Q is G
+PASS  0 G + 1 Q is Q
+PASS  (n - 1) G is -G
+PASS  2 G is 2G
+PASS  G + G, added, is 2G
+PASS  1 G + 1 Q with Q = G is 2G
+PASS  G + -G is the identity
+PASS  0 G + 0 Q is the identity
+PASS  n G is the identity
+PASS  a key off the curve is refused
+PASS  pair 0: u1 G
+PASS  pair 0: u2 Q
+PASS  pair 0: u1 G + u2 Q
+PASS  pair 0: the joint multiply is the two products added
+PASS  pair 1: u1 G
+PASS  pair 1: u2 Q
+PASS  pair 1: u1 G + u2 Q
+PASS  pair 1: the joint multiply is the two products added
+PASS  pair 2: u1 G
+PASS  pair 2: u2 Q
+PASS  pair 2: u1 G + u2 Q
+PASS  pair 2: the joint multiply is the two products added
+PASS  pair 3: u1 G
+PASS  pair 3: u2 Q
+PASS  pair 3: u1 G + u2 Q
+PASS  pair 3: the joint multiply is the two products added
+p384: 70 passed, 0 failed, 0 skipped
