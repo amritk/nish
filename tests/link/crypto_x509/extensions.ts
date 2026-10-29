@@ -43,8 +43,11 @@ import { fromHex, toHex } from "./hex"
 import { GOLDEN_PEM } from "./fixtures"
 import {
   CRITICAL_DER,
+  CRITICAL_SHA256,
   ED25519_CA_DER,
+  ED25519_CA_SHA256,
   ED25519_LEAF_DER,
+  ED25519_LEAF_SHA256,
   ED25519_V3_LEAF_DER,
   ED25519_V3_LEAF_SHA256,
   FULL_ALGORITHM,
@@ -65,10 +68,13 @@ import {
   FULL_VALIDITY,
   FULL_VERSION,
   P384_CA_DER,
+  P384_CA_SHA256,
   PSS_DER,
+  PSS_SHA256,
   RSA_DER,
   RSA_LEAF_DER,
   RSA_LEAF_SHA256,
+  RSA_SHA256,
 } from "./webpki"
 
 /** `n` zero octets as hex. */
@@ -265,6 +271,12 @@ const fixtureSuite = (): i32 => {
     return t.done()
   }
   t.pass("every OpenSSL fixture reads")
+  t.eqStr("RSA-2048: its hash is OpenSSL's", toHex(x509CertificateHash(rsa.der)), RSA_SHA256)
+  t.eqStr("PSS: its hash is OpenSSL's", toHex(x509CertificateHash(pss.der)), PSS_SHA256)
+  t.eqStr("P-384 CA: its hash is OpenSSL's", toHex(x509CertificateHash(ca.der)), P384_CA_SHA256)
+  t.eqStr("Ed25519 leaf: its hash is OpenSSL's", toHex(x509CertificateHash(edLeaf.der)), ED25519_LEAF_SHA256)
+  t.eqStr("Ed25519 CA: its hash is OpenSSL's", toHex(x509CertificateHash(edCa.der)), ED25519_CA_SHA256)
+  t.eqStr("critical: its hash is OpenSSL's", toHex(x509CertificateHash(crit.der)), CRITICAL_SHA256)
 
   t.eqI32("RSA-2048: sha256WithRSAEncryption", rsa.sigAlg, X509_SIG_RSA_PKCS1_SHA256)
   t.eqI32("RSA-2048: an RSA key", rsa.keyType, X509_KEY_RSA)

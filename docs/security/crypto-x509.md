@@ -12,8 +12,8 @@ bytes an attacker supplies:
 
 | Surface | Functions |
 | --- | --- |
-| DER reading | `x509DerRead`, `x509DerExpect`, `x509DerPeek`, `x509DerIntegerMinimal`, `x509DerSmallInteger`, `x509DerBitStringOctets`, `x509DerTime`, `x509DerIsAlgorithm`, `x509DerIsAlgorithmNull`, `x509DerUnsignedInto`, `x509DerSignatureRS` (exported since #361) and `x509DerSignatureRSWidth` (P-384's 48 octets), `x509DerBitStringSound`, `x509DerOidSound`, `x509DerNonNegative`, `x509DerIsTrue` |
-| Algorithms | `x509SignatureAlgorithm`, `x509PssParams`, `x509DerHashAlgorithm`, `x509KeyType` (X509-13) |
+| DER reading | `x509DerRead`, `x509DerReadInto`, `x509DerExpect`, `x509DerExpectInto`, `x509DerText`, `x509DerPeek`, `x509DerIntegerMinimal`, `x509DerSmallInteger`, `x509DerBitStringOctets`, `x509DerTime`, `x509DerIsAlgorithm`, `x509DerIsAlgorithmNull`, `x509DerUnsignedInto`, `x509DerSignatureRS` (exported since #361) and `x509DerSignatureRSWidth` (P-384's 48 octets), `x509DerBitStringSound`, `x509DerOidSound`, `x509DerNonNegative`, `x509DerIsTrue` |
+| Algorithms | the `X509SigAlg` result, `x509SignatureAlgorithm`, `x509PssParams`, `x509DerHashAlgorithm`, `x509KeyType` (X509-13) |
 | Extensions | `x509ReadExtensions` (which replaced `x509DerExtensionsSound`), `x509ExtensionArc`, `x509ReadExtension` and the readers it calls: `x509ReadSubjectAltName`, `x509GeneralNameKind`, `x509DerIa5Name`, `x509ReadBasicConstraints`, `x509ReadKeyUsage`, `x509ReadExtKeyUsage`, `x509ReadNameConstraints`, `x509ReadSubtrees`, `x509DerBoundSound`, `x509MaskContiguous`, `x509ReadSubjectKeyId`, `x509GeneralNamesSound`, `x509ReadAuthorityKeyId` (X509-10, X509-11), and the `X509_MAX_EXTENSIONS` cap (X509-14) |
 | Names | `x509DerNameSound`, `x509NameEqual`, `x509NameIsPrefix` (X509-12, X509-13) |
 | PEM and base64 | `pemToDer`, `derToPem`; the base64 is `base64StdPadDecode` and `base64StdPadEncode` in `std/crypto/base64url.ts` |
@@ -190,7 +190,9 @@ handle gracefully. Both were documented already.
 comment it summarises:
 
 - `x509ParseCertificate` and `x509ParseChain` parse and do not validate: no path
-  validation, no extension is read or exposed, and no clock is consulted.
+  validation and no clock is consulted. Since X509-10 the v3 extensions are read
+  and exposed, but what they mean for a chain is the validator's, planned as
+  `nish/crypto/pki`.
 - `pemToDer` refuses a file in which any block, of any label, is malformed.
 - `x509MintSelfSigned` refuses a common name that is not UTF-8 or holds a NUL,
   and its key and serial must come from `crypto.getRandomValues`, which

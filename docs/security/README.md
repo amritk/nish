@@ -295,6 +295,8 @@ only.
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JSON_TOK_END_CEILING`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
 | SQL-2 | Low | `std/sqlite.ts` (`columnText`) | `sqlite3_column_text` answers NULL both for SQL `NULL` and when converting the value to text runs out of memory, and `columnText` reads either as `null`. A program can take a value it failed to read for an empty column. `columnInto` tells the two apart and answers `SQLITE_NOMEM`. | — |
+| X509-12 | Low | `std/crypto/x509.ts` (`x509NameEqual`, `x509NameIsPrefix`) | Names compare as DER byte for byte, not after RFC 5280 §7.1's stringprep, so a re-encoded issuer Name does not chain and a re-encoded directoryName constraint does not match. Fails closed | — |
+| X509-13 | Low | `std/crypto/x509.ts` (`x509DerNameSound`) | DER's SET OF order inside a multi-valued RDN is not checked: an unsorted RDN is a sound Name that matches only itself, never its sorted spelling. Fails closed | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in
