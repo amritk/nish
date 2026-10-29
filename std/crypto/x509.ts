@@ -220,6 +220,7 @@ export class X509GeneralSubtree {
  * from. Times are milliseconds since 1970-01-01 UTC, as `Date.now()` counts.
  */
 export class X509Certificate {
+  // Widest first, which leaves no padding: pointers and i64s, then i32s, then booleans.
   /** The whole certificate, as its SHA-256 is taken. */
   der: u8[]
   /** The DER of `tbsCertificate`, the bytes the signature covers. */
@@ -238,10 +239,18 @@ export class X509Certificate {
   notBefore: i64 = 0
   /** The last instant it is valid, inclusive. */
   notAfter: i64 = 0
-  /** Whether the key is id-ecPublicKey on prime256v1 (RFC 5480 §2.1.1), so `publicKey` is a P-256 point. */
-  p256: boolean = false
-  /** Whether the signature algorithm is ecdsa-with-SHA256 with its parameters absent (RFC 5758 §3.2). */
-  ecdsaSha256: boolean = false
+  /** subjectAltName's dNSNames, the IA5 bytes exactly as encoded, with no case folded. */
+  sanDns: string[]
+  /** subjectAltName's iPAddresses, 4 octets or 16 each. */
+  sanIp: u8[][]
+  /** nameConstraints' permittedSubtrees, in order. */
+  ncPermitted: X509GeneralSubtree[]
+  /** nameConstraints' excludedSubtrees, in order. */
+  ncExcluded: X509GeneralSubtree[]
+  /** The subjectKeyIdentifier (RFC 5280 §4.2.1.2), or `null`. */
+  skid: u8[] | null = null
+  /** The authorityKeyIdentifier's keyIdentifier (RFC 5280 §4.2.1.1), or `null`. */
+  akid: u8[] | null = null
   /** The version as encoded: 0 for v1, 1 for v2, 2 for v3. */
   version: i32 = 0
   /** The signature algorithm, an `X509_SIG_` constant. */
@@ -252,41 +261,32 @@ export class X509Certificate {
   pssSaltLen: i32 = 0
   /** The subject key's algorithm, an `X509_KEY_` constant. */
   keyType: i32 = 0
-
-  /** Whether a subjectAltName extension is present (RFC 5280 §4.2.1.6). */
-  sanPresent: boolean = false
-  /** Its dNSNames, the IA5 bytes exactly as encoded, with no case folded. */
-  sanDns: string[]
-  /** Its iPAddresses, 4 octets or 16 each. */
-  sanIp: u8[][]
-  /** How many of its names are another form: rfc822Name, URI, directoryName and the rest. */
+  /** How many of subjectAltName's names are another form: rfc822Name, URI, directoryName and the rest. */
   sanOther: i32 = 0
-  /** Whether a basicConstraints extension is present (RFC 5280 §4.2.1.9). */
-  bcPresent: boolean = false
-  /** Its cA flag. */
-  bcCa: boolean = false
-  /** Its pathLenConstraint, or -1 when it is absent (no limit) or the extension is. */
+  /** basicConstraints' pathLenConstraint, or -1 when it is absent (no limit) or the extension is. */
   bcPathLen: i32 = -1
   /** The keyUsage bits (RFC 5280 §4.2.1.3), bit 0 digitalSignature to bit 8 decipherOnly, or -1 when absent. */
   keyUsage: i32 = -1
+  /** Whether the key is id-ecPublicKey on prime256v1 (RFC 5480 §2.1.1), so `publicKey` is a P-256 point. */
+  p256: boolean = false
+  /** Whether the signature algorithm is ecdsa-with-SHA256 with its parameters absent (RFC 5758 §3.2). */
+  ecdsaSha256: boolean = false
+  /** Whether a subjectAltName extension is present (RFC 5280 §4.2.1.6). */
+  sanPresent: boolean = false
+  /** Whether a basicConstraints extension is present (RFC 5280 §4.2.1.9). */
+  bcPresent: boolean = false
+  /** basicConstraints' cA flag. */
+  bcCa: boolean = false
   /** Whether an extKeyUsage extension is present (RFC 5280 §4.2.1.12). */
   ekuPresent: boolean = false
-  /** Whether it names id-kp-serverAuth. */
+  /** Whether extKeyUsage names id-kp-serverAuth. */
   ekuServerAuth: boolean = false
-  /** Whether it names anyExtendedKeyUsage. */
+  /** Whether extKeyUsage names anyExtendedKeyUsage. */
   ekuAny: boolean = false
   /** Whether a nameConstraints extension is present (RFC 5280 §4.2.1.10). */
   ncPresent: boolean = false
-  /** Its permittedSubtrees, in order. */
-  ncPermitted: X509GeneralSubtree[]
-  /** Its excludedSubtrees, in order. */
-  ncExcluded: X509GeneralSubtree[]
   /** Whether any subtree is `X509_GN_OTHER` or carries a `minimum` or `maximum`, which a validator must refuse or understand. */
   ncUnsupported: boolean = false
-  /** The subjectKeyIdentifier (RFC 5280 §4.2.1.2), or `null`. */
-  skid: u8[] | null = null
-  /** The authorityKeyIdentifier's keyIdentifier (RFC 5280 §4.2.1.1), or `null`. */
-  akid: u8[] | null = null
   /** Whether a critical extension is one this module does not decode: RFC 5280 §4.2 has a verifier refuse it. */
   unknownCritical: boolean = false
 
@@ -334,12 +334,24 @@ class X509DerElement {
  * refused before they can overflow.
  */
 const x509DerRead = (der: u8[], at: i32, limit: i32): X509DerElement | null => {
-  if (at < 0 || limit > toI32(der.length) || at > limit - 2) {
+  const e = new X509DerElement(0, 0, 0, 0)
+  if (!x509DerReadInto(der, at, limit, e)) {
     return null
+  }
+  return e
+}
+
+/**
+ * `x509DerRead` into `into`, answering whether it read one: what a loop uses
+ * so a pass allocates nothing it leaves behind. `into` is unspecified on `false`.
+ */
+const x509DerReadInto = (der: u8[], at: i32, limit: i32, into: X509DerElement): boolean => {
+  if (at < 0 || limit > toI32(der.length) || at > limit - 2) {
+    return false
   }
   const tag: i32 = toI32(der[at])
   if ((tag & 0x1f) === 0x1f) {
-    return null
+    return false
   }
   let length: i32 = toI32(der[at + 1])
   let start: i32 = at + 2
@@ -347,24 +359,28 @@ const x509DerRead = (der: u8[], at: i32, limit: i32): X509DerElement | null => {
     const count: i32 = length & 0x7f
     // 0x80 alone is BER's indefinite length, which DER forbids.
     if (count < 1 || count > 4 || count > limit - start) {
-      return null
+      return false
     }
     if (toI32(der[start]) === 0 || (count === 4 && toI32(der[start]) >= 0x80)) {
-      return null
+      return false
     }
     length = 0
     for (let k: i32 = 0; k < count; k++) {
       length = (length << 8) | toI32(der[start + k])
     }
     if (length < 0x80) {
-      return null
+      return false
     }
     start = start + count
   }
   if (length > limit - start) {
-    return null
+    return false
   }
-  return new X509DerElement(tag, at, start, start + length)
+  into.tag = tag
+  into.at = at
+  into.start = start
+  into.end = start + length
+  return true
 }
 
 /** `x509DerRead`, answering `null` also when the element's tag is not `tag`. */
@@ -375,6 +391,10 @@ const x509DerExpect = (der: u8[], at: i32, limit: i32, tag: i32): X509DerElement
   }
   return e
 }
+
+/** `x509DerReadInto`, answering `false` also when the element's tag is not `tag`. */
+const x509DerExpectInto = (der: u8[], at: i32, limit: i32, tag: i32, into: X509DerElement): boolean =>
+  x509DerReadInto(der, at, limit, into) && into.tag === tag
 
 /**
  * The identifier octet at `der[at]` when `at` is inside `der[.. limit)`, else
@@ -647,11 +667,14 @@ const x509DerOidSound = (der: u8[], e: X509DerElement): boolean => {
   }
   let first: boolean = true
   for (let k: i32 = e.start; k < e.end; k++) {
-    const b: i32 = toI32(der[k])
-    if (first && b === 0x80) {
-      return false
+    // Always true for an element `x509DerRead` gave, and what lets the load drop its check.
+    if (k >= 0 && k < toI32(der.length)) {
+      const b: i32 = toI32(der[k])
+      if (first && b === 0x80) {
+        return false
+      }
+      first = b < 0x80
     }
-    first = b < 0x80
   }
   return true
 }
@@ -1424,9 +1447,12 @@ export const x509NameIsPrefix = (base: u8[], name: u8[]): boolean => {
  */
 const x509DerIa5Name = (der: u8[], e: X509DerElement): boolean => {
   for (let k: i32 = e.start; k < e.end; k++) {
-    const b: i32 = toI32(der[k])
-    if (b === 0 || b >= 0x80) {
-      return false
+    // Always true for an element `x509DerRead` gave, and what lets the load drop its check.
+    if (k >= 0 && k < toI32(der.length)) {
+      const b: i32 = toI32(der[k])
+      if (b === 0 || b >= 0x80) {
+        return false
+      }
     }
   }
   return true
@@ -1489,10 +1515,11 @@ const x509ReadSubjectAltName = (der: u8[], start: i32, end: i32, out: X509Certif
   if (seq === null || seq.end !== end || seq.end === seq.start) {
     return false
   }
+  // Declared once and read into, so a pass leaves only what it keeps.
+  const name = new X509DerElement(0, 0, 0, 0)
   let at: i32 = seq.start
   while (at < seq.end) {
-    const name: X509DerElement | null = x509DerRead(der, at, seq.end)
-    if (name === null) {
+    if (!x509DerReadInto(der, at, seq.end, name)) {
       return false
     }
     const kind: i32 = x509GeneralNameKind(der, name)
@@ -1523,7 +1550,10 @@ const x509DerNonNegative = (der: u8[], e: X509DerElement): i32 => {
   }
   let value: i32 = 0
   for (let k: i32 = e.start; k < e.end; k++) {
-    value = (value << 8) | toI32(der[k])
+    // Always true for an element `x509DerRead` gave, and what lets the load drop its check.
+    if (k >= 0 && k < toI32(der.length)) {
+      value = (value << 8) | toI32(der[k])
+    }
   }
   return value
 }
@@ -1672,14 +1702,17 @@ const x509ReadSubtrees = (
   if (e.end === e.start) {
     return false
   }
+  // Declared once and read into, so a pass leaves only the subtree it keeps.
+  const tree = new X509DerElement(0, 0, 0, 0)
+  const base = new X509DerElement(0, 0, 0, 0)
+  const minimum = new X509DerElement(0, 0, 0, 0)
+  const maximum = new X509DerElement(0, 0, 0, 0)
   let at: i32 = e.start
   while (at < e.end) {
-    const tree: X509DerElement | null = x509DerExpect(der, at, e.end, X509_TAG_SEQUENCE)
-    if (tree === null) {
+    if (!x509DerExpectInto(der, at, e.end, X509_TAG_SEQUENCE, tree)) {
       return false
     }
-    const base: X509DerElement | null = x509DerRead(der, tree.start, tree.end)
-    if (base === null) {
+    if (!x509DerReadInto(der, tree.start, tree.end, base)) {
       return false
     }
     const subtree = new X509GeneralSubtree()
@@ -1705,9 +1738,8 @@ const x509ReadSubtrees = (
     }
     let bound: i32 = base.end
     if (x509DerPeek(der, bound, tree.end) === 0x80) {
-      const minimum: X509DerElement | null = x509DerRead(der, bound, tree.end)
       if (
-        minimum === null ||
+        !x509DerReadInto(der, bound, tree.end, minimum) ||
         !x509DerBoundSound(der, minimum) ||
         (minimum.end - minimum.start === 1 && toI32(der[minimum.start]) === 0)
       ) {
@@ -1717,8 +1749,7 @@ const x509ReadSubtrees = (
       bound = minimum.end
     }
     if (x509DerPeek(der, bound, tree.end) === 0x81) {
-      const maximum: X509DerElement | null = x509DerRead(der, bound, tree.end)
-      if (maximum === null || !x509DerBoundSound(der, maximum)) {
+      if (!x509DerReadInto(der, bound, tree.end, maximum) || !x509DerBoundSound(der, maximum)) {
         return false
       }
       out.ncUnsupported = true
@@ -1882,14 +1913,17 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
   // Every extnID so far, to find a second instance by its encoding, which
   // `x509DerOidSound` makes the only one.
   const seen: u8[][] = []
+  // Declared once and read into, so a pass leaves only the extnID it keeps.
+  const ext = new X509DerElement(0, 0, 0, 0)
+  const id = new X509DerElement(0, 0, 0, 0)
+  const flag = new X509DerElement(0, 0, 0, 0)
+  const value = new X509DerElement(0, 0, 0, 0)
   let at: i32 = seq.start
   while (at < seq.end) {
-    const ext: X509DerElement | null = x509DerExpect(der, at, seq.end, X509_TAG_SEQUENCE)
-    if (ext === null) {
+    if (!x509DerExpectInto(der, at, seq.end, X509_TAG_SEQUENCE, ext)) {
       return false
     }
-    const id: X509DerElement | null = x509DerExpect(der, ext.start, ext.end, X509_TAG_OID)
-    if (id === null || !x509DerOidSound(der, id)) {
+    if (!x509DerExpectInto(der, ext.start, ext.end, X509_TAG_OID, id) || !x509DerOidSound(der, id)) {
       return false
     }
     const oid: u8[] = x509DerSlice(der, id.start, id.end)
@@ -1902,15 +1936,13 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
     let next: i32 = id.end
     let critical: boolean = false
     if (x509DerPeek(der, next, ext.end) === X509_TAG_BOOLEAN) {
-      const flag: X509DerElement | null = x509DerRead(der, next, ext.end)
-      if (flag === null || !x509DerIsTrue(der, flag)) {
+      if (!x509DerReadInto(der, next, ext.end, flag) || !x509DerIsTrue(der, flag)) {
         return false
       }
       critical = true
       next = flag.end
     }
-    const value: X509DerElement | null = x509DerExpect(der, next, ext.end, X509_TAG_OCTET_STRING)
-    if (value === null || value.end !== ext.end) {
+    if (!x509DerExpectInto(der, next, ext.end, X509_TAG_OCTET_STRING, value) || value.end !== ext.end) {
       return false
     }
     const read: i32 = x509ReadExtension(der, x509ExtensionArc(der, id), value.start, value.end, out)
@@ -2040,10 +2072,10 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   // primitive, 0x81 and 0x82) from v2, held to their shape and not read; [3]
   // extensions is explicit (0xa3), v3, and read into `out`.
   const trailing: i32[] = [0x81, 0x82, 0xa3]
-  for (let i: i32 = 0; i < 3; i++) {
+  const e = new X509DerElement(0, 0, 0, 0)
+  for (let i: i32 = 0; i < toI32(trailing.length); i++) {
     if (x509DerPeek(der, at, tbs.end) === trailing[i]) {
-      const e: X509DerElement | null = x509DerRead(der, at, tbs.end)
-      if (e === null || version < (i === 2 ? 2 : 1)) {
+      if (!x509DerReadInto(der, at, tbs.end, e) || version < (i === 2 ? 2 : 1)) {
         return null
       }
       if (i === 2 ? !x509ReadExtensions(der, e, out) : !x509DerBitStringSound(der, e)) {

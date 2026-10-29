@@ -205,7 +205,7 @@ struct X509GeneralSubtree (class) size=40 align=8 exported
   field mask: u8[] index=3 offset=24
   field dirName: u8[] index=4 offset=32
   constructor -> @nish.X509GeneralSubtree.constructor
-struct X509Certificate (class) size=192 align=8 exported
+struct X509Certificate (class) size=168 align=8 exported
   field der: u8[] index=0 offset=0
   field tbs: u8[] index=1 offset=8
   field serial: u8[] index=2 offset=16
@@ -215,31 +215,31 @@ struct X509Certificate (class) size=192 align=8 exported
   field signature: u8[] index=6 offset=48
   field notBefore: i64 index=7 offset=56 initialized
   field notAfter: i64 index=8 offset=64 initialized
-  field p256: boolean index=9 offset=72 initialized
-  field ecdsaSha256: boolean index=10 offset=73 initialized
-  field version: i32 index=11 offset=76 initialized
-  field sigAlg: i32 index=12 offset=80 initialized
-  field pssHash: i32 index=13 offset=84 initialized
-  field pssSaltLen: i32 index=14 offset=88 initialized
-  field keyType: i32 index=15 offset=92 initialized
-  field sanPresent: boolean index=16 offset=96 initialized
-  field sanDns: string[] index=17 offset=104
-  field sanIp: u8[][] index=18 offset=112
-  field sanOther: i32 index=19 offset=120 initialized
-  field bcPresent: boolean index=20 offset=124 initialized
-  field bcCa: boolean index=21 offset=125 initialized
-  field bcPathLen: i32 index=22 offset=128 initialized
-  field keyUsage: i32 index=23 offset=132 initialized
-  field ekuPresent: boolean index=24 offset=136 initialized
-  field ekuServerAuth: boolean index=25 offset=137 initialized
-  field ekuAny: boolean index=26 offset=138 initialized
-  field ncPresent: boolean index=27 offset=139 initialized
-  field ncPermitted: X509GeneralSubtree[] index=28 offset=144
-  field ncExcluded: X509GeneralSubtree[] index=29 offset=152
-  field ncUnsupported: boolean index=30 offset=160 initialized
-  field skid: u8[] | null index=31 offset=168 initialized
-  field akid: u8[] | null index=32 offset=176 initialized
-  field unknownCritical: boolean index=33 offset=184 initialized
+  field sanDns: string[] index=9 offset=72
+  field sanIp: u8[][] index=10 offset=80
+  field ncPermitted: X509GeneralSubtree[] index=11 offset=88
+  field ncExcluded: X509GeneralSubtree[] index=12 offset=96
+  field skid: u8[] | null index=13 offset=104 initialized
+  field akid: u8[] | null index=14 offset=112 initialized
+  field version: i32 index=15 offset=120 initialized
+  field sigAlg: i32 index=16 offset=124 initialized
+  field pssHash: i32 index=17 offset=128 initialized
+  field pssSaltLen: i32 index=18 offset=132 initialized
+  field keyType: i32 index=19 offset=136 initialized
+  field sanOther: i32 index=20 offset=140 initialized
+  field bcPathLen: i32 index=21 offset=144 initialized
+  field keyUsage: i32 index=22 offset=148 initialized
+  field p256: boolean index=23 offset=152 initialized
+  field ecdsaSha256: boolean index=24 offset=153 initialized
+  field sanPresent: boolean index=25 offset=154 initialized
+  field bcPresent: boolean index=26 offset=155 initialized
+  field bcCa: boolean index=27 offset=156 initialized
+  field ekuPresent: boolean index=28 offset=157 initialized
+  field ekuServerAuth: boolean index=29 offset=158 initialized
+  field ekuAny: boolean index=30 offset=159 initialized
+  field ncPresent: boolean index=31 offset=160 initialized
+  field ncUnsupported: boolean index=32 offset=161 initialized
+  field unknownCritical: boolean index=33 offset=162 initialized
   constructor -> @nish.X509Certificate.constructor
 struct X509DerElement (class) size=16 align=4
   field tag: i32 index=0 offset=0
@@ -257,7 +257,7 @@ function X509GeneralSubtree.constructor(this: X509GeneralSubtree): void -> @nish
   stackSites=0 stackLocals=0
 function X509Certificate.constructor(this: X509Certificate): void -> @nish.X509Certificate.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=192 writesThrough=true captured=false
+  pointer this: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function X509DerElement.constructor(this: X509DerElement, tag: i32, at: i32, start: i32, end: i32): void -> @nish.X509DerElement.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -265,17 +265,27 @@ function X509DerElement.constructor(this: X509DerElement, tag: i32, at: i32, sta
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function x509DerRead(der: u8[], at: i32, limit: i32): X509DerElement | null -> @nish.x509DerRead
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: at
-  calls: nish.X509DerElement.constructor nish_alloc_struct nish_panic_index nish_panic_overflow
-  pointer der: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at limit
+  calls: nish.X509DerElement.constructor nish.x509DerReadInto nish_alloc_struct
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerReadInto#0
   stackSites=0 stackLocals=0
-  local +0:9 tag: i32 (const)
-  local +4:7 length: i32 (let)
-  local +5:7 start: i32 (let)
-  local +7:11 count: i32 (const)
-  local +16:14 k: i32 (let)
-  callee +27:10 new X509DerElement -> @nish.X509DerElement.constructor
+  local +0:9 e: X509DerElement (const)
+  callee +0:13 new X509DerElement -> @nish.X509DerElement.constructor
+  callee +1:8 x509DerReadInto -> @nish.x509DerReadInto
+function x509DerReadInto(der: u8[], at: i32, limit: i32, into: X509DerElement): boolean -> @nish.x509DerReadInto
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: at
+  calls: nish_panic_index nish_panic_overflow
+  pointer der: size=0 writesThrough=false captured=false
+  pointer into: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -27:9 tag: i32 (const)
+  local -23:7 length: i32 (let)
+  local -22:7 start: i32 (let)
+  local -20:11 count: i32 (const)
+  local -11:14 k: i32 (let)
 function x509DerExpect(der: u8[], at: i32, limit: i32, tag: i32): X509DerElement | null -> @nish.x509DerExpect
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: at limit
@@ -284,6 +294,15 @@ function x509DerExpect(der: u8[], at: i32, limit: i32, tag: i32): X509DerElement
   stackSites=0 stackLocals=0
   local +0:9 e: X509DerElement | null (const)
   callee +0:36 x509DerRead -> @nish.x509DerRead
+function x509DerExpectInto(der: u8[], at: i32, limit: i32, tag: i32, into: X509DerElement): boolean -> @nish.x509DerExpectInto
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.x509DerReadInto
+  escaping: at limit
+  calls: nish.x509DerReadInto
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerReadInto#0
+  pointer into: size=16 writesThrough=true captured=false passedTo=nish.x509DerReadInto#3
+  stackSites=0 stackLocals=0
+  callee +0:3 x509DerReadInto -> @nish.x509DerReadInto
 function x509DerPeek(der: u8[], at: i32, limit: i32): i32 -> @nish.x509DerPeek
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -475,7 +494,7 @@ function x509DerOidSound(der: u8[], e: X509DerElement): boolean -> @nish.x509Der
   stackSites=0 stackLocals=0
   local +0:7 first: boolean (let)
   local +1:12 k: i32 (let)
-  local +2:11 b: i32 (const)
+  local +4:13 b: i32 (const)
 function x509DerIsOnlyOid(der: u8[], start: i32, end: i32, oid: u8[]): boolean -> @nish.x509DerIsOnlyOid
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: end start
@@ -904,13 +923,12 @@ function x509NameIsPrefix(base: u8[], name: u8[]): boolean -> @nish.x509NameIsPr
   callee +16:23 x509DerWhole -> @nish.x509DerWhole
   callee +16:49 x509DerWhole -> @nish.x509DerWhole
 function x509DerIa5Name(der: u8[], e: X509DerElement): boolean -> @nish.x509DerIa5Name
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer der: size=0 writesThrough=false captured=false
   pointer e: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:12 k: i32 (let)
-  local +1:11 b: i32 (const)
+  local +3:13 b: i32 (const)
 function x509DerText(der: u8[], e: X509DerElement): string -> @nish.x509DerText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_slice nish_str_new
@@ -940,15 +958,16 @@ function x509ReadSubjectAltName(der: u8[], start: i32, end: i32, out: X509Certif
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: end start
-  calls: nish.x509DerExpect nish.x509DerRead nish.x509DerSlice nish.x509DerText nish.x509GeneralNameKind nish_array_grow nish_panic_overflow
-  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerRead#0 nish.x509GeneralNameKind#0 nish.x509DerText#0 nish.x509DerSlice#0
-  pointer out: size=192 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -13:9 seq: X509DerElement | null (const)
-  callee -13:38 x509DerExpect -> @nish.x509DerExpect
-  local -9:7 at: i32 (let)
-  local -7:11 name: X509DerElement | null (const)
-  callee -7:41 x509DerRead -> @nish.x509DerRead
+  calls: nish.X509DerElement.constructor nish.x509DerExpect nish.x509DerReadInto nish.x509DerSlice nish.x509DerText nish.x509GeneralNameKind nish_array_grow nish_panic_overflow
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerReadInto#0 nish.x509GeneralNameKind#0 nish.x509DerText#0 nish.x509DerSlice#0
+  pointer out: size=168 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local -14:9 seq: X509DerElement | null (const)
+  callee -14:38 x509DerExpect -> @nish.x509DerExpect
+  local -9:9 name: X509DerElement (const)
+  callee -9:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -8:7 at: i32 (let)
+  callee -6:10 x509DerReadInto -> @nish.x509DerReadInto
   local -3:11 kind: i32 (const)
   callee -3:23 x509GeneralNameKind -> @nish.x509GeneralNameKind
   local -2:11 length: i32 (const)
@@ -976,7 +995,7 @@ function x509ReadBasicConstraints(der: u8[], start: i32, end: i32, out: X509Cert
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerIsTrue nish.x509DerNonNegative nish.x509DerPeek nish.x509DerRead nish_arena_mark nish_arena_release
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerIsTrue#0 nish.x509DerRead#0 nish.x509DerNonNegative#0
-  pointer out: size=192 writesThrough=true captured=false
+  pointer out: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -10:9 seq: X509DerElement | null (const)
   callee -10:38 x509DerExpect -> @nish.x509DerExpect
@@ -994,7 +1013,7 @@ function x509ReadKeyUsage(der: u8[], start: i32, end: i32, out: X509Certificate)
   escaping: end start
   calls: nish.x509DerBitStringSound nish.x509DerExpect nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerBitStringSound#0
-  pointer out: size=192 writesThrough=true captured=false
+  pointer out: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -26:9 bits: X509DerElement | null (const)
   callee -26:39 x509DerExpect -> @nish.x509DerExpect
@@ -1012,7 +1031,7 @@ function x509ReadExtKeyUsage(der: u8[], start: i32, end: i32, out: X509Certifica
   escaping: end start
   calls: nish.x509DerContentsAre nish.x509DerExpect nish.x509DerOidSound nish.x509OidAnyEku nish.x509OidServerAuth nish_arena_mark nish_arena_release
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerOidSound#0 nish.x509DerContentsAre#0 nish.x509DerContentsAre#0
-  pointer out: size=192 writesThrough=true captured=false
+  pointer out: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -13:9 seq: X509DerElement | null (const)
   callee -13:38 x509DerExpect -> @nish.x509DerExpect
@@ -1045,17 +1064,23 @@ function x509DerBoundSound(der: u8[], e: X509DerElement): boolean -> @nish.x509D
 function x509ReadSubtrees(der: u8[], e: X509DerElement, into: X509GeneralSubtree[], out: X509Certificate): boolean -> @nish.x509ReadSubtrees
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.X509GeneralSubtree.constructor nish.x509DerBoundSound nish.x509DerExpect nish.x509DerPeek nish.x509DerRead nish.x509DerSlice nish.x509DerText nish.x509GeneralNameKind nish.x509MaskContiguous nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
-  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerRead#0 nish.x509GeneralNameKind#0 nish.x509DerText#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerBoundSound#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerBoundSound#0
+  calls: nish.X509DerElement.constructor nish.X509GeneralSubtree.constructor nish.x509DerBoundSound nish.x509DerExpectInto nish.x509DerPeek nish.x509DerReadInto nish.x509DerSlice nish.x509DerText nish.x509GeneralNameKind nish.x509MaskContiguous nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpectInto#0 nish.x509DerReadInto#0 nish.x509GeneralNameKind#0 nish.x509DerText#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerBoundSound#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerBoundSound#0
   pointer e: size=16 writesThrough=false captured=false
   pointer into: size=0 writesThrough=true captured=false
-  pointer out: size=192 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -27:7 at: i32 (let)
-  local -25:11 tree: X509DerElement | null (const)
-  callee -25:41 x509DerExpect -> @nish.x509DerExpect
-  local -21:11 base: X509DerElement | null (const)
-  callee -21:41 x509DerRead -> @nish.x509DerRead
+  pointer out: size=168 writesThrough=true captured=false
+  stackSites=4 stackLocals=4
+  local -29:9 tree: X509DerElement (const)
+  callee -29:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -28:9 base: X509DerElement (const)
+  callee -28:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -27:9 minimum: X509DerElement (const)
+  callee -27:19 new X509DerElement -> @nish.X509DerElement.constructor
+  local -26:9 maximum: X509DerElement (const)
+  callee -26:19 new X509DerElement -> @nish.X509DerElement.constructor
+  local -25:7 at: i32 (let)
+  callee -23:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -20:10 x509DerReadInto -> @nish.x509DerReadInto
   local -17:11 subtree: X509GeneralSubtree (const)
   callee -17:21 new X509GeneralSubtree -> @nish.X509GeneralSubtree.constructor
   callee -16:20 x509GeneralNameKind -> @nish.x509GeneralNameKind
@@ -1067,20 +1092,18 @@ function x509ReadSubtrees(der: u8[], e: X509DerElement, into: X509GeneralSubtree
   callee -2:25 x509DerSlice -> @nish.x509DerSlice
   local +4:9 bound: i32 (let)
   callee +5:9 x509DerPeek -> @nish.x509DerPeek
-  local +6:13 minimum: X509DerElement | null (const)
-  callee +6:46 x509DerRead -> @nish.x509DerRead
-  callee +9:10 x509DerBoundSound -> @nish.x509DerBoundSound
-  callee +17:9 x509DerPeek -> @nish.x509DerPeek
-  local +18:13 maximum: X509DerElement | null (const)
-  callee +18:46 x509DerRead -> @nish.x509DerRead
-  callee +19:32 x509DerBoundSound -> @nish.x509DerBoundSound
+  callee +7:10 x509DerReadInto -> @nish.x509DerReadInto
+  callee +8:10 x509DerBoundSound -> @nish.x509DerBoundSound
+  callee +16:9 x509DerPeek -> @nish.x509DerPeek
+  callee +17:12 x509DerReadInto -> @nish.x509DerReadInto
+  callee +17:63 x509DerBoundSound -> @nish.x509DerBoundSound
 function x509ReadNameConstraints(der: u8[], start: i32, end: i32, out: X509Certificate): boolean -> @nish.x509ReadNameConstraints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerPeek nish.x509DerRead nish.x509ReadSubtrees
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509ReadSubtrees#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509ReadSubtrees#0
-  pointer out: size=192 writesThrough=true captured=false passedTo=nish.x509ReadSubtrees#3 nish.x509ReadSubtrees#3
+  pointer out: size=168 writesThrough=true captured=false passedTo=nish.x509ReadSubtrees#3 nish.x509ReadSubtrees#3
   stackSites=0 stackLocals=0
   local -19:9 seq: X509DerElement | null (const)
   callee -19:38 x509DerExpect -> @nish.x509DerExpect
@@ -1099,7 +1122,7 @@ function x509ReadSubjectKeyId(der: u8[], start: i32, end: i32, out: X509Certific
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerSlice
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerSlice#0
-  pointer out: size=192 writesThrough=true captured=false
+  pointer out: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:9 id: X509DerElement | null (const)
   callee -4:37 x509DerExpect -> @nish.x509DerExpect
@@ -1120,7 +1143,7 @@ function x509ReadAuthorityKeyId(der: u8[], start: i32, end: i32, out: X509Certif
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerIntegerMinimal nish.x509DerPeek nish.x509DerRead nish.x509DerSlice nish.x509GeneralNamesSound
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerExpect#0 nish.x509GeneralNamesSound#0 nish.x509DerIntegerMinimal#0
-  pointer out: size=192 writesThrough=true captured=false
+  pointer out: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -10:9 seq: X509DerElement | null (const)
   callee -10:38 x509DerExpect -> @nish.x509DerExpect
@@ -1142,7 +1165,7 @@ function x509ReadExtension(der: u8[], ce: i32, start: i32, end: i32, out: X509Ce
   escaping: end start
   calls: nish.x509ReadAuthorityKeyId nish.x509ReadBasicConstraints nish.x509ReadExtKeyUsage nish.x509ReadKeyUsage nish.x509ReadNameConstraints nish.x509ReadSubjectAltName nish.x509ReadSubjectKeyId
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509ReadSubjectAltName#0 nish.x509ReadBasicConstraints#0 nish.x509ReadKeyUsage#0 nish.x509ReadExtKeyUsage#0 nish.x509ReadNameConstraints#0 nish.x509ReadSubjectKeyId#0 nish.x509ReadAuthorityKeyId#0
-  pointer out: size=192 writesThrough=true captured=false passedTo=nish.x509ReadSubjectAltName#3 nish.x509ReadBasicConstraints#3 nish.x509ReadKeyUsage#3 nish.x509ReadExtKeyUsage#3 nish.x509ReadNameConstraints#3 nish.x509ReadSubjectKeyId#3 nish.x509ReadAuthorityKeyId#3
+  pointer out: size=168 writesThrough=true captured=false passedTo=nish.x509ReadSubjectAltName#3 nish.x509ReadBasicConstraints#3 nish.x509ReadKeyUsage#3 nish.x509ReadExtKeyUsage#3 nish.x509ReadNameConstraints#3 nish.x509ReadSubjectKeyId#3 nish.x509ReadAuthorityKeyId#3
   stackSites=0 stackLocals=0
   local +0:7 sound: boolean (let)
   callee +2:13 x509ReadSubjectAltName -> @nish.x509ReadSubjectAltName
@@ -1162,41 +1185,45 @@ function x509ExtensionArc(der: u8[], id: X509DerElement): i32 -> @nish.x509Exten
 function x509ReadExtensions(der: u8[], e: X509DerElement, out: X509Certificate): boolean -> @nish.x509ReadExtensions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.x509BytesEqual nish.x509DerExpect nish.x509DerIsTrue nish.x509DerOidSound nish.x509DerPeek nish.x509DerRead nish.x509DerSlice nish.x509ExtensionArc nish.x509ReadExtension nish_array_grow
-  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerOidSound#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerIsTrue#0 nish.x509DerExpect#0 nish.x509ReadExtension#0 nish.x509ExtensionArc#0
+  calls: nish.X509DerElement.constructor nish.x509BytesEqual nish.x509DerExpect nish.x509DerExpectInto nish.x509DerIsTrue nish.x509DerOidSound nish.x509DerPeek nish.x509DerReadInto nish.x509DerSlice nish.x509ExtensionArc nish.x509ReadExtension nish_array_grow
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpectInto#0 nish.x509DerExpectInto#0 nish.x509DerOidSound#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerIsTrue#0 nish.x509DerExpectInto#0 nish.x509ReadExtension#0 nish.x509ExtensionArc#0
   pointer e: size=16 writesThrough=false captured=false
-  pointer out: size=192 writesThrough=true captured=false passedTo=nish.x509ReadExtension#4
-  stackSites=1 stackLocals=1
-  local -43:9 seq: X509DerElement | null (const)
-  callee -43:38 x509DerExpect -> @nish.x509DerExpect
-  local -37:9 seen: u8[][] (const)
-  local -36:7 at: i32 (let)
-  local -34:11 ext: X509DerElement | null (const)
-  callee -34:40 x509DerExpect -> @nish.x509DerExpect
-  local -30:11 id: X509DerElement | null (const)
-  callee -30:39 x509DerExpect -> @nish.x509DerExpect
-  callee -29:25 x509DerOidSound -> @nish.x509DerOidSound
-  local -26:11 oid: u8[] (const)
-  callee -26:23 x509DerSlice -> @nish.x509DerSlice
-  local -25:16 other: u8[] (const)
-  callee -24:11 x509BytesEqual -> @nish.x509BytesEqual
-  local -19:9 next: i32 (let)
-  local -18:9 critical: boolean (let)
-  callee -17:9 x509DerPeek -> @nish.x509DerPeek
-  local -16:13 flag: X509DerElement | null (const)
-  callee -16:43 x509DerRead -> @nish.x509DerRead
-  callee -15:29 x509DerIsTrue -> @nish.x509DerIsTrue
-  local -9:11 value: X509DerElement | null (const)
-  callee -9:42 x509DerExpect -> @nish.x509DerExpect
+  pointer out: size=168 writesThrough=true captured=false passedTo=nish.x509ReadExtension#4
+  stackSites=5 stackLocals=5
+  local -44:9 seq: X509DerElement | null (const)
+  callee -44:38 x509DerExpect -> @nish.x509DerExpect
+  local -38:9 seen: u8[][] (const)
+  local -36:9 ext: X509DerElement (const)
+  callee -36:15 new X509DerElement -> @nish.X509DerElement.constructor
+  local -35:9 id: X509DerElement (const)
+  callee -35:14 new X509DerElement -> @nish.X509DerElement.constructor
+  local -34:9 flag: X509DerElement (const)
+  callee -34:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -33:9 value: X509DerElement (const)
+  callee -33:17 new X509DerElement -> @nish.X509DerElement.constructor
+  local -32:7 at: i32 (let)
+  callee -30:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -27:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -27:75 x509DerOidSound -> @nish.x509DerOidSound
+  local -24:11 oid: u8[] (const)
+  callee -24:23 x509DerSlice -> @nish.x509DerSlice
+  local -23:16 other: u8[] (const)
+  callee -22:11 x509BytesEqual -> @nish.x509BytesEqual
+  local -17:9 next: i32 (let)
+  local -16:9 critical: boolean (let)
+  callee -15:9 x509DerPeek -> @nish.x509DerPeek
+  callee -14:12 x509DerReadInto -> @nish.x509DerReadInto
+  callee -14:58 x509DerIsTrue -> @nish.x509DerIsTrue
+  callee -8:10 x509DerExpectInto -> @nish.x509DerExpectInto
   local -5:11 read: i32 (const)
   callee -5:23 x509ReadExtension -> @nish.x509ReadExtension
   callee -5:46 x509ExtensionArc -> @nish.x509ExtensionArc
 function x509ParseCertificate(der: u8[]): X509Certificate | null -> @nish.x509ParseCertificate [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.x509ReadExtensions
-  calls: nish.X509Certificate.constructor nish.x509BytesEqual nish.x509DerBitStringOctets nish.x509DerBitStringSound nish.x509DerExpect nish.x509DerIntegerMinimal nish.x509DerNameSound nish.x509DerPeek nish.x509DerRead nish.x509DerSlice nish.x509DerSmallInteger nish.x509DerTime nish.x509DerWhole nish.x509KeyType nish.x509ReadExtensions nish.x509SignatureAlgorithm nish_alloc_struct nish_panic_index
-  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerBitStringOctets#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerRead#0 nish.x509DerSmallInteger#0 nish.x509DerExpect#0 nish.x509DerIntegerMinimal#0 nish.x509DerExpect#0 nish.x509DerWhole#0 nish.x509DerWhole#0 nish.x509DerExpect#0 nish.x509DerNameSound#0 nish.x509DerExpect#0 nish.x509DerRead#0 nish.x509DerRead#0 nish.x509DerExpect#0 nish.x509DerNameSound#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerBitStringOctets#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509ReadExtensions#0 nish.x509DerBitStringSound#0 nish.x509DerTime#0 nish.x509DerTime#0 nish.x509SignatureAlgorithm#0 nish.x509KeyType#0 nish.x509DerSlice#0 nish.x509DerWhole#0 nish.x509DerSlice#0 nish.x509DerWhole#0 nish.x509DerWhole#0
-  stackSites=1 stackLocals=1
+  calls: nish.X509Certificate.constructor nish.X509DerElement.constructor nish.x509BytesEqual nish.x509DerBitStringOctets nish.x509DerBitStringSound nish.x509DerExpect nish.x509DerIntegerMinimal nish.x509DerNameSound nish.x509DerPeek nish.x509DerRead nish.x509DerReadInto nish.x509DerSlice nish.x509DerSmallInteger nish.x509DerTime nish.x509DerWhole nish.x509KeyType nish.x509ReadExtensions nish.x509SignatureAlgorithm nish_alloc_struct
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerBitStringOctets#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerRead#0 nish.x509DerSmallInteger#0 nish.x509DerExpect#0 nish.x509DerIntegerMinimal#0 nish.x509DerExpect#0 nish.x509DerWhole#0 nish.x509DerWhole#0 nish.x509DerExpect#0 nish.x509DerNameSound#0 nish.x509DerExpect#0 nish.x509DerRead#0 nish.x509DerRead#0 nish.x509DerExpect#0 nish.x509DerNameSound#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerBitStringOctets#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509ReadExtensions#0 nish.x509DerBitStringSound#0 nish.x509DerTime#0 nish.x509DerTime#0 nish.x509SignatureAlgorithm#0 nish.x509KeyType#0 nish.x509DerSlice#0 nish.x509DerWhole#0 nish.x509DerSlice#0 nish.x509DerWhole#0 nish.x509DerWhole#0
+  stackSites=2 stackLocals=2
   local +0:9 total: i32 (const)
   local +1:9 cert: X509DerElement | null (const)
   callee +1:39 x509DerExpect -> @nish.x509DerExpect
@@ -1247,10 +1274,11 @@ function x509ParseCertificate(der: u8[]): X509Certificate | null -> @nish.x509Pa
   local +83:9 out: X509Certificate (const)
   callee +83:15 new X509Certificate -> @nish.X509Certificate.constructor
   local +88:9 trailing: i32[] (const)
-  local +89:12 i: i32 (let)
-  callee +90:9 x509DerPeek -> @nish.x509DerPeek
-  local +91:13 e: X509DerElement | null (const)
-  callee +91:40 x509DerRead -> @nish.x509DerRead
+  local +89:9 e: X509DerElement (const)
+  callee +89:13 new X509DerElement -> @nish.X509DerElement.constructor
+  local +90:12 i: i32 (let)
+  callee +91:9 x509DerPeek -> @nish.x509DerPeek
+  callee +92:12 x509DerReadInto -> @nish.x509DerReadInto
   callee +95:22 x509ReadExtensions -> @nish.x509ReadExtensions
   callee +95:57 x509DerBitStringSound -> @nish.x509DerBitStringSound
   local +105:9 before: i64 (const)
@@ -1281,8 +1309,8 @@ function x509VerifySignature(cert: X509Certificate, issuer: X509Certificate): bo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256VerifySha256
   calls: nish.p256VerifySha256 nish.x509DerSignatureRS
-  pointer cert: size=192 writesThrough=false captured=false
-  pointer issuer: size=192 writesThrough=false captured=false
+  pointer cert: size=168 writesThrough=false captured=false
+  pointer issuer: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 rs: u8[] | null (const)
   callee +0:27 x509DerSignatureRS -> @nish.x509DerSignatureRS
