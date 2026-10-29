@@ -1,0 +1,2 @@
+# <kernel> <size> <iterations> <checksum>, written by `node bench/crypto/run.mjs --validate --write-expected`.
+p384-verify 64 3 01d33223

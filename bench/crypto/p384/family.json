@@ -1,0 +1,12 @@
+{
+  "title": "P-384 ECDSA verification",
+  "kernels": [{ "name": "p384-verify", "sizes": [64], "unit": "op/s" }],
+  "twins": {
+    "openssl": "not written yet: this family measures nish/crypto/p384 against node:crypto, which is OpenSSL's libcrypto",
+    "go": "not written yet: this family measures nish/crypto/p384 against node:crypto",
+    "rust": "not written yet: this family measures nish/crypto/p384 against node:crypto",
+    "node": {
+      "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off"
+    }
+  }
+}
