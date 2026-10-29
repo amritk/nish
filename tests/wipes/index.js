@@ -56,7 +56,10 @@ const optimisedBodies = (group, nish, root, dir) => {
     if (!group.modules.test(fs.readFileSync(ll, "utf8"))) {
       continue
     }
-    const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+    const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    })
     if (o.status !== 0) {
       failure += o.stderr
       continue

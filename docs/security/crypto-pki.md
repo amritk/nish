@@ -1,13 +1,16 @@
-# Security record: PKI trust anchors
+# Security record: PKI trust anchors and path validation
 
-The record of `nish/crypto/pki-roots` (#987, toward #480): where a program's
-root certificates come from, what the loader does with a file it cannot use,
-and what it bounds. It is written with the code rather than after an audit,
-so that the audit starts from evidence. Chain building and path validation
-are not here; they are later stages of #987.
+The record of two modules of #987, toward #480. `nish/crypto/pki-roots`:
+where a program's root certificates come from, what the loader does with a
+file it cannot use, and what it bounds (PKI-R1 to PKI-R7). `nish/crypto/pki`:
+whether the chain a TLS server sent leads to one of those roots and names the
+host dialled, and what one call may cost ([Path validation](#path-validation-nishcryptopki),
+PKI-1 to PKI-16). Both are written with the code rather than after an audit,
+so that the audit starts from evidence.
 
-Anchors are function names in `std/crypto/pki-roots.ts` on the head that
-merges this record, whose base is `2cdef4fa`.
+Anchors are function names: in `std/crypto/pki-roots.ts` on the head that
+merged its half, whose base is `2cdef4fa`, and in `std/crypto/pki.ts` on the
+head that merges the path validator, whose base is `351a9a8f`.
 
 **Result.** The loader reads the roots `SSL_CERT_FILE` and `SSL_CERT_DIR`
 name, or else the first system bundle and `/etc/ssl/certs`, and gives them
@@ -27,15 +30,22 @@ Accepted and not counted:
 
 | File | Functions |
 | --- | --- |
+| `std/crypto/pki.ts` | `pkiVerifyServer`, `pkiMatchHostname`, `pkiVerifySignature`, `pkiTrustStore`, `pkiReason`, `PkiTrustStore`, `PkiResult`, and every private helper: `PkiSearch`, `pkiExtend`, `pkiCandidate`, `pkiNote`, `pkiLeafCode`, `pkiIntermediateCode`, `pkiTimeCode`, `pkiConstraintsCode`, `pkiSelfIssued`, `pkiDirAllowed`, `pkiIpAllowed`, `pkiIpWithin`, `pkiDnsAllowed`, `pkiSubtreeRoot`, `pkiDnsWithin`, `pkiCheckSignature`, `pkiSignatureCode`, `pkiEcdsaCode`, `pkiRsaCode`, `pkiHostDns`, `pkiDnsMatch`, `pkiParseIp`, `pkiParseIpv6`, `pkiParseIpv4`, `pkiHexDigit`, `pkiDigit`, `pkiLabelCount`, `pkiValidDns`, `pkiStripDot`, `pkiFoldEqualAt`, `pkiLower`, `pkiHex`, `pkiBytesEqual` |
 | `std/crypto/pki-roots.ts` | `pkiLoadSystemRoots`, `pkiLoadRootsFor`, `pkiLoadRoots`, `pkiSystemBundles`, `pkiRootsDirEntry`, `PkiRoots`; `PkiRootsLoad`, `pkiRootsKeep`, `pkiRootsBlock`, `pkiRootsSplit`, `pkiRootsRegular`, `pkiRootsFile`, `pkiRootsDir`, `pkiRootsSplitDirs`, `pkiRootsIsDigit`, `pkiRootsIsHex` |
 
 Out of scope:
 
-- The DER, PEM and certificate parsers it calls, `pemToDer` and
-  `x509ParseCertificate`. They are in [crypto-x509.md](crypto-x509.md).
-- Whether a root is fit to anchor a chain: its validity period, its
-  constraints, and whether it is a CA at all. That is the path validator's
-  question, in a later stage.
+- The DER, PEM and certificate parsers both modules call, `pemToDer`,
+  `x509ParseCertificate`, `x509NameEqual` and `x509NameIsPrefix`. They are in
+  [crypto-x509.md](crypto-x509.md). What the path validator takes from them —
+  every extension field it reads — is the parser's answer, so a parser that
+  answers more than the bytes say moves a decision here; X509-10 is that
+  parser's record of it.
+- The verifiers the path validator calls: `p256Verify`, `p384Verify`,
+  `ed25519Verify`, `sha256` and `sha384`, each in its own record.
+- Whether a root is fit to anchor a chain is not the loader's question. It is
+  not the path validator's either: a root is a name and a key, and its own
+  validity period, extensions and constraints are not read (PKI-4, PKI-18).
 - The `nish:fs` and `nish:process` builtins the module calls. They are in
   [runtime.md](runtime.md).
 
@@ -299,3 +309,437 @@ Reading the Keychain needs Security.framework, which the runtime does not
 link. Closing this gap is a separate stage. Until then, a macOS program that
 must honour the machine's trust settings sets `SSL_CERT_FILE` to an export it
 keeps current. The gap is also in the module's user-guide row.
+
+## Path validation (`nish/crypto/pki`)
+
+**Result.** `pkiVerifyServer` accepts a chain only when a path runs from the
+leaf to a root of the store with these properties:
+
+- every signature on it verifies, under an algorithm the module offers;
+- every certificate below the root is valid at the instant given;
+- every intermediate is a v3 CA that may sign certificates for a server;
+- the path keeps every pathLenConstraint and name constraint on it;
+- no certificate on it below the root carries a critical extension the
+  parser does not know;
+- the leaf names the host in its subjectAltName.
+
+Each refusal has a reason code of its own (PKI-14). Each cost an attacker can
+raise has a named bound, and passing a bound is a refusal, never a slow
+answer (PKI-1). Nothing was found to fix. Open, and counted:
+
+- PKI-17 (Medium): no revocation;
+- PKI-18 (Medium): a root's own name constraints are not applied;
+- PKI-19 (Low): certificate policies are not processed;
+- PKI-20 (Low): Names are compared byte for byte, not folded as RFC 5280
+  §7.1 says. This fails closed.
+
+### Threat model
+
+**A network attacker chooses the whole chain.** Anyone on the path to the
+server, or the server itself, decides every byte of every certificate that
+`chain` holds: how many there are, their order, their names and extensions,
+their signatures, and how they point at one another. The attacker does not
+hold the private key of any root in the store, nor of any CA that a root
+signed for and that has kept its key. The store and the clock are the
+caller's, and are trusted. A win is any of these:
+
+- an accepted chain whose leaf the attacker could sign, for a host the
+  attacker does not hold, or one that breaks a constraint some CA on the path
+  set;
+- a panic, a loop, or time or memory out of proportion to the bounds;
+- a reason code other than the one that names the defect. This is the
+  weakest win, since it misleads an operator but trusts nothing.
+
+The attacker may also be a CA that a root signed for, and may then sign
+whatever it likes. Its name constraints, path length and extended key usage
+are what limit it, and those are in scope.
+
+### Bounds
+
+Each is an exported constant, so a caller can see the limit it is held to.
+
+| Bound | Value | Refused as |
+| --- | --- | --- |
+| `PKI_MAX_CHAIN_CERTS`, certificates in `chain` | 128 | `PKI_ERR_CHAIN_TOO_LONG` |
+| `PKI_MAX_CHAIN_BYTES`, bytes in `chain` | 1 MiB | `PKI_ERR_CHAIN_TOO_LONG` |
+| `PKI_MAX_PATH`, certificates in a path, the leaf and the root counted | 8 | `PKI_ERR_CHAIN_TOO_LONG` |
+| `PKI_MAX_NAMES`, dNSName and iPAddress SANs of one certificate | 1024 | `PKI_ERR_BUDGET` |
+| `PKI_MAX_SUBTREES`, permitted and excluded subtrees of one certificate | 256 | `PKI_ERR_BUDGET` |
+| `PKI_MAX_SIGNATURES`, signatures checked by one call | 64 | `PKI_ERR_BUDGET` |
+| `PKI_MAX_NAME_CHECKS`, name-against-subtree comparisons by one call | 250,000 | `PKI_ERR_BUDGET` |
+| `PKI_MIN_RSA_BITS`, an RSA key's modulus | 2048 | `PKI_ERR_WEAK_KEY` |
+
+The search is depth first, and every candidate it tries costs a signature,
+except one refused by a cheaper check. So `PKI_MAX_SIGNATURES` bounds the work
+of the search, however the pool is arranged. A pool of n certificates that
+all name one another could otherwise make the search try up to n! orderings.
+The size of a name constraint check is the number of names below the issuer
+times its subtrees. Without a budget that is up to 1024 × 256 per issuer.
+The cost is charged before the check runs, so it can never be exceeded.
+
+### Choices left to the implementer
+
+RFC 5280 leaves these to the implementer, or validators answer them
+differently; the x509-limbo suite has cases for several. Each entry is this
+module's answer.
+
+- **The leaf may not be a CA.** A leaf with `cA` TRUE is refused as
+  `PKI_ERR_NOT_CA`. A CA key serving TLS directly is a misissuance, and
+  refusing it costs no correct server anything.
+- **`anyExtendedKeyUsage` on an intermediate** stands for serverAuth. On the
+  leaf it does not: a leaf needs serverAuth itself, or no EKU at all.
+- **An iPAddress subtree of the other family never holds an address.** An
+  IPv4 address under IPv6-only permitted subtrees is outside them, and an
+  IPv6 subtree never excludes an IPv4 address.
+- **The root is a name and a key.** Its validity period, basicConstraints,
+  keyUsage, EKU and name constraints are not read. RFC 5280 §6.1.1 makes
+  this the default. PKI-18 is the cost of that choice.
+- **A pathLenConstraint is read only on a CA.** The parser keeps it whatever
+  `cA` says, but `pkiIntermediateCode` reads it only after requiring `cA`
+  TRUE, and the leaf's is never read.
+- **A known extension is honoured whether it is critical or not.** The
+  parser does not keep the flag, so a non-critical nameConstraints or
+  basicConstraints binds as a critical one does. That is stricter than
+  §4.2, never looser.
+- **Every name compares without ASCII case.** That covers the SANs, the host
+  and dNSName subtrees. A SAN that is not a valid DNS name, such as one with
+  an empty label, a space, a partial wildcard or a label over 63 octets,
+  never matches the host.
+- **An excluded directoryName refuses the chain**, whatever the subject. A
+  byte-exact prefix test could let a second spelling of a Name past it, and
+  refusing fails closed (PKI-20).
+- **An empty issuer names no root.** A certificate whose issuer is the empty
+  Name is never matched against the store, whose roots might have empty
+  subjects too.
+- **A key the parser cannot name is unsupported.** A P-521 root has key type
+  unknown, so a signature under it is `PKI_ERR_UNSUPPORTED_ALGORITHM` and the
+  path ends there.
+- **The common name is never read.** A host only in the subject's CN is
+  refused, as RFC 6125 §6.4.4 allows.
+
+### Method
+
+The module was written from RFC 5280 §4.2 and §6.1 and RFC 6125 §6.4. It was
+checked against those sections clause by clause, then by mutation, one
+mutant at a time: `pki.ts` was edited, the test program was rebuilt in the
+debug profile and run, and the file was then restored. A mutant is killed
+when a named check fails, the debug profile panics, or the run does not
+finish within 600 seconds. 85 mutants were run, of three forms:
+
+- 62 replace a refusal rule by its accepting form, so that the rule never
+  refuses;
+- 17 narrow or delete a rule an accepting form leaves untested: the
+  serverAuth clauses of both EKU rules, an excluded dNSName or iPAddress
+  subtree that always matches, a permitted directoryName that never does,
+  each wildcard branch of the dNSName constraint check, the empty subtree,
+  each validity bound made strict, the store's dedupe by Name rather than
+  DER, the RSA and ECDSA key-type gates, and the `PKI_MAX_NAMES` and
+  `PKI_MAX_SUBTREES` bounds moved down by one;
+- 6 change the RSA wiring: the weak-key bound, the PSS dispatch, each hash
+  mapping, and each verdict made `PKI_OK`.
+
+80 were killed, every one of the narrowing forms among them, and one,
+`int-sig`, by not finishing: without the counted signature check the
+`PKI_MAX_SIGNATURES` test's search has no budget. The other five are
+equivalent:
+
+- `cand.version !== 2` (intermediate). Extensions exist only in v3, so a v1
+  or v2 certificate already has no basicConstraints and fails `bcPresent`.
+- `!cand.bcPresent`. The parser sets `bcCa` only when the extension is
+  present, so `!bcCa` refuses everything `!bcPresent` does.
+- The host's check against dNSName subtrees in `pkiConstraintsCode`. The leaf
+  must hold the host as a SAN, and that SAN is checked against the same
+  subtrees, so the host's own check cannot refuse anything new. It is kept
+  because it states the rule.
+- `pkiValidDns`, on the SAN and on a wildcard's base, in `pkiDnsMatch`, two
+  mutants. The host is validated first, and folding changes only A to Z, so
+  a SAN that folds equal to a valid host is itself valid.
+
+Three facts have no test of their own:
+
+- the redundant loop bounds in `pkiIpWithin`, which exist for the
+  `performance` gate's range proof;
+- the exact boundaries of `PKI_MAX_SIGNATURES` and `PKI_MAX_NAME_CHECKS`.
+  Each is tested past its bound, not at it;
+- that a self-issued CA's SANs are checked against name constraints. Only
+  its directoryName check is skipped.
+
+The fixtures are made by OpenSSL. The commands are in the header of
+`tests/link/crypto_pki/fixtures.ts`. The f64 twin
+`tests/link/crypto_pki_f64` runs the same suites in the other number mode.
+
+### Findings
+
+Tests are named by their exact check strings: the program's in
+`tests/link/crypto_pki/expected.out`, and the harness's in `tests/run.js`.
+
+#### PKI-1: the work of one call is bounded
+
+Every bound in [the table](#bounds) is checked before the work it limits,
+and each is tested past the bound. The size bounds are also tested at it.
+
+Tests:
+
+- `PKI_MAX_CHAIN_CERTS certificates`, `one more`, `PKI_MAX_CHAIN_BYTES bytes`
+  and `one byte more`
+- `a path of PKI_MAX_PATH certificates` and `a path past PKI_MAX_PATH`
+- `a leaf of PKI_MAX_NAMES names` and `a leaf of more names`
+- `an intermediate of PKI_MAX_SUBTREES subtrees` and
+  `an intermediate of more subtrees`
+- `more signatures than PKI_MAX_SIGNATURES` and
+  `more name comparisons than PKI_MAX_NAME_CHECKS`
+
+#### PKI-2: a chain that does not parse is refused whole
+
+An empty chain, or any certificate that `x509ParseCertificate` refuses, is
+`PKI_ERR_MALFORMED`. This holds even when that certificate would not be on
+the path.
+
+Tests: `an empty chain`, `a leaf that is no certificate` and
+`an intermediate that is no certificate`.
+
+#### PKI-3: the path is built from what was sent, in any order
+
+The pool is searched in the order sent, with extras allowed. A candidate's
+subjectKeyIdentifier must equal the child's authorityKeyIdentifier when both
+are present. A certificate is never twice in a path, so a cross-signed loop
+ends.
+
+Tests:
+
+- `P-256 leaf, P-384 intermediate, P-384 root`,
+  `the path is leaf, intermediate, root` and `the path ends at the root`
+- `out of order, with extra certificates` and `the extras are not in the path`
+- `RSA, out of order, with extra certificates` and
+  `the RSA extras are not in the path`
+- `two intermediates`
+- `an intermediate whose key identifier is another's`
+- `a cross-signed loop`
+
+#### PKI-4: a path ends only at a root of the store
+
+A root sent in the chain is trusted only because the store holds it. The
+store keeps each root once, by its DER.
+
+Tests: `a root not in the store`, `no intermediate`,
+`the root sent, the intermediate not`, `an empty issuer names no root`,
+`a self-signed CA sent in the chain is no root`,
+`a root given twice is kept once` and `two roots of one Name are both kept`.
+
+#### PKI-5: every signature on the path is checked
+
+That includes the root's signature over the first certificate below it.
+
+Tests:
+
+- `an intermediate of another key`, `a tampered leaf signature` and
+  `a tampered Ed25519 signature`
+- `an Ed25519 root signs the leaf`
+- `pkiVerifySignature: the root signed the intermediate`,
+  `pkiVerifySignature: Ed25519`, `pkiVerifySignature: P-256`,
+  `pkiVerifySignature: not the root's signature` and
+  `pkiVerifySignature: not a tampered P-256 signature`
+
+#### PKI-6: only the offered algorithms, each under its own key type
+
+ECDSA is accepted with SHA-256 or SHA-384 under P-256 or P-384, and Ed25519
+under an Ed25519 key. SHA-1, an unknown algorithm, and an algorithm the
+issuer's key cannot make are `PKI_ERR_UNSUPPORTED_ALGORITHM`. RSA is accepted
+as PKCS#1 v1.5 with SHA-256, SHA-384 or SHA-512, or as RSASSA-PSS with the
+hash and salt length the certificate names, under an RSA key only.
+`pkiRsaCode` hands the key to `nish/crypto/rsa`, which refuses a modulus
+outside 1,024 to 8,192 bits as a bad signature, and then refuses a modulus
+under `PKI_MIN_RSA_BITS` (2048) as `PKI_ERR_WEAK_KEY`, before any signature
+is checked. A 1,024-bit RSA root is therefore refused for its size, not
+trusted for being in the store. The record of `nish/crypto/rsa`
+([crypto-rsa.md](crypto-rsa.md)) covers the verification itself.
+
+Tests:
+
+- `SHA-1`, `pkiVerifySignature: SHA-1 is refused`,
+  `an Ed25519 signature under a P-256 key` and
+  `an ECDSA signature under an Ed25519 key`
+- `an RSA signature under a P-256 key`
+- `RSA leaf, intermediate and root, PKCS#1 v1.5`, `an RSA-PSS intermediate`,
+  `RSA with SHA-384`, `RSA with SHA-512` and `pkiVerifySignature: RSA-PSS`
+- `an RSA key under PKI_MIN_RSA_BITS`, `a tampered RSA signature`,
+  `a tampered RSA-PSS signature` and
+  `pkiVerifySignature: not the RSA root's signature`
+
+#### PKI-7: every certificate below the root is valid now
+
+A certificate is valid from its notBefore to its notAfter, both included.
+
+Tests:
+
+- `an expired leaf`, `a leaf not yet valid`, `an expired intermediate` and
+  `an intermediate not yet valid`
+- `valid at notBefore`, `valid at notAfter`, `a millisecond before notBefore`
+  and `a millisecond after notAfter`
+
+#### PKI-8: an issuer is a v3 CA, and the leaf is not
+
+Tests: `an intermediate with CA:FALSE`,
+`an intermediate without basicConstraints` and `a CA as the leaf`.
+
+#### PKI-9: pathLenConstraint counts the CAs below, not self-issued ones
+
+Per §6.1.4 (h) and (l), a self-issued intermediate does not count, and
+neither does the leaf.
+
+Tests: `pathLen 0 above the leaf`, `pathLen 0 does not count a self-issued CA`
+and `pathLen 0 above another CA`.
+
+#### PKI-10: key usage and extended key usage
+
+An intermediate with keyUsage needs keyCertSign. A leaf with keyUsage needs
+digitalSignature. When either carries an EKU, it must allow serverAuth,
+with `anyExtendedKeyUsage` accepted on an intermediate only.
+
+Tests:
+
+- `an intermediate without keyCertSign` and `a leaf without digitalSignature`
+- `an intermediate for clientAuth only`, `a leaf for clientAuth only`,
+  `serverAuth on an intermediate`, `anyExtendedKeyUsage on an intermediate`
+  and `a leaf for anyExtendedKeyUsage only`
+
+#### PKI-11: an unknown critical extension refuses its certificate
+
+Tests: `an unknown critical extension, intermediate` and
+`an unknown critical extension, leaf`.
+
+#### PKI-12: name constraints bind every name below their CA
+
+Every intermediate's constraints are checked against the host and every
+certificate below it: each dNSName and iPAddress SAN, and each subject, by
+directoryName. The checks are made per issuer, so permitted subtrees narrow
+down the path and excluded ones add up. A self-issued certificate's subject
+is not checked, except the leaf's, per §6.1.3 (b). Its SANs are. A subtree of
+a form the module does not check, such as rfc822Name, URI or otherName, or
+one with a minimum or maximum other than the default, refuses the chain.
+
+A dNSName subtree holds its own name and every name below it, by whole
+labels. A subtree of `.` holds every name. A wildcard SAN holds every name
+one label below its base, so it is outside a permitted subtree that holds
+only some of them. It is inside an excluded subtree that holds its base,
+such as `org` for `*.example.org`, and inside one anywhere below its base:
+`www.example.org`, which is one of its names, and also `a.www.example.org`,
+which none of its names is. Refusing the deeper case is stricter than the
+RFC asks, and fails closed.
+
+Tests:
+
+- `name constraints the leaf meets`, `name constraints, by address` and
+  `excluded dNSName and iPAddress subtrees the leaf misses`
+- `a wildcard at a permitted subtree`, `a wildcard over a permitted subtree`
+  `a wildcard over an excluded subtree` and `a wildcard below an excluded
+  subtree`
+- `a dNSName subtree of . permits every name` and
+  `a dNSName subtree of . excludes every name`
+- `a directoryName constraint skips a self-issued CA` and
+  `a leaf without a subject, under a directoryName constraint`
+- `an excluded dNSName`, `a dNSName not permitted` and
+  `a name that only ends in a permitted one`
+- `an rfc822Name subtree`
+- `an excluded directoryName`, `a subject not permitted` and
+  `a self-issued leaf outside a permitted subject`
+- `an iPAddress not permitted`, `an excluded iPAddress` and
+  `an IPv4 address under IPv6 subtrees`
+
+#### PKI-13: the host is matched as RFC 6125 §6.4 says
+
+DNS names match without case and with one trailing dot. A wildcard is only
+the whole leftmost label, stands for exactly one label, and needs at least
+two labels after it. Addresses are compared as octets, against iPAddress
+SANs only. An IPv4-mapped IPv6 address is not its IPv4 address. Both the
+host and the SAN must be valid names: labels of 1 to 63 octets, 253 octets
+in all, and letters, digits, hyphens and underscores.
+
+Tests: every check of the `pki hostnames` suite:
+
+- `the name`, `without case`, `with a trailing dot`, `not two trailing dots`,
+  `not a name below it` and `not a name above it`
+- `a wildcard's one label`, `a wildcard without case`,
+  `not a wildcard's two labels` and `not a wildcard's base`
+- `not an empty label`, `not an empty host`, `not a space` and
+  `not a wildcard host`
+- `an IPv4 address`, `not another address`, `not a leading zero`,
+  `not three octets` and `not an octet over 255`
+- `an IPv6 address`, `in brackets`, `spelt out`, `not another IPv6 address`,
+  `not two gaps`, `not nine groups` and `not a group of five digits`
+- `an address names no dNSName`, `an IPv4 address in IPv6` and
+  `not the IPv4 address it maps`
+- `a dNSName in capitals`, `a dNSName with a trailing dot`, `not *.com`,
+  `not a partial wildcard`, `not a wildcard inside`,
+  `not an invalid dNSName`, `not a dNSName with a space` and `an underscore`
+- `not a label of 64`, `a label of 63`, `a name of 253 octets` and
+  `not a name of 254 octets`
+
+Tests through `pkiVerifyServer`: `another host`,
+`a name only in the common name`, `a wildcard name`, `an IPv4 address` and
+`an IPv6 address`.
+
+#### PKI-14: the reason is the nearest attempt's
+
+When no path is accepted, the code returned is that of the attempt that got
+nearest a root. An attempt that reached a root beats any that did not. A
+longer attempt beats a shorter one, and among attempts of the same length
+the first found wins. Every code has a sentence of its own in `pkiReason`.
+
+Tests: `the nearest attempt's reason`, `the first of two as near`,
+`the nearer of two`, `a root's reason before a longer path's`,
+`every code has a sentence of its own` and `an unknown code has one too`.
+
+#### PKI-15: a wasm32 build compiles
+
+The module reads no file and calls no operating system, so it compiles for
+wasm32. A wasm program must bring its own roots, since `pki-roots` is refused
+there (PKI-R4).
+
+Test: `crypto_pki: a wasm32 build importing nish/crypto/pki without pki-roots compiles`.
+
+#### PKI-16: the same answers in either number mode
+
+Every length, index and count is `i32`, and every time is `i64`, in both
+modes.
+
+Tests: `link/crypto_pki: exits with 0 and stdout matches expected.out` and
+`link/crypto_pki_f64: exits with 0 and stdout matches expected.out`.
+
+### Open
+
+#### PKI-17 (Medium): revocation is not checked
+
+The module reads no CRL, no OCSP response, no stapled OCSP and no Signed
+Certificate Timestamp. A leaf or intermediate whose key was stolen and
+revoked is accepted until it expires. Closing this needs a stapled-OCSP
+check from the TLS stage, or a CRL set, such as CRLite, shipped with the
+roots. Until then a caller that must honour revocation checks the path it is
+given.
+
+#### PKI-18 (Medium): a root's own name constraints are not applied
+
+A root is a name and a key, so name constraints in a root certificate do not
+bind the chains under it. Some national and enterprise roots are distributed
+with name constraints for exactly this reason. Under this module such a root
+may issue for any name. RFC 5914's TrustAnchorInfo constraints, and Apple's
+and Mozilla's per-root restrictions (PKI-R7), are not applied either. A
+caller trusting such a root keeps it out of a general store.
+
+#### PKI-19 (Low): certificate policies are not processed
+
+§6.1's policy tree, inhibitAnyPolicy, policyConstraints and policyMappings
+are not computed, and the extensions are honoured only as far as the parser
+refuses an unknown critical one. The web PKI's browsers do not process them
+either. This is Low because a policy can only narrow what a path is for,
+never widen what the module accepts.
+
+#### PKI-20 (Low): Names are compared byte for byte
+
+The issuer is matched against a subject, and a permitted directoryName
+against a subject, by DER, not by RFC 5280 §7.1's folding (crypto-x509.md,
+X509-12). Two spellings of one Name, such as PrintableString and UTF8String,
+or different case or spacing, do not match. A chain that a folding validator
+would build is refused as `PKI_ERR_UNTRUSTED` or
+`PKI_ERR_NAME_CONSTRAINTS`, and excluded directoryNames refuse the chain
+outright. Every difference fails closed.
