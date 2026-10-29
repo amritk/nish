@@ -19708,24 +19708,23 @@ function tlsConnectWith(addr: u8[], config: TlsClientConfig, trust: TlsClientTru
   stackSites=1 stackLocals=1
   local +0:9 client: TlsTcpClient (const)
   callee +0:32 new TlsTcpClient -> @nish.TlsTcpClient.constructor
-  local +1:9 loop: i32 (const)
-  callee +1:21 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
-  callee +3:9 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
-  callee +5:7 TlsTcpClient.close -> @nish.TlsTcpClient.close
-  local +9:9 end: i64 (const)
-  local +10:9 ready: i32[] (const)
-  local +11:7 wants: i32 (let)
-  callee +11:20 TlsTcpClient.interest -> @nish.TlsTcpClient.interest
-  callee +12:17 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
-  callee +13:11 TlsTcpClient.open -> @nish.TlsTcpClient.open
-  local +14:11 now: i64 (const)
-  local +19:11 count: i32 (const)
-  local +29:13 events: i32 (const)
-  callee +30:54 TlsTcpClient.readable -> @nish.TlsTcpClient.readable
-  callee +30:74 TlsTcpClient.writable -> @nish.TlsTcpClient.writable
-  callee +32:26 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
-  callee +37:8 TlsTcpClient.open -> @nish.TlsTcpClient.open
-  callee +38:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
+  callee +1:7 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
+  local +4:9 loop: i32 (const)
+  callee +7:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
+  local +10:9 end: i64 (const)
+  local +11:9 ready: i32[] (const)
+  local +12:7 wants: i32 (let)
+  callee +12:20 TlsTcpClient.interest -> @nish.TlsTcpClient.interest
+  callee +13:17 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
+  callee +14:11 TlsTcpClient.open -> @nish.TlsTcpClient.open
+  local +15:11 now: i64 (const)
+  local +20:11 count: i32 (const)
+  local +30:13 events: i32 (const)
+  callee +31:54 TlsTcpClient.readable -> @nish.TlsTcpClient.readable
+  callee +31:74 TlsTcpClient.writable -> @nish.TlsTcpClient.writable
+  callee +33:26 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
+  callee +38:8 TlsTcpClient.open -> @nish.TlsTcpClient.open
+  callee +39:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
 module std/net/tls/client.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import expose from "nish:secret" -> generic function expose

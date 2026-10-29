@@ -61,7 +61,9 @@ Once open, `read`, `write`, `keyUpdate`, `shutdown` and `close` answer as the
 `nish:net` calls do, and `interest()`, `readable()` and `writable()` let the
 client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
 config, trust, timeoutMs)` takes a whole `TlsClientConfig` (to offer P-256,
-say) and the roots to trust. `new TlsTcpClient(addr, config, trust)` starts
+say) and the roots to trust; `tlsConnect` reads the system's roots on every
+call, so a program that connects often reads them once and passes them here.
+`new TlsTcpClient(addr, config, trust)` starts
 the same connection without blocking, for a loop you already run.
 
 **The server is always checked, and for now always refused.** The roots are

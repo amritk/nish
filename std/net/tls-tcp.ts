@@ -970,7 +970,9 @@ export class TlsTcpClient {
  * looked up: to reach a name, resolve it first with `nish/net/dns`'s
  * `resolveHost`; the name the certificate must carry is always `serverName`,
  * never one taken from `addr`. The open client's socket is
- * in no loop: the program adds it to its own.
+ * in no loop: the program adds it to its own. The roots are read on every
+ * call; a program that connects often reads them once with
+ * `tlsClientSystemTrust` and passes them to `tlsConnectWith`.
  */
 export const tlsConnect = (addr: u8[], serverName: string, alpn: string[], timeoutMs: i32): TlsTcpClient =>
   tlsConnectWith(addr, new TlsClientConfig(serverName, alpn), tlsClientSystemTrust(), timeoutMs)
@@ -983,12 +985,13 @@ export const tlsConnectWith = (
   timeoutMs: i32
 ): TlsTcpClient => {
   const client: TlsTcpClient = new TlsTcpClient(addr, config, trust)
-  const loop: i32 = client.fd() < 0 ? -1 : pollCreate()
+  if (client.fd() < 0) {
+    return client
+  }
+  const loop: i32 = pollCreate()
   if (loop < 0) {
-    if (client.fd() >= 0) {
-      client.connectError = loop
-      client.close()
-    }
+    client.connectError = loop
+    client.close()
     return client
   }
   const end: i64 = monotonicNanos() + toI64(timeoutMs) * TLS_TCP_NANOS_PER_MS
