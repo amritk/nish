@@ -1,0 +1,5 @@
+unlink: 0
+gone: true
+missing: -2
+directory refused: true
+directory kept: true

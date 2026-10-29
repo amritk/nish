@@ -35,6 +35,7 @@ export declare function log(x: unknown): void;
 export declare function error(x: unknown): void;
 export declare function write(s: string): void;
 export declare function writeError(s: string): void;
+export declare function writeBytes(bytes: readonly u8[], off: i32, len: i32): i32;
 export declare function panic(message: string): never;
 export declare function exit(code: i32): never;
 export declare function argv(): string[];
@@ -43,6 +44,9 @@ export declare function readFileSyncOrNull(path: string): string | null;
 export declare function readFileBytesSync(path: string): u8[] | null;
 export declare function writeFileSync(path: string, data: string): void;
 export declare function appendFileSync(path: string, data: string): void;
+export declare function writeFileBytesSync(path: string, bytes: readonly u8[]): i32;
+export declare function renameSync(from: string, to: string): i32;
+export declare function unlinkSync(path: string): i32;
 export declare function mkdirSync(path: string): boolean;
 export declare function isDirectorySync(path: string): boolean;
 export declare function readdirSync(path: string): string[] | null;
@@ -69,6 +73,9 @@ export declare function spawn(argv: string[]): i32;
 export declare function waitPid(pid: i32, flags: i32): i32[];
 export declare function signalFd(): i32;
 export declare function readSignal(fd: i32): i32;
+/** These two have no reading under Node: each throws, naming itself. */
+export declare function setNice(n: i32): i32;
+export declare function setIdlePriority(): i32;
 /** What each `nish:net` function is under the core: a throw naming `name`. */
 export declare function noNetReading(name: string): never;
 /** What `readStdin`, `waitStdin`, `setRawMode` and `setTerminalRestore` are under the core: a throw naming `name`. */

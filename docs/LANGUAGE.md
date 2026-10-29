@@ -2164,7 +2164,7 @@ and their `.ll` goldens are byte-identical files.
   `` Module `nish/toml` is not part of the standard library (it has:
   collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
   crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256,
-  crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
+  crypto/pki-roots, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
   testing, text, threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
@@ -2209,8 +2209,10 @@ and their `.ll` goldens are byte-identical files.
   one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
   `ct` (constant-time compare), `base64url`, `x25519`, `ed25519` (Ed25519
   signatures), `chacha20poly1305` (ChaCha20-Poly1305), `aes` (AES-128 and
-  AES-256 with GCM), `p256` (P-256 ECDSA) and `x509` (DER, PEM and
-  self-signed P-256 certificates) (`tests/link/crypto_base64url` is the case
+  AES-256 with GCM), `p256` (P-256 ECDSA), `p384` (P-384 ECDSA
+  verification), `x509` (DER, PEM and
+  self-signed P-256 certificates) and `pki-roots` (the trust anchors from
+  `SSL_CERT_FILE`, `SSL_CERT_DIR` or the system bundle; native only) (`tests/link/crypto_base64url` is the case
   that resolves a nested specifier). Each is ordinary Nish source under the
   rules above, and a byte string is a `u8[]`. They are written branch-free on
   secret data, and WP34 N6's disassembly check (`tests/ct-asm.js`) verifies
@@ -6374,9 +6376,9 @@ and `io_nish_import_global` and comparing the two bodies.
 
 | Module | Exports |
 | --- | --- |
-| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
-| `nish:io` | `write`, `writeError`, `panic` |
+| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
@@ -6428,6 +6430,7 @@ import { write } from "nish:io";
 | `console.error(x): void` | the same, on **stderr** — the stream a compiler's diagnostics belong on (WP14 B2). Identical rules and identical messages under its own name | write | `io_streams`; `reject_console_error_type` |
 | `write(s: string): void` | `s` to stdout with **no** trailing newline and no conversion (a `string` only); statement position | write | `io_streams` |
 | `writeError(s: string): void` | the same, on stderr | write | `io_streams` |
+| `writeBytes(bytes: readonly u8[], off: i32, len: i32): i32` | the bytes of `bytes[off..off+len)` to stdout, as they are, with no conversion: the one way to send bytes that are not text, a byte of `0x80` or above or a zero byte included. A loop of `write(2)` sends them all, retried on an interrupted call; the answer is `len`, or a **negative errno** if the stream refuses them (`-9` EBADF on a closed descriptor), never a panic; a pipe whose reader has gone raises SIGPIPE natively, as it does for `write`, where Node answers `-32` EPIPE. `off` and `len` are `netWrite`'s buffer range, checked once after the arguments are evaluated: `0 <= off`, `0 <= len`, `off + len <= bytes.length`, anything else **panics** with `slice out of range: [off, off+len) of length n` and exits 1 (a `slice` site). The shape is `netWrite`'s with the descriptor fixed at 1. No capability, as for `write`. A `wasm32` build has no stdout to reach and refuses it. Under Node the range is the same check and the bytes go to `fs.writeSync(1, …)` | write | `io_write_bytes`, `io_write_bytes_bounds`; `reject_write_bytes_arity`, `reject_write_bytes_type` (NL2268), `reject_write_bytes_wasm` |
 | `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it. It is how a program ends on an unmet invariant now that `throw` is gone (WP14 D1, WP16) | write | `io_streams`; `reject_panic_value` |
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
@@ -7194,6 +7197,25 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061), `reject_bytes_read_type` (NL2268) |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position. A symbolic link as the last component of `path` is refused (`nish: cannot write <path>`), where Node follows it | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position. A symbolic link as the last component is refused, as for `writeFileSync` | write | `io_files` |
+| `writeFileBytesSync(path: string, bytes: readonly u8[]): i32` | create/truncate (`0644`) and write the array's bytes, as they are: `readFileBytesSync`'s other half. A symbolic link as the last component is refused, as for `writeFileSync`. Where `writeFileSync` exits, this **answers**: `bytes.length` written, or a negative errno (`-2` ENOENT for a missing directory, `-13` EACCES, `-21` EISDIR, `-40` ELOOP for the refused link, `-22` EINVAL for a NUL in `path`), never a panic, so a program can report the failure and carry on | write | `io_write_file_bytes`, `io_write_bytes`; `reject_write_file_bytes_arity`, `reject_write_file_bytes_type` (NL2268), `reject_write_file_bytes_wasm` |
+| `renameSync(from: string, to: string): i32` | `rename(2)`: `from` takes the name `to`, replacing a file already there in one step, so a reader sees the old file or the new one and never neither — write a temporary next to the target, then rename it over. `0`, or a negative errno: `-2` ENOENT for a missing `from`, `-18` **EXDEV** when the two are on different filesystems (nothing is copied: write the temporary in the target's directory), `-21` EISDIR or `-20` ENOTDIR for a file against a directory, `-22` EINVAL for a NUL in either path. Never a panic | write | `io_rename`, `caps_fs_replace`; `reject_rename_arity`, `reject_rename_type`, `reject_rename_wasm` |
+| `unlinkSync(path: string): i32` | `unlink(2)`: removes the name, and a symbolic link itself rather than what it names. `0`, or a negative errno: `-2` ENOENT for a missing path, and a **directory is refused** with `-21` EISDIR on Linux or `-1` EPERM where the kernel answers so — there is no fallback to `rmdir`. `-22` EINVAL for a NUL in `path`. Never a panic | write | `io_unlink`, `caps_fs_replace`; `reject_unlink_arity`, `reject_unlink_type`, `reject_unlink_wasm` |
+
+The three that answer an `i32` answer the same numbers under Node:
+`runtime/nish.mjs` turns the error Node throws into `-errno` from its `code`
+(`ERR_INVALID_ARG_VALUE`, Node's refusal of a NUL in a path, is `-22`).
+
+**Bytes out, and the string route.** A native string is `{len, bytes}`,
+never validated as UTF-8, and `write`, `writeError`, `writeFileSync` and
+`appendFileSync` send its `len` bytes as they are, so a string built by
+`String.fromBytes` from any bytes, all 256 values included, leaves exactly
+as it came in (`tests/cases/io_write_bytes`, compared with
+`io_write_bytes.bin` byte for byte). That route is native-only. Under the
+prelude (`runtime/nish.mjs`) `String.fromBytes` makes each byte one UTF-16
+unit, which leaves as UTF-8, so a byte above 127 becomes two; under
+`--emit-ts` the bytes decode as UTF-8 and a byte that is not UTF-8 becomes
+U+FFFD. `writeBytes` and `writeFileBytesSync` send a `u8[]` as it is on
+every host, and are the route for bytes that are not text.
 
 Paths are relative to the working directory. `readFileSync`,
 `readFileSyncOrNull` and `readFileBytesSync` treat a file longer than
@@ -7434,6 +7456,38 @@ the two can differ); and `totalMemory` is `os.totalmem()`, a `bigint` as every
 itself, on the event loop, so a synchronous wait has nothing to find, and the
 prelude's versions throw, naming themselves, rather than answer (the `os_`
 block of `tests/run.js`).
+
+### Scheduling: `setNice`, `setIdlePriority`
+
+How much of the CPU the program asks for: a batch job or a background indexer
+steps aside for the interactive work on the machine. Both are C in
+`runtime/runtime-os.c`, and each is exported by `nish:process` as well as
+being a global.
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `setNice(n: i32): i32` | set the **nice value** to `n` with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. The kernel clamps `n` to -20..19, so no value is out of range; lowering the value below the current one needs the privilege to, and is -13 (EACCES) without it on Linux and Darwin. Children started afterwards inherit the value | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
+| `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)`, which runs it only when nothing else wants the CPU, and answer 0 or a negative errno. **Linux only**: Darwin has no such policy and the answer there is -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback (`setNice(19)`, or a deadline) for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
+
+**Per thread.** Linux keeps both the nice value and the policy per thread: a
+call sets the calling thread's and every thread started after it. So both
+belong at the top of `main`, before a `scope()` or a parallel loop starts the
+pool, and a task or a parallel body that calls one is refused as any shared
+write is (`reject_os_nice_task`). Neither ever crashes the program: a failure
+is only the answer.
+
+**Capabilities.** Both carry `process.spawn`, the label `kill` carries: neither
+reaches another process, but the priority is the one the program's children
+inherit, and a step down cannot always be taken back.
+
+**On wasm.** A `wasm32` target schedules nothing of the host's, so both are
+refused by the checker with the N3 rule's words (NL2404;
+`reject_os_nice_wasm`, `reject_os_idle_wasm`).
+
+**The TypeScript reading.** Both are **class C** under `runtime/nish.mjs`:
+Node has `os.setPriority` but no `SCHED_IDLE`, and a reading of one without
+the other would differ from the native build on the same host, so both throw,
+naming themselves.
 
 ### `nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop
 
@@ -7914,7 +7968,7 @@ bytes — natively and under WASI, and expect the same lines from both.
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
 | `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
-| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2). `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
+| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Natively the string's bytes are the array's, so `write` or `writeFileSync` sends any bytes back out unchanged ([File I/O](#file-io), `io_write_bytes`). Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2); under `--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to U+FFFD. Bytes that are not text go out through `writeBytes` and `writeFileBytesSync`, which agree on every host. `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
 and a code-point index would need a decode per access (`codePointLength` in
@@ -9020,14 +9074,14 @@ policy](#the-capability-policy); without one, the set is a report.
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
-| `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`) |
+| `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
-Everything else is none: printing (`console.*`, `write`, `writeError`),
+Everything else is none: printing (`console.*`, `write`, `writeError`, `writeBytes`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,
 `Math.*` other than `random`, the conversions, the constant-time builtins, `secureZero`, the
 string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
@@ -10323,7 +10377,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | --- | --- | --- |
 | `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
 | `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
-| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`) |
+| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
 | `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). A `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not a site |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
