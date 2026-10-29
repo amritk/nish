@@ -16,9 +16,9 @@ wait has a deadline, and `totalTimeoutMs` bounds a whole fetch, so a server
 that drips its body cannot hold one forever. A body is capped by
 `maxBodyBytes` and by what `readAll` is asked for. A redirect is followed only
 when asked, never from https to http, and to another origin only when asked
-too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. Two
-findings were fixed while the module was written (HF-1 and HF-4, Low); two
-are open (HF-2 and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
+too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. Four
+findings were fixed while the module was written (HF-1, HF-4, HF-5 and HF-6,
+Low); two are open (HF-2 and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
 server's chain is checked under the caller's roots, or the system's, at the
 wall clock's time and for the URL's host before a byte of the request is
 sent; no root to trust is a refusal before any connection; there is no switch
@@ -70,6 +70,8 @@ for the end of a body.
 | HF-1 | Low | `std/net/http-client.ts` (`HttpClient.readBody`) | A reader whose body had ended answered the client's latest error, not its own: once a later fetch failed, a body already read to its end answered that failure on its next `read`, so a program could take a whole body for a failed one, and a failed one could answer 0 after a later success. | **Fixed** before the module shipped: the client keeps the body's own failure in `bodyError`, set where that body fails and cleared when the next one opens. Before, `a body read to its end answers 0 again` failed; after, it passes. |
 | HF-2 | Low | `std/net/http-client.ts` (`HttpClient.fetch`) | With `crossOriginRedirects` set, a hop to another origin drops `Authorization`, `Proxy-Authorization`, `Cookie` and `Host`, but a credential the caller sends under another name (`X-Api-Key`, `Private-Token`) goes on to the new origin. | **Open, accepted.** The client cannot know which of a caller's fields is a secret. The option is off by default, and the guide says to leave it off for a request that carries a credential in a field of its own. |
 | HF-4 | Low | `std/net/http-client.ts` (`httpFetch`) | `httpFetch` closed its client only when the fetch failed. After a success its connection stayed open, over https without a `close_notify`, until the process exited, and nothing could reach the client to close it: a CLI looping over `httpFetch` held a socket for every fetch, and the server never learned the session ended cleanly. | **Fixed** before the module shipped: `httpFetch`'s client is marked `once` and `release` closes it whole when its body ends, fails, or is refused past `readAll`'s limit. Before, `and once its body is read, it ends the connection with a close_notify` (in `net_http_fetch_tls`) failed; after, it passes. |
+| HF-5 | Low | `std/net/http-client.ts` (`HttpClient.send`) | A `Proxy-Authorization` the caller set went to the origin whenever the request did not go through an http proxy: fetched directly, or inside a CONNECT tunnel, whose CONNECT carries only the proxy URL's own userinfo. The proxy's credentials reached a server that has no use for them. | **Fixed** before the module shipped: `send` drops the caller's `Proxy-Authorization` unless the request goes to an http proxy. Before, `a caller's Proxy-Authorization never goes to an origin fetched directly` failed; after, it passes. |
+| HF-6 | Low | `std/net/http-client.ts` (`HttpClient.drop`) | A body whose client closed it before its end (`close()` on a cancel path, or any drop that keeps the generation) answered 0 on its next `read`, so `readAll` took the bytes read so far for the whole body. A stale reader also overwrote the client's error with its own, losing the later fetch's failure before the program reported it. | **Fixed** before the module shipped: `drop` sets the open body's `bodyError` to `HTTP_E_IO`, and a stale reader answers `-HTTP_E_IO` without touching the client. Before, `a body its client closed before its end answers an error, never 0` and `a stale body's read leaves the later fetch's error in place` failed; after, they pass. |
 | HF-3 | Low | `std/net/http-client.ts` (`HttpClient.fetch`, `send`, `dial`) | Each fetch makes its field arrays, its response, the response's copies of the parser's fields, the lookup's address arrays and its error text afresh, so they stay in the arena until the program resets it, as HC-1 records for the parser beneath. Bounded for each fetch by `maxRedirects + 1` heads of `HTTP_CLIENT_MAX_HEADERS` fields within the parser's caps. | **Open, accepted for now.** A long-running program fetches inside an arena it resets; a per-connection arena closes it with HC-1. |
 
 ## Fuzzing
@@ -97,7 +99,8 @@ is not a token`); a URL that is not absolute http or https is `HTTP_E_URL`
 (`an ftp URL is HTTP_E_URL`, `and so is a relative one`). The request line is
 origin-form, and `Host` comes from the URL unless the caller gives one (`the
 request line is origin-form, and Host comes first from the URL`, `a caller's
-Host is sent in place of the URL's`). A body goes with its `Content-Length`
+Host is sent in place of the URL's`); its `Proxy-Authorization` goes only to
+an http proxy (HF-5). A body goes with its `Content-Length`
 (`a POST body goes with its Content-Length`, `an empty body sends
 Content-Length: 0, and no body sends none`).
 
@@ -139,6 +142,8 @@ connection`); a fetch while a body is unread closes the connection, and the
 old reader answers an error rather than the next response's bytes (`a body
 left unread answers an error once the next fetch starts`, `and the next fetch
 went on a new connection`); a body read to its end answers 0 again (HF-1). A
+stale reader leaves the later fetch's error alone, and a body its client
+closed early answers an error (HF-6). A
 kept connection the server closed is retried once for a GET and never for a
 POST (`a GET on it is sent again on a fresh connection`, `a POST on it is not
 sent twice: it fails with HTTP_E_IO`). A response that says `Connection:

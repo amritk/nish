@@ -41,7 +41,9 @@ the response's head is in: `status`, `reason`, the `url` that answered and
 `readAll(limit)` answers it whole, or null past `limit` or on a failure, and
 `read(buf, off, n)` answers the next bytes as they arrive, 0 at the end and a
 negative code on a failure, for a stream you want as it comes. Once the body
-ends or fails, `httpFetch` closes its connection; read it to the end. A request
+ends or fails, `httpFetch` closes its connection; read it to the end, or, when
+you only want the status, close it with `res.body.client.close()`, since an
+unread body holds its socket open until the program exits. A request
 carries a body when you set `req.body`, with its `Content-Length` sent for
 you. A header value holding a line break, or a method that is not a token, is
 refused before a byte is sent.
@@ -109,7 +111,9 @@ and 302 after a POST; 307 and 308 keep both.
 upper-case names), unless `useEnvProxy` is off; `client.setProxies` sets them
 directly. `HTTP_PROXY` is ignored when the program runs as a CGI script,
 where a request's `Proxy:` header arrives under that name. Only an `http://`
-proxy is used; an https request goes through it in a `CONNECT` tunnel.
+proxy is used; an https request goes through it in a `CONNECT` tunnel. The
+proxy's user name and password come from its URL; a `Proxy-Authorization`
+you set yourself goes only to an http proxy, never to the server.
 
 **https** is TLS 1.3, and the server's certificate is always checked: its
 chain must end at a root you trust, it must be valid now by the wall clock,
