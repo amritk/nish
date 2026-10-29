@@ -23966,6 +23966,8 @@ declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #3
 declare noundef i64 @nish_cpu_count() #2
 declare noundef i64 @nish_cpu_online() #2
 declare noundef i64 @nish_total_memory() #2
+declare noundef i32 @nish_set_nice(i32 noundef) #2
+declare noundef i32 @nish_set_idle_priority() #2
 declare i32 @nish_aes_hw() #9
 declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2
