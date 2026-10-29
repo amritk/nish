@@ -196,7 +196,7 @@ Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-reco
 | `tls-record` | `TlsRecordReader` and `TlsRecordProtection` under the clear state and each of the three suites with RFC 8448's or a synthetic secret: raw bytes in chunks, or a script the writer seals (KeyUpdate included), checking `next()` against `tlsRecordLength` and what `open` answers | 395,065 (16 KiB buffers and a key install per input make it the slowest target) |
 | `tls-server-flight` | The client's readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`) at the offset and trim the first bytes choose, checking every window lies inside the input; and `TlsClient` fed a server's flight in chunks the input sizes, at the levels it chooses, checking a refusal is an alert and leaves the client failed | not yet run under libFuzzer; CI's fuzz smoke replays its 12-seed corpus |
 
-Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
+`tls-client-hello` and `tls-record` each ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding; `tls-server-flight`, added with the client, came later and has had only CI's replay. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
 ## Properties verified
 
@@ -867,10 +867,30 @@ answered once, with the cookie echoed and the transcript restarted with
 `message_hash`; SNI reaches the server; a KeyUpdate the client asks for is
 answered, the sequence numbers reset, and the server's own is followed.
 
+**The ClientHello offers what this page says, and no more.**
+`net_tls_client_refusals` reads the first ClientHello back field by field:
+`legacy_version` 0x0303, the random, a 32-byte session id, the three suites
+in order, null compression only, and the extensions `server_name`,
+`supported_groups`, `signature_algorithms`, ALPN, `supported_versions` and
+`key_share` in that order, each byte for byte — `supported_versions` only
+0x0304, `signature_algorithms` exactly ECDSA P-256 and P-384 then RSA-PSS
+SHA-256, -384 and -512, one share of the configured group, no cookie
+("ClientHello: …"). `server_name` is left out for an IPv4 or IPv6 literal
+(RFC 6066 §3) and ALPN when none is configured ("ClientHello to an IPv4
+literal: no server_name", "ClientHello to an IPv6 literal: no server_name",
+"ClientHello with no ALPN: no ALPN extension").
+
 **Nothing past `WAIT_AUTH` without the caller.** The client stops after
 CertificateVerify (`TLS_RECORD_AUTH` in `TlsRecordClient.interest`), hands out
 the chain, scheme, signed content and signature, and reads no Finished until
-`authenticate(true)`: `net_tls_client_refusals` holds a bad Finished at
+`authenticate(true)`. What it hands out is what a caller can check:
+`net_tls_client_refusals` finds the server's certificate as the leaf, the
+scheme `ecdsa_secp256r1_sha256`, and the content (64 spaces, the server's
+context string, a zero byte, the transcript hash) under which the DER
+signature, read as r and s, verifies with `p256VerifySha256` under the leaf's
+key, and with one byte of the content flipped does not ("at WAIT_AUTH: the
+signature verifies under the leaf's key", "at WAIT_AUTH: not over other
+content"). It holds a bad Finished at
 `WAIT_AUTH` ("a bad Finished is held", "waits on the caller"), and
 `authenticate(false)` sends `bad_certificate` ("the caller refuses the
 chain"); `reject(alert)` sends the caller's alert ("the caller's own alert"),
@@ -879,23 +899,23 @@ chain"); `reject(alert)` sends the caller's alert ("the caller's own alert"),
 through `TlsRecordClient` the server reads the caller's alert
 (`net_tls_client_record`, "refusal: the server reads it").
 
-**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 135 checks;
+**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 189 checks;
 each case checks the alert, that the client is `FAILED`, and that a later call
 answers the same alert):
 
 | Server's flight | Alert |
 | --- | --- |
 | Extensions cut short; a message longer than the input could hold; a Certificate with no entries; a CertificateVerify cut short or with bytes after it; a NewSessionTicket with no ticket | `decode_error` |
-| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the downgrade sentinel; a secp256r1 share off the curve or compressed; an all-zero x25519 share; a retry with neither `key_share` nor `cookie`; a Certificate with a request context | `illegal_parameter` |
+| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the TLS 1.2 or TLS 1.1 downgrade sentinel; a `legacy_version` other than 0x0303; `supported_versions` selecting anything but 0x0304; non-null compression; an extension known but out of place (ALPN in the ServerHello, `key_share` in EncryptedExtensions, RFC 8446 §4.2); a secp256r1 share off the curve or compressed; an all-zero x25519 share; a retry with neither `key_share` nor `cookie`; a Certificate with a request context | `illegal_parameter` |
 | No `supported_versions` | `protocol_version` |
 | No `key_share` | `missing_extension` |
-| `server_name` acknowledged when none was sent; ALPN when none was offered; a Certificate entry with an extension | `unsupported_extension` |
+| `server_name` acknowledged when none was sent; ALPN when none was offered; an unknown extension in the ServerHello or EncryptedExtensions; a Certificate entry with an extension | `unsupported_extension` |
 | Bytes after the ServerHello at its level; a second retry; EncryptedExtensions at the Initial level; Certificate before EncryptedExtensions; a Finished first; a CertificateRequest | `unexpected_message` |
 | A retry cookie too long for the second ClientHello's extensions to hold; any message to a client already wiped | `internal_error` |
 | A bad server Finished | `decrypt_error` |
 
-**The Finished and the session id are compared in constant time**
-(`timingSafeEqualAt` in `handleFinished` and `checkHello`), and an all-zero
+**The Finished and the session id are compared with `timingSafeEqualAt`**
+(in `handleFinished` and `checkHello`; no test measures the timing), and an all-zero
 x25519 secret is `illegal_parameter` (`tlsIsZeroSecret`,
 `timingSafeEqual`; RFC 7748 §6.1; "an all-zero x25519 share"). A retry that
 changes only the cookie is answered with the same share and the cookie echoed
@@ -909,7 +929,8 @@ all-zero check (TLS-8).
 **The record layer** mirrors `TlsRecordServer`: the compatibility
 `change_cipher_spec` is sent once, and the server's is tolerated only between
 its ServerHello and its Finished, never mid-message, and counted with the
-other records that carry nothing (`idle`) (§D.4) — `net_tls_client_record`
+other records that carry nothing (`idle`) (§D.4), against the server's
+`TLS_RECORD_IDLE_LIMIT`, a cap no client test drives — `net_tls_client_record`
 refuses one before any handshake record, one mid-message and one after the
 server's Finished with `unexpected_message` ("ccs before any handshake",
 "ccs mid-message", "ccs after the server's Finished"); a KeyUpdate from the server is answered, and no more than

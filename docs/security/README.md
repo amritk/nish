@@ -141,6 +141,12 @@ the record that found it. The notes below the table name each such finding.
    TLS-1, an open connection's secrets kept in plain fields, was closed by
    #674's secret-fields stage, which made each a `Secret` field, and is
    counted as a fixed Low.
+   The client (#480) adds three Lows. TLS-8, a secp256r1 share the client
+   could not complete, was closed by `p256Ecdh` and is counted as a fixed
+   Low. TLS-7, no TLS 1.2, client certificates, 0-RTT or client-side
+   resumption, is open by design, and TLS-9, a refusal in the ServerHello's
+   own `receive` sealed under the clear state, is open; both are counted as
+   open Lows, beside the carrier's TLS-4.
 10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8, JSON-9, JSON-11 and JSON-12 (Low) are accepted, with the reason in
     their record, and are not counted, and so is JSON-14 (Low), a `JsonNumber`'s
     bytes written raw. JSON-2 is open. JSON-13 (Medium), the map keys a body
@@ -249,7 +255,8 @@ Each parser below is a libFuzzer target in `tests/fuzz/targets/` (how to
 build, run and replay one: [`tests/fuzz/README.md`](../../tests/fuzz/README.md)),
 and its record says what fuzzing found. The TLS, QUIC, HTTP/1, WebSocket,
 HPACK and X.509 targets each ran for at least 30 minutes from their seed
-corpora and found no crash, sanitizer report, timeout or OOM; CI replays every
+corpora and found no crash, sanitizer report, timeout or OOM, except
+`tls-server-flight`, which has not yet had its run; CI replays every
 corpus on each PR and runs each target for 30 minutes weekly. RT-21 was found
 building the runtime for the harness, not by a target.
 

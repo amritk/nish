@@ -50,7 +50,9 @@ ServerHello the client reads the server's encrypted flight at
 
 `TlsRecordClient` takes a started or fresh `TlsClient` and does the rest: the
 records, the keys at the right record boundaries, alerts, KeyUpdate and
-`close_notify`. Your loop asks it what it wants with `interest()`:
+`close_notify`. Your loop asks it what it wants with `interest()`, whose bits
+come from `nish/net/tls/record-server` (the server uses the same ones), except
+`TLS_RECORD_AUTH`, which `nish/net/tls/record-client` exports:
 
 - `TLS_RECORD_WANT_WRITE`: send `output[outputStart .. outputEnd)` and call
   `consume(sent)`.
@@ -60,7 +62,10 @@ records, the keys at the right record boundaries, alerts, KeyUpdate and
   server's end of stream.
 - `TLS_RECORD_AUTH`: the server's certificate and signature are waiting for
   your verdict (below).
-- `TLS_RECORD_DONE`: the connection is over; `alert` says why if it failed.
+- `TLS_RECORD_DONE`: the connection is over. If it failed (`state` is
+  `TLS_RECORD_STATE_FAILED`), `failure()` says why: the alert the client sent,
+  else the server's, else `internal_error` for a failure with no alert, such
+  as the connection cut short. `alert` holds only the one the client sent.
 
 `write(data, off, len)` sends application data once the handshake is done,
 `keyUpdate(requestPeer)` rolls the keys, and `close()` sends `close_notify`.

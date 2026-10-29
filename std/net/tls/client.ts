@@ -922,7 +922,7 @@ export class TlsClient {
   }
 
   /**
-   * The server's Finished (§4.4.4), checked in constant time against the one
+   * The server's Finished (§4.4.4), checked with `timingSafeEqualAt` against the one
    * its handshake secret gives (`decrypt_error` if it differs). Then the
    * master secret, the application and exporter secrets, and the client's
    * Finished at the Handshake level; the handshake secret is wiped.

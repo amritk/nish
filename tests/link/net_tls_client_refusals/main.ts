@@ -15,6 +15,7 @@ import {
   TLS_ALERT_UNSUPPORTED_EXTENSION,
   TLS_GROUP_SECP256R1,
   TLS_GROUP_X25519,
+  TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
 } from "nish/net/tls/codec";
 import {
   TLS_CLIENT_STATE_CONNECTED,
@@ -26,12 +27,13 @@ import {
 } from "nish/net/tls/client";
 import { tlsEarlySecret, tlsHandshakeSecretHeld } from "nish/net/tls/schedule";
 import { Secret, secret, wipe } from "nish:secret";
-import { p256Ecdh } from "nish/crypto/p256";
+import { p256Ecdh, p256VerifySha256 } from "nish/crypto/p256";
+import { x509DerSignatureRS } from "nish/crypto/x509";
 import { p256PublicKeyPlain } from "../crypto_p256/plain";
 import { secretHex } from "../net_tls_common/secrets";
 import { x25519BasePlain } from "../crypto_x25519/plain";
-import { fromHex } from "../crypto_x509/hex";
-import { leafPrivate, leafPublic, newServer, serverPrivate, signWithLeaf, tcpConfig } from "../net_tls_common/server";
+import { bytesOf, fromHex, sameBytes, toHex } from "../crypto_x509/hex";
+import { leafCertificate, leafPrivate, leafPublic, newServer, serverPrivate, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 
 const ZERO: i32 = 0;
 const SUPPORTED_VERSIONS: i32 = 0x002b;
@@ -277,6 +279,80 @@ const p256HandshakeHex = (): string => {
   return hex;
 };
 
+/** The extensions of the ClientHello `ch` begin here: after its header, version, random, session id, suites and compression. */
+const helloExtensionsAt = (ch: u8[]): i32 => {
+  let at: i32 = 4 + 2 + 32;
+  at += 1 + toI32(ch[at]);
+  at += 2 + ((toI32(ch[at]) << 8) | toI32(ch[at + 1]));
+  at += 1 + toI32(ch[at]);
+  return at + 2;
+};
+
+/** The cipher suites of the ClientHello `ch`, as sent. */
+const helloSuites = (ch: u8[]): u8[] => {
+  let at: i32 = 4 + 2 + 32;
+  at += 1 + toI32(ch[at]);
+  return part(ch, at + 2, at + 2 + ((toI32(ch[at]) << 8) | toI32(ch[at + 1])));
+};
+
+/** The compression methods of the ClientHello `ch`, their count first. */
+const helloCompression = (ch: u8[]): u8[] => {
+  const at: i32 = helloExtensionsAt(ch) - 2;
+  let from: i32 = 4 + 2 + 32;
+  from += 1 + toI32(ch[from]);
+  from += 2 + ((toI32(ch[from]) << 8) | toI32(ch[from + 1]));
+  return part(ch, from, at);
+};
+
+/** The extension types of the ClientHello `ch`, two bytes each, in order. */
+const helloTypes = (ch: u8[]): u8[] => {
+  const out: u8[] = [];
+  let at: i32 = helloExtensionsAt(ch);
+  while (at + 4 <= toI32(ch.length)) {
+    out.push(ch[at]);
+    out.push(ch[at + 1]);
+    at += 4 + ((toI32(ch[at + 2]) << 8) | toI32(ch[at + 3]));
+  }
+  return out;
+};
+
+/** The data of the ClientHello extension `type`, or null when `ch` has none. */
+const helloExt = (ch: u8[], type: i32): u8[] | null => {
+  let at: i32 = helloExtensionsAt(ch);
+  while (at + 4 <= toI32(ch.length)) {
+    const length: i32 = (toI32(ch[at + 2]) << 8) | toI32(ch[at + 3]);
+    if (((toI32(ch[at]) << 8) | toI32(ch[at + 1])) === type) {
+      return part(ch, at + 4, at + 4 + length);
+    }
+    at += 4 + length;
+  }
+  return null;
+};
+
+const helloExtHex = (ch: u8[], type: i32): string => {
+  const data: u8[] | null = helloExt(ch, type);
+  if (data === null) {
+    return "absent";
+  }
+  return toHex(data);
+};
+
+/** The first ClientHello a client with `config` sends. */
+const firstHello = (config: TlsClientConfig): u8[] => {
+  const client = new TlsClient(config, counting(1, 32), counting(0x40, 32), counting(0x60, 32));
+  client.start();
+  return client.takeOutput(TLS_LEVEL_INITIAL);
+};
+
+/** The x25519 public key of the private key `started` gives every client. */
+const clientX25519Public = (): u8[] => {
+  const pub: u8[] | null = x25519BasePlain(counting(0x40, 32));
+  if (pub === null) {
+    return [];
+  }
+  return pub;
+};
+
 /** Whether `needle` appears in `hay`. */
 const holds = (hay: u8[], needle: u8[]): boolean => {
   const n: i32 = toI32(needle.length);
@@ -313,6 +389,25 @@ export const main = (): i32 => {
   refused(t, "missing supported_versions", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, share(TLS_GROUP_X25519, serverPublic()))), TLS_ALERT_PROTOCOL_VERSION);
   c = fresh();
   refused(t, "downgrade sentinel", c, feed(c, TLS_LEVEL_INITIAL, hello(downgradeRandom(), c, AES_128, share(TLS_GROUP_X25519, serverPublic()))), TLS_ALERT_ILLEGAL_PARAMETER);
+
+  c = fresh();
+  const tls11: u8[] = downgradeRandom();
+  tls11[31] = 0x00;
+  refused(t, "TLS 1.1 downgrade sentinel", c, feed(c, TLS_LEVEL_INITIAL, hello(tls11, c, AES_128, share(TLS_GROUP_X25519, serverPublic()))), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = fresh();
+  const legacy: u8[] = hello(randomOf(0xa0), c, AES_128, good);
+  legacy[5] = 0x04;
+  refused(t, "legacy_version other than 0x0303", c, feed(c, TLS_LEVEL_INITIAL, legacy), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = fresh();
+  refused(t, "supported_versions selecting TLS 1.2", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([share(TLS_GROUP_X25519, serverPublic()), ext(SUPPORTED_VERSIONS, [0x03, 0x03])]))), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = fresh();
+  const compression: u8[] = hello(randomOf(0xa0), c, AES_128, good);
+  compression[SESSION_ID_AT + toI32(c.sessionId.length) + 2] = 0x01;
+  refused(t, "non-null compression", c, feed(c, TLS_LEVEL_INITIAL, compression), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = fresh();
+  refused(t, "an unsolicited extension in the ServerHello", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([good, ext(0x1234, [])]))), TLS_ALERT_UNSUPPORTED_EXTENSION);
+  c = fresh();
+  refused(t, "ALPN in the ServerHello", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([good, alpnOf("h2")]))), TLS_ALERT_ILLEGAL_PARAMETER);
 
   // What the server picks.
   c = fresh();
@@ -391,10 +486,66 @@ export const main = (): i32 => {
   feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, goodExts()));
   refused(t, "server_name acknowledged unsent", c, feed(c, TLS_LEVEL_HANDSHAKE, encryptedExtensions(ext(SERVER_NAME, []))), TLS_ALERT_UNSUPPORTED_EXTENSION);
   c = afterHello();
+  refused(t, "an unsolicited extension in EncryptedExtensions", c, feed(c, TLS_LEVEL_HANDSHAKE, encryptedExtensions(ext(0x1234, []))), TLS_ALERT_UNSUPPORTED_EXTENSION);
+  c = afterHello();
+  refused(t, "key_share in EncryptedExtensions", c, feed(c, TLS_LEVEL_HANDSHAKE, encryptedExtensions(share(TLS_GROUP_X25519, serverPublic()))), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = afterHello();
   refused(t, "EncryptedExtensions at the Initial level", c, feed(c, TLS_LEVEL_INITIAL, encryptedExtensions([])), TLS_ALERT_UNEXPECTED_MESSAGE);
 
+  // The ClientHello (§4.1.2): TLS 1.3 only, the three suites, the groups and
+  // one share, the client's signature schemes, ALPN, and server_name for a
+  // host name but not an IP literal (RFC 6066 §3).
+  const ch: u8[] = firstHello(new TlsClientConfig("localhost", ["h2"]));
+  t.eqI32("ClientHello: the message type", toI32(ch[0]), 1);
+  t.eqI32("ClientHello: the length is the message's", messageEnd(ch, 0), toI32(ch.length));
+  t.eqStr("ClientHello: legacy_version", toHex(part(ch, 4, 6)), "0303");
+  t.eqStr("ClientHello: the random", toHex(part(ch, 6, 38)), toHex(counting(1, 32)));
+  t.eqI32("ClientHello: a 32-byte legacy_session_id", toI32(ch[38]), 32);
+  t.eqStr("ClientHello: the suites", toHex(helloSuites(ch)), "130113021303");
+  t.eqStr("ClientHello: null compression only", toHex(helloCompression(ch)), "0100");
+  t.eqStr("ClientHello: the extensions, in order", toHex(helloTypes(ch)), "0000000a000d0010002b0033");
+  t.eqStr("ClientHello: server_name", helloExtHex(ch, SERVER_NAME), "000c0000096c6f63616c686f7374");
+  t.eqStr("ClientHello: supported_groups", helloExtHex(ch, 0x000a), "0002001d");
+  t.eqStr("ClientHello: signature_algorithms", helloExtHex(ch, 0x000d), "000a04030503080408050806");
+  t.eqStr("ClientHello: ALPN", helloExtHex(ch, ALPN), "0003026832");
+  t.eqStr("ClientHello: supported_versions", helloExtHex(ch, SUPPORTED_VERSIONS), "020304");
+  t.eqStr("ClientHello: one x25519 share", helloExtHex(ch, KEY_SHARE), "0024001d0020" + toHex(clientX25519Public()));
+  t.eqStr("ClientHello: no cookie", helloExtHex(ch, COOKIE), "absent");
+  t.eqStr("ClientHello to an IPv4 literal: no server_name", helloExtHex(firstHello(new TlsClientConfig("127.0.0.1", ["h2"])), SERVER_NAME), "absent");
+  t.eqStr("ClientHello to an IPv6 literal: no server_name", helloExtHex(firstHello(new TlsClientConfig("::1", ["h2"])), SERVER_NAME), "absent");
+  t.eqStr("ClientHello with no ALPN: no ALPN extension", helloExtHex(firstHello(new TlsClientConfig("localhost", [])), ALPN), "absent");
+  const both = new TlsClientConfig("localhost", ["h2", "http/1.1"]);
+  both.groups = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1];
+  both.shareGroup = TLS_GROUP_SECP256R1;
+  const ch2: u8[] = firstHello(both);
+  t.eqStr("ClientHello offering both groups: supported_groups", helloExtHex(ch2, 0x000a), "0004001d0017");
+  t.eqStr("ClientHello offering both groups: one P-256 share", helloExtHex(ch2, KEY_SHARE), "004500170041" + toHex(clientP256Public()));
+  t.eqStr("ClientHello with two protocols: ALPN in order", helloExtHex(ch2, ALPN), "000c02683208687474702f312e31");
+
+  // The hand-off at WAIT_AUTH: the caller gets the server's chain, its
+  // scheme, the content and the signature, and checks them itself.
+  let real = realUpTo(3);
+  t.eqI32("at WAIT_AUTH", real.client.state, TLS_CLIENT_STATE_WAIT_AUTH);
+  const chain: u8[][] = real.client.peerCertificates();
+  t.eqI32("at WAIT_AUTH: one certificate", toI32(chain.length), 1);
+  t.ok("at WAIT_AUTH: the leaf is the server's certificate", toI32(chain.length) === 1 && sameBytes(chain[0], leafCertificate()));
+  t.eqI32("at WAIT_AUTH: the scheme", real.client.verifyScheme(), TLS_SIGNATURE_ECDSA_SECP256R1_SHA256);
+  const content: u8[] = real.client.verifyContent();
+  t.eqI32("at WAIT_AUTH: the content's length", toI32(content.length), 64 + 33 + 1 + 32);
+  t.eqStr("at WAIT_AUTH: the content's prefix", toHex(part(content, 60, 98)), "20202020" + toHex(bytesOf("TLS 1.3, server CertificateVerify")) + "00");
+  const rs: u8[] | null = x509DerSignatureRS(real.client.verifySignature());
+  let raw: u8[] = [];
+  if (rs !== null) {
+    raw = rs;
+  }
+  t.eqI32("at WAIT_AUTH: the signature is DER r and s", toI32(raw.length), 64);
+  t.ok("at WAIT_AUTH: the signature verifies under the leaf's key", p256VerifySha256(leafPublic(), content, raw));
+  const flipped: u8[] = part(content, 0, toI32(content.length));
+  flipped[100] = toU8(toI32(flipped[100]) ^ 1);
+  t.ok("at WAIT_AUTH: not over other content", !p256VerifySha256(leafPublic(), flipped, raw));
+
   // Out of order and the Finished, against a real server's flight.
-  let real = new Real();
+  real = new Real();
   feed(real.client, TLS_LEVEL_INITIAL, real.serverHello);
   const eeLength: i32 = 4 + ((toI32(real.flight[1]) << 16) | (toI32(real.flight[2]) << 8) | toI32(real.flight[3]));
   const skipped: i32 = real.client.receive(TLS_LEVEL_HANDSHAKE, real.flight, eeLength, toI32(real.flight.length) - eeLength);

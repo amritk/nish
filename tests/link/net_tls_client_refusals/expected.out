@@ -16,6 +16,24 @@ PASS  missing supported_versions: keeps its alert
 PASS  downgrade sentinel
 PASS  downgrade sentinel: failed
 PASS  downgrade sentinel: keeps its alert
+PASS  TLS 1.1 downgrade sentinel
+PASS  TLS 1.1 downgrade sentinel: failed
+PASS  TLS 1.1 downgrade sentinel: keeps its alert
+PASS  legacy_version other than 0x0303
+PASS  legacy_version other than 0x0303: failed
+PASS  legacy_version other than 0x0303: keeps its alert
+PASS  supported_versions selecting TLS 1.2
+PASS  supported_versions selecting TLS 1.2: failed
+PASS  supported_versions selecting TLS 1.2: keeps its alert
+PASS  non-null compression
+PASS  non-null compression: failed
+PASS  non-null compression: keeps its alert
+PASS  an unsolicited extension in the ServerHello
+PASS  an unsolicited extension in the ServerHello: failed
+PASS  an unsolicited extension in the ServerHello: keeps its alert
+PASS  ALPN in the ServerHello
+PASS  ALPN in the ServerHello: failed
+PASS  ALPN in the ServerHello: keeps its alert
 PASS  unoffered suite
 PASS  unoffered suite: failed
 PASS  unoffered suite: keeps its alert
@@ -70,9 +88,45 @@ PASS  ALPN when none was offered: keeps its alert
 PASS  server_name acknowledged unsent
 PASS  server_name acknowledged unsent: failed
 PASS  server_name acknowledged unsent: keeps its alert
+PASS  an unsolicited extension in EncryptedExtensions
+PASS  an unsolicited extension in EncryptedExtensions: failed
+PASS  an unsolicited extension in EncryptedExtensions: keeps its alert
+PASS  key_share in EncryptedExtensions
+PASS  key_share in EncryptedExtensions: failed
+PASS  key_share in EncryptedExtensions: keeps its alert
 PASS  EncryptedExtensions at the Initial level
 PASS  EncryptedExtensions at the Initial level: failed
 PASS  EncryptedExtensions at the Initial level: keeps its alert
+PASS  ClientHello: the message type
+PASS  ClientHello: the length is the message's
+PASS  ClientHello: legacy_version
+PASS  ClientHello: the random
+PASS  ClientHello: a 32-byte legacy_session_id
+PASS  ClientHello: the suites
+PASS  ClientHello: null compression only
+PASS  ClientHello: the extensions, in order
+PASS  ClientHello: server_name
+PASS  ClientHello: supported_groups
+PASS  ClientHello: signature_algorithms
+PASS  ClientHello: ALPN
+PASS  ClientHello: supported_versions
+PASS  ClientHello: one x25519 share
+PASS  ClientHello: no cookie
+PASS  ClientHello to an IPv4 literal: no server_name
+PASS  ClientHello to an IPv6 literal: no server_name
+PASS  ClientHello with no ALPN: no ALPN extension
+PASS  ClientHello offering both groups: supported_groups
+PASS  ClientHello offering both groups: one P-256 share
+PASS  ClientHello with two protocols: ALPN in order
+PASS  at WAIT_AUTH
+PASS  at WAIT_AUTH: one certificate
+PASS  at WAIT_AUTH: the leaf is the server's certificate
+PASS  at WAIT_AUTH: the scheme
+PASS  at WAIT_AUTH: the content's length
+PASS  at WAIT_AUTH: the content's prefix
+PASS  at WAIT_AUTH: the signature is DER r and s
+PASS  at WAIT_AUTH: the signature verifies under the leaf's key
+PASS  at WAIT_AUTH: not over other content
 PASS  Certificate before EncryptedExtensions
 PASS  Certificate before EncryptedExtensions: failed
 PASS  Certificate before EncryptedExtensions: keeps its alert
@@ -133,4 +187,4 @@ PASS  a NewSessionTicket with no ticket: keeps its alert
 PASS  a wiped client
 PASS  a wiped client: failed
 PASS  a wiped client: keeps its alert
-tls client refusals: 135 passed, 0 failed, 0 skipped
+tls client refusals: 189 passed, 0 failed, 0 skipped

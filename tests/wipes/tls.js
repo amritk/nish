@@ -153,13 +153,13 @@ export const wipeChecks = [
   // (both private keys, 1 each, and both pools' twelve), `fail` 26 (`wipe`),
   // the constructor 28 (the caller's two key arrays once they are copied in,
   // 1 each, and the `fail` of a bad argument, inlined), `wipeKeys` 2 and
-  // `wipeUnpicked` 1 (`tlsClientZeroHeld` on each private key, and on the one
+  // `wipeUnpicked` 1 (`nish/net/tls`'s `tlsZeroHeld` on each private key, and on the one
   // the server did not pick), `exchangeKeys` 8 (`wipeKeys`, 2, the ECDHE
   // secret and the early secret, and the derivations under them; 9 until
   // P-256's ECDH, when a secp256r1 share took an `internal_error` path that
   // called `wipeKeys` again) and `handleFinished` 19 (the server's expected verify data and the client's
   // own, 1 each, and the derivations and pool arms under them). Deleting
-  // `tlsClientZeroHeld`'s `wipe` takes 2 from `wipeKeys`, 1 from
+  // `tlsZeroHeld`'s `wipe` takes 2 from `wipeKeys`, 1 from
   // `wipeUnpicked` and 2 from `exchangeKeys`; either Finished `secureZero`
   // takes 1 from `handleFinished`, and either of the caller's arrays 1 from
   // the constructor. The other wipes are of `Secret`s, which the holder and
@@ -170,8 +170,9 @@ export const wipeChecks = [
   // fields, both `clear`s, the three plaintext buffers, 1 each, and
   // `TlsClient.wipe`), `fail` 61 (the alert's seal, 14, and `wipe`), `abort`
   // 47, `handleAlert` 56 (`wipeRead` and `wipe`), `sealClose` 23 (the
-  // `close_notify`'s seal and `wipeWrite`), `close` 58 (`sealClose`, and on a
-  // close before the verdict `wipeRead` and `TlsClient.wipe`), `tlsClientInstallHeld` 14
+  // `close_notify`'s seal and `wipeWrite`), `close` 58 (`sealClose`, 23, and on a
+  // close before the client's Finished is sealed `wipeRead`, 9, and
+  // `TlsClient.wipe`, 26), `tlsClientInstallHeld` 14
   // (the plain copy it installs from, 1, and the keys it installs),
   // `updateReadKeys` 30 (the plain copy `tlsClientAdvanceHeld` moves on, once
   // for each hash length, and the keys it installs) and `advance` 716 (every
