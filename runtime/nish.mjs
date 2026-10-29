@@ -200,6 +200,7 @@ if (!("set" in Array.prototype)) {
 // describes. A printed reading can never match a native run: the two origins are
 // both arbitrary, and only the difference between two reads means anything.
 provide("monotonicNanos", shim.monotonicNanos);
+provide("wallClockNanos", shim.wallClockNanos);
 
 // Conversions. In f64 mode `toF64` is the identity and `toI32` is the one that
 // matters (it saturates, where a JavaScript cast would not).

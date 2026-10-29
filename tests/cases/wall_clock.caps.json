@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "entry": "wall_clock.ts",
+  "deterministic": false,
+  "capabilities": ["clock"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["clock"],
+      "modules": [
+        {
+          "path": "wall_clock.ts",
+          "capabilities": ["clock"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["clock"],
+              "witnesses": {
+                "clock": [
+                  { "function": "main", "at": "wall_clock.ts:8:17", "calls": "wallClockNanos" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "wall_clock.ts:10:15", "allowed": true },
+                { "kind": "divide", "at": "wall_clock.ts:10:30", "proven": true },
+                { "kind": "divide", "at": "wall_clock.ts:11:23", "proven": true },
+                { "kind": "oom", "at": "wall_clock.ts:12:15", "allowed": true }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
