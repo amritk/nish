@@ -39,6 +39,7 @@ import {
   NET_INT,
   NET_RANGE,
   NET_STRING,
+  netOption,
   netRangeBuffer,
   netSymbol,
 } from "./nish-modules"
@@ -1388,6 +1389,9 @@ export const emitNamespaceProperty = (emitter: Emitter, name: string): string =>
   }
   if (name === "process.arch") {
     return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_arch")}()`)
+  }
+  if (netOption(name) > 0) {
+    return `${netOption(name)}`
   }
   process.exit(internalErrorFor(`emitter: unexpected builtin property \`${name}\``, emitter.opts.json))
 }

@@ -4,6 +4,7 @@ entry: src/capabilities.ts src/nish-modules.ts src/branding.ts
 import isNetExport from "./nish-modules" -> function @isNetExport
 import isTermExport from "./nish-modules" -> function @isTermExport
 import isUnsafeExport from "./nish-modules" -> function @isUnsafeExport
+import netOption from "./nish-modules" -> function @netOption
 const CAP_NONE: i32 = -1 [exported]
 const CAP_UNLABELLED: i32 = -2 [exported]
 const CAP_CLOCK: i32 = 0
@@ -59,8 +60,9 @@ function capabilityNames(mask: i32): string[] -> @capabilityNames [exported]
 function builtinCapability(name: string): i32 -> @builtinCapability [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: isNetExport isTermExport isUnsafeExport nish_str_eq
+  calls: isNetExport isTermExport isUnsafeExport netOption nish_str_eq
   stackSites=0 stackLocals=0
-  callee +0:7 isUnsafeExport -> @isUnsafeExport
-  callee +44:7 isNetExport -> @isNetExport
-  callee +74:7 isTermExport -> @isTermExport
+  callee +0:7 netOption -> @netOption
+  callee +6:7 isUnsafeExport -> @isUnsafeExport
+  callee +50:7 isNetExport -> @isNetExport
+  callee +80:7 isTermExport -> @isTermExport

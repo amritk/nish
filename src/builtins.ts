@@ -26,6 +26,7 @@ import {
   isUnsafeExport,
   NET_STRING,
   NET_WORDS,
+  netOption,
   netSignature,
   unsafeModule,
 } from "./nish-modules"
@@ -430,6 +431,11 @@ export const checkNamespaceProperty = (
   // triple from them exactly as stage0's `src/codegen/target.ts` does.
   if (namespace === "process" && (member === "platform" || member === "arch")) {
     return T_STRING
+  }
+  // `nish:net`'s socket option ids, the one integer constants a `nish:`
+  // module exports: read as a value like `platform`, and folded to the id.
+  if (namespace === "" && netOption(member) > 0) {
+    return T_I32
   }
   if (namespace === "Date") {
     return ctx.errorType(expr, dateRefusal(`Date.${member}`))

@@ -1,0 +1,53 @@
+PASS  quoting: ambiguous strings are quoted and read back (85 cases)
+PASS  quoting: control characters and line breaks are quoted and read back (16 cases)
+PASS  quoting: near misses stay plain and read back (28 cases)
+PASS  escape: quote and backslash
+PASS  escape: newline, tab and return
+PASS  escape: other C0 controls and DEL as \x
+PASS  escape: C1 controls as \x
+PASS  escape: U+2028, U+2029, U+FEFF, U+FFFE and U+FFFF as \u
+PASS  escape: other text is kept as its bytes
+PASS  quoting: << is quoted as a key and not as a value
+PASS  every kind of value: written
+PASS  every kind of value: reads back
+PASS  a sequence of maps: written
+PASS  a sequence of maps: reads back
+PASS  a top-level null: written
+PASS  a top-level null: reads back
+PASS  a top-level number: written
+PASS  a top-level number: reads back
+PASS  a top-level plain string: written
+PASS  a top-level plain string: reads back
+PASS  a top-level ambiguous string: written
+PASS  a top-level ambiguous string: reads back
+PASS  a top-level empty array: written
+PASS  a top-level empty array: reads back
+PASS  a top-level empty object: written
+PASS  a top-level empty object: reads back
+PASS  keys keep their order: written
+PASS  keys keep their order: reads back
+PASS  a 20-digit integer reads back as an integer with its text
+PASS  1E+2 reads back as the float 100
+PASS  -0 reads back as an integer
+PASS  a key past 1024 bytes is written as an explicit key
+PASS  explicit keys read back
+PASS  explicit keys in a sequence item read back
+PASS  a quoted key's \n counts toward the 1024 bytes
+PASS  a quoted key's \u2028 counts toward the 1024 bytes
+PASS  a quoted key's \x85 counts toward the 1024 bytes
+PASS  a quoted key's \x7F counts toward the 1024 bytes
+PASS  a tree JSON_WRITER_MAX_DEPTH deep is written
+PASS  a tree JSON_WRITER_MAX_DEPTH deep reads back
+PASS  an empty array at the depth limit reads back
+PASS  a tree one deeper than the limit is refused
+PASS  stringify refuses the same tree
+PASS  an empty array one deeper than the limit is refused
+PASS  a refused tree under a key refuses the whole text
+PASS  a handle that names no value writes nothing
+PASS  a handle past the document writes nothing
+PASS  unquoted, ~ would read as null
+PASS  unquoted, 0x1F would read as an integer
+PASS  unquoted, a << key would merge
+PASS  unquoted, a: b would be an error
+PASS  quoted, a << key is an ordinary key
+std/yaml-write: 52 passed, 0 failed, 0 skipped

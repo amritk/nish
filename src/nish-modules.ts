@@ -122,7 +122,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -191,6 +191,9 @@ export const netSignature = (name: string): string => {
   }
   if (name === "pollWait") {
     return "imi"
+  }
+  if (name === "netSetOption") {
+    return "iii"
   }
   return ""
 }
@@ -263,6 +266,31 @@ export const netSymbol = (name: string): string => {
     }
   }
   return parts.join("")
+}
+
+/**
+ * The id `netSetOption` takes for the socket option `name` names, or 0 for a
+ * name that is not one. The ids are the runtime's own, not the kernel's
+ * level and option pair, so that runtime-net.c's switch over them is the
+ * whole of what a program can set: there is no raw `setsockopt`.
+ */
+export const netOption = (name: string): i32 => {
+  if (name === "NET_TCP_NODELAY") {
+    return 1
+  }
+  if (name === "NET_TCP_QUICKACK") {
+    return 2
+  }
+  if (name === "NET_SO_KEEPALIVE") {
+    return 3
+  }
+  if (name === "NET_SO_SNDBUF") {
+    return 4
+  }
+  if (name === "NET_SO_RCVBUF") {
+    return 5
+  }
+  return 0
 }
 
 /** Whether `nish:net` exports `name`: every name with a signature, and `pollCreate`, whose is empty. */
@@ -338,6 +366,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
     return null
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
+    if (netOption(name) > 0) {
+      return new BuiltinExport("", name, true)
+    }
     return isNetExport(name) ? new BuiltinExport("", name, false) : null
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {

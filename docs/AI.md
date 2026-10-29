@@ -2210,7 +2210,13 @@ loop, `pollAdd(loop, fd, events, token)` / `pollModify(...)` watch `fd` for
 for `-1`), fills `ready: i32[]` with pairs — `ready[2k]` a token,
 `ready[2k + 1]` its events, 4 added for a hang-up or error — and answers how
 many, **0 on a timeout or a signal**. It is level-triggered, so what you leave
-unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM. None
+unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM.
+`netSetOption(fd, option, value)` sets one socket option from a whitelist:
+`NET_TCP_NODELAY`, `NET_TCP_QUICKACK` (Linux; `-95` on Darwin),
+`NET_SO_KEEPALIVE`, `NET_SO_SNDBUF` and `NET_SO_RCVBUF`, `i32` ids exported
+beside it; any other id is `-22`. Linux drops quick-ACK mode on its own, so set
+it again after each response. The ids are not module constants: pass them
+directly. None
 exists on a wasm target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.

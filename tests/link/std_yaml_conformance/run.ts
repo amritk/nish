@@ -2,6 +2,7 @@
 import { JSON_VALUE_DUPLICATE_LAST, JsonDocument } from "../../../std/json-value";
 import { JsonLimits } from "../../../std/json-tokenizer";
 import { YamlOptions, YamlStream, parseYamlWith, yamlErrorName } from "../../../std/yaml";
+import { stringifyYaml } from "../../../std/yaml-write";
 import { YcCase } from "./cases";
 import { YcComparer, ycSplitJson } from "./compare";
 
@@ -38,6 +39,47 @@ export const ycVerdict = (c: YcCase, json: JsonDocument, budget: i32): string =>
     }
     const comparer = new YcComparer(stream, json, budget);
     if (!comparer.same(stream.documentRoot(d), root, `$${d}`)) {
+      return comparer.detail;
+    }
+  }
+  return "";
+};
+
+/**
+ * Why case `c`'s expected JSON fails to round trip, or `""` when every value of
+ * it does: written by stringifyYaml, read back by parseYamlWith (uniqueKeys
+ * on) with no diagnostic, and equal to the JSON again. `"-"` when the case has
+ * no JSON to write.
+ */
+export const ycRoundTrip = (c: YcCase, json: JsonDocument, budget: i32): string => {
+  const text = c.json;
+  if (c.error || text === null) {
+    return "-";
+  }
+  const values = ycSplitJson(text);
+  if (values === null) {
+    return "the expected JSON does not split";
+  }
+  const options = new YamlOptions();
+  options.uniqueKeys = true;
+  for (let d: i32 = 0; d < toI32(values.length); d += 1) {
+    const root: i32 = json.parseText(values[d]);
+    if (root < 0) {
+      return `the expected JSON of document ${d} does not parse`;
+    }
+    const yaml: string = stringifyYaml(json, root);
+    if (yaml === "") {
+      return `document ${d} is not written`;
+    }
+    const stream: YamlStream = parseYamlWith(yaml, options);
+    if (stream.diagnosticCount() > 0) {
+      return `document ${d} reads back with ${yamlErrorName(stream.diagnosticCode(0))}: ${stream.diagnosticMessage(0)}`;
+    }
+    if (stream.documentCount() !== 1) {
+      return `document ${d} reads back as ${stream.documentCount()} documents`;
+    }
+    const comparer = new YcComparer(stream, json, budget);
+    if (!comparer.same(stream.documentRoot(0), root, `$${d}`)) {
       return comparer.detail;
     }
   }
