@@ -275,8 +275,14 @@ mutant of the retry rule (a dropped `reused`, `lost` or `gotByte` term, POST
 made idempotent), of HF-7's `leftover` and `quiet` taken out together, of
 HF-8's redaction at each of its seven call sites and in each of its cuts, of
 `fill`'s `overdue`, of `maxHeaderBytes`, of the empty read, and of the TLS
-read of bytes that arrive with a proxy's `200` (T9) is killed. These survive,
-and stay:
+read of bytes that arrive with a proxy's `200` (T9) is killed. A response the
+server closes part way through counts as a lost connection, as one closed
+before any byte does, so the dropped `gotByte` term is killed on every run by
+`a GET whose answer was cut off part way is not sent again`, which needs no
+timing. The reset check behind it waits until `/proc/net/tcp` shows the
+client has read the bytes before it resets, and when it fails it says on
+stderr how the server closed and what the client saw. These survive, and
+stay:
 
 - `L1`, `L2`, `L12`: HF-7 is closed twice, by `release` dropping a connection
   that holds a byte and by `open` reusing one only when `quiet`. Either alone

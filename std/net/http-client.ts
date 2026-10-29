@@ -73,6 +73,7 @@ import {
 } from "nish/net/http1"
 import {
   HTTP1_E_BODY_LIMIT,
+  HTTP1_E_TRUNCATED,
   HTTP1_INFORMATIONAL,
   Http1ResponseParser,
   http1RequestHead,
@@ -865,6 +866,10 @@ export class HttpClient {
           `the body is larger than maxBodyBytes (${this.options.maxBodyBytes})`
         )
       } else {
+        // A response the server closed part way through is a connection lost,
+        // as one closed before any byte is; it is never sent again, because
+        // a byte of it came.
+        this.lost = code === HTTP1_E_TRUNCATED
         this.fail(
           HTTP_E_PROTOCOL,
           `the response broke HTTP/1.1: ${this.parser.errorText} (http1 error ${code})`

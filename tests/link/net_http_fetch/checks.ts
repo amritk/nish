@@ -109,6 +109,11 @@ const readByClient = (server: i32, client: i32): i32 => {
     const local: string = fields[1];
     const remote: string = fields[2];
     const queues: string = fields[4];
+    // A closed connection's row can stay behind on the same ports with both
+    // queues empty; only an established one says what the client has read.
+    if (fields[3] !== "01") {
+      continue;
+    }
     const localPort: i32 = hexValue(local, toI32(local.indexOf(":")) + 1, toI32(local.length));
     const remotePort: i32 = hexValue(remote, toI32(remote.indexOf(":")) + 1, toI32(remote.length));
     const colon: i32 = toI32(queues.indexOf(":"));
@@ -173,6 +178,8 @@ class Server {
   portB: i32;
   conns: Conn[];
   accepts: i32 = 0;
+  /** How the latest `doom` 4 connection was closed, for `/reset-note`. */
+  resetNote: string = "no reset yet";
 
   constructor() {
     this.loop = pollCreate();
@@ -253,6 +260,8 @@ class Server {
     const redirect: string = "redirected, and this body is drained";
     if (path === "/echo") {
       this.respond(c, "200 OK", "Content-Type: text/plain\r\n", head + "\r\n\r\n" + body);
+    } else if (path === "/reset-note") {
+      this.respond(c, "200 OK", "", this.resetNote);
     } else if (path === "/hello") {
       this.respond(c, "200 OK", "", "hello");
     } else if (path === "/chunked") {
@@ -469,6 +478,7 @@ class Server {
         if (c.open && c.resetIn >= 0) {
           const read: i32 = readByClient(c.port, c.peerPort);
           if (read === 1 || (read < 0 && c.resetIn === 0)) {
+            this.resetNote = read === 1 ? "closed once /proc/net/tcp showed the client had read the bytes (readByClient 1)" : "closed by the three-tick fallback (readByClient -1)";
             netClose(c.fd);
             c.open = false;
             c.resetIn = -1;
@@ -658,7 +668,13 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(armedPartial === "armed" && partial === null && dc.error !== HTTP_E_NONE, "a GET whose answer was cut off part way is not sent again");
   const armedReset: string = bodyOf(dc.fetch(get(`${base}/doom-reset`)));
   const reset: HttpResponse | null = dc.fetch(get(`${base}/hello`));
-  t.check(armedReset === "armed" && reset === null && dc.error !== HTTP_E_NONE, "nor one whose connection was reset part way through its answer");
+  const resetOk: boolean = armedReset === "armed" && reset === null && dc.error !== HTTP_E_NONE;
+  if (!resetOk) {
+    // stdout is the expected output; what went wrong goes to stderr.
+    console.error(`doom-reset: armed ${armedReset}, answer ${reset !== null ? "came" : "null"}, error ${dc.error}: ${dc.errorText}`);
+    console.error(`doom-reset: the server ${bodyOf(dc.fetch(get(`${base}/reset-note`)))}`);
+  }
+  t.check(resetOk, "nor one whose connection was reset part way through its answer");
   const stallOptions: HttpOptions = new HttpOptions();
   stallOptions.useEnvProxy = false;
   stallOptions.readTimeoutMs = 300;

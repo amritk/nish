@@ -1055,6 +1055,7 @@ import HTTP1_HEAD from "nish/net/http1" -> const HTTP1_HEAD
 import HTTP1_NEED_MORE from "nish/net/http1" -> const HTTP1_NEED_MORE
 import HTTP1_UPGRADE from "nish/net/http1" -> const HTTP1_UPGRADE
 import HTTP1_E_BODY_LIMIT from "nish/net/http1-client" -> const HTTP1_E_BODY_LIMIT
+import HTTP1_E_TRUNCATED from "nish/net/http1-client" -> const HTTP1_E_TRUNCATED
 import HTTP1_INFORMATIONAL from "nish/net/http1-client" -> const HTTP1_INFORMATIONAL
 import Http1ResponseParser from "nish/net/http1-client" -> struct Http1ResponseParser
 import http1RequestHead from "nish/net/http1-client" -> function @nish.http1RequestHead
@@ -1542,18 +1543,18 @@ function HttpClient.head(this: HttpClient): i32 -> @nish.HttpClient.head [export
   callee +5:7 HttpClient.fail -> @nish.HttpClient.fail
 function HttpClient.pump(this: HttpClient): i32 -> @nish.HttpClient.pump [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:9
   calls: nish.Http1ResponseParser.next nish.HttpClient.fail nish.HttpClient.fill nish_str_concat nish_str_from_i32 nish_str_from_i64
   pointer this: size=152 writesThrough=true captured=false passedTo=nish.HttpClient.fill#0 nish.HttpClient.fail#0 nish.HttpClient.fail#0 nish.HttpClient.fail#0
   stackSites=0 stackLocals=0
-  local -23:9 event: i32 (let)
-  callee -23:22 Http1ResponseParser.next -> @nish.Http1ResponseParser.next
-  callee -21:12 HttpClient.fill -> @nish.HttpClient.fill
-  callee -18:15 Http1ResponseParser.next -> @nish.Http1ResponseParser.next
-  local -15:13 code: i32 (const)
-  callee -13:9 HttpClient.fail -> @nish.HttpClient.fail
+  local -18:9 event: i32 (let)
+  callee -18:22 Http1ResponseParser.next -> @nish.Http1ResponseParser.next
+  callee -16:12 HttpClient.fill -> @nish.HttpClient.fill
+  callee -13:15 Http1ResponseParser.next -> @nish.Http1ResponseParser.next
+  local -10:13 code: i32 (const)
   callee -8:9 HttpClient.fail -> @nish.HttpClient.fail
-  callee +1:7 HttpClient.fail -> @nish.HttpClient.fail
+  callee +1:9 HttpClient.fail -> @nish.HttpClient.fail
+  callee +10:7 HttpClient.fail -> @nish.HttpClient.fail
 function HttpClient.fill(this: HttpClient): boolean -> @nish.HttpClient.fill [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
