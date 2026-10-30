@@ -485,7 +485,10 @@ export class YamlJsonLoader {
     const stream: YamlStream = this.stream
     const doc: JsonDocument = this.doc
     const base: i32 = this.entryTop
-    this.seen.clear()
+    // Clearing costs the table's capacity, which a large map leaves behind.
+    if (this.seen.size > 0) {
+      this.seen.clear()
+    }
     for (let i: i32 = 0; i < stream.count(at); i += 1) {
       const pair: i32 = stream.child(at, i)
       if (!this.isMergeKey(stream.key(pair)) && this.addEntry(base, pair, true) < 0) {
