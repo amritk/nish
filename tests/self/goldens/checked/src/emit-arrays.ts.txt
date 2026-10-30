@@ -968,21 +968,25 @@ function emitVectorAccess(emitter: Emitter, expr: Node, store: boolean): string 
   callee +16:19 IRFunction.newBlock -> @IRFunction.newBlock
   callee +17:3 IRFunction.emit -> @IRFunction.emit
   callee +18:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +19:3 IRFunction.emit -> @IRFunction.emit
-  callee +19:24 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +20:3 IRFunction.emit -> @IRFunction.emit
-  callee +21:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +22:9 slot: string (const)
-  callee +22:16 elementPointer -> @elementPointer
-  local +23:9 ty: string (const)
-  callee +23:14 Emitter.llvm -> @Emitter.llvm
-  local +24:9 ptr: string (const)
-  callee +24:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +24:39 slotType -> @slotType
-  local +25:9 align: i32 (const)
-  callee +25:17 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +27:5 IRFunction.emit -> @IRFunction.emit
-  callee +30:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local +20:9 lastLane: string (const)
+  callee +20:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local +21:9 shown: string (const)
+  callee +21:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +22:3 IRFunction.emit -> @IRFunction.emit
+  callee +22:24 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +23:3 IRFunction.emit -> @IRFunction.emit
+  callee +24:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +25:9 slot: string (const)
+  callee +25:16 elementPointer -> @elementPointer
+  local +26:9 ty: string (const)
+  callee +26:14 Emitter.llvm -> @Emitter.llvm
+  local +27:9 ptr: string (const)
+  callee +27:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +27:39 slotType -> @slotType
+  local +28:9 align: string (const)
+  callee +28:62 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +30:5 IRFunction.emit -> @IRFunction.emit
+  callee +33:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitElementAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf

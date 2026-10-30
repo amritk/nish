@@ -627,14 +627,15 @@ function maybeLocalIndex(emitter: Emitter, local: Local): i32 -> @maybeLocalInde
 function zeroOf(emitter: Emitter, type: i32): string -> @zeroOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.isPointer TypeTable.isResult TypeTable.stripNull isFloat
+  calls: TypeTable.isPointer TypeTable.isResult TypeTable.isVector TypeTable.stripNull isFloat
   pointer emitter: size=280 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 isFloat -> @isFloat
-  local +7:9 stripped: i32 (const)
-  callee +7:20 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +8:10 TypeTable.isPointer -> @TypeTable.isPointer
-  callee +8:47 TypeTable.isResult -> @TypeTable.isResult
+  callee +6:7 TypeTable.isVector -> @TypeTable.isVector
+  local +10:9 stripped: i32 (const)
+  callee +10:20 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +11:10 TypeTable.isPointer -> @TypeTable.isPointer
+  callee +11:47 TypeTable.isResult -> @TypeTable.isResult
 function emitUndefinedTest(emitter: Emitter, expr: Node): string -> @emitUndefinedTest [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitMaybe
