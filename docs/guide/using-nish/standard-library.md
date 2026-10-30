@@ -105,7 +105,7 @@ numbers are the platform's errno values (Linux's shown).
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
-| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML; `YamlJsonLoader` in `nish/yaml-json` to load a document into a `JsonDocument` with its ranges |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
@@ -1112,6 +1112,61 @@ and followed by paths; on by default), `keepComments` (keep every comment's
 range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
 `MULTIPLE_DOCUMENTS` and stop after the first). Tabs are never indentation, as
 YAML says.
+
+### Loading YAML into a JsonDocument
+
+`new YamlJsonLoader()` from `nish/yaml-json` loads one document of a
+`YamlStream` into a `nish/json-value` `JsonDocument`, so a program that reads
+JSON reads YAML with the same code. `load(stream, d, doc)` clears `doc` and
+answers the root, with every value's range (`start`, `end`) and every key's
+(`keyStart`, `keyEnd`) set to the YAML node's bytes. A scalar is typed by the
+core schema: `0x1F` and `0o17` load as the exact decimal numbers `31` and
+`15`, and `.inf`, `-.inf` and `.nan`, which JSON cannot hold, are refused. An
+alias loads as a copy of its anchor's value, a `<<` merge key adds the merged
+maps' keys the map does not have itself, and a key that is not a string loads
+as its source text (`1`, `[ a, b ]`).
+
+Because the ranges are byte offsets into the text either way, one
+`YamlLineIndex` turns them into `line:column` whether the document came from
+JSON or from YAML:
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+import { parseYaml } from "nish/yaml";
+import { YamlJsonLoader } from "nish/yaml-json";
+import { YamlLineIndex } from "nish/yaml-lines";
+
+const place = (text: string, doc: JsonDocument, root: i32): string => {
+  const lines = new YamlLineIndex(text);
+  const at = doc.start(doc.get(root, "port"));
+  return `${lines.line(at)}:${lines.column(at)}`;
+};
+
+export const main = (): i32 => {
+  const json = `{\n  "name": "api",\n  "port": 8080\n}`;
+  const yaml = "name: api\nport: 8080\n";
+  const fromJson = new JsonDocument(new JsonLimits());
+  const fromYaml = new JsonDocument(new JsonLimits());
+  const loader = new YamlJsonLoader();
+  const a = fromJson.parseTextRanged(json);
+  const b = loader.load(parseYaml(yaml), 0, fromYaml);
+  console.log(`json ${place(json, fromJson, a)}, yaml ${place(yaml, fromYaml, b)}`);
+  return b < 0 ? 1 : 0;
+};
+```
+
+It prints `json 3:11, yaml 2:7`.
+
+**A load fails whole.** A negative answer is a code, also in `failed`, with
+the range it is about in `errorStart` and `errorEnd`, and the document is left
+empty; `yamlJsonErrorName` names it. A document with a YAML error is
+`YAML_JSON_ERR_YAML`, a non-finite number `YAML_JSON_ERR_NOT_FINITE`, and
+nesting past `maxDepth` (64) `YAML_JSON_ERR_DEPTH`. **An alias bomb is refused
+before anything is built**: the values the aliases expand to are counted
+first, and past the document's `maxValues` the load is
+`YAML_JSON_ERR_EXPANSION` at the alias; copies whose text passes the
+document's `JsonLimits.maxTotalBytes` are refused the same way.
 
 ### Writing YAML
 
