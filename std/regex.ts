@@ -463,8 +463,6 @@ class RegexParser {
   dotAll: boolean
   failed: boolean
   hasNames: boolean
-  /** The class being finished is closed under case folding already, so `finishClass` skips `foldRanges`. */
-  foldClosed: boolean
 
   constructor(src: string, icase: boolean, multiline: boolean, dotAll: boolean) {
     this.src = src
@@ -487,7 +485,6 @@ class RegexParser {
     this.groups = 1
     this.names = [""]
     this.hasNames = false
-    this.foldClosed = false
     this.clsAscii = []
     this.clsLo = []
     this.clsHi = []
@@ -917,11 +914,14 @@ class RegexParser {
       this.pos += 1
       this.tmpCount = 0
       this.addSet(c)
-      // Above ASCII, `\d`, `\w` and `\s` hold no folding code point and
-      // their capitals hold every one, so folding adds nothing.
-      this.foldClosed = true
+      // `\d`, `\w` and `\s` and their capitals are closed under case
+      // folding already: in ASCII `\w` holds both cases and the others no
+      // letter, and above it they hold no folding code point or every one.
+      // So the class is finished as if `i` were off.
+      const icase: boolean = this.icase
+      this.icase = false
       const node: i32 = this.finishClass(false)
-      this.foldClosed = false
+      this.icase = icase
       return node
     }
     if (c === 112 || c === 80) {
@@ -1410,7 +1410,7 @@ class RegexParser {
     let from: i32 = toI32(this.clsLo.length)
     let out: i32 = this.storeRanges()
     // Under `i`, the class closed under simple case folding above ASCII.
-    if (this.icase && !this.foldClosed && out > from && this.foldRanges(from, out)) {
+    if (this.icase && out > from && this.foldRanges(from, out)) {
       if (this.failed) {
         return -1
       }
