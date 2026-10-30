@@ -3943,13 +3943,13 @@ unsafe call 136:27 uncheckedGet (node 679)
 unsafe call 140:7 uncheckedSet (node 697)
 unsafe call 144:11 uncheckedSet (node 755)
 unsafe call 144:44 uncheckedGet (node 764)
-unsafe call 237:11 uncheckedGet (node 1278)
-unsafe call 237:44 uncheckedGet (node 1290)
-unsafe call 268:19 uncheckedGet (node 1446)
-unsafe call 270:19 uncheckedGet (node 1461)
-unsafe call 272:19 uncheckedGet (node 1478)
-unsafe call 274:19 uncheckedGet (node 1495)
-unsafe call 279:19 uncheckedGet (node 1521)
+unsafe call 251:9 uncheckedGet (node 1322)
+unsafe call 251:42 uncheckedGet (node 1334)
+unsafe call 281:19 uncheckedGet (node 1490)
+unsafe call 283:19 uncheckedGet (node 1505)
+unsafe call 285:19 uncheckedGet (node 1522)
+unsafe call 287:19 uncheckedGet (node 1539)
+unsafe call 292:19 uncheckedGet (node 1565)
 const CRC32_POLY: i64 = 3988292384
 const CRC32_TABLE_SIZE: i32 = 2048
 const CRC32_BRAIDS: i32 = 5
@@ -3998,51 +3998,60 @@ function Crc32.constructor(this: Crc32): void -> @nish.Crc32.constructor [export
   local +26:16 b: i32 (let)
   local +27:15 low: i32 (const)
 function Crc32.update(this: Crc32, crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.Crc32.update [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: len off
-  calls: nish.checksumLoad64 nish.checksumWindow nish.crc32Step nish_panic nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: crc len off
+  calls: nish.checksumWindow nish.crc32Walk nish_panic
   pointer this: size=16 writesThrough=false captured=false
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.crc32Walk#3
   stackSites=0 stackLocals=0
   callee +0:5 checksumWindow -> @nish.checksumWindow
   local +1:11 t: u32[] (const)
   local +2:11 bt: u32[] (const)
-  local +6:9 c: u32 (let)
-  local +7:9 p: i32 (let)
-  local +8:11 end: i32 (const)
-  local +18:13 blocks: i32 (const)
-  local +19:13 lastBlock: i32 (const)
-  local +20:11 c1: u32 (let)
-  local +21:11 c2: u32 (let)
-  local +22:11 c3: u32 (let)
-  local +23:11 c4: u32 (let)
-  local +26:11 p1: i32 (let)
-  local +27:11 p2: i32 (let)
-  local +28:11 p3: i32 (let)
-  local +29:11 p4: i32 (let)
-  callee +43:13 crc32Step -> @nish.crc32Step
-  callee +43:30 checksumLoad64 -> @nish.checksumLoad64
-  callee +44:14 crc32Step -> @nish.crc32Step
-  callee +44:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +45:14 crc32Step -> @nish.crc32Step
-  callee +45:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +46:14 crc32Step -> @nish.crc32Step
-  callee +46:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +47:14 crc32Step -> @nish.crc32Step
-  callee +47:32 checksumLoad64 -> @nish.checksumLoad64
-  callee +66:13 crc32Step -> @nish.crc32Step
-  callee +66:29 checksumLoad64 -> @nish.checksumLoad64
-  callee +67:13 crc32Step -> @nish.crc32Step
-  callee +67:34 checksumLoad64 -> @nish.checksumLoad64
-  callee +68:13 crc32Step -> @nish.crc32Step
-  callee +68:34 checksumLoad64 -> @nish.checksumLoad64
-  callee +69:13 crc32Step -> @nish.crc32Step
-  callee +69:34 checksumLoad64 -> @nish.checksumLoad64
-  callee +70:13 crc32Step -> @nish.crc32Step
-  callee +70:34 checksumLoad64 -> @nish.checksumLoad64
-  local +74:11 whole: i32 (const)
-  callee +76:11 crc32Step -> @nish.crc32Step
-  callee +76:27 checksumLoad64 -> @nish.checksumLoad64
+  callee +6:12 crc32Walk -> @nish.crc32Walk
+function crc32Walk(t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.crc32Walk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.checksumLoad64 nish.crc32Step nish_panic_overflow
+  pointer t: size=0 writesThrough=false captured=false passedTo=nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0
+  pointer bt: size=0 writesThrough=false captured=false passedTo=nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0 nish.crc32Step#0
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0
+  stackSites=0 stackLocals=0
+  local +0:7 c: u32 (let)
+  local +1:7 p: i32 (let)
+  local +2:9 end: i32 (const)
+  local +12:11 blocks: i32 (const)
+  local +13:11 lastBlock: i32 (const)
+  local +14:9 c1: u32 (let)
+  local +15:9 c2: u32 (let)
+  local +16:9 c3: u32 (let)
+  local +17:9 c4: u32 (let)
+  local +20:9 p1: i32 (let)
+  local +21:9 p2: i32 (let)
+  local +22:9 p3: i32 (let)
+  local +23:9 p4: i32 (let)
+  callee +37:11 crc32Step -> @nish.crc32Step
+  callee +37:28 checksumLoad64 -> @nish.checksumLoad64
+  callee +38:12 crc32Step -> @nish.crc32Step
+  callee +38:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +39:12 crc32Step -> @nish.crc32Step
+  callee +39:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +40:12 crc32Step -> @nish.crc32Step
+  callee +40:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +41:12 crc32Step -> @nish.crc32Step
+  callee +41:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +60:11 crc32Step -> @nish.crc32Step
+  callee +60:27 checksumLoad64 -> @nish.checksumLoad64
+  callee +61:11 crc32Step -> @nish.crc32Step
+  callee +61:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +62:11 crc32Step -> @nish.crc32Step
+  callee +62:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +63:11 crc32Step -> @nish.crc32Step
+  callee +63:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +64:11 crc32Step -> @nish.crc32Step
+  callee +64:32 checksumLoad64 -> @nish.checksumLoad64
+  local +68:9 whole: i32 (const)
+  callee +70:9 crc32Step -> @nish.crc32Step
+  callee +70:25 checksumLoad64 -> @nish.checksumLoad64
 function crc32(buf: u8[], off: i32, len: i32): u32 -> @nish.crc32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
