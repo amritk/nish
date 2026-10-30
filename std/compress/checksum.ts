@@ -160,85 +160,98 @@ export class Crc32 {
     if (toI32(t.length) !== CRC32_TABLE_SIZE || toI32(bt.length) !== CRC32_TABLE_SIZE) {
       panic("Crc32.update: the table is not its size")
     }
-    let c: u32 = ~crc
-    let p: i32 = off
-    const end: i32 = off + len
-    if (len >= CRC32_BRAID_MIN) {
-      // Braided (Kadatch and Jenkins, "Everything we know about CRC but
-      // afraid to forget", 2010): five chains, each over every fifth 8-byte
-      // word, so a step's table reads overlap the other four's instead of
-      // waiting on its own last. A braid's table also steps it over the
-      // other braids' 32 bytes, so before each block every register sits at
-      // its own word's place. The last block is taken one word at a time
-      // with the plain table, each braid's register joining as its word
-      // comes, which adds them into one.
-      const blocks: i32 = len / CRC32_BLOCK
-      const lastBlock: i32 = off + (blocks - 1) * CRC32_BLOCK
-      let c1: u32 = 0
-      let c2: u32 = 0
-      let c3: u32 = 0
-      let c4: u32 = 0
-      // Each word's position is a local the loop condition bounds, which
-      // is what lets it enter the loader's range without a check.
-      let p1: i32 = p + 8
-      let p2: i32 = p + 16
-      let p3: i32 = p + 24
-      let p4: i32 = p + 32
-      while (
-        p < lastBlock &&
-        p >= 0 &&
-        p1 >= 0 &&
-        p2 >= 0 &&
-        p3 >= 0 &&
-        p4 >= 0 &&
-        p4 <= 2147483639 &&
-        p3 <= 2147483639 &&
-        p2 <= 2147483639 &&
-        p1 <= 2147483639 &&
-        p <= 2147483639
-      ) {
-        c = crc32Step(bt, c, checksumLoad64(buf, p))
-        c1 = crc32Step(bt, c1, checksumLoad64(buf, p1))
-        c2 = crc32Step(bt, c2, checksumLoad64(buf, p2))
-        c3 = crc32Step(bt, c3, checksumLoad64(buf, p3))
-        c4 = crc32Step(bt, c4, checksumLoad64(buf, p4))
-        p += CRC32_BLOCK
-        p1 += CRC32_BLOCK
-        p2 += CRC32_BLOCK
-        p3 += CRC32_BLOCK
-        p4 += CRC32_BLOCK
-      }
-      if (
-        p >= 0 &&
-        p1 >= 0 &&
-        p2 >= 0 &&
-        p3 >= 0 &&
-        p4 >= 0 &&
-        p4 <= 2147483639 &&
-        p3 <= 2147483639 &&
-        p2 <= 2147483639 &&
-        p1 <= 2147483639 &&
-        p <= 2147483639
-      ) {
-        c = crc32Step(t, c, checksumLoad64(buf, p))
-        c = crc32Step(t, c ^ c1, checksumLoad64(buf, p1))
-        c = crc32Step(t, c ^ c2, checksumLoad64(buf, p2))
-        c = crc32Step(t, c ^ c3, checksumLoad64(buf, p3))
-        c = crc32Step(t, c ^ c4, checksumLoad64(buf, p4))
-        p += CRC32_BLOCK
-      }
-    }
-    const whole: i32 = end - (len & 7)
-    while (p < whole && p >= 0 && p <= 2147483639) {
-      c = crc32Step(t, c, checksumLoad64(buf, p))
-      p += 8
-    }
-    while (p < end) {
-      c = uncheckedGet(t, toI32((c ^ toU32(uncheckedGet(buf, p))) & 255)) ^ (c >>> 8)
-      p += 1
-    }
-    return ~c
+    return crc32Walk(t, bt, crc, buf, off, len)
   }
+}
+
+/**
+ * `Crc32.update`'s loop: the CRC-32 of the bytes `crc` was the CRC of,
+ * followed by `buf[off .. off + len)`, a window its one caller has checked,
+ * as it has checked both tables' length. Natively the compiler puts the call
+ * behind a branch on `nish_crc32_hw` and hands the same window to the
+ * runtime's `nish_crc32_update`, which runs it on PCLMULQDQ or the ARMv8
+ * CRC32 instructions (`src/kernels.ts`); a machine without them, a process
+ * run with `NISH_CRC32=soft`, a wasm32 build and Node run this.
+ */
+const crc32Walk = (t: u32[], bt: u32[], crc: u32, buf: u8[], off: i32, len: i32): u32 => {
+  let c: u32 = ~crc
+  let p: i32 = off
+  const end: i32 = off + len
+  if (len >= CRC32_BRAID_MIN) {
+    // Braided (Kadatch and Jenkins, "Everything we know about CRC but
+    // afraid to forget", 2010): five chains, each over every fifth 8-byte
+    // word, so a step's table reads overlap the other four's instead of
+    // waiting on its own last. A braid's table also steps it over the
+    // other braids' 32 bytes, so before each block every register sits at
+    // its own word's place. The last block is taken one word at a time
+    // with the plain table, each braid's register joining as its word
+    // comes, which adds them into one.
+    const blocks: i32 = len / CRC32_BLOCK
+    const lastBlock: i32 = off + (blocks - 1) * CRC32_BLOCK
+    let c1: u32 = 0
+    let c2: u32 = 0
+    let c3: u32 = 0
+    let c4: u32 = 0
+    // Each word's position is a local the loop condition bounds, which
+    // is what lets it enter the loader's range without a check.
+    let p1: i32 = p + 8
+    let p2: i32 = p + 16
+    let p3: i32 = p + 24
+    let p4: i32 = p + 32
+    while (
+      p < lastBlock &&
+      p >= 0 &&
+      p1 >= 0 &&
+      p2 >= 0 &&
+      p3 >= 0 &&
+      p4 >= 0 &&
+      p4 <= 2147483639 &&
+      p3 <= 2147483639 &&
+      p2 <= 2147483639 &&
+      p1 <= 2147483639 &&
+      p <= 2147483639
+    ) {
+      c = crc32Step(bt, c, checksumLoad64(buf, p))
+      c1 = crc32Step(bt, c1, checksumLoad64(buf, p1))
+      c2 = crc32Step(bt, c2, checksumLoad64(buf, p2))
+      c3 = crc32Step(bt, c3, checksumLoad64(buf, p3))
+      c4 = crc32Step(bt, c4, checksumLoad64(buf, p4))
+      p += CRC32_BLOCK
+      p1 += CRC32_BLOCK
+      p2 += CRC32_BLOCK
+      p3 += CRC32_BLOCK
+      p4 += CRC32_BLOCK
+    }
+    if (
+      p >= 0 &&
+      p1 >= 0 &&
+      p2 >= 0 &&
+      p3 >= 0 &&
+      p4 >= 0 &&
+      p4 <= 2147483639 &&
+      p3 <= 2147483639 &&
+      p2 <= 2147483639 &&
+      p1 <= 2147483639 &&
+      p <= 2147483639
+    ) {
+      c = crc32Step(t, c, checksumLoad64(buf, p))
+      c = crc32Step(t, c ^ c1, checksumLoad64(buf, p1))
+      c = crc32Step(t, c ^ c2, checksumLoad64(buf, p2))
+      c = crc32Step(t, c ^ c3, checksumLoad64(buf, p3))
+      c = crc32Step(t, c ^ c4, checksumLoad64(buf, p4))
+      p += CRC32_BLOCK
+    }
+  }
+  const whole: i32 = end - (len & 7)
+  while (p < whole && p >= 0 && p <= 2147483639) {
+    c = crc32Step(t, c, checksumLoad64(buf, p))
+    p += 8
+  }
+  while (p < end) {
+    c = uncheckedGet(t, toI32((c ^ toU32(uncheckedGet(buf, p))) & 255)) ^ (c >>> 8)
+    p += 1
+  }
+  return ~c
 }
 
 /**

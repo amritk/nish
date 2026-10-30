@@ -38,6 +38,12 @@ PASS  smuggling: chunk data longer than its size: transcript
 PASS  smuggling: chunk data longer than its size: the same cut at every byte and fed a byte at a time
 PASS  a 101 this client never asked for: transcript
 PASS  a 101 this client never asked for: the same cut at every byte and fed a byte at a time
+PASS  a 101 to a request that asked to switch protocols, frame bytes glued to its head: transcript
+PASS  a 101 to a request that asked to switch protocols, frame bytes glued to its head: the same cut at every byte and fed a byte at a time
+PASS  a 101 that asked to switch protocols ignores its framing fields: transcript
+PASS  a 101 that asked to switch protocols ignores its framing fields: the same cut at every byte and fed a byte at a time
+PASS  a request that asked to switch protocols, answered 200, reads as any other: transcript
+PASS  a request that asked to switch protocols, answered 200, reads as any other: the same cut at every byte and fed a byte at a time
 PASS  a status line over the limit, ended in a bare LF past it: transcript
 PASS  a status line over the limit, ended in a bare LF past it: the same cut at every byte and fed a byte at a time
 PASS  a second head across the first 1 KiB: in pieces
@@ -75,8 +81,15 @@ PASS  refused with 1 (a malformed status line): a non-digit third status digit
 PASS  refused with 2 (an HTTP major version other than 1): HTTP/2.0
 PASS  refused with 2 (an HTTP major version other than 1): HTTP/0.9
 PASS  refused with 3 (a line ended in a bare LF): a status line ended in a bare LF
-PASS  refused with 5 (a 101 Switching Protocols this client never asks for): a 101
-PASS  refused with 5 (a 101 Switching Protocols this client never asks for): a 101 to CONNECT
+PASS  refused with 5 (a 101 Switching Protocols the request did not ask for): a 101
+PASS  refused with 5 (a 101 Switching Protocols the request did not ask for): a 101 to CONNECT
+PASS  refused with 5 (a 101 Switching Protocols the request did not ask for): a 101 to HEAD
+PASS  refused with 5 (a 101 Switching Protocols the request did not ask for): a 101 after a 100 to a request that asked for no switch
+PASS  refused: expect() after expectUpgrade() asks for no switch again
+PASS  an interim response first
+PASS  refused: expectUpgrade() once a response has begun does nothing
+PASS  asked to switch, a 200 ends
+PASS  refused: the next response on the connection is not asked to switch
 PASS  refused with 4 (a malformed field name): an empty field name
 PASS  refused with 4 (a malformed field name): a field line with no colon
 PASS  refused with 4 (a malformed field name): a non-token byte in a name
@@ -258,6 +271,14 @@ PASS  refused: a NUL in a value
 PASS  refused: the caller's own Content-Length
 PASS  refused: the caller's own Transfer-Encoding, in any case
 PASS  refused: a Connection that lists upgrade
+PASS  refused: http1WriteRequestHead with a Connection that lists upgrade
+PASS  http1UpgradeRequestHead writes Upgrade and Connection itself
+PASS  refused upgrade: an empty protocol
+PASS  refused upgrade: a protocol that is not a token
+PASS  refused upgrade: CR LF in the protocol
+PASS  refused upgrade: the caller's own Connection
+PASS  refused upgrade: the caller's own Upgrade, in any case
+PASS  refused upgrade: no Host
 PASS  refused: no Host
 PASS  refused: two Hosts
 PASS  refused: names and values of different lengths
@@ -345,4 +366,4 @@ PASS  CONNECT :80 is refused
 PASS  CONNECT a:123456 is refused
 PASS  a field whose value is upgrade is written when it is not Connection
 PASS  HTTP1_E_NONE is 0, before anything goes wrong
-http1-client: 347 passed, 0 failed, 0 skipped
+http1-client: 368 passed, 0 failed, 0 skipped

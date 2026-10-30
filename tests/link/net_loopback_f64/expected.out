@@ -21,7 +21,10 @@ PASS  http/1.1: a request with Connection: close is answered, then the server cl
 http/1.1: that connection kept 64 bytes, accept to close
 PASS  http/1.1: the program answered every request and refused nothing
 PASS  http/1.1: with nothing gone wrong in the loop
-PASS  websocket: the upgrade over TLS is answered 101 with RFC 6455's accept key
+PASS  websocket: nish/net/tls-tcp's client authenticates the pool's chain and reads a head to its upgrade
+PASS  websocket: websocketCheckResponse accepts the 101 and its accept for the random key
+PASS  websocket: of chat and superchat, the server chose superchat
+PASS  websocket: and the parser ends the head and hands over the tunnel
 PASS  websocket: a ping between a message's fragments is answered with a pong of its payload
 PASS  websocket: and the three fragments come back as the one text message
 PASS  websocket: a 100,000-byte binary message sent in seven fragments is echoed whole
@@ -29,13 +32,20 @@ PASS  websocket: the server's echo went back in 49 fragments of at most 2,048 by
 PASS  websocket: a ping on its own is answered with a pong
 PASS  websocket: fifty messages on the warm connection, each echoed
 PASS  websocket: and every server wake kept 0 bytes over them
-PASS  websocket: the client's close with code 4000 is answered with a close of that code
+PASS  websocket: the client's close with 1000 is answered with a close of that code
 PASS  websocket: and the server's program saw the client's code
-PASS  websocket: then the server ends TLS with close_notify
-PASS  websocket: then the end of the stream, not a reset
-PASS  websocket: and, once the client hangs up, closes the slot
+PASS  websocket: then the server ends TLS with close_notify, and the client answers with its own
+PASS  websocket: and the server closes the slot
 PASS  websocket: the program refused nothing
 PASS  websocket: with nothing gone wrong in the loop
+PASS  websocket: over plain TCP, the client reads a head to its upgrade
+PASS  websocket: which is accepted, superchat chosen
+PASS  websocket: the second connection drew a key of its own
+PASS  websocket: a message over plain TCP is echoed
+PASS  websocket: the close with 1000 is answered in kind
+PASS  websocket: then the server ends the stream, not a reset
+PASS  websocket: and closes the slot
+PASS  websocket: with nothing gone wrong in the plain loop
 PASS  http/2: a TLS handshake offering h2 across loopback
 PASS  http/2: ALPN chose h2
 PASS  http/2: the server's SETTINGS, then a GET answered on stream 1
@@ -96,4 +106,4 @@ PASS  webtransport: three more connections, each a session and a datagram, close
 PASS  webtransport: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's, the signature's or the listener's (WT-1, H3-1, H3-3)
 PASS  webtransport: the program was refused nothing and held nothing it could not place
 PASS  webtransport: with nothing gone wrong in the loop
-net loopback: 95 passed, 0 failed, 0 skipped
+net loopback: 105 passed, 0 failed, 0 skipped
