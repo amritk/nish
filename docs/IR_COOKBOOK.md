@@ -24132,8 +24132,6 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-nish-modules -->
 
-## Optimisation flags
-
 ### `nish:simd`: a vector is an LLVM vector
 
 A `nish:simd` vector is `<N x T>` and nothing else: the constructor is one
@@ -24282,6 +24280,8 @@ attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !16 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end simd-load-store -->
+
+## Optimisation flags
 
 ### Integer overflow: checked by default, `nsw` where proven
 

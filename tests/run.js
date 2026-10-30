@@ -10745,34 +10745,49 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     )
   }
 
-  // A load whose last lane is past the end panics before it reads, naming the
-  // first index and the length, as `xs[i]` does.
-  const oobWords = "index out of range: 5 >= 5"
-  const oobExe = buildCaseIn(simdDir, "simd_access_oob")
-  if (oobExe !== null) {
-    const native = spawnSync(oobExe, [], { cwd: root, encoding: "utf8" })
+  // An access out of range panics before it reads or writes, naming the first
+  // index past the end (a negative one as the unsigned value `xs[i]` names
+  // too) and the length, natively and under runtime/nish.mjs alike.
+  const oobCases = [
+    ["simd_access_oob", "a load whose last lane is past the end", "5\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
+    ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
+    ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+  ]
+  for (const [name, what, stdout, words] of oobCases) {
+    const exe = buildCaseIn(simdDir, name)
+    if (exe !== null) {
+      const native = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
+      check(
+        `${name}: ${what} panics natively, after the access before it`,
+        native.status !== 0 && native.stdout === stdout && native.stderr.includes(words),
+        shown(native)
+      )
+    }
+    const node = runCaseUnderPrelude(name, [])
     check(
-      "simd_access_oob: a load past the end panics natively, after the load before it",
-      native.status !== 0 && native.stdout === "5\n" && native.stderr.includes(oobWords),
-      shown(native)
+      `${name}: ${what} panics under runtime/nish.mjs with the native words`,
+      node.status !== 0 && node.stdout === stdout && node.stderr.includes(words),
+      shown(node)
     )
   }
-  const oobNode = runCaseUnderPrelude("simd_access_oob", [])
-  check(
-    "simd_access_oob: a load past the end panics under runtime/nish.mjs with the native words",
-    oobNode.status !== 0 && oobNode.stdout === "5\n" && oobNode.stderr.includes(oobWords),
-    shown(oobNode)
-  )
 
-  // The sidecars spell no vector: a function with one in its signature, as a
-  // parameter, a result or an array's element, is skipped by the header, the
-  // Node-API shim and the wasm loader, each with a comment naming the type; a
-  // class holding one is opaque in the header, as a `Map` holder is.
+  // The sidecars spell no vector: a function with one anywhere in its
+  // signature, as a parameter, a result, an array's element or a `Result` arm,
+  // is skipped by the header, the Node-API shim and the wasm loader, each with
+  // a comment naming the type; a class holding one at any depth -- a field, a
+  // `Result` arm, an array's element, another class -- is opaque in the
+  // header, as a `Map` holder is, and no `Result` over one is defined.
   const lib = path.join(simdDir, "lib.ts")
   fs.writeFileSync(
     lib,
-    'import { i32x4, extract, splatI32x4 } from "nish:simd";\n' +
+    'import { i32x4, u8x16, f64x2, extract, splatI32x4, splatU8x16, splatF64x2 } from "nish:simd";\n' +
       "export class Holder { n: i32; v: i32x4; constructor(n: i32) { this.n = n; this.v = splatI32x4(n) } }\n" +
+      "export class InResult { n: i32; r: Result<u8x16, string>; constructor(n: i32) { this.n = n; this.r = Ok(splatU8x16(1)) } }\n" +
+      "export class InArray { n: i32; a: u8x16[]; constructor(n: i32) { this.n = n; this.a = [splatU8x16(1)] } }\n" +
+      "export class Nested { n: i32; h: InResult; constructor(n: i32) { this.n = n; this.h = new InResult(n) } }\n" +
+      'export const pair = (x: f64): Result<f64x2, string> => x > 0 ? Ok(splatF64x2(x)) : Err("neg");\n' +
+      "export const peekNested = (h: Nested): i32 => h.n;\n" +
       "export const first = (v: i32x4): i32 => extract(v, 0);\n" +
       "export const make = (x: i32): i32x4 => splatI32x4(x);\n" +
       "export const sum = (vs: i32x4[]): i32 => extract(vs[0], 0);\n" +
@@ -10794,7 +10809,7 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
   const n = read(napi)
   const code = h.replace(/\/\*[\s\S]*?\*\//g, "")
   check(
-    "simd: --emit-header leaves out a vector parameter, result and array of vectors, naming each, and makes a vector holder opaque",
+    "simd: --emit-header leaves out a vector parameter, result, array of vectors and Result over one, naming each, and makes a holder at any depth opaque",
     sides.status === 0 &&
       h.includes("int32_t twice(int32_t x);") &&
       h.includes("int32_t peek(struct Holder *h);") &&
@@ -10803,7 +10818,14 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
       !/\b(first|make|sum)\(/.test(code) &&
       h.includes("first(v: i32x4): number: not declared") &&
       h.includes("make(x: number): i32x4: not declared") &&
-      h.includes("sum(vs: i32x4[]): number: not declared"),
+      h.includes("sum(vs: i32x4[]): number: not declared") &&
+      ["InResult", "InArray", "Nested"].every(
+        (c) => h.includes(`typedef struct ${c} ${c};`) && !new RegExp(`struct ${c} \\{`).test(code)
+      ) &&
+      h.includes("int32_t peekNested(struct Nested *h);") &&
+      !/\bpair\(/.test(code) &&
+      h.includes("pair(x: number): Result<f64x2, string>: not declared") &&
+      !/nish_result/.test(code),
     `${shown(sides)}\n--- lib.h\n${h}`
   )
   check(
@@ -10813,7 +10835,9 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
       !/nish_napi_(first|make|sum)\b/.test(n) &&
       n.includes("first(v: i32x4): number -- not bridged: parameter 1 (v) is i32x4") &&
       n.includes("make(x: number): i32x4 -- not bridged: it returns i32x4") &&
-      n.includes("sum(vs: i32x4[]): number -- not bridged: parameter 1 (vs) is i32x4[]"),
+      n.includes("sum(vs: i32x4[]): number -- not bridged: parameter 1 (vs) is i32x4[]") &&
+      !/nish_napi_pair\b/.test(n) &&
+      n.includes("pair(x: number): Result<f64x2, string> -- not bridged: it returns Result<f64x2, string>"),
     `${shown(sides)}\n--- lib_napi.c\n${n}`
   )
   check(
@@ -10824,7 +10848,9 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
       !/\b(first|make|sum): raw\./.test(m) &&
       d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector") &&
       d.includes("the result is `i32x4`, a `nish:simd` vector") &&
-      d.includes("sum(vs: i32x4[]): number  -- not exported to JS"),
+      d.includes("sum(vs: i32x4[]): number  -- not exported to JS") &&
+      !/\bpair: raw\./.test(m) &&
+      d.includes("the result is `Result<f64x2, string>`, which holds a `nish:simd` vector"),
     `${shown(sides)}\n--- lib.d.ts\n${d}\n--- lib.mjs\n${m}`
   )
 

@@ -36,6 +36,7 @@ import {
   banner,
   endsWithFold,
   ExternalFunction,
+  holdsVector,
   jsExportName,
   POS_PARAM,
   POS_RETURN,
@@ -46,6 +47,7 @@ import {
   typedView,
 } from "./interop-abi"
 import { takesRange } from "./emit-builtins"
+import { StringSet } from "./map"
 import { basename } from "./paths"
 import { FunctionSig } from "./program"
 import {
@@ -175,14 +177,17 @@ export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
 }
 
 /**
- * A type the bridge does not carry, and why: a `nish:simd` vector because no
- * wasm export signature here spells a `v128`, the rest because they need the
- * runtime the freestanding profile leaves out.
+ * A type the bridge does not carry, and why: a `nish:simd` vector, or a type
+ * holding one, because no wasm export signature here spells a `v128`, the rest
+ * because they need the runtime the freestanding profile leaves out.
  */
 const wasmMissing = (table: TypeTable, t: i32): string => {
   const shown = `\`${tsKeyword(table, t)}\``
   if (table.isVector(t)) {
     return `${shown}, a \`nish:simd\` vector, which the wasm bridge does not carry yet`
+  }
+  if (holdsVector(table, t, new StringSet())) {
+    return `${shown}, which holds a \`nish:simd\` vector the wasm bridge does not carry yet`
   }
   return `${shown}, which needs the ${LANGUAGE} runtime the freestanding wasm profile does not include`
 }

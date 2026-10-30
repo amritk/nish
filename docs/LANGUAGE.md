@@ -6682,12 +6682,15 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
   natively, under `--profile wasi` (where a sysroot is installed) and under
   Node, and holds the three to one output.
 - **A vector does not cross the interop boundary yet.** An exported function
-  with a vector, or an array of vectors, as a parameter or result is left out
-  of `--emit-header`, `--emit-napi` and the `--emit-dts` typings and wasm
-  loader, with a comment naming the type, as every type the sidecars cannot
-  spell is. A class with a vector field is opaque in the header
-  (`typedef struct Name Name;`), as a `Map` or `Secret` holder is: C has no
-  portable vector type to lay it out with.
+  whose parameter or result holds a vector at any depth (the vector itself,
+  an array of them, a `Result` with a vector arm, an array of a class that
+  holds one) is left out of `--emit-header`, `--emit-napi` and the
+  `--emit-dts` typings and wasm loader, with a comment naming the type, as
+  every type the sidecars cannot spell is. A class that holds a vector
+  anywhere (a field, an element, a `Result` arm, another class it points at)
+  is opaque in the header (`typedef struct Name Name;`), as a `Map` or
+  `Secret` holder is: C has no portable vector type to lay it out with. A bare
+  pointer to such a class still crosses, as an opaque `struct Name *`.
 
 ### Constant time: `ctSelect` and `ctEq`
 

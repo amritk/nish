@@ -6,6 +6,7 @@ import Compilation from "./compilation" -> struct Compilation
 import banner from "./interop-abi" -> function @banner
 import endsWithFold from "./interop-abi" -> function @endsWithFold
 import ExternalFunction from "./interop-abi" -> struct ExternalFunction
+import holdsVector from "./interop-abi" -> function @holdsVector
 import jsExportName from "./interop-abi" -> function @jsExportName
 import POS_PARAM from "./interop-abi" -> const POS_PARAM
 import POS_RETURN from "./interop-abi" -> const POS_RETURN
@@ -15,6 +16,7 @@ import tsSignatureLine from "./interop-abi" -> function @tsSignatureLine
 import TypedView from "./interop-abi" -> struct TypedView
 import typedView from "./interop-abi" -> function @typedView
 import takesRange from "./emit-builtins" -> function @takesRange
+import StringSet from "./map" -> struct StringSet
 import basename from "./paths" -> function @basename
 import FunctionSig from "./program" -> struct FunctionSig
 import K_ARRAY from "./types" -> const K_ARRAY
@@ -80,12 +82,14 @@ function wasmSkipReason(table: TypeTable, sig: FunctionSig): string -> @wasmSkip
 function wasmMissing(table: TypeTable, t: i32): string -> @wasmMissing
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
-  calls: TypeTable.isVector nish_str_concat tsKeyword
-  pointer table: size=96 writesThrough=false captured=false passedTo=tsKeyword#0 TypeTable.isVector#0
-  stackSites=0 stackLocals=0
+  calls: StringSet.constructor TypeTable.isVector holdsVector nish_str_concat tsKeyword
+  pointer table: size=96 writesThrough=false captured=false passedTo=tsKeyword#0 TypeTable.isVector#0 holdsVector#0
+  stackSites=1 stackLocals=0
   local +0:9 shown: string (const)
   callee +0:22 tsKeyword -> @tsKeyword
   callee +1:7 TypeTable.isVector -> @TypeTable.isVector
+  callee +4:7 holdsVector -> @holdsVector
+  callee +4:29 new StringSet -> @StringSet.constructor
 function wasmUnsignedIn(table: TypeTable, t: i32): string -> @wasmUnsignedIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t

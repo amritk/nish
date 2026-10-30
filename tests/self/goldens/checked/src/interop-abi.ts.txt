@@ -59,6 +59,7 @@ struct ExternalFunction (class) size=32 align=8 exported
   field unit: ModuleUnit index=1 offset=8
   field writtenParams: StringSet index=2 offset=16
   field rangeInData: boolean index=3 offset=24
+  field vectorInData: boolean index=4 offset=25
   constructor -> @ExternalFunction.constructor
 struct TypedView (class) size=32 align=8 exported
   field ctor: string index=0 offset=0
@@ -84,9 +85,9 @@ function pushAll(dst: string[], src: string[]): void -> @pushAll [exported]
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -1:14 line: string (const)
-function ExternalFunction.constructor(this: ExternalFunction, sig: FunctionSig, unit: ModuleUnit, writtenParams: StringSet, rangeInData: boolean): void -> @ExternalFunction.constructor [exported constructor]
+function ExternalFunction.constructor(this: ExternalFunction, sig: FunctionSig, unit: ModuleUnit, writtenParams: StringSet, rangeInData: boolean, vectorInData: boolean): void -> @ExternalFunction.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: rangeInData sig unit writtenParams
+  escaping: rangeInData sig unit vectorInData writtenParams
   pointer this: size=32 writesThrough=true captured=false
   pointer sig: size=136 writesThrough=true captured=true
   pointer unit: size=88 writesThrough=true captured=true
@@ -95,8 +96,8 @@ function ExternalFunction.constructor(this: ExternalFunction, sig: FunctionSig, 
 function externalFunctions(compilation: Compilation): ExternalFunction[] -> @externalFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via analyzeFunctions
-  calls: AnalysisUnit.constructor ExternalFunction.constructor FactsTable.get FunctionSig.compileTimeOnly FunctionSig.definedIn analyzeFunctions nish_alloc_struct nish_array_grow nish_str_eq privateAbi signatureHidesRange structsHoldingRanges writtenArrayParams
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=structsHoldingRanges#0
+  calls: AnalysisUnit.constructor ExternalFunction.constructor FactsTable.get FunctionSig.compileTimeOnly FunctionSig.definedIn analyzeFunctions nish_alloc_struct nish_array_grow nish_str_eq privateAbi signatureHidesRange signatureHidesVector structsHoldingRanges structsHoldingVectors writtenArrayParams
+  pointer compilation: size=160 writesThrough=false captured=false passedTo=structsHoldingRanges#0 structsHoldingVectors#0
   stackSites=1 stackLocals=1
   local +0:9 units: AnalysisUnit[] (const)
   local +1:14 unit: ModuleUnit (const)
@@ -105,19 +106,24 @@ function externalFunctions(compilation: Compilation): ExternalFunction[] -> @ext
   callee +4:17 analyzeFunctions -> @analyzeFunctions
   local +5:9 ranged: StringSet (const)
   callee +5:18 structsHoldingRanges -> @structsHoldingRanges
-  local +6:9 out: ExternalFunction[] (const)
-  local +7:14 unit: ModuleUnit (const)
-  local +8:11 program: CheckedProgram (const)
-  local +9:11 entryMain: FunctionSig | null (const)
-  local +24:16 sig: FunctionSig (const)
-  callee +25:12 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee +32:11 privateAbi -> @privateAbi
-  callee +38:11 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
-  local +41:13 written: StringSet (const)
-  callee +41:23 writtenArrayParams -> @writtenArrayParams
-  callee +41:66 FactsTable.get -> @FactsTable.get
-  callee +42:16 new ExternalFunction -> @ExternalFunction.constructor
-  callee +42:57 signatureHidesRange -> @signatureHidesRange
+  local +6:9 vectored: StringSet (const)
+  callee +6:20 structsHoldingVectors -> @structsHoldingVectors
+  local +7:9 out: ExternalFunction[] (const)
+  local +8:14 unit: ModuleUnit (const)
+  local +9:11 program: CheckedProgram (const)
+  local +10:11 entryMain: FunctionSig | null (const)
+  local +25:16 sig: FunctionSig (const)
+  callee +26:12 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +33:11 privateAbi -> @privateAbi
+  callee +39:11 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
+  local +42:13 written: StringSet (const)
+  callee +42:23 writtenArrayParams -> @writtenArrayParams
+  callee +42:66 FactsTable.get -> @FactsTable.get
+  local +43:13 table: TypeTable (const)
+  local +44:13 hidesRange: boolean (const)
+  callee +44:26 signatureHidesRange -> @signatureHidesRange
+  callee +46:9 new ExternalFunction -> @ExternalFunction.constructor
+  callee +46:62 signatureHidesVector -> @signatureHidesVector
 function structsHoldingRanges(compilation: Compilation): StringSet -> @structsHoldingRanges
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.add StringSet.constructor StringSet.has holdsRange nish_alloc_struct
@@ -164,6 +170,28 @@ function signatureHidesRange(table: TypeTable, sig: FunctionSig, ranged: StringS
   local +3:14 t: i32 (const)
   callee +4:10 TypeTable.isRanged -> @TypeTable.isRanged
   callee +4:31 holdsRange -> @holdsRange
+function signatureHidesVector(table: TypeTable, sig: FunctionSig, vectored: StringSet): boolean -> @signatureHidesVector
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: hidesVector
+  pointer table: size=96 writesThrough=false captured=false passedTo=hidesVector#0 hidesVector#0
+  pointer sig: size=136 writesThrough=false captured=false
+  pointer vectored: size=8 writesThrough=false captured=false passedTo=hidesVector#2 hidesVector#2
+  stackSites=0 stackLocals=0
+  callee +0:7 hidesVector -> @hidesVector
+  local +3:14 t: i32 (const)
+  callee +4:9 hidesVector -> @hidesVector
+function hidesVector(table: TypeTable, t: i32, vectored: StringSet): boolean -> @hidesVector
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: t
+  calls: TypeTable.kindOf TypeTable.refOf holdsVector
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 TypeTable.kindOf#0 holdsVector#0
+  pointer vectored: size=8 writesThrough=false captured=false passedTo=holdsVector#2
+  stackSites=0 stackLocals=0
+  local +0:7 at: i32 (let)
+  callee +1:7 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +2:10 TypeTable.refOf -> @TypeTable.refOf
+  callee +4:10 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +4:43 holdsVector -> @holdsVector
 function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionFacts | null): StringSet -> @writtenArrayParams
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: FunctionFacts.pointerParam StringSet.add StringSet.constructor TypeTable.isArray TypeTable.isReadonlyArray nish_alloc_struct nish_panic_index
@@ -201,32 +229,59 @@ function typedView(table: TypeTable, t: i32): TypedView | null -> @typedView [ex
   callee +24:14 new TypedView -> @TypedView.constructor
   callee +26:14 new TypedView -> @TypedView.constructor
   callee +28:14 new TypedView -> @TypedView.constructor
-function arrayOfVectors(table: TypeTable, t: i32): boolean -> @arrayOfVectors
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: t
-  calls: TypeTable.isVector TypeTable.kindOf TypeTable.refOf
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 TypeTable.isVector#0
+function structsHoldingVectors(compilation: Compilation): StringSet -> @structsHoldingVectors [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  calls: StringSet.add StringSet.constructor StringSet.has holdsVector nish_alloc_struct
+  pointer compilation: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:7 at: i32 (let)
-  callee +1:10 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +2:10 TypeTable.refOf -> @TypeTable.refOf
-  callee +4:10 TypeTable.isVector -> @TypeTable.isVector
+  local +0:9 table: TypeTable (const)
+  local +1:9 held: StringSet (const)
+  callee +1:16 new StringSet -> @StringSet.constructor
+  local +2:7 grew: boolean (let)
+  local +5:16 unit: ModuleUnit (const)
+  local +6:18 info: StructInfo (const)
+  callee +7:13 StringSet.has -> @StringSet.has
+  local +10:20 field: FieldInfo (const)
+  callee +11:15 holdsVector -> @holdsVector
+  callee +12:13 StringSet.add -> @StringSet.add
+function holdsVector(table: TypeTable, t: i32, held: StringSet): boolean -> @holdsVector [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: t
+  calls: StringSet.has TypeTable.errOf TypeTable.isVector TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf holdsVector
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isVector#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.refOf#0 holdsVector#0 TypeTable.refOf#0 holdsVector#0 TypeTable.okOf#0 holdsVector#0 TypeTable.errOf#0 TypeTable.nameOf#0
+  pointer held: size=8 writesThrough=false captured=false passedTo=holdsVector#2 holdsVector#2 holdsVector#2 holdsVector#2 StringSet.has#0
+  stackSites=0 stackLocals=0
+  callee +0:7 TypeTable.isVector -> @TypeTable.isVector
+  callee +3:11 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +5:14 holdsVector -> @holdsVector
+  callee +5:33 TypeTable.refOf -> @TypeTable.refOf
+  callee +7:14 holdsVector -> @holdsVector
+  callee +7:33 TypeTable.refOf -> @TypeTable.refOf
+  callee +9:14 holdsVector -> @holdsVector
+  callee +9:33 TypeTable.okOf -> @TypeTable.okOf
+  callee +9:57 holdsVector -> @holdsVector
+  callee +9:76 TypeTable.errOf -> @TypeTable.errOf
+  callee +11:14 StringSet.has -> @StringSet.has
+  callee +11:23 TypeTable.nameOf -> @TypeTable.nameOf
 function cType(table: TypeTable, t: i32, position: i32, written: boolean): string -> @cType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: position t
-  calls: TypeTable.isRanged TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.resultByValue arrayOfVectors cResultName cResultWord cStructName cType nish_str_concat
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 arrayOfVectors#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
-  stackSites=0 stackLocals=0
+  calls: StringSet.constructor TypeTable.isRanged TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.resultByValue cResultName cResultWord cStructName cType holdsVector nish_str_concat
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 holdsVector#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 holdsVector#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
+  stackSites=2 stackLocals=0
   callee +0:7 TypeTable.isRanged -> @TypeTable.isRanged
   callee +3:11 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +34:11 arrayOfVectors -> @arrayOfVectors
+  callee +34:11 holdsVector -> @holdsVector
+  callee +34:33 new StringSet -> @StringSet.constructor
   callee +44:24 cStructName -> @cStructName
   callee +44:36 TypeTable.nameOf -> @TypeTable.nameOf
   callee +46:14 cType -> @cType
   callee +46:27 TypeTable.refOf -> @TypeTable.refOf
-  callee +54:14 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +54:39 cResultWord -> @cResultWord
-  callee +54:73 cResultName -> @cResultName
+  callee +56:11 holdsVector -> @holdsVector
+  callee +56:33 new StringSet -> @StringSet.constructor
+  callee +59:14 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +59:39 cResultWord -> @cResultWord
+  callee +59:73 cResultName -> @cResultName
 function cResultName(table: TypeTable, t: i32): string -> @cResultName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
@@ -276,14 +331,16 @@ function resultTypesIn(table: TypeTable, t: i32, out: i32[]): void -> @resultTyp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: t
-  calls: TypeTable.errOf TypeTable.kindOf TypeTable.okOf TypeTable.refOf nish_array_grow resultTypesIn
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 resultTypesIn#0 TypeTable.refOf#0 resultTypesIn#0 TypeTable.okOf#0 resultTypesIn#0 TypeTable.errOf#0
+  calls: StringSet.constructor TypeTable.errOf TypeTable.kindOf TypeTable.okOf TypeTable.refOf holdsVector nish_array_grow resultTypesIn
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 resultTypesIn#0 TypeTable.refOf#0 holdsVector#0 resultTypesIn#0 TypeTable.okOf#0 resultTypesIn#0 TypeTable.errOf#0
   pointer out: size=0 writesThrough=true captured=false passedTo=resultTypesIn#2 resultTypesIn#2 resultTypesIn#2
-  stackSites=0 stackLocals=0
+  stackSites=1 stackLocals=0
   local -6:9 kind: i32 (const)
   callee -6:16 TypeTable.kindOf -> @TypeTable.kindOf
   callee -4:5 resultTypesIn -> @resultTypesIn
   callee -4:26 TypeTable.refOf -> @TypeTable.refOf
+  callee -3:36 holdsVector -> @holdsVector
+  callee -3:58 new StringSet -> @StringSet.constructor
   callee -2:5 resultTypesIn -> @resultTypesIn
   callee -2:26 TypeTable.okOf -> @TypeTable.okOf
   callee -1:5 resultTypesIn -> @resultTypesIn

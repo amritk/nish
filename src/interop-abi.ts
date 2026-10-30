@@ -95,12 +95,26 @@ export class ExternalFunction {
    * type without a C spelling gets.
    */
   rangeInData: boolean
+  /**
+   * A `nish:simd` vector sits inside a parameter or the result: an element, a
+   * `Result` arm, a record stored inline in an array (`holdsVector`). A bare
+   * class holding one stays, as the pointer to an opaque struct the header
+   * declares; nothing else that holds one has a C spelling.
+   */
+  vectorInData: boolean
 
-  constructor(sig: FunctionSig, unit: ModuleUnit, writtenParams: StringSet, rangeInData: boolean) {
+  constructor(
+    sig: FunctionSig,
+    unit: ModuleUnit,
+    writtenParams: StringSet,
+    rangeInData: boolean,
+    vectorInData: boolean
+  ) {
     this.sig = sig
     this.unit = unit
     this.writtenParams = writtenParams
     this.rangeInData = rangeInData
+    this.vectorInData = vectorInData
   }
 }
 
@@ -124,6 +138,7 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
   }
   const facts = analyzeFunctions(units, compilation.table, compilation.opts, compilation.runtime)
   const ranged = structsHoldingRanges(compilation)
+  const vectored = structsHoldingVectors(compilation)
   const out: ExternalFunction[] = []
   for (const unit of compilation.modules) {
     const program = unit.checker.program
@@ -160,7 +175,11 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
         continue
       }
       const written = writtenArrayParams(compilation.table, sig, facts.get(sig.name))
-      out.push(new ExternalFunction(sig, unit, written, signatureHidesRange(compilation.table, sig, ranged)))
+      const table = compilation.table
+      const hidesRange = signatureHidesRange(table, sig, ranged)
+      out.push(
+        new ExternalFunction(sig, unit, written, hidesRange, signatureHidesVector(table, sig, vectored))
+      )
     }
   }
   return out
@@ -226,6 +245,30 @@ const signatureHidesRange = (table: TypeTable, sig: FunctionSig, ranged: StringS
     }
   }
   return false
+}
+
+/**
+ * `ExternalFunction.vectorInData`: a vector held by a parameter or the result
+ * anywhere but behind a bare class reference, which crosses as a pointer.
+ */
+const signatureHidesVector = (table: TypeTable, sig: FunctionSig, vectored: StringSet): boolean => {
+  if (hidesVector(table, sig.returnType, vectored)) {
+    return true
+  }
+  for (const t of sig.paramTypes) {
+    if (hidesVector(table, t, vectored)) {
+      return true
+    }
+  }
+  return false
+}
+
+const hidesVector = (table: TypeTable, t: i32, vectored: StringSet): boolean => {
+  let at = t
+  if (table.kindOf(at) === K_NULLABLE) {
+    at = table.refOf(at)
+  }
+  return table.kindOf(at) !== K_STRUCT && holdsVector(table, at, vectored)
 }
 
 const writtenArrayParams = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts | null): StringSet => {
@@ -314,13 +357,58 @@ export const typedView = (table: TypeTable, t: i32): TypedView | null => {
   }
 }
 
-/** Whether `t` is an array whose innermost element is a `nish:simd` vector. */
-const arrayOfVectors = (table: TypeTable, t: i32): boolean => {
-  let at = t
-  while (table.kindOf(at) === K_ARRAY) {
-    at = table.refOf(at)
+/**
+ * The names of the classes and interfaces that hold a `nish:simd` vector
+ * anywhere: in a field, in an element or a payload of one, or in another record
+ * one of their fields points at. The header makes each one opaque, the same
+ * fixpoint as `structsHoldingRanges`.
+ */
+export const structsHoldingVectors = (compilation: Compilation): StringSet => {
+  const table = compilation.table
+  const held = new StringSet()
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const unit of compilation.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (held.has(info.name)) {
+          continue
+        }
+        for (const field of info.fields) {
+          if (holdsVector(table, field.type, held)) {
+            held.add(info.name)
+            grew = true
+            break
+          }
+        }
+      }
+    }
   }
-  return table.isVector(at)
+  return held
+}
+
+/**
+ * Whether `t` is a `nish:simd` vector or has one inside it: an element, a
+ * `Result` arm, the type under a `| null`, or a record named in `held`
+ * (`structsHoldingVectors`). A vector is sixteen bytes aligned to sixteen, and
+ * nothing that holds one inline has a C, N-API or wasm spelling.
+ */
+export const holdsVector = (table: TypeTable, t: i32, held: StringSet): boolean => {
+  if (table.isVector(t)) {
+    return true
+  }
+  switch (table.kindOf(t)) {
+    case K_ARRAY:
+      return holdsVector(table, table.refOf(t), held)
+    case K_NULLABLE:
+      return holdsVector(table, table.refOf(t), held)
+    case K_RESULT:
+      return holdsVector(table, table.okOf(t), held) || holdsVector(table, table.errOf(t), held)
+    case K_STRUCT:
+      return held.has(table.nameOf(t))
+    default:
+      return false
+  }
 }
 
 /**
@@ -363,9 +451,9 @@ export const cType = (table: TypeTable, t: i32, position: i32, written: boolean)
     case K_ARRAY:
       // One header type for every element type (the comment above the
       // prototype names it). `const` is the `readonly` proof from attributes.ts.
-      // An array of `nish:simd` vectors holds them inline, sixteen bytes a
-      // slot, which C has no portable element type to describe.
-      if (arrayOfVectors(table, t)) {
+      // An array holding a `nish:simd` vector in its slots, directly or in a
+      // `Result` element, has a stride C has no portable type to describe.
+      if (holdsVector(table, t, new StringSet())) {
         return ""
       }
       return position === POS_PARAM && !written ? "const nish_array *" : "nish_array *"
@@ -384,7 +472,12 @@ export const cType = (table: TypeTable, t: i32, position: i32, written: boolean)
     // header is the ABI rather than a description of it. Every other `Result`
     // is the arena pointer WP16 has always used
     // (`docs/wp17-result-abi.md` §3).
+    // A `Result` with a vector arm is laid out around it (`resultLayout`), and
+    // C has no portable type to describe that arm with.
     case K_RESULT:
+      if (holdsVector(table, t, new StringSet())) {
+        return ""
+      }
       return table.resultByValue(t) ? cResultWord(table, t) : `struct ${cResultName(table, t)} *`
     default:
       return ""
@@ -479,12 +572,16 @@ export const cFieldType = (table: TypeTable, t: i32): string => {
   return c.length > 0 ? c : "void *"
 }
 
-/** Every `Result` type mentioned inside `t`, itself included, innermost first. */
+/**
+ * Every `Result` type mentioned inside `t`, itself included, innermost first.
+ * One holding a `nish:simd` vector has no C definition (`cType`), so it and
+ * everything under it is left out.
+ */
 const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
   const kind = table.kindOf(t)
   if (kind === K_ARRAY || kind === K_NULLABLE) {
     resultTypesIn(table, table.refOf(t), out)
-  } else if (kind === K_RESULT) {
+  } else if (kind === K_RESULT && !holdsVector(table, t, new StringSet())) {
     resultTypesIn(table, table.okOf(t), out)
     resultTypesIn(table, table.errOf(t), out)
     out.push(t)
@@ -1090,10 +1187,11 @@ const sigNameNode = (sig: FunctionSig): Node =>
 /**
  * `int32_t add(int32_t a, int32_t b)` for a function, or `""` when a type has
  * no C spelling or holds a range a host would write unchecked
- * (`ExternalFunction.rangeInData`).
+ * (`ExternalFunction.rangeInData`) or a `nish:simd` vector
+ * (`ExternalFunction.vectorInData`).
  */
 export const cPrototype = (table: TypeTable, fn: ExternalFunction): string => {
-  if (fn.rangeInData) {
+  if (fn.rangeInData || fn.vectorInData) {
     return ""
   }
   const sig = fn.sig
