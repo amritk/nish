@@ -262,7 +262,7 @@ export const wipeChecks = [
   // and `bcryptVerifyNExposed` dropped each, `bcryptHashN`, `bcryptVerifyN`,
   // `bcryptHash4`, `bcryptVerify4` and `bcryptCalibrateTime` by one.
   {
-    name: "crypto: the wipes survive opt -O2 (bcrypt's batch state, key words, block, digests, joined and given hashes in bcryptVerify4Exposed)",
+    name: "crypto: the wipes survive opt -O2 (bcrypt's batch state, key words, block, digests, joined and given hashes in bcryptVerifyNExposed)",
     program: "tests/link/crypto_bcrypt_batch/main.ts",
     modules: BCRYPT_MODULES,
     roots: [

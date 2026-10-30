@@ -50,10 +50,12 @@ PASS  a malformed lane 4 is an Err naming it
 PASS  and is not read when lane 4 is null
 PASS  a malformed lane 5 is an Err naming it
 PASS  and is not read when lane 5 is null
+PASS  a short hash in lane 2 is an Err naming it
+PASS  a bad salt character in lane 4 is an Err naming it
 PASS  95 bytes of salt are refused
 PASS  cost 3 is refused
 PASS  cost 32 is refused
 PASS  a batch is six hashes
 PASS  bcryptCalibrate answers 1 to 6
 PASS  and again
-bcrypt width: 58 passed, 0 failed, 0 skipped
+bcrypt width: 60 passed, 0 failed, 0 skipped

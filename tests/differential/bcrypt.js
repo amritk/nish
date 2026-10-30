@@ -429,6 +429,11 @@ allBatches.forEach((b, j) => {
     batchFailures.push(`bcryptVerifyN answered ${verifies}, crypt_r ${wantVerifies} (${what})`)
   }
 })
+const widths = new Set(allBatches.map((b) => b.length))
+const missing = [2, 3, 4, 5, 6].filter((w) => !widths.has(w))
+if (missing.length > 0) {
+  failures.push(`no batch of width ${missing.join(", ")} was run (widths ${[...widths].sort().join(", ")})`)
+}
 failures.push(...batchFailures)
 for (const f of failures) {
   console.log(`FAIL  bcrypt differential: ${f}`)
@@ -443,6 +448,6 @@ console.log(
     `(${withNul} with a NUL, ${highBit} with an 8-bit byte, ${long} past 72 bytes, ${veryLong} past 255, ` +
     `${cost10} at cost 10; seed ${argValue("--seed", "873")}); ` +
     `${allBatches.length - new Set(batchFailures.map((f) => f.slice(f.lastIndexOf("(")))).size} of ${allBatches.length} ` +
-    `batches agree (widths ${[...new Set(allBatches.map((b) => b.length))].sort().join(", ")})`
+    `batches agree (widths ${[...widths].sort().join(", ")})`
 )
 process.exit(failures.length === 0 ? 0 : 1)

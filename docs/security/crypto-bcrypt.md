@@ -144,7 +144,8 @@ given (`bcryptBodyN`, one of `bcryptBody2` to `bcryptBody6`, through
 overlap the others' and a core is not left waiting on one chain's latency.
 Each lane's hash is the single path's, byte for byte. The kernels other than
 `bcryptBody4` are written out by `bench/crypto/bcrypt/gen-body.mjs`, whose
-output is the source as committed.
+output is the source as committed; its width 4 is `bcryptBody4`'s text below
+the doc comment, and `gen-body.mjs --check` compares all five with the module.
 
 **One state, one wipe.** A `Secret` cannot be stored in an array or a field,
 so the lanes' states cannot be several `Secret`s handed to one kernel. They
@@ -402,7 +403,7 @@ per block, and `crypt_r` 177.
 
 **The four-lane kernel, read.** The loop of `bcryptBody4` after `opt -O3` and
 `llc`, from its `objdump`, is one round (two half-rounds) of all four lanes
-in 124 instructions: 45 loads (each lane's 4 S-box words and `P` word per
+in 123 instructions (124 before it was inlined into `bcryptBodyN`): 45 loads (each lane's 4 S-box words and `P` word per
 half-round, 40, and 5 reloads of spilled values), 5 stores, all spills to
 the stack, and one compare and backward branch, the only branch; it runs 8
 times per block, not unrolled further. Checked against the suspects: no
@@ -415,6 +416,50 @@ so the lanes' S-box words at one index fall in different L1 sets, and the
 six-lane state, 25.5 KB, fits the 32 KB L1. The spills are five registers'
 worth per round: 16 general-purpose registers do not hold four lanes' two
 halves, base, counter and temporaries.
+
+**Reproducing the clock and the counts.** `run.mjs` turns times into cycles
+at cpuinfo's clock unless `--ghz` gives one, so the 3.2 GHz figures are
+`node bench/crypto/bcrypt/run.mjs --rounds 9 --ghz 3.2`. The clock is a chain
+of dependent one-cycle `add`s timed with `CLOCK_MONOTONIC`; on machine C it
+printed 3.12, 3.14 and 3.23 on three runs, with a build running beside it:
+
+```sh
+cat > clock.c <<'C'
+#include <stdio.h>
+#include <time.h>
+int main(void) {
+  unsigned long x = 1, n = 1000000000;
+  struct timespec a, b;
+  clock_gettime(CLOCK_MONOTONIC, &a);
+  for (unsigned long i = 0; i < n; i++)
+    __asm__ volatile("add %0, %0\n\tadd %0, %0\n\tadd %0, %0\n\tadd %0, %0" : "+r"(x));
+  clock_gettime(CLOCK_MONOTONIC, &b);
+  printf("%.2f GHz\n", 4.0 * n / ((b.tv_sec - a.tv_sec) * 1e9 + (b.tv_nsec - a.tv_nsec)));
+  return (int)(x & 1);
+}
+C
+gcc -O2 clock.c -o clock && ./clock
+```
+
+The four-lane loop's counts are read from the `bcryptHash4` bench program.
+`bcryptBody4` is inlined into `bcryptBodyN`, so the command lists every loop
+there, from a backward branch's target to the branch. A load is an
+instruction that reads memory, and a store is one that writes it:
+
+```sh
+build/nish build/bench/bcrypt/nish4.ts -o build/bench/bcrypt/nish4-g-out/ --link build/bench/bcrypt/nish4-g -g
+objdump -d --no-show-raw-insn -M intel --disassemble=nish.bcryptBodyN build/bench/bcrypt/nish4-g |
+  grep -P '^\s+[0-9a-f]+:\t' | awk -F'\t' '{ a = $1; sub(/^ +/, "", a); sub(/:$/, "", a); i[++n] = $2; at[a] = n }
+  $2 ~ /^j/ { split($2, t, " +"); if (t[2] in at && at[t[2]] < n) { lo[++L] = at[t[2]]; hi[L] = n } }
+  END { for (l = 1; l <= L; l++) { ld = st = br = 0; for (k = lo[l]; k <= hi[l]; k++) { o = i[k]; sub(/^[a-z]+ +/, "", o)
+    if (o ~ /^[^,]*PTR \[/) st++; else if (o ~ /PTR \[/) ld++; if (i[k] ~ /^(j|call)/) br++ }
+    print hi[l] - lo[l] + 1 " instructions, " ld " loads, " st " stores, " br " branches" } }'
+```
+
+It prints ten loops, a round loop with one branch and its block loop with
+two for each width. A width-w round loop's loads are its 10w S-box and `P`
+words plus its reloads. The round loops print 58, 188, 123, 154 and 90
+instructions, with 20, 73, 45, 59 and 30 loads, for widths 2, 6, 4, 5 and 3.
 
 **The bounds.** Per lane half-round: the latency floor is the 11-cycle chain
 over the w lanes (about 2.8 cycles at four, 2.2 at five), the load-port bound

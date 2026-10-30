@@ -3,8 +3,9 @@
 // `bcryptVerify` gives, byte for byte. Random passwords (0 to 80 bytes, NULs
 // and 8-bit bytes included), random salts, the given lanes in random
 // positions, costs 4 to 8 and two batches at 10; verify with lanes of mixed
-// cost; a malformed hash in each lane position; the refusals; and
-// `bcryptCalibrate` answering a width from one to six.
+// cost; a malformed hash in each lane position, a short one and a bad salt
+// character; the refusals; and `bcryptCalibrate` answering a width from one
+// to six.
 import { Suite } from "nish/testing";
 import { Secret, secret, wipe } from "nish:secret";
 import { bcryptCalibrate, bcryptHash, bcryptHashN, bcryptVerify, bcryptVerifyN } from "nish/crypto/bcrypt";
@@ -270,6 +271,13 @@ export const main = (): i32 => {
       t.eqStr(`and is not read when lane ${k} is null`, verify(pw, 63 & ~(1 << k), hashes), expect.join(" "));
     }
   }
+  // A short hash and a bad salt character are named the same way.
+  const short: string[] = [good, good, good, good, good, good];
+  short[2] = good.substring(0, 59);
+  t.eqStr("a short hash in lane 2 is an Err naming it", verify(pw, 63, short), "Err: bcrypt: lane 2: a hash is 60 characters");
+  const badSalt: string[] = [good, good, good, good, good, good];
+  badSalt[4] = `${good.substring(0, 7)}!${good.substring(8)}`;
+  t.eqStr("a bad salt character in lane 4 is an Err naming it", verify(pw, 63, badSalt), "Err: bcrypt: lane 4: the salt is not bcrypt base64");
 
   // Refusals.
   const salts: u8[] = randomBytes(state, 96);
