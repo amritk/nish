@@ -459,8 +459,8 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  * question and `NISH_SHA256` pin, and `nish_sha256_compress` on SHA-NI (or the ARMv8
  * SHA-256 instructions on AArch64).
  *
- * Measured **491 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
- * `.text`: the guard and the block 337, the resolver 154; the round constants are
+ * Measured **495 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the guard and the block 341, the resolver 154; the round constants are
  * `.rodata`. Its own translation unit rather than more of `runtime-aes.c`: a program
  * that hashes carries no AES, and the rule is a new file with its own measured
  * ceiling, never a raised one. The budget is the next 256-byte boundary above the

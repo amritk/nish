@@ -14,8 +14,8 @@
  * Then a seeded corpus: 20,000 random states and blocks at random offsets in
  * a buffer, through both, with the state compared word for word; and the
  * guard's edges (`at` at -1, 0, the last offset that fits and one past it,
- * short `h` and `w`), each of which must leave the state untouched and answer
- * 0.
+ * short `h` and `w`, a source longer than `toI32` reads), each of which must
+ * leave the state untouched and answer 0.
  *
  * The runtime file is included rather than linked, as tests/simd/aes-gcm.c
  * includes runtime-aes.c, so the resolver's stored answer can be reset and
@@ -186,7 +186,9 @@ static int edges(void) {
   return refuses("at -1", 8, 64, 100, -1) && refuses("one past the last offset", 8, 64, 100, 37) &&
          refuses("a source of 63 bytes", 8, 64, 63, 0) && refuses("an empty source", 8, 64, 0, 0) &&
          refuses("a state of seven words", 7, 64, 100, 0) && refuses("a schedule of 63 words", 8, 63, 100, 0) &&
-         refuses("at INT32_MIN", 8, 64, 100, INT32_MIN);
+         refuses("at INT32_MIN", 8, 64, 100, INT32_MIN) &&
+         refuses("a source past 2^31 - 1 bytes, one past the last offset toI32 of its length allows", 8, 64,
+                 (uint64_t)INT32_MAX + 64, INT32_MAX - 63);
 }
 
 /* ---- The resolver ----------------------------------------------------------- */

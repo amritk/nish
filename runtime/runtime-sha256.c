@@ -155,10 +155,13 @@ NISH_SHA256_INLINE void nish_sha256_block(char *state, const char *in) {
 }
 #endif
 
-/* `sha256Compress`'s own guard, then the block. */
+/* `sha256Compress`'s own guard, then the block. That guard reads the source's
+   length through `toI32`, which saturates at 2^31 - 1, so it refuses a block
+   ending past that offset whatever the length: `at > INT32_MAX - 64`. */
 NISH_SHA256_TARGET int32_t nish_sha256_compress(nish_array *h, const nish_array *w, const nish_array *src,
                                                 int32_t at) {
-  if (h->len < 8 || w->len < 64 || at < 0 || src->len < 64 || (uint64_t)at > src->len - 64) return 0;
+  if (h->len < 8 || w->len < 64 || at < 0 || at > INT32_MAX - 64 || src->len < 64 || (uint64_t)at > src->len - 64)
+    return 0;
   nish_sha256_block(h->data, src->data + at);
   return 1;
 }
