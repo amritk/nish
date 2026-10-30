@@ -20,6 +20,8 @@ import {
   ACTION_PRESS,
   COLOR_DEFAULT,
   EVENT_KEY,
+  KEY_CHAR,
+  KEY_ESCAPE,
   KEY_F3,
   KEY_F4,
   KEY_F5,
@@ -158,6 +160,18 @@ const wallGetenv = (name: string): string => {
   return v === null ? "" : v
 }
 
+/** Whether this step's events press q (either case) or Esc. */
+const wallQuitPressed = (events: TermEvent[]): boolean => {
+  for (const e of events) {
+    if (e.type === EVENT_KEY && e.action === ACTION_PRESS) {
+      if (e.key === KEY_ESCAPE || (e.key === KEY_CHAR && (e.code === 113 || e.code === 81))) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 /** Whether `e` is a press of one of the director's keys, F3 to F8. */
 const wallHotkey = (e: TermEvent): boolean => e.type === EVENT_KEY && e.key >= KEY_F3 && e.key <= KEY_F8
 
@@ -239,7 +253,7 @@ const wallUpdate = (run: WallRun, input: TermInput): boolean => {
     return false
   }
   if (run.small) {
-    return true
+    return !wallQuitPressed(input.events)
   }
   if (run.scene === WALL_SCENE_MENU) {
     const answer: i32 = stepBreakMenu(run.menu, input)
@@ -247,8 +261,17 @@ const wallUpdate = (run: WallRun, input: TermInput): boolean => {
       return false
     }
     if (answer === MENU_APPLY) {
-      run.reopen = true
-      return false
+      // Only the rate needs the terminal opened again: the graphics setting
+      // is not handed to it yet, so a change there is only said.
+      if (run.settings.fps !== run.openFps) {
+        run.reopen = true
+        return false
+      }
+      if (run.settings.graphics !== run.openGraphics) {
+        run.openGraphics = run.settings.graphics
+        wallToast(run, wallGraphicsToast(run.openGraphics))
+      }
+      return true
     }
     if (answer !== MENU_STAY) {
       wallStartGame(run, answer)
@@ -297,6 +320,8 @@ const wallDrawText = (run: WallRun, fb: Framebuffer, stats: TermStats): void => 
   viewFor(view, fb, 0.0, 0.0)
   const scale: i32 = Math.max(fontScaleFor(view, 6.0), 1)
   const shadow: i32 = gfxRgb(0, 0, 0)
+  // The stats lines are built afresh each frame while F3 has them on; off,
+  // nothing is built. They are a diagnostic, so the strings are not cached.
   if (run.settings.stats) {
     const s: BreakSettings = run.settings
     blendRect(view, 0.0, 0.0, WORLD_W, 20.0, shadow, 0.6)
