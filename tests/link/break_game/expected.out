@@ -181,6 +181,10 @@ PASS  Q pauses too
 PASS  q from the pause quits
 PASS  quit sticks
 PASS  escape from the pause quits
+PASS  the brick breaks before the pause
+PASS  a pause draws the same frame at any alpha
+PASS  a pause draws the same frame step after step
+PASS  a held D moves the paddle right
 PASS  alpha 0 draws the ball where it was
 PASS  alpha 1 draws the ball where it is
 PASS  alpha 0.5 draws the ball midway across
@@ -191,11 +195,18 @@ PASS  the paddle is drawn
 PASS  a brick is drawn
 PASS  alpha moves what is drawn
 PASS  low effects drop the glow
+PASS  high effects light the ball's surroundings
+PASS  low effects leave the ball's surroundings bare
 PASS  low effects still draw the ball
 PASS  every scene draws at every size
 PASS  the HUD's text has width
 PASS  no text is no width
+PASS  the compact intro is two lines apart
+PASS  the compact pause is three lines apart
+PASS  the tally is up
+PASS  the compact tally is two lines apart
+PASS  the compact last screen is three lines apart
 PASS  a perfect player clears level 1
 PASS  a perfect player wins
 PASS  the pools never grow
-break-game: 200 passed, 0 failed, 0 skipped
+break-game: 211 passed, 0 failed, 0 skipped

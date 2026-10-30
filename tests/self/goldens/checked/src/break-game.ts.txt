@@ -3092,6 +3092,7 @@ import KEY_SPACE from "nish/term" -> const KEY_SPACE
 import KEY_UP from "nish/term" -> const KEY_UP
 import TermInput from "nish/term-io" -> struct TermInput
 import GLYPH_ADVANCE from "./break-gfx" -> const GLYPH_ADVANCE
+import GLYPH_H from "./break-gfx" -> const GLYPH_H
 import GfxTrail from "./break-gfx" -> struct GfxTrail
 import NO_SHADOW from "./break-gfx" -> const NO_SHADOW
 import Particles from "./break-gfx" -> struct Particles
@@ -3441,9 +3442,10 @@ function stepBreakGame(game: BreakGame, input: TermInput): i32 -> @stepBreakGame
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: anyPress enterPhase nish_panic_overflow remember stepClear stepEffects stepLastScreen stepPause stepPlay
-  pointer game: size=312 writesThrough=true captured=false passedTo=stepPause#0 remember#0 enterPhase#0 stepPlay#0 stepClear#0 stepLastScreen#0 stepEffects#0
+  pointer game: size=312 writesThrough=true captured=false passedTo=remember#0 stepPause#0 remember#0 enterPhase#0 stepPlay#0 stepClear#0 stepLastScreen#0 stepEffects#0
   pointer input: size=16 writesThrough=false captured=false passedTo=stepPause#1 anyPress#0 stepPlay#1 stepClear#1 stepLastScreen#1
   stackSites=0 stackLocals=0
+  callee -4:5 remember -> @remember
   callee -3:5 stepPause -> @stepPause
   callee +2:3 remember -> @remember
   callee +4:9 anyPress -> @anyPress
@@ -3453,13 +3455,16 @@ function stepBreakGame(game: BreakGame, input: TermInput): i32 -> @stepBreakGame
   callee +12:5 stepLastScreen -> @stepLastScreen
   callee +14:3 stepEffects -> @stepEffects
 function remember(game: BreakGame): void -> @remember
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
+  calls: nish_panic_index
   pointer game: size=312 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +5:14 b: Ball (const)
   local +9:14 c: Capsule (const)
   local +12:14 f: Floater (const)
+  local +15:9 pool: Particles (const)
+  local +16:12 i: i32 (let)
 function stepPause(game: BreakGame, input: TermInput): void -> @stepPause
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -4269,13 +4274,18 @@ function drawPower(view: View, x: f64, left: i32, full: i32, kind: i32, compact:
   callee +4:3 fillRect -> @fillRect
   callee +6:5 drawTextCentred -> @drawTextCentred
   callee +6:52 capsuleLetter -> @capsuleLetter
+function lineHeight(view: View, scale: i32): f64 -> @lineHeight
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer view: size=64 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function drawScreen(game: BreakGame, view: View, alpha: f64): void -> @drawScreen
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via drawTextCentred
+  sharedWrite: via drawCompactScreen
   escaping: alpha
-  calls: blendRect clamp dim drawNumberCentred drawTextCentred fontScale gfxRgb lerp levelLabel levelName llvm.smin.i32 nish_panic_overflow outBack outBounce phaseSeconds tallied
-  pointer game: size=312 writesThrough=false captured=false passedTo=phaseSeconds#0 tallied#0
-  pointer view: size=64 writesThrough=false captured=false passedTo=fontScale#0 fontScale#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0 drawNumberCentred#0 blendRect#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0
+  calls: blendRect clamp dim drawCompactScreen drawNumberCentred drawTextCentred fontScale fontScaleFor gfxRgb lerp levelLabel levelName llvm.smin.i32 nish_panic_overflow outBack outBounce phaseSeconds tallied
+  pointer game: size=312 writesThrough=false captured=false passedTo=phaseSeconds#0 drawCompactScreen#0 tallied#0
+  pointer view: size=64 writesThrough=false captured=false passedTo=fontScale#0 fontScale#0 fontScaleFor#0 drawCompactScreen#1 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0 drawNumberCentred#0 blendRect#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   local +0:9 t: f64 (const)
   callee +0:18 phaseSeconds -> @phaseSeconds
@@ -4289,58 +4299,120 @@ function drawScreen(game: BreakGame, view: View, alpha: f64): void -> @drawScree
   callee +4:22 gfxRgb -> @gfxRgb
   local +5:9 gold: i32 (const)
   callee +5:21 gfxRgb -> @gfxRgb
+  callee +6:7 fontScaleFor -> @fontScaleFor
+  callee +7:5 drawCompactScreen -> @drawCompactScreen
+  local +11:11 y: f64 (const)
+  callee +11:20 lerp -> @lerp
+  callee +11:38 outBack -> @outBack
+  callee +11:46 clamp -> @clamp
+  callee +12:5 drawTextCentred -> @drawTextCentred
+  callee +12:42 levelLabel -> @levelLabel
+  callee +13:5 drawTextCentred -> @drawTextCentred
+  callee +13:51 levelName -> @levelName
+  callee +16:7 drawTextCentred -> @drawTextCentred
+  callee +19:5 blendRect -> @blendRect
+  callee +19:47 gfxRgb -> @gfxRgb
+  callee +20:5 drawTextCentred -> @drawTextCentred
+  callee +21:5 drawTextCentred -> @drawTextCentred
+  callee +21:62 dim -> @dim
+  callee +22:5 drawTextCentred -> @drawTextCentred
+  callee +22:63 dim -> @dim
+  callee +23:5 drawTextCentred -> @drawTextCentred
+  callee +23:60 dim -> @dim
+  callee +24:5 drawTextCentred -> @drawTextCentred
+  callee +24:58 dim -> @dim
+  callee +26:5 blendRect -> @blendRect
+  callee +26:47 gfxRgb -> @gfxRgb
+  callee +26:71 clamp -> @clamp
+  local +27:11 y: f64 (const)
+  callee +27:20 lerp -> @lerp
+  callee +27:38 outBack -> @outBack
+  callee +27:46 clamp -> @clamp
+  callee +28:5 drawTextCentred -> @drawTextCentred
+  local +29:11 counted: i32 (const)
+  callee +29:26 tallied -> @tallied
+  local +30:11 time: i32 (const)
+  callee +31:5 drawTextCentred -> @drawTextCentred
+  callee +31:55 dim -> @dim
+  callee +32:5 drawNumberCentred -> @drawNumberCentred
+  callee +33:5 drawTextCentred -> @drawTextCentred
+  callee +33:56 dim -> @dim
+  callee +34:5 drawNumberCentred -> @drawNumberCentred
+  callee +35:5 drawTextCentred -> @drawTextCentred
+  callee +36:5 drawNumberCentred -> @drawNumberCentred
+  local +38:11 won: boolean (const)
+  callee +39:5 blendRect -> @blendRect
+  callee +39:47 gfxRgb -> @gfxRgb
+  callee +39:70 clamp -> @clamp
+  local +40:11 y: f64 (const)
+  callee +40:20 lerp -> @lerp
+  callee +40:38 outBounce -> @outBounce
+  callee +40:48 clamp -> @clamp
+  callee +41:5 drawTextCentred -> @drawTextCentred
+  callee +47:20 gfxRgb -> @gfxRgb
+  callee +50:5 drawNumberCentred -> @drawNumberCentred
+  callee +52:7 drawTextCentred -> @drawTextCentred
+  callee +52:65 dim -> @dim
+function drawCompactScreen(game: BreakGame, view: View, t: f64, big: i32, small: i32): void -> @drawCompactScreen
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via drawTextCentred
+  escaping: big small
+  calls: blendRect clamp dim drawNumberCentred drawTextCentred gfxRgb lerp levelLabel levelName lineHeight outBack outBounce
+  pointer game: size=312 writesThrough=false captured=false
+  pointer view: size=64 writesThrough=false captured=false passedTo=lineHeight#0 lineHeight#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawNumberCentred#0 blendRect#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0
+  stackSites=0 stackLocals=0
+  local +0:9 shadow: i32 (const)
+  callee +0:23 gfxRgb -> @gfxRgb
+  local +1:9 white: i32 (const)
+  callee +1:22 gfxRgb -> @gfxRgb
+  local +2:9 gold: i32 (const)
+  callee +2:21 gfxRgb -> @gfxRgb
+  local +3:9 bigLine: f64 (const)
+  callee +3:24 lineHeight -> @lineHeight
+  local +4:9 smallLine: f64 (const)
+  callee +4:26 lineHeight -> @lineHeight
+  local +6:11 top: f64 (const)
   local +7:11 y: f64 (const)
   callee +7:20 lerp -> @lerp
-  callee +7:38 outBack -> @outBack
-  callee +7:46 clamp -> @clamp
+  callee +7:52 outBack -> @outBack
+  callee +7:60 clamp -> @clamp
   callee +8:5 drawTextCentred -> @drawTextCentred
   callee +8:42 levelLabel -> @levelLabel
   callee +9:5 drawTextCentred -> @drawTextCentred
-  callee +9:51 levelName -> @levelName
+  callee +9:54 levelName -> @levelName
   callee +12:7 drawTextCentred -> @drawTextCentred
   callee +15:5 blendRect -> @blendRect
   callee +15:47 gfxRgb -> @gfxRgb
-  callee +16:5 drawTextCentred -> @drawTextCentred
+  local +16:11 top: f64 (const)
   callee +17:5 drawTextCentred -> @drawTextCentred
-  callee +17:62 dim -> @dim
   callee +18:5 drawTextCentred -> @drawTextCentred
-  callee +18:63 dim -> @dim
+  callee +18:68 dim -> @dim
   callee +19:5 drawTextCentred -> @drawTextCentred
-  callee +19:60 dim -> @dim
-  callee +20:5 drawTextCentred -> @drawTextCentred
-  callee +20:58 dim -> @dim
-  callee +22:5 blendRect -> @blendRect
-  callee +22:47 gfxRgb -> @gfxRgb
-  callee +22:71 clamp -> @clamp
+  callee +19:78 dim -> @dim
+  callee +21:5 blendRect -> @blendRect
+  callee +21:47 gfxRgb -> @gfxRgb
+  callee +21:71 clamp -> @clamp
+  local +22:11 top: f64 (const)
   local +23:11 y: f64 (const)
   callee +23:20 lerp -> @lerp
-  callee +23:38 outBack -> @outBack
-  callee +23:46 clamp -> @clamp
+  callee +23:40 outBack -> @outBack
+  callee +23:48 clamp -> @clamp
   callee +24:5 drawTextCentred -> @drawTextCentred
-  local +25:11 counted: i32 (const)
-  callee +25:26 tallied -> @tallied
-  local +26:11 time: i32 (const)
-  callee +27:5 drawTextCentred -> @drawTextCentred
-  callee +27:55 dim -> @dim
-  callee +28:5 drawNumberCentred -> @drawNumberCentred
-  callee +29:5 drawTextCentred -> @drawTextCentred
-  callee +29:56 dim -> @dim
-  callee +30:5 drawNumberCentred -> @drawNumberCentred
+  callee +25:5 drawNumberCentred -> @drawNumberCentred
+  local +27:11 won: boolean (const)
+  callee +28:5 blendRect -> @blendRect
+  callee +28:47 gfxRgb -> @gfxRgb
+  callee +28:70 clamp -> @clamp
+  local +29:11 top: f64 (const)
+  local +30:11 y: f64 (const)
+  callee +30:20 lerp -> @lerp
+  callee +30:40 outBounce -> @outBounce
+  callee +30:50 clamp -> @clamp
   callee +31:5 drawTextCentred -> @drawTextCentred
-  callee +32:5 drawNumberCentred -> @drawNumberCentred
-  local +34:11 won: boolean (const)
-  callee +35:5 blendRect -> @blendRect
-  callee +35:47 gfxRgb -> @gfxRgb
-  callee +35:70 clamp -> @clamp
-  local +36:11 y: f64 (const)
-  callee +36:20 lerp -> @lerp
-  callee +36:38 outBounce -> @outBounce
-  callee +36:48 clamp -> @clamp
-  callee +37:5 drawTextCentred -> @drawTextCentred
-  callee +43:20 gfxRgb -> @gfxRgb
-  callee +46:5 drawNumberCentred -> @drawNumberCentred
-  callee +48:7 drawTextCentred -> @drawTextCentred
-  callee +48:65 dim -> @dim
+  callee +37:20 gfxRgb -> @gfxRgb
+  callee +40:5 drawNumberCentred -> @drawNumberCentred
+  callee +42:7 drawTextCentred -> @drawTextCentred
+  callee +42:79 dim -> @dim
 function breakTextWidth(text: string, scale: i32): i32 -> @breakTextWidth [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: scale text

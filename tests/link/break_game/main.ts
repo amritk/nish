@@ -20,6 +20,7 @@ import {
   TermEvent
 } from "../../../std/term"
 import { TermInput } from "../../../std/term-io"
+import { GLYPH_H, dim, gfxRgb } from "../../../src/break-gfx"
 import {
   BRICK_EXPLOSIVE,
   BRICK_MYSTERY,
@@ -685,6 +686,34 @@ const testPause = (t: Suite): void => {
   const esc = playing(1, input)
   tap(esc, input, KEY_ESCAPE, 0)
   t.eqI32("escape from the pause quits", tap(esc, input, KEY_ESCAPE, 0), GAME_QUIT)
+
+  // Paused the step after a break, with sparks, shake and a floating score in
+  // flight: every draw shows the same still frame, whatever its alpha.
+  const still = playing(1, input)
+  fly(still, colCentre(5), 70.0, 0.0, -1.0)
+  let steps: i32 = 0
+  while (still.bricksLeft === 48 && steps < 40) {
+    idle(still, input)
+    steps++
+  }
+  t.ok("the brick breaks before the pause", still.bricksLeft < 48 && liveParticles(still) > 0)
+  tap(still, input, KEY_CHAR, 112)
+  idle(still, input)
+  const a = new Framebuffer(320, 180)
+  const z = new Framebuffer(320, 180)
+  drawBreakGame(still, a, NOW)
+  drawBreakGame(still, z, 1.0)
+  t.eqI32("a pause draws the same frame at any alpha", differing(a, z), 0)
+  idleFor(still, input, 5)
+  drawBreakGame(still, z, 0.5)
+  t.eqI32("a pause draws the same frame step after step", differing(a, z), 0)
+
+  const upper = playing(1, input)
+  const start: f64 = upper.paddleX
+  input.keys.apply([keyEvent(KEY_CHAR, 68, ACTION_PRESS)], NOW)
+  idleFor(upper, input, 5)
+  input.keys.apply([keyEvent(KEY_CHAR, 68, ACTION_RELEASE)], NOW)
+  t.ok("a held D moves the paddle right", upper.paddleX > start)
 }
 
 // ---- Drawing --------------------------------------------------------------------------
@@ -735,6 +764,14 @@ const testDraw = (t: Suite): void => {
   drawBreakGame(game, low, 0.5)
   game.effects = 1
   t.ok("low effects drop the glow", differing(fb, low) > 0)
+  const gx: i32 = toI32(drawnBallX(game, 0, 0.5)) + 5
+  const gy: i32 = toI32(drawnBallY(game, 0, 0.5))
+  const bare = new Framebuffer(320, 180)
+  game.balls[0].live = false
+  drawBreakGame(game, bare, 0.5)
+  game.balls[0].live = true
+  t.ok("high effects light the ball's surroundings", fb.get(gx, gy) !== bare.get(gx, gy))
+  t.eqI32("low effects leave the ball's surroundings bare", low.get(gx, gy), bare.get(gx, gy))
   t.ok("low effects still draw the ball", low.get(toI32(drawnBallX(game, 0, 0.5)), toI32(drawnBallY(game, 0, 0.5))) !== low.get(30, 120))
 
   // Every scene draws at every size without panicking, down to no pixels at all.
@@ -779,6 +816,70 @@ const testDraw = (t: Suite): void => {
   t.eqI32("every scene draws at every size", drew, 36)
   t.ok("the HUD's text has width", breakTextWidth("SCORE", 1) > 0)
   t.eqI32("no text is no width", breakTextWidth("", 1), 0)
+}
+
+/**
+ * The runs of rows in `fb` holding a pixel of one of `colours` (text is never
+ * blended, so its pixels are exactly its colour): answers the number of runs
+ * times 100 plus the tallest, so lines that overlap show as one tall run.
+ */
+const textRows = (fb: Framebuffer, colours: i32[]): i32 => {
+  let runs: i32 = 0
+  let run: i32 = 0
+  let tallest: i32 = 0
+  for (let y: i32 = 0; y < fb.height; y++) {
+    let hit: boolean = false
+    for (let x: i32 = 0; x < fb.width && !hit; x++) {
+      hit = colours.indexOf(fb.get(x, y)) >= 0
+    }
+    if (hit) {
+      run++
+      if (run === 1) {
+        runs++
+      }
+      tallest = Math.max(tallest, run)
+    } else {
+      run = 0
+    }
+  }
+  return runs * 100 + tallest
+}
+
+/** At 80 x 45 a glyph's 7 pixels outgrow the layout: every screen's lines stand apart. */
+const testCompact = (t: Suite): void => {
+  const input = newInput()
+  const white: i32 = gfxRgb(240, 242, 255)
+  const gold: i32 = gfxRgb(255, 214, 90)
+  const red: i32 = gfxRgb(255, 90, 90)
+  const soft: i32 = dim(white, 0.8)
+  const fb = new Framebuffer(80, 45)
+
+  const intro = newBreakGame(1, toI64(7))
+  idleFor(intro, input, INTRO_STEPS - 2)
+  drawBreakGame(intro, fb, 0.5)
+  t.eqI32("the compact intro is two lines apart", textRows(fb, [white, gold]), 200 + GLYPH_H)
+
+  const paused = playing(1, input)
+  tap(paused, input, KEY_CHAR, 112)
+  drawBreakGame(paused, fb, 0.5)
+  t.eqI32("the compact pause is three lines apart", textRows(fb, [white, soft]), 300 + GLYPH_H)
+
+  const clear = playing(1, input)
+  emptyWall(clear)
+  idleFor(clear, input, 60)
+  t.eqI32("the tally is up", clear.phase, PHASE_CLEAR)
+  drawBreakGame(clear, fb, 0.5)
+  t.eqI32("the compact tally is two lines apart", textRows(fb, [gold]), 200 + GLYPH_H)
+
+  const over = playing(1, input)
+  over.phase = PHASE_OVER
+  over.phaseTime = 0
+  idleFor(over, input, DISMISS_STEPS + 2)
+  while (over.ticks % 70 >= 48) {
+    idle(over, input)
+  }
+  drawBreakGame(over, fb, 0.5)
+  t.eqI32("the compact last screen is three lines apart", textRows(fb, [red, white, soft]), 300 + GLYPH_H)
 }
 
 // ---- Soak -------------------------------------------------------------------------
@@ -844,6 +945,7 @@ export const main = (): i32 => {
   testWall(t)
   testPause(t)
   testDraw(t)
+  testCompact(t)
   testSoak(t)
   return t.done()
 }

@@ -34,6 +34,7 @@ import {
 import { TermInput } from "nish/term-io"
 import {
   GLYPH_ADVANCE,
+  GLYPH_H,
   GfxTrail,
   NO_SHADOW,
   Particles,
@@ -363,7 +364,6 @@ export class BreakGame {
   /** The wide power-up's share of the paddle, eased: 1 normal, 1.5 wide. */
   widthScale: f64
   prevWidthScale: f64
-  /** How far the paddle sits below its place while the intro raises it. */
   /** The ball's speed in units a second before slow. */
   speed: f64
   /** What slow multiplies the speed by now, eased toward its target. */
@@ -655,7 +655,7 @@ const anyPress = (input: TermInput): boolean => {
 const confirmPressed = (input: TermInput): boolean =>
   pressed(input, KEY_SPACE, 0) || pressed(input, KEY_ENTER, 0)
 
-/** -1 for left held, 1 for right, 0 for neither or both. */
+/** -1 for left held, 1 for right, 0 for neither or both (`KeyState` folds a capital to its small letter). */
 const heldDirection = (input: TermInput): i32 => {
   const left: boolean = input.isDown(KEY_LEFT, 0) || input.isDown(KEY_CHAR, 97) || input.isDown(KEY_CHAR, 104)
   const right: boolean =
@@ -678,6 +678,9 @@ export const stepBreakGame = (game: BreakGame, input: TermInput): i32 => {
     return game.result
   }
   if (game.phase === PHASE_PAUSE) {
+    // Nothing moves while paused, so where it was is where it is: a draw at
+    // any alpha then shows the same still frame.
+    remember(game)
     stepPause(game, input)
     return game.result
   }
@@ -715,6 +718,11 @@ const remember = (game: BreakGame): void => {
   }
   for (const f of game.floaters) {
     f.prevY = f.y
+  }
+  const pool: Particles = game.particles
+  for (let i: i32 = 0; i < toI32(pool.xs.length); i++) {
+    pool.prevXs[i] = pool.xs[i]
+    pool.prevYs[i] = pool.ys[i]
   }
 }
 
@@ -1952,7 +1960,15 @@ const drawPower = (
   return x - w - 4.0
 }
 
-/** What the phase puts over the field: the intro banner, the serve prompt, the pause, the tally, the last screens. */
+/** The world units a line of text at `scale` takes on `view`: its glyph's pixel height and a 2-pixel gap. */
+const lineHeight = (view: View, scale: i32): f64 => toF64(GLYPH_H * scale + 2) / view.scale
+
+/**
+ * What the phase puts over the field: the intro banner, the serve prompt, the
+ * pause, the tally, the last screens. Where a 7-pixel glyph is taller than the
+ * 7 world units the layout spaces lines by, the screen goes compact
+ * (`drawCompactScreen`).
+ */
 const drawScreen = (game: BreakGame, view: View, alpha: f64): void => {
   const t: f64 = phaseSeconds(game, alpha)
   const big: i32 = fontScale(view, 14.0)
@@ -1960,6 +1976,10 @@ const drawScreen = (game: BreakGame, view: View, alpha: f64): void => {
   const shadow: i32 = gfxRgb(0, 0, 0)
   const white: i32 = gfxRgb(240, 242, 255)
   const gold: i32 = gfxRgb(255, 214, 90)
+  if (fontScaleFor(view, 7.0) < 1) {
+    drawCompactScreen(game, view, t, big, small)
+    return
+  }
   if (game.phase === PHASE_INTRO) {
     const y: f64 = lerp(-24.0, 92.0, outBack(clamp(t / 0.6, 0.0, 1.0)))
     drawTextCentred(view, 160.0, y, big, levelLabel(game.level), white, shadow)
@@ -2003,6 +2023,60 @@ const drawScreen = (game: BreakGame, view: View, alpha: f64): void => {
     drawNumberCentred(view, 160.0, 92.0, big, game.score, white, shadow)
     if (game.phaseTime >= DISMISS_STEPS && game.ticks % 70 < 48) {
       drawTextCentred(view, 160.0, 124.0, small, "PRESS SPACE", dim(white, 0.8), shadow)
+    }
+  }
+}
+
+/**
+ * `drawScreen` for a view too small for its layout: fewer lines, each spaced
+ * by its glyph's pixel height so none overlaps the next, the block centred on
+ * the field. The pause keeps resume and quit, the tally keeps the score, the
+ * last screens keep the score and the prompt.
+ */
+const drawCompactScreen = (game: BreakGame, view: View, t: f64, big: i32, small: i32): void => {
+  const shadow: i32 = gfxRgb(0, 0, 0)
+  const white: i32 = gfxRgb(240, 242, 255)
+  const gold: i32 = gfxRgb(255, 214, 90)
+  const bigLine: f64 = lineHeight(view, big)
+  const smallLine: f64 = lineHeight(view, small)
+  if (game.phase === PHASE_INTRO) {
+    const top: f64 = (WORLD_H - bigLine - smallLine) / 2.0
+    const y: f64 = lerp(-bigLine - smallLine, top, outBack(clamp(t / 0.6, 0.0, 1.0)))
+    drawTextCentred(view, 160.0, y, big, levelLabel(game.level), white, shadow)
+    drawTextCentred(view, 160.0, y + bigLine, small, levelName(game.level), gold, shadow)
+  } else if (game.phase === PHASE_PLAY) {
+    if (!game.launched && game.ticks % 70 < 48) {
+      drawTextCentred(view, 160.0, (WORLD_H - smallLine) / 2.0, small, "PRESS SPACE", white, shadow)
+    }
+  } else if (game.phase === PHASE_PAUSE) {
+    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, gfxRgb(0, 0, 0), 0.6)
+    const top: f64 = (WORLD_H - bigLine - 2.0 * smallLine) / 2.0
+    drawTextCentred(view, 160.0, top, big, "PAUSED", white, shadow)
+    drawTextCentred(view, 160.0, top + bigLine, small, "P RESUME", dim(white, 0.8), shadow)
+    drawTextCentred(view, 160.0, top + bigLine + smallLine, small, "Q QUIT", dim(white, 0.8), shadow)
+  } else if (game.phase === PHASE_CLEAR) {
+    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, gfxRgb(0, 0, 0), 0.35 * clamp(t * 3.0, 0.0, 1.0))
+    const top: f64 = (WORLD_H - bigLine - smallLine) / 2.0
+    const y: f64 = lerp(-bigLine, top, outBack(clamp(t / 0.5, 0.0, 1.0)))
+    drawTextCentred(view, 160.0, y, big, "LEVEL CLEAR", gold, shadow)
+    drawNumberCentred(view, 160.0, y + bigLine, small, game.score, gold, shadow)
+  } else {
+    const won: boolean = game.phase === PHASE_WON
+    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, gfxRgb(0, 0, 0), 0.5 * clamp(t * 2.0, 0.0, 1.0))
+    const top: f64 = (WORLD_H - 2.0 * bigLine - smallLine) / 2.0
+    const y: f64 = lerp(-bigLine, top, outBounce(clamp(t / 0.9, 0.0, 1.0)))
+    drawTextCentred(
+      view,
+      160.0,
+      y,
+      big,
+      won ? "YOU WIN" : "GAME OVER",
+      won ? gold : gfxRgb(255, 90, 90),
+      shadow
+    )
+    drawNumberCentred(view, 160.0, top + bigLine, big, game.score, white, shadow)
+    if (game.phaseTime >= DISMISS_STEPS && game.ticks % 70 < 48) {
+      drawTextCentred(view, 160.0, top + 2.0 * bigLine, small, "PRESS SPACE", dim(white, 0.8), shadow)
     }
   }
 }
