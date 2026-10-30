@@ -1783,10 +1783,14 @@ These scans still step one byte at a time:
 lines: English, Greek, French, German and CJK words, numbers and addresses.
 Each case compiles one pattern, then counts its matches (`exec` walks them and
 reads groups 1 and 3) over one of eight copies of the corpus that differ in
-their first line, a different copy each pass. Seven cases use none of the
+their first line, a different copy each pass. Eight cases use none of the
 Unicode features (`literal`, `class`, `alternation`, `group`, `anchored`,
-`icase-ascii`, `exec`) and three do (`property`, `script`,
-`icase-unicode`). Not run in CI.
+`icase-ascii`, `icase-class`, `exec`) and three do (`property`, `script`,
+`icase-unicode`). Four `compile-` cases time `regexCompile` alone, 50 times
+as many passes as a match case: a large class with and without `i`
+(`compile-class`, `compile-icase-class`), `\S+` under `i`
+(`compile-nonspace-icase`) and ten small patterns (`compile-many`). Not run
+in CI.
 
 ```bash
 npm run build
