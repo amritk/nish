@@ -2057,3 +2057,11 @@ Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
   every round, so a machine drifting under the run drifts under all three. On a
   busy box, pin it and read the ratio rather than the milliseconds.
 - `rss.c`: the peak-RSS helper the runner compiles into `build/bench/rss`.
+- `gzip/`: one-shot gzip of a JSON response against zlib, libdeflate and other
+  languages, and (`small.mjs`) the fixed-Huffman small-body encoder against
+  `DEFLATE_FAST` on 0.5 to 16 KB bodies. Results in
+  [gzip/README.md](gzip/README.md).
+- `http-compress/`: what `HttpCompressor`'s policy costs and saves on the
+  wire, an HTTP/1.1 server answering 0.5 to 8 KB JSON under five settings, in
+  CPU, bytes, TCP segments and ACKs per response.
+  Results in [http-compress/README.md](http-compress/README.md).
