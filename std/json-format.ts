@@ -682,12 +682,12 @@ const jfUriRun = (s: string, from: i32, to: i32, set: i32, iri: boolean): boolea
   return i === to
 }
 
-/** The first index in `[from, to)` whose unit is one of `a`, `b` or `c`, or `to`. */
-const jfFind = (s: string, from: i32, to: i32, a: i32, b: i32, c: i32): i32 => {
+/** The first index in `[from, to)` whose unit is `a` or `b`, or `to`. */
+const jfFind = (s: string, from: i32, to: i32, a: i32, b: i32): i32 => {
   let i = from
   while (i < to) {
     const u = jfUnitAt(s, i)
-    if (u === a || u === b || u === c) {
+    if (u === a || u === b) {
       return i
     }
     i += 1
@@ -716,7 +716,7 @@ const jfIpLiteral = (s: string, from: i32, to: i32): boolean => {
 /** Whether `s[from, to)` is an RFC 3986 `authority`: `[ userinfo "@" ] host [ ":" port ]`. */
 const jfAuthority = (s: string, from: i32, to: i32, iri: boolean): boolean => {
   // `userinfo` cannot hold an `@`, so the first one ends it.
-  const at = jfFind(s, from, to, 64, 64, 64)
+  const at = jfFind(s, from, to, 64, 64)
   let host = from
   if (at < to) {
     if (!jfUriRun(s, from, at, JF_USERINFO, iri)) {
@@ -724,9 +724,9 @@ const jfAuthority = (s: string, from: i32, to: i32, iri: boolean): boolean => {
     }
     host = at + 1
   }
-  let port = host
+  let port: i32 = 0
   if (jfUnitAt(s, host) === 91) {
-    const close = jfFind(s, host, to, 93, 93, 93)
+    const close = jfFind(s, host, to, 93, 93)
     if (close === to || !jfIpLiteral(s, host + 1, close)) {
       return false
     }
@@ -734,7 +734,7 @@ const jfAuthority = (s: string, from: i32, to: i32, iri: boolean): boolean => {
   } else {
     // A `reg-name` cannot hold a `:`, so the first one starts the port; an
     // IPv4 address is a `reg-name` too, so it needs no check of its own.
-    port = jfFind(s, host, to, 58, 58, 58)
+    port = jfFind(s, host, to, 58, 58)
     if (!jfUriRun(s, host, port, JF_REG_NAME, iri)) {
       return false
     }
@@ -762,7 +762,6 @@ const jfAuthority = (s: string, from: i32, to: i32, iri: boolean): boolean => {
 const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
   const length: i32 = toI32(s.length)
   let i: i32 = 0
-  let hasScheme = false
   if (jfIsAlpha(jfUnitAt(s, 0))) {
     let j: i32 = 1
     while (true) {
@@ -773,25 +772,24 @@ const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
       j += 1
     }
     if (jfUnitAt(s, j) === 58) {
-      hasScheme = true
       i = j + 1
     }
   }
-  if (!hasScheme && !reference) {
+  if (i === 0 && !reference) {
     return false
   }
-  const pathEnd = jfFind(s, i, length, 63, 35, 35)
+  const pathEnd = jfFind(s, i, length, 63, 35)
   if (jfUnitAt(s, i) === 47 && jfUnitAt(s, i + 1) === 47) {
-    const authorityEnd = jfFind(s, i + 2, pathEnd, 47, 47, 47)
+    const authorityEnd = jfFind(s, i + 2, pathEnd, 47, 47)
     if (!jfAuthority(s, i + 2, authorityEnd, iri)) {
       return false
     }
     i = authorityEnd
-  } else if (!hasScheme) {
+  } else if (i === 0) {
     // `path-noscheme`: a relative path's first segment cannot hold a `:`,
     // or it would read as a scheme.
-    const firstSegmentEnd = jfFind(s, i, pathEnd, 47, 47, 47)
-    if (jfFind(s, i, firstSegmentEnd, 58, 58, 58) < firstSegmentEnd) {
+    const firstSegmentEnd = jfFind(s, i, pathEnd, 47, 47)
+    if (jfFind(s, i, firstSegmentEnd, 58, 58) < firstSegmentEnd) {
       return false
     }
   }
@@ -800,7 +798,7 @@ const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
   }
   i = pathEnd
   if (jfUnitAt(s, i) === 63) {
-    const queryEnd = jfFind(s, i + 1, length, 35, 35, 35)
+    const queryEnd = jfFind(s, i + 1, length, 35, 35)
     if (!jfUriRun(s, i + 1, queryEnd, JF_QUERY, iri)) {
       return false
     }
@@ -841,20 +839,7 @@ const jfVarchar = (s: string, i: i32): i32 => {
 const jfExpressionEnd = (s: string, open: i32): i32 => {
   let i = open + 1
   const op = jfUnitAt(s, i)
-  if (
-    op === 43 ||
-    op === 35 ||
-    op === 46 ||
-    op === 47 ||
-    op === 59 ||
-    op === 63 ||
-    op === 38 ||
-    op === 61 ||
-    op === 44 ||
-    op === 33 ||
-    op === 64 ||
-    op === 124
-  ) {
+  if (jfUnitIndex(op, "+#./;?&=,!@|") >= 0) {
     i += 1
   }
   while (true) {
