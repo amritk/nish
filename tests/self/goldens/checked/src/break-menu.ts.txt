@@ -58,6 +58,7 @@ const SCREEN_SETTINGS: i32 = 2 [exported]
 const SCREEN_OUTRO: i32 = 3 [exported]
 const MENU_LEVELS: i32 = 6
 const ITEM_COUNT: i32 = 5
+const TICK_WRAP: i32 = 1073741824
 const ITEM_PLAY: i32 = 0
 const ITEM_LEVEL: i32 = 1
 const ITEM_HOWTO: i32 = 2
@@ -279,13 +280,15 @@ function stepBreakMenu(menu: BreakMenu, input: TermInput): i32 -> @stepBreakMenu
   callee +3:3 stepParticles -> @stepParticles
   callee +6:12 stepOutro -> @stepOutro
   local +8:7 answer: i32 (let)
-  local +9:14 e: TermEvent (const)
-  local +16:11 act: i32 (const)
-  callee +16:22 actionOf -> @actionOf
-  callee +18:16 actOnTitle -> @actOnTitle
-  callee +20:16 actOnHowTo -> @actOnHowTo
-  callee +22:16 actOnSettings -> @actOnSettings
-  callee +25:3 slideHighlight -> @slideHighlight
+  local +9:9 entered: i32 (const)
+  local +10:14 e: TermEvent (const)
+  local +18:11 act: i32 (const)
+  callee +18:22 actionOf -> @actionOf
+  local +21:11 moves: boolean (const)
+  callee +26:16 actOnTitle -> @actOnTitle
+  callee +28:16 actOnHowTo -> @actOnHowTo
+  callee +30:16 actOnSettings -> @actOnSettings
+  callee +33:3 slideHighlight -> @slideHighlight
 function actionOf(e: TermEvent): i32 -> @actionOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
@@ -436,7 +439,7 @@ function stepBall(menu: BreakMenu): void -> @stepBall
   local +20:9 hitY: i32 (const)
   callee +20:21 wallCellAt -> @wallCellAt
   callee +22:5 knock -> @knock
-  callee +30:3 pushTrail -> @pushTrail
+  callee +32:3 pushTrail -> @pushTrail
 function startOutro(menu: BreakMenu): void -> @startOutro
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -596,8 +599,8 @@ function drawLogo(menu: BreakMenu, view: View, alpha: f64, time: f64): void -> @
   callee +0:5 drawSmallTitle -> @drawSmallTitle
   local +3:9 n: i32 (const)
   callee +3:18 logoSlots -> @logoSlots
-  local +4:12 i: i32 (let)
-  local +5:11 outro: boolean (const)
+  local +4:9 outro: boolean (const)
+  local +5:12 i: i32 (let)
   local +6:11 x: f64 (const)
   callee +6:28 lerp -> @lerp
   local +7:11 y: f64 (const)
@@ -771,8 +774,8 @@ function drawCapsule(view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64)
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via disc
   escaping: cx k scale
-  calls: capsuleLetter capsuleName disc drawTextCentred fillRect fontScaleFor hue llvm.sin.f64 llvm.smax.i32
-  pointer view: size=64 writesThrough=false captured=false passedTo=disc#0 disc#0 fillRect#0 drawTextCentred#0 fontScaleFor#0 drawTextCentred#0
+  calls: capsuleLetter capsuleName disc drawTextCentred fillRect hue llvm.sin.f64
+  pointer view: size=64 writesThrough=false captured=false passedTo=disc#0 disc#0 fillRect#0 drawTextCentred#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   local +0:9 colour: i32 (const)
   callee +0:23 hue -> @hue
@@ -782,10 +785,9 @@ function drawCapsule(view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64)
   callee +4:3 disc -> @disc
   callee +5:3 fillRect -> @fillRect
   callee +6:3 drawTextCentred -> @drawTextCentred
-  callee +10:14 fontScaleFor -> @fontScaleFor
-  callee +11:5 capsuleLetter -> @capsuleLetter
-  callee +15:3 drawTextCentred -> @drawTextCentred
-  callee +15:46 capsuleName -> @capsuleName
+  callee +6:47 capsuleLetter -> @capsuleLetter
+  callee +7:3 drawTextCentred -> @drawTextCentred
+  callee +7:46 capsuleName -> @capsuleName
 function capsuleLetter(k: i32): string -> @capsuleLetter
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
