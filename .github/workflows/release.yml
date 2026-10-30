@@ -850,10 +850,35 @@ jobs:
       # packages are scoped. Trusted publishing attaches a provenance
       # attestation without being asked; `--provenance` says so where the
       # command is read.
+      #
+      # Each publish gets three tries, 30 seconds apart, because the
+      # attestation goes through Sigstore's transparency log on the way, and
+      # that log has answered 409 to a publish before (0.26.0), failing a
+      # release that a second try would have finished. A try that failed but
+      # left the version on the registry counts as done: publishing it again
+      # would only be refused.
       - name: Publish
         run: |
           while IFS= read -r tgz; do
-            npm publish "$tgz" --access public --provenance
+            name="$(tar -xzOf "$tgz" package/package.json | jq -r .name)"
+            version="$(tar -xzOf "$tgz" package/package.json | jq -r .version)"
+            done=""
+            for try in 1 2 3; do
+              if npm publish "$tgz" --access public --provenance; then
+                done=yes
+                break
+              fi
+              if [ "$(npm view "$name@$version" version --prefer-online 2>/dev/null || true)" = "$version" ]; then
+                echo "$name@$version is on the registry although the publish reported a failure; going on"
+                done=yes
+                break
+              fi
+              [ "$try" = 3 ] || { echo "::warning::publishing $name@$version failed (try $try of 3); trying again in 30 seconds"; sleep 30; }
+            done
+            if [ -z "$done" ]; then
+              echo "::error::could not publish $name@$version after 3 tries; re-run this job to finish the publish"
+              exit 1
+            fi
           done < build/npm/todo.txt
 
   # The lockfile half of the release, which can only be written once the
@@ -927,7 +952,8 @@ jobs:
       #
       # The `npm` job finishing is not the registry serving: a version can
       # take a while to appear in the metadata an install reads. So each name is
-      # asked for with a bounded wait (30 tries, 10 seconds apart), and a
+      # asked for with a bounded wait (90 tries, 10 seconds apart: 0.25.0 took
+      # longer than the 5 minutes this used to allow), and a
       # version still missing after that fails the job rather than writing a
       # lockfile that leaves it out. "Re-run failed jobs" retries this alone.
       - name: The registry serves every package of this release
@@ -945,13 +971,13 @@ jobs:
           echo "$name" >> "$RUNNER_TEMP/packages.txt"
           while IFS= read -r pkg; do
             seen=""
-            for _ in $(seq 1 30); do
+            for _ in $(seq 1 90); do
               seen="$(npm view "$pkg@$version" version --prefer-online 2>/dev/null || true)"
               [ "$seen" = "$version" ] && break
               sleep 10
             done
             if [ "$seen" != "$version" ]; then
-              echo "::error::the registry does not serve $pkg@$version after 5 minutes; re-run this job once it does"
+              echo "::error::the registry does not serve $pkg@$version after 15 minutes; re-run this job once it does"
               exit 1
             fi
             echo "$pkg@$version is on the registry"

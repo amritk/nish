@@ -156,9 +156,14 @@ without their entries, is the red `main` this replaced.
 
 The script moves both copies of the pins, because v0.4.0 shipped with the
 lockfile still pinning 0.3.0 when the bump read only the top-level field.
-`tests/run.js` allows a pin equal to this version or to the release before it,
+`tests/run.js` allows a pin equal to this version, to the release before it,
+or to the seed's version (the last release that reached its GitHub release),
 requires all four to agree, and compares the two files on every run; the `lint`
-check now runs on every commit. Nobody merges a lockfile pull request by hand;
+check now runs on every commit. The seed's version is there for a release that
+failed before it published: it never runs its `lockfile` job, so the next
+release comes up with the pins two versions behind (0.27.0 failed, and 0.27.1
+went red on its pins). A publish that fails once is retried, and the `lockfile`
+job waits up to 15 minutes for the registry to serve the new versions. Nobody merges a lockfile pull request by hand;
 one left open means the repository refused the job's merge, and its run says so
 in a warning.
 
