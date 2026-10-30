@@ -104,6 +104,7 @@
             "filepath": "docs/guide/using-nish/password-hashing.md"
           },
           "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" },
+          "/websocket": { "type": "page", "title": "WebSocket", "filepath": "docs/guide/using-nish/websocket.md" },
           "/http-client": { "type": "page", "title": "HTTP client", "filepath": "docs/guide/using-nish/http-client.md" },
           "/postgres": { "type": "page", "title": "PostgreSQL", "filepath": "docs/guide/using-nish/postgres.md" },
           "/compression": { "type": "page", "title": "Compression", "filepath": "docs/guide/using-nish/compression.md" },

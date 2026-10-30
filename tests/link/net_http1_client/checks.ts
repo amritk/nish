@@ -5,7 +5,8 @@
 //   head, the body of each response, and how the stream ended — must be the
 //   same every way. The whole transcript is also pinned. The corpus holds
 //   kept-alive responses, every way a body is framed, interim responses, a
-//   tunnel, and the response-smuggling shapes, which must be refused with the
+//   tunnel, a 101 to a request that asked for it, and the response-smuggling
+//   shapes, which must be refused with the
 //   same code however the stream was cut.
 // - **The refusals**, one response per rule, each with its `HTTP1_E_` code.
 // - **The limits**, each at exactly its cap and at one past it.
@@ -51,6 +52,7 @@ import {
   HTTP1_MAX_INFORMATIONAL,
   Http1ResponseParser,
   http1RequestHead,
+  http1UpgradeRequestHead,
   http1WriteRequestHead,
 } from "nish/net/http1-client";
 
@@ -112,7 +114,7 @@ const describeHead = (p: Http1ResponseParser): string => {
  * Pulls events until the parser wants more input or has stopped, and says
  * the same `expect` for each response after the last one's end.
  */
-const drain = (p: Http1ResponseParser, t: Transcript, head: boolean, connect: boolean): void => {
+const drain = (p: Http1ResponseParser, t: Transcript, a: Ask): void => {
   let e: i32 = p.next();
   while (e === HTTP1_INFORMATIONAL || e === HTTP1_HEAD || e === HTTP1_BODY || e === HTTP1_END) {
     if (e === HTTP1_INFORMATIONAL) {
@@ -124,7 +126,7 @@ const drain = (p: Http1ResponseParser, t: Transcript, head: boolean, connect: bo
     } else {
       t.log.push(`body "${t.body.join("")}"`);
       t.body = [];
-      p.expect(head, connect);
+      expectAs(p, a);
     }
     e = p.next();
   }
@@ -151,12 +153,24 @@ const ending = (p: Http1ResponseParser, t: Transcript): string => {
   return t.log.join("\n");
 };
 
-/** How one corpus stream is read: what was asked, and whether the server closes after it. */
+/**
+ * How one corpus stream is read: what was asked, whether the request asked
+ * to switch protocols, and whether the server closes after it.
+ */
 class Ask {
   head: boolean = false;
   connect: boolean = false;
+  upgrade: boolean = false;
   close: boolean = false;
 }
+
+/** Says `a`'s `expect` to `p`, and `expectUpgrade` when `a` asked to switch protocols. */
+const expectAs = (p: Http1ResponseParser, a: Ask): void => {
+  p.expect(a.head, a.connect);
+  if (a.upgrade) {
+    p.expectUpgrade();
+  }
+};
 
 const ask = (head: boolean, connect: boolean, close: boolean): Ask => {
   const a: Ask = new Ask();
@@ -184,14 +198,14 @@ const transcriptSplitAt = (data: u8[], cut: i32, a: Ask): string => {
   const p: Http1ResponseParser = corpusParser();
   const t: Transcript = new Transcript();
   const start: i32 = 0;
-  p.expect(a.head, a.connect);
+  expectAs(p, a);
   p.feed(data, start, cut);
-  drain(p, t, a.head, a.connect);
+  drain(p, t, a);
   p.feed(data, cut, toI32(data.length) - cut);
-  drain(p, t, a.head, a.connect);
+  drain(p, t, a);
   if (a.close) {
     p.finish();
-    drain(p, t, a.head, a.connect);
+    drain(p, t, a);
   }
   return ending(p, t);
 };
@@ -202,14 +216,14 @@ const transcriptByteByByte = (data: u8[], a: Ask): string => {
   const t: Transcript = new Transcript();
   const one: i32 = 1;
   const n: i32 = toI32(data.length);
-  p.expect(a.head, a.connect);
+  expectAs(p, a);
   for (let i: i32 = 0; i < n; i += 1) {
     p.feed(data, i, one);
-    drain(p, t, a.head, a.connect);
+    drain(p, t, a);
   }
   if (a.close) {
     p.finish();
-    drain(p, t, a.head, a.connect);
+    drain(p, t, a);
   }
   return ending(p, t);
 };
@@ -243,7 +257,7 @@ const outcomeOf = (p: Http1ResponseParser, text: string, a: Ask): string => {
   const data: u8[] = bytesOf(text);
   const start: i32 = 0;
   let ends: i32 = 0;
-  p.expect(a.head, a.connect);
+  expectAs(p, a);
   p.feed(data, start, toI32(data.length));
   if (a.close) {
     p.finish();
@@ -252,7 +266,7 @@ const outcomeOf = (p: Http1ResponseParser, text: string, a: Ask): string => {
   while (e === HTTP1_INFORMATIONAL || e === HTTP1_HEAD || e === HTTP1_BODY || e === HTTP1_END) {
     if (e === HTTP1_END) {
       ends += 1;
-      p.expect(a.head, a.connect);
+      expectAs(p, a);
     }
     e = p.next();
   }
@@ -275,6 +289,13 @@ const closing = (): Ask => ask(false, false, true);
 const toHead = (): Ask => ask(true, false, false);
 const toConnect = (): Ask => ask(false, true, false);
 
+/** A request that asked to switch protocols, as `http1UpgradeRequestHead` writes one. */
+const toUpgrade = (): Ask => {
+  const a: Ask = plain();
+  a.upgrade = true;
+  return a;
+};
+
 /**
  * Checks that `smallParser` refuses `text` with `code`. The check's name
  * carries the parser's `errorText`, so `expected.out` pins which rule refused.
@@ -295,12 +316,12 @@ const transcriptWith = (p: Http1ResponseParser, text: string, a: Ask): string =>
   const data: u8[] = bytesOf(text);
   const t: Transcript = new Transcript();
   const start: i32 = 0;
-  p.expect(a.head, a.connect);
+  expectAs(p, a);
   p.feed(data, start, toI32(data.length));
-  drain(p, t, a.head, a.connect);
+  drain(p, t, a);
   if (a.close) {
     p.finish();
-    drain(p, t, a.head, a.connect);
+    drain(p, t, a);
   }
   return ending(p, t);
 };
@@ -333,14 +354,14 @@ const transcriptInPieces = (data: u8[], pieces: i32[], a: Ask): string => {
   const n: i32 = toI32(data.length);
   let at: i32 = 0;
   let k: i32 = 0;
-  p.expect(a.head, a.connect);
+  expectAs(p, a);
   while (at < n) {
     let len: i32 = pieces[k % toI32(pieces.length)];
     if (len > n - at) {
       len = n - at;
     }
     p.feed(data, at, len);
-    drain(p, t, a.head, a.connect);
+    drain(p, t, a);
     at += len;
     k += 1;
   }
@@ -372,7 +393,7 @@ const firstAsked = (p: Http1ResponseParser, text: string, a: Ask): string => {
   const data: u8[] = bytesOf(text);
   const t: Transcript = new Transcript();
   const start: i32 = 0;
-  p.expect(a.head, a.connect);
+  expectAs(p, a);
   p.feed(data, start, toI32(data.length));
   // `drain` says expect after each end, which would hide what the parser
   // forgets on its own; this loop never says it again.
@@ -602,6 +623,27 @@ export const http1ClientChecks = (): i32 => {
   );
   corpusCase(
     t,
+    "a 101 to a request that asked to switch protocols, frame bytes glued to its head",
+    "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n\u0081\u0005hello",
+    toUpgrade(),
+    "101 1.1 close length -1 [upgrade=websocket; connection=Upgrade]\n" + 'body ""\n' + 'tunnel, then "\u0081\u0005hello"'
+  );
+  corpusCase(
+    t,
+    "a 101 that asked to switch protocols ignores its framing fields",
+    "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nContent-Length: 4\r\n\r\nabcd",
+    toUpgrade(),
+    "101 1.1 close length -1 [upgrade=websocket; content-length=4]\n" + 'body ""\n' + 'tunnel, then "abcd"'
+  );
+  corpusCase(
+    t,
+    "a request that asked to switch protocols, answered 200, reads as any other",
+    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
+    toUpgrade(),
+    "200 1.1 keep length 2 [content-length=2]\n" + 'body "ok"\n' + "needs more"
+  );
+  corpusCase(
+    t,
     "a status line over the limit, ended in a bare LF past it",
     `HTTP/1.1 200 ${repeat("x", toI32(60))}\n`,
     plain(),
@@ -674,6 +716,30 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "a status line ended in a bare LF", "HTTP/1.1 204 No Content\n\r\n", plain(), HTTP1_E_BARE_LF);
   refused(t, "a 101", "HTTP/1.1 101 Switching Protocols\r\n\r\n", plain(), HTTP1_E_SWITCH);
   refused(t, "a 101 to CONNECT", "HTTP/1.1 101 Switching Protocols\r\n\r\n", toConnect(), HTTP1_E_SWITCH);
+  refused(t, "a 101 to HEAD", "HTTP/1.1 101 Switching Protocols\r\n\r\n", toHead(), HTTP1_E_SWITCH);
+  refused(t, "a 101 after a 100 to a request that asked for no switch", "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 101 Switching Protocols\r\n\r\n", plain(), HTTP1_E_SWITCH);
+  const origin: i32 = 0;
+  const reset: Http1ResponseParser = smallParser();
+  reset.expectUpgrade();
+  outcomeOf(reset, "HTTP/1.1 101 Switching Protocols\r\n\r\n", plain());
+  t.eqI32("refused: expect() after expectUpgrade() asks for no switch again", reset.error, HTTP1_E_SWITCH);
+  const lateAsk: Http1ResponseParser = smallParser();
+  lateAsk.expect(false, false);
+  const interimFirst: u8[] = bytesOf("HTTP/1.1 100 Continue\r\n\r\n");
+  lateAsk.feed(interimFirst, origin, toI32(interimFirst.length));
+  t.eqI32("an interim response first", lateAsk.next(), HTTP1_INFORMATIONAL);
+  lateAsk.expectUpgrade();
+  const switchAfter: u8[] = bytesOf("HTTP/1.1 101 Switching Protocols\r\n\r\n");
+  lateAsk.feed(switchAfter, origin, toI32(switchAfter.length));
+  lateAsk.next();
+  t.eqI32("refused: expectUpgrade() once a response has begun does nothing", lateAsk.error, HTTP1_E_SWITCH);
+  const kept: Http1ResponseParser = smallParser();
+  t.eqStr("asked to switch, a 200 ends", outcomeOf(kept, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", toUpgrade()), "ends 1, error 0");
+  kept.expect(false, false);
+  const nextSwitch: u8[] = bytesOf("HTTP/1.1 101 Switching Protocols\r\n\r\n");
+  kept.feed(nextSwitch, origin, toI32(nextSwitch.length));
+  kept.next();
+  t.eqI32("refused: the next response on the connection is not asked to switch", kept.error, HTTP1_E_SWITCH);
 
   // --- Field lines -----------------------------------------------------------
   refused(t, "an empty field name", "HTTP/1.1 204 No Content\r\n: x\r\n\r\n", plain(), HTTP1_E_FIELD);
@@ -1002,6 +1068,31 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr("refused: the caller's own Content-Length", requestWith("POST", "/", "Content-Length", "5", none), "null");
   t.eqStr("refused: the caller's own Transfer-Encoding, in any case", requestWith("POST", "/", "TRANSFER-encoding", "chunked", none), "null");
   t.eqStr("refused: a Connection that lists upgrade", requestWith("GET", "/", "Connection", "keep-alive, Upgrade", none), "null");
+  const upgradeRoom: u8[] = new Array<u8>(256);
+  t.eqI32(
+    "refused: http1WriteRequestHead with a Connection that lists upgrade",
+    http1WriteRequestHead(upgradeRoom, zero, "GET", "/", ["Host", "Connection"], ["example.com", "Upgrade"], none),
+    HTTP1_REFUSED
+  );
+  t.eqStr(
+    "http1UpgradeRequestHead writes Upgrade and Connection itself",
+    headText(http1UpgradeRequestHead("GET", "/chat", ["Host", "Sec-WebSocket-Version"], ["example.com", "13"], "websocket")),
+    "GET /chat HTTP/1.1\r\nHost: example.com\r\nSec-WebSocket-Version: 13\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+  );
+  t.eqStr("refused upgrade: an empty protocol", headText(http1UpgradeRequestHead("GET", "/", ["Host"], ["example.com"], "")), "null");
+  t.eqStr("refused upgrade: a protocol that is not a token", headText(http1UpgradeRequestHead("GET", "/", ["Host"], ["example.com"], "web socket")), "null");
+  t.eqStr("refused upgrade: CR LF in the protocol", headText(http1UpgradeRequestHead("GET", "/", ["Host"], ["example.com"], "ws\r\nX: 1")), "null");
+  t.eqStr(
+    "refused upgrade: the caller's own Connection",
+    headText(http1UpgradeRequestHead("GET", "/", ["Host", "Connection"], ["example.com", "keep-alive"], "websocket")),
+    "null"
+  );
+  t.eqStr(
+    "refused upgrade: the caller's own Upgrade, in any case",
+    headText(http1UpgradeRequestHead("GET", "/", ["Host", "uPGRADE"], ["example.com", "h2c"], "websocket")),
+    "null"
+  );
+  t.eqStr("refused upgrade: no Host", headText(http1UpgradeRequestHead("GET", "/", ["Accept"], ["*/*"], "websocket")), "null");
   t.eqStr("refused: no Host", headText(http1RequestHead("GET", "/", ["Accept"], ["*/*"], none)), "null");
   t.eqStr("refused: two Hosts", requestWith("GET", "/", "host", "evil.example", none), "null");
   t.eqStr("refused: names and values of different lengths", headText(http1RequestHead("GET", "/", ["Host", "Accept"], ["example.com"], none)), "null");
@@ -1110,7 +1201,7 @@ export const http1ClientChecks = (): i32 => {
   afterFinish.feed(afterFinishRest, zero, toI32(afterFinishRest.length));
   t.eqI32("bytes fed after finish() are dropped", toI32(afterFinish.buffered()), toI32(afterFinishHead.length));
   const afterFinishLog: Transcript = new Transcript();
-  drain(afterFinish, afterFinishLog, false, false);
+  drain(afterFinish, afterFinishLog, plain());
   t.eqStr("so the body is cut short", ending(afterFinish, afterFinishLog), `200 1.1 keep length 5 [content-length=5]\npartial body "hel"\nerror ${HTTP1_E_TRUNCATED}`);
 
   // Each response's header section has its own byte and field budget, and so

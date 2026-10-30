@@ -257,7 +257,7 @@ the body on its own:
 | `HTTP1_HEAD` | the final response's status line and fields are in: `status`, `reason`, `minor` (the HTTP minor version), `names` and `values` (names in lowercase), `header(name)` (any case), `contentLength` (the body's length, or -1 when the response is not framed by one; it is always -1 for a response to HEAD, a 204, a 304 and a 2xx to CONNECT, which have no body, so read `header("content-length")` there) |
 | `HTTP1_BODY` | some body bytes, de-chunked: `body[bodyOff .. bodyOff + bodyLen)`, valid until the next call |
 | `HTTP1_END` | the response is complete, trailers included |
-| `HTTP1_UPGRADE` | a `CONNECT` was answered with 2xx and the connection is a tunnel: `tunnelBytes()` answers what was fed past the head |
+| `HTTP1_UPGRADE` | a `CONNECT` was answered with 2xx, or a request `expectUpgrade` named with 101, and the connection is a tunnel: `tunnelBytes()` answers what was fed past the head |
 | `HTTP1_CLOSED` | the connection is done: the server closed it between responses, or the response before was not kept alive (`keepAlive()` false) and nothing more can follow it |
 | `HTTP1_ERROR` | the response is refused: `error` holds the code and `errorText` says why |
 
@@ -303,7 +303,7 @@ constant of `nish/net/http1-client`:
 | 2 | `HTTP1_E_VERSION` | an HTTP major version other than 1 |
 | 3 | `HTTP1_E_BARE_LF` | a line ended by LF without CR |
 | 4 | `HTTP1_E_FIELD` | a malformed field line: a folded line, whitespace before the colon, a control byte in a value |
-| 5 | `HTTP1_E_SWITCH` | a 101, since this client never asks to switch protocols |
+| 5 | `HTTP1_E_SWITCH` | a 101 to a request that did not ask to switch protocols (`expectUpgrade`, below) |
 | 6 | `HTTP1_E_FRAMING` | `Transfer-Encoding` together with `Content-Length` |
 | 7 | `HTTP1_E_CODING` | a transfer coding other than one `chunked`, last, or one in an HTTP/1.0 response |
 | 8 | `HTTP1_E_LENGTH` | a `Content-Length` that is not one run of digits, or two that differ |
@@ -318,6 +318,19 @@ constant of `nish/net/http1-client`:
 | 17 | `HTTP1_E_INFORMATIONAL_LIMIT` | more than `HTTP1_MAX_INFORMATIONAL` (32) interim responses to one request |
 
 After an error the connection cannot be trusted: close it.
+
+### Switching protocols
+
+A request that asks the server to switch protocols, such as a WebSocket's
+opening handshake, is written with `http1UpgradeRequestHead(method, target,
+names, values, upgrade)`, which adds `Upgrade` and `Connection: Upgrade`
+itself. Tell the parser before you feed it the answer: call `expectUpgrade()`
+after `expect`. A 101 then answers `HTTP1_HEAD`, `HTTP1_END` and
+`HTTP1_UPGRADE`, and `tunnelBytes()` answers whatever was fed past its head,
+which is the new protocol's, not HTTP's. Any other answer reads as it would
+without the call. It lasts one request: the next `expect` clears it, and it
+does nothing once a response has begun. [WebSocket](websocket.md) shows the
+whole handshake.
 
 ### Limits
 

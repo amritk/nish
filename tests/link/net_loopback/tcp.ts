@@ -1,6 +1,7 @@
 // The TCP half of the loopback suite: one `pollWait` loop that holds a Nish
 // server on one carrier — `nish/net/tls-tcp`, `nish/net/http1-server`'s TLS
-// pool, or `nish/net/http2-tls` — and the Nish clients that talk to it. The
+// or plain pool, or `nish/net/http2-tls` — and the Nish clients that talk to
+// it: raw sockets, or `nish/net/tls-tcp`'s own client driven in the loop. The
 // kernel carries every byte: a client writes to its socket, the loop wakes
 // the server's descriptor, and what the server sends is read off the client's
 // socket when the loop wakes it.
@@ -28,14 +29,18 @@ import {
   tcpConnect,
   tcpListen,
 } from "nish:net";
-import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server";
-import { TLS_TCP_POOL_FULL, TlsTcpServer } from "nish/net/tls-tcp";
-import { H1_ALPN, H1_DONE, H1_ERROR, H1_NEED_MORE, Http1Config, Http1Connection, Http1TlsServer } from "nish/net/http1-server";
+import { TLS_RECORD_DATA, TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server";
+import { TlsClientConfig } from "nish/net/tls/client";
+import { TlsClientTrust } from "nish/net/tls/verify";
+import { X509Certificate, x509ParseCertificate } from "nish/crypto/x509";
+import { TLS_TCP_POOL_FULL, TlsTcpClient, TlsTcpServer } from "nish/net/tls-tcp";
+import { H1_ALPN, H1_DONE, H1_ERROR, H1_NEED_MORE, Http1Config, Http1Connection, Http1Server, Http1TlsServer } from "nish/net/http1-server";
 import { H2_ALPN, Http2TlsServer } from "nish/net/http2-tls";
 import { H2_ERROR, H2_NEED_MORE, Http2Config } from "nish/net/http2";
 import { leafPrivate, serverPrivate, tcpConfig } from "../net_tls_common/server";
 import { ZERO } from "../net_tls_record_common/bytes";
 import { CLIENTS, LISTENER, Peer } from "../net_tls_record_tcp/harness";
+import { chainConfig, goodLeaf, loopbackRoot } from "../net_tls_client_tcp/chain";
 import { LbMeter, lbBegin, lbEnd, lbLeafKey } from "./common";
 import { EchoSlots, H1App, H2App } from "./apps";
 
@@ -45,6 +50,10 @@ const WOULD_BLOCK: i32 = -11;
 export const CARRIER_TLS: i32 = 0;
 export const CARRIER_H1: i32 = 1;
 export const CARRIER_H2: i32 = 2;
+export const CARRIER_H1_PLAIN: i32 = 3;
+
+/** The token of the loop's `TlsTcpClient`, below `CLIENTS` so that it is not taken for a raw client. */
+const TLS_CLIENT: i32 = 1500;
 
 /** The slots every pool here has: one connection under test, and room for the next while the last closes. */
 const POOL: i32 = 2;
@@ -73,6 +82,7 @@ export class TcpLoop {
   tls: TlsTcpServer;
   h1: Http1TlsServer;
   h2: Http2TlsServer;
+  plain: Http1Server;
   echo: EchoSlots;
   h1App: H1App;
   h2App: H2App;
@@ -85,6 +95,11 @@ export class TcpLoop {
   serverKey: u8[];
   /** The P-256 leaf key, as the program holds it. */
   leafKey: u8[];
+  /** The `TlsTcpClient` `connectTls` made, what it has read, and whether its stream has ended and it is done. */
+  client: TlsTcpClient | null = null;
+  clientGot: u8[];
+  clientEnded: boolean = false;
+  clientDone: boolean = false;
   /** The first thing that went wrong, or empty. */
   failure: string = "";
   accepted: i32 = 0;
@@ -96,6 +111,7 @@ export class TcpLoop {
     this.carrier = carrier;
     this.ready = new Array<i32>(32);
     this.peers = [];
+    this.clientGot = [];
     this.buf = new Array<u8>(65536);
     this.keyBuffer = new Array<u8>(32);
     this.randomBuffer = new Array<u8>(32);
@@ -106,8 +122,10 @@ export class TcpLoop {
     this.port = netLocalPort(this.listener);
     const unused: i32 = -1;
     this.tls = new TlsTcpServer(tcpConfig([]), carrier === CARRIER_TLS ? this.listener : unused, carrier === CARRIER_TLS ? POOL : toI32(1));
-    this.h1 = new Http1TlsServer(tcpConfig([H1_ALPN]), h1Config(), carrier === CARRIER_H1 ? this.listener : unused, carrier === CARRIER_H1 ? POOL : toI32(1));
+    // The HTTP/1.1 pool sends a chain under `loopbackRoot`, so that `nish/net/tls-tcp`'s client can authenticate it.
+    this.h1 = new Http1TlsServer(chainConfig([goodLeaf()], [H1_ALPN]), h1Config(), carrier === CARRIER_H1 ? this.listener : unused, carrier === CARRIER_H1 ? POOL : toI32(1));
     this.h2 = new Http2TlsServer(tcpConfig([H2_ALPN]), new Http2Config(), carrier === CARRIER_H2 ? this.listener : unused, carrier === CARRIER_H2 ? POOL : toI32(1));
+    this.plain = new Http1Server(h1Config(), carrier === CARRIER_H1_PLAIN ? this.listener : unused, carrier === CARRIER_H1_PLAIN ? POOL : toI32(1));
     this.echo = new EchoSlots(POOL);
     this.h1App = new H1App(POOL);
     this.h2App = new H2App(carrier === CARRIER_H2 ? toI32(8) : ZERO);
@@ -161,6 +179,8 @@ export class TcpLoop {
       seen = seen || who === token;
       if (who === LISTENER) {
         this.acceptAll();
+      } else if (who === TLS_CLIENT) {
+        this.driveClient(events);
       } else if (who >= CLIENTS) {
         this.readPeer(who - CLIENTS);
       } else {
@@ -192,6 +212,134 @@ export class TcpLoop {
     }
   }
 
+  /**
+   * A `TlsTcpClient` for "localhost" offering http/1.1, authenticating the
+   * server against `loopbackRoot`, run in the loop until it has opened; false
+   * when it did not.
+   */
+  connectTls(): boolean {
+    const addr: u8[] = new Array<u8>(18);
+    netAddress(addr, "127.0.0.1", this.port);
+    const roots: X509Certificate[] = [];
+    const root: X509Certificate | null = x509ParseCertificate(loopbackRoot());
+    if (root !== null) {
+      roots.push(root);
+    }
+    const trust = new TlsClientTrust(roots);
+    const c = new TlsTcpClient(addr, new TlsClientConfig("localhost", [H1_ALPN]), trust);
+    this.client = c;
+    this.clientGot = [];
+    this.clientEnded = false;
+    this.clientDone = c.fd() < 0;
+    if (this.clientDone) {
+      this.fail(`TlsTcpClient: ${c.failure()}`);
+      return false;
+    }
+    pollAdd(this.loop, c.fd(), c.interest() & 3, TLS_CLIENT);
+    for (let rounds: i32 = 0; rounds < 100 && !c.open() && !this.clientDone && this.failure === ""; rounds++) {
+      this.step(TLS_CLIENT);
+    }
+    if (!c.open()) {
+      this.fail(`TlsTcpClient did not open: ${c.failure()}`);
+      return false;
+    }
+    return true;
+  }
+
+  /** The client's socket is ready: drives it, reads what it opened into `clientGot`, and re-arms it. */
+  driveClient(events: i32): void {
+    const c: TlsTcpClient | null = this.client;
+    if (c === null || this.clientDone) {
+      return;
+    }
+    let wants: i32 = (events & 5) !== 0 ? c.readable() : c.writable();
+    while ((wants & TLS_RECORD_DATA) !== 0) {
+      const n: i32 = c.read(this.buf, ZERO, toI32(this.buf.length));
+      if (n === 0) {
+        // The server's close_notify: the client answers with its own.
+        this.clientEnded = true;
+        wants = c.shutdown();
+        break;
+      }
+      if (n < 0) {
+        wants = c.interest();
+        break;
+      }
+      for (let k: i32 = 0; k < n; k++) {
+        this.clientGot.push(this.buf[k]);
+      }
+      wants = c.interest();
+    }
+    this.rearmClient(c, wants);
+  }
+
+  /** Re-arms the client with `wants`, or, once it wants nothing more, takes it out of the loop. */
+  rearmClient(c: TlsTcpClient, wants: i32): void {
+    if ((wants & TLS_RECORD_DONE) !== 0) {
+      this.clientDone = true;
+      pollRemove(this.loop, c.fd());
+      return;
+    }
+    pollModify(this.loop, c.fd(), wants & 3, TLS_CLIENT);
+  }
+
+  /** Writes every byte of `bytes` from the `TlsTcpClient`, running the loop while it cannot take them. */
+  clientSend(bytes: u8[]): void {
+    const c: TlsTcpClient | null = this.client;
+    if (c === null) {
+      this.fail("clientSend: no client");
+      return;
+    }
+    const len: i32 = toI32(bytes.length);
+    let sent: i32 = 0;
+    for (let rounds: i32 = 0; sent < len && rounds < 100000 && this.failure === ""; rounds++) {
+      const w: i32 = c.write(bytes, sent, len - sent);
+      if (w > 0) {
+        sent = sent + w;
+      } else if (w !== WOULD_BLOCK) {
+        this.fail(`TlsTcpClient write ${w}`);
+        return;
+      }
+      this.rearmClient(c, c.interest());
+      if (sent < len) {
+        this.step(toI32(-1));
+      }
+    }
+  }
+
+  /** Runs the loop until the `TlsTcpClient` has read at least `n` bytes, or its stream has ended; false short of them. */
+  awaitClientBytes(n: i32): boolean {
+    while (toI32(this.clientGot.length) < n && !this.clientEnded && !this.clientDone) {
+      this.step(toI32(-1));
+      if (this.failure !== "") {
+        return false;
+      }
+    }
+    return toI32(this.clientGot.length) >= n;
+  }
+
+  /** Takes everything the `TlsTcpClient` has read. */
+  takeClient(): u8[] {
+    const got: u8[] = this.clientGot;
+    this.clientGot = [];
+    return got;
+  }
+
+  /** Runs the loop until the `TlsTcpClient` is done, then closes it; false on a timeout. */
+  awaitClientDone(): boolean {
+    while (!this.clientDone) {
+      this.step(toI32(-1));
+      if (this.failure !== "") {
+        return false;
+      }
+    }
+    const c: TlsTcpClient | null = this.client;
+    if (c !== null) {
+      c.close();
+    }
+    return true;
+  }
+
   /** Accepts every waiting connection into the carrier's pool, with the test randomness. */
   acceptAll(): void {
     while (true) {
@@ -205,6 +353,8 @@ export class TcpLoop {
         slot = this.tls.accept(this.randomBuffer, this.keyBuffer);
       } else if (this.carrier === CARRIER_H1) {
         slot = this.h1.accept(this.randomBuffer, this.keyBuffer);
+      } else if (this.carrier === CARRIER_H1_PLAIN) {
+        slot = this.plain.accept();
       } else {
         slot = this.h2.accept(this.randomBuffer, this.keyBuffer);
       }
@@ -227,6 +377,9 @@ export class TcpLoop {
     if (this.carrier === CARRIER_TLS) {
       return this.tls.fd(slot);
     }
+    if (this.carrier === CARRIER_H1_PLAIN) {
+      return this.plain.fd(slot);
+    }
     return this.carrier === CARRIER_H1 ? this.h1.fd(slot) : this.h2.fd(slot);
   }
 
@@ -243,6 +396,10 @@ export class TcpLoop {
     } else if (this.carrier === CARRIER_H1) {
       wants = this.serveH1(slot, events);
       holds = this.h1.holds(slot);
+      done = (wants & H1_DONE) !== 0;
+    } else if (this.carrier === CARRIER_H1_PLAIN) {
+      wants = this.servePlain(slot, events);
+      holds = this.plain.holds(slot);
       done = (wants & H1_DONE) !== 0;
     } else {
       wants = this.serveH2(slot, events);
@@ -266,6 +423,8 @@ export class TcpLoop {
       this.tls.close(slot);
     } else if (this.carrier === CARRIER_H1) {
       this.h1.close(slot);
+    } else if (this.carrier === CARRIER_H1_PLAIN) {
+      this.plain.close(slot);
     } else {
       this.h2.close(slot);
     }
@@ -304,6 +463,24 @@ export class TcpLoop {
       event = this.h1.next(slot);
     }
     return this.h1.flush(slot);
+  }
+
+  /** HTTP/1.1 and WebSocket over plain TCP: the carrier's events, answered by `H1App`. */
+  servePlain(slot: i32, events: i32): i32 {
+    const wants: i32 = (events & 5) !== 0 ? this.plain.readable(slot) : this.plain.writable(slot);
+    if ((wants & H1_DONE) !== 0) {
+      return wants;
+    }
+    const conn: Http1Connection = this.plain.connection(slot);
+    let event: i32 = this.plain.next(slot);
+    while (event !== H1_NEED_MORE) {
+      this.h1App.handle(conn, event, slot);
+      if (event === H1_ERROR) {
+        break;
+      }
+      event = this.plain.next(slot);
+    }
+    return this.plain.flush(slot);
   }
 
   /** HTTP/2 over TLS: the carrier's events, answered by `H2App`. */
@@ -400,6 +577,9 @@ export class TcpLoop {
     if (this.carrier === CARRIER_TLS) {
       return this.tls.busy();
     }
+    if (this.carrier === CARRIER_H1_PLAIN) {
+      return this.plain.busy();
+    }
     return this.carrier === CARRIER_H1 ? this.h1.busy() : this.h2.busy();
   }
 
@@ -421,10 +601,15 @@ export class TcpLoop {
         peer.fd = -1;
       }
     }
+    const c: TlsTcpClient | null = this.client;
+    if (c !== null) {
+      c.close();
+    }
     for (let slot: i32 = 0; slot < POOL; slot++) {
       this.tls.close(slot);
       this.h1.close(slot);
       this.h2.close(slot);
+      this.plain.close(slot);
     }
     netClose(this.listener);
     netClose(this.loop);
