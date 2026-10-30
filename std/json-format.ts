@@ -58,9 +58,10 @@
  * `u` flag's rules, so a lone `{` or `]` is an error. Such a pattern is valid
  * ECMA-262 and is answered invalid here, a false negative.
  *
- * **What a call costs.** Every check but `regex` reads each byte of its string
- * a bounded number of times (at most twice, where a part is found and then
- * walked), allocates nothing and cannot panic. `jsonFormatId` compares the
+ * **What a call costs.** Every check but `regex` is linear in the length of
+ * its string: each unit is read a small fixed number of times (at most four, in
+ * a URI's authority, which is found and then split at `@` and `:`). It
+ * allocates nothing and cannot panic. `jsonFormatId` compares the
  * name with up to 15 strings; resolve it once per schema, not per instance.
  * `isRegex` compiles the pattern, which allocates the program `nish/regex`
  * builds and is linear in the pattern's length.
@@ -379,7 +380,7 @@ const jfIpv6Range = (s: string, from: i32, to: i32): boolean => {
       return false
     }
   }
-  return elided ? groups <= 7 && i >= from + 2 : groups === 8
+  return elided ? groups <= 7 : groups === 8
 }
 
 /** Whether `s` is a dotted-quad IPv4 address, `192.168.0.1`. */
@@ -790,12 +791,6 @@ const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
     // `path-noscheme`: a relative path's first segment cannot hold a `:`,
     // or it would read as a scheme.
     const firstSegmentEnd = jfFind(s, i, pathEnd, 47, 47, 47)
-    if (
-      !jfUriRun(s, i, firstSegmentEnd, JF_USERINFO, iri) &&
-      !jfUriRun(s, i, firstSegmentEnd, JF_SEGMENT, iri)
-    ) {
-      return false
-    }
     if (jfFind(s, i, firstSegmentEnd, 58, 58, 58) < firstSegmentEnd) {
       return false
     }

@@ -56,7 +56,7 @@ PASS  ipv6: two ::
 PASS  ipv6: nine groups
 PASS  uuid: upper case
 PASS  uuid: a dash moved
-PASS  uri: a percent-encoded host url refuses
+PASS  uri: a percent-encoded reg-name
 PASS  uri: a numeric reg-name
 PASS  uri: a userinfo and port
 PASS  uri: a URN
