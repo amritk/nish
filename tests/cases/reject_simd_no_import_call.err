@@ -1,0 +1,1 @@
+`extract` is a `nish:simd` name and is used only through an import of it: add `import { extract } from "nish:simd"`

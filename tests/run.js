@@ -11255,6 +11255,215 @@ for (const name of ["unsafe_get_set", "unsafe_wrapping"]) {
   )
 }
 
+// WP38 S3: `nish:simd` three ways. Each `simd_*` program with a `.out` is linked
+// natively, built with `--profile wasi` and run under Node's WASI where a
+// sysroot is installed, and run from source under `runtime/nish.mjs` (or, one
+// that zero-fills vectors, as `--emit-ts` writes it), where a vector is a typed
+// array; all three must print the `.out` section A holds the
+// native build to. Then the out-of-range load panics with the same words on
+// both sides, an exported function with a vector in its signature is left out
+// of the C header and the `.d.ts` with a comment naming the type, and no
+// golden names a target's intrinsic: the lowering is generic IR.
+if (!only || "nish:simd".includes(only) || only.includes("simd")) {
+  const simdDir = path.join(buildDir, "simd")
+  fs.rmSync(simdDir, { recursive: true, force: true })
+  fs.mkdirSync(simdDir, { recursive: true })
+  const wasi = WASI_SYSROOT && has("wasm-ld")
+  const programs = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^simd_.*\.out$/.test(f))
+    .map((f) => f.slice(0, -".out".length))
+  check("simd: the section finds the simd_* programs with a .out", programs.length >= 3, programs.join(", "))
+  // Each slot of a `new Array<V>(n)` is a fresh zero vector, which only the
+  // `--emit-ts` route can build: its rewriter reads the element type.
+  const zeroFilled = new Set(["simd_zero_fill"])
+  for (const name of programs) {
+    const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+    const exe = buildCaseIn(simdDir, name)
+    if (exe !== null) {
+      const native = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
+      check(`${name}: native prints the .out`, native.status === 0 && native.stdout === want, shown(native))
+    }
+    if (zeroFilled.has(name)) {
+      // `new Array<V>(n)` has holes under the prelude, which sees no type
+      // argument (docs/RUN_UNDER_NODE.md): Node runs it as `--emit-ts` writes it.
+      const out = path.join(simdDir, `ts_${name}`)
+      const emitted = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--emit-ts", out + path.sep], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const node =
+        emitted.status === 0
+          ? spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
+          : emitted
+      check(
+        `${name}: written by --emit-ts, runs under Node and prints the native .out`,
+        emitted.status === 0 && node.status === 0 && node.stdout === want,
+        `--- native (.out)\n${want}--- node\n${shown(node)}`
+      )
+    } else {
+      const node = runCaseUnderPrelude(name, [])
+      check(
+        `${name}: runs under runtime/nish.mjs and prints the native .out`,
+        node.status === 0 && node.stdout === want,
+        `--- native (.out)\n${want}--- node\n${shown(node)}`
+      )
+    }
+    if (wasi) {
+      const wasm = path.join(simdDir, `${name}.wasm`)
+      const built = spawnSync(
+        NISH,
+        [
+          path.join(casesDir, `${name}.ts`),
+          "-o",
+          path.join(simdDir, `wasi_${name}`) + path.sep,
+          "--link",
+          wasm,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run =
+        built.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+          : built
+      check(
+        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the native .out under Node's WASI`,
+        built.status === 0 && run.status === 0 && run.stdout === want,
+        shown(run)
+      )
+    }
+  }
+  if (!wasi) {
+    skip(
+      `skipped: simd: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of simd_* are not run`
+    )
+  }
+
+  // An access out of range panics before it reads or writes, naming the first
+  // index past the end (a negative one as the unsigned value `xs[i]` names
+  // too) and the length, natively and under runtime/nish.mjs alike.
+  const oobCases = [
+    ["simd_access_oob", "a load whose last lane is past the end", "5\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
+    ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
+    ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+  ]
+  for (const [name, what, stdout, words] of oobCases) {
+    const exe = buildCaseIn(simdDir, name)
+    if (exe !== null) {
+      const native = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
+      check(
+        `${name}: ${what} panics natively, after the access before it`,
+        native.status !== 0 && native.stdout === stdout && native.stderr.includes(words),
+        shown(native)
+      )
+    }
+    const node = runCaseUnderPrelude(name, [])
+    check(
+      `${name}: ${what} panics under runtime/nish.mjs with the native words`,
+      node.status !== 0 && node.stdout === stdout && node.stderr.includes(words),
+      shown(node)
+    )
+  }
+
+  // The sidecars spell no vector: a function with one anywhere in its
+  // signature, as a parameter, a result, an array's element or a `Result` arm,
+  // is skipped by the header, the Node-API shim and the wasm loader, each with
+  // a comment naming the type; a class holding one at any depth -- a field, a
+  // `Result` arm, an array's element, another class -- is opaque in the
+  // header, as a `Map` holder is, and no `Result` over one is defined.
+  const lib = path.join(simdDir, "lib.ts")
+  fs.writeFileSync(
+    lib,
+    'import { i32x4, u8x16, f64x2, extract, splatI32x4, splatU8x16, splatF64x2 } from "nish:simd";\n' +
+      "export class Holder { n: i32; v: i32x4; constructor(n: i32) { this.n = n; this.v = splatI32x4(n) } }\n" +
+      "export class InResult { n: i32; r: Result<u8x16, string>; constructor(n: i32) { this.n = n; this.r = Ok(splatU8x16(1)) } }\n" +
+      "export class InArray { n: i32; a: u8x16[]; constructor(n: i32) { this.n = n; this.a = [splatU8x16(1)] } }\n" +
+      "export class Nested { n: i32; h: InResult; constructor(n: i32) { this.n = n; this.h = new InResult(n) } }\n" +
+      'export const pair = (x: f64): Result<f64x2, string> => x > 0 ? Ok(splatF64x2(x)) : Err("neg");\n' +
+      "export const peekNested = (h: Nested): i32 => h.n;\n" +
+      "export const first = (v: i32x4): i32 => extract(v, 0);\n" +
+      "export const make = (x: i32): i32x4 => splatI32x4(x);\n" +
+      "export const sum = (vs: i32x4[]): i32 => extract(vs[0], 0);\n" +
+      "export const peek = (h: Holder): i32 => h.n;\n" +
+      "export const twice = (x: i32): i32 => x * 2;\n"
+  )
+  const header = path.join(simdDir, "lib.h")
+  const dts = path.join(simdDir, "lib.d.ts")
+  const napi = path.join(simdDir, "lib_napi.c")
+  const sides = spawnSync(
+    NISH,
+    [lib, "-o", path.join(simdDir, "lib.ll"), "--emit-header", header, "--emit-dts", dts, "--emit-napi", napi],
+    { cwd: root, encoding: "utf8" }
+  )
+  const read = (f) => (sides.status === 0 ? fs.readFileSync(f, "utf8") : "")
+  const h = read(header)
+  const d = read(dts)
+  const m = read(path.join(simdDir, "lib.mjs"))
+  const n = read(napi)
+  const code = h.replace(/\/\*[\s\S]*?\*\//g, "")
+  check(
+    "simd: --emit-header leaves out a vector parameter, result, array of vectors and Result over one, naming each, and makes a holder at any depth opaque",
+    sides.status === 0 &&
+      h.includes("int32_t twice(int32_t x);") &&
+      h.includes("int32_t peek(struct Holder *h);") &&
+      h.includes("typedef struct Holder Holder;") &&
+      !/struct Holder \{/.test(code) &&
+      !/\b(first|make|sum)\(/.test(code) &&
+      h.includes("first(v: i32x4): number: not declared") &&
+      h.includes("make(x: number): i32x4: not declared") &&
+      h.includes("sum(vs: i32x4[]): number: not declared") &&
+      ["InResult", "InArray", "Nested"].every(
+        (c) => h.includes(`typedef struct ${c} ${c};`) && !new RegExp(`struct ${c} \\{`).test(code)
+      ) &&
+      h.includes("int32_t peekNested(struct Nested *h);") &&
+      !/\bpair\(/.test(code) &&
+      h.includes("pair(x: number): Result<f64x2, string>: not declared") &&
+      !/nish_result/.test(code),
+    `${shown(sides)}\n--- lib.h\n${h}`
+  )
+  check(
+    "simd: --emit-napi bridges none of the vector signatures, naming the type, nor a class that holds one",
+    sides.status === 0 &&
+      n.includes('{"twice", nish_napi_twice}') &&
+      !/nish_napi_(first|make|sum)\b/.test(n) &&
+      n.includes("first(v: i32x4): number -- not bridged: parameter 1 (v) is i32x4") &&
+      n.includes("make(x: number): i32x4 -- not bridged: it returns i32x4") &&
+      n.includes("sum(vs: i32x4[]): number -- not bridged: parameter 1 (vs) is i32x4[]") &&
+      !/nish_napi_pair\b/.test(n) &&
+      n.includes("pair(x: number): Result<f64x2, string> -- not bridged: it returns Result<f64x2, string>") &&
+      !/nish_napi_peek(Nested)?\b/.test(n) &&
+      n.includes("peek(h: Holder): number -- not bridged: parameter 1 (h) is Holder") &&
+      n.includes("peekNested(h: Nested): number -- not bridged: parameter 1 (h) is Nested"),
+    `${shown(sides)}\n--- lib_napi.c\n${n}`
+  )
+  check(
+    "simd: --emit-dts and its wasm loader export none of the vector signatures, naming the type, nor a class that holds one",
+    sides.status === 0 &&
+      d.includes("twice(x: number): number;") &&
+      m.includes("twice: raw.twice") &&
+      !/\b(first|make|sum): raw\./.test(m) &&
+      d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector") &&
+      d.includes("the result is `i32x4`, a `nish:simd` vector") &&
+      d.includes("sum(vs: i32x4[]): number  -- not exported to JS") &&
+      !/\bpair: raw\./.test(m) &&
+      d.includes("the result is `Result<f64x2, string>`, which holds a `nish:simd` vector") &&
+      !/\bpeek(Nested)?: raw\./.test(m) &&
+      d.includes("peek(h: Holder): number  -- not exported to JS: argument 1 (h) is `Holder`, which holds a `nish:simd` vector") &&
+      d.includes("peekNested(h: Nested): number  -- not exported to JS: argument 1 (h) is `Nested`, which holds a `nish:simd` vector"),
+    `${shown(sides)}\n--- lib.d.ts\n${d}\n--- lib.mjs\n${m}`
+  )
+
+  // Generic IR only: LLVM picks the instructions for the target it is given.
+  const named = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^simd_.*\.ll$/.test(f))
+    .filter((f) => /llvm\.(x86|aarch64)\./.test(fs.readFileSync(path.join(casesDir, f), "utf8")))
+  check("simd: no simd_*.ll golden calls an llvm.x86. or llvm.aarch64. intrinsic", named.length === 0, named.join(", "))
+}
+
 // RT-4 under Node (#405): `runtime/shim.mjs` opens what `writeFileSync`,
 // `appendFileSync` and `spawnSyncTo` write with `O_NOFOLLOW`, as runtime-os.c
 // does, so a symbolic link planted at the name is refused rather than followed
@@ -16817,6 +17026,80 @@ if (!only || "layout".includes(only)) {
           run.status === 0 && String(run.stdout).trim() === "inline layout ok",
           `${run.stdout}${run.stderr}`
         )
+      }
+    }
+    // `nish:simd` vectors: tests/layout/simd.ts against its C twin, whose
+    // fields are clang's `vector_size(16)` types. The asserts pin a vector at
+    // sixteen bytes aligned to sixteen and an array of them at a sixteen-byte
+    // stride; the run reads every lane through the object `makeLanes` built
+    // and the bytes a `store` wrote.
+    {
+      const simdTs = path.join(root, "tests", "layout", "simd.ts")
+      const simdC = path.join(root, "tests", "layout", "simd.c")
+      const simdLl = path.join(buildDir, "layout_simd.ll")
+      const sc = spawnSync(NISH, [simdTs, "-o", simdLl], { cwd: root })
+      check("layout: tests/layout/simd.ts compiles", sc.status === 0, String(sc.stderr))
+      if (sc.status === 0) {
+        const ir = fs.readFileSync(simdLl, "utf8")
+        const cText = fs.readFileSync(simdC, "utf8")
+        /** What `make<Name>` allocates, and what simd.c asserts `sizeof(struct <Name>)` is. */
+        const sizes = (name) => {
+          const alloc = ir.match(new RegExp(`define [^\\n]*@make${name}\\([^\\n]*\\{\\n[\\s\\S]*?@nish_alloc_struct\\(i64 (\\d+)\\)`))
+          const cSize = cText.match(new RegExp(`_Static_assert\\(sizeof\\(struct ${name}\\) == (\\d+)`))
+          return { ir: alloc && alloc[1], c: cSize && cSize[1] }
+        }
+        const lanes = sizes("Lanes")
+        check(
+          "layout: a vector field is `<N x T>`, an array of them `[K x <N x T>]`, and the object is the size simd.c asserts",
+          ir.includes(
+            "%struct.Lanes = type { i32, <4 x i32>, double, <2 x double>, { %struct.nish_array, [3 x <4 x i32>] }, <16 x i8>, <8 x i16>, <4 x i32>, <4 x float> }"
+          ) &&
+            lanes.ir !== null &&
+            lanes.ir === lanes.c,
+          `IR allocates ${lanes.ir}, simd.c asserts ${lanes.c}`
+        )
+        // An inline array of vectors is aligned to sixteen, not to its header's
+        // eight, so `Mid` and `Tail` (one after a lone i32, mid-object and last)
+        // are allocated at the size LLVM and clang give them.
+        const mid = sizes("Mid")
+        const tail = sizes("Tail")
+        check(
+          "layout: an inline array of vectors after an i32, mid-object and as the last field, is allocated at the size simd.c asserts",
+          mid.ir !== null && mid.ir === mid.c && tail.ir !== null && tail.ir === tail.c,
+          `Mid: IR ${mid.ir}, simd.c ${mid.c}; Tail: IR ${tail.ir}, simd.c ${tail.c}`
+        )
+        const exe = path.join(buildDir, "layout_simd")
+        const cc = spawnSync(
+          "clang",
+          [
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-Wno-override-module",
+            "-O2",
+            "-Iruntime",
+            simdC,
+            simdLl,
+            ...RUNTIME_C,
+            "-o",
+            exe,
+          ],
+          { cwd: root }
+        )
+        check(
+          "layout: simd.c compiles with -std=c11 -Wall -Wextra -Werror (vector sizes, alignment and stride agree with clang)",
+          cc.status === 0,
+          String(cc.stderr)
+        )
+        if (cc.status === 0) {
+          const run = spawnSync(exe)
+          check(
+            "layout: every vector lane agrees with clang at run time, and a store writes the sixteen bytes it names",
+            run.status === 0 && String(run.stdout).trim() === "simd layout ok",
+            `${run.stdout}${run.stderr}`
+          )
+        }
       }
     }
     // --emit-header describes every class, so a build that writes one keeps

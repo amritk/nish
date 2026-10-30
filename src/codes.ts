@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 718
+export const RULE_COUNT: i32 = 724
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -699,6 +699,8 @@ const diagnosticRules = (): string[] => [
   "NL3002",
   "` is generic: it must be written with its type arguments, e.g. ",
   "NL2317",
+  "` name and is used only through an import of it: add `import { ",
+  "NL2578",
   "` takes i32 or i64 operands (convert with toI32 or toI64), got ",
   "NL2454",
   "` takes u32 or u64 operands (convert with toU32 or toU64), got ",
@@ -733,6 +735,8 @@ const diagnosticRules = (): string[] => [
   "NL2056",
   "` in a constant requires two operands of the same type, got ",
   "NL2070",
+  "` takes an array whose elements are the vector's lane type, ",
+  "NL2579",
   "`unwrapOr(...)` needs a success value to fall back to, and `",
   "NL2164",
   " (an override keeps the signature; there is no overloading)",
@@ -741,6 +745,8 @@ const diagnosticRules = (): string[] => [
   "NL3044",
   ", and a declared C function returns a scalar or `CPtr` only",
   "NL2321",
+  "` takes a lane index that is an integer literal, from 0 to ",
+  "NL2580",
   "`, which the root package does not grant it; grant it with ",
   "NL2576",
   "A union needs two different variants: this one names only `",
@@ -943,6 +949,8 @@ const diagnosticRules = (): string[] => [
   "NL1006",
   " (object layout is fixed at compile time)",
   "NL1007",
+  "): compare the lanes, read with `extract`",
+  "NL2581",
   "` in a constant requires boolean operands",
   "NL2069",
   "` is a builtin value and cannot be called",
@@ -1033,6 +1041,8 @@ const diagnosticRules = (): string[] => [
   "NL2076",
   "` is set twice in the object literal",
   "NL2088",
+  "` vector as its first argument, got ",
+  "NL2582",
   "`, and this program is compiling in ",
   "NL3017",
   "`.prototype` access is forbidden in ",
@@ -1305,6 +1315,8 @@ const diagnosticRules = (): string[] => [
   "NL1039",
   "Duplicate `case` label `",
   "NL2194",
+  ", whose lanes are 0 to ",
+  "NL2583",
   "; declare the type as `",
   "NL2024",
   "`with` is forbidden in ",

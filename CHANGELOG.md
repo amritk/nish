@@ -54,7 +54,6 @@ hand — the git log is the working account until a release turns it into one.
 ### Fixed
 
 - runtime: SetNice refuses a raise and values outside 0..19 ([`3db5a5d`](https://github.com/amritk/nish/commit/3db5a5d))
-- cli: Chalk that keeps to its own names ([#1058](https://github.com/amritk/nish/pull/1058))
 
 ### Performance
 
@@ -69,10 +68,6 @@ hand — the git log is the working account until a release turns it into one.
 ### CI
 
 - Keep main's platform pins one release behind so every commit agrees with its lockfile ([#1039](https://github.com/amritk/nish/pull/1039))
-
-### Internal
-
-- cli: Chalk for the wall ([#1049](https://github.com/amritk/nish/pull/1049))
 
 
 ## [0.26.0] - 2026-10-29

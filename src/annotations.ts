@@ -15,11 +15,13 @@
 // context is one argument that is already being threaded.
 
 import { containerMessage as secretContainerMessage } from "./secret"
+import { simdImportMessage, simdLaneType } from "./simd"
 import { LANGUAGE } from "./branding"
 import { CheckContext, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo, STRUCT_CLASS, StructInfo } from "./program"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
+import { SIMD_SPECIFIER } from "./nish-modules"
 import {
   FLAG_DEFAULT,
   FLAG_READONLY,
@@ -388,6 +390,17 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     return declaredEnum.type
   }
 
+  // A `nish:simd` vector (WP38 S3), spelled by the name its import bound. A
+  // vector type is a name in that module and nowhere else, so an `as` rename
+  // spells it too, and an unimported `u8x16` is refused below.
+  const vectorImport = ctx.program.importNamed(name)
+  if (vectorImport !== null && vectorImport.specifier === SIMD_SPECIFIER) {
+    const lane = simdLaneType(vectorImport.importedName)
+    if (lane !== T_ERROR) {
+      return ctx.table.vectorOf(lane)
+    }
+  }
+
   // A class or interface: one this module declares or imports. A name that is
   // imported but not yet bound resolves provisionally, exactly as stage0 does,
   // and pass 1b rejects it if it turns out to name a function or a constant.
@@ -398,6 +411,10 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     }
     ctx.program.importsUsedAsTypes.add(name)
     return ctx.table.structOf(name)
+  }
+
+  if (simdLaneType(name) !== T_ERROR) {
+    return ctx.errorType(node, simdImportMessage(name))
   }
 
   return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`)

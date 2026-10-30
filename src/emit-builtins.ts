@@ -33,9 +33,11 @@ import { emitWrapping } from "./emit-ops"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
+import { emitSimdCall, isSimdAccess } from "./simd"
 import {
   bufferSignature,
   isNetExport,
+  isSimdExport,
   NET_INT,
   NET_RANGE,
   NET_STRING,
@@ -796,6 +798,9 @@ export const isIdentifierBuiltinCall = (program: CheckedProgram, call: Node): bo
 }
 
 export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: string): string => {
+  if (isSimdExport(name)) {
+    return emitSimdCall(emitter, expr, name)
+  }
   const target = builtinConversionTarget(name)
   if (target >= 0) {
     const arg = firstArgument(expr)
@@ -1154,6 +1159,27 @@ export const identifierBuiltinCalleesNamed = (
   name: string
 ): string[] => {
   const out: string[] = []
+  // The `nish:simd` names `isBuiltinFunction` lists each get a branch of their
+  // own, though `isSimdExport` below answers them too: the allocating-builtin
+  // scan in tests/run.js reads this table by `name === "..."` branches, and
+  // reads a builtin with none as unchecked.
+  if (name === "store") {
+    out.push("nish_panic_index")
+    return out
+  }
+  if (name === "extract" || name === "replace") {
+    return out
+  }
+  if (name === "u8x16" || name === "u16x8" || name === "i32x4") {
+    return out
+  }
+  if (name === "u32x4" || name === "f32x4" || name === "f64x2") {
+    return out
+  }
+  if (isSimdExport(name)) {
+    // A load's out-of-range panic, and nothing for a splat.
+    return isSimdAccess(name) ? ["nish_panic_index"] : out
+  }
   if (!isBuiltinFunction(name)) {
     return out
   }
