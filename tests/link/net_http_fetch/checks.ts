@@ -244,9 +244,11 @@ class Server {
     if (method === "CONNECT") {
       const auth: boolean = lower(head + "\r\n").indexOf("\r\nproxy-authorization: basic dxnlcjpwyxnz\r\n") >= 0;
       if (target === "example.test:443" && auth) {
-        // The tunnel opens and closes at once: the TLS handshake over it fails.
+        // The tunnel opens, and the ClientHello sent over it is read and hung
+        // up on below, so the TLS handshake fails. Closing here instead would
+        // race it: a ClientHello already in the socket, unread, turns the
+        // close into a reset, and the fetch fails as HTTP_E_IO.
         this.send(c, "HTTP/1.1 200 Connection established\r\n\r\n");
-        this.close(c);
       } else {
         this.send(c, "HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n");
       }

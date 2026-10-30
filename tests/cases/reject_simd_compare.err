@@ -1,0 +1,6 @@
+`===` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
+`!==` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
+`<` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
+`>=` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
+`indexOf` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
+5 errors

@@ -34,7 +34,15 @@
 //                     string does not.
 
 import { Compilation } from "./compilation"
-import { banner, ExternalFunction, jsExportName, POS_PARAM, POS_RETURN, tsSignatureLine } from "./interop-abi"
+import {
+  banner,
+  ExternalFunction,
+  jsExportName,
+  POS_PARAM,
+  POS_RETURN,
+  structsHoldingVectors,
+  tsSignatureLine,
+} from "./interop-abi"
 import { wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
 import { TypeTable } from "./types"
 
@@ -61,7 +69,8 @@ const docComment = (table: TypeTable, fn: ExternalFunction): string =>
 
 export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): string => {
   const table = compilation.table
-  const bridge = wasmBridged(table, fns)
+  const vectored = structsHoldingVectors(compilation)
+  const bridge = wasmBridged(table, fns, vectored)
   const lines: string[] = []
   lines.push(banner(compilation, "--emit-dts", "// "))
   lines.push("// Typings for the wasm build (scripts/build.sh --profile wasm), implemented by")
@@ -100,7 +109,7 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
   // declarations get ahead of the loader once already.
   let count = 0
   for (const fn of fns) {
-    const skip = wasmSkipReason(table, fn.sig)
+    const skip = wasmSkipReason(table, fn.sig, vectored)
     if (skip.length > 0) {
       lines.push(tsSignatureLine(table, fn.sig, "  // ", `  -- not exported to JS: ${skip}`))
       continue

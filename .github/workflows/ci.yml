@@ -24,9 +24,11 @@
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
 # simd-arm64: runtime/runtime-simd.c's, runtime/runtime-bytes.c's and
-#       runtime/runtime-aes.c's agreement tests on an AArch64 runner, where
-#       their native runs are the NEON and the ARMv8 AES and PMULL paths no x86-64 job can run, and the `aes
-#       kernel` section, std/crypto/aes.ts lowered onto those AES kernels.
+#       runtime/runtime-aes.c's and runtime/runtime-checksum.c's agreement
+#       tests on an AArch64 runner, where their native runs are the NEON, the
+#       ARMv8 AES and PMULL and the ARMv8 CRC32 paths no x86-64 job can run,
+#       and the `aes kernel` and `crc32 kernel` sections, std/crypto/aes.ts and
+#       std/compress/checksum.ts lowered onto those kernels.
 # runtime-net: runtime/runtime-net.c's Darwin branch (kqueue, SO_NOSIGPIPE,
 #       errno translated to Linux's numbers) on a macOS runner: the runtime
 #       unit tests, plain and with -DNISH_THREADS, and every `net_` section.
@@ -434,6 +436,20 @@ jobs:
         run: |
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/test.log"
 
+      # WP38's CRC-32: runtime/runtime-checksum.c's `simd` driver passes with
+      # the byte tail alone on a CPU without PCLMULQDQ and SSE4.1, and the `crc32
+      # kernel` section passes on its soft arm where /proc/cpuinfo names neither.
+      # These runners have both, so the lines that say the kernel ran are
+      # required here.
+      - name: The PCLMULQDQ CRC-32 path ran
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          build/test/simd/crc32 | grep -E '^crc32: [0-9]+ cases agree across pclmul;'
+          for program in std_compress_crc_paths std_compress_crc_diff std_compress_gzip_files; do
+            grep -F "PASS  crc32 kernel: $program with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/test.log"
+          done
+
       # #619: `par_map_vector` links its modules with `llvm-link` and runs `opt
       # -O3`, and skips without either tool. The line that says the map's loop
       # vectorised is required here, where both are installed.
@@ -482,6 +498,14 @@ jobs:
       - name: Keep the compiler the suite tested
         if: matrix.shard == 1
         run: cp build/nish-test build/nish
+
+      # bench/crc32.mjs builds bench/crc32.ts with the compiler just kept and
+      # runs it once on each path, the kernel and the tables, each checksum
+      # against the one it pins: the benchmark the PR tables come from still
+      # measures the same answers.
+      - name: The CRC-32 benchmark answers the same on both paths
+        if: matrix.shard == 1
+        run: node bench/crc32.mjs --check
 
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
       # run, the compiler this job built.
@@ -971,11 +995,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The runner walks the corpus one program at a time; `--shard` deals the
-    # programs three ways, and scripts/nish-runner-parallel.mjs runs one runner
-    # per core on each third, each in a working directory of its own. Four
-    # jobs of one runner each took 8 to 13 minutes (run 40820090678) with three
-    # cores of four idle. Two jobs of four runners each took 8 minutes on a
-    # fast machine and passed 15 on a slow one (run 40997535378), when every
+    # programs three ways, and the runner's own `--jobs` (one process per core
+    # by default) runs each third as several of itself. Four jobs of one
+    # runner each took 8 to 13 minutes (run 40820090678) with three cores of
+    # four idle. Two jobs of four runners each took 8 minutes on a fast
+    # machine and passed 15 on a slow one (run 40997535378), when every
     # tests/link program still linked at -O3 with LTO; they now link under the
     # profile tests/run.js gives them (tests/speed-link.txt). The `/3` below is
     # this list's length, and tests/run.js checks that the two agree.
@@ -1026,15 +1050,19 @@ jobs:
       # and a runner that answered 1 would still be a green step.
       # The runner is built by the compiler under test and handed it with
       # `--compiler`; with no filter it walks its shard of the whole corpus.
-      # The wrapper's last line sums the runners' summaries in the runner's
-      # own words, and it answers 1 when any runner did.
+      # With `--jobs` (a core each by default) the last line sums the
+      # processes' summaries in the same words, and it answers 1 when any did.
+      # `env --default-signal` is load-bearing too: the Actions runner starts
+      # the step shell with SIGPIPE ignored, `exec` keeps an ignored signal,
+      # and `io_spawn_piped` checks that a child starts with SIGPIPE at its
+      # default. Node reset it when it started the runner; nothing else does.
       - name: The corpus, through the Nish runner
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          node scripts/nish-runner-parallel.mjs --runner build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
+          env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()
@@ -1099,6 +1127,7 @@ jobs:
           grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base \(plain: scalar base\);' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: crc32 native arm64: [0-9]+ cases agree across armv8-crc32' "$RUNNER_TEMP/simd.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
       # PMULL kernels, run end to end against the bitsliced walker, the 8- and
@@ -1108,6 +1137,36 @@ jobs:
           set -o pipefail
           node tests/run.js "aes kernel" | tee "$RUNNER_TEMP/aes-kernel.log"
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/aes-kernel.log"
+
+      # WP38's CRC-32 on AArch64: the compiler's branch to the ARMv8 CRC32
+      # kernel, run end to end against the Nish walk.
+      - name: The lowered CRC-32 programs, natively on AArch64
+        run: |
+          set -o pipefail
+          node tests/run.js "crc32 kernel" | tee "$RUNNER_TEMP/crc32-kernel.log"
+          for program in std_compress_crc_paths std_compress_crc_diff std_compress_gzip_files; do
+            grep -F "PASS  crc32 kernel: $program with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/crc32-kernel.log"
+          done
+
+      # The figures, not a gate: the C kernel timed against the table
+      # reference, then bench/crc32.mjs's checksums on both paths and its
+      # ns/op table with `--self`, whose byte-identical copy of the default
+      # column is the noise band the kernel's gain is read against, built
+      # with the stage1 the section above linked into build/nish-test.
+      - name: CRC-32 throughput on AArch64
+        run: |
+          build/test/simd/crc32 bench
+          node bench/crc32.mjs --check --compiler build/nish-test
+          node bench/crc32.mjs --self --runs 9 --compiler build/nish-test
+
+      # The figures, not a gate: WP38's NEON Adler-32 held to the scalar
+      # reference, then timed against the Nish adler32Update at 64 KiB and
+      # 1 MiB with a copy column for the noise band, and its verdict against
+      # the 20% bar (docs/wp38-simd.md §3.1).
+      - name: Adler-32 throughput on AArch64
+        run: |
+          node bench/adler32.mjs --check --compiler build/nish-test
+          node bench/adler32.mjs --runs 12 --compiler build/nish-test
 
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on
@@ -1394,19 +1453,22 @@ jobs:
       # package-lock.json agrees with package.json, read from the two files
       # alone. `npm ci` above is not this check, and 0.11.0 is why: it asks
       # the registry, and an optional dependency whose pinned version is not
-      # published yet is dropped rather than refused. That release commit
-      # pinned the platform packages at a version release.yml publishes only
-      # after the tag is built, so `npm ci` passed on it, went red on main
+      # published yet is dropped rather than refused. The release commit pins
+      # the platform packages at a version release.yml publishes only after
+      # the tag is built, so `npm ci` passed on that commit, went red on main
       # once the publish landed, and nothing re-ran to say so until the next
       # pull request merged main. `npm ls --package-lock-only` never asks the
-      # registry, so a pin that moved without its lockfile entry is red here
-      # on its own push.
+      # registry, so the release commit is red here on its own push and stays
+      # red until release.yml's `lockfile` job's pull request merges.
       #
-      # It runs everywhere, the Release PR and the tag included, because no
-      # commit is meant to disagree any more: the release commit leaves the
-      # pins at the previous release, and release.yml's `lockfile` job moves
-      # them together with their entries (release-pr.yml says why).
+      # Skipped exactly where that disagreement is the release working: on
+      # the Release PR, which carries the bump but cannot carry the entries,
+      # and on a tag, where release.yml runs this workflow before publishing
+      # and a red here would stop the publish that fixes it. In the merge
+      # queue `head_ref` is empty, so the Release PR is known there by the
+      # subject of the commit the queue built for it.
       - name: Lockfile agrees with package.json
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.head_ref != 'release/next' && !startsWith(github.event.merge_group.head_commit.message, 'chore(release):') }}
         run: npm ls --package-lock-only --all > /dev/null
 
       - name: Lint (only when package.json defines a lint script)

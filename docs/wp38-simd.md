@@ -1,13 +1,12 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: accepted; S0 and S1's kernel and surface landed, S1's `bench/json`
-bar missed and S1b proposed, S2's bar met on a re-measurement and its flag built (`d835d40`), S4 declined for now, S5's 5x bar met, S6 proposed, S7 met by #561, S3a and S2 decided and planned (tracking issues #516 and #577).** The owner took the
+**Status: accepted; S0, S1's kernel and surface, S2, S3a, S5, S6a, S6b and S7 landed; S3 decided and being built (tracking issue #1064); S1's `bench/json` bar missed; S1b superseded by S6c; S4 declined; S6c and S6d measured not reachable.** The owner took the
 first four decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
 was reliably faster than S0 on `bench/json`, and none came near 1.5x, so
-`std/json` is unchanged (§2.3); whether to design S1b, the block classifier,
-is the owner's call (§7).
+`std/json` is unchanged (§2.3). S1b, the block classifier, was never built: S6c
+re-aimed it at `JsonTokenizer` and S6c's gate and S6d found it out of reach (§7).
 A second kernel shares S1's file, path store and `NISH_SIMD` pin:
 `nish_regex_scan` finds where a `nish/regex` match can start, testing up to
 three positions of a pattern's leading byte sets for thirty-two starts at
@@ -15,29 +14,29 @@ once on AVX2, a nibble lookup in each of the 32-byte forms, and simd128 or
 NEON at sixteen. `std/regex.ts`'s walker `regexScanFrom` is recognised as
 `indexOfAny`'s is ([IR_COOKBOOK](IR_COOKBOOK.md#nishregex-a-matchs-first-byte-on-the-runtime-kernel));
 `tests/simd/regex-scan.c` holds every path to a reference loop.
-S2's `--cpu` flag is built (`d835d40`): S0's figures missed its bar, and a
-re-measurement against the noise met it (§7); the owner decided to build it.
-What reading every level costs the constant-time checkers was measured: the
-x86-64 levels and ARMv8 without SVE already pass, the SVE levels do not, and
-`native` cannot be read. The owner decided on 2026-10-16 to build it with one
-value, `x86-64-v3` (§7; §8, Q7), in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md).
+A third kernel, CRC-32 for `nish/compress/checksum`, shares the same seam (#1062; §7).
+S2's `--cpu` flag is built (#660): S0's figures missed its bar, a
+re-measurement against the noise met it, and the owner decided on 2026-10-16
+to build it with one value, `x86-64-v3` (§7; §8, Q7), in
+[the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md).
 S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
-small a part of the bootstrap to move it (§7). S3's bar now names the scalar
-kernel it is judged against, and its operation list leaves out a fused
-multiply-add, after a portable-vector benchmark's findings were checked
-against LLVM 18 (§3.2.1). It waits for S3a, S3's two bar kernels measured
-without a surface, and is decided on those figures (§8, Q8, decided
-2026-10-16). S7, crediting an offset index from the test that bounds it, was
-to come first, and turned out to be built already, by #561 (§7, S7). S5 put `std/crypto/aes.ts`'s key schedule, block,
-GCTR and GHASH on AES-NI and PCLMULQDQ, and on ARMv8's AES and PMULL, as a
-runtime kernel behind a run-time branch that keeps the bitsliced code as the
-fallback: 38.5x on a 16 KiB AES-128-GCM seal (§2.3, §7). S6 puts `nish/json-tokenizer`'s byte runs on kernels, its numbers on
-Eisel–Lemire and, last, its structure on a block classifier, each on its own
-bar against the json-compare record of the json-parity run (§2.4, §7). S3 has no flag, type or runtime
-symbol yet: it arrives with its stage, and its rule goes into
-[LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md) lists the
-work as additive. LANGUAGE.md stays normative and this note adds no rule to
-it; where they disagree, LANGUAGE.md wins.
+small a part of the bootstrap to move it (§7). S7, crediting an offset index
+from the test that bounds it, turned out to be built already, by #561 (§7, S7).
+S5 put `std/crypto/aes.ts`'s key schedule, block, GCTR and GHASH on AES-NI and
+PCLMULQDQ, and on ARMv8's AES and PMULL, as a runtime kernel behind a run-time
+branch that keeps the bitsliced code as the fallback: 38.5x on a 16 KiB
+AES-128-GCM seal (§2.3, §7). S6 put `nish/json-tokenizer`'s byte runs on kernels
+(S6a: the tokenize bar met, serialize not reached) and its numbers on
+Eisel–Lemire (S6b: met), each against the json-compare record of the
+json-parity run (§2.4, §7). S6c's block classifier did not pass its callgrind
+gate, and S6d's per-value cuts could not lift it to 1.5x on both documents, so
+neither is built. S3a measured S3's two bar kernels in C with portable vectors
+without a surface (#658): both cleared 1.5x on x86-64. On 2026-10-30 the owner
+decided to build S3, `nish:simd`, on those figures (§8, Q10), with the surface
+in §3.2. It has no flag, type or runtime symbol until its stages land, and its
+rule goes into [LANGUAGE.md](LANGUAGE.md) then. [MASTER_PLAN.md](MASTER_PLAN.md)
+lists the work as additive. LANGUAGE.md stays normative and this note adds no
+rule to it; where they disagree, LANGUAGE.md wins.
 
 The question came from `bench/json`, the cross-language JSON benchmark of
 #507. In its recorded report Nish's `std/json` read three fields per line in
@@ -705,7 +704,7 @@ result is turned into a 16-bit integer (a bool vector, `ext_vector_type(16)`,
 copied into a `uint16_t`, which is a portable `bitcast <16 x i1> to i16` in
 the IR). `nish:simd` would need that bitmask as an operation of its own.
 
-Taken at `46a1e4d`, this PR's kernels-and-harness commit; the kernels have not
+Taken at `46a1e4d` in #658, that PR's kernels-and-harness commit; the kernels have not
 changed since. The machine was a KVM container on an `Intel(R) Xeon(R)
 Processor @ 2.80GHz` (lscpu: family 6, model 85; 4 vCPUs; SSE4.2, AVX2 and
 AVX-512F present, none of them used, since no `-march` is given), running
@@ -787,8 +786,8 @@ between scalar Nish and scalar C on the same loop, which this stage does not
 diagnose. Both are SLP-vectorised to `<2 x double>`. The bar compares against
 form 3 as written, so the verdict stands. The depth kernels clear 1.5x
 against form 2 too. By the order decided in §7 (2026-10-16), **S3's design is
-written next**. That design still has to settle how much of the byte half S6c's
-classifier already covers (§2.4). The figures are x86-64's only.
+written next**. It is written: Q10 decided on 2026-10-30 to build `nish:simd` (§3.2),
+and S6c's classifier, which might have covered the byte half, was found not reachable. The figures are x86-64's only.
 
 ### 2.4 `JsonTokenizer` after json-parity: the gap S6 is aimed at
 
@@ -941,39 +940,193 @@ program's IR is unchanged.
 **What it does not buy.** Numeric code, and any scan whose step is not "find
 the next byte from this set".
 
+**CRC-32 on the same seam.** `nish/compress/checksum`'s `Crc32.update` hands
+its checked window to one private walker, `crc32Walk`, and the compiler
+branches in front of that call on `nish_crc32_hw` (`isCrc32Seam` in
+`src/kernels.ts`, `emitCrc32KernelArm` in `src/emit.ts`), so the
+slicing-by-8 tables stay the fallback and the answer at the edges stays the
+`std` file's. The kernels are `runtime/runtime-checksum.c`, a unit of its own
+with its own ceiling: PCLMULQDQ folding then a Barrett reduction on x86-64
+(never SSE4.2's `crc32`, which is CRC-32C), and the ARMv8 CRC32 instructions on
+AArch64, found through `AT_HWCAP` or `sysctl`. A PMULL fold in front of the
+CRC32 instructions was built and measured on CI's AArch64 runner, then
+dropped: 20.6 GB/s at 1 MiB and 21.0 GB/s at 64 KiB, against the instructions'
+24.9 and 27.0 GB/s. Each is compiled with
+`target(...)` alone. The path is chosen once per process; `NISH_CRC32=soft`
+pins the tables. `tests/simd/crc32.c` holds every path to a bit-at-a-time
+reference, and `bench/crc32.mjs` measures 64 B to 1 MiB and a gzip round trip
+on each path ([bench/README.md](../bench/README.md)). The security record is
+[compress.md](security/compress.md) (COMP-13).
+
+Median ns/op from `node bench/crc32.mjs --self --runs 9` (9 rounds of 3 after
+a warm-up) on an Intel Xeon at 2.10 GHz, x86-64, the PCLMULQDQ path:
+
+| Workload | `default` (`pclmul`) | `default (copy)` | `soft` (`tables`) | Soft over default |
+| --- | ---: | ---: | ---: | ---: |
+| CRC-32, 64 B | 16 | 16 | 47 | 2.96x |
+| CRC-32, 4 KiB | 188 | 193 | 1,434 | 7.63x |
+| CRC-32, 64 KiB | 2,976 | 3,035 | 23,196 | 7.79x |
+| CRC-32, 1 MiB | 50,746 | 53,482 | 465,955 | 9.18x |
+| gzip compress, 1 MiB | 58,558,905 | 59,432,084 | 59,025,291 | 1.01x |
+| gzip decompress, 1 MiB | 4,541,521 | 4,866,916 | 5,066,379 | 1.12x |
+
+`default (copy)` is the same binary again, so the gap between the first two
+columns is the noise band: 2 to 7% here. The CRC-32 rows clear it many times
+over: about 22 GB/s from 4 KiB up at the median (19.6 to 20.7 GB/s at 1 MiB),
+against 2.3 to 2.9 GB/s on the tables. The gzip rows do not: compressing is
+match finding, and the 12% on decompressing is about twice the band, a gain
+to read as small rather than as measured.
+
+On AArch64, CI's `simd-arm64` job runs the same command each push and prints
+its table in the step log. These are its medians at `43c4bbd` (the merge ref
+`902ec83`), on the GitHub `ubuntu-24.04-arm` runner, the ARMv8 CRC32 path:
+
+| Workload | `default` (`crc32`) | `default (copy)` | `soft` (`tables`) | Soft over default |
+| --- | ---: | ---: | ---: | ---: |
+| CRC-32, 64 B | 11 | 11 | 36 | 3.19x |
+| CRC-32, 4 KiB | 186 | 187 | 1,172 | 6.30x |
+| CRC-32, 64 KiB | 2,494 | 2,496 | 18,589 | 7.45x |
+| CRC-32, 1 MiB | 41,826 | 41,819 | 299,178 | 7.15x |
+| gzip compress, 1 MiB | 35,006,497 | 35,008,259 | 35,259,514 | 1.01x |
+| gzip decompress, 1 MiB | 2,314,526 | 2,313,356 | 2,574,127 | 1.11x |
+
+Here the copy column agrees with the default within 0.6% on every row, so the
+band is under 1%. The CRC-32 rows run at 22.0 to 26.3 GB/s from 4 KiB up at
+the median, against about 3.5 GB/s on the tables. The 11% on decompressing is
+past this band, but it is still a small gain. The PMULL verdict above, 21.0
+against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at 1 MiB, measured on this
+runner, is a 22% and a 17% gap, from one C-driver run: about twenty times the
+bench's band.
+
+**Adler-32: measured, not built.** Whether `adler32Update` would gain from a
+vector kernel was measured before anything went near the runtime.
+`bench/adler32/kernel.c` holds two candidates beside a scalar C copy of the
+Nish loop. The SSSE3 one sums each 32-byte block with `_mm_sad_epu8` for `s1`
+and with `_mm_maddubs_epi16` against the taps 32 down to 1 for `s2`. The NEON
+one widens with `vpadalq_u8` and multiplies the column sums by the taps with
+`vmlal_u16`. Both defer the modulo for NMAX bytes, as the Nish loop does, and
+`-O2` builds them with `target("ssse3")` alone; NEON is AArch64's baseline.
+`kernel verify` holds each to the scalar reference on every length to 4 KiB at
+every offset mod 16, and on lengths about NMAX and its multiples, over random
+bytes and all-`0xff` bytes. `bench/adler32.mjs` then times `adler32Update`, a
+byte-identical copy of it, the kernel and the scalar C at 64 KiB and 1 MiB
+([bench/README.md](../bench/README.md#adler-32)). The bar: the kernel ships on
+an architecture only if it is at least 20% faster than `adler32Update` at both
+sizes, and the gain is larger than the noise band. The band is the copy's larger
+distance from `adler32Update`, taken at the minimum and at the median.
+
+ns/op from `node bench/adler32.mjs --runs 16` (16 rounds of 4 after a warm-up)
+at `9046339`, on an Intel Xeon at 2.10 GHz, x86-64, the SSSE3 kernel:
+
+| Size | `adler32Update` min / median | copy min / median | SSSE3 min / median | scalar C median | Gain at the median | Band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 64 KiB | 18,439 / 22,719 | 17,569 / 22,691 | 2,546 / 3,199 | 20,806 | 610% | 4.7% |
+| 1 MiB | 328,254 / 375,586 | 283,355 / 368,880 | 41,652 / 53,562 | 343,377 | 601% | 13.7% |
+
+That is 2.8 to 2.9 GB/s on `adler32Update` against 19.6 to 20.5 GB/s on the
+kernel. An earlier run of 12 rounds read 588% (band 26.7%) and 662% (band
+3.4%). The scalar C column runs within about 10% of `adler32Update`, so the
+gap is the vectors, not the compiler.
+
+On AArch64, CI's `simd-arm64` job runs `--check` and then `--runs 12` on each
+push and prints the table in its step log. These figures are from `9046339`
+(the merge ref `c916a3f`), on the GitHub `ubuntu-24.04-arm` runner, with the
+NEON kernel. It agreed with the scalar reference on all 131,128 cases `verify`
+ran then. It now runs 131,144, adding the lengths either side of the kernel's
+5,536-byte stretch:
+
+| Size | `adler32Update` min / median | copy min / median | NEON min / median | scalar C median | Gain at the median | Band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 64 KiB | 21,612 / 21,699 | 21,646 / 21,691 | 2,848 / 2,878 | 33,096 | 654% | 0.2% |
+| 1 MiB | 346,255 / 347,110 | 345,911 / 347,366 | 47,337 / 48,164 | 530,742 | 621% | 0.1% |
+
+That is 3.0 GB/s on `adler32Update` against 21.8 to 22.8 GB/s on the kernel.
+Here the scalar C copy takes half again as long as `adler32Update`, so on this
+runner too the gap is the vectors.
+
+**Verdict.** SSSE3 clears the bar at both sizes, many times over the band,
+and NEON clears it at both sizes too. Neither kernel is built yet: WP38 holds
+the measurement. A follow-up would ship both kernels on CRC-32's seam:
+`runtime/runtime-checksum.c` gains the kernel and `nish_adler32_hw`, its
+resolver, picked once per process and pinned off by `NISH_ADLER32=soft`. On
+x86-64 it reads `cpuid.h` leaf 1, ECX bit 9 (SSSE3), as CRC-32's resolver does;
+NEON is baseline on AArch64; a soft stub covers big-endian AArch64 and
+toolchains without the intrinsic headers;
+`adler32Update` hands its checked window to a private `adler32Walk`, the call
+`isAdler32Seam` and an emit arm branch in front of; and the kernel takes the
+test set CRC-32's did. That set is `tests/simd/adler32.c` against a scalar
+reference, a `NISH_ADLER32=soft` run of `std_compress`, link tests, a runtime
+budget, a COMP entry in [compress.md](security/compress.md), and a line in the
+compression guide page.
+
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 
-**What.** A builtin module with these types: `u8x16`, `i16x8`, `i32x4`,
-`u32x4`, `f32x4` and `f64x2`. They are exactly 128 bits wide: the width SSE2,
-NEON and wasm simd128 all share. The operations are functions, because
-TypeScript has no operator overloading, and `a + b` on two objects is TS2365
-before Nish sees the program:
+**What.** A builtin module, decided on 2026-10-30 (§8, Q10) and being built
+in three stages. It has six vector types: `u8x16`, `u16x8`, `i32x4`, `u32x4`,
+`f32x4` and `f64x2`. They are exactly 128 bits wide, the width SSE2, NEON and
+wasm simd128 all share, and lower to `<16 x i8>`, `<8 x i16>`, `<4 x i32>`,
+`<4 x i32>`, `<4 x float>` and `<2 x double>`. Each is 16 bytes and 16-byte
+aligned. **`u16x8` replaces this note's earlier `i16x8`**: Nish has `u16` and
+no `i16` scalar, so an `i16x8` lane would have no type to extract to.
 
-- `load` and `store` from an array at an offset, bounds-checked as a whole
-  vector
-- `splat`, lane-wise arithmetic and comparisons into a mask
-- `select`, `min` and `max`, and horizontal sums
-- `extract` and `shuffle` with constant indices
-- `any` and `all` on a mask, the test a byte scanner makes on every block
-- `bitmask`, which turns a compare into an offset once that test has found a
-  hit (§3.2.1 says why the test and the offset are two operations)
+Comparisons give one of four mask types by lane width: `mask8x16`, `mask16x8`,
+`mask32x4` and `mask64x2`, lowered as `<N x i1>`. **Masks are new here**; the
+earlier text said "a mask" without a type. They are separate types so a mask of
+one width cannot select lanes of another, and they give LLVM `icmp` or `fcmp`
+into `select`, and `llvm.vector.reduce.or`, directly (`pmovmskb` and `ptest` on
+x86-64, `umaxv` on AArch64, with no target intrinsic in the IR). They are values
+only: a local, a parameter, or the return of an unexported function, and never a
+field, array element, generic argument, `Map` key or exported type.
 
-Each one lowers to LLVM vector IR (`<16 x i8>`, `<4 x float>`) or a
-target-independent `llvm.*` intrinsic such as `llvm.vector.reduce.add`. None
-lowers to `llvm.x86.*` or `llvm.aarch64.*`.
+The operations are free functions, because TypeScript has no operator
+overloading, and `a + b` on two objects is TS2365 before Nish sees the program.
+The type follows from the arguments, except where none carries it.
 
-**TypeScript reading.** Under Node a vector is a small frozen object of lanes,
-and `runtime/nish.mjs` gains the module. That would be the third `nish:`
+| Family | Names | Lowering |
+| --- | --- | --- |
+| construct | `u8x16(a0..a15)` … `f64x2(a0, a1)`, a function named after its type | `insertelement` chain, or a constant vector |
+| splat | `splatU8x16(x)` … `splatF64x2(x)` | `insertelement` and `shufflevector` |
+| load, store | `loadU8x16(xs, i)` … `loadF64x2(xs, i)`, `store(v, xs, i)` | one check `i >= 0 && i <= len - N`, then an `align 1` vector load or store |
+| lanes | `extract(v, k)`, `replace(v, k, x)`, `k` a constant in `0..N-1` | `extractelement`, `insertelement` |
+| float arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `abs`, `sqrt` on `f32x4`, `f64x2` | `fadd` … `llvm.fabs`, `llvm.sqrt`, with no `fast` flags and no contraction |
+| integer arithmetic | `addWrapping`, `subWrapping`, `mulWrapping` | `add`, `sub`, `mul` without `nsw` or `nuw` |
+| bitwise | `and`, `or`, `xor`, `not` on integer vectors and masks | `and`, `or`, `xor`, `xor` with all-ones |
+| min, max | `min`, `max` on every lane type | `llvm.umin`, `smin`, `umax`, `smax`; floats `llvm.minimum`, `llvm.maximum` (NaN-propagating, -0 below +0, as `Math.min`) |
+| compare | `eq`, `ne`, `lt`, `le`, `gt`, `ge`, into the lane width's mask | `icmp` (unsigned for `u*`), `fcmp` ordered (`une` for `ne`) |
+| select | `select(m, a, b)` | `select` |
+| any, all | `any(m)`, `all(m)`, the test a byte scanner makes on every block | `llvm.vector.reduce.or`, `.and` |
+| bitmask | `bitmask(m)` to `i32`, the offset once that test has found a hit (§3.2.1 says why they are two operations) | `bitcast <N x i1>` to `iN`, `zext` |
+| sums | `sum(v)` for `u8x16` and `u16x8` (to `i32`, exact) and for floats (in lane order 0..N-1, returning the lane type); `sumWrapping(v)` for `i32x4` (returning `i32`) and `u32x4` (returning `u32`) | `zext` and `llvm.vector.reduce.add`; floats `llvm.vector.reduce.fadd` without `reassoc` |
+| shuffle | `shuffle(a, b, i0, …)`, indices constants in `0..2N-1` | `shufflevector` |
+| bitcast | `asU8x16(v)` … `asF64x2(v)` | `bitcast` |
+
+Each one lowers to LLVM vector IR or a target-independent `llvm.*` intrinsic
+such as `llvm.vector.reduce.add`. None lowers to `llvm.x86.*` or
+`llvm.aarch64.*`; the `simd` section of `tests/run.js` greps every golden for
+both.
+
+**Left out, as later work:** conversions between lane types (`sitofp` and the
+like), shifts, saturating arithmetic, widening multiplies, 256-bit vectors (Q4)
+and `Secret<vector>` (§6). The earlier text listed `extract` and `shuffle`
+together; `extract` now has `replace` beside it, and the bitwise operations,
+`not`, `abs`, `sqrt` and the bitcasts are named where the text had only
+"lane-wise arithmetic".
+
+**TypeScript reading.** Under Node a vector is a fresh typed array of its lanes
+(`Uint8Array(16)` … `Float64Array(2)`) that no operation mutates. A typed array rounds an `f32` lane
+and wraps an integer lane on store, which gives the same class-A reading that `Math.fround` and a
+frozen object gave, with no per-operation rounding call. A mask is an
+array of `boolean`, and `runtime/nish.mjs` gains the module. It is the third `nish:`
 import the prelude resolves, after `nish:unsafe` and `nish:secret`
 ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). Floats are class A: `f64` lanes are
-`number`, and `f32` lanes use `Math.fround` on every result, as scalar `f32`
+`number`, and `f32` lanes round through `Float32Array` on every result, as scalar `f32`
 does. Integer lanes are the hard part. An LLVM vector `add` wraps, but Nish's
 scalar `+` traps on overflow (#426). Making lanes trap would add an
 overflow-mask reduction to every operation, which costs the speed the type
 exists for. So integer operations wrap, and their names say so (`addWrapping`,
 `mulWrapping`), the way `nish:unsafe`'s `wrappingAdd` does. Their reading is
 then `| 0`, `Math.imul` or a `& 0xff` mask on each lane: class A, with no
-ledger row. Under Node this is slow, an object for every vector. That is the
+ledger row. Under Node this is slow, an array for every vector. That is the
 right side to pay on ([wp33](wp33-round-trip.md) §9).
 
 **wasm and N-API.** With `-msimd128` these lower to simd128 instructions.
@@ -985,8 +1138,12 @@ out the types the loader cannot carry ([wp8](wp8-interop.md)), and the refusal i
 **Checker rules a type family needs, each with a negative test:**
 
 - a vector in an exported, N-API or wasm signature is refused
-- a non-constant lane index to `extract` or `shuffle` is refused
+- a non-constant or out-of-range lane index to `extract`, `replace` or
+  `shuffle` is refused
 - mixing lane types without an explicit `bitcast` is refused
+- a mask anywhere it would need storage is refused
+- `==`, `!=` and the relational operators on vectors are refused
+- a `nish:simd` name used without its import is refused
 - a vector as a `Map` key is refused
 - `Secret<T>` does not take a vector at first (§6)
 - an array of vectors gets a layout pinned by `tests/layout`, because it is
@@ -1325,10 +1482,10 @@ a printed checksum.
 | --- | --- | --- |
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
-| **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Not built; designing it is the owner's call** (below). |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). **Built (`d835d40`)**: `nish --link`, `nish run` and `scripts/build.sh` take `--cpu x86-64-v3` and refuse every other value; `ct_asm` reads x86-64 at that level for the fixtures and the runtime (CT-16, narrowed). |
-| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Not built; decided on S3a's figures (Q8, decided 2026-10-16)**: see below. |
-| **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Landed (#658)**, taken at `46a1e4d` (§2.3, S3a): the C vector form beats Nish checked by 1.65x on mat-vec and by 1.81x and 3.51x on the two depth documents at the median, outside a noise band within 5%, so both kernels clear 1.5x on x86-64; no AArch64 machine was at hand. |
+| **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Superseded by S6c; never built.** S6c re-aimed the same classifier at `JsonTokenizer`, and S6c's callgrind gate and S6d measured it not reachable (below). |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). **Built (`d835d40` in #660)**: `nish --link`, `nish run` and `scripts/build.sh` take `--cpu x86-64-v3` and refuse every other value; `ct_asm` reads x86-64 at that level for the fixtures and the runtime (CT-16, narrowed). |
+| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Decided 2026-10-30 (Q10): build it**, on S3a's figures, with the surface in §3.2. Being built in three stages: the types with load, store, splat and lanes; the masks and the rest of the operations; then the two bar kernels written with it and measured against this bar. Tracking issue #1064. See below. |
+| **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Landed (#658)**, taken at `46a1e4d` in #658 (§2.3, S3a): the C vector form beats Nish checked by 1.65x on mat-vec and by 1.81x and 3.51x on the two depth documents at the median, outside a noise band within 5%, so both kernels clear 1.5x on x86-64; no AArch64 machine was at hand. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
 | **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). In those three samples, at the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). **The bar holds at the minimum too, against `ce9d394` itself, at `b515c1b`** ([§2.3](#s5-aes-gcm-the-result)): a fourth sample, 48 rounds on a host where the byte-identical copy stayed within 1.4% at the minimum, puts every workload's fallback minimum within +3.0% of `ce9d394`'s (worst +0.8%) and every median within 11.1% (worst +2.0%). That is the raw comparison the bar names. The untouched ChaCha20-Poly1305 rows ran 3.4% to 5.8% faster than `ce9d394` in the same sample, and corrected for that drift `aesHeaderMask`'s minimum could be 4% to 7% slower, so the drift-corrected minimum is open ([§2.3](#s5-aes-gcm-the-result)). |
 | **S6a** | (a): byte-class run kernels on `u8[]` for `JsonTokenizer` and `JsonWriter`: the first index at or after `from`, below `limit`, whose byte is *not* a blank, a digit, or a plain string byte, each class fixed in its kernel, with no set to splat (§7, S6) | On `bench/json-compare` against the `06645ecf` record ([§2.4](#24-jsontokenizer-after-json-parity-the-gap-s6-is-aimed-at)), tokenize on twitter.json and citm_catalog.json are **at least 1.2x** faster at the minimum, and serialize on citm_catalog.json is faster outside its band. No corpus or workload is slower outside its band, and `bench/json-tokenizer`'s 242-byte body is not slower: short runs pay no call. The scalar, 16-byte and 32-byte paths agree on a fuzzed corpus that puts every class boundary at every offset of a block. JSONTestSuite's verdicts, the conformance corpus, the fuzz checksum and #582's mutation-pinned boundaries are unchanged. The unit stays within its ceiling. **Tokenize bar met; serialize not reached by S6a**, recorded at `96899c1` ([BENCHMARKS.md](BENCHMARKS.md#json-against-other-languages), 14 rounds). Against `06645ecf`'s minimums, tokenize on twitter went from 1,247,246 to 737,985 ns (**1.69x**) and on citm from 2,397,781 to 1,468,015 ns (**1.63x**). Against simdjson On-Demand in the same rounds, Nish is now 1.55x behind on twitter (2.20x before S6a) and 1.24x behind on citm (1.59x before), and it trails simdjson by 1.10x on canada. Serialize on citm is 675,503 ns against `06645ecf`'s 870,432, but that gain came before S6a: S6a left `JsonWriter` unchanged, and serialize did not move outside its band against the previous record. The follow-up put `JsonWriter`'s byte writers on a fourth class, `skipJsonPlain`, and found the serialize condition **not reached by the escape scan on citm**: 95.8% of its strings are under the kernel's 16-byte block, so skipping the check for the rest has a ceiling of 1.0139x, inside serialize's 1.4% band by only 0.01 points, and a free check would reach only 1.137x. The next serialize lead is number writing, 37.4% of serialize's instructions, 21.1% in the digit-write loop; see *JsonWriter's byte writers*. In the A/B against the S6b head, canada ran 0.931x, outside the band; see *S6a, the byte-class kernels: what was built*. The host was noisier during this record: every other implementation's minimum rose by 5% to 7% against the previous one, and Nish's bands against its own copy reached 6.6% on citm and 7.3% on typed decode. Measured again after the writer follow-up against main's merge base `3dca351`, with the three class paths' instructions as main's: `bench/json-tokenizer`'s 242-byte body ran 0.99x at the minimum, inside its 0.6% band (the branch against its byte-identical copy); on `bench/json-compare` serialize ran 0.988x, inside its 1.4% band, and two rows ran past theirs, tokenize on citm 0.994x against 0.5% (by 0.1 points) and typed-reuse 0.955x against 4.2% (by 0.3 points). Both run machine code identical to main's, and in typed-reuse the branch's byte-identical copy ran within 0.3% of the base, so the copy band is the evidence for reading them as noise, not a regression. The paths' agreement (`tests/simd/byte-runs.c`), JSONTestSuite, the conformance corpus and the mutation-pinned boundaries pass, and the unit is at 1,303 of 1,536 bytes (1,525 after the writer follow-up, with the three class paths' instructions unchanged). |
@@ -1336,8 +1493,14 @@ a printed checksum.
 | **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Accepted (§8, Q5); gate measured: not reachable** (2026-10-24). With the index priced by a prototype, callgrind leaves twitter at 1.37x and citm at 1.22x; see *S6c, the callgrind gate* below. Nothing is built. |
 | **S6d** | Measurement, nothing built: cuts to the per-value work S6c's index keeps (`numberF64`, the depth stack, `stringInto`'s copy, `next`'s entry), each priced by a throwaway prototype under callgrind, for the combination that would let S6c reach 1.5x | A combination whose measured saving out of kept work, with S6c's index and walker as the gate priced them, puts the gate's ceiling at **1.5x or more on twitter.json and on citm_catalog.json**, by the gate's formula and Total. **Measured: not reachable** (2026-10-24, revised 2026-10-25). Seven cuts that save kept work, an integer path in `numberF64`, the innermost container's kind in a field, `stringInto` copying a string with no escape, and the plain runs of one with an escape, whole, a failed state in `next`'s switch, a dispatch fused on the byte and a direct sign read in `numberF64`, save 932,538 instructions an iteration on twitter and 3,720,284 on citm, credited: **1.533x and 1.486x**. citm's best set leaves out the escape path's run copy and stops at **1.490x**, 109,087 instructions short (1.488x on twitter). No set reaches 1.5x on both. A one-comparison limit in `string` saves only setup the index already removes on a string with no escape, so it is not credited. The first five cuts reach 1.490x and 1.443x, and without the run copy 1.448x and 1.447x. See *S6d, the per-value cuts* below. Nothing is built. |
 | **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Met by #561** (Q9): at `5403a55` the guarded kernel compiles to the same `--profile speed` binary as its `uncheckedGet` form, with the `<4 x float>` accumulator; #561's own entry measured it 3.1x faster than before, against a 2.4% band (§3.2.1, and below). |
+| **S8** | Measurement, then (a) if it clears: `adler32Update` on an SSSE3 or NEON kernel, on CRC-32's seam (§3.1) | The kernel is **at least 20% faster** than `adler32Update` at 64 KiB and at 1 MiB, by more than the band of a byte-identical copy, from `bench/adler32.mjs`. **Measured, not built** (§3.1): SSSE3 and NEON each clear it by 601–654% (a 7.0–7.5× speed-up), against a band of at most 13.7% on x86-64 and 0.2% on AArch64 |
 
-**S1b: what the classifier could buy, and what it needs decided.** S1
+**S1b: what the classifier could buy. Superseded by S6c, never built.** S6c
+re-aimed this classifier at `JsonTokenizer`, where `bench/json-compare` gives
+it a record to be judged against. S6c's callgrind gate priced it at 1.37x on
+twitter and 1.22x on citm, and S6d's cuts could not lift it to 1.5x on both
+(S6c and S6d above), so no classifier is built. The estimate below is the
+reasoning that proposed S1b and is kept as written. S1
 missed its bar because a per-call search has nothing to jump on `bench/json`
 ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). The classifier
 ([§3.1](#31-a-runtime-kernels-chosen-at-run-time), the second kernel) takes
@@ -1364,7 +1527,7 @@ built.
 and median), but vec3 is at or below zero in three of its four figures
 (−0.3%, then −1.2% and −1.0%), so "no loss on the others" is not met, and the
 bar gives no tolerance. The flag was not built then, `tests/ct-asm.js` read only
-the baseline, and LANGUAGE.md gained no rule; it is built now (`d835d40`). It reopens on a re-measurement on
+the baseline, and LANGUAGE.md gained no rule; it is built now (`d835d40` in #660). It reopens on a re-measurement on
 a quieter machine, or on a measurement of the noise itself: one binary timed
 against itself, showing vec3's dip lies inside it. `bench/simd-s0.mjs` only
 timed the two builds against each other then.
@@ -1391,7 +1554,7 @@ the same 2.1 GHz Xeon, gave (minimum / median):
 
 So spectral clears 10%, and nothing else loses by more than a binary loses to
 itself. That is the reading this paragraph asked for, and S2's bar is met on
-it. The flag was still not built then (it is now, `d835d40`): what it costs is mostly `tests/ct-asm.js`
+it. The flag was still not built then (it is now, `d835d40` in #660): what it costs is mostly `tests/ct-asm.js`
 reading every level it accepts (§6), and whether a gain on one benchmark of
 three is worth that is the owner's decision.
 
@@ -1486,8 +1649,9 @@ the bounds check on each offset access, which the range analysis did not
 credit from the test `i + 3 < n` until #561. Since #561 it does (§3.2.1), so
 S3's numeric half is likely won already, with no surface. Its byte half is a scan `indexOfAny` cannot express, such as
 `bench/scan.ts`'s depth counting, which a block classifier (S1b, re-aimed as
-S6c) would also reach, in the runtime. Against that, S3's surface is large and permanent: six types,
-about a dozen operation families, six checker rules with their negative tests,
+S6c) would also have reached, in the runtime; S6c's gate found that classifier out of reach. Against that, S3's surface is large and permanent: six vector types
+and four mask types (§3.2; this counted six types and about a dozen families in the earlier
+proposal), the operation table's families, the longer refusal list with its negative tests,
 a third `nish:` module in `nish.mjs`, `nish.d.ts`, a layout test, a golden for
 every operation, its guide page, cookbook entry and LANGUAGE.md rule, and a
 breaking change for any later lane rule. About 29 files of `src/` handle
@@ -1497,9 +1661,27 @@ before the next release, and it has no use for it (S4 was declined). Each
 `src/` pull request of the series also regenerates the checked goldens and
 must leave the NL9007 ratchet where it was.
 
-So the order, decided on 2026-10-16, is S3a, then S3 decided on S3a's
+So the order, decided on 2026-10-16, was S3a, then S3 decided on S3a's
 figures: if neither of S3a's kernels clears 1.5x, S3 moves to §9; if only the
 byte kernel does, S3 is weighed against S6c's classifier on that kernel.
+
+**S3 is decided: build it (Q10, 2026-10-30).** Both of S3a's kernels cleared
+1.5x (1.65x on mat-vec, 1.81x and 3.51x on the two depth documents, #658), and
+the byte half is not reachable by S6c's classifier, which failed its gate. The
+owner chose to build the surface in §3.2 as revised, in three stages: the types
+with load, store, splat and lanes; the masks, arithmetic, comparisons, sums,
+shuffle and bitcasts; and last S3a's two kernels written with `nish:simd` and
+timed against this row's bar. A miss on the bar is recorded with the optimised
+IR beside the C vector form's, and the surface stays; whether to change it is
+the owner's call. `src/` implements the module and does not use it, under the
+rolling freeze (§4).
+
+**#662, the S7 and S2 acceptance pass.** Of eight criteria, six were met. The
+owner accepted the other two as shipped on 2026-10-30. S7's golden
+`arr_bounds_offset_other` panics natively only: `runtime/nish.mjs` does not
+check indexing, by design, so under Node it prints `NaN`. S2's baseline
+capability report has no `cpu` key, as LANGUAGE.md says; only a `--cpu` build
+writes one. See the Sign-off in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md).
 
 **S4 is declined for now on its own bar.** The lexer is about 1% of the front
 end, and the front end's three runs about 2% of `scripts/bootstrap.sh
@@ -2393,7 +2575,7 @@ first; S6c waits for both, because its bar is a ratio against what they leave.
 
 ## 8. Decisions
 
-The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6. The owner took Q6 on 2026-10-23 and Q5 on 2026-10-24, each as recommended; Q5's callgrind gate then found the bar out of reach, so S6c is not built. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. The reason
+The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6. The owner took Q6 on 2026-10-23 and Q5 on 2026-10-24, each as recommended; Q5's callgrind gate then found the bar out of reach, so S6c is not built. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. Q10 came with S3a's figures, and the owner took it on 2026-10-30. The reason
 beside each is the one the recommendation gave, and it is the reason the
 decision stands on: a stage that finds it untrue comes back here before it
 builds anything else.
@@ -2409,6 +2591,7 @@ builds anything else.
 | Q7 | S2's `--cpu` flag | build it with `x86-64-v3` only; build it with §3.4's levels; defer | **`x86-64-v3` only, for the module and the runtime alike** (2026-10-16). It is the one level that met the bar, and both constant-time checkers already read it cleanly; `native` can never be read, and the SVE levels fail today. Planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
 | Q8 | S3, `nish:simd` | S7, then S3a, then decide; build S3 now; decline it now | **S3a, then decide** (2026-10-16). S7 was already built (#561), so scalar Nish reaches the vector loop for a float kernel with checked indexing; the byte half overlaps S6c's classifier; the surface is large and permanent. S3a is planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
 | Q9 | S7, the offset-index credit | build it ahead of S2 and S3; leave it to WP15 | **Ahead of both** (2026-10-16), and found built: #561 had landed it on 2026-10-10 (§7, S7). |
+| Q10 | S3, `nish:simd`, on S3a's figures | build it with §3.2's surface; decline it into §9 | **Build it** (2026-10-30). Both bar kernels cleared 1.5x in S3a (#658), and the byte half is not reachable by S6c's runtime classifier (§7, S6c). The surface is §3.2 as revised: `u16x8` for `i16x8`, four value-only mask types and the operation table. Built in three stages, the last measuring S3's bar (§7, S3). |
 
 ---
 

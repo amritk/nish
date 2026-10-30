@@ -94,23 +94,35 @@ export const roundUpTo = (value: i32, align: i32): i32 => {
 const INLINE_HEADER_BYTES: i32 = 24
 
 /**
+ * The alignment one field needs: its value's, or for an inline array field
+ * the larger of the header's 8 and its slots' own, as the LLVM literal struct
+ * `{ %struct.nish_array, [K x T] }` is aligned. A vector slot asks sixteen.
+ */
+const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
+  if (!field.inline()) {
+    return table.alignOf(field.type)
+  }
+  const slot = table.alignOf(table.refOf(field.type))
+  return slot > 8 ? slot : 8
+}
+
+/**
  * Bytes one field occupies in its object: its value's size, or for an inline
- * array field (`FieldInfo.inlineCapacity`) the header and `K` slots, rounded
- * up to the header's alignment as the LLVM literal struct
- * `{ %struct.nish_array, [K x T] }` is. The slots are values, never records:
- * `src/inline-arrays.ts` refuses a record element type.
+ * array field (`FieldInfo.inlineCapacity`) the header, the padding that brings
+ * the first slot to its alignment, and `K` slots, rounded up to the field's
+ * alignment as the LLVM literal struct `{ %struct.nish_array, [K x T] }` is.
+ * The slots are values, never records: `src/inline-arrays.ts` refuses a record
+ * element type.
  */
 const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
   if (!field.inline()) {
     return table.alignOf(field.type)
   }
+  const align = fieldAlign(table, field)
   const stride = table.alignOf(table.refOf(field.type))
-  return roundUpTo(INLINE_HEADER_BYTES + field.inlineCapacity * stride, 8)
+  const slots = roundUpTo(INLINE_HEADER_BYTES, align)
+  return roundUpTo(slots + field.inlineCapacity * stride, align)
 }
-
-/** The alignment one field needs: its value's, or the header's 8 for an inline array. */
-const fieldAlign = (table: TypeTable, field: FieldInfo): i32 =>
-  field.inline() ? 8 : table.alignOf(field.type)
 
 /**
  * Offsets in declaration order, and the size and alignment clang would

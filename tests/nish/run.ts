@@ -1,7 +1,7 @@
 /**
  * The golden-case runner, in Nish.
  *
- *     build/nish-runner [substring] [--compiler <nish>] [--shard <i>/<n>]
+ *     build/nish-runner [substring] [--compiler <nish>] [--shard <i>/<n>] [--jobs <p>]
  *
  * The compiler under test defaults to `build/nish`, what `npm run build` leaves
  * behind; `--compiler <nish>` names another. A Node entry point (`.js`, `.mjs`,
@@ -9,6 +9,19 @@
  * `NISH_BOOTSTRAP` follows in `scripts/bootstrap.sh`. `--shard <i>/<n>` runs the
 `i`th of `n` slices of the selected cases and link programs, dealt round-robin
 over one list, so `n` CI jobs share the corpus between them.
+ *
+ * `--jobs <p>` runs that slice as `p` processes, one per core by default (at
+ * most 8; at most 64 when given). Every check is a `spawnSyncTo` the runner
+ * waits on, so one process leaves all but one core idle; with `p` above 1 the
+ * runner starts itself `p` times through `spawn` instead, on the slices `i`,
+ * `i + n`, ..., `i + n(p - 1)` of `n·p`. An item lands in one of those exactly
+ * when its position is `i - 1` modulo `n`, which is the set `--shard i/n` names
+ * alone, so `--jobs` changes how long a slice takes and never what it checks.
+ * Each child keeps its work under `build/nish-runner-jobs/<slice>-of-<total>/`
+ * (`--work <dir>`, the child's own flag, refused beside `--jobs` above 1),
+ * its output is printed whole in slice order once it and every slice before
+ * it are done, and the last line is the summary summed over them, so a
+ * `tail -n 1` reads it as one run's.
  *
  * `tests/run.js` is the suite of record and this is not a replacement for it: it
  * covers section A, the golden cases in `tests/cases/`, and the `tests/link/`
@@ -70,10 +83,10 @@ import { replaceAll, splitLines, splitWhitespace, trim } from "../../std/text";
 
 const CASES: string = "tests/cases";
 const LINKS: string = "tests/link";
-const WORK: string = "build/nish-cases";
 /** `tests/run.js`'s own build directory, which some cases write into by that literal path. */
 const CASE_WORK: string = "build/test";
-const LINK_WORK: string = "build/nish-link";
+/** Where `--jobs` children keep their work, one directory per slice. */
+const JOB_WORK: string = "build/nish-runner-jobs";
 /** The `tests/link` programs that keep the speed profile; see `speedLinkNames`. */
 const SPEED_LINK: string = "tests/speed-link.txt";
 /** The compiler nobody named: the one `npm run build` leaves behind. */
@@ -96,8 +109,22 @@ class Tools {
   opt: boolean;
   /** `env(1)`, and specifically an `env` that honours `-u`. See `hasEnvTool`. */
   env: boolean;
+  /** This process's scratch files for the golden cases. */
+  work: string;
+  /** This process's link work directory, one subdirectory per program. */
+  linkWork: string;
 
-  constructor(clang: boolean, llvmAs: boolean, opt: boolean, env: boolean, compiler: string) {
+  constructor(
+    clang: boolean,
+    llvmAs: boolean,
+    opt: boolean,
+    env: boolean,
+    compiler: string,
+    work: string,
+    linkWork: string,
+  ) {
+    this.work = work;
+    this.linkWork = linkWork;
     this.clang = clang;
     this.llvmAs = llvmAs;
     this.opt = opt;
@@ -193,8 +220,8 @@ const readOrEmpty = (path: string): string => {
  * streams go to files because the probe is the runner's own business and not
  * part of its report.
  */
-const probe = (tool: string): boolean =>
-  spawnSyncTo([tool, "--version"], `${WORK}/${tool}.probe.out`, `${WORK}/${tool}.probe.err`) === 0;
+const probe = (work: string, tool: string): boolean =>
+  spawnSyncTo([tool, "--version"], `${work}/${tool}.probe.out`, `${work}/${tool}.probe.err`) === 0;
 
 /**
  * Whether `env(1)` is here and honours `-u`.
@@ -207,8 +234,8 @@ const probe = (tool: string): boolean =>
  * runs `env` under itself so that one utility answers both halves of the
  * question and `--version`, which is GNU-only, stays out of it.
  */
-const hasEnvTool = (): boolean =>
-  spawnSyncTo(["env", "-u", "NISH_ENV_PROBE", "env"], `${WORK}/env.probe.out`, `${WORK}/env.probe.err`) ===
+const hasEnvTool = (work: string): boolean =>
+  spawnSyncTo(["env", "-u", "NISH_ENV_PROBE", "env"], `${work}/env.probe.out`, `${work}/env.probe.err`) ===
   0;
 
 /**
@@ -384,9 +411,9 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     return;
   }
 
-  const irPath = `${WORK}/${name}.ll`;
-  const compileOut = `${WORK}/${name}.compile.out`;
-  const compileErr = `${WORK}/${name}.compile.err`;
+  const irPath = `${tools.work}/${name}.ll`;
+  const compileOut = `${tools.work}/${name}.compile.out`;
+  const compileErr = `${tools.work}/${name}.compile.err`;
   const argv = compilerArgv(tools, [`${CASES}/${name}.ts`, "-o", irPath]);
   // `--threads` is the one compiler flag that also changes how the case is
   // *linked*: the IR then reaches for a `_Thread_local` arena, which only
@@ -458,7 +485,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     t.eqLines(name, stripHeader(emitted), stripHeader(replaceAll(golden, "<root>/", "")));
   }
 
-  verifyIR(t, tools, name, irPath, `${WORK}/${name}`);
+  verifyIR(t, tools, name, irPath, `${tools.work}/${name}`);
 
   const expectedOut = readFileSyncOrNull(`${CASES}/${name}.out`);
   if (expectedOut === null || !tools.clang) {
@@ -470,7 +497,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     return;
   }
 
-  const exe = `${WORK}/${name}.exe`;
+  const exe = `${tools.work}/${name}.exe`;
   const link: string[] = ["clang", "-Wno-override-module", "-O2"];
   if (threaded) {
     link.push("-DNISH_THREADS=1");
@@ -487,24 +514,31 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     link.push(readFileSyncOrNull(own) === null ? "tests/driver.c" : own);
   }
   // The C runtime is several translation units: the core (arena, strings,
-  // arrays, number formatting, the panics), the syscall wrappers, the host
-  // calls (the wall clock, entropy, file times, signals), the sockets of
-  // `nish:net`, the byte searches that read a vector at a time, AES-GCM on
-  // the CPU's AES instructions, the stdin and terminal calls of `nish:term`
-  // and the byte-class runs of `nish/bytes`, split apart so each carries its own size budget. A direct `clang` line names them; only `scripts/build.sh` pairs
-  // them for its callers.
+  // arrays, number formatting, the panics), the syscall wrappers, the worker
+  // pool (its sequential fallback without `-pthread`, linked for the CPU count
+  // `--sandbox` primes), the host calls (the wall clock, entropy, file times,
+  // signals), the sockets of `nish:net`, the byte searches that read a vector
+  // at a time, AES-GCM on the CPU's AES instructions, CRC-32 on its CRC
+  // instructions, the stdin and terminal calls of `nish:term`, the byte-class
+  // runs of `nish/bytes` and the `--sandbox` confinement, split apart so each
+  // carries its own size budget.
+  // A direct `clang` line names them; only `scripts/build.sh` pairs them for
+  // its callers.
   link.push("runtime/runtime.c");
   link.push("runtime/runtime-os.c");
+  link.push("runtime/runtime-parallel.c");
   link.push("runtime/runtime-host.c");
   link.push("runtime/runtime-net.c");
   link.push("runtime/runtime-simd.c");
   link.push("runtime/runtime-aes.c");
+  link.push("runtime/runtime-checksum.c");
   link.push("runtime/runtime-term.c");
   link.push("runtime/runtime-bytes.c");
+  link.push("runtime/runtime-sandbox.c");
   link.push("-lm");
   link.push("-o");
   link.push(exe);
-  if (spawnSyncTo(link, "", `${WORK}/${name}.link.err`) !== 0) {
+  if (spawnSyncTo(link, "", `${tools.work}/${name}.link.err`) !== 0) {
     t.fail(`${name}: links`, "clang refused the emitted IR");
     return;
   }
@@ -524,8 +558,8 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
       runArgv.push(arg);
     }
   }
-  const stdoutPath = `${WORK}/${name}.stdout`;
-  const ran = spawnSyncTo(runArgv, stdoutPath, `${WORK}/${name}.run.err`);
+  const stdoutPath = `${tools.work}/${name}.stdout`;
+  const ran = spawnSyncTo(runArgv, stdoutPath, `${tools.work}/${name}.run.err`);
   const printed = readFileSyncOrNull(stdoutPath);
   if (printed === null) {
     t.fail(`${name}: runs`, "nothing was captured");
@@ -571,7 +605,7 @@ const speedLinkNames = (): string[] => {
  */
 const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string): void => {
   const dir = `${LINKS}/${name}`;
-  const outDir = `${LINK_WORK}/${name}`;
+  const outDir = `${tools.linkWork}/${name}`;
   const label = `link/${name}`;
   if (!mkdirSync(outDir)) {
     t.fail(label, `cannot create ${outDir}`);
@@ -594,7 +628,7 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
     argv.push("--profile");
     argv.push("debug");
   }
-  const work = `${WORK}/link_${name}`;
+  const work = `${tools.work}/link_${name}`;
   const status = spawnSyncTo(argv, `${work}.compile.out`, `${work}.compile.err`);
   const diagnostics = readOrEmpty(`${work}.compile.err`);
 
@@ -663,6 +697,161 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
   t.eqStr(`${label}: stdout`, trim(readOrEmpty(stdoutPath)), trim(readOrEmpty(`${dir}/expected.out`)));
 };
 
+/**
+ * Whether `name` is one of the cases that share a file under `CASE_WORK` by
+ * literal path: both write `build/test/io_nish_import.txt`. Processes share
+ * `CASE_WORK`, so these are dealt one position between them and always land
+ * in the same process. (A module constant cannot be an array.)
+ */
+const sharesAFile = (name: string): boolean => name === "io_nish_import" || name === "io_nish_import_global";
+
+/**
+ * The counts of the last `golden cases: N passed, N failed, N skipped` line a
+ * child printed, as `[passed, failed, skipped]`, or `[]` when it printed none
+ * — a child that panicked or was killed before its report.
+ */
+const summaryOf = (output: string): i32[] => {
+  const prefix = "golden cases: ";
+  let found = "";
+  for (const line of splitLines(output)) {
+    if (line.startsWith(prefix) && line.endsWith(" skipped")) {
+      found = line.substring(prefix.length, line.length);
+    }
+  }
+  if (found.length === 0) {
+    return [];
+  }
+  // `parseInt` stops at the first non-digit, so "12 passed, ..." reads as 12
+  // and each count is read from just past the comma before it.
+  const counts: i32[] = [parseInt(found)];
+  let rest = found;
+  while (counts.length < 3) {
+    const comma = rest.indexOf(", ");
+    if (comma < 0) {
+      return [];
+    }
+    rest = rest.substring(comma + 2, rest.length);
+    counts.push(parseInt(rest));
+  }
+  return counts;
+};
+
+/**
+ * `--jobs` above 1: this runner, started once per slice and reaped as each
+ * finishes, with each child's output printed whole and in slice order and the
+ * summed summary last.
+ *
+ * `spawn` inherits the parent's streams and redirects none, so each child is
+ * started through `sh -c` with its two streams sent to files — the same
+ * stand-in for a missing builtin that `env(1)` is for `.env`. The script takes
+ * the two paths as its first arguments and `exec`s the rest, so no argument is
+ * ever spliced into shell text.
+ */
+const runJobs = (filter: string, compiler: string, shard: i32, shards: i32, jobs: i32): number => {
+  if (!mkdirSync(JOB_WORK)) {
+    panic(`cannot create ${JOB_WORK}`);
+  }
+  const total = shards * jobs;
+  const redirect = 'out=$1; err=$2; shift 2; exec "$@" >"$out" 2>"$err"';
+  const slices: i32[] = [];
+  const dirs: string[] = [];
+  const pids: i32[] = [];
+  const statuses: i32[] = [];
+  const finished: boolean[] = [];
+  let running: i32 = 0;
+  let p: i32 = 0;
+  while (p < jobs) {
+    const slice = shard + shards * p;
+    // Named by slice and total, so the two halves of one corpus can run at once.
+    const dir = `${JOB_WORK}/${slice}-of-${total}`;
+    const argv: string[] = ["sh", "-c", redirect, "sh", `${dir}/out`, `${dir}/err`, process.argv[0]];
+    if (filter.length > 0) {
+      argv.push(filter);
+    }
+    for (const arg of ["--compiler", compiler, "--shard", `${slice}/${total}`, "--jobs", "1", "--work", dir]) {
+      argv.push(arg);
+    }
+    // `spawn` answers a pid or a negative errno; 0 stands for a directory that could not be made.
+    const pid = mkdirSync(dir) ? spawn(argv) : 0;
+    slices.push(slice);
+    dirs.push(dir);
+    pids.push(pid);
+    // A child that never started is finished already, and its files, if any, are an earlier run's.
+    statuses.push(0);
+    finished.push(pid <= 0);
+    if (pid > 0) {
+      running += 1;
+    }
+    p += 1;
+  }
+
+  const outputs: string[] = [];
+  let printed: i32 = 0;
+  while (printed < jobs) {
+    if (finished[printed]) {
+      const ran = pids[printed] > 0;
+      const out = ran ? readOrEmpty(`${dirs[printed]}/out`) : "";
+      const err = ran ? readOrEmpty(`${dirs[printed]}/err`) : "";
+      write(`--- slice ${slices[printed]}/${total}\n${out}${err}`);
+      outputs.push(out);
+      printed += 1;
+      continue;
+    }
+    if (running === 0) {
+      panic("a child is unfinished and none is running");
+    }
+    const reaped = waitPid(-1, 0);
+    // -EINTR (4 on Linux and macOS): a signal interrupted the wait, and the children run on.
+    if (reaped[0] === -4) {
+      continue;
+    }
+    if (reaped[0] < 0) {
+      panic(`waitPid failed with ${reaped[0]} while ${running} children were running`);
+    }
+    let at: i32 = 0;
+    while (at < jobs) {
+      if (pids[at] === reaped[0] && !finished[at]) {
+        statuses[at] = reaped[1];
+        finished[at] = true;
+        running -= 1;
+      }
+      at += 1;
+    }
+  }
+
+  let passed: i32 = 0;
+  let failed: i32 = 0;
+  let skipped: i32 = 0;
+  let broken: i32 = 0;
+  p = 0;
+  while (p < jobs) {
+    const counts = summaryOf(outputs[p]);
+    const label = `slice ${slices[p]}/${total}`;
+    if (pids[p] === 0) {
+      console.log(`FAIL  ${label} did not start: cannot create ${dirs[p]}`);
+      broken += 1;
+    } else if (pids[p] < 0) {
+      console.log(`FAIL  ${label} did not start: spawn answered ${pids[p]}`);
+      broken += 1;
+    } else if (counts.length === 0) {
+      console.log(`FAIL  ${label} printed no summary (exit ${statuses[p]})`);
+      broken += 1;
+    } else {
+      passed += counts[0];
+      failed += counts[1];
+      skipped += counts[2];
+      // A child that failed a check exits 1, and its summary already counts it.
+      if (statuses[p] !== 0 && counts[1] === 0) {
+        console.log(`FAIL  ${label} exited ${statuses[p]} with no failed check`);
+        broken += 1;
+      }
+    }
+    p += 1;
+  }
+  console.log(`golden cases: ${passed} passed, ${failed + broken} failed, ${skipped} skipped`);
+  return failed + broken > 0 ? 1 : 0;
+};
+
 export const main = (): number => {
   // One filter argument, matched as a substring, the way `node tests/run.js <sub>` does,
   // and `--compiler <nish>` anywhere around it.
@@ -674,6 +863,10 @@ export const main = (): number => {
   // slices instead of all in the last one.
   let shard: i32 = 1;
   let shards: i32 = 1;
+  const cores = availableParallelism();
+  let jobs: i32 = cores < 8 ? cores : 8;
+  let base = "build";
+  let workGiven = false;
   let i = 1;
   while (i < process.argv.length) {
     if (process.argv[i] === "--compiler") {
@@ -696,6 +889,22 @@ export const main = (): number => {
         panic(`--shard wants <i>/<n> with 1 <= i <= n, not ${spec}`);
       }
       i = i + 2;
+    } else if (process.argv[i] === "--jobs") {
+      if (i + 1 >= process.argv.length) {
+        panic("--jobs needs a count");
+      }
+      jobs = parseInt(process.argv[i + 1]);
+      if (jobs < 1 || jobs > 64) {
+        panic(`--jobs wants a count from 1 to 64, not ${process.argv[i + 1]}`);
+      }
+      i = i + 2;
+    } else if (process.argv[i] === "--work") {
+      if (i + 1 >= process.argv.length) {
+        panic("--work needs a directory");
+      }
+      base = process.argv[i + 1];
+      workGiven = true;
+      i = i + 2;
     } else {
       filter = process.argv[i];
       i = i + 1;
@@ -705,8 +914,16 @@ export const main = (): number => {
     panic(`cannot read the compiler ${compiler} (run this from the repository root, after \`npm run build\`)`);
   }
   mkdirSync("build");
-  if (!mkdirSync(WORK)) {
-    panic(`cannot create ${WORK}`);
+  if (jobs > 1 && workGiven) {
+    panic(`--work names one process's directory; pass --jobs 1 with it (--jobs ${jobs} keeps each under ${JOB_WORK})`);
+  }
+  if (jobs > 1) {
+    return runJobs(filter, compiler, shard, shards, jobs);
+  }
+  const work = `${base}/nish-cases`;
+  const linkWork = `${base}/nish-link`;
+  if (!mkdirSync(base) || !mkdirSync(work)) {
+    panic(`cannot create ${work}`);
   }
   // `build/test` is not this runner's directory — it is `tests/run.js`'s, which
   // creates it before running anything. Several cases write into it by that
@@ -722,10 +939,18 @@ export const main = (): number => {
   // golden names it — compared as though this run had emitted it. `rm -rf` is
   // the tool for that here for the same reason `env(1)` answers `.env`: a POSIX
   // utility stands in for the builtin the language does not have.
-  const cleaned = spawnSyncTo(["rm", "-rf", LINK_WORK], `${WORK}/rm.out`, `${WORK}/rm.err`) === 0;
-  const linkReady = cleaned && mkdirSync(LINK_WORK);
+  const cleaned = spawnSyncTo(["rm", "-rf", linkWork], `${work}/rm.out`, `${work}/rm.err`) === 0;
+  const linkReady = cleaned && mkdirSync(linkWork);
 
-  const tools = new Tools(probe("clang"), probe("llvm-as"), probe("opt"), hasEnvTool(), compiler);
+  const tools = new Tools(
+    probe(work, "clang"),
+    probe(work, "llvm-as"),
+    probe(work, "opt"),
+    hasEnvTool(work),
+    compiler,
+    work,
+    linkWork,
+  );
 
   const started = monotonicNanos();
   const t = new Suite("golden cases");
@@ -741,14 +966,26 @@ export const main = (): number => {
 
   const slow = new Slowest();
   // The position in the selected list, which decides the shard: counted after
-  // the filter, so a filtered run still splits evenly.
+  // the filter, so a filtered run still splits evenly. It depends on nothing
+  // but the list, so a `--jobs` child dealt `slice/total` and this process
+  // dealt `shard/shards` agree on every position.
   let dealt: i32 = 0;
+  // The position the first case `sharesAFile` names was dealt, which the second reuses.
+  let sharedAt: i32 = -1;
   for (const name of caseNames()) {
     if (filter.length > 0 && name.indexOf(filter) < 0) {
       continue;
     }
-    dealt += 1;
-    if ((dealt - 1) % shards !== shard - 1) {
+    let position = dealt;
+    if (sharesAFile(name) && sharedAt >= 0) {
+      position = sharedAt;
+    } else {
+      dealt += 1;
+      if (sharesAFile(name)) {
+        sharedAt = position;
+      }
+    }
+    if (position % shards !== shard - 1) {
       continue;
     }
     const at = monotonicNanos();
@@ -757,7 +994,7 @@ export const main = (): number => {
   }
 
   if (!linkReady) {
-    t.skip("tests/link programs", `cannot empty ${LINK_WORK}, and a stale module would read as this run's`);
+    t.skip("tests/link programs", `cannot empty ${linkWork}, and a stale module would read as this run's`);
   } else {
     const speedLink = speedLinkNames();
     for (const name of linkNames()) {

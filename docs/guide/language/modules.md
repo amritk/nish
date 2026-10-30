@@ -116,6 +116,7 @@ local name:
 | `nish:net` | TCP and UDP sockets and a readiness loop ([Networking](../using-nish/networking.md)) |
 | `nish:secret` | the `Secret<T>` wrapper for keys and other secret values |
 | `nish:unsafe` | unchecked array access and wrapping arithmetic, available only through the import |
+| `nish:simd` | sixteen-byte vectors and the calls that make, load and store them ([Vectors](simd.md)), available only through the import |
 
 ```ts nish:ok
 import { argv } from "nish:process";
@@ -130,7 +131,7 @@ export const main = (): i32 => {
 `nish run args.ts one two` prints `called with 2 argument(s)`: the first
 element of `argv` is the program itself.
 
-Except for `nish:secret` and `nish:unsafe`, which exist only as imports, these
+Except for `nish:secret`, `nish:unsafe` and `nish:simd`, which exist only as imports, these
 are also globals, like `console.log`, so you can call them without an import.
 The `nish:process` names are spelled `process.argv`, `process.exit`,
 `process.platform` and `process.arch` there, as in Node. Importing has one advantage: an imported built-in cannot be shadowed by

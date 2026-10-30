@@ -77,6 +77,75 @@ export const isUnsafeExport = (name: string): boolean =>
   name === "wrappingMul" ||
   name === "readCString"
 
+/**
+ * `nish:simd` (WP38 S3, docs/LANGUAGE.md, "Vectors"): the six 128-bit vector
+ * types and the functions over them. Unlike every other builtin module its
+ * names are not renames of globals: a vector type is spelled, and a vector
+ * function called, only under an import of this module, so a program that
+ * never imports it reads exactly as it did before vectors existed.
+ */
+export const SIMD_SPECIFIER: string = "nish:simd"
+
+/** The six vector type names, which are also their constructors, in table order. */
+const SIMD_TYPE_NAMES: string = "u8x16, u16x8, i32x4, u32x4, f32x4, f64x2"
+
+/**
+ * Whether `nish:simd` exports `name`: a type (which is also its constructor),
+ * its `splat` and its `load`, or one of the functions every vector shares.
+ */
+export const isSimdExport = (name: string): boolean =>
+  simdTypeLane(name).length > 0 ||
+  simdTypeLane(simdSuffix(name, "splat")).length > 0 ||
+  simdTypeLane(simdSuffix(name, "load")).length > 0 ||
+  name === "store" ||
+  name === "extract" ||
+  name === "replace"
+
+/**
+ * The lane name of a vector type name: `u8` for `u8x16`, and "" for anything
+ * else. The checker turns it into a type, so this file needs no type table.
+ */
+export const simdTypeLane = (name: string): string => {
+  if (name === "u8x16") {
+    return "u8"
+  }
+  if (name === "u16x8") {
+    return "u16"
+  }
+  if (name === "i32x4") {
+    return "i32"
+  }
+  if (name === "u32x4") {
+    return "u32"
+  }
+  if (name === "f32x4") {
+    return "f32"
+  }
+  return name === "f64x2" ? "f64" : ""
+}
+
+/**
+ * The type a `splat` or `load` name is of, as the type spells it: `u8x16` for
+ * `splatU8x16` under the prefix `splat`, and "" when `name` is not the prefix
+ * and a capitalised type name.
+ */
+export const simdSuffix = (name: string, prefix: string): string => {
+  if (!name.startsWith(prefix) || name.length <= prefix.length) {
+    return ""
+  }
+  // The six lane types start with `u`, `i` or `f`, so those three capitals are
+  // the only ones a type name can follow the prefix with.
+  const first = name.charCodeAt(prefix.length)
+  const rest = name.slice(prefix.length + 1)
+  if (first === 85) {
+    return `u${rest}`
+  }
+  if (first === 73) {
+    return `i${rest}`
+  }
+  return first === 70 ? `f${rest}` : ""
+}
+
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
@@ -84,12 +153,13 @@ export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}io` ||
   specifier === `${BUILTIN_SCHEME}net` ||
   specifier === `${BUILTIN_SCHEME}term` ||
+  specifier === SIMD_SPECIFIER ||
   specifier === unsafeModule() ||
   isNishSourceModule(specifier)
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${unsafeModule()}`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${SIMD_SPECIFIER}, ${unsafeModule()}`
 
 /**
  * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
@@ -126,6 +196,9 @@ export const nishModuleExports = (specifier: string): string => {
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
+  }
+  if (specifier === SIMD_SPECIFIER) {
+    return `${SIMD_TYPE_NAMES}, splatU8x16, splatU16x8, splatI32x4, splatU32x4, splatF32x4, splatF64x2, loadU8x16, loadU16x8, loadI32x4, loadU32x4, loadF32x4, loadF64x2, store, extract, replace`
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
@@ -377,6 +450,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return isTermExport(name) ? new BuiltinExport("", name, false) : null
+  }
+  if (specifier === SIMD_SPECIFIER) {
+    return isSimdExport(name) ? new BuiltinExport("", name, false) : null
   }
   if (specifier === unsafeModule()) {
     return isUnsafeExport(name) ? new BuiltinExport("", name, false) : null

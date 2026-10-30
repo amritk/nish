@@ -537,6 +537,30 @@ Noise band, Nish against its byte-identical copy: 1.4% on the minimums (14.1% on
 `JsonWriter.keyBytes` and `stringBytes` copy runs of plain bytes with the `skipJsonPlain` kernel (`nish/bytes`) from 16 bytes up. `jsonEncode` writes `string`s through `jsonWriterPutString`, which did not change, so the serialize table above does not measure this: in an A/B against the base, `804120e`, serialize on citm ran 0.988x at the minimum, 0.9 points past that run's 0.3% band (the branch against its byte-identical copy). Re-run against `3dca351` with the class kernels' loops restored to main's instructions, it ran 0.988x again, inside that run's 1.4% band. In the same run (12 rounds, minimums, each band the branch against its byte-identical copy), tokenize ran 1.025x on twitter (band 0.7%), 0.994x on citm (0.5%) and 1.048x on canada (0.3%), typed decode on citm 1.003x (0.9%) and typed-reuse 0.955x (4.2%), and `bench/json-tokenizer`'s 242-byte body ran 0.99x, inside its 0.6% band. Two rows are past their bands: tokenize on citm by 0.1 points and typed-reuse by 0.3 points. Both run machine code identical to main's — the class paths' instructions are main's, and neither workload writes — and in typed-reuse the branch's byte-identical copy ran within 0.3% of the base, so the copy band is the evidence for reading both as noise; none of these gaps, faster or slower, is claimed. `JsonDocument.write`, the in-tree caller of the byte writers, ran **1.49x** faster on twitter.json and 1.03x to 1.07x on citm_catalog.json at the minimum (12 and 10 interleaved rounds; bands against a byte-identical copy 0.4% and 2.7%). canada.json also ran faster, but a build with the kernel switched off did as well, so that gain is code shape, not the kernel. On citm, the escape scan does not make serialize faster outside its band: most strings are shorter than 16 bytes, and its ceiling at the 16-byte guard, 1.0139x, is inside the 1.4% band by 0.01 points. The profile, the guard and the full A/B are in [wp38-simd.md](wp38-simd.md), *JsonWriter's byte writers*.
 <!-- json-writer-bytes:end -->
 
+<!-- json-value-ranges:begin -->
+
+### JsonDocument's source ranges
+
+`JsonDocument.parseRanged` and `parseTextRanged` record each value's and each member key's byte range (about 20 bytes more a value); `parse` and `parseText` record none. Retired instructions under cachegrind, from one run of `node bench/json-value/measure.mjs --instructions --before <main's nish>` against main at `1391cf8`, in `bench/run.mjs`'s pinned environment (fixed libc tunables, `NISH_SIMD=base`, a fixed hash key), 16 MB of input a case. `head` is this tree's plain `parse` loop, `before` main's build of the same program, `on` the same loop calling `parseRanged`, and `both` one `parseRanged` followed by the plain `parse` loop in one binary. Every binary is also counted as a byte-identical copy; the band is the gap between the two counts.
+
+| Row                                        |        before |          head | head − before | head / before | on / head | both / head |   band |
+| ------------------------------------------ | ------------: | ------------: | ------------: | ------------: | --------: | ----------: | -----: |
+| parse twitter.json (27 parses)             |   753,801,566 |   753,801,541 |           −25 |       −0.000% |   +4.089% |     +3.749% | 0.000% |
+| parse citm_catalog.json (10 parses)        |   411,471,288 |   411,471,271 |           −17 |       −0.000% |   +9.427% |    +10.998% | 0.000% |
+| parse canada.json (7 parses)               | 1,015,203,067 | 1,015,203,048 |           −19 |       −0.000% |  +10.416% |    +16.239% | 0.000% |
+| parse sample.json, 1,427 bytes (11,757)    | 1,091,940,938 | 1,091,929,215 |       −11,723 |       −0.001% |   +7.603% |     −0.146% | 0.000% |
+| builders (500 documents of 1,100 values)   |   882,996,248 |   881,763,264 |    −1,232,984 |       −0.140% |           |             | 0.000% |
+| json-compare tokenize twitter.json         |   353,787,664 |   353,787,664 |             0 |       +0.000% |           |             | 0.000% |
+| json-compare tokenize citm_catalog.json    |   297,763,836 |   297,763,822 |           −14 |       −0.000% |           |             | 0.000% |
+| json-compare tokenize canada.json          |   993,834,293 |   993,834,293 |             0 |       +0.000% |           |             | 0.000% |
+| json-compare typed                         |   306,561,355 |   306,561,383 |           +28 |       +0.000% |           |             | 0.000% |
+| json-compare typed-reuse                   |   303,863,883 |   303,863,883 |             0 |       +0.000% |           |             | 0.000% |
+| http1-server `/json-echo-doc`, 2,000 POSTs |   161,803,094 |   161,801,102 |        −1,992 |       −0.001% |           |             | 0.000% |
+
+No row retires more than main's but typed, by 28 instructions in 306 million, which is inside what the two byte-identical copies of the same binary differ by in this run (`head-copy` counts 1 more, `before-copy` 29 more); the tokenize and typed binaries do not reach `nish/json-value`. A plain `parse` writes no range and resets none: ranges carry the generation they were written in and the readers answer `-1` for any other, so `clear` steps the generation as main's does, with one store more, of the range stamp, on the one clear in 511 that wraps it; and a document that never keeps ranges never makes their arrays. `parseRanged` costs 4.1% to 10.4% more than `parse` on the four documents. A binary that links both entry points (`both`) pays for the second in its plain `parse` loop, 3.7% to 16.2% on the large documents and −0.15% on sample.json, from layout and inlining rather than noise: every band is 0.000%. `parseRanged` keeps its own copies of `storeSource`, `duplicateKeys` and `sortPending`, so that a second caller does not keep them from inlining into `parse`. `append`, which every builder goes through, moves a full container's key ranges only when the slots have some of this generation, and reads the range arrays directly there, so that the move inlined into `append` keeps its not-full path straight. No timings are recorded: unpinned wall-clock bands on this machine ran 2% to 8%, wider than every gap above.
+
+<!-- json-value-ranges:end -->
+
 <!-- techempower:begin -->
 ## TechEmpower json and plaintext
 
@@ -685,3 +709,46 @@ Run 1 put everything together 1.48 µs under main on `list`, outside that run's 
 
 `readRow` was not changed: it is 2.2 % of `list` out of line, about 1.2 µs a query for 20 rows, and already reads each column's length without a call. Halving it would save less than the run-to-run spread above.
 <!-- postgres-profile:end -->
+
+<!-- regex:begin -->
+## Regular expressions
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/regex/measure.mjs --before <nish> --rounds 24 --size` times `nish/regex` over a 64 KB corpus of mixed ASCII and non-ASCII lines, against a byte-identical copy of the binary for the noise band and against the same program built with another compiler's `std/` ([bench/README.md](../bench/README.md#regular-expressions) describes it). 2026-10-30: this branch against `main` at 384371b, before property escapes and non-ASCII folding, one run of 24 interleaved rounds, four cores, x86-64.
+
+The cases without the Unicode features. Timings this short move by more than any difference between the two builds, so the verdict is the instructions a pass retires, counted with `valgrind --tool=cachegrind` as the difference between a run of 40 passes and one of 20 (no setup). The time ratio is main's over this branch's, so above 1 means this branch is faster.
+
+| Case | Pattern | Instructions a pass, main | Branch / main | Median, main | Median, branch | Time ratio (min / median) | Noise band (median, main / branch) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `literal` | `needle` | 2,287,435 | 1.000x | 8.3 µs | 8.3 µs | 0.999x / 0.997x | 0.1% / 0.7% |
+| `class` | `[0-9]+` | 6,541,291 | 1.000x | 34.3 µs | 30.7 µs | 1.094x / 1.119x | 3.2% / 0.1% |
+| `alternation` | `fox\|dog\|needle\|World` | 9,476,271 | 1.000x | 60.7 µs | 59.9 µs | 1.035x / 1.014x | 3.0% / 0.5% |
+| `group` | `(?:[a-z]+ ){2}[a-z]+` | 34,539,670 | 1.000x | 269.8 µs | 257.4 µs | 1.010x / 1.048x | 1.9% / 4.8% |
+| `anchored` | `^[A-Z][a-z]+` (`m`) | 5,661,967 | 0.992x | 21.1 µs | 20.1 µs | 0.997x / 1.050x | 0.3% / 3.4% |
+| `icase-ascii` | `hello world\|quick` (`i`) | 5,267,653 | 1.000x | 25.0 µs | 24.2 µs | 0.976x / 1.033x | 0.3% / 1.6% |
+| `icase-class` | `[A-Za-z]+` (`i`) | 62,588,232 | 1.000x | 438.0 µs | 432.4 µs | 1.049x / 1.013x | 4.0% / 4.3% |
+| `exec` | `(\w+)@(\w+)\.(com\|org)` | 169,456,374 | 0.926x | 515.8 µs | 530.7 µs | 1.094x / 0.972x | 10.3% / 11.3% |
+
+The instruction columns are counted against `main` at 1391cf8, whose `src/` this branch's is. Six cases retire main's instructions to within 0.01%. `class`, `alternation` and `icase-class` were 0.5% over until the DFA's two context masks, which gained a sixth slot saying whether U+017F and U+212A are word characters, were sized by a named constant again: sized `CTX_KINDS + 1`, they were no longer a constant length, so they left the `Regex` object for the heap and `dfaForward` paid a pointer load per read. `anchored` was 2.6% over until a context read under `i` stopped testing U+017F and U+212A on ASCII bytes. `exec` retires 7.4% fewer: all of it is in the Pike VM's `addThread`, whose source is main's, where the loops that copy capture slots compile to fewer instructions around the inlined `assertHolds`; no algorithm changed, and its time ratio is inside the band.
+
+Compiling alone: a pass compiles the case's patterns once, 10,000 passes a run. Instructions are per compile, counted the same way between 4,000 and 2,000 passes.
+
+| Case | Patterns | Instructions, main | Branch / main | Median, main | Median, branch | Time ratio (min / median) | Noise band (median, main / branch) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `compile-class` | a large class with non-ASCII letters | 26,785 | 0.990x | 5.0 µs | 5.2 µs | 1.006x / 0.979x | 0.8% / 1.0% |
+| `compile-icase-class` | the same class under `i` | 27,376 | 5.67x | 5.0 µs | 17.1 µs | 0.321x / 0.291x | 3.9% / 9.5% |
+| `compile-nonspace-icase` | `\S+` (`i`) | 16,891 | 0.967x | 3.6 µs | 3.8 µs | 1.016x / 0.944x | 1.3% / 5.1% |
+| `compile-icase-literal` | `é` (`i`) | 3,885 | 1.53x | 1.9 µs | 2.1 µs | 0.951x / 0.893x | 0.8% / 4.7% |
+| `compile-many` | ten small patterns | 274,390 | 1.002x | 47.2 µs | 46.7 µs | 0.977x / 1.011x | 2.5% / 1.0% |
+
+The two folding rows are the real cost, and they are work main does not do: main folds no letter outside ASCII. A compile reads the folding table in place, so nothing is decoded ahead of time and nothing is kept between compiles. An index of every sixteenth folding code point finds a letter's place, and a flag on two-letter orbits saves the second lookup. The large class costs about 12 µs more than main. A single `é` costs about 0.2 µs. A pattern that folds nothing above ASCII never reads the table. `\S`, `\D` and `\W` under `i` don't either, being closed under folding already.
+
+The three cases with the Unicode features. Main refuses `\p{…}` and folds no non-ASCII letter, so these time this branch alone:
+
+| Case | Pattern | Median | Noise band (median) |
+| --- | --- | ---: | --- |
+| `property` | `\p{L}+` | 601.7 µs | 0.0% |
+| `script` | `\p{Script=Greek}+` | 354.5 µs | 2.0% |
+| `icase-unicode` | `σοφία\|école\|straße\|über` (`i`) | 358.2 µs | 5.6% |
+
+Linked size of `bench/regex/size.ts`, which imports `nish/regex` and compiles `[0-9]+`: 92,824 bytes from main and 177,448 from this branch. The 84,624 bytes are mostly the Unicode tables, about 70 KB of packed strings, plus the code that reads them. `regexCompile`'s parser reaches them, so they are linked whether or not a pattern names a property.
+<!-- regex:end -->

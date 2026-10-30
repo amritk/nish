@@ -51,7 +51,7 @@ import {
   dateRefusal,
   isBuiltinFunction,
 } from "./builtins"
-import { BuiltinExport, netOption } from "./nish-modules"
+import { BuiltinExport, isSimdExport, netOption } from "./nish-modules"
 import { checkResultConstructor, isResultConstructor, narrowResultTest } from "./result"
 import {
   checkMember,
@@ -115,6 +115,7 @@ import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
+import { simdCompareMessage, simdImportMessage } from "./simd"
 import { Local, NARROWED_NONE, STORAGE_LOCAL, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   intBits,
@@ -1456,6 +1457,9 @@ const checkOperator = (
     return checkEquality(ctx, expr, op, left, right, leftNode, rightNode)
   }
   if (op === "<" || op === "<=" || op === ">" || op === ">=") {
+    if (left === right && ctx.table.isVector(left)) {
+      return ctx.errorType(expr, simdCompareMessage(op, a))
+    }
     if (left !== right || !isNumeric(left)) {
       return ctx.errorType(expr, `Operator \`${op}\` requires two numeric operands, got ${a} and ${b}`)
     }
@@ -1541,6 +1545,9 @@ const checkEquality = (
       )
     }
     return ctx.errorType(expr, `Operator \`${op}\` requires two operands of the same type, got ${a} and ${b}`)
+  }
+  if (ctx.table.isVector(left)) {
+    return ctx.errorType(expr, simdCompareMessage(op, a))
   }
   const leftSet = memberSetOf(ctx, leftNode)
   const rightSet = memberSetOf(ctx, rightNode)
@@ -3255,6 +3262,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     // like any other, and calling it is the unknown function below.
     if (callee.text === "Date" && local === null) {
       return ctx.errorType(expr, dateRefusal("Date()"))
+    }
+    if (local === null && isSimdExport(callee.text)) {
+      return ctx.errorType(callee, simdImportMessage(callee.text))
     }
     ctx.errorFix(
       callee,
