@@ -859,28 +859,34 @@ function Http1Connection.respondEncoded(this: Http1Connection, status: i32, name
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: coding len off status
-  calls: nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.Http1Connection.end nish.Http1Connection.identityRefused nish.Http1Connection.respond nish.Http1Connection.room nish.Http1Connection.unrespond nish.Http1Connection.write nish.HttpCompressor.addFields nish.HttpCompressor.compress nish.HttpCompressor.compressAnyway nish.HttpCompressor.fewerSegments nish.HttpCompressor.http1IdentityHead nish.HttpCompressor.identityFields nish.http1ServerCheckWindow nish_panic nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.identityRefused#0 nish.Http1Connection.room#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
-  pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.addFields#1 nish.HttpCompressor.identityFields#1 nish.HttpCompressor.identityFields#1
-  pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.addFields#2 nish.HttpCompressor.identityFields#2 nish.HttpCompressor.identityFields#2
+  calls: nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.Http1Connection.end nish.Http1Connection.identityRefused nish.Http1Connection.respond nish.Http1Connection.room nish.Http1Connection.unrespond nish.Http1Connection.write nish.HttpCompressor.addFields nish.HttpCompressor.compress nish.HttpCompressor.compressAnyway nish.HttpCompressor.fewerSegments nish.HttpCompressor.http1IdentityHead nish.HttpCompressor.identityFields nish.HttpCompressor.oneSegment nish.HttpCompressor.segmentSize nish.http1ServerCheckWindow nish_panic nish_panic_overflow
+  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.identityRefused#0 nish.Http1Connection.room#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.identityFields#1 nish.HttpCompressor.addFields#1 nish.HttpCompressor.identityFields#1 nish.HttpCompressor.identityFields#1
+  pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.identityFields#2 nish.HttpCompressor.addFields#2 nish.HttpCompressor.identityFields#2 nish.HttpCompressor.identityFields#2
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.HttpCompressor.compressAnyway#2 nish.HttpCompressor.compress#2 nish.Http1Connection.write#1
-  pointer enc: size=112 writesThrough=true captured=false passedTo=nish.HttpCompressor.compressAnyway#0 nish.HttpCompressor.compress#0 nish.HttpCompressor.addFields#0 nish.HttpCompressor.identityFields#0 nish.HttpCompressor.http1IdentityHead#0 nish.HttpCompressor.fewerSegments#0 nish.HttpCompressor.identityFields#0
+  pointer enc: size=120 writesThrough=true captured=false passedTo=nish.HttpCompressor.oneSegment#0 nish.HttpCompressor.identityFields#0 nish.HttpCompressor.segmentSize#0 nish.HttpCompressor.compressAnyway#0 nish.HttpCompressor.compress#0 nish.HttpCompressor.addFields#0 nish.HttpCompressor.identityFields#0 nish.HttpCompressor.http1IdentityHead#0 nish.HttpCompressor.fewerSegments#0 nish.HttpCompressor.identityFields#0
   stackSites=0 stackLocals=0
-  callee -47:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
-  callee -46:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
-  local -43:11 required: boolean (const)
-  callee -43:62 Http1Connection.identityRefused -> @nish.Http1Connection.identityRefused
-  local -42:9 packed: i32 (let)
-  callee -41:9 HttpCompressor.compressAnyway -> @nish.HttpCompressor.compressAnyway
-  callee -40:9 HttpCompressor.compress -> @nish.HttpCompressor.compress
-  local -39:9 n: i32 (let)
-  callee -37:7 HttpCompressor.addFields -> @nish.HttpCompressor.addFields
-  callee -34:7 HttpCompressor.identityFields -> @nish.HttpCompressor.identityFields
-  callee -28:5 Http1Connection.room -> @nish.Http1Connection.room
-  local -27:11 outputEnd: i32 (const)
-  local -26:11 closeAfter: boolean (const)
-  local -25:9 r: i32 (let)
-  callee -25:18 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee -64:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
+  callee -63:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
+  local -60:11 required: boolean (const)
+  callee -60:62 Http1Connection.identityRefused -> @nish.Http1Connection.identityRefused
+  callee -55:5 Http1Connection.room -> @nish.Http1Connection.room
+  local -54:11 outputEnd: i32 (const)
+  local -53:11 closeAfter: boolean (const)
+  local -52:9 packed: i32 (let)
+  local -51:9 n: i32 (let)
+  local -50:9 r: i32 (let)
+  local -49:9 queued: boolean (let)
+  callee -48:41 HttpCompressor.oneSegment -> @nish.HttpCompressor.oneSegment
+  callee -44:7 HttpCompressor.identityFields -> @nish.HttpCompressor.identityFields
+  callee -43:11 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee -39:52 HttpCompressor.segmentSize -> @nish.HttpCompressor.segmentSize
+  callee -37:9 Http1Connection.unrespond -> @nish.Http1Connection.unrespond
+  callee -33:27 HttpCompressor.compressAnyway -> @nish.HttpCompressor.compressAnyway
+  callee -33:72 HttpCompressor.compress -> @nish.HttpCompressor.compress
+  callee -31:9 HttpCompressor.addFields -> @nish.HttpCompressor.addFields
+  callee -28:9 HttpCompressor.identityFields -> @nish.HttpCompressor.identityFields
+  callee -26:11 Http1Connection.respond -> @nish.Http1Connection.respond
   local -19:13 head: i32 (const)
   local -18:13 plain: i32 (const)
   callee -18:26 HttpCompressor.http1IdentityHead -> @nish.HttpCompressor.http1IdentityHead
@@ -2038,7 +2044,7 @@ const HTTP_ENCODER_LEVEL: i32 = 2 [exported]
 const HTTP_DEFAULT_MSS: i32 = 1448 [exported]
 const HTTP1_GZIP_FIELD_BYTES: i32 = 24 [exported]
 const HTTP_Q_ONE: i32 = 1000
-struct HttpCompressor (class) size=112 align=8 exported
+struct HttpCompressor (class) size=120 align=8 exported
   field gzip: GzipCompressor index=0 offset=0 readonly
   field fixed: GzipFixedCompressor index=1 offset=8 readonly
   field output: u8[] index=2 offset=16 readonly
@@ -2058,11 +2064,14 @@ struct HttpCompressor (class) size=112 align=8 exported
   field encoder: i32 index=16 offset=100
   field fixedLimit: i32 index=17 offset=104
   field decision: i32 index=18 offset=108
+  field encoderRuns: i32 index=19 offset=112
   constructor -> @nish.HttpCompressor.constructor
   method compress -> @nish.HttpCompressor.compress
   method compressAnyway -> @nish.HttpCompressor.compressAnyway
   method leastSaving -> @nish.HttpCompressor.leastSaving
   method fewerSegments -> @nish.HttpCompressor.fewerSegments
+  method segmentSize -> @nish.HttpCompressor.segmentSize
+  method oneSegment -> @nish.HttpCompressor.oneSegment
   method http1IdentityHead -> @nish.HttpCompressor.http1IdentityHead
   method varies -> @nish.HttpCompressor.varies
   method addFields -> @nish.HttpCompressor.addFields
@@ -2162,7 +2171,7 @@ function HttpCompressor.constructor(this: HttpCompressor, level: i32, minLength:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: level maxLength minLength
   calls: nish.GzipCompressor.constructor nish.GzipFixedCompressor.constructor nish.compressBound nish.httpCompressBytes nish_alloc_struct nish_panic
-  pointer this: size=112 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:17 new GzipCompressor -> @nish.GzipCompressor.constructor
   callee +1:18 new GzipFixedCompressor -> @nish.GzipFixedCompressor.constructor
@@ -2176,62 +2185,76 @@ function HttpCompressor.compress(this: HttpCompressor, coding: i32, body: u8[], 
   sharedWrite: +0:7
   escaping: len off
   calls: nish.GzipCompressor.compress nish.GzipFixedCompressor.compress nish.HttpCompressor.leastSaving nish_panic nish_panic_overflow
-  pointer this: size=112 writesThrough=true captured=false passedTo=nish.HttpCompressor.leastSaving#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.HttpCompressor.leastSaving#0
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.GzipFixedCompressor.compress#1 nish.GzipCompressor.compress#1
   stackSites=0 stackLocals=0
   local +12:11 keep: i32 (const)
   callee +12:29 HttpCompressor.leastSaving -> @nish.HttpCompressor.leastSaving
   local +13:9 n: i32 (let)
   local +15:13 fixed: boolean (const)
-  callee +18:11 GzipFixedCompressor.compress -> @nish.GzipFixedCompressor.compress
-  callee +19:11 GzipCompressor.compress -> @nish.GzipCompressor.compress
+  callee +19:11 GzipFixedCompressor.compress -> @nish.GzipFixedCompressor.compress
+  callee +20:11 GzipCompressor.compress -> @nish.GzipCompressor.compress
 function HttpCompressor.compressAnyway(this: HttpCompressor, coding: i32, body: u8[], off: i32, len: i32): i32 -> @nish.HttpCompressor.compressAnyway [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: len off
-  calls: nish.GzipCompressor.compress nish.GzipFixedCompressor.compress nish_panic
-  pointer this: size=112 writesThrough=true captured=false
+  calls: nish.GzipCompressor.compress nish.GzipFixedCompressor.compress nish_panic nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.GzipFixedCompressor.compress#1 nish.GzipCompressor.compress#1
   stackSites=0 stackLocals=0
-  local +7:9 n: i32 (let)
-  callee +12:11 GzipFixedCompressor.compress -> @nish.GzipFixedCompressor.compress
-  callee +15:11 GzipCompressor.compress -> @nish.GzipCompressor.compress
+  local +8:9 n: i32 (let)
+  callee +13:11 GzipFixedCompressor.compress -> @nish.GzipFixedCompressor.compress
+  callee +16:11 GzipCompressor.compress -> @nish.GzipCompressor.compress
 function HttpCompressor.leastSaving(this: HttpCompressor, len: i32): i32 -> @nish.HttpCompressor.leastSaving [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 least: i32 (let)
   local +1:9 pct: i32 (let)
   local +7:11 share: i32 (const)
 function HttpCompressor.fewerSegments(this: HttpCompressor, identityBytes: i32, encodedBytes: i32, mss: i32): boolean -> @nish.HttpCompressor.fewerSegments [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: encodedBytes identityBytes mss
-  calls: nish.httpSegments
-  pointer this: size=112 writesThrough=true captured=false
+  calls: nish.HttpCompressor.segmentSize nish.httpSegments
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.HttpCompressor.segmentSize#0
   stackSites=0 stackLocals=0
-  local -7:9 size: i32 (let)
+  local -4:11 size: i32 (const)
+  callee -4:23 HttpCompressor.segmentSize -> @nish.HttpCompressor.segmentSize
   callee -3:9 httpSegments -> @nish.httpSegments
   callee -3:44 httpSegments -> @nish.httpSegments
+function HttpCompressor.segmentSize(this: HttpCompressor, mss: i32): i32 -> @nish.HttpCompressor.segmentSize [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: mss
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function HttpCompressor.oneSegment(this: HttpCompressor, coding: i32, len: i32, mss: i32): boolean -> @nish.HttpCompressor.oneSegment [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: mss
+  calls: nish.HttpCompressor.segmentSize
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.HttpCompressor.segmentSize#0
+  stackSites=0 stackLocals=0
+  callee -4:13 HttpCompressor.segmentSize -> @nish.HttpCompressor.segmentSize
 function HttpCompressor.http1IdentityHead(this: HttpCompressor, encodedHead: i32, encodedLength: i32, length: i32): i32 -> @nish.HttpCompressor.http1IdentityHead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: encodedLength length
   calls: nish.httpDecimalDigits nish_panic_overflow
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 head: i32 (let)
   callee +4:19 httpDecimalDigits -> @nish.httpDecimalDigits
   callee +4:54 httpDecimalDigits -> @nish.httpDecimalDigits
 function HttpCompressor.varies(this: HttpCompressor): boolean -> @nish.HttpCompressor.varies [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function HttpCompressor.addFields(this: HttpCompressor, names: u8[][], values: u8[][]): void -> @nish.HttpCompressor.addFields [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2242,14 +2265,14 @@ function HttpCompressor.addVary(this: HttpCompressor): void -> @nish.HttpCompres
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.HttpCompressor.varies nish_array_grow
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.HttpCompressor.varies#0
+  pointer this: size=120 writesThrough=false captured=false passedTo=nish.HttpCompressor.varies#0
   stackSites=0 stackLocals=0
   callee -1:22 HttpCompressor.varies -> @nish.HttpCompressor.varies
 function HttpCompressor.identityFields(this: HttpCompressor, names: u8[][], values: u8[][]): void -> @nish.HttpCompressor.identityFields [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.HttpCompressor.addVary nish_array_grow
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.HttpCompressor.addVary#0
+  pointer this: size=120 writesThrough=false captured=false passedTo=nish.HttpCompressor.addVary#0
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2258,7 +2281,7 @@ function HttpCompressor.identityFields(this: HttpCompressor, names: u8[][], valu
   local +8:15 value: u8[] (const)
   callee +13:5 HttpCompressor.addVary -> @nish.HttpCompressor.addVary
 function httpCompressorDefault(): HttpCompressor -> @nish.httpCompressorDefault [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=112
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=120
   calls: nish.HttpCompressor.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
   callee +0:60 new HttpCompressor -> @nish.HttpCompressor.constructor
@@ -4432,7 +4455,8 @@ struct Http1Parser (class) size=200 align=8 exported
   field chunked: boolean index=37 offset=192 initialized
   field keepAlive: boolean index=38 offset=193 initialized
   field upgrading: boolean index=39 offset=194 initialized
-  field keepText: boolean index=40 offset=195 initialized
+  field headHeld: boolean index=40 offset=195 initialized
+  field keepText: boolean index=41 offset=196 initialized
   constructor -> @nish.Http1Parser.constructor
   method feed -> @nish.Http1Parser.feed
   method next -> @nish.Http1Parser.next
@@ -4863,8 +4887,9 @@ function http1Next(p: Http1Parser): i32 -> @nish.http1Next
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.http1BodyWindow nish.http1ChunkSize nish.http1EndOfHead nish.http1Fail nish.http1FieldLine nish.http1MethodOverrun nish.http1RequestLine nish.http1StartRequest nish.http1TakeLine nish_panic_overflow
-  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1MethodOverrun#0 nish.http1Fail#0 nish.http1TakeLine#0 nish.http1RequestLine#0 nish.http1TakeLine#0 nish.http1Fail#0 nish.http1EndOfHead#0 nish.http1FieldLine#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1ChunkSize#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1StartRequest#0
+  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1StartRequest#0 nish.http1MethodOverrun#0 nish.http1Fail#0 nish.http1TakeLine#0 nish.http1RequestLine#0 nish.http1TakeLine#0 nish.http1Fail#0 nish.http1EndOfHead#0 nish.http1FieldLine#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1ChunkSize#0 nish.http1BodyWindow#0 nish.http1TakeLine#0
   stackSites=0 stackLocals=0
+  callee -25:11 http1StartRequest -> @nish.http1StartRequest
   callee -21:13 http1MethodOverrun -> @nish.http1MethodOverrun
   callee -20:18 http1Fail -> @nish.http1Fail
   local -16:15 got: i32 (const)
@@ -4883,7 +4908,6 @@ function http1Next(p: Http1Parser): i32 -> @nish.http1Next
   callee +30:16 http1BodyWindow -> @nish.http1BodyWindow
   local +34:15 got: i32 (const)
   callee +34:26 http1TakeLine -> @nish.http1TakeLine
-  callee +47:11 http1StartRequest -> @nish.http1StartRequest
 function http1BytesOf(text: string): u8[] -> @nish.http1BytesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
