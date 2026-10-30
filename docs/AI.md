@@ -2239,11 +2239,16 @@ that `netRead`, `netWrite`, `netShutdown`, `netClose` and the loop take as
 they are, and `unixSocketPair(NET_UNIX_STREAM, fds)` fills `fds: i32[]` with
 two connected ends (`NET_UNIX_SEQPACKET` keeps message boundaries; Linux
 only, `-95` on Darwin). A path starting with `@` is Linux's abstract
-namespace and makes no file. A path that exists is `-98`; flag
-`NET_UNIX_UNLINK_STALE` first removes a socket file nobody listens on. A path
-past `sun_path` (107 bytes on Linux, 103 on Darwin) is `-36`. Under
-`--sandbox`, a listener on a path also needs `fs.write` (`-13` without it);
-an abstract name does not.
+namespace and makes no file (`-95` on Darwin); write `./@name` for a socket
+file so named. A path that exists is `-98`; flag `NET_UNIX_UNLINK_STALE`
+first removes a socket file nobody listens on (Linux; on Darwin it is `-95`
+at a socket file, since a full backlog and a dead file both refuse there).
+`NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM` and `NET_TCP_NODELAY` are all `1`,
+so pass the constant each call names. A path past `sun_path` as written (107
+bytes on Linux, 103 on Darwin) is `-36`. A full backlog makes `unixConnect`
+`-11` on Linux and `-111` on Darwin. Under `--sandbox`, a listener on a path
+also needs `fs.write` (`-13` without it); an abstract name does not, and a
+connect to a path is not confined.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write

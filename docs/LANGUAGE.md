@@ -7654,9 +7654,9 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
 | `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one socket option from a whitelist, named by the ids below: `0`, or the failure, such as `-9` for a closed descriptor and `-88` for one that is not a socket. Any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `value` is `0` or `1` for the switches and a byte count for the buffer sizes. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
-| `unixListen(path: string, backlog: i32, flags: i32): i32` | a listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose file only its owner may connect to (`0600`); a leading `@` names Linux's abstract namespace, which leaves no file. `-98` when the path exists, unless flag `1` (`NET_UNIX_UNLINK_STALE`) finds a socket file nothing listens on and unlinks it first; `-17` when that flag finds something that is not a socket; `-36` for a path too long for `sun_path`; `-22` for an empty path, a bare `@`, a NUL inside or any other flag bit | write | `net_unix_calls`, `net_unix_paths`, `net_unix_fds`; `reject_net_unix_arity`, `reject_net_unix_wasm` |
+| `unixListen(path: string, backlog: i32, flags: i32): i32` | a listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose file only its owner may connect to (`0600`); a leading `@` names Linux's abstract namespace, which leaves no file. `-98` when the path exists, unless flag `1` (`NET_UNIX_UNLINK_STALE`) finds a socket file nothing listens on and unlinks it first (on Darwin, which cannot tell, a socket file is `-95` under that flag); `-17` when that flag finds something that is not a socket; `-36` for a path too long for `sun_path`; `-22` for an empty path, a bare `@`, a NUL inside or any other flag bit | write | `net_unix_calls`, `net_unix_paths`, `net_unix_fds`; `reject_net_unix_arity`, `reject_net_unix_wasm` |
 | `unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32` | `unixListen`'s socket with the file's mode chosen, `0` to `0o777` and no other bits, set before the listen so no connect gets in under a wider one; `-22` for a mode outside that range or an abstract name, which has no file to give a mode to | write | `net_unix_paths`, `net_unix_calls` |
-| `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`: the descriptor, `-111` when nothing listens there, `-2` when there is no such file, `-11` when the listener's backlog is full (the socket is closed; try again later), and the path refusals `unixListen` has | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
+| `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`: the descriptor, `-111` when nothing listens there, `-2` when there is no such file, `-11` on Linux and `-111` on Darwin when the listener's backlog is full (the socket is closed; try again later), and the path refusals `unixListen` has | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
 | `unixAccept(fd: i32): i32` | the next waiting connection, non-blocking and close-on-exec; `-11` when none is waiting. No peer address is written: a Unix client is seldom bound | write | `net_unix_calls` |
 | `unixSocketPair(kind: i32, fds: i32[]): i32` | two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec, and `0`. Kind `1` (`NET_UNIX_STREAM`) is a byte stream, kind `2` (`NET_UNIX_SEQPACKET`) keeps each write one message; any other kind, or an `fds` shorter than 2, is `-22` before a socket exists. Kind `2` is **`-95` on Darwin** | write | `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`, `reject_net_unix_pair_readonly` |
 
@@ -7885,11 +7885,14 @@ too. There is no address form: `unixAccept` writes no peer.
   as an empty path is. It must fit `sun_path` with its NUL: **107 bytes on
   Linux, 103 on Darwin**, and a longer one is `-36` before a socket exists,
   rather than the kernel's cut-short name binding a file the program never
-  named. A relative path is the working directory's.
+  named. A relative path is the working directory's, and the limit is on the
+  string as written, not the absolute path it resolves to.
 - **Abstract names.** A path that starts with `@` is Linux's abstract
   namespace: the rest, at most 107 bytes, is the name, nothing is made on the
   file system and nothing is left behind when the socket closes. A bare `@` is
-  `-22`. Darwin has none, and there every `@` path is **`-95`**.
+  `-22`. Darwin has none, and there every `@` path is **`-95`**. A file whose
+  name starts with `@` is spelled `./@name`, which is a relative path like any
+  other.
 - **The file's mode.** A pathname listener's file is `0600` for `unixListen`,
   so only its owner may connect, and `unixListenMode`'s `mode` otherwise. The
   runtime sets it between the bind and the listen, while every connect is
@@ -7901,9 +7904,13 @@ too. There is no address form: `unixAccept` writes no peer.
   `-98`, whatever is there, and flag `1`, `NET_UNIX_UNLINK_STALE`, clears only
   a socket file nothing listens on, the one a server that died left: the
   runtime connects to it, and only a refusal makes it unlink the file and bind
-  again. A live listener, even one whose backlog is full, stays `-98`; a
-  regular file, a directory or a link is `-17` and left alone. The probe is a
-  connection the live listener sees close at once. Between the probe and the
+  again. On Linux a live listener, even one whose backlog is full, stays
+  `-98`; a regular file, a directory or a link is `-17` and left alone. On
+  Darwin a connect to a listener whose backlog is full is refused just as one
+  to a dead file is, so the probe cannot tell them apart: there a socket file
+  in the way is **`-95`** and left alone, and the flag never unlinks one;
+  remove a file the program knows is its own with `unlinkSync`. The probe is
+  a connection the live listener sees close at once. Between the probe and the
   unlink another process can bind the path, which is why the directory must
   be the program's own ([docs/security/runtime.md](security/runtime.md),
   RT-33).
@@ -7911,7 +7918,9 @@ too. There is no address form: `unixAccept` writes no peer.
   it when the server stops, or let the next start's flag `1` clear it. A
   `unixListen` that fails after its bind closes the socket and unlinks the
   file it made, so no failure leaves a descriptor or a file behind
-  (`net_unix_fds` counts the descriptors around every failure).
+  (`net_unix_fds` counts the descriptors around every failure, a chmod made
+  to fail after the bind among them, and checks that none of the paths it
+  named is left on disk).
 - **Pairs.** `unixSocketPair` makes two sockets already connected to each
   other, which is the way to give a child process, or one side of a program,
   a channel without a name. `NET_UNIX_STREAM` is a byte stream, as a
@@ -7925,9 +7934,15 @@ too. There is no address form: `unixAccept` writes no peer.
 | `NET_UNIX_STREAM` | `1` | `unixSocketPair`'s byte-stream kind |
 | `NET_UNIX_SEQPACKET` | `2` | `unixSocketPair`'s message kind; `-95` on Darwin |
 
-On Darwin the calls are the same C under `#if`, with three differences: no
-abstract names (`-95`), no seqpacket pair (`-95`), and `fcntl` after `accept`
-and `socketpair` where Linux passes `SOCK_NONBLOCK | SOCK_CLOEXEC`. CI does not
+`NET_UNIX_UNLINK_STALE` and `NET_UNIX_STREAM` are both `1`, as
+`NET_TCP_NODELAY` is: the constants are plain `i32`s, so the checker cannot
+tell one passed where another belongs. Name the one the call takes.
+
+On Darwin the calls are the same C under `#if`, with five differences: no
+abstract names (`-95`), no seqpacket pair (`-95`), flag `1` meeting a socket
+file is `-95` rather than a probe, a connect to a full backlog is `-111`
+rather than `-11`, and `fcntl` after `accept` and `socketpair` where Linux
+passes `SOCK_NONBLOCK | SOCK_CLOEXEC`. CI does not
 run them on a mac yet.
 
 #### Bounds
@@ -9577,7 +9592,13 @@ entry:
   child must load its binary and libraries, so a program that reaches
   `process.spawn` can read any file the user can whether or not it reaches
   `fs.read`. Without `net`, `socket`, `socketpair`, `connect`,
-  `bind`, `listen`, `accept` and `accept4` kill it. `ffi`, `unsafe`, `tty`,
+  `bind`, `listen`, `accept` and `accept4` kill it. With `net` but without
+  `fs.write`, a pathname `unixListen` or `unixListenMode` is **`-13`**:
+  Landlock counts making the socket file as a write (`MAKE_SOCK`), while an
+  abstract name binds. Landlock has no right for connecting to a pathname
+  socket, so `net` alone still lets `unixConnect` reach any pathname
+  listener whose file and directories the user may reach; only abstract
+  names outside the sandbox are scoped, from ABI 6. `ffi`, `unsafe`, `tty`,
   `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing of their
   own; the ABI 6 scopes under **Always** apply whatever `main` reaches.
 - **The CPU count.** Before it confines anything, `nish_sandbox` reads the

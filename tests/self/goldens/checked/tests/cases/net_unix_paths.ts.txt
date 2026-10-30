@@ -13,6 +13,14 @@ function modeOf(path: string): i32 -> @modeOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
+function sizeOf(path: string): i32 -> @sizeOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function listenedFirst(): i32 -> @listenedFirst
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
 function fresh(name: string): string -> @fresh
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_unlink
@@ -28,7 +36,7 @@ function longPath(n: i32): string -> @longPath
 function run(): i32 -> @run [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via fresh
-  calls: fresh longPath modeOf nish_arena_mark nish_arena_release nish_net_close nish_panic nish_print nish_str_concat nish_str_from_i32 nish_str_index_of nish_unix_connect nish_unix_listen nish_unix_listen_mode nish_unlink nish_write_file
+  calls: fresh listenedFirst longPath modeOf nish_arena_mark nish_arena_release nish_net_close nish_panic nish_print nish_str_concat nish_str_from_i32 nish_str_index_of nish_unix_connect nish_unix_listen nish_unix_listen_mode nish_unlink nish_write_file sizeOf
   stackSites=0 stackLocals=0
   local +0:9 plain: string (const)
   callee +0:17 fresh -> @fresh
@@ -45,7 +53,7 @@ function run(): i32 -> @run [exported]
   local +20:9 peer: i32 (const)
   local +26:9 regular: string (const)
   callee +26:19 fresh -> @fresh
-  callee +28:86 modeOf -> @modeOf
+  callee +28:86 sizeOf -> @sizeOf
   local +31:9 missing: string (const)
   callee +31:19 fresh -> @fresh
   local +33:9 fits: string (const)
@@ -56,3 +64,5 @@ function run(): i32 -> @run [exported]
   callee +39:16 longPath -> @longPath
   callee +40:59 modeOf -> @modeOf
   callee +41:70 modeOf -> @modeOf
+  callee +42:34 modeOf -> @modeOf
+  callee +43:37 listenedFirst -> @listenedFirst

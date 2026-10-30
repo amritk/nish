@@ -106,6 +106,8 @@ static int32_t nish_net_err(int e) {
   if (e == ECONNREFUSED) return -111;
   if (e == ETIMEDOUT) return -110;
   if (e == ENOTSOCK) return -88;
+  if (e == ENAMETOOLONG) return -36;
+  if (e == ELOOP) return -40;
 #endif
   return -e;
 }
@@ -730,17 +732,25 @@ static int32_t nish_unix_addr(const nish_str *path, struct sockaddr_un *s, sockl
    -98. The probe is a connection the live listener sees and that closes at
    once. Between the probe and the unlink another process may bind the path,
    and that file is the one unlinked: the socket's directory is the trust
-   boundary (RT-33). */
+   boundary (RT-33). Darwin refuses a connect to a listener whose backlog is
+   full with the same `ECONNREFUSED` as one to a dead file, so the probe
+   cannot tell them apart there, and a socket file in the way is -95 and left
+   alone: the flag never removes a live listener's file. */
 static int32_t nish_unix_stale(const struct sockaddr_un *s, socklen_t n) {
   struct stat st;
   if (lstat(s->sun_path, &st) != 0) return errno == ENOENT ? 0 : nish_net_fail();
   if (!S_ISSOCK(st.st_mode)) return -17;
+#if !defined(__linux__)
+  (void)n;
+  return -95;
+#else
   int probe = nish_net_socket(AF_UNIX, SOCK_STREAM);
   if (probe < 0) return nish_net_fail();
   int e = connect(probe, (const struct sockaddr *)s, n) == 0 ? 0 : errno;
   close(probe);
   if (e != ECONNREFUSED) return e == 0 || e == EAGAIN || e == EINPROGRESS ? -98 : nish_net_err(e);
   return unlink(s->sun_path) != 0 && errno != ENOENT ? nish_net_fail() : 0;
+#endif
 }
 
 /* A listening Unix stream socket at `path`, or the failure. A path that
@@ -750,7 +760,8 @@ static int32_t nish_unix_stale(const struct sockaddr_un *s, socklen_t n) {
    behind. A pathname socket's file gets `mode` between the bind and the
    listen: a connect needs write permission on it, and until the listen every
    connect is refused, so the umask's mode the bind gave it never admits
-   anyone (RT-34). A failure after the bind closes the socket and unlinks the
+   anyone (RT-34; `tests/cases/net_unix_paths` checks the order under umask
+   0). A failure after the bind closes the socket and unlinks the
    file it made, so no failure leaves a descriptor or a file behind
    (RT-35). */
 static int32_t nish_unix_bound(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode) {
@@ -801,8 +812,9 @@ int32_t nish_unix_listen_mode(const nish_str *path, int32_t backlog, int32_t fla
 
 /* `unixConnect(path)`: a new socket, non-blocking and close-on-exec,
    connecting to the listener at `path`. A Unix connect finishes at once or
-   fails; a full backlog is -11 (Linux's `EAGAIN`) and closes the socket, so
-   the caller tries again later. `EINPROGRESS` is answered as `tcpConnect`
+   fails; a full backlog is -11 on Linux (`EAGAIN`) and -111 on Darwin, which
+   answers it as it answers a dead file, and either closes the socket, so the
+   caller tries again later. `EINPROGRESS` is answered as `tcpConnect`
    answers it: the descriptor, with `connectResult` to say how it went once it
    is writable. Any other failure closes the socket and is answered. */
 int32_t nish_unix_connect(const nish_str *path) {

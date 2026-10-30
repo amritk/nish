@@ -11056,31 +11056,33 @@ if (!only || "sandbox".includes(only)) {
       // alone, abstract names work and a pathname bind is -13, since Landlock
       // counts making the socket file as a write; granted `fs.write` too, it
       // binds. On ABI 6 a connect to an abstract listener outside the sandbox
-      // is -1, the scope's EPERM. The listener outside is the same fixture
-      // built without the sandbox, waiting in `pollWait` until it is killed.
+      // is -1, the scope's EPERM; below it the connect goes through. The
+      // listener outside is the same fixture built without the sandbox,
+      // waiting in `pollWait` until it is killed, under a name with this
+      // run's pid, and the check needs it seen in /proc/net/unix first.
       const unixBuild = (name, fixture, flags) =>
         build(name, `../net_unix_sandbox/${fixture}`, flags, { driver: null })
       const serveExe = unixBuild("unix-net-plain", "net", [])
       const netExe = unixBuild("unix-net-sandbox", "net", ["--sandbox"])
       const writeExe = unixBuild("unix-write-sandbox", "write", ["--sandbox"])
-      const server = serveExe !== null ? spawn(serveExe, ["serve"], { stdio: "ignore" }) : null
-      const outside = "@nish-net-unix-sandbox-outside"
+      const outside = `@nish-net-unix-sandbox-outside-${process.pid}`
+      const server = serveExe !== null ? spawn(serveExe, ["serve", outside], { stdio: "ignore" }) : null
       const pause = new Int32Array(new SharedArrayBuffer(4))
-      for (let k = 0; k < 200 && server !== null; k++) {
-        if (fs.readFileSync("/proc/net/unix", "utf8").includes(outside)) break
-        Atomics.wait(pause, 0, 0, 50)
+      let serving = false
+      for (let k = 0; k < 200 && server !== null && !serving; k++) {
+        serving = fs.readFileSync("/proc/net/unix", "utf8").includes(outside)
+        if (!serving) Atomics.wait(pause, 0, 0, 50)
       }
-      const unixNet = run(netExe, ["probe"])
+      const unixNet = run(netExe, ["probe", outside])
       if (server !== null) server.kill()
       check(
-        `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13${abi >= 6 ? ", and an abstract listener outside is -1" : ""}`,
-        unixNet !== null &&
+        `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13, and an abstract listener outside is ${abi >= 6 ? "-1" : "reached (ABI <6)"}`,
+        serving &&
+          unixNet !== null &&
           unixNet.status === 0 &&
-          (abi >= 6
-            ? unixNet.stdout === "abstract true true\npathname -13\noutside -1\n"
-            : /^abstract true true\npathname -13\noutside \d+\n$/.test(unixNet.stdout)) &&
+          unixNet.stdout === `abstract true true\npathname -13\noutside ${abi >= 6 ? "-1" : "connected"}\n` &&
           !fs.existsSync(path.join(W, "net.sock")),
-        said(unixNet)
+        `listener outside seen: ${serving}\n${said(unixNet)}`
       )
       const unixWrite = run(writeExe, [])
       check(

@@ -70,7 +70,13 @@ export const main = (): i32 => {
 ```
 
 macOS has no abstract namespace: a name starting with `@` answers `-95`
-there, so a program meant for both uses a path.
+there, so a program meant for both uses a path. A socket file whose name
+starts with `@` is spelled `./@name`.
+
+The flags and the kinds are small numbers that other `nish:net` constants
+share: `NET_UNIX_UNLINK_STALE` and `NET_UNIX_STREAM` are both `1`, the same
+as `NET_TCP_NODELAY`, so the compiler cannot catch one passed for another.
+Name the constant the call documents.
 
 ## The socket file
 
@@ -86,13 +92,17 @@ once the server stops.
   crashed is the usual case: pass `NET_UNIX_UNLINK_STALE` as the flags, and
   `unixListen` removes a socket file nobody listens on and binds again. A
   live listener's file is still `-98`, and anything that is not a socket,
-  such as a regular file, is `-17` and left alone.
+  such as a regular file, is `-17` and left alone. On macOS the flag answers
+  `-95` once it meets a socket file: there a listener whose backlog is full
+  refuses a connect just as a dead file does, so the runtime cannot tell
+  them apart and removes nothing.
 - **The directory is what protects it.** Whoever can write the socket's
   directory can replace the file, so put it in a directory only its owner can
   write, such as `$XDG_RUNTIME_DIR`.
 - **Length.** A path longer than the kernel's limit, 107 bytes on Linux and
-  103 on macOS, answers `-36`. A relative path is short; it is resolved from
-  the working directory.
+  103 on macOS, answers `-36`. The limit is on the path as written, so a
+  relative path counts only its own bytes; it is resolved from the working
+  directory.
 
 ```ts nish:ok
 import { NET_UNIX_UNLINK_STALE, netClose, unixListenMode } from "nish:net";

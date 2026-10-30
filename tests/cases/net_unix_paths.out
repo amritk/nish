@@ -8,8 +8,10 @@ dead default -98
 dead stale true mode 600
 mode 0660 true mode 660
 connect true
-regular stale -17 mode 644
+regular stale -17 size 4
 missing connect -2
 107 bytes true mode 600
 108 bytes -36 mode -1
 108 bytes -36 mode -1
+107 bytes after -1
+chmod after listen 0

@@ -184,6 +184,15 @@ recorded rather than counted.
   call and does not infer `fs.write`, since the path is data; a program that
   listens on a path asks for both, or uses an abstract name. Pinned by the
   two `sandbox: granted net …` checks in `tests/run.js`.
+- **A pathname Unix connect is not confined.** Landlock has no right for
+  connecting to a pathname socket, on any ABI, and the abstract-socket scope
+  covers abstract names only. A sandboxed program granted `net` can therefore
+  `unixConnect` to any pathname listener outside the sandbox whose file it
+  may write and whose directories it may search, such as a system daemon's
+  socket; `fs.read` and `fs.write` do not govern it. Recorded open: what
+  bounds it is the socket file's mode and its directory's, which the listener
+  sets, and a program that must not reach a host's daemons should not be
+  granted `net`. Not pinned by a test.
 - **Non-Linux.** Both symbols print `nish: --sandbox: this platform has no
   sandbox` and exit 126, so a `.ll` built for Linux and linked elsewhere
   refuses to run rather than run unconfined.

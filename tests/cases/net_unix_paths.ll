@@ -23,13 +23,19 @@
 @.str.19 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"nup-regular.sock\00" }, align 8
 @.str.20 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"keep\00" }, align 8
 @.str.21 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"regular stale \00" }, align 8
-@.str.22 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"nup-missing.sock\00" }, align 8
-@.str.23 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"missing connect \00" }, align 8
-@.str.24 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"107 bytes \00" }, align 8
-@.str.25 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"108 bytes \00" }, align 8
+@.str.22 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c" size \00" }, align 8
+@.str.23 = private unnamed_addr constant { i64, [90 x i8] } { i64 89, [90 x i8] c"`sizeOf`: argument 1 (path) holds a NUL byte, which C would read as the end of the string\00" }, align 8
+@.str.24 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"nup-missing.sock\00" }, align 8
+@.str.25 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"missing connect \00" }, align 8
+@.str.26 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"107 bytes \00" }, align 8
+@.str.27 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"108 bytes \00" }, align 8
+@.str.28 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"107 bytes after \00" }, align 8
+@.str.29 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"chmod after listen \00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare i32 @modeOf(i8*)
+declare i32 @sizeOf(i8*)
+declare i32 @listenedFirst()
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noundef i64 @nish_arena_mark() #1
@@ -391,32 +397,32 @@ ffi.ok.3:
   %102 = call i32 @nish_unix_listen(i8* %101, i32 4, i32 1)
   %103 = call i8* @nish_str_from_i32(i32 %102)
   %104 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.21 to i8*), i8* %103)
-  %105 = call i8* @nish_str_concat(i8* %104, i8* bitcast ({ i64, [7 x i8] }* @.str.7 to i8*))
+  %105 = call i8* @nish_str_concat(i8* %104, i8* bitcast ({ i64, [7 x i8] }* @.str.22 to i8*))
   %106 = load i8*, i8** %regular.addr, align 8
   %107 = call i64 @nish_str_index_of(i8* %106, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
   %108 = icmp sge i64 %107, 0
   br i1 %108, label %ffi.nul.4, label %ffi.ok.4
 
 ffi.nul.4:
-  call void @nish_panic(i8* bitcast ({ i64, [90 x i8] }* @.str.9 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [90 x i8] }* @.str.23 to i8*))
   unreachable
 
 ffi.ok.4:
   %109 = getelementptr inbounds i8, i8* %106, i64 8
-  %110 = call i32 @modeOf(i8* %109)
+  %110 = call i32 @sizeOf(i8* %109)
   %111 = call i8* @nish_str_from_i32(i32 %110)
   %112 = call i8* @nish_str_concat(i8* %105, i8* %111)
   call void @nish_print(i8* %112)
   %113 = load i8*, i8** %regular.addr, align 8
   %114 = call i32 @nish_unlink(i8* %113)
   %115 = call i64 @nish_arena_mark()
-  %116 = call i8* @fresh(i8* bitcast ({ i64, [17 x i8] }* @.str.22 to i8*))
+  %116 = call i8* @fresh(i8* bitcast ({ i64, [17 x i8] }* @.str.24 to i8*))
   %117 = call i8* @nish_arena_keep(i64 %115, i8* %116)
   store i8* %117, i8** %missing.addr, align 8
   %118 = load i8*, i8** %missing.addr, align 8
   %119 = call i32 @nish_unix_connect(i8* %118)
   %120 = call i8* @nish_str_from_i32(i32 %119)
-  %121 = call i8* @nish_str_concat(i8* bitcast ({ i64, [17 x i8] }* @.str.23 to i8*), i8* %120)
+  %121 = call i8* @nish_str_concat(i8* bitcast ({ i64, [17 x i8] }* @.str.25 to i8*), i8* %120)
   call void @nish_print(i8* %121)
   %122 = call i64 @nish_arena_mark()
   %123 = call i8* @longPath(i32 107)
@@ -430,7 +436,7 @@ ffi.ok.4:
   %129 = load i32, i32* %edge.addr, align 4
   %130 = icmp sge i32 %129, 0
   %131 = select i1 %130, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
-  %132 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.24 to i8*), i8* %131)
+  %132 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.26 to i8*), i8* %131)
   %133 = call i8* @nish_str_concat(i8* %132, i8* bitcast ({ i64, [7 x i8] }* @.str.7 to i8*))
   %134 = load i8*, i8** %fits.addr, align 8
   %135 = call i64 @nish_str_index_of(i8* %134, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
@@ -458,7 +464,7 @@ ffi.ok.5:
   %148 = load i8*, i8** %long.addr, align 8
   %149 = call i32 @nish_unix_listen(i8* %148, i32 4, i32 0)
   %150 = call i8* @nish_str_from_i32(i32 %149)
-  %151 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.25 to i8*), i8* %150)
+  %151 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.27 to i8*), i8* %150)
   %152 = call i8* @nish_str_concat(i8* %151, i8* bitcast ({ i64, [7 x i8] }* @.str.7 to i8*))
   %153 = load i8*, i8** %long.addr, align 8
   %154 = call i64 @nish_str_index_of(i8* %153, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
@@ -478,7 +484,7 @@ ffi.ok.6:
   %160 = load i8*, i8** %long.addr, align 8
   %161 = call i32 @nish_unix_listen_mode(i8* %160, i32 4, i32 0, i32 384)
   %162 = call i8* @nish_str_from_i32(i32 %161)
-  %163 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.25 to i8*), i8* %162)
+  %163 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.27 to i8*), i8* %162)
   %164 = call i8* @nish_str_concat(i8* %163, i8* bitcast ({ i64, [7 x i8] }* @.str.7 to i8*))
   %165 = load i8*, i8** %long.addr, align 8
   %166 = call i64 @nish_str_index_of(i8* %165, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
@@ -495,6 +501,25 @@ ffi.ok.7:
   %170 = call i8* @nish_str_from_i32(i32 %169)
   %171 = call i8* @nish_str_concat(i8* %164, i8* %170)
   call void @nish_print(i8* %171)
+  %172 = load i8*, i8** %fits.addr, align 8
+  %173 = call i64 @nish_str_index_of(i8* %172, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
+  %174 = icmp sge i64 %173, 0
+  br i1 %174, label %ffi.nul.8, label %ffi.ok.8
+
+ffi.nul.8:
+  call void @nish_panic(i8* bitcast ({ i64, [90 x i8] }* @.str.9 to i8*))
+  unreachable
+
+ffi.ok.8:
+  %175 = getelementptr inbounds i8, i8* %172, i64 8
+  %176 = call i32 @modeOf(i8* %175)
+  %177 = call i8* @nish_str_from_i32(i32 %176)
+  %178 = call i8* @nish_str_concat(i8* bitcast ({ i64, [17 x i8] }* @.str.28 to i8*), i8* %177)
+  call void @nish_print(i8* %178)
+  %179 = call i32 @listenedFirst()
+  %180 = call i8* @nish_str_from_i32(i32 %179)
+  %181 = call i8* @nish_str_concat(i8* bitcast ({ i64, [20 x i8] }* @.str.29 to i8*), i8* %180)
+  call void @nish_print(i8* %181)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

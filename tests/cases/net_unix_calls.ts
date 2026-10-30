@@ -7,7 +7,11 @@
 // word past 1, an unknown pair kind and a pair array shorter than 2; -36 for a
 // name past `sun_path`; -98 for a second listener on a name in use; -111 from
 // a connect to a name nobody listens on; -22 from `unixListenMode` on an
-// abstract name, which has no file to give a mode to.
+// abstract name, which has no file to give a mode to. Every name carries the
+// monotonic clock's reading at the start, so two runs at once on one machine
+// do not meet in the namespace, which is shared by the whole network
+// namespace.
+import { monotonicNanos } from "nish:process";
 import {
   NET_UNIX_SEQPACKET,
   NET_UNIX_STREAM,
@@ -25,7 +29,6 @@ import {
   unixSocketPair,
 } from "nish:net";
 
-const NAME: string = "@nish-net-unix-calls";
 
 /** The bytes of `s`, one per character. */
 const bytesOf = (s: string): u8[] => {
@@ -36,10 +39,10 @@ const bytesOf = (s: string): u8[] => {
   return out;
 };
 
-/** "@" and then `n` letters, an abstract name of `n + 1` bytes. */
-const abstract = (n: i32): string => {
-  const parts: string[] = ["@"];
-  for (let i = 0; i < n; i++) {
+/** "@", `tag` and then letters, an abstract name of `n + 1` bytes. */
+const abstract = (tag: string, n: i32): string => {
+  const parts: string[] = ["@", tag];
+  for (let i = tag.length; i < n; i++) {
     parts.push("n");
   }
   return parts.join("");
@@ -65,6 +68,8 @@ const send = (fd: i32, s: string): i32 => {
 
 export const main = (): number => {
   const buf: u8[] = new Array<u8>(64);
+  const tag = `nish-net-unix-calls-${monotonicNanos()}`;
+  const NAME = `@${tag}`;
 
   const listener = unixListen(NAME, 4, 0);
   console.log(listener >= 0);
@@ -117,10 +122,10 @@ export const main = (): number => {
   console.log(unixSocketPair(3, pair));
   console.log(unixSocketPair(0, pair));
   console.log(unixSocketPair(NET_UNIX_STREAM, new Array<i32>(1)));
-  console.log(unixListen(abstract(107), 4, 0) >= 0);
-  console.log(unixListen(abstract(108), 4, 0));
-  console.log(unixConnect(abstract(108)));
-  console.log(unixConnect("@nish-net-unix-nobody"));
+  console.log(unixListen(abstract(tag, 107), 4, 0) >= 0);
+  console.log(unixListen(abstract(tag, 108), 4, 0));
+  console.log(unixConnect(abstract(tag, 108)));
+  console.log(unixConnect(`@${tag}-nobody`));
   console.log(unixListenMode(NAME, 4, 0, 0o600));
   console.log(unixListenMode("build/test/x.sock", 4, 0, 0o1000));
   return 0;

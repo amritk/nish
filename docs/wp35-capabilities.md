@@ -66,7 +66,7 @@ labelled apart.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `mkdirSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` |
 | `process.spawn` | `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `kill`, `waitPid` |
-| `net` | every `nish:net` export: `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` |
+| `net` | every `nish:net` export: `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair` |
 | `env` | `getenv`, `geteuid` |
 | `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` |
 | `entropy` | `crypto.getRandomValues`, `Math.random` |
