@@ -2790,11 +2790,16 @@ if (!only || "net_unix".includes(only)) {
   const kindsEntry = path.join(unixDir, "unix-kinds.ts")
   fs.writeFileSync(
     kindsEntry,
-    "export const main = (): number => " +
-      "NET_UNIX_UNLINK_STALE * 100 + NET_UNIX_STREAM * 10 + NET_UNIX_SEQPACKET === 112 ? 0 : 1;\n"
+    "export const main = (): number => {\n" +
+      "  console.log(`${NET_UNIX_UNLINK_STALE} ${NET_UNIX_STREAM} ${NET_UNIX_SEQPACKET}`);\n" +
+      "  return 0;\n};\n"
   )
   const kinds = runUnderPrelude(kindsEntry, [])
-  check("net_unix: under the prelude the flag and the pair kinds read 1, 1 and 2, as natively", kinds.status === 0, shown(kinds))
+  check(
+    "net_unix: under the prelude the flag and the pair kinds read 1, 1 and 2, as natively",
+    kinds.status === 0 && kinds.stdout === "1 1 2\n",
+    shown(kinds)
+  )
   const calls = [
     ["unixListen", 'unixListen("@nish", 4, 0)'],
     ["unixListenMode", 'unixListenMode("nish.sock", 4, 0, 384)'],
@@ -11053,26 +11058,19 @@ if (!only || "sandbox".includes(only)) {
       // binds. On ABI 6 a connect to an abstract listener outside the sandbox
       // is -1, the scope's EPERM. The listener outside is the same fixture
       // built without the sandbox, waiting in `pollWait` until it is killed.
-      const unixDir = path.join(linkDir, "net_unix_sandbox")
-      const unixBuild = (name, flags) => {
-        const ll = path.join(dir, `${name}.ll`)
-        const exe = path.join(dir, name)
-        const c = spawnSync(NISH, [path.join(unixDir, `${name.split("-")[0]}.ts`), ...flags, "-o", ll], {
-          cwd: root,
-          encoding: "utf8",
-        })
-        const l = c.status === 0 ? linkNative(exe, ll) : c
-        if (l.status !== 0) check(`sandbox: net_unix_sandbox/${name} compiles and links`, false, shown(l))
-        return l.status === 0 ? exe : null
-      }
-      const serveExe = unixBuild("net-plain", [])
+      const unixBuild = (name, fixture, flags) =>
+        build(name, `../net_unix_sandbox/${fixture}`, flags, { driver: null })
+      const serveExe = unixBuild("unix-net-plain", "net", [])
+      const netExe = unixBuild("unix-net-sandbox", "net", ["--sandbox"])
+      const writeExe = unixBuild("unix-write-sandbox", "write", ["--sandbox"])
       const server = serveExe !== null ? spawn(serveExe, ["serve"], { stdio: "ignore" }) : null
       const outside = "@nish-net-unix-sandbox-outside"
+      const pause = new Int32Array(new SharedArrayBuffer(4))
       for (let k = 0; k < 200 && server !== null; k++) {
         if (fs.readFileSync("/proc/net/unix", "utf8").includes(outside)) break
-        spawnSync("sleep", ["0.05"])
+        Atomics.wait(pause, 0, 0, 50)
       }
-      const unixNet = run(unixBuild("net-sandbox", ["--sandbox"]), ["probe"])
+      const unixNet = run(netExe, ["probe"])
       if (server !== null) server.kill()
       check(
         `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13${abi >= 6 ? ", and an abstract listener outside is -1" : ""}`,
@@ -11084,7 +11082,7 @@ if (!only || "sandbox".includes(only)) {
           !fs.existsSync(path.join(W, "net.sock")),
         said(unixNet)
       )
-      const unixWrite = run(unixBuild("write-sandbox", ["--sandbox"]), [])
+      const unixWrite = run(writeExe, [])
       check(
         "sandbox: granted net and fs.write, a pathname Unix listener binds and is unlinked",
         unixWrite !== null &&

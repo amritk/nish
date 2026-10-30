@@ -698,11 +698,10 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
    An empty path or one with a NUL inside is -22, and so is a bare `@`. A path
    too long for `sun_path` with its NUL is -36: the kernel would cut it short
    or refuse it, and a cut one binds a file the program never named
-   (docs/security/runtime.md, RT-32). A
-   leading `@` is Linux's abstract namespace: the rest, at most
-   `sizeof sun_path - 1` bytes, follows a NUL, and the length is exact,
-   because the name is every byte the length covers. Darwin has no abstract
-   namespace, so there `@` is -95. */
+   (docs/security/runtime.md, RT-32). A leading `@` is Linux's abstract
+   namespace: the rest, at most `sizeof sun_path - 1` bytes, follows a NUL,
+   and the length is exact, because the name is every byte the length covers.
+   Darwin has no abstract namespace, so there `@` is -95. */
 static int32_t nish_unix_addr(const nish_str *path, struct sockaddr_un *s, socklen_t *n) {
   const char *p = path->data;
   uint64_t len = path->len;
@@ -760,7 +759,6 @@ static int32_t nish_unix_bound(const nish_str *path, int32_t backlog, int32_t fl
   socklen_t n;
   int32_t abstract = nish_unix_addr(path, &s, &n);
   if (abstract < 0) return abstract;
-  if (abstract && mode != 0600) return -22;
   int fd = nish_net_socket(AF_UNIX, SOCK_STREAM);
   if (fd < 0) return nish_net_fail();
   int bound = bind(fd, (struct sockaddr *)&s, n);
