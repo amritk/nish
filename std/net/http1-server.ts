@@ -1271,8 +1271,9 @@ export class Http1Connection {
    * included, it takes fewer segments of `mss` bytes (this connection's, or
    * `enc.mss`) than the body as it is, and a response that fits one segment
    * as it is goes so without compressing (`enc.oneSegment`); `enc.decision`
-   * says what was chosen. A request that refuses identity (`identityRefused`) is sent gzip whatever
-   * the length, the saving or the segments (`enc.compressAnyway`).
+   * says what was chosen. A request that refuses identity (`identityRefused`)
+   * is sent gzip whatever the length, the saving or the segments
+   * (`enc.compressAnyway`).
    * The program's fields may not name `Content-Encoding` or, with
    * `enc.vary`, `Vary`. The whole response is written or none of
    * it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says
