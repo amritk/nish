@@ -14026,6 +14026,48 @@ if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includ
   }
 }
 
+// The single path's half-rounds keep `x ^ P[n]` off the critical path
+// (std/crypto/bcrypt.ts, `bcryptBody`; docs/security/crypto-bcrypt.md,
+// "Speed"): it sits behind the value barrier as `ctSelect(0xffffffff, x ^ P[n],
+// 0)`, and after `opt -O3`, which unrolls the 16 half-rounds as the speed
+// profile's `-O3` does, each still ends in one XOR of `F(y)` with an `and` of
+// the barrier's answer: 16 of them, from one hoisted barrier. A plain
+// `x ^ P[n] ^ F(y)` leaves no barrier and no such `and`, so the count is 0.
+if (!only || ["bcrypt barrier", "crypto_bcrypt"].some((name) => name.includes(only))) {
+  if (!HAS_OPT) {
+    skip("bcrypt barrier: no opt, so nothing shows the barrier keeps P off bcryptBody's critical path")
+  } else {
+    const dir = path.join(buildDir, "bcrypt-barrier")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(NISH, [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const o =
+      c.status === 0
+        ? spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "bcrypt.ll")], {
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+          })
+        : c
+    const body = String(o.stdout).match(/^define [^\n]*@nish\.bcryptBody\([\s\S]*?\n\}/m)?.[0] ?? ""
+    const hidden = new Set([...body.matchAll(/(%[\w.]+) = (?:tail )?call i32 asm ""/g)].map((m) => m[1]))
+    const masked = new Set(
+      [...body.matchAll(/(%[\w.]+) = and i32 (%[\w.]+), (%[\w.]+)/g)]
+        .filter((m) => hidden.has(m[2]) || hidden.has(m[3]))
+        .map((m) => m[1])
+    )
+    const closing = [...body.matchAll(/= xor i32 (%[\w.]+), (%[\w.]+)/g)].filter(
+      (m) => masked.has(m[1]) || masked.has(m[2])
+    ).length
+    check(
+      `bcrypt barrier: after opt -O3 all 16 of bcryptBody's half-rounds end in one XOR with the barrier's \`and\` (${closing})`,
+      o.status === 0 && closing === 16,
+      o.status !== 0 ? o.stderr : body
+    )
+  }
+}
+
 // The bcrypt vectors of tests/link/crypto_bcrypt, and the four-lane batch of
 // tests/link/crypto_bcrypt_batch, as `--profile wasi` modules under Node's
 // WASI: both are pure, so they build for wasm32 and answer every case there as

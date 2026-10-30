@@ -380,12 +380,13 @@ const bcryptEncrypt = (st: u32[], lr: u32[]): void => {
     const lb: i32 = toI32(l >>> 16) & 0xff
     const lc: i32 = toI32(l >>> 8) & 0xff
     const ld: i32 = toI32(l) & 0xff
-    r ^= st[n] ^ (((st[18 + la] + st[274 + lb]) ^ st[530 + lc]) + st[786 + ld])
+    r = ctSelect(0xffffffff, r ^ st[n], 0) ^ (((st[18 + la] + st[274 + lb]) ^ st[530 + lc]) + st[786 + ld])
     const ra: i32 = toI32(r >>> 24) & 0xff
     const rb: i32 = toI32(r >>> 16) & 0xff
     const rc: i32 = toI32(r >>> 8) & 0xff
     const rd: i32 = toI32(r) & 0xff
-    l ^= st[n + 1] ^ (((st[18 + ra] + st[274 + rb]) ^ st[530 + rc]) + st[786 + rd])
+    l =
+      ctSelect(0xffffffff, l ^ st[n + 1], 0) ^ (((st[18 + ra] + st[274 + rb]) ^ st[530 + rc]) + st[786 + rd])
   }
   lr[0] = r ^ st[17]
   lr[1] = l
@@ -395,6 +396,15 @@ const bcryptEncrypt = (st: u32[], lr: u32[]): void => {
  * `BF_body`: encrypt the zero block, then each result in turn, writing the
  * pairs over the whole state, P first and then the S-boxes. The hot loop:
  * 2^(cost+1) calls of 521 blocks each.
+ *
+ * Each half-round is `x ^ P[n] ^ F(y)`, and only `F(y)` waits on the previous
+ * one, so `x ^ P[n]` belongs off the critical path with one XOR after the last
+ * S-box add. Written plainly, LLVM's Reassociate and InstCombine put `P[n]`
+ * after `F(y)` in 15 of 16 half-rounds, two dependent XORs instead of one
+ * (docs/security/crypto-bcrypt.md, "Speed"). `ctSelect` with an all-ones mask
+ * is `x ^ P[n]` itself, but behind the value barrier the mask is opaque, so the
+ * `and` it leaves cannot be reassociated into the XOR chain: the half-round
+ * keeps the order written, for one hoisted barrier and an `and` off the path.
  */
 const bcryptBody = (st: u32[]): void => {
   if (st.length < 1042) {
@@ -409,12 +419,14 @@ const bcryptBody = (st: u32[]): void => {
       const lb: i32 = toI32(l >>> 16) & 0xff
       const lc: i32 = toI32(l >>> 8) & 0xff
       const ld: i32 = toI32(l) & 0xff
-      r ^= st[n] ^ (((st[18 + la] + st[274 + lb]) ^ st[530 + lc]) + st[786 + ld])
+      r = ctSelect(0xffffffff, r ^ st[n], 0) ^ (((st[18 + la] + st[274 + lb]) ^ st[530 + lc]) + st[786 + ld])
       const ra: i32 = toI32(r >>> 24) & 0xff
       const rb: i32 = toI32(r >>> 16) & 0xff
       const rc: i32 = toI32(r >>> 8) & 0xff
       const rd: i32 = toI32(r) & 0xff
-      l ^= st[n + 1] ^ (((st[18 + ra] + st[274 + rb]) ^ st[530 + rc]) + st[786 + rd])
+      l =
+        ctSelect(0xffffffff, l ^ st[n + 1], 0) ^
+        (((st[18 + ra] + st[274 + rb]) ^ st[530 + rc]) + st[786 + rd])
     }
     const t: u32 = r
     r = l
