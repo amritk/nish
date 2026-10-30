@@ -1259,7 +1259,8 @@ export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): 
   const slot = elementPointer(emitter, base, lane, idx)
   const ty = emitter.llvm(vector)
   const ptr = fn.emitValue(`bitcast ${slotType(emitter, lane)}* ${slot} to ${ty}*`)
-  const align = emitter.opts.optimizeAttributes ? `, align ${emitter.table.alignOf(lane)}` : ""
+  // Always stated: without it the access would claim the vector's sixteen.
+  const align = `, align ${emitter.table.alignOf(lane)}`
   if (store) {
     fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${align}`)
     return "void"

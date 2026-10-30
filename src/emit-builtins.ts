@@ -1164,16 +1164,13 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_panic_index")
     return out
   }
-  if (
-    name === "extract" ||
-    name === "replace" ||
-    name === "u8x16" ||
-    name === "u16x8" ||
-    name === "i32x4" ||
-    name === "u32x4" ||
-    name === "f32x4" ||
-    name === "f64x2"
-  ) {
+  if (name === "extract" || name === "replace") {
+    return out
+  }
+  if (name === "u8x16" || name === "u16x8" || name === "i32x4") {
+    return out
+  }
+  if (name === "u32x4" || name === "f32x4" || name === "f64x2") {
     return out
   }
   if (isSimdExport(name)) {

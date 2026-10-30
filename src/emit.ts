@@ -1860,7 +1860,12 @@ export class Emitter {
    * (`nish_alloc_struct`), so no access claims more than 8.
    */
   align(type: i32): i32 {
-    return this.opts.optimizeAttributes ? accessAlign(this.table.alignOf(type)) : 0
+    // A vector's ABI alignment is sixteen, more than an arena block promises,
+    // so its accesses state their alignment even with the attributes off.
+    if (this.opts.optimizeAttributes || this.table.isVector(type)) {
+      return accessAlign(this.table.alignOf(type))
+    }
+    return 0
   }
 
   alignSuffix(type: i32): string {
