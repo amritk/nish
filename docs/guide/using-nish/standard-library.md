@@ -269,8 +269,10 @@ range at byte 1`), as it is in JavaScript.
 The property and folding tables add about 80 KB to every program that
 imports `nish/regex`, whether or not it uses `\p{…}` or `i`: a pattern is
 read at run time, so the tables cannot be left out. Compiling a pattern
-whose `i` class or character folds a letter outside ASCII reads the folding
-table once for that pattern, about 50 µs; other patterns never read it.
+whose `i` class or character folds a letter outside ASCII looks each such
+letter up in the folding table where it lies, through an index of every
+sixteenth entry, so nothing is decoded ahead of time: a single `é` adds about
+0.2 µs to the compile. Other patterns never read the table.
 
 Matching never backtracks, so a pattern cannot make one search slow:
 `(a+)+$` against a long run of `a`s takes as long as `a+$`. The price is
@@ -283,7 +285,11 @@ ranges to its classes. Offsets are UTF-8 bytes, as `s.length` is, and `\w`,
 `\d` and `\b` are ASCII, as they are in JavaScript. The `i` flag folds every
 letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
 `Σ` and `ς`. One difference from JavaScript: no letter outside ASCII folds to
-one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`.
+one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`,
+nor `[a-z]`, `\p{Lu}` or `\p{Ll}`. That keeps an ASCII pattern under `i`
+ASCII: it folds `A`–`Z` to `a`–`z` with no table, and its search, its
+vectorised prefix scan included, never has to look for those two letters'
+three-byte and two-byte forms.
 Under `i` both still count as word characters to `\w`, `\W`, `\b` and `\B`,
 as they do in JavaScript with `iu`.
 Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in JavaScript:

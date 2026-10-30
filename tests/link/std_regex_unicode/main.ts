@@ -29,6 +29,7 @@ const utf8 = (c: i32): string => {
  * less the surrogates and the four ASCII letters whose folding crosses ASCII.
  */
 const sample = (): string => {
+  // `sample` in scripts/gen-regex-unicode.mjs builds the same text: change both.
   const edges: i32[] = [
     0x323b0, 0x3fffe, 0x3ffff, 0x40000, 0xdfffe, 0xdffff, 0xe01f0, 0xefffe, 0xeffff, 0xf0000, 0xffffd, 0xffffe,
     0xfffff, 0x100000, 0x10fffd, 0x10fffe, 0x10ffff,

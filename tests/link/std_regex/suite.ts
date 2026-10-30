@@ -379,6 +379,20 @@ export const runSuite = (): i32 => {
   // fold to nothing in ASCII, nor k and s to them.
   row(t, "\\u{212a}", "i", "k", "none")
   row(t, "s", "i", "ſ", "none")
+  // Nor does a class or property reach them through the ASCII letter it
+  // holds: JavaScript's `iu` matches all four.
+  row(t, "\\p{Lu}", "iu", "ſ", "none")
+  row(t, "\\p{Ll}", "iu", "\u212a", "none")
+  row(t, "[a-z]", "iu", "\u212a", "none")
+  row(t, "[a-z]", "iu", "ſ", "none")
+  // But both are word characters under `i`, here through the VM, which a
+  // capture sends the pattern to.
+  row(t, "(\\b\\w)", "i", "-\u212a", "1-4|\u212a")
+  row(t, "(\\B\\w)", "i", "ſx", "2-3|x")
+  row(t, "(\\B\\w)", "", "ſx", "none")
+  // `i` without `u` reads the pattern the `u` way too: JavaScript's `i`
+  // matches neither this nor `ß` on `ẞ` above.
+  row(t, "\\w", "i", "ſ", "0-2")
 
   // --- the lazy DFA ----------------------------------------------------------
   // Texts long enough that the match is found by the DFA's table rather than

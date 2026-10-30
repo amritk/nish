@@ -695,22 +695,22 @@ The cases without the Unicode features. Timings this short move by more than any
 
 | Case | Pattern | Instructions a pass, main | Branch / main | Median, main | Median, branch | Time ratio (min / median) | Noise band (median, main / branch) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `literal` | `needle` | 2,287,433 | 1.000x | 8.3 µs | 8.3 µs | 0.999x / 0.997x | 0.1% / 0.7% |
-| `class` | `[0-9]+` | 6,541,349 | 1.005x | 34.3 µs | 30.7 µs | 1.094x / 1.119x | 3.2% / 0.1% |
-| `alternation` | `fox\|dog\|needle\|World` | 9,476,316 | 1.005x | 60.7 µs | 59.9 µs | 1.035x / 1.014x | 3.0% / 0.5% |
-| `group` | `(?:[a-z]+ ){2}[a-z]+` | 34,539,693 | 1.001x | 269.8 µs | 257.4 µs | 1.010x / 1.048x | 1.9% / 4.8% |
-| `anchored` | `^[A-Z][a-z]+` (`m`) | 5,661,809 | 0.998x | 21.1 µs | 20.1 µs | 0.997x / 1.050x | 0.3% / 3.4% |
-| `icase-ascii` | `hello world\|quick` (`i`) | 5,267,624 | 1.002x | 25.0 µs | 24.2 µs | 0.976x / 1.033x | 0.3% / 1.6% |
-| `icase-class` | `[A-Za-z]+` (`i`) | 62,588,112 | 1.005x | 438.0 µs | 432.4 µs | 1.049x / 1.013x | 4.0% / 4.3% |
-| `exec` | `(\w+)@(\w+)\.(com\|org)` | 169,456,575 | 0.927x | 515.8 µs | 530.7 µs | 1.094x / 0.972x | 10.3% / 11.3% |
+| `literal` | `needle` | 2,287,435 | 1.000x | 8.3 µs | 8.3 µs | 0.999x / 0.997x | 0.1% / 0.7% |
+| `class` | `[0-9]+` | 6,541,291 | 1.000x | 34.3 µs | 30.7 µs | 1.094x / 1.119x | 3.2% / 0.1% |
+| `alternation` | `fox\|dog\|needle\|World` | 9,476,271 | 1.000x | 60.7 µs | 59.9 µs | 1.035x / 1.014x | 3.0% / 0.5% |
+| `group` | `(?:[a-z]+ ){2}[a-z]+` | 34,539,670 | 1.000x | 269.8 µs | 257.4 µs | 1.010x / 1.048x | 1.9% / 4.8% |
+| `anchored` | `^[A-Z][a-z]+` (`m`) | 5,661,967 | 0.992x | 21.1 µs | 20.1 µs | 0.997x / 1.050x | 0.3% / 3.4% |
+| `icase-ascii` | `hello world\|quick` (`i`) | 5,267,653 | 1.000x | 25.0 µs | 24.2 µs | 0.976x / 1.033x | 0.3% / 1.6% |
+| `icase-class` | `[A-Za-z]+` (`i`) | 62,588,232 | 1.000x | 438.0 µs | 432.4 µs | 1.049x / 1.013x | 4.0% / 4.3% |
+| `exec` | `(\w+)@(\w+)\.(com\|org)` | 169,456,374 | 0.926x | 515.8 µs | 530.7 µs | 1.094x / 0.972x | 10.3% / 11.3% |
 
-`class`, `alternation` and `icase-class` retire 0.5% more instructions a pass. The match loop they run is unchanged, so this is the compiler laying out the same code differently, and it is below every noise band in the table. `anchored` was 2.6% more until a context read under `i` stopped testing U+017F and U+212A on ASCII bytes.
+The instruction columns are counted against `main` at 1391cf8, whose `src/` this branch's is. Six cases retire main's instructions to within 0.01%. `class`, `alternation` and `icase-class` were 0.5% over until the DFA's two context masks, which gained a sixth slot saying whether U+017F and U+212A are word characters, were sized by a named constant again: sized `CTX_KINDS + 1`, they were no longer a constant length, so they left the `Regex` object for the heap and `dfaForward` paid a pointer load per read. `anchored` was 2.6% over until a context read under `i` stopped testing U+017F and U+212A on ASCII bytes. `exec` retires 7.4% fewer: all of it is in the Pike VM's `addThread`, whose source is main's, where the loops that copy capture slots compile to fewer instructions around the inlined `assertHolds`; no algorithm changed, and its time ratio is inside the band.
 
 Compiling alone: a pass compiles the case's patterns once, 10,000 passes a run. Instructions are per compile, counted the same way between 4,000 and 2,000 passes.
 
 | Case | Patterns | Instructions, main | Branch / main | Median, main | Median, branch | Time ratio (min / median) | Noise band (median, main / branch) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `compile-class` | a large class with non-ASCII letters | 26,785 | 0.991x | 5.0 µs | 5.2 µs | 1.006x / 0.979x | 0.8% / 1.0% |
+| `compile-class` | a large class with non-ASCII letters | 26,785 | 0.990x | 5.0 µs | 5.2 µs | 1.006x / 0.979x | 0.8% / 1.0% |
 | `compile-icase-class` | the same class under `i` | 27,376 | 5.67x | 5.0 µs | 17.1 µs | 0.321x / 0.291x | 3.9% / 9.5% |
 | `compile-nonspace-icase` | `\S+` (`i`) | 16,891 | 0.967x | 3.6 µs | 3.8 µs | 1.016x / 0.944x | 1.3% / 5.1% |
 | `compile-icase-literal` | `é` (`i`) | 3,885 | 1.53x | 1.9 µs | 2.1 µs | 0.951x / 0.893x | 0.8% / 4.7% |

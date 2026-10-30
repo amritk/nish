@@ -1737,6 +1737,8 @@ const CTX_LINE: i32 = 2
 const CTX_OTHER: i32 = 3
 const CTX_EOT: i32 = 4
 const CTX_KINDS: i32 = 5
+// The kinds, then the slot that says whether U+017F and U+212A are word characters.
+const CTX_MASK_LEN: i32 = 6
 const CTX_SLOTS: i32 = 4
 
 /**
@@ -1746,8 +1748,7 @@ const CTX_SLOTS: i32 = 4
  * twice.
  */
 const regexContextMask = (bits: i32): i32[] => {
-  // One slot past the kinds says whether U+017F and U+212A are word characters.
-  const m: i32[] = new Array<i32>(CTX_KINDS + 1)
+  const m: i32[] = new Array<i32>(CTX_MASK_LEN)
   const line: boolean = (bits & (1 << ASSERT_BEGIN_LINE)) !== 0
   if ((bits & (1 << ASSERT_BEGIN_TEXT)) !== 0) {
     m[CTX_START] = CTX_START

@@ -247,6 +247,14 @@ PASS  /Straße/i
 PASS  /日+/i
 PASS  /\u{212a}/i
 PASS  /s/i
+PASS  /\p{Lu}/iu
+PASS  /\p{Ll}/iu
+PASS  /[a-z]/iu
+PASS  /[a-z]/iu
+PASS  /(\b\w)/i
+PASS  /(\B\w)/i
+PASS  /(\B\w)/
+PASS  /\w/i
 PASS  /é+日/
 PASS  /[^a]+z/
 PASS  /\s+x/
@@ -312,4 +320,4 @@ PASS  case folding past 100000 ranges
 PASS  1025 groups
 PASS  500 groups compile
 PASS  a backtrack stack past the slot table
-regex: 314 passed, 0 failed, 0 skipped
+regex: 322 passed, 0 failed, 0 skipped
