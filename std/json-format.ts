@@ -64,7 +64,10 @@
  * allocates nothing and cannot panic. `jsonFormatId` compares the
  * name with up to 15 strings; resolve it once per schema, not per instance.
  * `isRegex` compiles the pattern, which allocates the program `nish/regex`
- * builds and is linear in the pattern's length.
+ * builds. That is not linear in the pattern's length, since a counted repeat
+ * copies its body, but `nish/regex`'s limits bound it: `(a{1000}){100}` is
+ * refused at 100,000 instructions (`REGEX_MAX_INSTRUCTIONS`) or a 4 MiB slot
+ * table, whichever comes first.
  *
  * Offsets are code units: UTF-8 bytes natively and UTF-16 units under Node.
  * The checks answer the same on both, since every non-ASCII character is

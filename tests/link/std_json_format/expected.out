@@ -92,6 +92,11 @@ PASS  regex: a class and a quantifier
 PASS  regex: an unclosed group
 PASS  regex: lookahead is a known false negative
 PASS  regex: a backreference is a known false negative
+PASS  regex: a named backreference is a known false negative
+PASS  regex: negative lookahead is a known false negative
+PASS  regex: lookbehind is a known false negative
+PASS  regex: a lone { is a known false negative
+PASS  regex: a lone ] is a known false negative
 PASS  suite: cases.txt holds all 478 cases
 PASS  suite: date-time 19/19
 PASS  suite: date 41/41
@@ -109,4 +114,4 @@ PASS  suite: iri-reference 7/7
 PASS  suite: uri-template 4/4
 PASS  suite: regex 2/2
 PASS  suite: the unchecked formats are unknown in 129 cases
-std/json-format: 111 passed, 0 failed, 0 skipped
+std/json-format: 116 passed, 0 failed, 0 skipped

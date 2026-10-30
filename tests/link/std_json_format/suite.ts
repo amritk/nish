@@ -52,7 +52,7 @@ export const jftSuiteChecks = (t: Suite): void => {
     }
     if (!c.isString) {
       if (!c.valid) {
-        t.fail(`suite: ${c.key}`, "a case that is not a string is expected invalid");
+        t.fail(`suite: ${c.key}`, "the suite expects a case that is not a string invalid, but a format applies only to strings, so the check must answer valid");
       }
       continue;
     }

@@ -970,8 +970,9 @@ per instance; `jsonFormatValidate(name, value)` does both at once.
 
 Some answers are stricter than you may expect:
 
-- `duration` follows RFC 3339's grammar as written, so its units come in order
-  and none is skipped: `P1Y2M` is valid and `P1Y1D` is not.
+- `duration` follows RFC 3339's Appendix A grammar as written, so its units
+  come in order and none is skipped: `P1Y2M` and `PT1H2M` are valid, and
+  `P1Y1D` and `PT1H1S` are not.
 - `hostname` does not decode an `xn--` label's Punycode.
 - `regex` is a pattern `nish/regex` compiles. It refuses lookaround and
   backreferences, and a lone `{` or `]`, all of which ECMA-262 accepts, so

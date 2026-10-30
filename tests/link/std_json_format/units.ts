@@ -143,4 +143,9 @@ export const jftUnits = (t: Suite): void => {
   // Known differences: ECMA-262 patterns nish/regex refuses, answered invalid.
   t.eqBool("regex: lookahead is a known false negative", isRegex("(?=a)a"), false);
   t.eqBool("regex: a backreference is a known false negative", isRegex("(a)\\1"), false);
+  t.eqBool("regex: a named backreference is a known false negative", isRegex("(?<n>a)\\k<n>"), false);
+  t.eqBool("regex: negative lookahead is a known false negative", isRegex("(?!a)"), false);
+  t.eqBool("regex: lookbehind is a known false negative", isRegex("(?<=a)a"), false);
+  t.eqBool("regex: a lone { is a known false negative", isRegex("a{"), false);
+  t.eqBool("regex: a lone ] is a known false negative", isRegex("a]"), false);
 };
