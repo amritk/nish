@@ -1,0 +1,28 @@
+{
+  "version": "0.27.2",
+  "date": "2026-10-30",
+  "tag": "v0.27.2",
+  "range": {
+    "from": "v0.27.1",
+    "to": "cbb95069"
+  },
+  "entries": [
+    {
+      "id": "revert-the-lagging-platform-pins-that-blocked-0",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "revert the lagging platform pins that blocked 0.27.0 and 0.27.1",
+      "body": "* fix(cli): let a release follow one that never published\n\n0.27.0 failed before it published, so its lockfile job never moved the\nplatform pins, and 0.27.1 came up pinning 0.26.0. The pin-age check in\ntests/run.js allowed only this version or the one before, so 0.27.1 went\nred as well, and every later release would have too. The check now also\nallows the seed's version: the last release that reached its GitHub\nrelease.\n\nThe release workflow also gets more resilient. Each npm publish is tried\nthree times, and a failed try that still left the version on the registry\ncounts as done (0.26.0's first attempt died on a Sigstore 409). The\nlockfile job now waits up to 15 minutes for the registry, not 5 (0.25.0\nran past the old limit).\n\nTests: node tests/run.js package (261 passed), release (47), pin-platform (21)\n\n* Revert \"fix(cli): let a release follow one that never published\"\n\nThis reverts commit a523e43d9d7ff18afd7b334c22def823c29bf956.\n\n* Revert \"fix(cli): install the main package with its pins stamped, as release.yml publishes it (#1070)\"\n\nThis reverts commit 9ed9675e3a76f3344654825230f533085fcf2670.\n\n* Revert \"ci: keep main's platform pins one release behind so every commit agrees with its lockfile (#1039)\"\n\nThis reverts commit 5db6f0b1245684a9c82647256b1d3775b1adb89f.\n\n* build: pin the platform packages to 0.27.1, as the restored release bump does\n\nWith the lagging-pins flow reverted, the release commit moves the\noptionalDependencies pins with the version again, and tests/run.js wants\nthem equal to it. 0.27.1's release commit was cut under the reverted flow\nand left them at 0.26.0, so this moves them by hand, in package.json and\nthe lockfile root, the way release-pr.yml now would have.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "cbb9506"
+      ],
+      "pr": 1073,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    }
+  ]
+}
