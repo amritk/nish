@@ -540,16 +540,42 @@ Noise band, Nish against its byte-identical copy: 1.4% on the minimums (14.1% on
 <!-- json-value-ranges:begin -->
 ### JsonDocument's source ranges
 
-`JsonDocument.keepRanges` makes a parse record each value's and each member key's byte range (20 bytes a value, 66 in all). Measured by `node bench/json-value/measure.mjs --before <main's nish>` (24 interleaved rounds of six binaries, minimums; each band a binary against its byte-identical copy). `off` parses with ranges off, `on` with them on, `before` is main's `JsonDocument` at `384371b`.
+`JsonDocument.keepRanges` makes a parse record each value's and each member key's byte range (20 bytes a value, 66 in all). One run of `node bench/json-value/measure.mjs --rounds 40 --before <main's nish>` and `bench/http.mjs` against main at `384371b`, on a 4-core cloud machine. Each row is interleaved rounds of every binary and its byte-identical copy; the band is the gap between them. `off` and `head` are this tree with ranges off, `on` with them on, `before` main's build of the same program. Ratios are minimums, with medians after them.
 
-| Document | off / before | band (off, before) | on / off | band (on) |
-| --- | --- | --- | --- | --- |
-| twitter.json | 1.005x | 1.0%, 0.6% | 1.049x | 0.3% |
-| citm_catalog.json | 0.994x | 0.3%, 0.5% | 1.119x | 1.1% |
-| canada.json | 1.022x | 0.4%, 0.4% | 1.075x | 1.1% |
-| sample.json (1,427 bytes) | 1.006x | 1.2%, 0.6% | 1.051x | 1.0% |
+| Row | Rounds | head / before (min, median) | band head, before (min, median) |
+| --- | ---: | --- | --- |
+| parse twitter.json | 48 | 0.985x, 1.040x | 1.5% 2.6%, 0.1% 1.3% |
+| parse citm_catalog.json | 48 | 0.990x, 0.957x | 0.3% 0.0%, 0.1% 2.1% |
+| parse canada.json | 48 | 0.978x, 0.998x | 0.2% 3.1%, 0.1% 0.2% |
+| parse sample.json (1,427 bytes) | 48 | 0.982x, 0.994x | 2.1% 1.9%, 0.8% 2.3% |
+| builders (2,000 documents of 1,100 values) | 40 | 1.005x, 0.991x | 1.3% 3.7%, 0.6% 3.0% |
+| json-compare tokenize twitter.json | 40 | 0.996x, 1.031x | 0.7% 2.0%, 0.3% 0.8% |
+| json-compare tokenize citm_catalog.json | 40 | 0.978x, 1.021x | 1.1% 4.2%, 0.8% 0.3% |
+| json-compare tokenize canada.json | 40 | 0.991x, 1.000x | 0.3% 2.5%, 0.1% 2.0% |
+| json-compare typed | 40 | 1.006x, 1.011x | 1.2% 3.4%, 0.3% 0.7% |
+| json-compare typed-reuse | 40 | 1.005x, 0.959x | 0.4% 0.7%, 0.3% 6.8% |
 
-canada's 1.022x is past its band, and its median ran 0.983x; re-run alone over 36 rounds it ran 0.996x at the minimum (bands 0.2% and 1.0%), so ranges off is read as costing what main costs. The ranged loop is the same loop as the unranged one, behind a `ranged` latch hoisted out of it. `bench/json-tokenizer`'s rows, whose code did not change, ran 0.99x to 1.01x against main, each inside its band.
+No row is slower than main by its minimum beyond its band. twitter's median, 1.040x, is past its bands while its minimum is 0.985x. Medians in this run are loose: the tokenize, typed and typed-reuse binaries are byte-identical to main's, since they do not reach `nish/json-value`, and their medians still ran 0.959x to 1.031x.
+
+| Document | on / off (min, median) | band on (min, median) |
+| --- | --- | --- |
+| twitter.json | 1.072x, 1.015x | 0.5%, 3.5% |
+| citm_catalog.json | 1.119x, 1.114x | 1.0%, 3.2% |
+| canada.json | 1.144x, 1.192x | 4.2%, 0.6% |
+| sample.json | 1.093x, 1.114x | 0.2%, 0.9% |
+
+`bench/http1-server.ts`'s `post-json-doc` route, built by each compiler with `--profile speed`, 15 rounds of 5 s, server on one CPU and `wrk -t3` on the other three:
+
+| Build | req/s (median) | spread | user µs/req |
+| --- | ---: | ---: | ---: |
+| head | 46,764 | 42,986–57,265 | 10.14 |
+| before | 50,452 (+7.9%) | 43,353–57,275 | 9.80 |
+| head-copy | 50,617 (+8.2%) | 45,044–61,878 | 9.71 |
+| before-copy | 49,017 (+4.8%) | 43,829–61,404 | 9.76 |
+
+head and head-copy are the same binary and differ by 8.2%, so the route's band is wider than the gap to main.
+
+With ranges off, `parse` is main's loop plus one branch into `parseRanged`, and the builders are main's except for one test in `append` when a container's slots move.
 <!-- json-value-ranges:end -->
 
 <!-- techempower:begin -->
