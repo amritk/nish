@@ -933,6 +933,39 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // The Unix-domain calls. Listening, connecting and the pair never wait
+    // (the connect is non-blocking, as `tcpConnect`'s is); the accept is
+    // `nounwind` alone, as `tcpAccept` is.
+    this.add(
+      plain(
+        "nish_unix_listen",
+        `declare noundef i32 @nish_unix_listen(${STR_NOCAP}, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_unix_listen_mode",
+        `declare noundef i32 @nish_unix_listen_mode(${STR_NOCAP}, i32 noundef, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(plain("nish_unix_connect", `declare noundef i32 @nish_unix_connect(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(
+      new RuntimeFunction(
+        "nish_unix_accept",
+        "declare noundef i32 @nish_unix_accept(i32 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_unix_socket_pair",
+        `declare noundef i32 @nish_unix_socket_pair(i32 noundef, ${NET_BUFFER})`,
+        EFFECT_WRITE
+      )
+    )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build

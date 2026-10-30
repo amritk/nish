@@ -675,7 +675,21 @@ bool nish_is_executable(const nish_str *path);
  * into `ready` (element type `int32_t`) a token and its events, 4 added for a
  * hang-up or an error, per ready descriptor: at most `ready->len / 2` pairs
  * and at most 64 in one call. It answers the count, 0 on a timeout or an
- * interrupting signal, and -22 for a `ready` shorter than 2. */
+ * interrupting signal, and -22 for a `ready` shorter than 2.
+ *
+ * Unix-domain sockets. A `path` names a socket file, or with a leading `@`
+ * Linux's abstract namespace (-95 on Darwin); empty, holding a NUL, or a bare
+ * `@` is -22, and one too long for `sun_path` with its NUL is -36, before any
+ * socket exists. `nish_unix_listen(path, backlog, flags)` is a listening
+ * stream socket whose file has mode 0600; a path that exists is -98, unless
+ * flag 1 (`NET_UNIX_UNLINK_STALE`) unlinks a socket file nothing listens on
+ * (anything but a socket is -17, a live listener -98). `nish_unix_listen_mode`
+ * takes the mode (0..0o777, -22 for an abstract name). `nish_unix_connect(path)`
+ * connects, -11 for a full backlog. `nish_unix_accept(fd)` takes the next
+ * connection, -11 when none waits. `nish_unix_socket_pair(kind, fds)` writes
+ * two connected sockets into `fds` (element type `int32_t`, at least 2): kind
+ * 1 a stream, kind 2 `SOCK_SEQPACKET` (-95 on Darwin). Every descriptor is
+ * non-blocking and close-on-exec. */
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
@@ -698,6 +712,11 @@ int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_modify(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_remove(int32_t loop, int32_t fd);
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
+int32_t nish_unix_listen(const nish_str *path, int32_t backlog, int32_t flags);
+int32_t nish_unix_listen_mode(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode);
+int32_t nish_unix_connect(const nish_str *path);
+int32_t nish_unix_accept(int32_t fd);
+int32_t nish_unix_socket_pair(int32_t kind, nish_array *fds);
 
 /* ---- The terminal, runtime/runtime-term.c, `nish:term` -------------------
  *
