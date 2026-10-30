@@ -40,6 +40,16 @@
 //     about the review rather than about the change
 //   Release-As: 1.0.0 -- the version the next release takes, when it is not
 //     the one the types imply (see nextVersion)
+//   Changelog: skip -- this commit produces no entry
+//   Changelog-Skip: 1a2b3c4, 5d6e7f8 -- the named commits produce no entry
+//
+// The last two keep internal or unannounced work out of the notes without
+// rewriting history: `Changelog-Skip:` names commits by SHA (an abbreviation of
+// at least seven hex digits is a prefix of the full one), so a squash merge
+// can drop commits that landed earlier in the same release. A SHA outside the
+// range is ignored, since it may name a commit an earlier release already
+// covered. The commits they drop are counted on stderr, never listed, and do
+// not move the version: a bump the notes cannot explain would be a mystery.
 //
 // `type!` or a `BREAKING CHANGE:` trailer marks a breaking change.
 //
@@ -53,7 +63,9 @@
 // `--include-unconventional` flag files them under "Uncategorised" the way this
 // tool behaved before. Use it for the first release after the convention
 // lands, or write the history up by hand in `changelog/<version>.intro.md`,
-// which renders above the sections.
+// which renders above the sections. A commit kept out by a `Changelog` trailer
+// is the one exception to the listing: it was dropped on purpose, so only a
+// count is printed.
 import fs from "node:fs"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
@@ -104,7 +116,8 @@ const CONVENTIONAL_TYPES = TYPES.filter(([k]) => k !== "other").map(([k]) => k)
 const DROPPED_TRAILERS = /^(Co-Authored-By|Claude-Session|Signed-off-by|Reviewed-by):/i
 
 /** Trailers this tool reads. Everything else is left in the body. */
-const KNOWN_TRAILERS = /^(Measured|Refs|Tests|Release-Note|Release-As|BREAKING[ -]CHANGE):\s*(.*)$/i
+const KNOWN_TRAILERS =
+  /^(Measured|Refs|Tests|Release-Note|Release-As|Changelog|Changelog-Skip|BREAKING[ -]CHANGE):\s*(.*)$/i
 
 /**
  * GitHub ends a squashed body with a rule when the branch had more than one
@@ -167,6 +180,8 @@ const parseTrailers = (lines) => {
     releaseNote: undefined,
     releaseAs: [],
     breaking: undefined,
+    skipSelf: false,
+    skipShas: [],
   }
   for (const line of lines) {
     if (DROPPED_TRAILERS.test(line)) {
@@ -200,6 +215,17 @@ const parseTrailers = (lines) => {
       out.releaseAs.push(value)
     } else if (key === "breakingchange") {
       out.breaking = value
+    } else if (key === "changelog") {
+      out.skipSelf ||= value.toLowerCase() === "skip"
+    } else if (key === "changelogskip") {
+      // A value that is not a SHA names nothing, the way a SHA outside the
+      // range does, and is ignored the same way.
+      out.skipShas.push(
+        ...value
+          .split(/[\s,]+/)
+          .filter((s) => /^[0-9a-f]{7,40}$/i.test(s))
+          .map((s) => s.toLowerCase())
+      )
     }
   }
   return out
@@ -234,8 +260,9 @@ const slug = (title, taken) => {
 }
 
 /**
- * The entries a release contains, the subjects that did not become one, and
- * the `Release-As:` trailers the range carries.
+ * The entries a release contains, the subjects that did not become one, the
+ * number of commits a `Changelog` trailer kept out, and the `Release-As:`
+ * trailers the range carries.
  *
  * A subject that does not classify is skipped: `pr-title.yml` makes every
  * squash-merge subject conventional, so what is left over is the branch
@@ -247,7 +274,9 @@ const slug = (title, taken) => {
  *
  * A trailer is read from every commit in the range, skipped or not: a version
  * someone asked for is not lost because the commit that asked was the
- * work-in-progress half of a merge.
+ * work-in-progress half of a merge. That is also why the log is read whole
+ * before any entry is made: a `Changelog-Skip:` usually names a commit that
+ * came before it.
  */
 const collect = (fromRef, toRef, withUnconventional = false) => {
   const range = fromRef ? `${fromRef}..${toRef}` : toRef
@@ -255,11 +284,8 @@ const collect = (fromRef, toRef, withUnconventional = false) => {
   // newlines and may contain anything else, so the separators must be bytes
   // that cannot appear in one.
   const raw = git(["log", "--no-merges", "--reverse", "--format=%H%x00%an%x00%aI%x00%s%x00%b%x1e", range])
-  const taken = new Set()
-  const entries = []
-  const skipped = []
-  const releaseAs = []
-
+  const commits = []
+  const skipShas = []
   for (const record of raw.split("\x1e")) {
     const text = record.replace(/^\n/, "")
     if (!text.trim()) {
@@ -268,8 +294,25 @@ const collect = (fromRef, toRef, withUnconventional = false) => {
     const [sha, author, date, subject, body = ""] = text.split("\x00")
     const { prose: rawProse, trailers } = splitTrailers(body)
     const t = parseTrailers(trailers)
+    skipShas.push(...t.skipShas)
+    commits.push({ sha, author, date, subject, rawProse, t })
+  }
+
+  const taken = new Set()
+  const entries = []
+  const skipped = []
+  const releaseAs = []
+  let hidden = 0
+
+  for (const { sha, author, date, subject, rawProse, t } of commits) {
+    const hide = t.skipSelf || skipShas.some((prefix) => sha.startsWith(prefix))
     for (const version of t.releaseAs) {
-      releaseAs.push({ version, commit: `${sha.slice(0, 7)} ${subject}` })
+      // A hidden commit is named by its SHA alone, should a refusal quote it.
+      releaseAs.push({ version, commit: hide ? sha.slice(0, 7) : `${sha.slice(0, 7)} ${subject}` })
+    }
+    if (hide) {
+      hidden += 1
+      continue
     }
 
     const parsed = parseSubject(subject)
@@ -302,7 +345,7 @@ const collect = (fromRef, toRef, withUnconventional = false) => {
       date: date.slice(0, 10),
     })
   }
-  return { entries, skipped, releaseAs }
+  return { entries, skipped, hidden, releaseAs }
 }
 
 const renderMarkdown = (releaseData) => {
@@ -507,7 +550,7 @@ const stdoutKind = flag("stdout", "md")
 const write = argv.includes("--write")
 const includeUnconventional = argv.includes("--include-unconventional")
 
-const { entries, skipped, releaseAs } = collect(from, to, includeUnconventional)
+const { entries, skipped, hidden, releaseAs } = collect(from, to, includeUnconventional)
 
 // `--next` answers the version and nothing else, for the release PR to name
 // itself and to bump package.json with. Everything release-pr.yml writes reads
@@ -539,13 +582,21 @@ if (skipped.length > 0 && !includeUnconventional) {
   console.error('Pass --include-unconventional to file them under "Uncategorised" instead.')
 }
 
+if (hidden > 0) {
+  console.error(
+    `changelog-gen: ${hidden} commit${hidden === 1 ? "" : "s"} kept out of the changelog by trailer`
+  )
+}
+
 if (entries.length === 0) {
   const range = from ? `${from}..${to}` : to
-  console.error(
-    skipped.length > 0
-      ? `changelog-gen: no commit in ${range} carries a conventional subject (${skipped.length} skipped, listed above), so the release has no entries; fix the subjects or pass --include-unconventional`
-      : `changelog-gen: no commits in ${range}; a release with no changes is a mistake, not an empty section`
-  )
+  let why = `no commits in ${range}; a release with no changes is a mistake, not an empty section`
+  if (skipped.length > 0) {
+    why = `no commit in ${range} carries a conventional subject (${skipped.length} skipped, listed above), so the release has no entries; fix the subjects or pass --include-unconventional`
+  } else if (hidden > 0) {
+    why = `every commit in ${range} is kept out by trailer, so the release has no entries; a release with nothing to announce is a mistake, not an empty section`
+  }
+  console.error(`changelog-gen: ${why}`)
   process.exit(1)
 }
 
