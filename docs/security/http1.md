@@ -4,7 +4,8 @@ The record of WP34's lane H1: `nish/net/http1` (the incremental request parser
 and the response writers), `nish/net/http1-server` (the server side of a
 connection, and its two carriers: plain TCP on `nish:net` and TLS on
 `nish/net/tls-tcp` with ALPN `http/1.1`) and `nish/net/websocket` (RFC 6455
-framing and the opening handshake, as far as the server uses it). It says what
+framing and the opening handshake, both the server's accept and the client's
+request and check of the server's answer). It says what
 each refuses and with what, what it caps and where the cap is set, what it
 keeps in memory and for how long, and the test that pins each property. It is
 written with the code rather than after an audit, so that the audit of the
@@ -19,7 +20,9 @@ way, responses with a length or chunked — with `Arena.used()` flat, over plain
 TCP and over TLS. H1-1 (Medium), a client that trickles the bytes of its head
 to keep its slot, is fixed by a deadline for the whole head. Two findings are
 open: H1-2 (Low), no lingering close after a refusal over plain TCP (TLS lingers, TLS-6); and H1-3 (Low), the
-memory each WebSocket upgrade leaves behind.
+memory each WebSocket upgrade leaves behind. The client's side of the
+handshake refuses every answer RFC 6455 §4.1 tells a client to fail, each
+with its own `WS_HS_*` code; it adds no finding.
 
 ## Scope
 
@@ -28,7 +31,7 @@ memory each WebSocket upgrade leaves behind.
 | `std/net/http1.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
 | `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
-| `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload` |
+| `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`; the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
 
 Out of scope: TLS (`docs/security/tls.md`, whose TLS-3 and TLS-4 the TLS
 carrier inherits), `nish:net`, and `nish/crypto/sha1`, which only computes the
@@ -48,6 +51,18 @@ by a caller's string, or a response sent to the wrong request. The program
 driving the connection is trusted; its mistakes panic or are refused, and
 what it writes is checked so that its strings cannot end a line.
 
+As a WebSocket client (`websocketUpgradeRequest`, `websocketCheckResponse`)
+the attacker is the server, or whoever stands between it and a client over
+plain TCP: every byte of the answer is theirs. They may answer with another
+status (a redirect, a 200 with a body), with HTTP/1.0, without `Upgrade` or
+`Connection`, with a forged `Sec-WebSocket-Accept` or one for another key, with
+an extension or a subprotocol the client never offered, or with frame bytes
+glued to the head. A win is a panic, a connection the client takes for a
+WebSocket that the server did not accept for its key, a protocol or extension
+it did not ask for, or frame bytes read as HTTP (or HTTP as frames). The
+client's randomness is the program's: the module draws none, and takes the
+nonce and every mask key from the caller.
+
 ## Findings
 
 | Id | Severity | Where | Description | Disposition |
@@ -59,14 +74,23 @@ what it writes is checked so that its strings cannot end a line.
 
 ## Fuzzing
 
-Fuzzed by `tests/fuzz/targets/http1.ts`, `tests/fuzz/targets/websocket.ts`.
+Fuzzed by `tests/fuzz/targets/http1.ts`, `tests/fuzz/targets/websocket.ts`,
+`tests/fuzz/targets/websocket-client.ts`.
 
 | Target | What it drives | Executions |
 | --- | --- | ---: |
 | `http1` | the HTTP/1.1 parser fed in pieces under small or default limits, chunked bodies, an upgrade declined or taken, checking every refusal is a 4xx or 5xx | 57,537,869 |
 | `websocket` | the WebSocket frame reader with masking required or not and a message cap of 0, 16, 125 or 65,536 bytes, checking text is UTF-8, every frame round-trips through `websocketFrame`, and pong and close payloads | 117,903,219 |
+| `websocket-client` | a server's answer to the client's upgrade, offering none, either or both of `chat` and `superchat`, fed whole or in pieces of 1 to 255 bytes through `Http1ResponseParser` told to expect the upgrade, then `websocketCheckResponse` and a client's `WsDecoder` over the bytes past the head; checking that only a 101 to HTTP/1.1 is accepted, that its accept never matches another key, that its protocol is one offered, and that text frames are UTF-8 | not yet run |
 
-Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
+`websocket-client` has not run under libFuzzer: the session that wrote it had
+no `libclang-rt`. Its 18 seeds in `tests/fuzz/corpus/websocket-client/` (an
+accepted 101 with and without a protocol and with a frame glued on, and each
+refusal, a missing `Sec-WebSocket-Accept` among them) were replayed through `fuzzOne` linked natively against
+`tests/fuzz/harness.c`, with 4,000 mutations of them besides, without a crash;
+its 31-minute run is owed with the next fuzzing pass.
+
+The other targets each ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
 ## Properties verified
 
@@ -167,6 +191,41 @@ what the connection writes itself. An unmasked frame is closed with 1002 and a
 message past `maxMessage` with 1009, refused from the frame's header. A frame
 larger than the output, a close through `sendFrame` and a close code that may
 not be sent are refused.
+
+**WebSocket client** (`net_websocket`, `net_http1_client`, `net_loopback`):
+`websocketClientKey` makes a key only of a 16-byte nonce (`refused client key:
+a 15-byte nonce`, `a 17-byte nonce`, `no nonce`; `the §1.3 nonce gives the §1.3
+key`). `websocketUpgradeRequest` writes the request through
+`http1UpgradeRequestHead`, so its host, target and protocols cannot end a line,
+and refuses an empty host, an invalid key, and a protocol that is empty, not a
+token or offered twice (the `refused request: …` checks: `an invalid key`, `a
+protocol that is not a token`, `a protocol holding a comma`, `an empty
+protocol`, `a protocol offered twice`, `CR LF in the host`, `an empty host`,
+`CR LF in the target`, `CR LF in a protocol`). `websocketCheckResponse` checks
+RFC 6455 §4.1's list in order and answers the first failure: a status other
+than 101, a redirect included, is `WS_HS_STATUS` and never followed (`refused
+check 1: a 302 is not followed`, `a 200`); HTTP/1.0 is `WS_HS_VERSION`
+(`refused check 2: an HTTP/1.0 101`); `Upgrade` missing, twice or not
+`websocket` is `WS_HS_UPGRADE` (`refused check 3: no Upgrade`, `Upgrade: h2c`,
+`Upgrade twice`); no `Connection` listing `upgrade` is `WS_HS_CONNECTION`
+(`refused check 4: no Connection`, `Connection without upgrade`); an accept
+missing, twice, forged or for another key is `WS_HS_ACCEPT`, and an invalid
+key matches no accept (`refused check 5: no Sec-WebSocket-Accept`, `a forged
+Sec-WebSocket-Accept`, `Sec-WebSocket-Accept twice`, `an accept for another
+key`, `an invalid key matches nothing`); any `Sec-WebSocket-Extensions` is
+`WS_HS_EXTENSION`, since the client offers none (`refused check 6: a
+Sec-WebSocket-Extensions`); and a protocol not offered, a list, the field
+twice, or one in another case is `WS_HS_PROTOCOL` (`refused check 7: a
+protocol when none was offered`, `a protocol that was not offered`, `a protocol
+list`, `Sec-WebSocket-Protocol twice`, `a protocol in another case`). A 101 is
+read only by a parser told `expectUpgrade` (in
+[`http1-client.md`](http1-client.md)), so frame bytes glued to the head are
+handed over by `tunnelBytes` and read as frames, never as HTTP (`glued: the
+frame past the head is a message`, `and it says Hello`). Over the loopback,
+plain and TLS, each connection draws a fresh nonce and every frame a fresh mask
+from `crypto.getRandomValues` (`websocket: websocketCheckResponse accepts the
+101 and its accept for the random key`, `websocket: the second connection drew
+a key of its own`).
 
 **Caps, all fixed at start-up** (`Http1Config`): the request target
 (`maxTarget`, 8,192), the header section and each trailer section
