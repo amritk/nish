@@ -1514,20 +1514,25 @@ export class JsonDocument {
   /**
    * Internal: `append` moving the `n` slots from `from`, some of them below
    * `slotRangeTop`, to `to`, the end of the slots: their key ranges move with
-   * them, and the slots between keep none.
+   * them, and the slots between keep none. `moveSlots` has checked the
+   * generation, and a slot below `slotRangeTop` means the arrays were made;
+   * reading them here, not through `rangeArrays`, keeps `append` small.
    */
   moveKeyRanges(from: i32, to: i32, n: i32): void {
-    const r: JsonValueRanges = this.rangeArrays()
-    for (let t: i32 = this.slotRangeTop; t < to; t += 1) {
-      jsonValuePut(r.slotKeyStart, t, -1)
-      jsonValuePut(r.slotKeyEnd, t, -1)
+    const r: JsonValueRanges | null = this.ranges
+    const top: i32 = this.slotRangeTop
+    if (r !== null) {
+      for (let t: i32 = top; t < to; t += 1) {
+        jsonValuePut(r.slotKeyStart, t, -1)
+        jsonValuePut(r.slotKeyEnd, t, -1)
+      }
+      for (let i: i32 = 0; i < n; i += 1) {
+        const has: boolean = from + i < top
+        jsonValuePut(r.slotKeyStart, to + i, has ? jsonValueGet(r.slotKeyStart, from + i) : -1)
+        jsonValuePut(r.slotKeyEnd, to + i, has ? jsonValueGet(r.slotKeyEnd, from + i) : -1)
+      }
+      this.slotRangeTop = to + n
     }
-    for (let i: i32 = 0; i < n; i += 1) {
-      const has: boolean = this.hasKeyRange(from + i)
-      jsonValuePut(r.slotKeyStart, to + i, has ? jsonValueGet(r.slotKeyStart, from + i) : -1)
-      jsonValuePut(r.slotKeyEnd, to + i, has ? jsonValueGet(r.slotKeyEnd, from + i) : -1)
-    }
-    this.slotRangeTop = to + n
   }
 
   /** Internal: `s`'s bytes onto the end of `bytes`; answers how many. */
