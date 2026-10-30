@@ -18,8 +18,8 @@
 //
 // Gameplay draws from `rng` and the effects from `fxRng`, so the effects
 // setting, which changes how many particles fly, never changes the game.
-import { Framebuffer } from "../std/term-pixels"
-import { Rng } from "../std/random"
+import { Framebuffer } from "nish/term-pixels"
+import { Rng } from "nish/random"
 import {
   ACTION_PRESS,
   EVENT_KEY,
@@ -30,14 +30,14 @@ import {
   KEY_RIGHT,
   KEY_SPACE,
   KEY_UP,
-} from "../std/term"
-import { TermInput } from "../std/term-io"
+} from "nish/term"
+import { TermInput } from "nish/term-io"
 import {
   GLYPH_ADVANCE,
+  GfxTrail,
   NO_SHADOW,
   Particles,
   STEPS_PER_SECOND,
-  Trail,
   View,
   WORLD_H,
   bevelBrick,
@@ -52,17 +52,17 @@ import {
   fillLetterbox,
   fillRect,
   fontScaleFor,
+  gfxMix,
+  gfxRgb,
   glow,
   gradient,
   hue,
   lerp,
-  mix,
   outBack,
   outBounce,
   outCubic,
   pixelX,
   pushTrail,
-  rgb,
   spawnParticle,
   stepParticles,
   textWidth,
@@ -261,7 +261,7 @@ export class Ball {
   /** Where on the paddle a stuck ball sits, from its centre. */
   stickOffset: f64
   /** The streak behind the ball. */
-  trail: Trail
+  trail: GfxTrail
   /** Whether the slot holds a ball in play. */
   live: boolean
   /** Whether the ball rides the paddle, waiting for a serve or held by catch. */
@@ -276,7 +276,7 @@ export class Ball {
     this.dx = 0.0
     this.dy = -1.0
     this.stickOffset = 0.0
-    this.trail = new Trail(TRAIL_POINTS)
+    this.trail = new GfxTrail(TRAIL_POINTS)
     this.live = false
     this.stuck = false
   }
@@ -1117,7 +1117,7 @@ const hitBrick = (game: BreakGame, i: i32): void => {
       brickX(i % LEVEL_COLS) + BRICK_W / 2.0,
       brickY(game, i / LEVEL_COLS) + BRICK_H / 2.0,
       4,
-      rgb(220, 220, 240)
+      gfxRgb(220, 220, 240)
     )
   }
 }
@@ -1151,13 +1151,13 @@ const breakBrick = (game: BreakGame, i: i32): void => {
   game.kinds[i] = BRICK_NONE
   game.hits[i] = 0
   game.bricksLeft = game.bricksLeft - 1
-  floatScore(game, cx, cy, points, game.combo >= 2 ? rgb(255, 220, 90) : rgb(235, 235, 245))
+  floatScore(game, cx, cy, points, game.combo >= 2 ? gfxRgb(255, 220, 90) : gfxRgb(235, 235, 245))
   if (kind === BRICK_MYSTERY || game.rng.nextF64() < game.tuning.dropChance) {
     dropCapsule(game, cx, cy)
   }
   if (kind === BRICK_EXPLOSIVE) {
-    burst(game, cx, cy, 36, rgb(255, 150, 40))
-    burst(game, cx, cy, 12, rgb(255, 240, 180))
+    burst(game, cx, cy, 36, gfxRgb(255, 150, 40))
+    burst(game, cx, cy, 12, gfxRgb(255, 240, 180))
     game.shake = Math.min(game.shake + 3.0, 6.0)
     for (let dr: i32 = -1; dr <= 1; dr++) {
       for (let dc: i32 = -1; dc <= 1; dc++) {
@@ -1358,7 +1358,7 @@ const enterClear = (game: BreakGame): void => {
   for (const b of game.balls) {
     b.live = false
   }
-  burst(game, 160.0, 90.0, 60, rgb(255, 230, 120))
+  burst(game, 160.0, 90.0, 60, gfxRgb(255, 230, 120))
   enterPhase(game, PHASE_CLEAR)
 }
 
@@ -1441,7 +1441,7 @@ const firework = (game: BreakGame, x: f64, y: f64, colour: i32): void => {
       colour
     )
   }
-  spawnParticle(game.particles, x, y, 0.0, 0.0, 0.3, 6.0, rgb(255, 255, 255))
+  spawnParticle(game.particles, x, y, 0.0, 0.0, 0.3, 6.0, gfxRgb(255, 255, 255))
 }
 
 /** `points` floating up from `x`, `y`. */
@@ -1506,21 +1506,21 @@ const levelHue = (level: i32): f64 => toF64(level - 1) * 0.13 + 0.55
 /** The colour of capsule `kind`. */
 const capsuleColour = (kind: i32): i32 => {
   if (kind === CAPSULE_WIDE) {
-    return rgb(70, 140, 255)
+    return gfxRgb(70, 140, 255)
   }
   if (kind === CAPSULE_MULTI) {
-    return rgb(80, 220, 120)
+    return gfxRgb(80, 220, 120)
   }
   if (kind === CAPSULE_SLOW) {
-    return rgb(240, 200, 60)
+    return gfxRgb(240, 200, 60)
   }
   if (kind === CAPSULE_CATCH) {
-    return rgb(190, 110, 255)
+    return gfxRgb(190, 110, 255)
   }
   if (kind === CAPSULE_FIRE) {
-    return rgb(255, 100, 40)
+    return gfxRgb(255, 100, 40)
   }
-  return rgb(255, 90, 150)
+  return gfxRgb(255, 90, 150)
 }
 
 /** The letter on capsule `kind`. */
@@ -1551,10 +1551,10 @@ const brickColour = (game: BreakGame, i: i32): i32 => {
   const kind: i32 = game.kinds[i]
   const t: f64 = toF64(game.ticks) / toF64(STEPS_PER_SECOND)
   if (kind === BRICK_STEEL) {
-    return rgb(150, 156, 172)
+    return gfxRgb(150, 156, 172)
   }
   if (kind === BRICK_EXPLOSIVE) {
-    return mix(rgb(190, 40, 20), rgb(255, 170, 40), Math.sin(t * 7.0) * 0.5 + 0.5)
+    return gfxMix(gfxRgb(190, 40, 20), gfxRgb(255, 170, 40), Math.sin(t * 7.0) * 0.5 + 0.5)
   }
   if (kind === BRICK_MYSTERY) {
     return hue(t * 0.4 + toF64(i % LEVEL_COLS) * 0.05)
@@ -1703,7 +1703,7 @@ export const drawBreakGame = (game: BreakGame, fb: Framebuffer, alpha: f64): voi
   const view: View = game.view
   viewFor(view, fb, lerp(game.prevShakeX, game.shakeX, a), lerp(game.prevShakeY, game.shakeY, a))
   const base: f64 = levelHue(game.level)
-  gradient(view, mix(rgb(10, 10, 24), hue(base), 0.12), rgb(2, 2, 8))
+  gradient(view, gfxMix(gfxRgb(10, 10, 24), hue(base), 0.12), gfxRgb(2, 2, 8))
   if (!(view.scale > 0.0)) {
     return
   }
@@ -1716,13 +1716,13 @@ export const drawBreakGame = (game: BreakGame, fb: Framebuffer, alpha: f64): voi
   drawFloaters(game, view, a)
   drawHud(game, view)
   drawScreen(game, view, a)
-  fillLetterbox(view, rgb(0, 0, 0))
+  fillLetterbox(view, gfxRgb(0, 0, 0))
 }
 
 /** The rails and the HUD strip. */
 const drawField = (view: View, base: f64): void => {
-  const rail: i32 = mix(rgb(40, 44, 64), hue(base), 0.25)
-  fillRect(view, 0.0, 0.0, 320.0, FIELD_TOP - 2.0, rgb(6, 6, 14))
+  const rail: i32 = gfxMix(gfxRgb(40, 44, 64), hue(base), 0.25)
+  fillRect(view, 0.0, 0.0, 320.0, FIELD_TOP - 2.0, gfxRgb(6, 6, 14))
   fillRect(view, 0.0, FIELD_TOP - 2.0, 320.0, 2.0, rail)
   fillRect(view, 0.0, FIELD_TOP, FIELD_LEFT, WORLD_H - FIELD_TOP, rail)
   fillRect(view, FIELD_RIGHT, FIELD_TOP, 320.0 - FIELD_RIGHT, WORLD_H - FIELD_TOP, rail)
@@ -1731,7 +1731,7 @@ const drawField = (view: View, base: f64): void => {
 }
 
 /** A rail's lit edge. */
-const add2 = (c: i32): i32 => mix(c, rgb(255, 255, 255), 0.25)
+const add2 = (c: i32): i32 => gfxMix(c, gfxRgb(255, 255, 255), 0.25)
 
 /** The integer font scale for a glyph about `size` world units tall, at least 1 wherever the view draws. */
 const fontScale = (view: View, size: f64): i32 => Math.max(fontScaleFor(view, size), 1)
@@ -1758,12 +1758,12 @@ const drawWall = (game: BreakGame, view: View, alpha: f64): void => {
       const x: f64 = brickX(col)
       let face: i32 = brickColour(game, i)
       if (game.flashes[i] > 0.0) {
-        face = mix(face, rgb(255, 255, 255), game.flashes[i] / 0.15)
+        face = gfxMix(face, gfxRgb(255, 255, 255), game.flashes[i] / 0.15)
       }
       bevelBrick(view, x + 1.0, y + 1.0, BRICK_W - 2.0, BRICK_H - 2.0, face)
       if (kind === BRICK_STEEL) {
-        disc(view, x + 4.0, y + BRICK_H / 2.0, 1.0, rgb(90, 94, 110))
-        disc(view, x + BRICK_W - 4.0, y + BRICK_H / 2.0, 1.0, rgb(90, 94, 110))
+        disc(view, x + 4.0, y + BRICK_H / 2.0, 1.0, gfxRgb(90, 94, 110))
+        disc(view, x + BRICK_W - 4.0, y + BRICK_H / 2.0, 1.0, gfxRgb(90, 94, 110))
       } else if (kind === BRICK_EXPLOSIVE || kind === BRICK_MYSTERY) {
         if (glyph >= 1) {
           drawTextCentred(
@@ -1772,7 +1772,7 @@ const drawWall = (game: BreakGame, view: View, alpha: f64): void => {
             y + 1.0,
             glyph,
             kind === BRICK_MYSTERY ? "?" : "*",
-            rgb(30, 20, 30),
+            gfxRgb(30, 20, 30),
             NO_SHADOW
           )
         }
@@ -1814,10 +1814,10 @@ const drawCapsules = (game: BreakGame, view: View, alpha: f64): void => {
       y - r + 1.0,
       CAPSULE_W - 2.0 * r,
       1.0,
-      mix(colour, rgb(255, 255, 255), 0.5)
+      gfxMix(colour, gfxRgb(255, 255, 255), 0.5)
     )
     if (glyph >= 1) {
-      drawTextCentred(view, c.x, y - 3.0, glyph, capsuleLetter(c.kind), rgb(20, 16, 28), NO_SHADOW)
+      drawTextCentred(view, c.x, y - 3.0, glyph, capsuleLetter(c.kind), gfxRgb(20, 16, 28), NO_SHADOW)
     }
   }
 }
@@ -1830,11 +1830,11 @@ const drawPaddle = (game: BreakGame, view: View, alpha: f64): void => {
   if (game.phase === PHASE_INTRO) {
     y = y + (1.0 - outCubic(clamp(phaseSeconds(game, alpha) / 0.8, 0.0, 1.0))) * 24.0
   }
-  let colour: i32 = rgb(205, 214, 235)
+  let colour: i32 = gfxRgb(205, 214, 235)
   if (game.fireSteps > 0) {
-    colour = rgb(255, 150, 80)
+    colour = gfxRgb(255, 150, 80)
   } else if (game.catchSteps > 0) {
-    colour = rgb(200, 150, 255)
+    colour = gfxRgb(200, 150, 255)
   }
   if (game.effects > 0) {
     glow(view, x, y + PADDLE_H / 2.0, w * 0.6, colour, 0.25)
@@ -1847,8 +1847,10 @@ const drawPaddle = (game: BreakGame, view: View, alpha: f64): void => {
 
 const drawBalls = (game: BreakGame, view: View, alpha: f64): void => {
   const fire: boolean = game.fireSteps > 0
-  const colour: i32 = fire ? rgb(255, 170, 60) : rgb(255, 255, 255)
-  const trailColour: i32 = fire ? rgb(255, 90, 30) : mix(hue(levelHue(game.level)), rgb(255, 255, 255), 0.4)
+  const colour: i32 = fire ? gfxRgb(255, 170, 60) : gfxRgb(255, 255, 255)
+  const trailColour: i32 = fire
+    ? gfxRgb(255, 90, 30)
+    : gfxMix(hue(levelHue(game.level)), gfxRgb(255, 255, 255), 0.4)
   for (let i: i32 = 0; i < toI32(game.balls.length); i++) {
     const b: Ball = game.balls[i]
     if (!b.live) {
@@ -1893,10 +1895,10 @@ const drawHud = (game: BreakGame, view: View): void => {
   const fit: i32 = fontScaleFor(view, 7.0)
   const compact: boolean = fit < 1
   const scale: i32 = Math.max(fit, 1)
-  const white: i32 = rgb(235, 238, 250)
-  drawNumber(view, FIELD_LEFT, 2.5, scale, game.score, white, compact ? NO_SHADOW : rgb(0, 0, 0))
+  const white: i32 = gfxRgb(235, 238, 250)
+  drawNumber(view, FIELD_LEFT, 2.5, scale, game.score, white, compact ? NO_SHADOW : gfxRgb(0, 0, 0))
   for (let i: i32 = 0; i < game.lives && i < MAX_LIVES; i++) {
-    disc(view, FIELD_RIGHT - 3.0 - toF64(i) * 8.0, 6.0, 2.5, rgb(255, 255, 255))
+    disc(view, FIELD_RIGHT - 3.0 - toF64(i) * 8.0, 6.0, 2.5, gfxRgb(255, 255, 255))
   }
   let x: f64 = FIELD_RIGHT - 12.0 - toF64(game.lives) * 8.0
   x = drawPower(view, x, game.fireSteps, FIRE_STEPS, CAPSULE_FIRE, compact, scale)
@@ -1912,18 +1914,18 @@ const drawHud = (game: BreakGame, view: View): void => {
       numberWidth(game.score, scale) +
       4 * scale
     const wx: f64 = (toF64(px) - view.offsetX + 0.25) / view.scale
-    drawText(view, wx, 2.5, scale, "x", rgb(255, 210, 80))
+    drawText(view, wx, 2.5, scale, "x", gfxRgb(255, 210, 80))
     drawNumberAt(
       view,
       px + GLYPH_ADVANCE * scale,
       2.5,
       scale,
       Math.min(game.combo, MAX_COMBO),
-      rgb(255, 210, 80),
+      gfxRgb(255, 210, 80),
       NO_SHADOW
     )
   }
-  drawTextCentred(view, 160.0, 2.5, scale, levelLabel(game.level), dim(white, 0.8), rgb(0, 0, 0))
+  drawTextCentred(view, 160.0, 2.5, scale, levelLabel(game.level), dim(white, 0.8), gfxRgb(0, 0, 0))
 }
 
 /** One timed power-up in the HUD, its right edge at `x`, if it is on; answers where the next one's right edge goes. */
@@ -1955,9 +1957,9 @@ const drawScreen = (game: BreakGame, view: View, alpha: f64): void => {
   const t: f64 = phaseSeconds(game, alpha)
   const big: i32 = fontScale(view, 14.0)
   const small: i32 = fontScale(view, 7.0)
-  const shadow: i32 = rgb(0, 0, 0)
-  const white: i32 = rgb(240, 242, 255)
-  const gold: i32 = rgb(255, 214, 90)
+  const shadow: i32 = gfxRgb(0, 0, 0)
+  const white: i32 = gfxRgb(240, 242, 255)
+  const gold: i32 = gfxRgb(255, 214, 90)
   if (game.phase === PHASE_INTRO) {
     const y: f64 = lerp(-24.0, 92.0, outBack(clamp(t / 0.6, 0.0, 1.0)))
     drawTextCentred(view, 160.0, y, big, levelLabel(game.level), white, shadow)
@@ -1967,14 +1969,14 @@ const drawScreen = (game: BreakGame, view: View, alpha: f64): void => {
       drawTextCentred(view, 160.0, 120.0, small, "PRESS SPACE", white, shadow)
     }
   } else if (game.phase === PHASE_PAUSE) {
-    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, rgb(0, 0, 0), 0.6)
+    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, gfxRgb(0, 0, 0), 0.6)
     drawTextCentred(view, 160.0, 46.0, big, "PAUSED", white, shadow)
     drawTextCentred(view, 160.0, 76.0, small, "ARROWS MOVE", dim(white, 0.8), shadow)
     drawTextCentred(view, 160.0, 88.0, small, "SPACE LAUNCH", dim(white, 0.8), shadow)
     drawTextCentred(view, 160.0, 100.0, small, "P RESUME", dim(white, 0.8), shadow)
     drawTextCentred(view, 160.0, 112.0, small, "Q QUIT", dim(white, 0.8), shadow)
   } else if (game.phase === PHASE_CLEAR) {
-    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, rgb(0, 0, 0), 0.35 * clamp(t * 3.0, 0.0, 1.0))
+    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, gfxRgb(0, 0, 0), 0.35 * clamp(t * 3.0, 0.0, 1.0))
     const y: f64 = lerp(-24.0, 50.0, outBack(clamp(t / 0.5, 0.0, 1.0)))
     drawTextCentred(view, 160.0, y, big, "LEVEL CLEAR", gold, shadow)
     const counted: i32 = tallied(game)
@@ -1987,9 +1989,17 @@ const drawScreen = (game: BreakGame, view: View, alpha: f64): void => {
     drawNumberCentred(view, 200.0, 116.0, small, game.score, gold, shadow)
   } else {
     const won: boolean = game.phase === PHASE_WON
-    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, rgb(0, 0, 0), 0.5 * clamp(t * 2.0, 0.0, 1.0))
+    blendRect(view, 0.0, 0.0, 320.0, WORLD_H, gfxRgb(0, 0, 0), 0.5 * clamp(t * 2.0, 0.0, 1.0))
     const y: f64 = lerp(-24.0, 56.0, outBounce(clamp(t / 0.9, 0.0, 1.0)))
-    drawTextCentred(view, 160.0, y, big, won ? "YOU WIN" : "GAME OVER", won ? gold : rgb(255, 90, 90), shadow)
+    drawTextCentred(
+      view,
+      160.0,
+      y,
+      big,
+      won ? "YOU WIN" : "GAME OVER",
+      won ? gold : gfxRgb(255, 90, 90),
+      shadow
+    )
     drawNumberCentred(view, 160.0, 92.0, big, game.score, white, shadow)
     if (game.phaseTime >= DISMISS_STEPS && game.ticks % 70 < 48) {
       drawTextCentred(view, 160.0, 124.0, small, "PRESS SPACE", dim(white, 0.8), shadow)
