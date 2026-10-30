@@ -608,6 +608,22 @@ size and fails if either path's checksum differs from the one pinned in the
 driver. `tests/simd/crc32 bench` times the C kernels directly, beside the
 table reference.
 
+Median ns/op from `--self --runs 9`, on two machines. The x86-64 run is an
+Intel Xeon at 2.10 GHz on the `pclmul` path. The AArch64 run is CI's
+`simd-arm64` job on `ubuntu-24.04-arm`, on the `crc32` path. `copy` is the
+default binary run again, so its gap from `default` is the noise band: 2 to 7%
+on the Xeon and under 1% on the ARM runner. The reading is in
+[docs/wp38-simd.md §3.1](../docs/wp38-simd.md).
+
+| Workload | x86-64 default | copy | soft | AArch64 default | copy | soft |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| crc-64 | 16 | 16 | 47 | 11 | 11 | 36 |
+| crc-4k | 188 | 193 | 1,434 | 186 | 187 | 1,172 |
+| crc-64k | 2,976 | 3,035 | 23,196 | 2,494 | 2,496 | 18,589 |
+| crc-1m | 50,746 | 53,482 | 465,955 | 41,826 | 41,819 | 299,178 |
+| gzip-compress-1m | 58,558,905 | 59,432,084 | 59,025,291 | 35,006,497 | 35,008,259 | 35,259,514 |
+| gzip-decompress-1m | 4,541,521 | 4,866,916 | 5,066,379 | 2,314,526 | 2,313,356 | 2,574,127 |
+
 ## HTTP
 
 `http1-server.ts` is a program built on `nish/net/http1-server` the way the

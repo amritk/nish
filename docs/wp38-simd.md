@@ -976,10 +976,27 @@ columns is the noise band: 2 to 7% here. The CRC-32 rows clear it many times
 over: about 22 GB/s from 4 KiB up at the median (19.6 to 20.7 GB/s at 1 MiB),
 against 2.3 to 2.9 GB/s on the tables. The gzip rows do not: compressing is
 match finding, and the 12% on decompressing is about twice the band, a gain
-to read as small rather than as measured. On AArch64 CI's `simd-arm64` job
-runs the same command each push and prints its table in the step log. The
-PMULL verdict above, 21.0 against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at
-1 MiB, is a 20% and a 17% gap, well outside a band of this size.
+to read as small rather than as measured.
+
+On AArch64, CI's `simd-arm64` job runs the same command each push and prints
+its table in the step log. These are its medians at `43c4bbd` (the merge ref
+`902ec83`), on the GitHub `ubuntu-24.04-arm` runner, the ARMv8 CRC32 path:
+
+| Workload | `default` (`crc32`) | `default (copy)` | `soft` (`tables`) | Soft over default |
+| --- | ---: | ---: | ---: | ---: |
+| CRC-32, 64 B | 11 | 11 | 36 | 3.19x |
+| CRC-32, 4 KiB | 186 | 187 | 1,172 | 6.30x |
+| CRC-32, 64 KiB | 2,494 | 2,496 | 18,589 | 7.45x |
+| CRC-32, 1 MiB | 41,826 | 41,819 | 299,178 | 7.15x |
+| gzip compress, 1 MiB | 35,006,497 | 35,008,259 | 35,259,514 | 1.01x |
+| gzip decompress, 1 MiB | 2,314,526 | 2,313,356 | 2,574,127 | 1.11x |
+
+Here the copy column agrees with the default within 0.6% on every row, so the
+band is under 1%. The CRC-32 rows run at 22.0 to 26.3 GB/s from 4 KiB up at
+the median, against about 3.5 GB/s on the tables. The 11% on decompressing is
+past this band, but it is still a small gain. The PMULL verdict above, 21.0
+against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at 1 MiB, measured on this
+runner, is a 20% and a 17% gap: more than twenty times this run's own band.
 
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 
