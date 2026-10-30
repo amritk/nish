@@ -8,7 +8,9 @@
 // fixed-Huffman encoder round trip on random and JSON-shaped bodies of every
 // size class, each `HTTP_COMPRESS_*` decision, the saving thresholds, segment
 // mode (its head arithmetic against the heads written), `Vary` only where the
-// request decided, and `identity;q=0` sent gzip below every threshold.
+// request decided, and `identity;q=0` sent gzip below every threshold. Last,
+// segment mode's skip: a response that fits one segment as it is goes out
+// with no encoder run (`encoderRuns`), at the segment's edge and one byte past.
 import { DEFLATE_FAST, DEFLATE_NO_ROOM } from "nish/compress/deflate"
 import { GzipDecompressor, GzipFixedCompressor } from "nish/compress/gzip"
 import {
@@ -536,6 +538,66 @@ export const main = (): number => {
     t.eqI32("h1 none acceptable: respondEncoded", none.respondEncoded(200, names, values, body, 0, 5221, p, none.acceptEncoding()), 0)
     const e: Response = queued(none)
     t.ok("h1 none acceptable: identity, with vary", e.has("content-length: 5221") && e.has("vary: accept-encoding"))
+  }
+
+  // --- The one-segment skip ---------------------------------------------------
+  {
+    const p = new HttpCompressor(DEFLATE_FAST, 256, 65536)
+    p.segmentMode = true
+    t.ok("skip: 1448 bytes fit the default segment", p.oneSegment(HTTP_CODING_GZIP, 1448, 0))
+    t.ok("skip: 1449 do not", !p.oneSegment(HTTP_CODING_GZIP, 1449, 0))
+    t.ok("skip: the connection's mss wins over the compressor's", p.oneSegment(HTTP_CODING_GZIP, 2000, 2000) && !p.oneSegment(HTTP_CODING_GZIP, 2001, 2000))
+    t.ok("skip: not under minLength", !p.oneSegment(HTTP_CODING_GZIP, 255, 0))
+    t.ok("skip: not for a client without gzip", !p.oneSegment(HTTP_CODING_IDENTITY, 600, 0))
+    t.eqI32("skip: oneSegment runs no encoder", p.encoderRuns, 0)
+    // 600 bytes and their head fit the default segment: no encoder runs.
+    const one = request(t, "skip one", config, "GET", "accept-encoding: gzip\r\n")
+    t.eqI32("skip one: respondEncoded", one.respondEncoded(200, names, values, body, 0, 600, p, one.acceptEncoding()), 0)
+    const o: Response = queued(one)
+    t.eqI32("skip one: NO_FEWER_SEGMENTS", p.decision, HTTP_COMPRESS_NO_FEWER_SEGMENTS)
+    t.ok("skip one: sent as it is", o.head.indexOf("content-encoding") < 0 && o.has("content-length: 600") && same(body, o.bytes, o.bodyStart, 600))
+    t.ok("skip one: no vary", o.head.indexOf("vary") < 0)
+    t.eqI32("skip one: and no encoder ran", p.encoderRuns, 0)
+    // The whole response, head and 600 bytes: the boundary is set from it.
+    const whole: i32 = o.bodyEnd - one.outputStart
+    const exact = request(t, "skip exact", config, "GET", "accept-encoding: gzip\r\n")
+    exact.mss = whole
+    t.eqI32("skip exact: respondEncoded", exact.respondEncoded(200, names, values, body, 0, 600, p, exact.acceptEncoding()), 0)
+    t.ok(`skip exact: a ${whole}-byte response in a ${whole}-byte segment is sent as it is`, queued(exact).has("content-length: 600") && p.decision === HTTP_COMPRESS_NO_FEWER_SEGMENTS)
+    t.eqI32("skip exact: no encoder ran", p.encoderRuns, 0)
+    // One byte over the segment: compressed, since gzip then takes one segment, not two.
+    const over = request(t, "skip over", config, "GET", "accept-encoding: gzip\r\n")
+    over.mss = whole - 1
+    t.eqI32("skip over: respondEncoded", over.respondEncoded(200, names, values, body, 0, 600, p, over.acceptEncoding()), 0)
+    const v: Response = queued(over)
+    t.ok(`skip over: a ${whole}-byte response in a ${whole - 1}-byte segment is gzipped`, v.has("content-encoding: gzip") && v.has("vary: accept-encoding") && p.decision === HTTP_COMPRESS_SENT)
+    t.ok("skip over: in one segment", v.bodyEnd - over.outputStart <= whole - 1)
+    t.eqI32("skip over: and gunzips", gunzip.decompress(v.bytes, v.bodyStart, v.bodyEnd - v.bodyStart, back, 0, 70000), 600)
+    t.eqI32("skip over: one encoder run", p.encoderRuns, 1)
+    // A body of exactly one segment: its head pushes it over, so it is compressed.
+    const full = request(t, "skip full", config, "GET", "accept-encoding: gzip\r\n")
+    t.eqI32("skip full: respondEncoded", full.respondEncoded(200, names, values, body, 0, 1448, p, full.acceptEncoding()), 0)
+    t.ok("skip full: 1448 bytes and a head are gzipped", queued(full).has("content-encoding: gzip") && p.decision === HTTP_COMPRESS_SENT)
+    t.eqI32("skip full: one encoder run more", p.encoderRuns, 2)
+    const past = request(t, "skip past", config, "GET", "accept-encoding: gzip\r\n")
+    t.eqI32("skip past: respondEncoded", past.respondEncoded(200, names, values, body, 0, 1449, p, past.acceptEncoding()), 0)
+    t.ok("skip past: 1449 bytes are gzipped", queued(past).has("content-encoding: gzip") && p.decision === HTTP_COMPRESS_SENT)
+    t.eqI32("skip past: one encoder run more", p.encoderRuns, 3)
+    // A client that takes no gzip: NOT_ACCEPTED, with vary, as before.
+    const not = request(t, "skip not accepted", config, "GET", "")
+    t.eqI32("skip not accepted: respondEncoded", not.respondEncoded(200, names, values, body, 0, 600, p, not.acceptEncoding()), 0)
+    const a: Response = queued(not)
+    t.eqI32("skip not accepted: NOT_ACCEPTED", p.decision, HTTP_COMPRESS_NOT_ACCEPTED)
+    t.ok("skip not accepted: as it is, with vary", a.head.indexOf("content-encoding") < 0 && a.has("vary: accept-encoding"))
+    // Under minLength: TOO_SMALL, as before.
+    const short = request(t, "skip short", config, "GET", "accept-encoding: gzip\r\n")
+    t.eqI32("skip short: respondEncoded", short.respondEncoded(200, names, values, body, 0, 100, p, short.acceptEncoding()), 0)
+    t.eqI32("skip short: TOO_SMALL", p.decision, HTTP_COMPRESS_TOO_SMALL)
+    // identity;q=0: gzip all the same, one segment or not.
+    const must = request(t, "skip refused", config, "GET", "accept-encoding: gzip, identity;q=0\r\n")
+    t.eqI32("skip refused: respondEncoded", must.respondEncoded(200, names, values, body, 0, 600, p, must.acceptEncoding()), 0)
+    t.ok("skip refused: gzipped", queued(must).has("content-encoding: gzip") && p.decision === HTTP_COMPRESS_SENT)
+    t.eqI32("skip refused: one encoder run more", p.encoderRuns, 4)
   }
   return t.done()
 }

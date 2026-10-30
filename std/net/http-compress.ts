@@ -401,6 +401,11 @@ export class HttpCompressor {
   fixedLimit: i32
   /** The last decision, an `HTTP_COMPRESS_*`; `HTTP_COMPRESS_NOT_ACCEPTED` before any. */
   decision: i32
+  /**
+   * How many times `compress` and `compressAnyway` ran an encoder, from 0: a
+   * count for a test or a profile to read, never consulted by a decision.
+   */
+  encoderRuns: i32
 
   /**
    * A compressor at `level` (`DEFLATE_FAST` suits a server) for bodies of
@@ -430,6 +435,7 @@ export class HttpCompressor {
     this.encoder = HTTP_ENCODER_AUTO
     this.fixedLimit = 16384
     this.decision = HTTP_COMPRESS_NOT_ACCEPTED
+    this.encoderRuns = 0
   }
 
   /**
@@ -462,6 +468,7 @@ export class HttpCompressor {
     if (keep > 0) {
       const fixed: boolean =
         this.encoder === HTTP_ENCODER_FIXED || (this.encoder !== HTTP_ENCODER_LEVEL && len <= this.fixedLimit)
+      this.encoderRuns += 1
       n = fixed
         ? this.fixed.compress(body, off, len, this.output, toI32(0), keep)
         : this.gzip.compress(body, off, len, this.output, toI32(0))
@@ -493,6 +500,7 @@ export class HttpCompressor {
       this.decision = HTTP_COMPRESS_NOT_ACCEPTED
       return -1
     }
+    this.encoderRuns += 1
     let n: i32 = -1
     if (
       this.encoder === HTTP_ENCODER_FIXED ||
@@ -532,15 +540,43 @@ export class HttpCompressor {
    * driving HTTP/2 or HTTP/3 by hand may with its own head sizes.
    */
   fewerSegments(identityBytes: i32, encodedBytes: i32, mss: i32): boolean {
-    let size: i32 = mss
-    if (size <= 0) {
-      size = this.mss > 0 ? this.mss : HTTP_DEFAULT_MSS
-    }
+    const size: i32 = this.segmentSize(mss)
     if (httpSegments(encodedBytes, size) < httpSegments(identityBytes, size)) {
       return true
     }
     this.decision = HTTP_COMPRESS_NO_FEWER_SEGMENTS
     return false
+  }
+
+  /** The segment `segmentMode` counts in: `mss` when above 0, else `this.mss` when above 0, else `HTTP_DEFAULT_MSS`. */
+  segmentSize(mss: i32): i32 {
+    if (mss > 0) {
+      return mss
+    }
+    return this.mss > 0 ? this.mss : HTTP_DEFAULT_MSS
+  }
+
+  /**
+   * `segmentMode`'s shortcut, before any encoder runs: whether a `len`-byte
+   * body that `compress` would try (its length in `[minLength, maxLength]`
+   * and `coding` gzip) is no longer than one segment of `mss` bytes (as
+   * `fewerSegments` reads it). Sent as it is, such a response takes one
+   * segment once its head fits beside it, and no compression takes fewer, so
+   * `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks
+   * the head: when it does not fit, the caller goes on to `compress`, which
+   * decides again. Anything else answers false and leaves `decision` alone.
+   */
+  oneSegment(coding: i32, len: i32, mss: i32): boolean {
+    if (
+      coding !== HTTP_CODING_GZIP ||
+      len < this.minLength ||
+      len > this.maxLength ||
+      len > this.segmentSize(mss)
+    ) {
+      return false
+    }
+    this.decision = HTTP_COMPRESS_NO_FEWER_SEGMENTS
+    return true
   }
 
   /**
