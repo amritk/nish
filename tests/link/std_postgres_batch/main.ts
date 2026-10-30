@@ -218,6 +218,20 @@ const route = (b: PgBatcher, r: i32, conn: PgConnection, bytes: u8[]): string =>
   return out.join(",");
 };
 
+/** A row of the batch statement in binary: the query's text column, then the ordinal as a binary int8. */
+const binaryRow = (value: string, ordinal: i32): u8[] => {
+  const body: u8[] = [];
+  pushI16(body, 2);
+  pushI32(body, toI32(value.length));
+  for (const b of z(value)) {
+    body.push(b);
+  }
+  pushI32(body, 8);
+  pushI32(body, 0);
+  pushI32(body, ordinal);
+  return msg("D", body);
+};
+
 const ints = (): PgBatchConfig => {
   const c = new PgBatchConfig();
   c.name = "titles";
@@ -731,6 +745,52 @@ const room = (t: Suite): void => {
   t.eqStr("and a byte past it is refused", fullTake(987, 983), "-1");
 };
 
+/** A binary batch's answer to `bad` then a good row, and what it refused. */
+const binaryRefusal = (bad: u8[]): string => {
+  const c = ints();
+  c.binary = true;
+  const b = new PgBatcher(c);
+  const conn = prepared(b, config());
+  b.addInt(toI64(1), 1);
+  b.addInt(toI64(2), 2);
+  const r: i32 = b.take(conn);
+  conn.sync();
+  drain(conn);
+  const got: string = route(b, r, conn, answer(cat(bad, binaryRow("good", 2))));
+  return `${got} refused ${b.refused}`;
+};
+
+const binaryBatch = (t: Suite): void => {
+  const c = ints();
+  c.binary = true;
+  const b = new PgBatcher(c);
+  const conn = prepared(b, config());
+  b.addInt(toI64(5), 10);
+  b.addInt(toI64(6), 11);
+  const r: i32 = b.take(conn);
+  t.eqI32("a binary take answers a run", r, 0);
+  conn.sync();
+  const bind: string = drain(conn);
+  t.ok("its Bind asks for one result format, binary", bind.indexOf("}|<1>|<1>") >= 0 && bind.indexOf("}||") < 0);
+  t.eqStr(
+    "its ordinals are read as binary int8s, each row to its request",
+    route(b, r, conn, answer(cat(binaryRow("x", 1), binaryRow("y", 2)))),
+    "10=x,10.,11=y,11.",
+  );
+  t.eqI32("nothing refused", b.refused, 0);
+
+  // The caller's own binary decode state is left as it was.
+  const again: i32 = b.take(conn);
+  conn.sync();
+  drain(conn);
+  conn.binary.failed = true;
+  route(b, again, conn, answer(cat(binaryRow("z", 1), binaryRow("w", 2))));
+  t.ok("binary.failed stays as the caller set it", conn.binary.failed);
+
+  t.eqStr("a text ordinal is refused", binaryRefusal(row("text", "1")), "no,no,1!,2! refused 1");
+  t.eqStr("a NULL ordinal is refused", binaryRefusal(dataRow(["x", "0"], [false, true])), "no,no,1!,2! refused 1");
+};
+
 export const main = (): number => {
   const t = new Suite("postgres batch");
   statement(t);
@@ -744,5 +804,6 @@ export const main = (): number => {
   failures(t);
   strays(t);
   room(t);
+  binaryBatch(t);
   return t.done();
 };
