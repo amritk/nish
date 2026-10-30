@@ -233,6 +233,11 @@ const produceChecked = (seed) => {
       }
       return
     }
+    // A module from a package (`std/` loaded as `nish/...`) dumps with this
+    // program's instantiations, so it stays with the program, under its entry
+    // line, rather than joining the body of whichever module preceded it.
+    const packages = []
+    let inPackage = false
     let conflict
     for (const line of lines) {
       const at = /^module (\S+)(?: \(entry\))?$/.exec(line)
@@ -240,6 +245,14 @@ const produceChecked = (seed) => {
         conflict = close() ?? conflict
         module = at[1]
         body = []
+        inPackage = false
+      } else if (/^module \S+ \[package \S+\]$/.test(line)) {
+        conflict = close() ?? conflict
+        module = null
+        inPackage = true
+        packages.push(line)
+      } else if (inPackage) {
+        packages.push(line)
       } else if (module !== null) {
         body.push(line)
       }
@@ -248,7 +261,7 @@ const produceChecked = (seed) => {
     if (conflict !== undefined) {
       return { error: conflict }
     }
-    entries.set(named, `entry${label}: ${order.join(" ")}`)
+    entries.set(named, [`entry${label}: ${order.join(" ")}`, ...packages].join("\n"))
   }
 
   const files = new Map()
