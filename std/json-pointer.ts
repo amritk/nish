@@ -139,7 +139,7 @@ const jsonPointerToken = (p: string, from: i32, end: i32): string => {
   let i: i32 = from
   while (i < end) {
     if (jsonPointerByte(p, i) === JSON_POINTER_TILDE) {
-      parts.push(p.substring(run, i))
+      parts.push(p.slice(run, i))
       parts.push(jsonPointerByte(p, i + 1) === JSON_POINTER_DIGIT_1 ? "/" : "~")
       i += 2
       run = i
@@ -147,7 +147,7 @@ const jsonPointerToken = (p: string, from: i32, end: i32): string => {
       i += 1
     }
   }
-  parts.push(p.substring(run, end))
+  parts.push(p.slice(run, end))
   return parts.join("")
 }
 
@@ -188,12 +188,12 @@ export const jsonPointerEscape = (token: string): string => {
   for (let i: i32 = 0; i < toI32(token.length); i++) {
     const c: i32 = jsonPointerByte(token, i)
     if (c === JSON_POINTER_TILDE || c === JSON_POINTER_SLASH) {
-      parts.push(token.substring(run, i))
+      parts.push(token.slice(run, i))
       parts.push(c === JSON_POINTER_TILDE ? "~0" : "~1")
       run = i + 1
     }
   }
-  parts.push(token.substring(run))
+  parts.push(token.slice(run))
   return parts.join("")
 }
 
