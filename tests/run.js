@@ -10682,7 +10682,7 @@ for (const name of ["unsafe_get_set", "unsafe_wrapping"]) {
   )
 }
 
-// WP38 S3: `nish:simd` three ways. Each positive `simd_*` program is linked
+// WP38 S3: `nish:simd` three ways. Each `simd_*` program with a `.out` is linked
 // natively, built with `--profile wasi` and run under Node's WASI where a
 // sysroot is installed, and run from source under `runtime/nish.mjs`, where a
 // vector is a typed array; all three must print the `.out` section A holds the
@@ -10695,7 +10695,12 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
   fs.rmSync(simdDir, { recursive: true, force: true })
   fs.mkdirSync(simdDir, { recursive: true })
   const wasi = WASI_SYSROOT && has("wasm-ld")
-  for (const name of ["simd_lanes", "simd_access", "simd_values"]) {
+  const programs = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^simd_.*\.out$/.test(f))
+    .map((f) => f.slice(0, -".out".length))
+  check("simd: the section finds the simd_* programs with a .out", programs.length >= 3, programs.join(", "))
+  for (const name of programs) {
     const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
     const exe = buildCaseIn(simdDir, name)
     if (exe !== null) {
@@ -10759,33 +10764,68 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     shown(oobNode)
   )
 
-  // The sidecars spell no vector: the function is skipped, and the comment says
-  // which type stopped it.
+  // The sidecars spell no vector: a function with one in its signature, as a
+  // parameter, a result or an array's element, is skipped by the header, the
+  // Node-API shim and the wasm loader, each with a comment naming the type; a
+  // class holding one is opaque in the header, as a `Map` holder is.
   const lib = path.join(simdDir, "lib.ts")
   fs.writeFileSync(
     lib,
-    'import { i32x4, extract } from "nish:simd";\n' +
+    'import { i32x4, extract, splatI32x4 } from "nish:simd";\n' +
+      "export class Holder { n: i32; v: i32x4; constructor(n: i32) { this.n = n; this.v = splatI32x4(n) } }\n" +
       "export const first = (v: i32x4): i32 => extract(v, 0);\n" +
+      "export const make = (x: i32): i32x4 => splatI32x4(x);\n" +
+      "export const sum = (vs: i32x4[]): i32 => extract(vs[0], 0);\n" +
+      "export const peek = (h: Holder): i32 => h.n;\n" +
       "export const twice = (x: i32): i32 => x * 2;\n"
   )
   const header = path.join(simdDir, "lib.h")
   const dts = path.join(simdDir, "lib.d.ts")
+  const napi = path.join(simdDir, "lib_napi.c")
   const sides = spawnSync(
     NISH,
-    [lib, "-o", path.join(simdDir, "lib.ll"), "--emit-header", header, "--emit-dts", dts],
+    [lib, "-o", path.join(simdDir, "lib.ll"), "--emit-header", header, "--emit-dts", dts, "--emit-napi", napi],
     { cwd: root, encoding: "utf8" }
   )
-  const h = sides.status === 0 ? fs.readFileSync(header, "utf8") : ""
-  const d = sides.status === 0 ? fs.readFileSync(dts, "utf8") : ""
+  const read = (f) => (sides.status === 0 ? fs.readFileSync(f, "utf8") : "")
+  const h = read(header)
+  const d = read(dts)
+  const m = read(path.join(simdDir, "lib.mjs"))
+  const n = read(napi)
+  const code = h.replace(/\/\*[\s\S]*?\*\//g, "")
   check(
-    "simd: --emit-header and --emit-dts skip a function with a vector parameter, naming i32x4",
+    "simd: --emit-header leaves out a vector parameter, result and array of vectors, naming each, and makes a vector holder opaque",
     sides.status === 0 &&
       h.includes("int32_t twice(int32_t x);") &&
-      !/\bfirst\(/.test(h.replace(/\/\*[\s\S]*?\*\//g, "")) &&
-      h.includes("first(v: i32x4)") &&
+      h.includes("int32_t peek(struct Holder *h);") &&
+      h.includes("typedef struct Holder Holder;") &&
+      !/struct Holder \{/.test(code) &&
+      !/\b(first|make|sum)\(/.test(code) &&
+      h.includes("first(v: i32x4): number: not declared") &&
+      h.includes("make(x: number): i32x4: not declared") &&
+      h.includes("sum(vs: i32x4[]): number: not declared"),
+    `${shown(sides)}\n--- lib.h\n${h}`
+  )
+  check(
+    "simd: --emit-napi bridges none of the vector signatures, naming the type",
+    sides.status === 0 &&
+      n.includes('{"twice", nish_napi_twice}') &&
+      !/nish_napi_(first|make|sum)\b/.test(n) &&
+      n.includes("first(v: i32x4): number -- not bridged: parameter 1 (v) is i32x4") &&
+      n.includes("make(x: number): i32x4 -- not bridged: it returns i32x4") &&
+      n.includes("sum(vs: i32x4[]): number -- not bridged: parameter 1 (vs) is i32x4[]"),
+    `${shown(sides)}\n--- lib_napi.c\n${n}`
+  )
+  check(
+    "simd: --emit-dts and its wasm loader export none of the vector signatures, naming the type",
+    sides.status === 0 &&
       d.includes("twice(x: number): number;") &&
-      d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector"),
-    `${shown(sides)}\n--- lib.h\n${h}\n--- lib.d.ts\n${d}`
+      m.includes("twice: raw.twice") &&
+      !/\b(first|make|sum): raw\./.test(m) &&
+      d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector") &&
+      d.includes("the result is `i32x4`, a `nish:simd` vector") &&
+      d.includes("sum(vs: i32x4[]): number  -- not exported to JS"),
+    `${shown(sides)}\n--- lib.d.ts\n${d}\n--- lib.mjs\n${m}`
   )
 
   // Generic IR only: LLVM picks the instructions for the target it is given.
@@ -16373,15 +16413,32 @@ if (!only || "layout".includes(only)) {
       check("layout: tests/layout/simd.ts compiles", sc.status === 0, String(sc.stderr))
       if (sc.status === 0) {
         const ir = fs.readFileSync(simdLl, "utf8")
-        const alloc = ir.match(/define [^\n]*@makeLanes\([^\n]*\{\n[\s\S]*?@nish_alloc_struct\(i64 (\d+)\)/)
-        const cSize = fs.readFileSync(simdC, "utf8").match(/_Static_assert\(sizeof\(struct Lanes\) == (\d+)/)
+        const cText = fs.readFileSync(simdC, "utf8")
+        /** What `make<Name>` allocates, and what simd.c asserts `sizeof(struct <Name>)` is. */
+        const sizes = (name) => {
+          const alloc = ir.match(new RegExp(`define [^\\n]*@make${name}\\([^\\n]*\\{\\n[\\s\\S]*?@nish_alloc_struct\\(i64 (\\d+)\\)`))
+          const cSize = cText.match(new RegExp(`_Static_assert\\(sizeof\\(struct ${name}\\) == (\\d+)`))
+          return { ir: alloc && alloc[1], c: cSize && cSize[1] }
+        }
+        const lanes = sizes("Lanes")
         check(
           "layout: a vector field is `<N x T>`, an array of them `[K x <N x T>]`, and the object is the size simd.c asserts",
-          ir.includes("%struct.Lanes = type { i32, <4 x i32>, double, <2 x double>, { %struct.nish_array, [3 x <4 x i32>] }, <16 x i8> }") &&
-            alloc !== null &&
-            cSize !== null &&
-            alloc[1] === cSize[1],
-          `IR allocates ${alloc && alloc[1]}, simd.c asserts ${cSize && cSize[1]}`
+          ir.includes(
+            "%struct.Lanes = type { i32, <4 x i32>, double, <2 x double>, { %struct.nish_array, [3 x <4 x i32>] }, <16 x i8>, <8 x i16>, <4 x i32>, <4 x float> }"
+          ) &&
+            lanes.ir !== null &&
+            lanes.ir === lanes.c,
+          `IR allocates ${lanes.ir}, simd.c asserts ${lanes.c}`
+        )
+        // An inline array of vectors is aligned to sixteen, not to its header's
+        // eight, so `Mid` and `Tail` (one after a lone i32, mid-object and last)
+        // are allocated at the size LLVM and clang give them.
+        const mid = sizes("Mid")
+        const tail = sizes("Tail")
+        check(
+          "layout: an inline array of vectors after an i32, mid-object and as the last field, is allocated at the size simd.c asserts",
+          mid.ir !== null && mid.ir === mid.c && tail.ir !== null && tail.ir === tail.c,
+          `Mid: IR ${mid.ir}, simd.c ${mid.c}; Tail: IR ${tail.ir}, simd.c ${tail.c}`
         )
         const exe = path.join(buildDir, "layout_simd")
         const cc = spawnSync(

@@ -64,7 +64,7 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
   callee +8:13 cType -> @cType
 function structDefinitions(compilation: Compilation): string[] -> @structDefinitions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isRanged TypeTable.kindOf cFieldType cParamName cStructName isCollectionStruct isSecretStruct nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf spaceAfter tsKeyword
+  calls: TypeTable.isRanged TypeTable.kindOf cFieldType cParamName cStructName holdsVector isCollectionStruct isSecretStruct nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf spaceAfter tsKeyword
   pointer compilation: size=160 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local +0:9 table: TypeTable (const)
@@ -85,19 +85,28 @@ function structDefinitions(compilation: Compilation): string[] -> @structDefinit
   callee +33:9 isCollectionStruct -> @isCollectionStruct
   callee +43:9 isSecretStruct -> @isSecretStruct
   callee +53:9 secretFieldOf -> @secretFieldOf
-  local +68:16 f: FieldInfo (const)
-  local +69:13 t: string (const)
-  callee +69:17 cFieldType -> @cFieldType
-  local +71:13 name: string (const)
-  callee +71:20 cParamName -> @cParamName
-  local +73:13 note: string (const)
-  callee +74:9 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +74:45 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +75:31 tsKeyword -> @tsKeyword
-  callee +77:27 spaceAfter -> @spaceAfter
+  callee +63:9 holdsVector -> @holdsVector
+  local +78:16 f: FieldInfo (const)
+  local +79:13 t: string (const)
+  callee +79:17 cFieldType -> @cFieldType
+  local +81:13 name: string (const)
+  callee +81:20 cParamName -> @cParamName
+  local +83:13 note: string (const)
+  callee +84:9 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +84:45 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +85:31 tsKeyword -> @tsKeyword
+  callee +87:27 spaceAfter -> @spaceAfter
+function holdsVector(table: TypeTable, info: StructInfo): boolean -> @holdsVector
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.isVector
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isVector#0
+  pointer info: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 f: FieldInfo (const)
+  callee +1:9 TypeTable.isVector -> @TypeTable.isVector
 function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: isCollectionStruct isSecretStruct nish_array_grow secretFieldOf
+  calls: holdsVector isCollectionStruct isSecretStruct nish_array_grow secretFieldOf
   pointer compilation: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: i32[] (const)
@@ -106,7 +115,8 @@ function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
   callee +5:9 isCollectionStruct -> @isCollectionStruct
   callee +6:9 isSecretStruct -> @isSecretStruct
   callee +7:9 secretFieldOf -> @secretFieldOf
-  local +11:18 f: FieldInfo (const)
+  callee +8:9 holdsVector -> @holdsVector
+  local +12:18 f: FieldInfo (const)
 function prototypeComment(table: TypeTable, fn: ExternalFunction): string -> @prototypeComment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: cAliasReason cFunctionName elementNotes nish_str_concat tsSignatureLine

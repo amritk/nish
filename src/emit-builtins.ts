@@ -1159,8 +1159,11 @@ export const identifierBuiltinCalleesNamed = (
   name: string
 ): string[] => {
   const out: string[] = []
+  // The `nish:simd` names `isBuiltinFunction` lists each get a branch of their
+  // own, though `isSimdExport` below answers them too: the allocating-builtin
+  // scan in tests/run.js reads this table by `name === "..."` branches, and
+  // reads a builtin with none as unchecked.
   if (name === "store") {
-    // A store's out-of-range panic.
     out.push("nish_panic_index")
     return out
   }

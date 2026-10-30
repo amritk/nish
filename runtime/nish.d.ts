@@ -703,9 +703,9 @@ declare module "nish:unsafe" {
 // `runtime/nish.mjs` answers the import with `runtime/core.mjs`'s names.
 declare module "nish:simd" {
   /**
-   * A sixteen-byte vector of lanes. Opaque: there is no `+` or `===` on one,
-   * so TypeScript refuses what `nish` refuses. Under Node it is a typed array
-   * made once and never written after.
+   * A sixteen-byte vector of lanes. Opaque: TypeScript refuses `+` on one, as
+   * `nish` does, but lets `===` and `<` through, which `nish` refuses. Under
+   * Node it is a typed array made once and never written after.
    */
   export interface u8x16 { readonly __nishSimd: "u8x16"; readonly __lane: u8 }
   export interface u16x8 { readonly __nishSimd: "u16x8"; readonly __lane: u16 }

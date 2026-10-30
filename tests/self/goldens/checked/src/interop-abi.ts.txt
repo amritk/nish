@@ -201,21 +201,32 @@ function typedView(table: TypeTable, t: i32): TypedView | null -> @typedView [ex
   callee +24:14 new TypedView -> @TypedView.constructor
   callee +26:14 new TypedView -> @TypedView.constructor
   callee +28:14 new TypedView -> @TypedView.constructor
+function arrayOfVectors(table: TypeTable, t: i32): boolean -> @arrayOfVectors
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: t
+  calls: TypeTable.isVector TypeTable.kindOf TypeTable.refOf
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 TypeTable.isVector#0
+  stackSites=0 stackLocals=0
+  local +0:7 at: i32 (let)
+  callee +1:10 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +2:10 TypeTable.refOf -> @TypeTable.refOf
+  callee +4:10 TypeTable.isVector -> @TypeTable.isVector
 function cType(table: TypeTable, t: i32, position: i32, written: boolean): string -> @cType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: position t
-  calls: TypeTable.isRanged TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.resultByValue cResultName cResultWord cStructName cType nish_str_concat
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
+  calls: TypeTable.isRanged TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.resultByValue arrayOfVectors cResultName cResultWord cStructName cType nish_str_concat
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.kindOf#0 arrayOfVectors#0 TypeTable.nameOf#0 cType#0 TypeTable.refOf#0 TypeTable.resultByValue#0 cResultWord#0 cResultName#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isRanged -> @TypeTable.isRanged
   callee +3:11 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +39:24 cStructName -> @cStructName
-  callee +39:36 TypeTable.nameOf -> @TypeTable.nameOf
-  callee +41:14 cType -> @cType
-  callee +41:27 TypeTable.refOf -> @TypeTable.refOf
-  callee +49:14 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +49:39 cResultWord -> @cResultWord
-  callee +49:73 cResultName -> @cResultName
+  callee +34:11 arrayOfVectors -> @arrayOfVectors
+  callee +44:24 cStructName -> @cStructName
+  callee +44:36 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +46:14 cType -> @cType
+  callee +46:27 TypeTable.refOf -> @TypeTable.refOf
+  callee +54:14 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +54:39 cResultWord -> @cResultWord
+  callee +54:73 cResultName -> @cResultName
 function cResultName(table: TypeTable, t: i32): string -> @cResultName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t

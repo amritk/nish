@@ -887,19 +887,19 @@ function identifierBuiltinCalleesNamed(program: CheckedProgram, table: TypeTable
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
-  callee +15:7 isSimdExport -> @isSimdExport
-  callee +17:12 isSimdAccess -> @isSimdAccess
-  callee +19:8 isBuiltinFunction -> @isBuiltinFunction
-  local +22:9 args: Node (const)
-  local +23:9 firstType: i32 (const)
-  local +24:9 target: i32 (const)
-  callee +24:18 builtinConversionTarget -> @builtinConversionTarget
-  local +26:11 intrinsic: string (const)
-  callee +26:40 conversionIntrinsic -> @conversionIntrinsic
-  callee +207:5 panicTailCallees -> @panicTailCallees
-  callee +238:7 isNetExport -> @isNetExport
-  callee +239:14 netSymbol -> @netSymbol
-  callee +240:9 netRangeBuffer -> @netRangeBuffer
+  callee +18:7 isSimdExport -> @isSimdExport
+  callee +20:12 isSimdAccess -> @isSimdAccess
+  callee +22:8 isBuiltinFunction -> @isBuiltinFunction
+  local +25:9 args: Node (const)
+  local +26:9 firstType: i32 (const)
+  local +27:9 target: i32 (const)
+  callee +27:18 builtinConversionTarget -> @builtinConversionTarget
+  local +29:11 intrinsic: string (const)
+  callee +29:40 conversionIntrinsic -> @conversionIntrinsic
+  callee +210:5 panicTailCallees -> @panicTailCallees
+  callee +241:7 isNetExport -> @isNetExport
+  callee +242:14 netSymbol -> @netSymbol
+  callee +243:9 netRangeBuffer -> @netRangeBuffer
 function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emitNetCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitIndex

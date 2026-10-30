@@ -16,9 +16,9 @@ import splatF64x2 from "nish:simd" -> builtin splatF64x2
 import extract from "nish:simd" -> builtin extract
 import replace from "nish:simd" -> builtin replace
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 nish_str_from_u64
+  calls: nish_arena_mark nish_arena_release nish_parse_number nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_from_u64
   stackSites=0 stackLocals=0
   local +0:9 b: u8x16 (const)
   local +2:9 h: u16x8 (const)
@@ -26,3 +26,9 @@ function main(): i32 -> @nish_main [exported entry]
   local +6:9 u: u32x4 (const)
   local +8:9 f: f32x4 (const)
   local +10:9 d: f64x2 (const)
+  local +20:9 zero: f64 (const)
+  local +21:9 nan: f64 (const)
+  local +22:9 zero32: f32 (const)
+  local +23:9 nan32: f32 (const)
+  local +24:9 odd: f32x4 (const)
+  local +28:9 wide: f64x2 (const)

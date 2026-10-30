@@ -77,26 +77,33 @@ function roundUpTo(value: i32, align: i32): i32 -> @roundUpTo [exported]
   calls: nish_panic_div nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 remainder: i32 (const)
-function fieldWidth(table: TypeTable, field: FieldInfo): i32 -> @fieldWidth
+function fieldAlign(table: TypeTable, field: FieldInfo): i32 -> @fieldAlign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf nish_panic_overflow roundUpTo
+  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
   pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee +0:8 FieldInfo.inline -> @FieldInfo.inline
   callee +1:12 TypeTable.alignOf -> @TypeTable.alignOf
-  local +3:9 stride: i32 (const)
-  callee +3:18 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +3:32 TypeTable.refOf -> @TypeTable.refOf
-  callee +4:10 roundUpTo -> @roundUpTo
-function fieldAlign(table: TypeTable, field: FieldInfo): i32 -> @fieldAlign
+  local +3:9 slot: i32 (const)
+  callee +3:16 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +3:30 TypeTable.refOf -> @TypeTable.refOf
+function fieldWidth(table: TypeTable, field: FieldInfo): i32 -> @fieldWidth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FieldInfo.inline TypeTable.alignOf
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.alignOf#0
-  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf fieldAlign nish_panic_overflow roundUpTo
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 fieldAlign#0 TypeTable.alignOf#0 TypeTable.refOf#0
+  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
   stackSites=0 stackLocals=0
-  callee +0:3 FieldInfo.inline -> @FieldInfo.inline
-  callee +0:24 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +0:8 FieldInfo.inline -> @FieldInfo.inline
+  callee +1:12 TypeTable.alignOf -> @TypeTable.alignOf
+  local +3:9 align: i32 (const)
+  callee +3:17 fieldAlign -> @fieldAlign
+  local +4:9 stride: i32 (const)
+  callee +4:18 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +4:32 TypeTable.refOf -> @TypeTable.refOf
+  local +5:9 slots: i32 (const)
+  callee +5:17 roundUpTo -> @roundUpTo
+  callee +6:10 roundUpTo -> @roundUpTo
 function computeLayout(ctx: CheckContext, info: StructInfo): i32 -> @computeLayout [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

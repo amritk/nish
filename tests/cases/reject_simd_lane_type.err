@@ -4,4 +4,6 @@ Cannot initialize f32x4 variable `f` with i32x4
 Non-integer literal `1.5` where i32 is expected
 `extract` takes a `nish:simd` vector as its first argument, got i32
 Cannot `store` through readonly u8[] (declare it u8[] to write through it)
-6 errors
+`store` takes a `nish:simd` vector as its first argument, got f64
+`replace` takes a `nish:simd` vector as its first argument, got i32
+8 errors

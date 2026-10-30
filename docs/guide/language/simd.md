@@ -42,7 +42,7 @@ That prints `30` and `0.5`.
 elements must be the lane type: an `i32x4` comes from an `i32[]`, a `u8x16`
 from a `u8[]`. The index is checked once for the whole vector, and if any of
 its lanes would fall outside the array the program stops with the same
-`index out of bounds` message an `xs[i]` gives:
+`index out of range: i >= len` message an `xs[i]` gives:
 
 ```ts nish:ok
 import { loadU8x16, store } from "nish:simd";
@@ -88,8 +88,10 @@ field or an array, pass it to a function and return it. It has no operators
 in this version: `+`, `===`, `<` and the others are refused, and so is
 printing one directly — read the lanes with `extract`. A vector cannot be a
 `Map` key, cannot be `null`, and cannot appear in the signature of a function
-that C or JavaScript calls (`--emit-header`, `--emit-napi`, `--emit-dts`
-leave such a function out and say why).
+that C or JavaScript calls: `--emit-header`, `--emit-napi` and `--emit-dts`
+leave out a function with a vector, or an array of vectors, as a parameter or
+result, and say why. In a C header, a class with a vector field is declared
+without its fields.
 
 The same program prints the same thing natively, under `--profile wasi` and
 under Node, where each vector is a typed array that is never changed after it

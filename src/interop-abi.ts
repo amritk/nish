@@ -314,6 +314,15 @@ export const typedView = (table: TypeTable, t: i32): TypedView | null => {
   }
 }
 
+/** Whether `t` is an array whose innermost element is a `nish:simd` vector. */
+const arrayOfVectors = (table: TypeTable, t: i32): boolean => {
+  let at = t
+  while (table.kindOf(at) === K_ARRAY) {
+    at = table.refOf(at)
+  }
+  return table.isVector(at)
+}
+
 /**
  * C spelling of a type at a parameter or return position; `""` when C has no
  * equivalent. `written` marks an array parameter the callee stores through
@@ -354,6 +363,11 @@ export const cType = (table: TypeTable, t: i32, position: i32, written: boolean)
     case K_ARRAY:
       // One header type for every element type (the comment above the
       // prototype names it). `const` is the `readonly` proof from attributes.ts.
+      // An array of `nish:simd` vectors holds them inline, sixteen bytes a
+      // slot, which C has no portable element type to describe.
+      if (arrayOfVectors(table, t)) {
+        return ""
+      }
       return position === POS_PARAM && !written ? "const nish_array *" : "nish_array *"
     case T_VOID:
       return "void"

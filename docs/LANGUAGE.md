@@ -6678,13 +6678,16 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
   arithmetic: a `u8` lane wraps through `Uint8Array`, an `f32` lane rounds
   through `Float32Array`. `--emit-ts` writes the import as `nish/runtime`'s. A
   load or a store checks the whole vector and panics with the native words.
-  `tests/run.js`'s `simd` section runs every `simd_*` program natively, under
-  `--profile wasi` (where a sysroot is installed) and under Node, and holds the
-  three to one output.
+  `tests/run.js`'s `simd` section runs every `simd_*` program with a `.out`
+  natively, under `--profile wasi` (where a sysroot is installed) and under
+  Node, and holds the three to one output.
 - **A vector does not cross the interop boundary yet.** An exported function
-  with a vector parameter or result is left out of `--emit-header`,
-  `--emit-dts`, `--emit-napi` and `--emit-wasm`'s glue with a comment naming
-  the vector type, as every type the sidecars cannot spell is.
+  with a vector, or an array of vectors, as a parameter or result is left out
+  of `--emit-header`, `--emit-napi` and the `--emit-dts` typings and wasm
+  loader, with a comment naming the type, as every type the sidecars cannot
+  spell is. A class with a vector field is opaque in the header
+  (`typedef struct Name Name;`), as a `Map` or `Secret` holder is: C has no
+  portable vector type to lay it out with.
 
 ### Constant time: `ctSelect` and `ctEq`
 

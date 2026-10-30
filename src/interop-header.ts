@@ -164,6 +164,16 @@ const structDefinitions = (compilation: Compilation): string[] => {
       i = i + 1
       continue
     }
+    // A `nish:simd` vector has no portable C spelling, so a class holding one
+    // is opaque as well rather than describing a field it cannot name.
+    if (holdsVector(table, info)) {
+      lines.push(
+        `/* ${file}: ${kind} ${info.name}, opaque: it holds a nish:simd vector, which C has no portable type for */`
+      )
+      lines.push(`typedef struct ${cName} ${cName};`)
+      i = i + 1
+      continue
+    }
     lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`)
     if (info.fields.length === 0) {
       lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`)
@@ -188,16 +198,27 @@ const structDefinitions = (compilation: Compilation): string[] => {
   return lines
 }
 
+/** Whether a field of `info` is a `nish:simd` vector. */
+const holdsVector = (table: TypeTable, info: StructInfo): boolean => {
+  for (const f of info.fields) {
+    if (table.isVector(f.type)) {
+      return true
+    }
+  }
+  return false
+}
+
 /** Every field type of every class and interface, for the `Result` definitions above. */
 const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = []
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      // An opaque `Map`, `Set` (WP32), `Secret` or holder contributes no field to describe.
+      // An opaque `Map`, `Set` (WP32), `Secret`, holder or vector holder contributes no field to describe.
       if (
         isCollectionStruct(info) ||
         isSecretStruct(info) ||
-        secretFieldOf(compilation.table, info) !== null
+        secretFieldOf(compilation.table, info) !== null ||
+        holdsVector(compilation.table, info)
       ) {
         continue
       }

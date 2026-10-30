@@ -250,6 +250,13 @@ export class DeclaredRange {
 }
 
 /**
+ * The alignment a memory access may claim for a value laid out at `align`:
+ * at most 8, the arena's (`nish_alloc_struct`). Only a `nish:simd` vector
+ * lays out wider, at 16, and only it is ever lowered by this.
+ */
+export const accessAlign = (align: i32): i32 => (align > 8 ? 8 : align)
+
+/**
  * Every type in one program, interned.
  *
  * The parallel arrays are indexed by type id: `kinds[t]` is the kind, `refs`
@@ -258,13 +265,6 @@ export class DeclaredRange {
  * by the constructor so that `T_I32` and friends are usable before anything
  * has been interned.
  */
-/**
- * The alignment a memory access may claim for a value laid out at `align`:
- * at most 8, the arena's (`nish_alloc_struct`). Only a `nish:simd` vector
- * lays out wider, at 16, and only it is ever lowered by this.
- */
-export const accessAlign = (align: i32): i32 => (align > 8 ? 8 : align)
-
 export class TypeTable {
   kinds: i32[]
   refs: i32[]

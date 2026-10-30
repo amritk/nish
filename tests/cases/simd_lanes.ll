@@ -1,10 +1,16 @@
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #0
+@.str.0 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"NaN\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #1
+declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #1
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -14,6 +20,12 @@ entry:
   %u.addr = alloca <4 x i32>, align 8
   %f.addr = alloca <4 x float>, align 8
   %d.addr = alloca <2 x double>, align 8
+  %zero.addr = alloca double, align 8
+  %nan.addr = alloca double, align 8
+  %zero32.addr = alloca float, align 4
+  %nan32.addr = alloca float, align 4
+  %odd.addr = alloca <4 x float>, align 8
+  %wide.addr = alloca <2 x double>, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = insertelement <16 x i8> undef, i8 1, i32 0
   %1 = insertelement <16 x i8> %0, i8 2, i32 1
@@ -130,19 +142,101 @@ entry:
   %95 = extractelement <2 x double> %94, i32 0
   %96 = call i8* @nish_str_from_f64(double %95)
   call void @nish_print(i8* %96)
+  store double 0x0000000000000000, double* %zero.addr, align 8
+  %97 = call double @nish_parse_number(i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i32 0)
+  store double %97, double* %nan.addr, align 8
+  store float 0x0000000000000000, float* %zero32.addr, align 4
+  %98 = load double, double* %nan.addr, align 8
+  %99 = fptrunc double %98 to float
+  store float %99, float* %nan32.addr, align 4
+  %100 = load float, float* %nan32.addr, align 4
+  %101 = insertelement <4 x float> undef, float %100, i32 0
+  %102 = load float, float* %zero32.addr, align 4
+  %103 = fneg float %102
+  %104 = insertelement <4 x float> %101, float %103, i32 1
+  %105 = insertelement <4 x float> %104, float 0x3FB99999A0000000, i32 2
+  %106 = insertelement <4 x float> %105, float 0x3FF0000000000000, i32 3
+  %107 = load float, float* %zero32.addr, align 4
+  %108 = fneg float %107
+  %109 = insertelement <4 x float> %106, float %108, i32 3
+  store <4 x float> %109, <4 x float>* %odd.addr, align 8
+  %110 = load <4 x float>, <4 x float>* %odd.addr, align 8
+  %111 = extractelement <4 x float> %110, i32 0
+  %112 = bitcast float %111 to i32
+  %113 = call i8* @nish_str_from_i32(i32 %112)
+  %114 = call i8* @nish_str_concat(i8* %113, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %115 = load <4 x float>, <4 x float>* %odd.addr, align 8
+  %116 = extractelement <4 x float> %115, i32 1
+  %117 = bitcast float %116 to i32
+  %118 = call i8* @nish_str_from_i32(i32 %117)
+  %119 = call i8* @nish_str_concat(i8* %114, i8* %118)
+  %120 = call i8* @nish_str_concat(i8* %119, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %121 = load <4 x float>, <4 x float>* %odd.addr, align 8
+  %122 = extractelement <4 x float> %121, i32 2
+  %123 = bitcast float %122 to i32
+  %124 = call i8* @nish_str_from_i32(i32 %123)
+  %125 = call i8* @nish_str_concat(i8* %120, i8* %124)
+  %126 = call i8* @nish_str_concat(i8* %125, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %127 = load <4 x float>, <4 x float>* %odd.addr, align 8
+  %128 = extractelement <4 x float> %127, i32 3
+  %129 = bitcast float %128 to i32
+  %130 = call i8* @nish_str_from_i32(i32 %129)
+  %131 = call i8* @nish_str_concat(i8* %126, i8* %130)
+  call void @nish_print(i8* %131)
+  %132 = insertelement <2 x double> undef, double 0x3FB999999999999A, i32 0
+  %133 = load double, double* %zero.addr, align 8
+  %134 = fneg double %133
+  %135 = insertelement <2 x double> %132, double %134, i32 1
+  %136 = load double, double* %nan.addr, align 8
+  %137 = insertelement <2 x double> %135, double %136, i32 0
+  store <2 x double> %137, <2 x double>* %wide.addr, align 8
+  %138 = load <2 x double>, <2 x double>* %wide.addr, align 8
+  %139 = extractelement <2 x double> %138, i32 0
+  %140 = bitcast double %139 to i64
+  %141 = call i8* @nish_str_from_i64(i64 %140)
+  %142 = call i8* @nish_str_concat(i8* %141, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %143 = load <2 x double>, <2 x double>* %wide.addr, align 8
+  %144 = extractelement <2 x double> %143, i32 1
+  %145 = bitcast double %144 to i64
+  %146 = call i8* @nish_str_from_i64(i64 %145)
+  %147 = call i8* @nish_str_concat(i8* %142, i8* %146)
+  %148 = call i8* @nish_str_concat(i8* %147, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %149 = insertelement <2 x double> undef, double 0x3FB999999999999A, i32 0
+  %150 = shufflevector <2 x double> %149, <2 x double> undef, <2 x i32> zeroinitializer
+  %151 = extractelement <2 x double> %150, i32 1
+  %152 = bitcast double %151 to i64
+  %153 = call i8* @nish_str_from_i64(i64 %152)
+  %154 = call i8* @nish_str_concat(i8* %148, i8* %153)
+  call void @nish_print(i8* %154)
+  %155 = load float, float* %nan32.addr, align 4
+  %156 = insertelement <4 x float> undef, float %155, i32 0
+  %157 = shufflevector <4 x float> %156, <4 x float> undef, <4 x i32> zeroinitializer
+  %158 = extractelement <4 x float> %157, i32 2
+  %159 = bitcast float %158 to i32
+  %160 = call i8* @nish_str_from_i32(i32 %159)
+  %161 = call i8* @nish_str_concat(i8* %160, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %162 = load float, float* %zero32.addr, align 4
+  %163 = fneg float %162
+  %164 = insertelement <4 x float> undef, float %163, i32 0
+  %165 = shufflevector <4 x float> %164, <4 x float> undef, <4 x i32> zeroinitializer
+  %166 = extractelement <4 x float> %165, i32 0
+  %167 = bitcast float %166 to i32
+  %168 = call i8* @nish_str_from_i32(i32 %167)
+  %169 = call i8* @nish_str_concat(i8* %161, i8* %168)
+  call void @nish_print(i8* %169)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}
