@@ -732,7 +732,7 @@ and the byte in `doc.errorAt`. Nothing in the input can make it panic. The
 nesting depth is capped at 64, the writer's own limit, so every document a
 parse accepts can be written back. A document holds at most `doc.maxValues`
 values, 262,144 unless you raise it; one more is `JSON_VALUE_ERR_VALUES`. Each
-value costs the document about 46 bytes, kept for as long as the document is,
+value costs the document about 46 bytes (66 with ranges, below), kept for as long as the document is,
 so that cap, with the input's own size limit for the text the document
 copies, is what bounds a long-lived server's memory.
 
@@ -751,6 +751,38 @@ parses; it is there to catch the mistake. The document keeps its memory, so a
 server that keeps one document and parses each request into it stops
 allocating once it has seen its largest request. `clear()` empties it for
 building from scratch.
+
+**Where a value came from.** Set `doc.keepRanges = true` and every parse
+after it records where each value and each key was in the input, so an error
+about a value can point at its line and column. `start(v)` and `end(v)` are
+the byte offsets of the value's first byte and one past its last, and
+`keyStart(o, i)` and `keyEnd(o, i)` the same for the key of member `i` of
+object `o`; a string's and a key's range includes its quotes. The offsets are
+into the array you gave `parse`, or into the string `parseText` read.
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  doc.keepRanges = true;
+  const text = `{"port": "eighty"}`;
+  const root = doc.parseText(text);
+  const port = doc.get(root, "port");
+  console.log(`${doc.start(port)} ${doc.end(port)}`); // 9 17
+  console.log(text.substring(doc.keyStart(root, 0), doc.keyEnd(root, 0))); // "port"
+  return 0;
+};
+```
+
+Ranges cost each value about 20 bytes more, so they are off unless you ask,
+and a document without them answers `-1` from all four. A value you build with
+the `new*` methods, and a key `set` adds, has no range either until you give
+it one with `setRange(v, start, end)` or `setKeyRange(o, i, start, end)`, which
+is how a loader for another format that builds the tree itself can point back
+into its own text. `set` over an existing key keeps the key's range. Turning
+`keepRanges` on or off takes effect at the next `parse` or `clear()`.
 
 Objects keep their members in order, and `get` looks a key up by scanning
 them, so walk a large object once with `keyAt` and `at` rather than calling
