@@ -23,6 +23,7 @@ import {
   isNetBufferLetter,
   isNetExport,
   isNetWrittenLetter,
+  isSimdExport,
   isTermExport,
   isUnsafeExport,
   NET_STRING,
@@ -32,6 +33,7 @@ import {
   unsafeModule,
 } from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
+import { checkSimdCall } from "./simd"
 import { Scope } from "./symbols"
 import {
   isNumeric,
@@ -236,7 +238,7 @@ export const requireStatementPosition = (ctx: CheckContext, call: Node, name: st
   }
 }
 
-const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void => {
+export const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void => {
   const got = checkExpression(ctx, arg, scope, want)
   if (got !== T_ERROR && got !== want) {
     // "an argument of type" rather than the bare type, so the message has a
@@ -826,6 +828,9 @@ export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope
  */
 export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: Scope, name: string): i32 => {
   const args = call.children[1]
+  if (isSimdExport(name)) {
+    return checkSimdCall(ctx, call, scope, name)
+  }
 
   const target = conversionTarget(name)
   if (target >= 0) {

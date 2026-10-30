@@ -192,6 +192,7 @@ import {
   walkMethodsOf,
 } from "./emit-map"
 import { isCollectionStruct } from "./generics"
+import { isSimdAccess } from "./simd"
 import {
   builtinPanicKind,
   PANIC_ARRAY_LENGTH,
@@ -1368,7 +1369,9 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     // inline, and the element is a number, so `p` is read and kept by nothing
     // -- which is all `readonly nocapture` claims of it. `uncheckedSet`'s `p`
     // is the written argument above.
-    if (index === 0 && builtinNameOf(program, owner) === "uncheckedGet") {
+    // A `nish:simd` load reads elements of its array the same way.
+    const read = builtinNameOf(program, owner)
+    if (index === 0 && (read === "uncheckedGet" || (isSimdAccess(read) && read !== "store"))) {
       return use(USE_READ)
     }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
@@ -3603,9 +3606,11 @@ class FactCollector {
     // is a shared write above, through its `w`. `readCString` reads C's bytes
     // up to the `NUL` (WP27 S3.3).
     const name = builtinNameOf(this.unit.program, node)
-    if (name === "uncheckedGet" || name === "readCString") {
+    // `nish:simd`'s load reads elements and its store writes them, as an
+    // element access does, through a bounds check (`simdCallees`).
+    if (name === "uncheckedGet" || name === "readCString" || (isSimdAccess(name) && name !== "store")) {
       this.facts.readsMemory = true
-    } else if (name === "uncheckedSet") {
+    } else if (name === "uncheckedSet" || name === "store") {
       this.facts.effect = EFFECT_WRITE
     } else if (name === "spawnPiped") {
       // The runtime appends to `stdout` and `stderr` as `push` does, moving

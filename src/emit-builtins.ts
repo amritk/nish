@@ -33,9 +33,11 @@ import { emitWrapping } from "./emit-ops"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
+import { emitSimdCall, simdCallees } from "./simd"
 import {
   bufferSignature,
   isNetExport,
+  isSimdExport,
   NET_INT,
   NET_RANGE,
   NET_STRING,
@@ -796,6 +798,9 @@ export const isIdentifierBuiltinCall = (program: CheckedProgram, call: Node): bo
 }
 
 export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: string): string => {
+  if (isSimdExport(name)) {
+    return emitSimdCall(emitter, expr, name)
+  }
   const target = builtinConversionTarget(name)
   if (target >= 0) {
     const arg = firstArgument(expr)
@@ -1154,6 +1159,9 @@ export const identifierBuiltinCalleesNamed = (
   name: string
 ): string[] => {
   const out: string[] = []
+  if (isSimdExport(name)) {
+    return simdCallees(name)
+  }
   if (!isBuiltinFunction(name)) {
     return out
   }

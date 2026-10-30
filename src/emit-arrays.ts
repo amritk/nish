@@ -65,7 +65,7 @@ import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructI
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa } from "./tbaa"
-import { ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32, TypeTable } from "./types"
+import { accessAlign, ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32, TypeTable } from "./types"
 
 const HEADER: string = ARRAY_STRUCT
 const HEADER_PTR: string = "%struct.nish_array*"
@@ -890,7 +890,7 @@ const storeElement = (emitter: Emitter, ptr: string, elem: i32, value: string): 
   )
   const dst = emitter.fn.emitValue(`bitcast ${ty}* ${ptr} to i8*`)
   const src = emitter.fn.emitValue(`bitcast ${ty}* ${value} to i8*`)
-  const a = emitter.opts.optimizeAttributes ? `align ${info.align} ` : ""
+  const a = emitter.opts.optimizeAttributes ? `align ${accessAlign(info.align)} ` : ""
   emitter.fn.emit(
     `call void @${MEMCPY}(i8* ${a}${dst}, i8* ${a}${src}, i64 ${info.size}, i1 false)${elementAccess(emitter)}`
   )
@@ -1206,6 +1206,51 @@ export const emitUncheckedElement = (emitter: Emitter, expr: Node, store: boolea
   const value = emitter.emitExpression(args[2])
   storeElement(emitter, elementPointer(emitter, base, elem, idx), elem, value)
   return "void"
+}
+
+/**
+ * `nish:simd`'s `loadU8x16(xs, i)` and `store(v, xs, i)` (WP38 S3): the
+ * vector of elements `i` to `i + N - 1`, read or written in one access after
+ * one bounds check for all of them — `i < len` and `i + N <= len`, the two
+ * compares joined so a single branch reaches the panic, which reports `i`
+ * against `len` as `xs[i]`'s does. Arguments are evaluated left to right.
+ *
+ * The access claims the lane's alignment, which is the element buffer's, and
+ * never the vector's sixteen: an element can start anywhere. It carries no
+ * TBAA tag, because it is a `<N x T>` covering elements tagged as `T`.
+ */
+export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): string => {
+  const args = expr.children[1].children
+  const value = store ? emitter.emitExpression(args[0]) : ""
+  const at = store ? 1 : 0
+  const vector = store ? emitter.typeOf(args[0]) : emitter.typeOf(expr)
+  const lane = emitter.table.refOf(vector)
+  const count = emitter.table.laneCount(vector)
+  emitter.declareType(ARRAY_TYPE)
+  const base = emitArrayBase(emitter, args[at])
+  const idx = emitIndex(emitter, args[at + 1])
+  const fn = emitter.fn
+  const len = baseLength(emitter, base)
+  const end = fn.emitValue(`add i64 ${idx}, ${count}`)
+  const first = fn.emitValue(`icmp ult i64 ${idx}, ${len}`)
+  const last = fn.emitValue(`icmp ule i64 ${end}, ${len}`)
+  const inRange = fn.emitValue(`and i1 ${first}, ${last}`)
+  const failBlock = fn.newBlock("bounds.fail")
+  const okBlock = fn.newBlock("bounds.ok")
+  fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`)
+  fn.placeBlock(failBlock)
+  fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${idx}, i64 ${len})`)
+  fn.emit("unreachable")
+  fn.placeBlock(okBlock)
+  const slot = elementPointer(emitter, base, lane, idx)
+  const ty = emitter.llvm(vector)
+  const ptr = fn.emitValue(`bitcast ${slotType(emitter, lane)}* ${slot} to ${ty}*`)
+  const align = emitter.table.alignOf(lane)
+  if (store) {
+    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}, align ${align}`)
+    return "void"
+  }
+  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}, align ${align}`)
 }
 
 /**

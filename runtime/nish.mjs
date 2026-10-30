@@ -314,6 +314,9 @@ provide("arena", shim.arena);
 // zero-fills it. `nish:unsafe` and `nish:term` are each answered by a module
 // that hands back the globals installed above: its functions are globals of this module either
 // way, and the import is what the compiler requires a program to write.
+// `nish:simd` is `runtime/core.mjs`, whose vectors are typed arrays made once
+// and never written after, so `--emit-ts` output and a program run as it was
+// written share one implementation.
 const UNSAFE_EXPORTS = ["uncheckedGet", "uncheckedSet", "wrappingAdd", "wrappingSub", "wrappingMul"];
 const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
 const TERM_EXPORTS = ["readStdin", "waitStdin", "isTerminal", "terminalSize", "setRawMode", "setTerminalRestore"];
@@ -325,6 +328,9 @@ registerHooks({
     }
     if (specifier === "nish:unsafe") {
       return { url: `data:text/javascript,${encodeURIComponent(unsafeSource)}`, shortCircuit: true };
+    }
+    if (specifier === "nish:simd") {
+      return next(new URL("./core.mjs", import.meta.url).href, context);
     }
     if (specifier === "nish:term") {
       return { url: `data:text/javascript,${encodeURIComponent(termSource)}`, shortCircuit: true };

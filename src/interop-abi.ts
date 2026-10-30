@@ -595,8 +595,9 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
   if (table.isEnumMemberType(t)) {
     return table.typeName(t)
   }
-  // A discriminated union crosses nowhere either, and reads as written.
-  if (table.isUnion(t)) {
+  // A discriminated union crosses nowhere either, and reads as written; so
+  // does a `nish:simd` vector, which no C, N-API or wasm signature carries.
+  if (table.isUnion(t) || table.isVector(t)) {
     return table.typeName(t)
   }
   switch (table.kindOf(t)) {

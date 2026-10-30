@@ -167,6 +167,14 @@ const K_ENUM_MEMBER: i32 = 20
  * enters one with a `bitcast`.
  */
 const K_UNION: i32 = 21
+/**
+ * A 128-bit vector from `nish:simd` (WP38 S3): `refs[type]` is the lane type,
+ * one of `u8`, `u16`, `i32`, `u32`, `f32` and `f64`, and the lane count is
+ * sixteen bytes over the lane's width, so the six vectors are six ids with no
+ * name of their own. It is a value, as an `f64` is: an LLVM `<N x T>` in a
+ * register, sixteen bytes in memory and sixteen-byte aligned there.
+ */
+const K_VECTOR: i32 = 22
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -250,6 +258,13 @@ export class DeclaredRange {
  * by the constructor so that `T_I32` and friends are usable before anything
  * has been interned.
  */
+/**
+ * The alignment a memory access may claim for a value laid out at `align`:
+ * at most 8, the arena's (`nish_alloc_struct`). Only a `nish:simd` vector
+ * lays out wider, at 16, and only it is ever lowered by this.
+ */
+export const accessAlign = (align: i32): i32 => (align > 8 ? 8 : align)
+
 export class TypeTable {
   kinds: i32[]
   refs: i32[]
@@ -591,6 +606,23 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_MAYBE
   }
 
+  // ---- `nish:simd` (WP38 S3) -----------------------------------------------
+
+  /** The vector whose lanes are `lane`; the caller passes one of the six lane types. */
+  vectorOf(lane: i32): i32 {
+    return this.intern(K_VECTOR, lane, "")
+  }
+
+  /** Whether `type` is a `nish:simd` vector; -1, a node with no recorded type, is not. */
+  isVector(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_VECTOR
+  }
+
+  /** A vector's lane count: sixteen bytes over its lane's width. */
+  laneCount(type: i32): i32 {
+    return 16 / this.alignOf(this.refs[type])
+  }
+
   // ---- `integer<Lo, Hi>` (WP31) --------------------------------------------
 
   /** The ranged type `integer<lo, hi>`; the caller has checked `lo <= hi` and both in `i32`. */
@@ -755,6 +787,8 @@ export class TypeTable {
       // encoding reads one way however the names run.
       case K_UNION:
         return this.unionMangle(type)
+      case K_VECTOR:
+        return `vec.${this.scalarName(this.refs[type])}`
       default:
         return this.scalarName(type)
     }
@@ -988,6 +1022,8 @@ export class TypeTable {
         return `%struct.${this.resultStructName(type)}*`
       case K_UNION:
         return UNION_TYPE
+      case K_VECTOR:
+        return `<${this.laneCount(type)} x ${this.llvmType(this.refs[type])}>`
       default:
         process.exit(internalErrorFor(`internal error: llvmType of kind ${this.kinds[type]}`, this.json))
     }
@@ -1016,6 +1052,8 @@ export class TypeTable {
         return 4 // its enum's i32
       case K_RANGED:
         return 4 // an i32 (WP31 §5)
+      case K_VECTOR:
+        return 16 // and sixteen bytes in size, as clang's `vector_size(16)` is
       default:
         return 8 // i64, u64, f64, and every pointer
     }
@@ -1050,6 +1088,8 @@ export class TypeTable {
         return `Result<${this.typeName(this.refs[type])}, ${this.typeName(this.errs[type])}>`
       case K_UNION:
         return this.unionName(type)
+      case K_VECTOR:
+        return `${this.scalarName(this.refs[type])}x${this.laneCount(type)}`
       default:
         return this.scalarName(type)
     }
