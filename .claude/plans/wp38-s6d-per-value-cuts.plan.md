@@ -21,32 +21,32 @@ stages:
     title: "perf(runtime): S6d, the per-value cuts in JsonTokenizer"
     goal: The cuts stage 1 chose are built in std/json-tokenizer.ts (and only what they need beside it), each one holding its own bar against main — tokenize on twitter and citm faster outside its band, nothing else on bench/json-compare or bench/json-tokenizer slower outside its band — with every numberF64 answer still bit-for-bit parseFloat's on S6b's corpus and every JSONTestSuite verdict, error code and errorAt offset unchanged, and the A/B recorded in docs/BENCHMARKS.md and docs/wp38-simd.md
     verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js json && node tests/run.js bytes && node tests/run.js simd && node docs/check-links.mjs, an undegraded set of CI test shards, and the per-cut bench/json-compare and bench/json-tokenizer A/B against main recorded
-    status: pending
+    status: cancelled
     todos:
       - id: build
         content: "Build each cut stage 1's S6d row chose, as its own commit, in std/json-tokenizer.ts and only the files it needs beside it; a cut touching runtime/*.c or src/ follows that area's rules (security record, rolling freeze, wasi and performance sections) — see Stage 2, building"
-        status: pending
+        status: cancelled
       - id: exact
         content: "Keep numberF64 bit-for-bit parseFloat's on S6b's corpus (canada.json's numbers, every JSONTestSuite number, at least 10^8 random doubles printed shortest and at 17 digits, natively and under Node), and keep every JSONTestSuite verdict, error code and errorAt offset and the conformance corpus unchanged; add native edge checks for every new fast path's boundaries — see Stage 2, exactness"
-        status: pending
+        status: cancelled
       - id: ab
         content: "Interleaved A/B of each cut against main (and the whole stage against main) on every bench/json-compare workload and bench/json-tokenizer, each with a byte-identical copy for its noise band; a cut that does not make tokenize on twitter or citm faster outside its band, or makes any other row slower outside its band, is dropped and recorded, not shipped — see Stage 2, the bar"
-        status: pending
+        status: cancelled
       - id: record
         content: "Record the A/B in docs/BENCHMARKS.md (a note after the JSON section, or a fresh json-compare --record) and in docs/wp38-simd.md's S6d row and section, saying for each chosen cut whether it was built and met its bar, with figures; regenerate tests/self/goldens/checked with node tests/self/goldens.js --update and read the diff"
-        status: pending
+        status: cancelled
   - id: regate
     title: "docs(wp38): re-run S6c's callgrind gate after S6d"
     goal: S6c's callgrind gate is re-run on main after S6d merged, by the same method and with the same prototype kernel, and the S6c row in §7, the gate section and §8 Q5 carry the new ceilings for twitter and citm and a REACHABLE or NOT REACHABLE verdict; nothing of S6c is built
     verification: npm run lint && node docs/check-links.mjs
-    status: pending
+    status: cancelled
     todos:
       - id: rerun
         content: "Re-run S6c's gate on the new main: the same build, 0 and 20 iterations, the same -g split into removable and kept, the same walker price (8 a mark, marks unchanged because the documents are) and the same kernel cost (1,299,916 and 3,277,635 a pass, the prototype's count, re-counted if the prototype is rebuilt) — see Stage 3, the re-gate"
-        status: pending
+        status: cancelled
       - id: verdict
         content: "Update the S6c row in §7, add a dated re-gate paragraph to the gate section with the new split, ceilings and the same sensitivity rows, and update §8 Q5; if REACHABLE, say so and stop — S6c is not built in this run"
-        status: pending
+        status: cancelled
 ---
 
 # WP38 S6d — cut the per-value work that blocks S6c, then re-gate S6c
