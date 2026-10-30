@@ -935,6 +935,55 @@ resolved: what it is relative to is the validator's to know. A resolve costs
 the pointer's length, and each member step the size of the object it looks
 in.
 
+## `nish/json-format`
+
+A JSON Schema names a string's shape with `format`: `"date-time"`, `"email"`,
+`"ipv6"`, `"uri"`. `nish/json-format` checks the formats of draft 2020-12, one
+predicate each, and a dispatcher for a format named in a schema.
+
+```ts nish:ok
+import { JSON_FORMAT_UNKNOWN, JSON_FORMAT_VALID, isEmail, isIpv6, jsonFormatCheck, jsonFormatId, jsonFormatValidate } from "nish/json-format";
+
+export const main = (): i32 => {
+  console.log(`${isEmail("joe.bloggs@example.com")} ${isIpv6("::ffff:192.168.0.1")}`); // true true
+
+  const id = jsonFormatId("date-time"); // once, when the schema is read
+  console.log(`${jsonFormatCheck(id, "1963-06-19T08:30:06Z") === JSON_FORMAT_VALID}`); // true
+  console.log(`${jsonFormatCheck(id, "1963-06-19 08:30:06Z")}`); // 0, invalid
+  console.log(`${jsonFormatValidate("idn-email", "x@y") === JSON_FORMAT_UNKNOWN}`); // true
+  return 0;
+};
+```
+
+The predicates are `isDateTime`, `isDate`, `isTime`, `isDuration`, `isEmail`,
+`isHostname`, `isIpv4`, `isIpv6`, `isUuid`, `isUri`, `isUriReference`, `isIri`,
+`isIriReference`, `isUriTemplate` and `isRegex`. Each is the grammar of the RFC
+the specification names, applied to the whole string, and each but `isRegex`
+reads the string once or twice and allocates nothing.
+
+The dispatcher answers `JSON_FORMAT_VALID` (1), `JSON_FORMAT_INVALID` (0) or
+`JSON_FORMAT_UNKNOWN` (-1). Unknown is the answer for `idn-email`,
+`idn-hostname`, `json-pointer`, `relative-json-pointer` and any other name, and
+a validator accepts what it cannot check. `jsonFormatId` compares the name with
+each format in turn, so resolve it once per schema and call `jsonFormatCheck`
+per instance; `jsonFormatValidate(name, value)` does both at once.
+
+Some answers are stricter than you may expect:
+
+- `duration` follows RFC 3339's Appendix A grammar as written, so its units
+  come in order and none is skipped: `P1Y2M` and `PT1H2M` are valid, and
+  `P1Y1D` and `PT1H1S` are not.
+- `hostname` does not decode an `xn--` label's Punycode.
+- `regex` is a pattern `nish/regex` compiles. It refuses lookaround and
+  backreferences, and a lone `{` or `]`, all of which ECMA-262 accepts, so
+  `isRegex("(?=a)a")` is false.
+
+`uri` and its relatives are checked against RFC 3986 and RFC 3987 here rather
+than by `nish/net/url`, which refuses valid URIs that could mislead a client,
+such as a percent-encoded host. Every case of JSON-Schema-Test-Suite's
+`optional/format` for these formats gives the suite's answer
+(`tests/link/std_json_format`).
+
 ## `nish/yaml`
 
 `parseYaml(text)` reads a YAML 1.2 stream — a configuration file, a CI
