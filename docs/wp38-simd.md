@@ -998,6 +998,67 @@ against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at 1 MiB, measured on this
 runner, is a 22% and a 17% gap, from one C-driver run: about twenty times the
 bench's band.
 
+**Adler-32: measured, not built.** Whether `adler32Update` would gain from a
+vector kernel was measured before anything went near the runtime.
+`bench/adler32/kernel.c` holds two candidates beside a scalar C copy of the
+Nish loop. The SSSE3 one sums each 32-byte block with `_mm_sad_epu8` for `s1`
+and with `_mm_maddubs_epi16` against the taps 32 down to 1 for `s2`. The NEON
+one widens with `vpadalq_u8` and multiplies the column sums by the taps with
+`vmlal_u16`. Both defer the modulo for NMAX bytes, as the Nish loop does, and
+`-O2` builds them with `target("ssse3")` alone; NEON is AArch64's baseline.
+`kernel verify` holds each to the scalar reference on every length to 4 KiB at
+every offset mod 16, and on lengths about NMAX and its multiples, over random
+bytes and all-`0xff` bytes. `bench/adler32.mjs` then times `adler32Update`, a
+byte-identical copy of it, the kernel and the scalar C at 64 KiB and 1 MiB
+([bench/README.md](../bench/README.md#adler-32)). The bar: the kernel ships on
+an architecture only if it is at least 20% faster than `adler32Update` at both
+sizes, and the gain is larger than the noise band. The band is the copy's larger
+distance from `adler32Update`, taken at the minimum and at the median.
+
+ns/op from `node bench/adler32.mjs --runs 16` (16 rounds of 4 after a warm-up)
+at `9046339`, on an Intel Xeon at 2.10 GHz, x86-64, the SSSE3 kernel:
+
+| Size | `adler32Update` min / median | copy min / median | SSSE3 min / median | scalar C median | Gain at the median | Band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 64 KiB | 18,439 / 22,719 | 17,569 / 22,691 | 2,546 / 3,199 | 20,806 | 610% | 4.7% |
+| 1 MiB | 328,254 / 375,586 | 283,355 / 368,880 | 41,652 / 53,562 | 343,377 | 601% | 13.7% |
+
+That is 2.8 to 2.9 GB/s on `adler32Update` against 19.6 to 20.5 GB/s on the
+kernel. An earlier run of 12 rounds read 588% (band 26.7%) and 662% (band
+3.4%). The scalar C column runs within about 10% of `adler32Update`, so the
+gap is the vectors, not the compiler.
+
+On AArch64, CI's `simd-arm64` job runs `--check` and then `--runs 12` on each
+push and prints the table in its step log. These figures are from `9046339`
+(the merge ref `c916a3f`), on the GitHub `ubuntu-24.04-arm` runner, with the
+NEON kernel. It agreed with the scalar reference on all 131,128 cases `verify`
+ran then. It now runs 131,144, adding the lengths either side of the kernel's
+5,536-byte stretch:
+
+| Size | `adler32Update` min / median | copy min / median | NEON min / median | scalar C median | Gain at the median | Band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 64 KiB | 21,612 / 21,699 | 21,646 / 21,691 | 2,848 / 2,878 | 33,096 | 654% | 0.2% |
+| 1 MiB | 346,255 / 347,110 | 345,911 / 347,366 | 47,337 / 48,164 | 530,742 | 621% | 0.1% |
+
+That is 3.0 GB/s on `adler32Update` against 21.8 to 22.8 GB/s on the kernel.
+Here the scalar C copy takes half again as long as `adler32Update`, so on this
+runner too the gap is the vectors.
+
+**Verdict.** SSSE3 clears the bar at both sizes, many times over the band,
+and NEON clears it at both sizes too. Neither kernel is built yet: WP38 holds
+the measurement. A follow-up would ship both kernels on CRC-32's seam:
+`runtime/runtime-checksum.c` gains the kernel and `nish_adler32_hw`, its
+resolver, picked once per process and pinned off by `NISH_ADLER32=soft`. On
+x86-64 it reads `cpuid.h` leaf 1, ECX bit 9 (SSSE3), as CRC-32's resolver does;
+NEON is baseline on AArch64; a soft stub covers big-endian AArch64 and
+toolchains without the intrinsic headers;
+`adler32Update` hands its checked window to a private `adler32Walk`, the call
+`isAdler32Seam` and an emit arm branch in front of; and the kernel takes the
+test set CRC-32's did. That set is `tests/simd/adler32.c` against a scalar
+reference, a `NISH_ADLER32=soft` run of `std_compress`, link tests, a runtime
+budget, a COMP entry in [compress.md](security/compress.md), and a line in the
+compression guide page.
+
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 
 **What.** A builtin module, decided on 2026-10-30 (§8, Q10) and being built
@@ -1432,6 +1493,7 @@ a printed checksum.
 | **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Accepted (§8, Q5); gate measured: not reachable** (2026-10-24). With the index priced by a prototype, callgrind leaves twitter at 1.37x and citm at 1.22x; see *S6c, the callgrind gate* below. Nothing is built. |
 | **S6d** | Measurement, nothing built: cuts to the per-value work S6c's index keeps (`numberF64`, the depth stack, `stringInto`'s copy, `next`'s entry), each priced by a throwaway prototype under callgrind, for the combination that would let S6c reach 1.5x | A combination whose measured saving out of kept work, with S6c's index and walker as the gate priced them, puts the gate's ceiling at **1.5x or more on twitter.json and on citm_catalog.json**, by the gate's formula and Total. **Measured: not reachable** (2026-10-24, revised 2026-10-25). Seven cuts that save kept work, an integer path in `numberF64`, the innermost container's kind in a field, `stringInto` copying a string with no escape, and the plain runs of one with an escape, whole, a failed state in `next`'s switch, a dispatch fused on the byte and a direct sign read in `numberF64`, save 932,538 instructions an iteration on twitter and 3,720,284 on citm, credited: **1.533x and 1.486x**. citm's best set leaves out the escape path's run copy and stops at **1.490x**, 109,087 instructions short (1.488x on twitter). No set reaches 1.5x on both. A one-comparison limit in `string` saves only setup the index already removes on a string with no escape, so it is not credited. The first five cuts reach 1.490x and 1.443x, and without the run copy 1.448x and 1.447x. See *S6d, the per-value cuts* below. Nothing is built. |
 | **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Met by #561** (Q9): at `5403a55` the guarded kernel compiles to the same `--profile speed` binary as its `uncheckedGet` form, with the `<4 x float>` accumulator; #561's own entry measured it 3.1x faster than before, against a 2.4% band (§3.2.1, and below). |
+| **S8** | Measurement, then (a) if it clears: `adler32Update` on an SSSE3 or NEON kernel, on CRC-32's seam (§3.1) | The kernel is **at least 20% faster** than `adler32Update` at 64 KiB and at 1 MiB, by more than the band of a byte-identical copy, from `bench/adler32.mjs`. **Measured, not built** (§3.1): SSSE3 and NEON each clear it by 601–654% (a 7.0–7.5× speed-up), against a band of at most 13.7% on x86-64 and 0.2% on AArch64 |
 
 **S1b: what the classifier could buy. Superseded by S6c, never built.** S6c
 re-aimed this classifier at `JsonTokenizer`, where `bench/json-compare` gives
