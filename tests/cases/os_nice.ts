@@ -1,22 +1,14 @@
-// `setNice(n)` answers 0 or a negative errno, and a child started afterwards
-// inherits the value: `ps` run from it reads 1. Raising the priority again to
-// -20 needs the privilege to, so it is 0 as root and a negative errno (-13,
-// EACCES, on Linux) otherwise, which this prints as one line either way.
-// `setIdlePriority` moves the case's own process, a child of the runner, to
-// SCHED_IDLE on Linux, where `ps` reads its class as IDL, and is -95
-// elsewhere; the runner itself is never demoted.
-export const main = (): number => {
-  console.log(setNice(1));
-  console.log(spawnSync(["sh", "-c", 'test "$(ps -o nice= -p $$)" -eq 1']));
-  const raised = setNice(-20);
-  console.log(geteuid() === 0 ? raised === 0 : raised < 0);
-  const idle = setIdlePriority();
-  if (process.platform === "linux") {
-    console.log(idle);
-    console.log(spawnSync(["sh", "-c", 'test "$(ps -o cls= -p $$)" = IDL']));
-  } else {
-    console.log(idle + 95);
-    console.log(0);
-  }
-  return 0;
-};
+// `setNice(n)` is lower-only, as root too: `n` takes 0..19, anything else is
+// -22 with no system call, and a value below the current nice value is -13
+// with none either. `setIdlePriority` moves the case's own process to
+// SCHED_IDLE on Linux and is -95 elsewhere; it never raises. `os_nice.c`
+// calls each export in turn and reads the kernel's state back with
+// `getpriority` and `sched_getscheduler`. The two `ps` checks show that a
+// child started afterwards inherits the nice value and the idle class.
+export const lower = (): i32 => setNice(1);
+export const above = (): i32 => setNice(20);
+export const negative = (): i32 => setNice(-1);
+export const below = (): i32 => setNice(0);
+export const childNice = (): i32 => spawnSync(["sh", "-c", 'test "$(ps -o nice= -p $$)" -eq 1']);
+export const idle = (): i32 => setIdlePriority();
+export const childClass = (): i32 => spawnSync(["sh", "-c", 'test "$(ps -o cls= -p $$)" = IDL']);
