@@ -26,6 +26,13 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-10-30
+
+### Fixed
+
+- cli: Revert the lagging platform pins that blocked 0.27.0 and 0.27.1 ([#1073](https://github.com/amritk/nish/pull/1073))
+
+
 ## [0.27.1] - 2026-10-30
 
 ### Fixed
@@ -1374,3 +1381,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.26.0]: https://github.com/amritk/nish/releases/tag/v0.26.0
 [0.27.0]: https://github.com/amritk/nish/releases/tag/v0.27.0
 [0.27.1]: https://github.com/amritk/nish/releases/tag/v0.27.1
+[0.27.2]: https://github.com/amritk/nish/releases/tag/v0.27.2

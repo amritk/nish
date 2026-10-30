@@ -173,6 +173,17 @@ export const isCryptoAesModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(CRYPTO_AES_SPECIFIER)
 
 /**
+ * `nish/compress/checksum`: ordinary Nish but for one call, `Crc32.update`'s
+ * walk, which the emitter puts behind a branch to the runtime's CRC-32 kernel
+ * (`src/kernels.ts`).
+ */
+const COMPRESS_CHECKSUM_SPECIFIER: string = "nish/compress/checksum"
+
+/** Whether a module is the standard library's `std/compress/checksum.ts`: the package is part of the test, as for `isTextModule`. */
+export const isCompressChecksumModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(COMPRESS_CHECKSUM_SPECIFIER)
+
+/**
  * `nish/regex`: ordinary Nish but for one call, the match-start scan's walk,
  * which the emitter replaces with the runtime kernel (`src/kernels.ts`).
  */

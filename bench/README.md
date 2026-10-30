@@ -578,6 +578,52 @@ nominal clock, taken from its model name or from `--ghz`, and not counted.
 the one pinned in the driver. Every build of `std/crypto/aes.ts`, kernel or
 bitsliced, must keep printing that checksum.
 
+## CRC-32
+
+`crc32.ts` times `Crc32.update` on 64 B, 4 KiB, 64 KiB and 1 MiB, and the gzip
+round trip of 1 MiB that it sits inside: compress and decompress, each in
+ns/op. It is the measure of WP38's CRC-32 kernel
+([docs/wp38-simd.md §3.1](../docs/wp38-simd.md)). It is not in this suite's
+tables, and it has no twins. `crc32.mjs` builds it and runs it twice a round:
+once with `NISH_CRC32` unset, so the kernel this CPU has runs, and once under
+`NISH_CRC32=soft`, the Nish tables. Each row names the path its column ran
+(`pclmul`, `crc32` or `tables`), inferred from the CPU flags the runtime
+reads, as `/proc/cpuinfo` lists them; that file is Linux only, and elsewhere
+the default column says `unknown`. `--runs` is rounded up to a multiple of the
+column count, so each column goes first equally often:
+
+```bash
+npm run build
+node bench/crc32.mjs --check            # one short run on each path; each checksum against the pinned one
+node bench/crc32.mjs --runs 15          # both paths, minimum and median
+node bench/crc32.mjs --self             # the default column against a copy of itself: the noise band
+```
+
+Each checksum call takes the previous call's answer as its seed, and its
+window moves a byte a turn, so every start offset mod 16 is timed. The gzip
+input is a 16-letter alphabet, which compresses about 2:1 as text does; random
+bytes would make stored blocks, and CRC-32 nearly all the work. Both paths
+must print the same checksum, or the run stops. `--check` runs at a 64th of the
+size and fails if either path's checksum differs from the one pinned in the
+driver. `tests/simd/crc32 bench` times the C kernels directly, beside the
+table reference.
+
+Median ns/op from `--self --runs 9`, on two machines. The x86-64 run is an
+Intel Xeon at 2.10 GHz on the `pclmul` path. The AArch64 run is CI's
+`simd-arm64` job on `ubuntu-24.04-arm` at 43c4bbd, on the `crc32` path. `copy`
+is the default binary run again, so its gap from `default` is the noise band: 2
+to 7% on the Xeon and about 1% on the ARM runner. The reading is in
+[docs/wp38-simd.md §3.1](../docs/wp38-simd.md).
+
+| Workload | x86-64 default | copy | soft | AArch64 default | copy | soft |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| crc-64 | 16 | 16 | 47 | 11 | 11 | 36 |
+| crc-4k | 188 | 193 | 1,434 | 186 | 187 | 1,172 |
+| crc-64k | 2,976 | 3,035 | 23,196 | 2,494 | 2,496 | 18,589 |
+| crc-1m | 50,746 | 53,482 | 465,955 | 41,826 | 41,819 | 299,178 |
+| gzip-compress-1m | 58,558,905 | 59,432,084 | 59,025,291 | 35,006,497 | 35,008,259 | 35,259,514 |
+| gzip-decompress-1m | 4,541,521 | 4,866,916 | 5,066,379 | 2,314,526 | 2,313,356 | 2,574,127 |
+
 ## HTTP
 
 `http1-server.ts` is a program built on `nish/net/http1-server` the way the
