@@ -20,7 +20,7 @@
 // error. `tests/capabilities.js` enumerates every name the checker accepts and
 // fails the suite when one has no row here, before any program calls it.
 
-import { isNetExport, isTermExport, isUnsafeExport, netOption } from "./nish-modules"
+import { isNetExport, isSimdExport, isTermExport, isUnsafeExport, netOption } from "./nish-modules"
 
 /** A deliberate "none": the builtin has a row, and the row says it reaches nothing. */
 export const CAP_NONE: i32 = -1
@@ -238,6 +238,11 @@ export const builtinCapability = (name: string): i32 => {
   // The `nish:net` option ids fold to the runtime's own numbers (`netOption`)
   // and reach nothing, as `process.platform` reaches nothing.
   if (netOption(name) > 0) {
+    return CAP_NONE
+  }
+  // `nish:simd` is arithmetic on sixteen bytes, and its loads and stores are
+  // bounds-checked as an element access is, so it reaches nothing.
+  if (isSimdExport(name)) {
     return CAP_NONE
   }
   // `nish:unsafe` reaches none of the world's capabilities: an unchecked

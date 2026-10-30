@@ -100,25 +100,6 @@
       "date": "2026-10-29"
     },
     {
-      "id": "chalk-for-the-wall-1049",
-      "type": "chore",
-      "scope": "cli",
-      "breaking": false,
-      "title": "chalk for the wall",
-      "body": "An allocation-free drawing kit in src/break-gfx.ts: a fixed 320x180 world\nmapped onto any framebuffer, anti-aliased discs and glow, bevelled bricks,\na 5x7 pixel font, colour and easing helpers, trails and a particle pool.",
-      "metrics": [],
-      "refs": [],
-      "tests": [
-        "tests/link/break_gfx"
-      ],
-      "commits": [
-        "0db6350"
-      ],
-      "pr": 1049,
-      "author": "Amrit Kahlon",
-      "date": "2026-10-29"
-    },
-    {
       "id": "tune-the-portable-sha-256-path-1050",
       "type": "perf",
       "scope": "crypto",
@@ -140,25 +121,6 @@
         "f0460df"
       ],
       "pr": 1050,
-      "author": "Amrit Kahlon",
-      "date": "2026-10-29"
-    },
-    {
-      "id": "chalk-that-keeps-to-its-own-names-1058",
-      "type": "fix",
-      "scope": "cli",
-      "breaking": false,
-      "title": "chalk that keeps to its own names",
-      "body": "The drawing kit shared names with std and with the compiler, so any program\nimporting it beside std/term-io or std/random was refused. rgb, mix and the\nclass Trail become gfxRgb, gfxMix and GfxTrail, and the kit imports\nFramebuffer from nish/term-pixels, the package std/term-io draws through.",
-      "metrics": [],
-      "refs": [],
-      "tests": [
-        "tests/link/break_gfx"
-      ],
-      "commits": [
-        "b1dac44"
-      ],
-      "pr": 1058,
       "author": "Amrit Kahlon",
       "date": "2026-10-29"
     },

@@ -463,13 +463,27 @@ const RUNTIME_SIMD_TEXT_BUDGET = 2560
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
 /**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sha256.c`
+ * -- the SHA-256 block on the CPU's SHA instructions: `nish_sha256_hw`, its CPU
+ * question and `NISH_SHA256` pin, and `nish_sha256_compress` on SHA-NI (or the ARMv8
+ * SHA-256 instructions on AArch64).
+ *
+ * Measured **495 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the guard and the block 341, the resolver 154; the round constants are
+ * `.rodata`. Its own translation unit rather than more of `runtime-aes.c`: a program
+ * that hashes carries no AES, and the rule is a new file with its own measured
+ * ceiling, never a raised one. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_SHA256_TEXT_BUDGET = 512
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-checksum.c`
  * -- CRC-32 on the CPU's carry-less multiply (WP38 CRC): `nish_crc32_hw`, its CPUID
  * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel.
  *
  * Measured **718 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
  * `.text`: the folding kernel with its Barrett reduction 514, the nibble-table tail
- * 58, the resolver 121 and the entry point 25. An eleventh translation unit rather
+ * 58, the resolver 121 and the entry point 25. A translation unit of its own rather
  * than more of `runtime-aes.c`, which shares only the instruction: apart, a program
  * that checks a gzip trailer carries no AES and one that speaks TLS no CRC. The
  * AArch64 build is the CRC32 instructions and is smaller; the ceiling is measured
@@ -696,6 +710,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
+  ["runtime/runtime-sha256.c", RUNTIME_SHA256_TEXT_BUDGET, "RUNTIME_SHA256_TEXT_BUDGET", []],
   ["runtime/runtime-checksum.c", RUNTIME_CHECKSUM_TEXT_BUDGET, "RUNTIME_CHECKSUM_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],

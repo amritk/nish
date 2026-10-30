@@ -1,0 +1,7 @@
+`i32x4` expects exactly 4 arguments, got 3
+`loadI32x4` expects exactly 2 arguments, got 1
+`store` returns void and can only be used as a statement
+`extract` expects exactly 2 arguments, got 1
+`replace` expects exactly 3 arguments, got 2
+`splatI32x4` expects exactly 1 argument, got 2
+6 errors

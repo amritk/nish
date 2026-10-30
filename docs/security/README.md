@@ -41,11 +41,12 @@ the record that found it. The notes below the table name each such finding.
 | Area | Record | Scope | Fixed (C / H / M / L) | Open (C / H / M / L) |
 | --- | --- | --- | ---: | ---: |
 | AEADs | [crypto-aead.md](crypto-aead.md) | `std/crypto/chacha20poly1305.ts`, `std/crypto/aes.ts`, `runtime/runtime-aes.c` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 1 |
+| SHA-256 block kernel | [crypto-sha256-hw.md](crypto-sha256-hw.md) | `runtime/runtime-sha256.c`; its lowering (`isSha256Seam` in `src/kernels.ts`, `emitKernelArm` in `src/emit.ts`) | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, `std/crypto/ed25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
 | RSA signatures | [crypto-rsa.md](crypto-rsa.md) | `std/crypto/rsa.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²³ |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
-| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 17 ² | 0 / 0 / 0 / 1 |
+| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 13 / 11 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
@@ -77,7 +78,7 @@ the record that found it. The notes below the table name each such finding.
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 41 / 135** | **0 / 0 / 1 / 26** |
+| **Total** ⁸ | | | **3 / 10 / 41 / 137** | **0 / 0 / 1 / 27** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -341,6 +342,7 @@ only.
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
+| SHA256HW-2 | Low | `runtime/runtime-sha256.c` (`nish_sha256_compress`) | On the SHA-NI and ARMv8 SHA-256 path the state, the message words and every round's intermediates pass through vector registers, and on x86-64 seven spills of them, which no store from C or the language can wipe; the kernel keeps no buffer and writes only the new state to `h`, which HMAC wipes (K1-7). Recorded rather than reached, as AEAD-4 | — |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | TLS-7 | Low | `std/net/tls/client.ts` | TLS 1.2 and below are refused by design (`protocol_version`, or `illegal_parameter` for the downgrade sentinel); client certificates, 0-RTT and client resumption are not offered | — |
 | TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | A handshake that fails within the `receive` that delivered the ServerHello seals its fatal alert in the clear, before the client's handshake write keys are installed | — |

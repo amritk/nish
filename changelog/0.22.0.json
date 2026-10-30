@@ -226,7 +226,7 @@
       "scope": "cli",
       "breaking": false,
       "title": "leave a wall of bricks in the help, and a door behind it",
-      "body": "`nish --help` now shows a faint row of bricks under its title, with one brick knocked out. It is painted with the menu's own dim style, and is plain under NO_COLOR, in a pipe, or for an agent. Behind it, the undocumented `nish break` answers with a placeholder until the game ships. A few near-miss words get a riddle. A real file of either name still compiles as usual.\n\n`nish/cli`'s `HelpMenu` gains the general-purpose `title(version, summary)` and `line(text)`. `header` now delegates to `title`.",
+      "body": "`nish --help` now shows a faint row of bricks under its title, with one brick knocked out. It is painted with the menu's own dim style, and is plain under NO_COLOR, in a pipe, or for an agent.\n\n`nish/cli`'s `HelpMenu` gains the general-purpose `title(version, summary)` and `line(text)`. `header` now delegates to `title`.",
       "metrics": [],
       "refs": [],
       "tests": [

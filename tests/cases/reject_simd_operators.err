@@ -1,0 +1,6 @@
+Operator `+` requires two operands of the same numeric type or two strings, got i32x4 and i32x4
+Unsupported unary operator `-` on i32x4
+Condition must be boolean, got i32x4 (Nish has no truthiness)
+`console.log` accepts string, number, or boolean, got i32x4
+Template literal hole must be string, number, or boolean, got i32x4
+5 errors

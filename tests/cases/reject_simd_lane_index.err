@@ -1,0 +1,6 @@
+`extract` takes a lane index that is an integer literal, from 0 to 3: i32x4 has 4 lanes
+`extract` lane index 4 is out of range for i32x4, whose lanes are 0 to 3
+`replace` lane index 16 is out of range for u8x16, whose lanes are 0 to 15
+`extract` takes a lane index that is an integer literal, from 0 to 1: f64x2 has 2 lanes
+Non-integer literal `1.0` where i32 is expected
+5 errors

@@ -37,6 +37,7 @@ import { StringSet } from "./map"
 import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
 import { N_BINARY, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
+import { isSimdAccess } from "./simd"
 import { addJsonQuoted, StringBuilder } from "./strings"
 import { TypeTable, isUnsigned } from "./types"
 
@@ -210,6 +211,11 @@ export const builtinPanicKind = (name: string): i32 => {
   // their buffer the way `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
   if ((isNetExport(name) || isTermExport(name) || name === "writeBytes") && netRangeBuffer(name) >= 0) {
     return PANIC_SLICE
+  }
+  // `nish:simd`'s load and store check their whole vector against the length
+  // once, through the index panic.
+  if (isSimdAccess(name)) {
+    return PANIC_INDEX
   }
   // `String.fromBytes` checks the range it copies with the same panic.
   if (name === "String.fromBytes") {

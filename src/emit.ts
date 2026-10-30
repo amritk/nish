@@ -151,6 +151,9 @@ import {
   isCrc32Seam,
   isIndexOfAnyWalk,
   isRegexScanWalk,
+  isSha256Seam,
+  SHA256_HW,
+  SHA256_KERNEL,
 } from "./kernels"
 import { StringMap, StringSet } from "./map"
 import {
@@ -216,7 +219,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader } from "./target"
-import { isForeignBuffer, T_STRING, T_VOID, TypeTable } from "./types"
+import { accessAlign, isForeignBuffer, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -1737,12 +1740,19 @@ export class Emitter {
     if (isRegexScanWalk(this.program, sig)) {
       return emitRegexScanKernel(this, operandValues)
     }
-    // WP38 S5: a seam of `nish/crypto/aes` runs the runtime kernel when
-    // `nish_aes_hw` says so and the walker below when not (`src/kernels.ts`).
-    // Never on wasm32, which has no kernel to branch to.
-    const aesSeam = isWasmBuild(this.opts) ? AES_SEAM_NONE : isAesSeam(this.program, sig)
-    const aesJoin: IRBlock | null =
-      aesSeam === AES_SEAM_NONE ? null : this.emitAesKernelArm(aesSeam, operands)
+    // WP38 S5: a seam of `nish/crypto/aes`, or `nish/crypto/sha256`'s block
+    // function, runs the runtime kernel when its resolver says so and the
+    // walker below when not (`src/kernels.ts`). Never on wasm32, which has no
+    // kernel to branch to.
+    let kernelJoin: IRBlock | null = null
+    if (!isWasmBuild(this.opts)) {
+      const aesSeam = isAesSeam(this.program, sig)
+      if (aesSeam !== AES_SEAM_NONE) {
+        kernelJoin = this.emitKernelArm(AES_HW, aesKernelOf(aesSeam), "aes", operands, false)
+      } else if (isSha256Seam(this.program, sig)) {
+        kernelJoin = this.emitKernelArm(SHA256_HW, SHA256_KERNEL, "sha256", operands, true)
+      }
+    }
     // WP38 CRC: `nish/compress/checksum`'s walk, the same branch, whose arms
     // meet at a `phi` because the walker answers the CRC.
     const noCrcKernel: string[] = []
@@ -1761,9 +1771,9 @@ export class Emitter {
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
       this.fn.emit(call)
-      if (aesJoin !== null) {
-        this.fn.emit(`br label %${aesJoin.label}`)
-        this.fn.placeBlock(aesJoin)
+      if (kernelJoin !== null) {
+        this.fn.emit(`br label %${kernelJoin.label}`)
+        this.fn.placeBlock(kernelJoin)
       }
       return "void"
     }
@@ -1788,23 +1798,31 @@ export class Emitter {
   }
 
   /**
-   * WP38 S5: the branch in front of an AES seam's call, and its kernel arm.
-   * The kernel takes the walker's own operands, which is the contract
-   * `runtime/nish.h` states for it. Answers the join block, and leaves the
-   * walker's arm as the insertion point, so the call the caller emits next is
-   * the original one, unchanged; every seam is `void`, so the join needs no
-   * `phi`.
+   * WP38 S5: the branch in front of a seam's call, and its kernel arm: `hw` is
+   * the resolver and `kernel` the runtime function, named `<prefix>.kernel`
+   * and so on in the IR. The kernel takes the walker's own operands, which is
+   * the contract `runtime/nish.h` states for it. With `answers`, the kernel
+   * says whether it ran, and the walker runs when it did not. Answers the join
+   * block, and leaves the walker's arm as the insertion point, so the call the
+   * caller emits next is the original one, unchanged; every seam is `void`,
+   * so the join needs no `phi`.
    */
-  emitAesKernelArm(seam: i32, operands: string[]): IRBlock {
-    const hw = this.fn.emitValue(`call i32 ${this.useRuntime(AES_HW)}()`)
-    const taken = this.fn.emitValue(`icmp ne i32 ${hw}, 0`)
-    const kernel = this.fn.newBlock("aes.kernel")
-    const walker = this.fn.newBlock("aes.walker")
-    const join = this.fn.newBlock("aes.join")
-    this.fn.emit(`br i1 ${taken}, label %${kernel.label}, label %${walker.label}`)
-    this.fn.placeBlock(kernel)
-    this.fn.emit(`call void ${this.useRuntime(aesKernelOf(seam))}(${operands.join(", ")})`)
-    this.fn.emit(`br label %${join.label}`)
+  emitKernelArm(hw: string, kernel: string, prefix: string, operands: string[], answers: boolean): IRBlock {
+    const asked = this.fn.emitValue(`call i32 ${this.useRuntime(hw)}()`)
+    const taken = this.fn.emitValue(`icmp ne i32 ${asked}, 0`)
+    const kernelArm = this.fn.newBlock(`${prefix}.kernel`)
+    const walker = this.fn.newBlock(`${prefix}.walker`)
+    const join = this.fn.newBlock(`${prefix}.join`)
+    this.fn.emit(`br i1 ${taken}, label %${kernelArm.label}, label %${walker.label}`)
+    this.fn.placeBlock(kernelArm)
+    const call = `call ${answers ? "i32" : "void"} ${this.useRuntime(kernel)}(${operands.join(", ")})`
+    if (answers) {
+      const ran = this.fn.emitValue(`icmp ne i32 ${this.fn.emitValue(call)}, 0`)
+      this.fn.emit(`br i1 ${ran}, label %${join.label}, label %${walker.label}`)
+    } else {
+      this.fn.emit(call)
+      this.fn.emit(`br label %${join.label}`)
+    }
     this.fn.placeBlock(walker)
     return join
   }
@@ -1813,7 +1831,7 @@ export class Emitter {
    * WP38 CRC: the branch in front of `crc32Walk`'s call, and its kernel arm,
    * which takes the walker's last four operands (`crc, buf, off, len`; the
    * tables are the walker's alone). Leaves the walker's arm as the insertion
-   * point, as `emitAesKernelArm` does, and answers what `joinCrc32Arms`
+   * point, as `emitKernelArm` does, and answers what `joinCrc32Arms`
    * needs: the kernel's value, the join's label and the kernel arm's.
    */
   emitCrc32KernelArm(operands: string[]): string[] {
@@ -1956,9 +1974,19 @@ export class Emitter {
     return this.table.llvmAbiType(type, isPrivate)
   }
 
-  /** Alignment for a type, or 0 when attributes are disabled. */
+  /**
+   * Alignment an access to a type claims, or 0 when attributes are disabled.
+   * A `nish:simd` vector lays out at 16 (`TypeTable.alignOf`), as clang's
+   * `vector_size(16)` does, but the arena's blocks are 8-byte aligned
+   * (`nish_alloc_struct`), so no access claims more than 8.
+   */
   align(type: i32): i32 {
-    return this.opts.optimizeAttributes ? this.table.alignOf(type) : 0
+    // A vector's ABI alignment is sixteen, more than an arena block promises,
+    // so its accesses state their alignment even with the attributes off.
+    if (this.opts.optimizeAttributes || this.table.isVector(type)) {
+      return accessAlign(this.table.alignOf(type))
+    }
+    return 0
   }
 
   alignSuffix(type: i32): string {
