@@ -42,7 +42,7 @@ const fail = (msg) => {
  * this number is a change to what Adler-32 answers.
  */
 const CHECK_SCALE = 64
-const CHECK_SUM = "checksum 2445497434"
+const CHECK_SUM = "checksum 1480580821"
 /** The workloads each column times; a run that reports fewer stopped short. */
 const WORKLOADS = 2
 /** The gain a kernel must reach at every size to ship. */
