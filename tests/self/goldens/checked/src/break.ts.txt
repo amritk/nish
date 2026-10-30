@@ -3133,6 +3133,8 @@ function Rng.nextInt(this: Rng, lo: i32, hi: i32): i32 -> @nish.Rng.nextInt [exp
 import ACTION_PRESS from "nish/term" -> const ACTION_PRESS
 import COLOR_DEFAULT from "nish/term" -> const COLOR_DEFAULT
 import EVENT_KEY from "nish/term" -> const EVENT_KEY
+import KEY_CHAR from "nish/term" -> const KEY_CHAR
+import KEY_ESCAPE from "nish/term" -> const KEY_ESCAPE
 import KEY_F3 from "nish/term" -> const KEY_F3
 import KEY_F4 from "nish/term" -> const KEY_F4
 import KEY_F5 from "nish/term" -> const KEY_F5
@@ -3232,6 +3234,11 @@ function wallGetenv(name: string): string -> @wallGetenv
   calls: nish_getenv
   stackSites=0 stackLocals=0
   local +0:9 v: string | null (const)
+function wallQuitPressed(events: TermEvent[]): boolean -> @wallQuitPressed
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer events: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 e: TermEvent (const)
 function wallHotkey(e: TermEvent): boolean -> @wallHotkey
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer e: size=80 writesThrough=false captured=false
@@ -3282,16 +3289,19 @@ function wallBackToMenu(run: WallRun): void -> @wallBackToMenu
 function wallUpdate(run: WallRun, input: TermInput): boolean -> @wallUpdate$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_overflow stepBreakGame stepBreakMenu wallBackToMenu wallStartGame wallTakeHotkeys
-  pointer run: size=80 writesThrough=true captured=false passedTo=wallTakeHotkeys#0 wallStartGame#0 wallBackToMenu#0
+  calls: nish_panic_overflow stepBreakGame stepBreakMenu wallBackToMenu wallGraphicsToast wallQuitPressed wallStartGame wallTakeHotkeys wallToast
+  pointer run: size=80 writesThrough=true captured=false passedTo=wallTakeHotkeys#0 wallToast#0 wallStartGame#0 wallBackToMenu#0
   pointer input: size=16 writesThrough=false captured=false passedTo=stepBreakMenu#1 stepBreakGame#1
   stackSites=0 stackLocals=0
   callee -2:3 wallTakeHotkeys -> @wallTakeHotkeys
+  callee +6:13 wallQuitPressed -> @wallQuitPressed
   local +9:11 answer: i32 (const)
   callee +9:25 stepBreakMenu -> @stepBreakMenu
-  callee +18:7 wallStartGame -> @wallStartGame
-  callee +23:7 stepBreakGame -> @stepBreakGame
-  callee +24:5 wallBackToMenu -> @wallBackToMenu
+  callee +22:9 wallToast -> @wallToast
+  callee +22:24 wallGraphicsToast -> @wallGraphicsToast
+  callee +27:7 wallStartGame -> @wallStartGame
+  callee +32:7 stepBreakGame -> @stepBreakGame
+  callee +33:5 wallBackToMenu -> @wallBackToMenu
 function wallCellPx(px: i32, fallback: i32): i32 -> @wallCellPx
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: fallback px
@@ -3334,21 +3344,21 @@ function wallDrawText(run: WallRun, fb: Framebuffer, stats: TermStats): void -> 
   callee +2:31 fontScaleFor -> @fontScaleFor
   local +3:9 shadow: i32 (const)
   callee +3:23 gfxRgb -> @gfxRgb
-  local +5:11 s: BreakSettings (const)
-  callee +6:5 blendRect -> @blendRect
-  callee +7:5 drawTextShadow -> @drawTextShadow
-  callee +12:27 wallWhole -> @wallWhole
-  callee +12:55 wallWhole -> @wallWhole
-  callee +12:100 wallWhole -> @wallWhole
-  callee +13:7 gfxRgb -> @gfxRgb
-  local +16:11 fps: i32 (const)
-  callee +16:22 fpsChoice -> @fpsChoice
-  callee +17:5 drawTextShadow -> @drawTextShadow
-  callee +22:10 wallGraphicsLabel -> @wallGraphicsLabel
-  callee +23:7 gfxRgb -> @gfxRgb
-  callee +28:5 blendRect -> @blendRect
-  callee +29:5 drawTextCentred -> @drawTextCentred
-  callee +29:76 gfxRgb -> @gfxRgb
+  local +7:11 s: BreakSettings (const)
+  callee +8:5 blendRect -> @blendRect
+  callee +9:5 drawTextShadow -> @drawTextShadow
+  callee +14:27 wallWhole -> @wallWhole
+  callee +14:55 wallWhole -> @wallWhole
+  callee +14:100 wallWhole -> @wallWhole
+  callee +15:7 gfxRgb -> @gfxRgb
+  local +18:11 fps: i32 (const)
+  callee +18:22 fpsChoice -> @fpsChoice
+  callee +19:5 drawTextShadow -> @drawTextShadow
+  callee +24:10 wallGraphicsLabel -> @wallGraphicsLabel
+  callee +25:7 gfxRgb -> @gfxRgb
+  callee +30:5 blendRect -> @blendRect
+  callee +31:5 drawTextCentred -> @drawTextCentred
+  callee +31:76 gfxRgb -> @gfxRgb
 function wallReopenToast(run: WallRun): string -> @wallReopenToast
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via wallGetenv
