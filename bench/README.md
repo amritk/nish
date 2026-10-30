@@ -1823,6 +1823,36 @@ These scans still step one byte at a time:
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
 
+## Regular expressions
+
+`regex/` times `nish/regex` over a 64 KB corpus of mixed ASCII and non-ASCII
+lines: English, Greek, French, German and CJK words, numbers and addresses.
+Each case compiles one pattern, then counts its matches (`exec` walks them and
+reads groups 1 and 3) over one of eight copies of the corpus that differ in
+their first line, a different copy each pass. Eight cases use none of the
+Unicode features (`literal`, `class`, `alternation`, `group`, `anchored`,
+`icase-ascii`, `icase-class`, `exec`) and three do (`property`, `script`,
+`icase-unicode`). Five `compile-` cases time `regexCompile` alone, 50 times
+as many passes as a match case: a large class with and without `i`
+(`compile-class`, `compile-icase-class`), `\S+` under `i`
+(`compile-nonspace-icase`), `é` under `i` (`compile-icase-literal`) and ten
+small patterns (`compile-many`). Not run in CI.
+
+```bash
+npm run build
+node bench/regex/measure.mjs                         # this build against its byte-identical copy
+node bench/regex/measure.mjs --before <nish> --size  # and against another compiler's std/
+```
+
+`--before` builds the same program with another compiler, which links its own
+`std/`, so a `build/nish` copied into a worktree of an older commit measures
+that commit's `nish/regex`. It runs the three Unicode cases on this build
+only, since a build without property escapes refuses them. Every binary must
+print the same checksum for a case, or the script exits 1. `--size` also prints
+the linked size of `regex/size.ts`, a program that imports `nish/regex` and
+uses no property escape. The figures are in
+[docs/BENCHMARKS.md](../docs/BENCHMARKS.md#regular-expressions).
+
 ## Loading YAML into a JsonDocument
 
 `yaml-json/run.mjs` times `nish/yaml`'s parse alone (**parse**) against the

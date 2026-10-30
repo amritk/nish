@@ -251,18 +251,52 @@ A `Regex` has `test`, `exec` (into a `RegexMatch` you reuse), `find`,
 `findAll`, `count`, `replace`, `replaceAll` and `split`. A replacement
 template reads `$&`, `$1` to `$99`, `$<name>`, `` $` ``, `$'` and `$$`, as
 in JavaScript. `regexEscape(text)` makes a pattern that matches `text`
-exactly. The flags are `i` (ASCII letters), `m` and `s`; there is no `g`,
-since `findAll` and `replaceAll` are the global forms.
+exactly. The flags are `i`, `m`, `s` and `u`, which changes nothing, as
+every pattern is read the `u` way; there is no `g`, since `findAll` and
+`replaceAll` are the global forms.
+
+`\p{…}` matches a Unicode property, and `\P{…}` everything outside it, with
+JavaScript's names from Unicode 16.0: a General_Category value (`\p{L}`,
+`\p{Lu}`, `\p{Uppercase_Letter}`, `\p{gc=Nd}`), a script (`\p{Script=Greek}`,
+`\p{sc=Grek}`, or `\p{scx=Deva}` for Script_Extensions), or a binary property
+(`\p{Alphabetic}`, `\p{Emoji}`, `\p{White_Space}`, `\p{Any}`,
+`\p{Assigned}`). They work inside classes too, as in `[\p{L}\p{Nd}_]+`. A
+name JavaScript does not know is refused: `regex: invalid property name at
+byte 0`, or `invalid property value` for `\p{sc=Lu}`. A property escape
+cannot end a range in a class: `[\p{L}-z]` is refused (`regex: invalid class
+range at byte 1`), as it is in JavaScript.
+
+The property and folding tables add about 80 KB to every program that
+imports `nish/regex`, whether or not it uses `\p{…}` or `i`: a pattern is
+read at run time, so the tables cannot be left out. Compiling a pattern
+whose `i` class or character folds a letter outside ASCII looks each such
+letter up in the folding table where it lies, through an index of every
+sixteenth entry, so nothing is decoded ahead of time: a single `é` adds about
+0.2 µs to the compile. Other patterns never read the table.
 
 Matching never backtracks, so a pattern cannot make one search slow:
 `(a+)+$` against a long run of `a`s takes as long as `a+$`. The price is
 that backreferences (`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused
 when the pattern is compiled. So is a pattern past the engine's limits: a
 repeat count over 1,000, more than 1,024 capturing groups, more than 10,000
-ranges in one class, or more than 100,000 instructions once its repeats are
-written out. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
-`\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
-letters, where JavaScript's folds every letter: `é` does not match `É`.
+ranges in one class, more than 100,000 instructions once its repeats are
+written out, or property escapes and case folding that add more than 100,000
+ranges to its classes. Offsets are UTF-8 bytes, as `s.length` is, and `\w`,
+`\d` and `\b` are ASCII, as they are in JavaScript. The `i` flag folds every
+letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
+`Σ` and `ς`. One difference from JavaScript: no letter outside ASCII folds to
+one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`,
+nor `[a-z]`, `\p{Lu}` or `\p{Ll}`. That keeps an ASCII pattern under `i`
+ASCII: it folds `A`–`Z` to `a`–`z` with no table, and its search, its
+vectorised prefix scan included, never has to look for those two letters'
+three-byte and two-byte forms.
+Under `i` both still count as word characters to `\w`, `\W`, `\b` and `\B`,
+as they do in JavaScript with `iu`.
+Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in JavaScript:
+`\P{Lu}` is everything outside `\p{Lu}`, closed under folding, so it
+matches `A` through `a`, while `[^\p{Lu}]` negates the folded class
+`[\p{Lu}]`, which holds every cased letter, so it matches neither `A` nor
+`a`.
 
 Finding every match is one search per match, so `findAll`, `count`,
 `replaceAll` and `split` are quadratic when a long branch is preferred to a
