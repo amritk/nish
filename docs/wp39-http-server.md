@@ -240,7 +240,11 @@ closes.
   it as worth a design note if it is ever wanted.
 - **io_uring, `sendfile` and kernel TLS.** Each is a runtime change that
   makes sense only after a profile shows the syscalls or the copy on top.
-  None is ruled out.
+  None is ruled out. For io_uring, [bench/README.md](../bench/README.md#syscall-cost)
+  measured a syscall's entry and exit at 106 ns, about 4% of a keep-alive
+  request's system time, which is under its 0.5 µs line, so it is not worth
+  building on that evidence; `bash bench/syscall-cost/run.sh` re-measures
+  it on another box.
 - **0-RTT, connection migration beyond G5's rebinding, HTTP/2 server push,
   and WebTransport over HTTP/2.** WP34 §3 gave the reason for each, and each
   can come later on its own measurement.
