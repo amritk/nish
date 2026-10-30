@@ -39,7 +39,6 @@
     "!scripts/rebuild-compare.sh",
     "!scripts/ddc-chain.sh",
     "!scripts/nish-runner-parallel.mjs",
-    "!scripts/pin-platform-packages.mjs",
     "std",
     "README.md",
     "LICENSE",

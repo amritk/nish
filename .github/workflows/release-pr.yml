@@ -134,30 +134,51 @@ jobs:
             for (const f of ["package.json","package-lock.json"]) {
               const j=JSON.parse(fs.readFileSync(f,"utf8"));
               j.version=v; if (j.packages&&j.packages[""]) j.packages[""].version=v;
-              // The version moves in three places: package.json, the lockfile
-              // top level, and the lockfile root package under packages[""].
-              //
-              // The platform packages pinned in optionalDependencies do NOT
-              // move here, in either file. Their lockfile entries, under
-              // packages["node_modules/@amritk/nish-<asset>"], carry a resolved
-              // URL and an integrity hash for a tarball that does not exist
-              // until release.yml builds this tag and publishes it. A bump that
-              // moved the pins without those entries left main disagreeing with
-              // its own lockfile from the release merge until the lockfile pull
-              // request merged, so the lint job in ci.yml was red on every
-              // release commit and on anything merged in between. So main keeps
-              // the PREVIOUS release pinned, which agrees with the lockfile, and
-              // scripts/pin-platform-packages.mjs moves the pins where they can
-              // be moved: in the release job, just before npm pack, so what is
-              // published installs this release; and in the lockfile job, after
-              // the publish, together with the entries they resolve to.
-              // tests/run.js allows main one release behind and no further.
+              // The per-platform packages carrying the native compiler are
+              // pinned to the exact version of the package that depends on
+              // them, so they move with it. A bump that left them behind would
+              // publish a compiler whose optionalDependencies still resolve
+              // the binaries of the PREVIOUS release -- an install that
+              // succeeds, runs, and is one release stale in the half of itself
+              // nobody looks at.
               //
               // No apostrophes in this comment block, deliberately: it sits
               // inside `node -e '...'`, so one would close that string and hand
               // node a truncated script. That is not hypothetical -- it is how
               // this step first shipped, and it broke the release train on the
               // very commit that added it.
+              // tests/run.js fails while the two disagree.
+              // Two places, not one. package.json keeps optionalDependencies at
+              // the top level; a lockfile keeps the root package under
+              // packages[""], so a bump that reads only the top level moves
+              // package.json and leaves the lockfile pinned to the PREVIOUS
+              // release. That is exactly what 0.4.0 shipped with, and npm ci
+              // tolerates a stale root pin, so nothing was red -- npm install
+              // simply rewrote the file under whoever ran it next.
+              //
+              // What this script does NOT move, and cannot: the lockfile
+              // entries for the platform packages themselves, under
+              // packages["node_modules/<scope>-<asset>"]. Their version,
+              // resolved URL and integrity hash describe a tarball that does
+              // not exist yet -- release.yml builds it from the tag this pull
+              // request leads to, and its npm job publishes it. So those
+              // entries stay at the PREVIOUS release here, and npm ci does NOT
+              // tolerate that: once the new version is on the registry it
+              // refuses the lockfile outright, which is how main broke after
+              // 0.11.0. The lockfile job in release.yml regenerates them after
+              // the publish and opens a pull request with the result, and the
+              // lint job in ci.yml keeps main red until that merges.
+              //
+              // Every key, not the ones that start with this package name: the
+              // main package is nish and its platform packages are
+              // @amritk/nish-<asset>, so a prefix test would match none of
+              // them. tests/run.js pins optionalDependencies to exactly one
+              // platform package per seed target, so every key is one.
+              const pinned=[j.optionalDependencies];
+              if (j.packages&&j.packages[""]) pinned.push(j.packages[""].optionalDependencies);
+              for (const deps of pinned) {
+                if (deps) for (const k of Object.keys(deps)) deps[k]=v;
+              }
               fs.writeFileSync(f, JSON.stringify(j,null,2)+"\n");
             }
             // src/branding.ts carries the version too, and tests/run.js fails
