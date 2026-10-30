@@ -1,0 +1,71 @@
+PASS  compare: 1.0 equals 1e0
+PASS  compare: 10e-1 equals 1
+PASS  compare: 0.015E+2 equals 1.5
+PASS  compare: -0 equals 0.0e5
+PASS  compare: 0.1 is below 0.10000000000000001, which f64 calls equal
+PASS  compare: 9007199254740993 is above 9007199254740992
+PASS  compare: -2 is above -2.0001
+PASS  compare: -1 is below 0
+PASS  compare: 0 is above -1e-400
+PASS  compare: 1e400 is above 9e399
+PASS  compare: 1.0001 is above 1
+PASS  compare: 123 is below 124
+PASS  compare: an exponent's leading zeros count for nothing
+PASS  compare: the largest exponent is read
+PASS  compare: the most negative exponent is read
+PASS  syntax: every text outside RFC 8259's grammar is refused
+PASS  exponent: one past 10^15 is refused
+PASS  exponent: one past -10^15 is refused
+PASS  exponent: a forty-digit exponent is refused, not wrapped
+PASS  exponent: canonical refuses one past the bound
+PASS  order: a's refusal is answered first
+PASS  order: then b's
+PASS  canonical: 1.50
+PASS  canonical: 0.015e2
+PASS  canonical: 100
+PASS  canonical: -0.015e2
+PASS  canonical: -0
+PASS  canonical: 0.000
+PASS  canonical: 1e400
+PASS  multipleOf: 0.3 of 0.1, which f64 calls no
+PASS  multipleOf: 0.0075 of 0.0001
+PASS  multipleOf: 4.5 not of 2
+PASS  multipleOf: 35 not of 1.5
+PASS  multipleOf: 4.5 of 1.5
+PASS  multipleOf: 0.05 not of 0.1, its last digit finer
+PASS  multipleOf: signs are ignored
+PASS  multipleOf: zero is one of anything
+PASS  multipleOf: 1e308 of 0.5
+PASS  multipleOf: 1e308 not of 0.123456789
+PASS  multipleOf: 18 digits take the u64 remainder
+PASS  multipleOf: 19 digits take the digit remainder
+PASS  multipleOf: and see a remainder of one
+PASS  multipleOf: a long divisor with a gap
+PASS  multipleOf: a long divisor scaled into the value
+PASS  divisor: zero is refused
+PASS  divisor: -0.0e9 is zero too
+PASS  multipleOf: value's syntax first
+PASS  multipleOf: then the divisor's
+PASS  multipleOf: an exponent past the bound
+PASS  gap: 1e1000000000 of 2 is refused before it starts
+PASS  gap: 2^20 + 1 steps of gap is refused
+PASS  gap: 2^20 steps in all is answered
+PASS  gap: 2^20 + 1 digits of value are refused
+PASS  gap: 2^20 digits of value are answered
+PASS  gap: a long divisor's steps count its digits
+PASS  gap: one step fewer is answered
+PASS  multipleOf: every test agrees with upstream
+PASS  multipleOf: the suite holds 11 tests
+PASS  minimum: every test agrees with upstream
+PASS  minimum: the suite holds 11 tests
+PASS  maximum: every test agrees with upstream
+PASS  maximum: the suite holds 8 tests
+PASS  exclusiveMinimum: every test agrees with upstream
+PASS  exclusiveMinimum: the suite holds 4 tests
+PASS  exclusiveMaximum: every test agrees with upstream
+PASS  exclusiveMaximum: the suite holds 4 tests
+PASS  optional/bignum: every test agrees with upstream
+PASS  optional/bignum: the suite holds 9 tests
+PASS  optional/float-overflow: every test agrees with upstream
+PASS  optional/float-overflow: the suite holds 1 tests
+std/json-number: 70 passed, 0 failed, 0 skipped

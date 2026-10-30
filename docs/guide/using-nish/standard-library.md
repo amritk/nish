@@ -760,6 +760,136 @@ differs from the native build there; `parse` over bytes reads the same both
 ways. Its security record is
 [docs/security/json.md](../../security/json.md).
 
+## `nish/json-number`
+
+A JSON number is text, and some texts say more than a double holds:
+`9007199254740993` and `9007199254740992` are one `f64`, and so are `0.1` and
+`0.10000000000000001`. JSON Schema's `minimum`, `maximum` and `multipleOf`
+compare values, not doubles, and `0.3` is a multiple of `0.1` though
+`0.3 / 0.1` is `2.9999999999999996`. This module reads the decimal digits
+themselves and never makes an `f64`.
+
+```ts nish:ok
+import { JSON_NUMBER_ERR_GAP, jsonNumberCanonical, jsonNumberCompare, jsonNumberMultipleOf } from "nish/json-number";
+
+export const main = (): i32 => {
+  console.log(`${jsonNumberCompare("9007199254740993", "9007199254740992")}`); // 1
+  console.log(`${jsonNumberCompare("1.0", "1e0")}`); // 0
+  console.log(`${jsonNumberMultipleOf("0.3", "0.1")}`); // 1
+  console.log(`${jsonNumberMultipleOf("4.5", "2")}`); // 0
+  console.log(jsonNumberCanonical("0.0150e3")); // 15e0
+  console.log(jsonNumberCanonical("1.50")); // 15e-1
+  console.log(`${jsonNumberMultipleOf("1e1000000000", "7") === JSON_NUMBER_ERR_GAP}`); // true
+  return 0;
+};
+```
+
+`jsonNumberCompare(a, b)` answers `-1`, `0` or `1`, and
+`jsonNumberMultipleOf(value, divisor)` answers `1` or `0` (signs do not
+matter, and zero is a multiple of anything). `jsonNumberCanonical(text)` is
+the shortest spelling of the value, digits without trailing zeros and an
+exponent (`15e-1` for `1.50`, `15e0` for `0.0150e3`, `0` for `-0`), so two texts are equal values
+exactly when their canonical texts are the same string.
+
+Each of them refuses with a negative code rather than guessing, and the code
+of the first argument comes first:
+
+- `JSON_NUMBER_ERR_SYNTAX`: the text is not one JSON number (`01`, `1.`, `+1`,
+  a blank around it).
+- `JSON_NUMBER_ERR_EXPONENT`: the exponent is past `JSON_NUMBER_MAX_EXPONENT`,
+  10^15 either way.
+- `JSON_NUMBER_ERR_DIVISOR`: `multipleOf` by zero.
+- `JSON_NUMBER_ERR_GAP`: `multipleOf` would take more than
+  `JSON_NUMBER_MAX_STEPS` (2^20) digit steps. `1e1000000000` is twelve bytes
+  of input and a billion digits of dividend, so the bound is what keeps a
+  hostile schema or document from costing a billion steps.
+
+A comparison costs the digits of the two texts; `multipleOf` costs the
+value's digits from its first to the divisor's last place, times the
+divisor's digits past eighteen, and never more than the bound.
+
+## `nish/json-equal`
+
+JSON Schema's `const`, `enum` and `uniqueItems` ask whether two JSON values
+are equal, and its rule is not JavaScript's: numbers are equal by value, so
+`1` and `1.0` are, objects are equal whatever the order of their members, and
+`true` is not `1`.
+
+```ts nish:ok
+import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+
+export const main = (): i32 => {
+  const da = new JsonDocument(new JsonLimits());
+  const db = new JsonDocument(new JsonLimits());
+  const a = da.parseText(`{"id":1,"tags":["x"]}`);
+  const b = db.parseText(`{"tags":["x"],"id":1.0}`);
+  console.log(`${jsonEqual(da, a, db, b)}`); // true
+  console.log(jsonEqualCanonical(da, a)); // o2:2:idn1e0;4:tagsa1:s1:x
+  const list = da.parseText(`[1, true, "1", 1e0]`);
+  console.log(`${jsonEqualFirstDuplicate(da, list)}`); // 3
+  return 0;
+};
+```
+
+`jsonEqual(da, a, db, b)` compares a value of one document with a value of
+another, or of the same one (a document's handles last until it parses again, so two parsed texts take two documents); a handle that names no value is equal to
+nothing. `jsonEqualFirstDuplicate(doc, array)` is the position of the first
+element equal to an earlier one, `-1` when there is none, so `uniqueItems`
+holds exactly when it is `-1`.
+
+`jsonEqualCanonical` is a text that is the same for exactly the values
+`jsonEqual` calls equal, which makes it a key for a `Map` or `Set` of JSON
+values; it is not JSON. `jsonEqualHash` is a 64-bit FNV-1a hash of it. The
+hash is not keyed, so anyone can make values that collide: use the canonical
+text, not the hash, as a table's key when the values come from someone else.
+
+A number past the exponent bound of `nish/json-number` is equal only to the
+same text. None of the functions recurses, so a document as deep as its
+limits allow compares. `jsonEqual` costs the values' sizes, plus sorting each
+pair of objects' keys; the canonical text and the first duplicate cost the
+canonical text's length.
+
+## `nish/json-pointer`
+
+A JSON Pointer (RFC 6901) names one value inside a document: `/tags/0` is the
+first element of the member `tags`. A token is a member's key, with `~1` for a
+`/` in it and `~0` for a `~`, or an array index written without a leading
+zero.
+
+```ts nish:ok
+import { JSON_POINTER_NONE, isRelativeJsonPointer, jsonPointerEscape, jsonPointerParse, jsonPointerResolve } from "nish/json-pointer";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  const root = doc.parseText(`{"a/b":[10,20],"tags":["tea"]}`);
+  console.log(`${doc.i64(jsonPointerResolve(doc, root, "/a~1b/1"))}`); // 20
+  console.log(`${jsonPointerResolve(doc, root, "/tags/1") === JSON_POINTER_NONE}`); // true
+  console.log(`/${jsonPointerEscape("a/b")}/0`); // /a~1b/0
+  const tokens = jsonPointerParse("/a~1b//~0");
+  console.log(tokens === null ? "refused" : tokens.join("|")); // a/b||~
+  console.log(`${isRelativeJsonPointer("1/tags")}`); // true
+  return 0;
+};
+```
+
+`jsonPointerResolve(doc, root, pointer)` answers the value, `root` itself for
+the empty pointer, `JSON_POINTER_NONE` when the pointer names nothing there
+(a missing key, an index past the end, `-`, a token on a number) and
+`JSON_POINTER_ERR_SYNTAX` when the text is not a pointer. `jsonPointerParse`
+answers the decoded tokens, or `null`; `jsonPointerEscape` writes one token.
+The pointer is the plain string, not a URI fragment: `#/a` is not one.
+
+`isJsonPointer` and `isRelativeJsonPointer` check the form JSON Schema's
+`json-pointer` and `relative-json-pointer` formats name, reading the text once
+and allocating nothing. A relative pointer (`0#`, `1/tags`) is checked but not
+resolved: what it is relative to is the validator's to know. A resolve costs
+the pointer's length, and each member step the size of the object it looks
+in.
+
 ## `nish/yaml`
 
 `parseYaml(text)` reads a YAML 1.2 stream — a configuration file, a CI
