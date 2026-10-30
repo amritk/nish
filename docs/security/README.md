@@ -242,9 +242,10 @@ the record that found it. The notes below the table name each such finding.
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
     does. BCRYPT-5 is a property checked and found to hold, not a finding.
-19. COMP-11 and COMP-12 (Medium), stale bytes queued by `respondEncoded`
-    after `H1_AGAIN` and a `GzipWriter` panic inside its own bound, were
-    found by a review of the first version and fixed. COMP-8 (Low) and COMP-9
+19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
+    `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
+    bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
+    were found by a review of the first version and fixed. COMP-8 (Low) and COMP-9
     (Medium), a stream of small dynamic blocks rebuilding the decoder's
     tables and the BREACH class of length leaks, are accepted, with the reason
     in their record, and are not counted. COMP-1 to COMP-7 and COMP-10 are

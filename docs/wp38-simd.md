@@ -959,6 +959,28 @@ reference, and `bench/crc32.mjs` measures 64 B to 1 MiB and a gzip round trip
 on each path ([bench/README.md](../bench/README.md)). The security record is
 [compress.md](security/compress.md) (COMP-13).
 
+Median ns/op from `node bench/crc32.mjs --self --runs 9` (9 rounds of 3 after
+a warm-up) on an Intel Xeon at 2.10 GHz, x86-64, the PCLMULQDQ path:
+
+| Workload | `default` (`pclmul`) | `default (copy)` | `soft` (`tables`) | Soft over default |
+| --- | ---: | ---: | ---: | ---: |
+| CRC-32, 64 B | 16 | 16 | 47 | 2.96x |
+| CRC-32, 4 KiB | 188 | 193 | 1,434 | 7.63x |
+| CRC-32, 64 KiB | 2,976 | 3,035 | 23,196 | 7.79x |
+| CRC-32, 1 MiB | 50,746 | 53,482 | 465,955 | 9.18x |
+| gzip compress, 1 MiB | 58,558,905 | 59,432,084 | 59,025,291 | 1.01x |
+| gzip decompress, 1 MiB | 4,541,521 | 4,866,916 | 5,066,379 | 1.12x |
+
+`default (copy)` is the same binary again, so the gap between the first two
+columns is the noise band: 2 to 7% here. The CRC-32 rows clear it many times
+over: about 22 GB/s from 4 KiB up at the median (19.6 to 20.7 GB/s at 1 MiB),
+against 2.3 to 2.9 GB/s on the tables. The gzip rows do not: compressing is
+match finding, and the 12% on decompressing is about twice the band, a gain
+to read as small rather than as measured. On AArch64 CI's `simd-arm64` job
+runs the same command each push and prints its table in the step log. The
+PMULL verdict above, 21.0 against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at
+1 MiB, is a 20% and a 17% gap, well outside a band of this size.
+
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 
 **What.** A builtin module with these types: `u8x16`, `i16x8`, `i32x4`,

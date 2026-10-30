@@ -14,10 +14,12 @@
  * Then, under a seeded generator, against every path this machine runs:
  * every length 0..4,096 at every offset 0..15 from an aligned block, each from
  * a random register; inputs of 1 to 16 MiB; and a 4,096-byte input streamed in
- * pieces of 1..16, 63/64/65 and 127/128/129 bytes, which must give the
+ * pieces of 1..16, 63/64/65 and 127/128/129 bytes, or split once after each
+ * of those counts (over 4,096 bytes and over 4,093), which must give the
  * one-call answer. And every length 0..256 ending at the last byte before a
- * page no access is allowed to, so a path that reads one byte past its input
- * faults rather than passing on whatever lay there. That last check is native
+ * page no access is allowed to, and starting at the first byte after one, so a
+ * path that reads one byte outside its input faults rather than passing on
+ * whatever lay there. That last check is native
  * only: wasm32-wasi has no mmap or page protection to fault with, and no kernel
  * there to over-read, so its build runs every other case on the reference.
  *
@@ -208,23 +210,45 @@ static int streaming(const uint8_t *data) {
       }
       cases++;
     }
+  /* Split once: the first `k` bytes, then the rest from the register they left,
+     over 4096 bytes and over 4093, whose length is no multiple of 16. */
+  static const size_t totals[] = {4096, 4093};
+  for (int i = 0; i < npaths; i++)
+    for (size_t t = 0; t < sizeof totals / sizeof totals[0]; t++) {
+      uint32_t all = ~ref(~0u, data, totals[t]);
+      for (size_t s = 0; s < sizeof pieces / sizeof pieces[0]; s++) {
+        size_t k = pieces[s];
+        uint32_t c = paths[i].fn(paths[i].fn(~0u, data, k), data + k, totals[t] - k);
+        if (~c != all) {
+          printf("FAIL %s: %zu bytes then %zu gave %08x, not %08x\n", paths[i].name, k, totals[t] - k, ~c, all);
+          return 0;
+        }
+        cases++;
+      }
+    }
   return 1;
 }
 
 #ifndef __wasi__
 static int edges(void) {
+  /* Three pages, the outer two PROT_NONE: an input that ends where the middle
+     page does and one that starts where it does, so a read past either end
+     faults. */
   size_t page = (size_t)sysconf(_SC_PAGESIZE);
-  uint8_t *map = mmap(NULL, 2 * page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (map == MAP_FAILED || mprotect(map + page, page, PROT_NONE) != 0) {
-    printf("FAIL: no guard page for the edge cases\n");
+  uint8_t *map = mmap(NULL, 3 * page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (map == MAP_FAILED || mprotect(map, page, PROT_NONE) != 0 || mprotect(map + 2 * page, page, PROT_NONE) != 0) {
+    printf("FAIL: no guard pages for the edge cases\n");
     return 0;
   }
-  for (size_t i = 0; i < page; i++) map[i] = (uint8_t)rnd();
+  uint8_t *mid = map + page;
+  for (size_t i = 0; i < page; i++) mid[i] = (uint8_t)rnd();
   for (int i = 0; i < npaths; i++)
-    for (size_t len = 0; len <= 256; len++)
-      if (!agree(&paths[i], (uint32_t)rnd(), map + page - len, len, page - len, "an input ending at a guard page"))
+    for (size_t len = 0; len <= 256; len++) {
+      if (!agree(&paths[i], (uint32_t)rnd(), mid + page - len, len, page - len, "an input ending at a guard page"))
         return 0;
-  munmap(map, 2 * page);
+      if (!agree(&paths[i], (uint32_t)rnd(), mid, len, 0, "an input starting after a guard page")) return 0;
+    }
+  munmap(map, 3 * page);
   return 1;
 }
 #else
@@ -311,6 +335,8 @@ int main(int argc, char **argv) {
   rng_state = seed | 1;
 
   const char *summary;
+  /* What the run proved of the resolver: every pin, or, with no kernel, that it says so. */
+  const char *resolver = "the resolver picks every pin";
 #if defined(NISH_CRC32_X86) || defined(NISH_CRC32_ARM)
   int32_t cpu = nish_crc32_cpu();
 #endif
@@ -335,6 +361,7 @@ int main(int argc, char **argv) {
                 : "the reference alone (armv8-crc32 SKIPPED: this CPU reports no CRC32 instructions)";
 #else
   summary = "the reference alone (this target has no kernel)";
+  resolver = "the resolver says there is no kernel";
 #endif
 
   size_t big_len = (16u << 20) + 64;
@@ -368,6 +395,6 @@ int main(int argc, char **argv) {
 #endif
   free(big);
 
-  printf("crc32: %ld cases agree across %s; the resolver picks every pin\n", cases, summary);
+  printf("crc32: %ld cases agree across %s; %s\n", cases, summary, resolver);
   return 0;
 }

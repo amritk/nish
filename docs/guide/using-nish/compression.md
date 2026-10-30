@@ -237,13 +237,15 @@ PCLMULQDQ on x86-64, the ARMv8 CRC32 instructions on AArch64. The binary
 still runs on any CPU of its target, because the choice is made when the
 program first checksums, not when it is compiled. The answer is the same
 either way, gzip's trailers included. Set `NISH_CRC32=soft` to make a process
-use the lookup tables instead, to compare timings or rule the kernel out:
+use the lookup tables instead, to compare timings or rule the kernel out. Only
+the exact value `soft` is read; any other value is ignored:
 
 ```bash
 NISH_CRC32=soft ./my-program
 ```
 
-Under Node, in wasm and on 32-bit targets the tables always run.
+Under Node, in wasm, on 32-bit targets, on big-endian AArch64, and on
+AArch64 under an OS other than Linux and macOS, the tables always run.
 
 These modules read and write arrays through `nish:unsafe`'s unchecked access
 in their inner loops (each site is justified in the record), so a program

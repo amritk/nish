@@ -2,7 +2,8 @@
 // "123456789", empty input, the CRC-32 and ISIZE a gzip trailer carries
 // (RFC 1952 §2.3.1) against `crc32` of the same bytes, and one checksum fed
 // in pieces of 1..16, 63..65 and 127..129 bytes, each chain equal to the
-// whole. Its stdout is the same under `NISH_CRC32=soft`, which the
+// whole, then split once at each of those lengths, the first `k` bytes and
+// the rest, over 4096 bytes and over 4093, whose length is no multiple of 16. Its stdout is the same under `NISH_CRC32=soft`, which the
 // "crc32 kernel" section of `tests/run.js` runs it under too; the expected
 // values are Node's `zlib.crc32`.
 import { Crc32, crc32 } from "nish/compress/checksum"
@@ -69,5 +70,18 @@ export const main = (): i32 => {
     }
   }
   console.log(`pieces: ${pieces.length} splits`)
+  const lengths: i32[] = [4096, 4093]
+  for (const total of lengths) {
+    const all: u32 = crc32(data, 0, total)
+    console.log(`whole ${total}: ${toI64(all)}`)
+    for (const cut of pieces) {
+      const c: u32 = k.update(k.update(toU32(0), data, 0, cut), data, cut, total - cut)
+      if (c !== all) {
+        console.log(`${cut} then ${total - cut}: ${toI64(c)}, not the whole`)
+        bad += 1
+      }
+    }
+  }
+  console.log(`split once: ${pieces.length * lengths.length} cuts`)
   return bad === 0 ? 0 : 1
 }

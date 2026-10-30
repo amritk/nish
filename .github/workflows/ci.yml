@@ -446,7 +446,7 @@ jobs:
         run: |
           set -o pipefail
           build/test/simd/crc32 | grep -E '^crc32: [0-9]+ cases agree across pclmul;'
-          for program in std_compress_crc_paths std_compress_crc_diff; do
+          for program in std_compress_crc_paths std_compress_crc_diff std_compress_gzip_files; do
             grep -F "PASS  crc32 kernel: $program with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/test.log"
           done
 
@@ -1140,19 +1140,20 @@ jobs:
         run: |
           set -o pipefail
           node tests/run.js "crc32 kernel" | tee "$RUNNER_TEMP/crc32-kernel.log"
-          for program in std_compress_crc_paths std_compress_crc_diff; do
+          for program in std_compress_crc_paths std_compress_crc_diff std_compress_gzip_files; do
             grep -F "PASS  crc32 kernel: $program with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/crc32-kernel.log"
           done
 
       # The figures, not a gate: the C kernel timed against the table
-      # reference, then bench/crc32.mjs's checksums on both
-      # paths and a short timed run, built with the stage1 the section above
-      # linked into build/nish-test.
+      # reference, then bench/crc32.mjs's checksums on both paths and its
+      # ns/op table with `--self`, whose byte-identical copy of the default
+      # column is the noise band the kernel's gain is read against, built
+      # with the stage1 the section above linked into build/nish-test.
       - name: CRC-32 throughput on AArch64
         run: |
           build/test/simd/crc32 bench
           node bench/crc32.mjs --check --compiler build/nish-test
-          node bench/crc32.mjs --runs 3 --compiler build/nish-test
+          node bench/crc32.mjs --self --runs 9 --compiler build/nish-test
 
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on

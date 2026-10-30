@@ -587,8 +587,10 @@ ns/op. It is the measure of WP38's CRC-32 kernel
 tables, and it has no twins. `crc32.mjs` builds it and runs it twice a round:
 once with `NISH_CRC32` unset, so the kernel this CPU has runs, and once under
 `NISH_CRC32=soft`, the Nish tables. Each row names the path its column ran
-(`pclmul`, `crc32` or `tables`), as read from the CPU flags the
-runtime reads:
+(`pclmul`, `crc32` or `tables`), inferred from the CPU flags the runtime
+reads, as `/proc/cpuinfo` lists them; that file is Linux only, and elsewhere
+the default column says `unknown`. `--runs` is rounded up to a multiple of the
+column count, so each column goes first equally often:
 
 ```bash
 npm run build

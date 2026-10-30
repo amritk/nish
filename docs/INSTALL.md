@@ -403,7 +403,7 @@ working directory — and the binary runs from inside its own platform package
 for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is ten files:
+on the `clang` line, and it is eleven files:
 
 ```bash
 clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \

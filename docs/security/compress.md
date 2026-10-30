@@ -27,6 +27,14 @@ could panic on incompressible input written into exactly `bound(len)`
 (COMP-12). The CRC-32 kernels read only the window `Crc32.update` checked
 and answer what the tables answer; a review of their first version found the
 AArch64 path reading four bytes past it, fixed before it shipped (COMP-13).
+Which kernel runs is decided once per process from the CPU alone: CPUID leaf
+1, ECX bits 1 (PCLMULQDQ) and 19 (SSE4.1), on x86-64; `getauxval(AT_HWCAP)`
+bit 7 (`HWCAP_CRC32`) on Linux AArch64, and
+`sysctlbyname("hw.optional.armv8_crc32")` on Darwin. Any other OS, and a
+big-endian or 32-bit target, gets the tables. The one input from outside is
+`NISH_CRC32`, compared with the exact string `soft` and otherwise ignored,
+so whoever sets a process's environment can only send it to the tables,
+which answer the same.
 Two properties are accepted: compressing a response that mixes a
 secret with attacker-chosen bytes leaks the secret through the length
 (COMP-9, the BREACH class), and a stream of many small dynamic blocks makes
@@ -124,12 +132,20 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
 - **COMP-13** (`tests/simd/crc32.c`, through `tests/run.js`): `simd: crc32
   native ${arch}: N cases agree across <paths>`, which holds every kernel to a
   bit-at-a-time reference on the check value, the empty input, lengths
-  0..4,096 at offsets 0..15, 1 to 16 MiB, streamed pieces, and lengths 0..256
-  ending at a guard page; `crc32 kernel: ${program} prints the same bytes with
-  NISH_CRC32 unset and with NISH_CRC32=soft, and they are its expected.out`
-  for `std_compress_crc_paths` and `std_compress_crc_diff`; `crc32 kernel:
-  ${program} under NISH_CRC32=soft calls no kernel`; and `simd: --profile wasi
-  links runtime-checksum.c, and nish_crc32_hw answers 0 there`.
+  0..4,096 at offsets 0..15, 1 to 16 MiB, streamed pieces and a stream split
+  once around each fold boundary, and lengths 0..256 ending at a guard page
+  and starting just after one; `crc32 kernel: ${program} prints the same
+  bytes with NISH_CRC32 unset and with NISH_CRC32=soft, and they are its
+  expected.out` for `std_compress_crc_paths`, `std_compress_crc_diff` and
+  `std_compress_gzip_files` (the system `gzip`'s files read, and Nish's read
+  back by it); `crc32 kernel: ${program} under NISH_CRC32=soft calls no
+  kernel`; and `simd: --profile wasi links runtime-checksum.c, and
+  nish_crc32_hw answers 0 there`. The targets CI does not run are compiled
+  instead: `crc32 kernel: runtime-checksum.c for ${label} selects the kernel,
+  asking the C library for ...` on x86-64 and arm64 Darwin, and `crc32
+  kernel: runtime-checksum.c for ${label} is the stub, nish_crc32_hw and
+  nish_crc32_update and nothing it asks for` on i686, ARMv7, big-endian
+  AArch64, and x86-64 and AArch64 with the intrinsics headers hidden.
 - Interoperability: `link/std_compress_node: each of the ${judged.lines} streams Nish compresses (every level, raw, gzip, zlib and GzipWriter) inflates under Node's zlib to its input`.
 
 Not fuzzed with libFuzzer yet: the corruption and prefix loops above are the

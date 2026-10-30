@@ -287,7 +287,7 @@ a layout smoke test.
 power-of-five tables) and `runtime/runtime-os.c` (the system-call half: 1,530
 bytes against 1,536) provide, in the order of the `RuntimeTable` in `src/runtime.ts`, the symbols
 below, with `runtime-parallel.c`, `runtime-cross.c`, `runtime-host.c`, `runtime-net.c`,
-`runtime-simd.c`, `runtime-aes.c`, `runtime-term.c` and `runtime-bytes.c` beside them under budgets of their own;
+`runtime-simd.c`, `runtime-aes.c`, `runtime-term.c`, `runtime-bytes.c` and `runtime-checksum.c` beside them under budgets of their own;
 measure any of them with `clang -Oz -c <file> && size -A <file>.o`, or
 `scripts/size-report.sh --budgets`, which prints one row for every unit and
 configuration `node tests/run.js runtime-budget` gates, each with the ceiling

@@ -5,7 +5,8 @@
 // throughput in MB/s and its time in ns/op, naming the path each column ran.
 //
 //   npm run build && node bench/crc32.mjs [options] [--compiler <nish>]
-//     --runs N    timed rounds after one warm-up (default 7)
+//     --runs N    timed rounds after one warm-up (default 7), rounded up to a
+//                 multiple of the column count so each column goes first equally often
 //     --self      a byte-identical copy of the default column: the noise band
 //     --check     one short run on each path, each checksum against the pinned one; exit 0 when equal
 //
@@ -16,11 +17,13 @@
 // first equally often, and every run must print the same checksum, or the run
 // stops: the paths answer the same or they are not timing the same work.
 //
-// The path a column ran is read the way runtime/runtime-checksum.c reads it,
-// from the CPU flags in /proc/cpuinfo, since the program cannot ask: pclmul
-// (x86-64 PCLMULQDQ and SSE4.1), crc32 (AArch64 with the CRC32 instructions), or
-// tables. What is timed is each
-// workload's own loop, not the process. MB/s is 10^6 bytes a second.
+// The path a column ran is inferred, not asked: the program cannot say which
+// kernel the runtime picked, so the path is read from the CPU flags in
+// /proc/cpuinfo, the bits runtime/runtime-checksum.c tests: pclmul (x86-64
+// PCLMULQDQ and SSE4.1), crc32 (AArch64 with the CRC32 instructions), or
+// tables. That file is Linux only; elsewhere the default column says
+// `unknown`. What is timed is each workload's own loop, not the process. MB/s
+// is 10^6 bytes a second.
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -82,12 +85,18 @@ const cpuinfo = (() => {
   try {
     return fs.readFileSync("/proc/cpuinfo", "utf8")
   } catch {
-    return ""
+    return null
   }
 })()
-const flags = new Set((cpuinfo.match(/^(?:flags|Features)\s*:\s*(.+)$/m)?.[1] ?? "").split(/\s+/))
-/** The kernel runtime/runtime-checksum.c picks on this machine, or `tables`. */
+const flags = new Set((cpuinfo?.match(/^(?:flags|Features)\s*:\s*(.+)$/m)?.[1] ?? "").split(/\s+/))
+/**
+ * The kernel runtime/runtime-checksum.c picks on this machine, or `tables`,
+ * inferred from /proc/cpuinfo; `unknown` where there is none.
+ */
 const machinePath = (() => {
+  if (cpuinfo === null) {
+    return "unknown"
+  }
   if (process.arch === "x64" && flags.has("pclmulqdq") && flags.has("sse4_1")) {
     return "pclmul"
   }
@@ -184,7 +193,7 @@ for (let i = 0; i <= rounds; i++) {
   }
 }
 
-const cpu = cpuinfo.match(/^model name\s*:\s*(.+)$/m)?.[1].trim() ?? `${process.arch}, model unnamed`
+const cpu = cpuinfo?.match(/^model name\s*:\s*(.+)$/m)?.[1].trim() ?? `${process.arch}, model unnamed`
 const commit = (() => {
   try {
     return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim()
@@ -224,4 +233,6 @@ const soft = stats[n - 1]
 const speedups = [...shape.keys()].map(
   (name) => `${name} ${(soft.get(name).median / stats[0].get(name).median).toFixed(2)}x`
 )
-console.log(`default (${machinePath}) against soft, median time over median time: ${speedups.join(", ")}`)
+console.log(
+  `default (${machinePath}, from /proc/cpuinfo) against soft, median time over median time: ${speedups.join(", ")}`
+)

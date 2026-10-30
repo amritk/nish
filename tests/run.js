@@ -18359,7 +18359,10 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
 // linked the same way as the trace's control. IR compiled for the host and linked
 // freestanding (`--profile wasm`) gets runtime-checksum.c from build.sh, whose wasm32
 // build answers 0, and its CRCs must be Node's.
-if (!only || "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff".includes(only)) {
+if (
+  !only ||
+  "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff std_compress_gzip_files".includes(only)
+) {
   const crcDir = path.join(buildDir, "crc32-kernel")
   fs.rmSync(crcDir, { recursive: true, force: true })
   fs.mkdirSync(crcDir, { recursive: true })
@@ -18394,7 +18397,7 @@ if (!only || "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff".in
         : []
     return { lls, why: r.status === 0 ? "" : r.stderr }
   }
-  const crcPrograms = ["std_compress_crc_paths", "std_compress_crc_diff"]
+  const crcPrograms = ["std_compress_crc_paths", "std_compress_crc_diff", "std_compress_gzip_files"]
 
   if (!HAS_CLANG) {
     skip("crc32 kernel: no clang to link the CRC-32 programs against runtime-checksum.c")
@@ -18454,8 +18457,8 @@ if (!only || "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff".in
         continue
       }
       const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
-      const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
-      const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_CRC32: "soft" } })
+      const hw = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: { ...unset, NISH_CRC32: "soft" } })
       /** The count the wrapper printed, or null. */
       const calls = (r) => {
         const m = /^crc32 kernel calls: (\d+)$/m.exec(r.stderr)
@@ -18480,6 +18483,128 @@ if (!only || "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff".in
           hw.stderr
         )
       }
+    }
+  }
+
+  // The targets CI cannot run, compiled: runtime-checksum.c with `-c
+  // -ffreestanding` for each, and the object's symbols read back. Darwin on
+  // x86-64 and AArch64 selects the kernel (the AArch64 one asks sysctlbyname);
+  // i686, ARMv7, big-endian AArch64 and a build whose intrinsic headers are
+  // hidden select the stub, which defines `nish_crc32_hw` and
+  // `nish_crc32_update` and nothing else, and asks the C library for nothing.
+  // A target this clang has no backend for is skipped with its reason.
+  const crcNm = ["llvm-nm", "llvm-nm-18"].find(has);
+  if (!HAS_CLANG || crcNm === undefined) {
+    skip(
+      "crc32 kernel: no clang and llvm-nm to compile runtime-checksum.c for the targets CI cannot run",
+    );
+  } else {
+    const xcDir = path.join(crcDir, "cross");
+    fs.mkdirSync(xcDir, { recursive: true });
+    // The three freestanding headers nish.h includes, and nothing else, for the hidden-header builds.
+    const resource = spawnSync("clang", ["-print-resource-dir"], {
+      encoding: "utf8",
+    }).stdout.trim();
+    const bare = path.join(xcDir, "include");
+    fs.mkdirSync(bare, { recursive: true });
+    for (const f of fs.readdirSync(path.join(resource, "include"))) {
+      if (
+        ["stdint.h", "stdbool.h", "stddef.h"].includes(f) ||
+        /^__stddef_.*\.h$/.test(f)
+      ) {
+        fs.copyFileSync(path.join(resource, "include", f), path.join(bare, f));
+      }
+    }
+    const stub = {
+      defined: ["nish_crc32_hw", "nish_crc32_update"],
+      undefined: [],
+    };
+    const crossTargets = [
+      [
+        "x86_64-apple-darwin",
+        [],
+        {
+          defined: ["nish_crc32_answer", "nish_crc32_clmul"],
+          undefined: ["getenv"],
+        },
+      ],
+      [
+        "arm64-apple-darwin",
+        [],
+        {
+          defined: ["nish_crc32_answer", "nish_crc32_arm"],
+          undefined: ["getenv", "sysctlbyname"],
+        },
+      ],
+      ["i686-linux-gnu", [], stub],
+      ["armv7-linux-gnueabihf", [], stub],
+      ["aarch64_be-linux-gnu", [], stub],
+      ["x86_64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+      ["aarch64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+    ];
+    for (const [triple, extra, want] of crossTargets) {
+      const hidden = extra.length > 0;
+      const label = hidden
+        ? `${triple} with the intrinsic headers hidden`
+        : triple;
+      const obj = path.join(xcDir, `${triple}${hidden ? "-hidden" : ""}.o`);
+      const cc = spawnSync(
+        "clang",
+        [
+          "-c",
+          "-ffreestanding",
+          `--target=${triple}`,
+          ...extra,
+          "-Iruntime",
+          "runtime/runtime-checksum.c",
+          "-o",
+          obj,
+        ],
+        { cwd: root, encoding: "utf8" },
+      );
+      if (
+        cc.status !== 0 &&
+        /no available targets|unknown target triple|unable to create target/i.test(
+          cc.stderr,
+        )
+      ) {
+        skip(
+          `crc32 kernel: this clang cannot compile for ${triple}: ${cc.stderr.trim().split("\n")[0]}`,
+        );
+        continue;
+      }
+      if (cc.status !== 0) {
+        check(
+          `crc32 kernel: runtime-checksum.c compiles for ${label}`,
+          false,
+          cc.stderr,
+        );
+        continue;
+      }
+      const nm = spawnSync(crcNm, [obj], { encoding: "utf8" });
+      // Mach-O names carry a leading underscore; ELF's do not.
+      const name = (n) => (triple.includes("apple") ? n.replace(/^_/, "") : n);
+      const syms = nm.stdout
+        .split("\n")
+        .map((l) => l.trim().split(/\s+/))
+        .filter((f) => f.length >= 2)
+        .map((f) => ({ type: f[f.length - 2], name: name(f[f.length - 1]) }));
+      const defined = syms.filter((x) => x.type !== "U").map((x) => x.name);
+      const undef = syms.filter((x) => x.type === "U").map((x) => x.name);
+      const ok =
+        want === stub
+          ? [...defined].sort().join(" ") === stub.defined.join(" ") &&
+            undef.length === 0
+          : ["nish_crc32_hw", "nish_crc32_update", ...want.defined].every((n) =>
+              defined.includes(n),
+            ) && [...undef].sort().join(" ") === want.undefined.join(" ");
+      check(
+        want === stub
+          ? `crc32 kernel: runtime-checksum.c for ${label} is the stub, nish_crc32_hw and nish_crc32_update and nothing it asks for`
+          : `crc32 kernel: runtime-checksum.c for ${label} selects the kernel, asking the C library for ${want.undefined.join(" and ")}`,
+        nm.status === 0 && ok,
+        `defined: ${defined.join(" ")}\nundefined: ${undef.join(" ")}\n${nm.stderr}`,
+      );
     }
   }
 
