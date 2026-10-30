@@ -1,5 +1,5 @@
-// A vector is a value: kept in a local, a field and an array slot, passed and
-// returned, and copied by assignment.
+// A vector is a value: kept in a local, a field, an array slot and a Map's
+// value, passed and returned, and copied by assignment.
 import { i32x4, f64x2, splatI32x4, extract, replace } from "nish:simd";
 
 class Particle {
@@ -37,5 +37,12 @@ export const main = (): number => {
   v = bump(v);
   console.log(sum4(kept));
   console.log(sum4(v));
+  const named = new Map<i32, i32x4>();
+  named.set(7, v);
+  const got = named.get(7);
+  if (got !== undefined) {
+    console.log(sum4(got));
+  }
+  console.log(named.get(8) === undefined);
   return 0;
 };

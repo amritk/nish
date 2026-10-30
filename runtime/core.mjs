@@ -66,11 +66,14 @@ export * from "./core/strings.mjs";
 
 const simdMake = (Lanes) => (...lanes) => Lanes.from(lanes);
 const simdSplat = (Lanes) => (x) => new Lanes(16 / Lanes.BYTES_PER_ELEMENT).fill(x);
-// The first index of `count` lanes at `i` in `xs`, or the native panic: a
-// negative index prints as the unsigned 64-bit number the native compare saw.
+// The first index of `count` lanes at `i` in `xs`, or the native panic naming
+// a lane that is out of range: the first when it is, else the last. A negative
+// index prints as the unsigned 64-bit number the native compare saw.
 const simdAt = (xs, i, count) => {
   const k = toIndex(i);
-  if (!(k >= 0 && k + count <= xs.length)) panicIndex(k < 0 ? BigInt.asUintN(64, BigInt(k)) : k, xs.length);
+  if (k < 0) panicIndex(BigInt.asUintN(64, BigInt(k)), xs.length);
+  if (k >= xs.length) panicIndex(k, xs.length);
+  if (k + count > xs.length) panicIndex(k + count - 1, xs.length);
   return k;
 };
 const simdLoad = (Lanes) => (xs, i) => {

@@ -6640,8 +6640,8 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
   (NL2579). A `readonly` array may be loaded from and not stored to
   (`` Cannot `store` through readonly u8[] ``). The index is an `i32`; the
   check is one compare pair for the whole vector, so a load whose last lane is
-  past the end panics before it reads, naming the first index and the length,
-  as `xs[i]` does (`simd_access_oob`, run by `tests/run.js` natively and under
+  past the end panics before it reads, naming a lane past the end (the first
+  when it is out of range, else the last) and the length, as `xs[i]` does (`simd_access_oob`, run by `tests/run.js` natively and under
   Node). The access is aligned to the lane, not to sixteen: an array's
   elements are where the arena put them.
 - **A lane index is an integer literal in range.** `extract(v, k)` and

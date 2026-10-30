@@ -1250,18 +1250,21 @@ export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): 
   const okBlock = fn.newBlock("bounds.ok")
   fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`)
   fn.placeBlock(failBlock)
-  fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${idx}, i64 ${len})`)
+  // The panic names a lane that is out of range: the first when it is, else the last.
+  const lastLane = fn.emitValue(`add i64 ${idx}, ${count - 1}`)
+  const shown = fn.emitValue(`select i1 ${first}, i64 ${lastLane}, i64 ${idx}`)
+  fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${shown}, i64 ${len})`)
   fn.emit("unreachable")
   fn.placeBlock(okBlock)
   const slot = elementPointer(emitter, base, lane, idx)
   const ty = emitter.llvm(vector)
   const ptr = fn.emitValue(`bitcast ${slotType(emitter, lane)}* ${slot} to ${ty}*`)
-  const align = emitter.table.alignOf(lane)
+  const align = emitter.opts.optimizeAttributes ? `, align ${emitter.table.alignOf(lane)}` : ""
   if (store) {
-    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}, align ${align}`)
+    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${align}`)
     return "void"
   }
-  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}, align ${align}`)
+  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}${align}`)
 }
 
 /**

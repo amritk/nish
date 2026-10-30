@@ -24191,8 +24191,8 @@ attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 <!-- cookbook:end simd-make -->
 
 A load or a store is the array's one bounds check for the whole vector —
-`i < len` and `i + N <= len`, so one `nish_panic_index(i, len)` names the
-first index — then the element's address, bitcast to `<N x T>*`, and one
+`i < len` and `i + N <= len`, so one `nish_panic_index` names a lane past the
+end, the first when it is out of range and else the last — then the element's address, bitcast to `<N x T>*`, and one
 vector `load` or `store` aligned to the lane, since the array's data is
 aligned to its element and not to sixteen.
 

@@ -1,5 +1,5 @@
 // A load whose last lane is past the array's end panics before it reads,
-// naming the first index and the length: the check covers the whole vector.
+// naming its last lane and the length: the check covers the whole vector.
 import { loadI32x4, extract } from "nish:simd";
 
 export const main = (): number => {

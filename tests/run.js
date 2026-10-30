@@ -10800,7 +10800,7 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
 
   // A load whose last lane is past the end panics before it reads, naming the
   // first index and the length, as `xs[i]` does.
-  const oobWords = "index out of range: 2 >= 5"
+  const oobWords = "index out of range: 5 >= 5"
   const oobExe = buildCaseIn(simdDir, "simd_access_oob")
   if (oobExe !== null) {
     const native = spawnSync(oobExe, [], { cwd: root, encoding: "utf8" })
