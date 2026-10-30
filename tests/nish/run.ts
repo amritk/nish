@@ -11,14 +11,14 @@
 over one list, so `n` CI jobs share the corpus between them.
  *
  * `--jobs <p>` runs that slice as `p` processes, one per core by default (at
- * most 8). Every check is a `spawnSyncTo` the runner waits on, so one process
- * leaves all but one core idle; with `p` above 1 the runner starts itself `p`
- * times through `spawn` instead, on the slices `i`, `i + n`, ..., `i + n(p - 1)`
- * of `n·p`. An item lands in one of those exactly when its position is `i - 1`
- * modulo `n`, which is the set `--shard i/n` names alone, so `--jobs` changes
- * how long a slice takes and never what it checks. Each child keeps its work
- * under `build/nish-runner-jobs/<slice>-of-<total>/` (`--work <dir>`, the
- * child's own flag), its output is printed whole in slice order once it and
+ * most 8; at most 64 when given). Every check is a `spawnSyncTo` the runner
+ * waits on, so one process leaves all but one core idle; with `p` above 1 the
+ * runner starts itself `p` times through `spawn` instead, on the slices `i`,
+ * `i + n`, ..., `i + n(p - 1)` of `n·p`. An item lands in one of those exactly
+ * when its position is `i - 1` modulo `n`, which is the set `--shard i/n` names
+ * alone, so `--jobs` changes how long a slice takes and never what it checks.
+ * Each child keeps its work under `build/nish-runner-jobs/<slice>-of-<total>/`
+ * (`--work <dir>`, the child's own flag, refused beside `--jobs` above 1), its output is printed whole in slice order once it and
  * every slice before it are done, and the last line is the summary summed
  * over them, so a `tail -n 1` reads it as one run's.
  *
@@ -113,9 +113,17 @@ class Tools {
   /** This process's link work directory, one subdirectory per program. */
   linkWork: string;
 
-  constructor(clang: boolean, llvmAs: boolean, opt: boolean, env: boolean, compiler: string, base: string) {
-    this.work = `${base}/nish-cases`;
-    this.linkWork = `${base}/nish-link`;
+  constructor(
+    clang: boolean,
+    llvmAs: boolean,
+    opt: boolean,
+    env: boolean,
+    compiler: string,
+    work: string,
+    linkWork: string,
+  ) {
+    this.work = work;
+    this.linkWork = linkWork;
     this.clang = clang;
     this.llvmAs = llvmAs;
     this.opt = opt;
@@ -755,12 +763,13 @@ const runJobs = (filter: string, compiler: string, shard: i32, shards: i32, jobs
     for (const arg of ["--compiler", compiler, "--shard", `${slice}/${total}`, "--jobs", "1", "--work", dir]) {
       argv.push(arg);
     }
-    const pid = mkdirSync(dir) ? spawn(argv) : -1;
+    // `spawn` answers a pid or a negative errno; 0 stands for a directory that could not be made.
+    const pid = mkdirSync(dir) ? spawn(argv) : 0;
     slices.push(slice);
     dirs.push(dir);
     pids.push(pid);
-    // A child that never started is finished already, with no output and so no summary.
-    statuses.push(pid > 0 ? 0 : -1);
+    // A child that never started is finished already, and its files, if any, are an earlier run's.
+    statuses.push(0);
     finished.push(pid <= 0);
     if (pid > 0) {
       running += 1;
@@ -772,8 +781,10 @@ const runJobs = (filter: string, compiler: string, shard: i32, shards: i32, jobs
   let printed: i32 = 0;
   while (printed < jobs) {
     if (finished[printed]) {
-      const out = readOrEmpty(`${dirs[printed]}/out`);
-      write(`--- slice ${slices[printed]}/${total}\n${out}${readOrEmpty(`${dirs[printed]}/err`)}`);
+      const ran = pids[printed] > 0;
+      const out = ran ? readOrEmpty(`${dirs[printed]}/out`) : "";
+      const err = ran ? readOrEmpty(`${dirs[printed]}/err`) : "";
+      write(`--- slice ${slices[printed]}/${total}\n${out}${err}`);
       outputs.push(out);
       printed += 1;
       continue;
@@ -782,6 +793,10 @@ const runJobs = (filter: string, compiler: string, shard: i32, shards: i32, jobs
       panic("a child is unfinished and none is running");
     }
     const reaped = waitPid(-1, 0);
+    // -EINTR (4 on Linux and macOS): a signal interrupted the wait, and the children run on.
+    if (reaped[0] === -4) {
+      continue;
+    }
     if (reaped[0] < 0) {
       panic(`waitPid failed with ${reaped[0]} while ${running} children were running`);
     }
@@ -804,7 +819,13 @@ const runJobs = (filter: string, compiler: string, shard: i32, shards: i32, jobs
   while (p < jobs) {
     const counts = summaryOf(outputs[p]);
     const label = `slice ${slices[p]}/${total}`;
-    if (counts.length === 0) {
+    if (pids[p] === 0) {
+      console.log(`FAIL  ${label} did not start: cannot create ${dirs[p]}`);
+      broken += 1;
+    } else if (pids[p] < 0) {
+      console.log(`FAIL  ${label} did not start: spawn answered ${pids[p]}`);
+      broken += 1;
+    } else if (counts.length === 0) {
       console.log(`FAIL  ${label} printed no summary (exit ${statuses[p]})`);
       broken += 1;
     } else {
@@ -837,6 +858,7 @@ export const main = (): number => {
   const cores = availableParallelism();
   let jobs: i32 = cores < 8 ? cores : 8;
   let base = "build";
+  let workGiven = false;
   let i = 1;
   while (i < process.argv.length) {
     if (process.argv[i] === "--compiler") {
@@ -864,8 +886,8 @@ export const main = (): number => {
         panic("--jobs needs a count");
       }
       jobs = parseInt(process.argv[i + 1]);
-      if (jobs < 1) {
-        panic(`--jobs wants a count of at least 1, not ${process.argv[i + 1]}`);
+      if (jobs < 1 || jobs > 64) {
+        panic(`--jobs wants a count from 1 to 64, not ${process.argv[i + 1]}`);
       }
       i = i + 2;
     } else if (process.argv[i] === "--work") {
@@ -873,6 +895,7 @@ export const main = (): number => {
         panic("--work needs a directory");
       }
       base = process.argv[i + 1];
+      workGiven = true;
       i = i + 2;
     } else {
       filter = process.argv[i];
@@ -883,6 +906,9 @@ export const main = (): number => {
     panic(`cannot read the compiler ${compiler} (run this from the repository root, after \`npm run build\`)`);
   }
   mkdirSync("build");
+  if (jobs > 1 && workGiven) {
+    panic(`--work names one process's directory; pass --jobs 1 with it (--jobs ${jobs} keeps each under ${JOB_WORK})`);
+  }
   if (jobs > 1) {
     return runJobs(filter, compiler, shard, shards, jobs);
   }
@@ -914,7 +940,8 @@ export const main = (): number => {
     probe(work, "opt"),
     hasEnvTool(work),
     compiler,
-    base,
+    work,
+    linkWork,
   );
 
   const started = monotonicNanos();

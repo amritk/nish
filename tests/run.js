@@ -8142,7 +8142,7 @@ if (dealtHere("nishRunner")) {
     // an absolute one from, which is also why it folds `<root>/` out of a
     // golden rather than into its own output. `--compiler` names the compiler
     // under test, where the runner's own default is build/nish.
-    const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH)], { cwd: root })
+    const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), "--jobs", "1"], { cwd: root })
     const report = String(ran.stdout)
     check(
       "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",

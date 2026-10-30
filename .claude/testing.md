@@ -317,11 +317,11 @@ answers 1 when any check failed, and names its slowest cases from
 `monotonicNanos`.
 
 ```bash
-npm run test:nish                 # the whole corpus, about five minutes
+npm run test:nish                 # the whole corpus, one process per core (at most 8)
 build/nish-runner pop             # only cases whose name contains "pop"
 build/nish-runner --shard 2/4     # the second of four round-robin slices
-build/nish-runner --shard 2/3 --jobs 4
-                                  # as CI runs it: a third of the corpus, four processes (default: one per core, at most 8)
+build/nish-runner --shard 2/3     # as CI runs it: a third of the corpus, one process per core
+build/nish-runner --jobs 1        # one process, as `tests/run.js` runs it
 ```
 
 `npm test` builds it and runs it over the `pop` cases — one golden, one native
