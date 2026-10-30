@@ -985,9 +985,13 @@ const ARM_READS_FLAGS = /^(cs\w+|cset\w*|cinc|cinv|cneg|adcs?|sbcs?|ngcs?|f?ccmp
 /** A divide or square root, whose latency follows its operands. */
 const ARM_LATENCY = /^([us]div|fdiv|fsqrt)$/
 const ARM_SETS_FLAGS = /^(adds|subs|ands|bics|negs|adcs|sbcs|ngcs)$/
-/** Instructions that read their destination as well as write it. `aese` and `aesd` XOR it with their key first. */
+/**
+ * Instructions that read their destination as well as write it. `aese` and
+ * `aesd` XOR it with their key first; the SHA-256 four take the state or the
+ * schedule words they advance from it.
+ */
 const ARM_READ_MODIFY_WRITE =
-  /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx|aese|aesd)$/
+  /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx|aese|aesd|sha256h2?|sha256su[01])$/
 
 /** An aarch64 immediate operand with the `lsl #12` that may follow it, or `null`. */
 const armImmediate = (ops, i) => {
@@ -1359,6 +1363,34 @@ const AUDIT_CORNERS = [
       "ldr w3, [x4, x2]",
     ],
   ],
+  // runtime/runtime-sha256.c: `sha256su0` with a public operand keeps the
+  // secret schedule words already in its destination, as `sha256h`, `sha256h2`
+  // and `sha256su1` keep the state and words in theirs.
+  [
+    "aarch64",
+    "a",
+    "load",
+    [
+      "fmov d0, x0",
+      "movi v1.2d, #0000000000000000",
+      "sha256su0 v0.4s, v1.4s",
+      "fmov x2, d0",
+      "ldr w3, [x4, x2]",
+    ],
+  ],
+  // Its x86-64 kernel's three: `sha256msg1` and `sha256msg2` fold their source into
+  // the schedule words in the destination, and `sha256rnds2` runs two rounds on the
+  // state already in its destination, with %xmm0 as an implicit third operand.
+  ...[
+    ["sha256msg1 %xmm1, %xmm2"],
+    ["sha256msg2 %xmm1, %xmm2"],
+    ["sha256rnds2 %xmm0, %xmm1, %xmm2", "pxor %xmm0, %xmm0"],
+  ].map(([op, zero = "pxor %xmm1, %xmm1"]) => [
+    "x86-64",
+    "a",
+    "load",
+    ["movq %rdi, %xmm2", zero, op, "movq %xmm2, %rax", "movl (%rsi,%rax,4), %eax"],
+  ]),
   // The SSE4.2 string compares: each writes the flags and a register it does not
   // name, %ecx or %xmm0, from its operands. Under `preciseFlags` a flag read after
   // one on a secret was public, and in either mode so was the index or mask it left.
