@@ -22,8 +22,11 @@
 // build/bench/sha256/. Each case calibrates one iteration count on the build
 // so a run takes about 200 ms, and every column runs that count; each round
 // runs every column once, in bench/json-compare/rounds.mjs's balanced order.
-// Every run of every column must print the same checksum, or the run stops:
-// two builds whose answers differ are not timing the same work.
+// Before timing, every column runs each case once and must print the case's
+// `known` checksum, pinned from one iteration of main's untuned build: that,
+// not the columns agreeing, is what says the hashes are right. Every timed run
+// of every column must then print the same checksum, or the run stops: two
+// builds whose answers differ are not timing the same work.
 //
 // A column's ns/op is its `ns` line over the iterations. Its change is its
 // median against the build's, + slower, and reads as a difference only
@@ -41,12 +44,15 @@ const root = path.resolve(here, "..", "..")
 const outDir = path.join(root, "build", "bench", "sha256")
 const nishc = compilerFrom(process.argv)
 
-/** What each case runs, as `main <kernel> <size> <iterations>` takes it. */
+/**
+ * What each case runs, as `main <kernel> <size> <iterations>` takes it, and
+ * `known`, the checksum one iteration prints.
+ */
 const CASES = [
-  { label: "sha256 64 B", kernel: "sha256", size: 64 },
-  { label: "sha256 1 KiB", kernel: "sha256", size: 1024 },
-  { label: "sha256 1 MiB", kernel: "sha256", size: 1048576 },
-  { label: "hs256 sign+verify", kernel: "hs256", size: 0 },
+  { label: "sha256 64 B", kernel: "sha256", size: 64, known: "af88af1d" },
+  { label: "sha256 1 KiB", kernel: "sha256", size: 1024, known: "dcc0d434" },
+  { label: "sha256 1 MiB", kernel: "sha256", size: 1048576, known: "e71d7281" },
+  { label: "hs256 sign+verify", kernel: "hs256", size: 0, known: "0737e026" },
 ]
 /** The nanoseconds a calibrated run aims at. */
 const TARGET_NS = 200e6
@@ -148,6 +154,15 @@ const pct = (from, to) => `${to >= from ? "+" : ""}${((100 * (to - from)) / from
 const WIDTHS = [18, 28, 12, 12, 9]
 const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
 console.log(line(["case", "column", "min ns/op", "median ns/op", "vs nish"]))
+
+for (const c of CASES) {
+  for (const col of columns) {
+    const r = runOnce(col, c, 1)
+    if (r.checksum !== c.known) {
+      fail(`${col.id} ${c.label} printed checksum ${r.checksum} for one iteration, not the known ${c.known}`)
+    }
+  }
+}
 
 const n = roundsFor(columns.length, rounds)
 for (const c of CASES) {

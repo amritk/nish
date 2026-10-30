@@ -12,8 +12,11 @@ npm run build && node bench/sha256/run.mjs [--rounds N] [--binary name=<path>]
 ```
 
 The inputs are the crypto twins' (`bench/crypto/lib/gen.ts`), and a run prints
-the checksum of every output, so two builds that print different checksums
-stop the run rather than being compared.
+the checksum of every output. What guards correctness is `run.mjs`'s pinned
+`known` checksum per case, one iteration's as main's untuned build prints it:
+before any timing, every column must print it, or the run stops. During
+timing, two builds that print different checksums stop the run rather than
+being compared.
 
 ## Last measured
 

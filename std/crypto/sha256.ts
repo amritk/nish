@@ -30,7 +30,7 @@
  * Every read is checked: nothing here imports `nish:unsafe`, so hashing never
  * makes a caller reach `unsafe`, which `--deny unsafe` refuses (the SCRAM in
  * `std/net/postgres.ts` is one such caller). `sha256Compress` instead orders
- * its reads so that one bounds check covers a whole block.
+ * its reads so that the optimiser can fold a block's bounds checks into one.
  *
  * Written from the specification, not ported from another implementation.
  */
