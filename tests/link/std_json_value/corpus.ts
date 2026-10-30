@@ -5,7 +5,14 @@
 // gets the tokenizer's own verdict, code and offset.
 import { JSON_WRITER_MAX_DEPTH, JsonWriter } from "nish/json";
 import { JSON_TOK_KEY, JSON_TOK_STRING, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
-import { JSON_VALUE_DUPLICATE_LAST, JSON_VALUE_ERR_DUPLICATE, JsonDocument } from "nish/json-value";
+import {
+  JSON_VALUE_ARRAY,
+  JSON_VALUE_DUPLICATE_LAST,
+  JSON_VALUE_ERR_DUPLICATE,
+  JSON_VALUE_OBJECT,
+  JsonDocument,
+  JsonValue,
+} from "nish/json-value";
 import { Suite } from "nish/testing";
 import { JvCase, jvCanonical, jvHex, jvHexOf, jvLoadCorpus, jvTokVerdict } from "./common";
 
@@ -83,8 +90,8 @@ export const jvCorpusChecks = (t: Suite): void => {
   const fuzz = jvLoadFuzzCorpus();
   t.ok("corpus: tests/fuzz/corpus/json-value holds files", fuzz.length > 0);
   t.eqLines(
-    "ranges: every file of JSONTestSuite and the fuzz corpus parses with keepRanges on to the verdict, errorAt and tree it parses to with it off",
-    jvRangesAgainstNone(corpus, fuzz),
+    "ranges: every file of JSONTestSuite, the fuzz corpus and the wide objects parses through parseRanged to the verdict, errorAt and tree parse gives, and every value and key it ranges reparses alone to itself",
+    jvRangesAgainstNone(corpus, fuzz, jvWide()),
     jvNone()
   );
 };
@@ -114,6 +121,28 @@ const jvLoadFuzzCorpus = (): JvCase[] => {
   return cases;
 };
 
+/**
+ * Objects of more than 8 members, which take the sorted path of the duplicate
+ * check, with a repeated key: neither JSONTestSuite nor the fuzz corpus has
+ * one, and `sortPending` and `sortPendingRanged` are two copies.
+ */
+const jvWide = (): JvCase[] => {
+  const texts: string[] = [
+    '{"k0":0,"k1":1,"k2":2,"k3":3,"k4":4,"k5":5,"k6":6,"k7":7,"k1":"one"}',
+    '{"z":[1],"y":{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"a":[9]},"x":2,"w":3,"v":4,"u":5,"t":6,"s":7,"z":null}',
+    '[{"m0":0,"m1":1,"m2":2,"m3":3,"m4":4,"m5":5,"m6":6,"m7":7,"m8":8,"m9":9,"m0":"a","m9":"b"}]',
+  ];
+  const cases: JvCase[] = [];
+  for (let i: i32 = 0; i < toI32(texts.length); i += 1) {
+    const text: u8[] = [];
+    for (let j: i32 = 0; j < toI32(texts[i].length); j += 1) {
+      text.push(toU8(toI32(texts[i].charCodeAt(j))));
+    }
+    cases.push(new JvCase(`wide/${i}`, text));
+  }
+  return cases;
+};
+
 /** What a parse of `c` by `doc` gives: the tree it writes, or its code and `errorAt`. */
 const jvVerdict = (doc: JsonDocument, c: JvCase): string => {
   const r = doc.parse(c.bytes, 0, toI32(c.bytes.length));
@@ -121,14 +150,55 @@ const jvVerdict = (doc: JsonDocument, c: JvCase): string => {
 };
 
 /**
- * Every file of `corpus` and `fuzz` parsed by a document that keeps ranges
- * and one that does not, under both duplicate policies, with and without a
- * cap of 16 values and of depth 4, and each document reused across files:
- * the files where the two differ. `parse` and `parseRanged` are two loops,
- * and `close` and `closeRanged` two closers, so this holds each pair to one
- * another.
+ * `jvVerdict` through `parseRanged`, and on success every value and key of
+ * the tree whose range is not its own bytes: `scratch`, under `doc`'s
+ * duplicate policy, reparses each range alone and must give the same value,
+ * or the same string for a key. A root without a range is one of them.
  */
-const jvRangesAgainstNone = (corpus: JvCase[], fuzz: JvCase[]): string[] => {
+const jvRangedVerdict = (doc: JsonDocument, scratch: JsonDocument, c: JvCase): string => {
+  const r = doc.parseRanged(c.bytes, 0, toI32(c.bytes.length));
+  if (r < 0) {
+    return `error ${r}@${doc.errorAt}`;
+  }
+  const wrong: string[] = [];
+  jvRangesOf(doc, scratch, c, r, wrong);
+  return wrong.length === 0 ? doc.stringify(r) : `${doc.stringify(r)}, ranges wrong: ${wrong.join(" ")}`;
+};
+
+/** `jvRangedVerdict`'s check of `v` and everything under it, each wrong range pushed onto `wrong`. */
+const jvRangesOf = (doc: JsonDocument, scratch: JsonDocument, c: JvCase, v: JsonValue, wrong: string[]): void => {
+  const a = doc.start(v);
+  const b = doc.end(v);
+  const alone = a < 0 || b < a || b > toI32(c.bytes.length) ? -1 : scratch.parse(c.bytes, a, b - a);
+  if (alone < 0 || scratch.stringify(alone) !== doc.stringify(v)) {
+    wrong.push(`value[${a},${b})`);
+  }
+  const kind = doc.kind(v);
+  if (kind !== JSON_VALUE_OBJECT && kind !== JSON_VALUE_ARRAY) {
+    return;
+  }
+  for (let i: i32 = 0; i < doc.length(v); i += 1) {
+    if (kind === JSON_VALUE_OBJECT) {
+      const ka = doc.keyStart(v, i);
+      const kb = doc.keyEnd(v, i);
+      const key = ka < 0 || kb < ka || kb > toI32(c.bytes.length) ? -1 : scratch.parse(c.bytes, ka, kb - ka);
+      if (key < 0 || !scratch.stringEquals(key, doc.keyAt(v, i))) {
+        wrong.push(`key[${ka},${kb})`);
+      }
+    }
+    jvRangesOf(doc, scratch, c, doc.at(v, i), wrong);
+  }
+};
+
+/**
+ * Every file of `corpus`, `fuzz` and `wide` parsed by `parse` and by
+ * `parseRanged`, under both duplicate policies, with and without a cap of 16
+ * values and of depth 4, and each document reused across files: the files
+ * where the two differ, or where a range is wrong. `parse` and `parseRanged`
+ * are two loops, `close` and `closeRanged` two closers, and so on, so this
+ * holds each pair to one another.
+ */
+const jvRangesAgainstNone = (corpus: JvCase[], fuzz: JvCase[], wide: JvCase[]): string[] => {
   const differ: string[] = [];
   for (let mode: i32 = 0; mode < 8; mode += 1) {
     const limits = new JsonLimits();
@@ -137,20 +207,20 @@ const jvRangesAgainstNone = (corpus: JvCase[], fuzz: JvCase[]): string[] => {
     }
     const off = new JsonDocument(limits);
     const on = new JsonDocument(limits);
-    on.keepRanges = true;
-    on.clear();
+    const scratch = new JsonDocument(new JsonLimits());
     if ((mode & 1) !== 0) {
       off.duplicates = JSON_VALUE_DUPLICATE_LAST;
       on.duplicates = JSON_VALUE_DUPLICATE_LAST;
+      scratch.duplicates = JSON_VALUE_DUPLICATE_LAST;
     }
     if ((mode & 2) !== 0) {
       off.maxValues = 16;
       on.maxValues = 16;
     }
-    for (const files of [corpus, fuzz]) {
+    for (const files of [corpus, fuzz, wide]) {
       for (const c of files) {
         const a = jvVerdict(off, c);
-        const b = jvVerdict(on, c);
+        const b = jvRangedVerdict(on, scratch, c);
         if (a !== b) {
           differ.push(`${c.name}, mode ${mode}: off ${a}, on ${b}`);
         }

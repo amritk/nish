@@ -42,7 +42,7 @@
  * negative handle, or one past the last value, is `JSON_VALUE_NONE` too.
  *
  * **The document's size is bounded.** Each value costs about 46 bytes of the
- * arrays the document keeps for its life, 66 with `keepRanges` on, on top of
+ * arrays the document keeps for its life, 66 after a `parseRanged`, on top of
  * the decoded text of its
  * strings, keys and numbers, which `JsonLimits.maxTotalBytes` bounds through
  * the input (`docs/security/json.md`, JSON-10). `maxValues` caps the first
@@ -62,24 +62,27 @@
  * `f64` holds, come back out exactly as they went in, where JavaScript's
  * `JSON.parse` turns both into the nearest double.
  *
- * **Source ranges are opt-in.** Set `keepRanges` before a `parse` and every
- * value and every member key keeps the range of bytes it was read from:
- * `start(v)` and `end(v)` bound a value, `keyStart(o, i)` and `keyEnd(o, i)`
- * the key of member `i`, its quotes included. They are offsets into the bytes
- * `parse` was given, or `parseText`'s string, so a line index over that text
+ * **Source ranges are opt-in.** `parseRanged` and `parseTextRanged` parse as
+ * `parse` and `parseText` do, and every value and every member key also keeps
+ * the range of bytes it was read from: `start(v)` and `end(v)` bound a value,
+ * `keyStart(o, i)` and `keyEnd(o, i)` the key of member `i`, its quotes
+ * included. They are offsets into the bytes `parseRanged` was given, or
+ * `parseTextRanged`'s string, so a line index over that text
  * (`YamlLineIndex` is one) turns them into a line and a column. Under Node,
- * where `parseText` takes one byte per UTF-16 code unit (below), its offsets
- * count code units, so past the first non-ASCII character they differ from a
- * native build's, which count UTF-8 bytes. That costs 20 bytes per value
- * more, two offsets for the value, two for its key and one on the parse's
- * stack. With it off, the default, the range arrays stay empty
- * and every reader answers `-1`. `keepRanges` takes effect at the next
- * `parse` or `clear`, so a loader that builds a document from another text
- * sets it, `clear`s, and gives each value it makes its range with `setRange`
- * and each key with `setKeyRange`; until then a built value or key answers
- * `-1`. `set` over an existing key keeps the member's key range and takes the
- * new value's own. Under `JSON_VALUE_DUPLICATE_LAST` a repeated key's member
- * keeps its first key's range and holds the last value, with that value's.
+ * where `parseTextRanged` takes one byte per UTF-16 code unit (below), its
+ * offsets count code units, so past the first non-ASCII character they differ
+ * from a native build's, which count UTF-8 bytes. Ranges cost 20 bytes per
+ * value more: two offsets for the value, two for its key and one on the
+ * parse's stack. They are entry points of their own rather than a flag
+ * `parse` tests, so that `parse` keeps the loop it had before ranges existed;
+ * what it pays for them is `clear` resetting two counts, so that after a
+ * `parse` every reader answers `-1`. A
+ * loader that builds a document from another text `clear`s, then gives each
+ * value it makes its range with `setRange` and each key with `setKeyRange`;
+ * until then a built value or key answers `-1`. `set` over an existing key
+ * keeps the member's key range and takes the new value's own. Under
+ * `JSON_VALUE_DUPLICATE_LAST` a repeated key's member keeps its first key's
+ * range and holds the last value, with that value's.
  *
  * **Objects keep insertion order**, the order the members were written in or
  * added. `get` finds a member by its key with a scan, so it is for a handful of
@@ -179,13 +182,13 @@ export const JSON_VALUE_ERR_ATTACHED: i32 = -32
 export const JSON_VALUE_ERR_NUMBER: i32 = -33
 /** One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at its first byte) or a builder. */
 export const JSON_VALUE_ERR_VALUES: i32 = -34
-/** `setRange` or `setKeyRange` on a document that keeps no ranges, or with a range that is not `0 <= start <= end`. */
+/** `setRange` or `setKeyRange` with a range that is not `0 <= start <= end`. */
 export const JSON_VALUE_ERR_RANGE: i32 = -35
 
 /**
  * The most values one document holds by default: a parse that would make
  * more is `JSON_VALUE_ERR_VALUES`. Each value costs the document about 46
- * bytes of arrays it keeps, 66 with `keepRanges` on (`docs/security/json.md`,
+ * bytes of arrays it keeps, 66 after a `parseRanged` (`docs/security/json.md`,
  * JSON-10), so this caps them near 12 MB, or 17 MB; a program raises `maxValues` up to
  * `JSON_VALUE_MAX_VALUES` for larger documents.
  */
@@ -244,9 +247,9 @@ export class JsonDocument {
   /** The bytes of every string, key and number, decoded, one after the other. */
   bytes: u8[]
   /**
-   * While `ranged`: per value, its first byte in the parsed bytes and one past
-   * its last; per member slot, its key's, quotes included. `-1` where nothing
-   * was recorded. They stay empty in a document that never keeps ranges.
+   * Per value, its first byte in the parsed bytes and one past its last; per
+   * member slot, its key's, quotes included. `-1` where nothing was recorded.
+   * They stay empty in a document that never keeps ranges.
    * Only the first `rangeTop` values and `slotRangeTop` slots are current:
    * past them is an earlier document's, and reads as `-1`, so that a value or
    * member a builder adds writes nothing here.
@@ -274,7 +277,7 @@ export class JsonDocument {
   pendingKeyAt: i32[]
   pendingKeyLength: i32[]
   pendingSource: i32[]
-  /** While `ranged`: where each open container's key and each pending member's key end; `openKeySource` and `pendingSource` hold where they start. */
+  /** For `parseRanged`: where each open container's key and each pending member's key end; `openKeySource` and `pendingSource` hold where they start. */
   openKeyEnd: i32[]
   pendingKeyEnd: i32[]
   sortA: i32[]
@@ -304,10 +307,6 @@ export class JsonDocument {
   generation: i32 = 1
   /** Whether the last `unsigned` read a number that fits a `u64`. */
   unsignedFits: boolean = false
-  /** Whether the contents the next `parse` or `clear` starts keep source ranges; see the module header. */
-  keepRanges: boolean = false
-  /** Whether the current contents keep them: `keepRanges` as it was at the last `parse` or `clear`. */
-  ranged: boolean = false
 
   constructor(limits: JsonLimits) {
     this.maxValues = JSON_VALUE_DEFAULT_MAX_VALUES
@@ -362,7 +361,6 @@ export class JsonDocument {
     this.pendingTop = 0
     this.failed = 0
     this.errorAt = -1
-    this.ranged = this.keepRanges
     this.rangeTop = 0
     this.slotRangeTop = 0
   }
@@ -373,15 +371,15 @@ export class JsonDocument {
    * Clears the document and parses `src[off, off + len)` into it. Answers the
    * root value, or a negative code — the tokenizer's `JSON_TOK_ERR_*` or
    * `JSON_VALUE_ERR_DUPLICATE` — which is also in `failed`, with the byte
-   * offset in `errorAt`. Nothing is kept from a parse that fails.
+   * offset in `errorAt`. Nothing is kept from a parse that fails. Keeps no
+   * source ranges; `parseRanged` does.
+   *
+   * Keep in step with `parseRanged`, the same loop plus the ranges.
    */
   parse(src: u8[], off: i32, len: i32): JsonValue {
     this.clear()
     const tok: JsonTokenizer = this.tok
     tok.reset(src, off, len)
-    if (this.ranged) {
-      return this.parseRanged()
-    }
     let depth: i32 = 0
     let root: i32 = -1
     let keyAt: i32 = 0
@@ -459,12 +457,19 @@ export class JsonDocument {
   }
 
   /**
-   * Internal: `parse` once the tokenizer is reset, for a document that keeps
-   * ranges. A loop of its own, so that `parse` without them runs the loop it
-   * ran before ranges existed and pays nothing for them.
+   * `parse`, and every value and member key keeps the range of bytes it was
+   * read from, for `start`, `end`, `keyStart` and `keyEnd`. The same answer,
+   * code and `errorAt` as `parse` on the same bytes.
+   *
+   * A loop of its own rather than a flag `parse` tests, so that `parse` runs
+   * the loop it ran before ranges existed and pays nothing for them: one
+   * dispatch inside `parse` lets this loop inline there and costs the plain
+   * loop up to 0.3% (`docs/BENCHMARKS.md`). Keep in step with `parse`.
    */
-  parseRanged(): JsonValue {
+  parseRanged(src: u8[], off: i32, len: i32): JsonValue {
+    this.clear()
     const tok: JsonTokenizer = this.tok
+    tok.reset(src, off, len)
     let depth: i32 = 0
     let root: i32 = -1
     let keyAt: i32 = 0
@@ -567,6 +572,17 @@ export class JsonDocument {
     return this.parse(buf, JSON_VALUE_NO_WORD, n)
   }
 
+  /** `parseRanged` over the bytes of `s`, as `parseText` is `parse`'s; its offsets are byte offsets in `s`. Keep in step with `parseText`. */
+  parseTextRanged(s: string): JsonValue {
+    const n: i32 = toI32(s.length)
+    const buf: u8[] = jsonValueRoom(this.textBytes, n)
+    this.textBytes = buf
+    for (let i: i32 = 0; i < n && i < toI32(buf.length); i += 1) {
+      buf[i] = toU8(s.charCodeAt(i))
+    }
+    return this.parseRanged(buf, JSON_VALUE_NO_WORD, n)
+  }
+
   /** Internal: Records a failed parse and forgets what it built. */
   parseFailed(code: i32, at: i32): i32 {
     this.clear()
@@ -578,7 +594,8 @@ export class JsonDocument {
   /**
    * Internal: Places the members pending from `base` into container `c` as one run of
    * slots, checking an object's keys for duplicates first. Answers `0`, or
-   * `JSON_VALUE_ERR_DUPLICATE` with `errorAt` set.
+   * `JSON_VALUE_ERR_DUPLICATE` with `errorAt` set. Keep in step with
+   * `closeRanged`.
    */
   close(c: i32, base: i32): i32 {
     let n: i32 = this.pendingTop - base
@@ -612,7 +629,7 @@ export class JsonDocument {
     return 0
   }
 
-  /** Internal: `close` for `parseRanged`, which also gives each member its key's range. */
+  /** Internal: `close` for `parseRanged`, which also gives each member its key's range. Keep in step with `close`. */
   closeRanged(c: i32, base: i32): i32 {
     let n: i32 = this.pendingTop - base
     const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
@@ -653,7 +670,8 @@ export class JsonDocument {
    * gone (their pending value set to `-1`) and the first one takes the last
    * one's value. Small objects compare every pair; larger ones are sorted by
    * key with ties in member order, so a key's repeats are next to each other
-   * and the first of them is its first member.
+   * and the first of them is its first member. Keep in step with
+   * `duplicateKeysRanged`.
    */
   duplicateKeys(base: i32, n: i32): i32 {
     let firstRepeat: i32 = -1
@@ -689,6 +707,7 @@ export class JsonDocument {
   /**
    * Internal: `duplicateKeys` for `closeRanged`, the same check. A copy, so that
    * `duplicateKeys` keeps the one caller that lets it inline into `parse`.
+   * Keep in step with `duplicateKeys`.
    */
   duplicateKeysRanged(base: i32, n: i32): i32 {
     let firstRepeat: i32 = -1
@@ -702,7 +721,7 @@ export class JsonDocument {
         }
       }
     } else {
-      const order: i32[] = this.sortPending(base, n)
+      const order: i32[] = this.sortPendingRanged(base, n)
       let i: i32 = 0
       while (i < n) {
         const head: i32 = jsonValueGet(order, i)
@@ -743,9 +762,54 @@ export class JsonDocument {
   /**
    * Internal: The pending indices `base .. base + n - 1` sorted by key, ties in index
    * order: a bottom-up merge sort between the two sort arrays, which answers
-   * whichever of them holds the result.
+   * whichever of them holds the result. Keep in step with
+   * `sortPendingRanged`.
    */
   sortPending(base: i32, n: i32): i32[] {
+    let from: i32[] = jsonValueRoomI32(this.sortA, n)
+    let to: i32[] = jsonValueRoomI32(this.sortB, n)
+    this.sortA = from
+    this.sortB = to
+    for (let i: i32 = 0; i < n && i < toI32(from.length); i += 1) {
+      from[i] = base + i
+    }
+    let width: i32 = 1
+    while (width < n) {
+      let lo: i32 = 0
+      while (lo < n) {
+        const mid: i32 = lo + width < n ? lo + width : n
+        const hi: i32 = mid + width < n ? mid + width : n
+        let a: i32 = lo
+        let b: i32 = mid
+        let out: i32 = lo
+        while (out < hi) {
+          const takeA: boolean =
+            b >= hi || (a < mid && this.comparePending(jsonValueGet(from, a), jsonValueGet(from, b)) <= 0)
+          if (takeA) {
+            jsonValuePut(to, out, jsonValueGet(from, a))
+            a += 1
+          } else {
+            jsonValuePut(to, out, jsonValueGet(from, b))
+            b += 1
+          }
+          out += 1
+        }
+        lo = hi
+      }
+      const swap: i32[] = from
+      from = to
+      to = swap
+      width = width * 2
+    }
+    return from
+  }
+
+  /**
+   * Internal: `sortPending` for `duplicateKeysRanged`, the same sort. A copy, so
+   * that `sortPending` keeps the one caller that lets it inline into `parse`.
+   * Keep in step with `sortPending`.
+   */
+  sortPendingRanged(base: i32, n: i32): i32[] {
     let from: i32[] = jsonValueRoomI32(this.sortA, n)
     let to: i32[] = jsonValueRoomI32(this.sortB, n)
     this.sortA = from
@@ -806,7 +870,7 @@ export class JsonDocument {
     return n
   }
 
-  /** Internal: The tokenizer's current token as written, a number's text, onto the end of `bytes`; answers its length. */
+  /** Internal: The tokenizer's current token as written, a number's text, onto the end of `bytes`; answers its length. Keep in step with `storeSourceRanged`. */
   storeSource(tok: JsonTokenizer): i32 {
     const src: u8[] = tok.src
     const start: i32 = tok.tokStart
@@ -826,6 +890,7 @@ export class JsonDocument {
   /**
    * Internal: `storeSource` for `parseRanged`, the same copy. A copy, so that
    * `storeSource` keeps the one caller that lets it inline into `parse`.
+   * Keep in step with `storeSource`.
    */
   storeSourceRanged(tok: JsonTokenizer): i32 {
     const src: u8[] = tok.src
@@ -1110,7 +1175,7 @@ export class JsonDocument {
   // ---- Ranges -----------------------------------------------------------------
   // Each reader answers `-1` for a handle that names nothing, for a member
   // that is not there, for a value or key a builder made and no setter gave a
-  // range, and for every value of a document that keeps no ranges.
+  // range, and for every value and key after a `parse` or `parseText`.
 
   /** The offset of `v`'s first byte in the bytes the document parsed. */
   start(v: JsonValue): i32 {
@@ -1146,15 +1211,14 @@ export class JsonDocument {
    * Gives `v` the range `[start, end)`, for a loader that builds a document
    * from another text with the `new*` methods and keeps where each value
    * came from. `JSON_VALUE_OK`, `JSON_VALUE_ERR_HANDLE`, or
-   * `JSON_VALUE_ERR_RANGE` when the document keeps no ranges or
-   * `0 <= start <= end` does not hold.
+   * `JSON_VALUE_ERR_RANGE` when `0 <= start <= end` does not hold.
    */
   setRange(v: JsonValue, start: i32, end: i32): i32 {
     const x: i32 = this.index(v)
     if (this.kindAt(x) === JSON_VALUE_NONE) {
       return JSON_VALUE_ERR_HANDLE
     }
-    if (!this.ranged || start < 0 || end < start) {
+    if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
     // Values between the last current one and `x` have no range yet.
@@ -1180,7 +1244,7 @@ export class JsonDocument {
     if (s < 0) {
       return JSON_VALUE_ERR_HANDLE
     }
-    if (!this.ranged || start < 0 || end < start) {
+    if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
     for (let t: i32 = this.slotRangeTop; t < s; t += 1) {

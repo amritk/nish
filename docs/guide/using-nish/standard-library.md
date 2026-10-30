@@ -752,14 +752,15 @@ server that keeps one document and parses each request into it stops
 allocating once it has seen its largest request. `clear()` empties it for
 building from scratch.
 
-**Where a value came from.** Set `doc.keepRanges = true` and every parse
-after it records where each value and each key was in the input, so an error
+**Where a value came from.** `parseRanged(bytes, off, len)` and
+`parseTextRanged(text)` parse as `parse` and `parseText` do, and also record
+where each value and each key was in the input, so an error
 about a value can point at its line and column. `start(v)` and `end(v)` are
 the byte offsets of the value's first byte and one past its last, and
 `keyStart(o, i)` and `keyEnd(o, i)` the same for the key of member `i` of
 object `o`; a string's and a key's range includes its quotes. The offsets are
-into the array you gave `parse`, or into the string `parseText` read. Under
-Node, where `parseText` reads one byte per UTF-16 code unit, its offsets
+into the array you gave `parseRanged`, or into the string `parseTextRanged`
+read. Under Node, where `parseTextRanged` reads one byte per UTF-16 code unit, its offsets
 count code units, so past the first non-ASCII character they differ from a
 native build's, which count UTF-8 bytes.
 
@@ -769,9 +770,8 @@ import { JsonDocument } from "nish/json-value";
 
 export const main = (): i32 => {
   const doc = new JsonDocument(new JsonLimits());
-  doc.keepRanges = true;
   const text = `{"port": "eighty"}`;
-  const root = doc.parseText(text);
+  const root = doc.parseTextRanged(text);
   const port = doc.get(root, "port");
   console.log(`${doc.start(port)} ${doc.end(port)}`); // 9 17
   console.log(text.substring(doc.keyStart(root, 0), doc.keyEnd(root, 0))); // "port"
@@ -779,13 +779,13 @@ export const main = (): i32 => {
 };
 ```
 
-Ranges cost each value about 20 bytes more, so they are off unless you ask,
-and a document without them answers `-1` from all four. A value you build with
+Ranges cost each value about 20 bytes more, so `parse` and `parseText` keep
+none, and after them all four answer `-1`. A value you build with
 the `new*` methods, and a key `set` adds, has no range either until you give
 it one with `setRange(v, start, end)` or `setKeyRange(o, i, start, end)`, which
 is how a loader for another format that builds the tree itself can point back
-into its own text. `set` over an existing key keeps the key's range. Turning
-`keepRanges` on or off takes effect at the next `parse` or `clear()`.
+into its own text. `set` over an existing key keeps the key's range. Every parse and `clear()`
+drops the ranges the document held.
 
 Objects keep their members in order, and `get` looks a key up by scanning
 them, so walk a large object once with `keyAt` and `at` rather than calling

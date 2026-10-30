@@ -1,8 +1,8 @@
-// `nish/json-value` source ranges (std/json-value.ts, `keepRanges`): every
+// `nish/json-value` source ranges (std/json-value.ts, `parseRanged`): every
 // value kind and every key read back as the exact bytes it was parsed from,
 // through nesting, a window that does not start at 0, both duplicate-key
-// policies, a reparse with ranges on and off, a document that keeps none, and
-// a tree built with `new*` and given its ranges by the setters.
+// policies, a reparse through either entry point, a `parse` that keeps none,
+// and a tree built with `new*` and given its ranges by the setters.
 import { JSON_TOK_ERR_TRUNCATED, JsonLimits } from "nish/json-tokenizer";
 import {
   JSON_VALUE_DUPLICATE_LAST,
@@ -36,18 +36,13 @@ const jrValue = (doc: JsonDocument, text: string, v: JsonValue): string => jrSli
 const jrKey = (doc: JsonDocument, text: string, o: JsonValue, i: i32): string =>
   jrSlice(text, doc.keyStart(o, i), doc.keyEnd(o, i));
 
-/** A ranged document, cleared so that it keeps ranges from its first build on. */
-const jrRanged = (): JsonDocument => {
-  const doc = new JsonDocument(new JsonLimits());
-  doc.keepRanges = true;
-  doc.clear();
-  return doc;
-};
+/** A document with the default limits; each test parses into it with `parseRanged` or `parseTextRanged`. */
+const jrDoc = (): JsonDocument => new JsonDocument(new JsonLimits());
 
 const jrKinds = (t: Suite): void => {
-  const doc = jrRanged();
+  const doc = jrDoc();
   const text = ' { "s" : "a\\"b\\u0041" , "t":true,"f": false ,"z":null, "n" : -12.5e+1 ,"a":[ 1 ,[], {} ] } ';
-  const root = doc.parseText(text);
+  const root = doc.parseTextRanged(text);
   if (!t.ok("kinds: the document parses", root >= 0)) {
     return;
   }
@@ -80,9 +75,9 @@ const jrKinds = (t: Suite): void => {
 };
 
 const jrNesting = (t: Suite): void => {
-  const doc = jrRanged();
+  const doc = jrDoc();
   const text = '{"outer":{"mid":[{"in":[true,{"deep":"x"}]}],"after":7},"tail":{"k":[]}}';
-  const root = doc.parseText(text);
+  const root = doc.parseTextRanged(text);
   if (!t.ok("nesting: the document parses", root >= 0)) {
     return;
   }
@@ -104,11 +99,11 @@ const jrNesting = (t: Suite): void => {
 };
 
 const jrWindow = (t: Suite): void => {
-  // Ranges are offsets into the array `parse` was given, so a window from 4 starts its root at 4.
-  const doc = jrRanged();
+  // Ranges are offsets into the array `parseRanged` was given, so a window from 4 starts its root at 4.
+  const doc = jrDoc();
   const text = 'xxx [ {"a":"b"} ] yyy';
   const bytes = jrBytes(text);
-  const root = doc.parse(bytes, 3, 15);
+  const root = doc.parseRanged(bytes, 3, 15);
   if (!t.ok("window: the window parses", root >= 0)) {
     return;
   }
@@ -119,10 +114,10 @@ const jrWindow = (t: Suite): void => {
 };
 
 const jrDuplicates = (t: Suite): void => {
-  const doc = jrRanged();
+  const doc = jrDoc();
   doc.duplicates = JSON_VALUE_DUPLICATE_LAST;
   const text = '{"a":1,"b":2,"a":[3]}';
-  const root = doc.parseText(text);
+  const root = doc.parseTextRanged(text);
   if (!t.ok("duplicates: last parses", root >= 0)) {
     return;
   }
@@ -132,7 +127,7 @@ const jrDuplicates = (t: Suite): void => {
   t.eqStr("duplicates: the next member keeps its own key", jrKey(doc, text, root, 1), '"b"');
   // Nine members take the sorted path of the duplicate check.
   const wide = '{"k0":0,"k1":1,"k2":2,"k3":3,"k4":4,"k5":5,"k6":6,"k7":7,"k1":"one"}';
-  const w = doc.parseText(wide);
+  const w = doc.parseTextRanged(wide);
   if (!t.ok("duplicates: a wide object parses", w >= 0)) {
     return;
   }
@@ -141,19 +136,18 @@ const jrDuplicates = (t: Suite): void => {
   t.eqStr("duplicates: sorted, the last value with its range", jrValue(doc, wide, doc.at(w, 1)), '"one"');
   t.eqStr("duplicates: sorted, the last member keeps its key", jrKey(doc, wide, w, 7), '"k7"');
   doc.duplicates = 0;
-  t.eqI32("duplicates: refused, the parse fails", doc.parseText(wide), JSON_VALUE_ERR_DUPLICATE);
+  t.eqI32("duplicates: refused, the parse fails", doc.parseTextRanged(wide), JSON_VALUE_ERR_DUPLICATE);
   t.eqI32("duplicates: errorAt is the repeated key", doc.errorAt, 57);
   t.eqI32("duplicates: a value built on the old root's index has no range", doc.start(doc.newObject()), -1);
 };
 
 const jrOff = (t: Suite): void => {
-  const doc = new JsonDocument(new JsonLimits());
+  const doc = jrDoc();
   const text = '{"a":[1,"x",null],"b":{"c":true}}';
   const root = doc.parseText(text);
   if (!t.ok("off: the document parses", root >= 0)) {
     return;
   }
-  t.ok("off: keepRanges is off by default", !doc.keepRanges && !doc.ranged);
   t.eqI32("off: start answers -1", doc.start(root), -1);
   t.eqI32("off: end answers -1", doc.end(doc.get(root, "a")), -1);
   t.eqI32("off: keyStart answers -1", doc.keyStart(root, 0), -1);
@@ -166,21 +160,29 @@ const jrOff = (t: Suite): void => {
     toI32(doc.openKeyEnd.length) +
     toI32(doc.pendingKeyEnd.length);
   t.eqI32("off: no range array holds anything", ranges, 0);
-  t.eqI32("off: setRange is refused", doc.setRange(root, 0, 1), JSON_VALUE_ERR_RANGE);
-  t.eqI32("off: setKeyRange is refused", doc.setKeyRange(root, 0, 1, 4), JSON_VALUE_ERR_RANGE);
-  // `keepRanges` waits for the next parse or clear, so the contents already there stay without.
-  doc.keepRanges = true;
-  t.eqI32("off: turned on, the current contents still have none", doc.start(root), -1);
-  t.eqI32("off: and a setter is still refused", doc.setRange(root, 0, 1), JSON_VALUE_ERR_RANGE);
+  // A setter gives a parsed value its first range; the values around it keep none.
+  t.eqI32("off: setRange on a parsed value", doc.setRange(doc.get(root, "b"), 22, 34), JSON_VALUE_OK);
+  t.eqStr("off: the value reads it back", jrValue(doc, text, doc.get(root, "b")), '{"c":true}');
+  t.eqI32("off: a value below it has none", doc.start(root), -1);
+  t.eqI32("off: setKeyRange on a parsed key", doc.setKeyRange(root, 1, 18, 21), JSON_VALUE_OK);
+  t.eqStr("off: the key reads it back", jrKey(doc, text, root, 1), '"b"');
+  t.eqI32("off: the key before it has none", doc.keyStart(root, 0), -1);
+  t.eqI32("off: a range that ends before it starts is refused", doc.setRange(root, 2, 1), JSON_VALUE_ERR_RANGE);
+  // Each parse starts from no ranges, whichever entry point the one before it took.
+  const ranged = doc.parseTextRanged(text);
+  t.eqStr("off: parseRanged after it ranges every value", jrValue(doc, text, doc.get(ranged, "a")), '[1,"x",null]');
+  const plain = doc.parseText(text);
+  t.ok("off: and parse after that keeps none", doc.start(plain) === -1 && doc.end(doc.get(plain, "a")) === -1);
+  t.ok("off: nor any key", doc.keyStart(plain, 0) === -1 && doc.keyEnd(doc.get(plain, "b"), 0) === -1);
 };
 
 const jrReparse = (t: Suite): void => {
-  const doc = jrRanged();
+  const doc = jrDoc();
   const first = '[1,2,{"a":"b"}]';
-  const r1 = doc.parseText(first);
+  const r1 = doc.parseTextRanged(first);
   t.eqStr("reparse: the first document's ranges", jrValue(doc, first, doc.at(r1, 2)), '{"a":"b"}');
   const second = '  {"zz":  [ ]  }';
-  const r2 = doc.parseText(second);
+  const r2 = doc.parseTextRanged(second);
   if (!t.ok("reparse: the second document parses", r2 >= 0)) {
     return;
   }
@@ -191,21 +193,23 @@ const jrReparse = (t: Suite): void => {
   // The first document had five values and the second two: an index only the first one ranged answers -1.
   const third = doc.newNull();
   t.ok("reparse: a value built past the second document has no range", third >= 0 && doc.start(third) === -1 && doc.end(third) === -1);
-  doc.keepRanges = false;
   const r3 = doc.parseText(first);
-  t.ok("reparse: ranges off, the document parses", r3 >= 0);
-  t.eqI32("reparse: ranges off, a reparse answers -1", doc.start(r3), -1);
-  t.eqI32("reparse: ranges off, for keys too", doc.keyStart(doc.at(r3, 2), 0), -1);
-  doc.keepRanges = true;
-  const r4 = doc.parseText(first);
-  t.eqStr("reparse: on again, the ranges are back", jrKey(doc, first, doc.at(r4, 2), 0), '"a"');
-  t.eqI32("reparse: a failed parse fails", doc.parseText('{"a":'), JSON_TOK_ERR_TRUNCATED);
-  const after = doc.newArray();
-  t.ok("reparse: and leaves no range behind", after >= 0 && doc.start(after) === -1 && doc.end(after) === -1);
+  t.ok("reparse: through parse, the document parses", r3 >= 0);
+  t.eqI32("reparse: through parse, a reparse answers -1", doc.start(r3), -1);
+  t.eqI32("reparse: through parse, for keys too", doc.keyStart(doc.at(r3, 2), 0), -1);
+  const r4 = doc.parseTextRanged(first);
+  t.eqStr("reparse: ranged again, the ranges are back", jrKey(doc, first, doc.at(r4, 2), 0), '"a"');
+  // The failed parse ranges index 0 and closes `{"b":1}` into slot 0, and the one before it ranged both: the
+  // values and slots a build takes next read -1 only because the failure dropped every range.
+  t.eqI32("reparse: a failed parse fails", doc.parseTextRanged('{"a":{"b":1},"c":'), JSON_TOK_ERR_TRUNCATED);
+  const after = doc.newObject();
+  t.ok("reparse: and leaves no value range behind", after >= 0 && doc.start(after) === -1 && doc.end(after) === -1);
+  t.eqI32("reparse: a member set after it", doc.set(after, "k", doc.newNull()), JSON_VALUE_OK);
+  t.ok("reparse: nor a key range", doc.keyStart(after, 0) === -1 && doc.keyEnd(after, 0) === -1);
 };
 
 const jrBuilders = (t: Suite): void => {
-  const doc = jrRanged();
+  const doc = jrDoc();
   const o = doc.newObject();
   const values: JsonValue[] = [
     doc.newNull(),
@@ -258,9 +262,9 @@ const jrBuilders = (t: Suite): void => {
 
 const jrGrowth = (t: Suite): void => {
   // A parsed object has exactly the slots it needs, so `set` of a new key moves them all: the key ranges move with them.
-  const doc = jrRanged();
+  const doc = jrDoc();
   const text = '{"one":1,"two":2,"inner":{"x":0}}';
-  const root = doc.parseText(text);
+  const root = doc.parseTextRanged(text);
   if (!t.ok("growth: the document parses", root >= 0)) {
     return;
   }
@@ -277,7 +281,7 @@ const jrGrowth = (t: Suite): void => {
   t.eqI32("growth: survives the next move", doc.set(root, "six", doc.newNull()) + doc.set(root, "seven", doc.newNull()), 0);
   t.ok("growth: reads back after it", doc.keyStart(root, 4) === 40 && doc.keyEnd(root, 4) === 46);
   t.eqStr("growth: a parsed value keeps its range", jrValue(doc, text, doc.get(root, "inner")), '{"x":0}');
-  // `clear` with `keepRanges` on starts contents that keep ranges, so a loader builds into it.
+  // `clear` drops every range, so a loader builds into it and gives each value its own.
   doc.clear();
   const v = doc.newString("y");
   t.eqI32("growth: after clear, a new value has no range", doc.start(v), -1);
@@ -286,9 +290,9 @@ const jrGrowth = (t: Suite): void => {
 
 const jrParsedEdits = (t: Suite): void => {
   // `set` over a parsed member replaces its value in place: the key keeps its parsed range, the value is the new one's.
-  const doc = jrRanged();
+  const doc = jrDoc();
   const text = '{"a":1,"b":[true]}';
-  const root = doc.parseText(text);
+  const root = doc.parseTextRanged(text);
   if (!t.ok("parsed edits: the document parses", root >= 0)) {
     return;
   }
@@ -309,9 +313,9 @@ const jrParsedEdits = (t: Suite): void => {
   t.eqI32("parsed edits: the pushed one has none", doc.start(doc.at(b, 1)), -1);
   // Across documents: the next parse reuses the indices and slots the first one ranged, and a build writes -1 over them.
   const longer = '{"p":[1,2,3,4,5,6,7,8],"q":{"r":"s","t":"u"}}';
-  const first = doc.parseText(longer);
+  const first = doc.parseTextRanged(longer);
   t.ok("parsed edits: a longer document parses", first >= 0);
-  const second = doc.parseText('{"k":0}');
+  const second = doc.parseTextRanged('{"k":0}');
   t.ok("parsed edits: then a shorter one", second >= 0);
   const fresh = doc.newArray();
   t.ok("parsed edits: a value built on an index the longer one ranged has none", doc.start(fresh) === -1 && doc.end(fresh) === -1);
@@ -321,6 +325,10 @@ const jrParsedEdits = (t: Suite): void => {
   t.eqI32("parsed edits: and adds no member", doc.length(second), 2);
 };
 
+/** `s` parsed by `parseTextRanged` when `ranged` is 1, by `parseText` otherwise. */
+const jrParseEither = (doc: JsonDocument, ranged: i32, s: string): JsonValue =>
+  ranged === 1 ? doc.parseTextRanged(s) : doc.parseText(s);
+
 const jrLimits = (t: Suite): void => {
   // `parseRanged` has its own refusals: each must answer what `parse` answers, at the same offset.
   const text = '[1,{"a":[2,3]},"s",[[[]]]]';
@@ -329,35 +337,35 @@ const jrLimits = (t: Suite): void => {
     const limits = new JsonLimits();
     limits.maxDepth = 3;
     const doc = new JsonDocument(limits);
-    doc.keepRanges = ranged === 1;
-    doc.clear();
     const got: string[] = [];
     for (const cap of [2, 4, 6]) {
       doc.maxValues = cap;
-      got.push(`${doc.parseText(text)}@${doc.errorAt}`);
+      got.push(`${jrParseEither(doc, ranged, text)}@${doc.errorAt}`);
     }
     doc.maxValues = 100;
-    got.push(`${doc.parseText(text)}@${doc.errorAt}`);
-    got.push(`${doc.parseText('{"a":1,"a":2}')}@${doc.errorAt}`);
-    const ok = doc.parseText('[1,{"a":[2]}]');
+    got.push(`${jrParseEither(doc, ranged, text)}@${doc.errorAt}`);
+    got.push(`${jrParseEither(doc, ranged, '{"a":1,"a":2}')}@${doc.errorAt}`);
+    const ok = jrParseEither(doc, ranged, '[1,{"a":[2]}]');
     got.push(ok >= 0 ? doc.stringify(ok) : `${ok}`);
+    // Which entry point ran shows in the root's range.
+    got.push(`${doc.start(ok)}`);
     verdicts.push(got.join(" "));
   }
   // An opener refused at the cap, two scalars refused at it, the depth limit, a duplicate, then a parse that succeeds.
-  t.eqStr("limits: ranges off", verdicts[0], "-34@3 -34@9 -34@15 -9@21 -30@7 [1,{\"a\":[2]}]");
-  t.eqStr("limits: ranges on answers the same", verdicts[1], verdicts[0]);
+  t.eqStr("limits: parse", verdicts[0], "-34@3 -34@9 -34@15 -9@21 -30@7 [1,{\"a\":[2]}] -1");
+  t.eqStr("limits: parseRanged answers the same, and ranges its root", verdicts[1], "-34@3 -34@9 -34@15 -9@21 -30@7 [1,{\"a\":[2]}] 0");
 };
 
 const jrMoves = (t: Suite): void => {
   // A longer document first, so that the slots past the next one's hold key ranges a move must not bring back.
-  const doc = jrRanged();
+  const doc = jrDoc();
   const parts: string[] = [];
   for (let i: i32 = 0; i < 64; i += 1) {
     parts.push(`"k${i}":${i}`);
   }
-  t.ok("moves: a wide document parses", doc.parseText(`{${parts.join(",")}}`) >= 0);
+  t.ok("moves: a wide document parses", doc.parseTextRanged(`{${parts.join(",")}}`) >= 0);
   const text = '{"a":{"x":1},"b":{"y":2}}';
-  const root = doc.parseText(text);
+  const root = doc.parseTextRanged(text);
   if (!t.ok("moves: the document parses", root >= 0)) {
     return;
   }

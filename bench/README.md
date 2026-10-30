@@ -1780,14 +1780,15 @@ These scans still step one byte at a time:
 
 ## JsonDocument source ranges
 
-`json-value/measure.mjs` times `JsonDocument` with `keepRanges` off and on, and
+`json-value/measure.mjs` times `JsonDocument`'s `parse` and `parseRanged`, and
 with `--before` the same programs built by another compiler, normally main's.
 Every binary is built twice and `cmp` must find the pair byte-identical: the gap
 between them is the noise band each ratio is read against. Its cases, each
 interleaved on its own:
 
-- **parse**: `json-value/main.ts` (ranges off) and `json-value/ranged.ts`
-  (ranges on) over twitter.json, citm_catalog.json and canada.json from
+- **parse**: `json-value/main.ts` (`parse`), `json-value/ranged.ts`
+  (`parseRanged`) and `json-value/both.ts` (`parse` in a program that also
+  calls `parseRanged` once, so both loops are in the binary) over twitter.json, citm_catalog.json and canada.json from
   json-compare's corpus (fetched into its cache on first use), `--mb` megabytes
   of input a run, and json-compare's 1,427-byte `sample.json`. Each iteration
   rewrites one digit so no parse can be hoisted.

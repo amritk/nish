@@ -8,13 +8,14 @@
 // With `--before <nish>`, every program but the ranges-on one is built a second
 // time by that compiler, whose own `std/` it links (a compiler built from
 // `main`, say), and that build and its copy run in the same rounds: what the
-// change costs a program that keeps no ranges. The ranges-on program needs
-// `keepRanges`, so only the compiler under test builds it.
+// change costs a program that keeps no ranges. The ranged programs call
+// `parseRanged`, so only the compiler under test builds them.
 //
 // The cases, each its own set of binaries interleaved round by round:
 //
-//   parse      bench/json-value/main.ts (ranges off, `off`) and ranged.ts
-//              (ranges on, `on`) over bench/json-compare's corpora,
+//   parse      bench/json-value/main.ts (`parse`, `off`), ranged.ts
+//              (`parseRanged`, `on`) and both.ts (`parse` in a program that
+//              also calls `parseRanged` once, `both`) over bench/json-compare's corpora,
 //              twitter.json, citm_catalog.json and canada.json (fetched into
 //              its cache on first use, so that needs the network once), `--mb`
 //              megabytes of input per run, and bench/json-compare/sample.json
@@ -108,6 +109,7 @@ const base = (program, name, label) =>
 const parseImpls = [
   ...head("bench/json-value/main.ts", "off-after", "off"),
   ...head("bench/json-value/ranged.ts", "on-after", "on"),
+  ...head("bench/json-value/both.ts", "both-after", "both"),
   ...base("bench/json-value/main.ts", "off-before", "before"),
 ]
 const builderImpls = [
@@ -176,7 +178,9 @@ const cases = [
       impls: parseImpls,
       ratios: pairs([
         ["on", "off"],
+        ["both", "off"],
         ["off", "before"],
+        ["both", "before"],
       ]),
       args: [file, iterations, at],
       run: (exe) => runOnce(exe, [file, iterations, at], iterations),

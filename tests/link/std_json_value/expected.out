@@ -184,7 +184,7 @@ PASS  JSONTestSuite: and merged as JSON.parse merges them under LAST
 PASS  JSONTestSuite: every n_ and i_ file gets the tokenizer's verdict, code and offset
 PASS  JSONTestSuite: every key and string of every y_ file is written by keyBytes and stringBytes as key and string write it
 PASS  corpus: tests/fuzz/corpus/json-value holds files
-PASS  ranges: every file of JSONTestSuite and the fuzz corpus parses with keepRanges on to the verdict, errorAt and tree it parses to with it off
+PASS  ranges: every file of JSONTestSuite, the fuzz corpus and the wide objects parses through parseRanged to the verdict, errorAt and tree parse gives, and every value and key it ranges reparses alone to itself
 PASS  reuse: a parsed tree reads back whole after churn
 PASS  reuse: and writes back whole after churn
 PASS  reuse: a second, larger body replaces the first and reads back after churn

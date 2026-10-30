@@ -1,4 +1,4 @@
-// The loop both bench/json-value programs run: one JSON document parsed into a
+// The loop every bench/json-value parse program runs: one JSON document parsed into a
 // `JsonDocument` over and over, the document reused, so a round costs what a
 // server pays for a parse once its arrays have grown.
 //
@@ -10,10 +10,17 @@
 // kind and length and the values, slots and string bytes the parse stored into
 // the printed checksum. The first line printed is the checksum, the second
 // `ns <elapsed>` for every iteration together.
-import { JSON_VALUE_MAX_VALUES, JsonDocument } from "nish/json-value"
+import { JSON_VALUE_MAX_VALUES, JsonDocument, JsonValue } from "nish/json-value"
 
-/** Parses argv's document `iterations` times into `doc`, prints the checksum and the time, and answers the exit code. */
-export const benchParse = (doc: JsonDocument): number => {
+/**
+ * Parses argv's document `iterations` times into `doc` with `parse`, which a
+ * program passes as an arrow naming one entry point, so that the binary holds
+ * only that one; prints the checksum and the time, and answers the exit code.
+ */
+export const benchParse = (
+  doc: JsonDocument,
+  parse: (doc: JsonDocument, src: u8[], off: i32, len: i32) => JsonValue
+): number => {
   if (process.argv.length < 4) {
     console.error("usage: <program> <file> <iterations> <at>")
     return 2
@@ -33,7 +40,7 @@ export const benchParse = (doc: JsonDocument): number => {
     if (at >= 0 && at < toI32(src.length)) {
       src[at] = toU8(48 + (i % 10))
     }
-    const root = doc.parse(src, 0, toI32(src.length))
+    const root = parse(doc, src, 0, toI32(src.length))
     if (root < 0) {
       console.error(`parse failed: ${root} at ${doc.errorAt}`)
       return 1
