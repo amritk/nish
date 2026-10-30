@@ -176,8 +176,8 @@ first request sets the option once, as it accepts:
 ```ts nish:ok
 import { NET_TCP_QUICKACK, netSetOption, tcpAccept } from "nish:net";
 
-export const acceptOne = (listener: i32): i32 => {
-  const conn = tcpAccept(listener);
+export const acceptOne = (listener: i32, peer: u8[]): i32 => {
+  const conn = tcpAccept(listener, peer);
   if (conn >= 0) {
     // Delay ACKs from the first request, so each one rides on its response.
     // On macOS this answers -95, which a server can ignore.

@@ -344,7 +344,9 @@ const parseLatency = (text) => {
 
 /** The `names` fields of the `prefix` table in a /proc/net/snmp-style file. */
 const procTable = (file, prefix, names) => {
-  const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.startsWith(`${prefix}:`))
+  const lines = readFileSync(file, "utf8")
+    .split("\n")
+    .filter((l) => l.startsWith(`${prefix}:`))
   const keys = lines[0].split(/\s+/)
   const values = lines[1].split(/\s+/).map(Number)
   return names.map((name) => values[keys.indexOf(name)])
@@ -684,7 +686,9 @@ const runLayout = async (lay) => {
     for (const k of servers.keys()) {
       const r = results[k]
       if (r.na === "single-core") {
-        console.log(`| ${label(k)} | n/a (single-core) | n/a | n/a | n/a | n/a | n/a |${ackNa} uses one core only |`)
+        console.log(
+          `| ${label(k)} | n/a (single-core) | n/a | n/a | n/a | n/a | n/a |${ackNa} uses one core only |`
+        )
         continue
       }
       if (r.na !== null) {
@@ -696,9 +700,7 @@ const runLayout = async (lay) => {
       const hi = Math.max(...r.rps)
       const delta =
         k === baseIndex ? "" : ` (${m >= base ? "+" : ""}${(((m - base) / base) * 100).toFixed(1)}%)`
-      const ackCells = acks
-        ? ` ${median(r.segs).toFixed(3)} | ${median(r.delayed).toFixed(4)} |`
-        : ""
+      const ackCells = acks ? ` ${median(r.segs).toFixed(3)} | ${median(r.delayed).toFixed(4)} |` : ""
       const notes = [...(lay.shared ? ["client shares server cores"] : []), ...r.errors].join(" ")
       console.log(
         `| ${label(k)} | ${Math.round(m).toLocaleString("en-US")}${delta} | ${Math.round(lo).toLocaleString("en-US")}–${Math.round(hi).toLocaleString("en-US")} | ${median(r.p99).toFixed(2)} | ${median(r.user).toFixed(2)} | ${median(r.sys).toFixed(2)} | ${Math.round(median(r.rss))} |${ackCells} ${notes} |`

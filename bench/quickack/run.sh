@@ -51,11 +51,14 @@ echo "# box"
 echo
 grep -m1 "model name" /proc/cpuinfo | sed 's/^/    /'
 echo "    $(nproc) CPUs, kernel $(uname -r)"
-virt=$(systemd-detect-virt 2>/dev/null || true)
-if [ -z "$virt" ] && grep -qw hypervisor /proc/cpuinfo; then
-  virt="a VM (the CPU reports a hypervisor)"
+# A container inside a VM reports only the container, so the CPU's hypervisor
+# flag is printed as well: it is what tells a VM from bare metal.
+echo "    systemd-detect-virt: $(systemd-detect-virt 2>/dev/null || echo none)"
+if grep -qw hypervisor /proc/cpuinfo; then
+  echo "    the CPU reports a hypervisor: a VM"
+else
+  echo "    the CPU reports no hypervisor: bare metal"
 fi
-echo "    virtualisation: ${virt:-none detected}"
 for f in /sys/devices/system/cpu/vulnerabilities/*; do
   echo "    $(basename "$f"): $(cat "$f")"
 done
