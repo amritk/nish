@@ -17,6 +17,7 @@ stages:
       - id: choose
         content: "Choose the smallest set of cuts whose combined saving reaches 1.5x on both files with the formula S6c's gate used (gate Total ÷ (kept − saving + walker + kernel), with the gate's Total, walker and kernel figures unchanged), and record the choice, each cut's saving and the arithmetic as a new S6d row in §7 plus its section; if no combination reaches 1.5x on both files, record that with the best combination's ceilings and stop — see Stage 1, the verdict"
         status: completed
+  # cuts and regate are cancelled: S6d's verdict was NOT REACHABLE (docs/wp38-simd.md §7, S6d).
   - id: cuts
     title: "perf(runtime): S6d, the per-value cuts in JsonTokenizer"
     goal: The cuts stage 1 chose are built in std/json-tokenizer.ts (and only what they need beside it), each one holding its own bar against main — tokenize on twitter and citm faster outside its band, nothing else on bench/json-compare or bench/json-tokenizer slower outside its band — with every numberF64 answer still bit-for-bit parseFloat's on S6b's corpus and every JSONTestSuite verdict, error code and errorAt offset unchanged, and the A/B recorded in docs/BENCHMARKS.md and docs/wp38-simd.md

@@ -703,7 +703,7 @@ result is turned into a 16-bit integer (a bool vector, `ext_vector_type(16)`,
 copied into a `uint16_t`, which is a portable `bitcast <16 x i1> to i16` in
 the IR). `nish:simd` would need that bitmask as an operation of its own.
 
-Taken at `46a1e4d` in #658, this PR's kernels-and-harness commit; the kernels have not
+Taken at `46a1e4d` in #658, that PR's kernels-and-harness commit; the kernels have not
 changed since. The machine was a KVM container on an `Intel(R) Xeon(R)
 Processor @ 2.80GHz` (lscpu: family 6, model 85; 4 vCPUs; SSE4.2, AVX2 and
 AVX-512F present, none of them used, since no `-march` is given), running
@@ -785,8 +785,8 @@ between scalar Nish and scalar C on the same loop, which this stage does not
 diagnose. Both are SLP-vectorised to `<2 x double>`. The bar compares against
 form 3 as written, so the verdict stands. The depth kernels clear 1.5x
 against form 2 too. By the order decided in §7 (2026-10-16), **S3's design is
-written next**. That design still has to settle how much of the byte half S6c's
-classifier already covers (§2.4). The figures are x86-64's only.
+written next**. It is written: Q10 decided on 2026-10-30 to build `nish:simd` (§3.2),
+and S6c's classifier, which might have covered the byte half, was found not reachable. The figures are x86-64's only.
 
 ### 2.4 `JsonTokenizer` after json-parity: the gap S6 is aimed at
 
@@ -976,7 +976,7 @@ The type follows from the arguments, except where none carries it.
 | select | `select(m, a, b)` | `select` |
 | any, all | `any(m)`, `all(m)`, the test a byte scanner makes on every block | `llvm.vector.reduce.or`, `.and` |
 | bitmask | `bitmask(m)` to `i32`, the offset once that test has found a hit (§3.2.1 says why they are two operations) | `bitcast <N x i1>` to `iN`, `zext` |
-| sums | `sum(v)` for `u8x16` and `u16x8` (to `i32`, exact) and for floats (in lane order 0..N-1); `sumWrapping(v)` for `i32x4` and `u32x4` | `zext` and `llvm.vector.reduce.add`; floats `llvm.vector.reduce.fadd` without `reassoc` |
+| sums | `sum(v)` for `u8x16` and `u16x8` (to `i32`, exact) and for floats (in lane order 0..N-1, returning the lane type); `sumWrapping(v)` for `i32x4` (returning `i32`) and `u32x4` (returning `u32`) | `zext` and `llvm.vector.reduce.add`; floats `llvm.vector.reduce.fadd` without `reassoc` |
 | shuffle | `shuffle(a, b, i0, …)`, indices constants in `0..2N-1` | `shufflevector` |
 | bitcast | `asU8x16(v)` … `asF64x2(v)` | `bitcast` |
 
@@ -993,8 +993,10 @@ together; `extract` now has `replace` beside it, and the bitwise operations,
 "lane-wise arithmetic".
 
 **TypeScript reading.** Under Node a vector is a fresh typed array of its lanes
-(`Uint8Array(16)` … `Float64Array(2)`) that no operation mutates, a mask is an
-array of `boolean`, and `runtime/nish.mjs` gains the module. That would be the third `nish:`
+(`Uint8Array(16)` … `Float64Array(2)`) that no operation mutates. A typed array rounds an `f32` lane
+and wraps an integer lane on store, which gives the same class-A reading that `Math.fround` and a
+frozen object gave, with no per-operation rounding call. A mask is an
+array of `boolean`, and `runtime/nish.mjs` gains the module. It is the third `nish:`
 import the prelude resolves, after `nish:unsafe` and `nish:secret`
 ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). Floats are class A: `f64` lanes are
 `number`, and `f32` lanes round through `Float32Array` on every result, as scalar `f32`
@@ -1526,8 +1528,9 @@ the bounds check on each offset access, which the range analysis did not
 credit from the test `i + 3 < n` until #561. Since #561 it does (§3.2.1), so
 S3's numeric half is likely won already, with no surface. Its byte half is a scan `indexOfAny` cannot express, such as
 `bench/scan.ts`'s depth counting, which a block classifier (S1b, re-aimed as
-S6c) would also have reached, in the runtime; S6c's gate found that classifier out of reach. Against that, S3's surface is large and permanent: six types,
-about a dozen operation families, six checker rules with their negative tests,
+S6c) would also have reached, in the runtime; S6c's gate found that classifier out of reach. Against that, S3's surface is large and permanent: six vector types
+and four mask types (§3.2; this counted six types and about a dozen families in the earlier
+proposal), the operation table's families, the longer refusal list with its negative tests,
 a third `nish:` module in `nish.mjs`, `nish.d.ts`, a layout test, a golden for
 every operation, its guide page, cookbook entry and LANGUAGE.md rule, and a
 breaking change for any later lane rule. About 29 files of `src/` handle
