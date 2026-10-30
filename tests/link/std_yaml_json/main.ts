@@ -24,6 +24,7 @@ import {
   YAML_JSON_ERR_DEPTH,
   YAML_JSON_ERR_DOCUMENT,
   YAML_JSON_ERR_EXPANSION,
+  YAML_JSON_ERR_MERGE,
   YAML_JSON_ERR_NOT_FINITE,
   YAML_JSON_ERR_NUMBER,
   YAML_JSON_ERR_YAML,
@@ -288,6 +289,58 @@ const yjMerge = (t: Suite): void => {
   t.eqI32("merge: from the anchored map", doc.keyStart(own, 3), 13);
 };
 
+const yjMergeBomb = (t: Suite): void => {
+  // Each map merges the one before twice: 2^60 paths through 61 maps.
+  let text = "a0: &a0 {}\n";
+  for (let i: i32 = 1; i <= 60; i += 1) {
+    text = `${text}a${i}: &a${i} {<<: [*a${i - 1}, *a${i - 1}]}\n`;
+  }
+  text = `${text}r: *a60\n`;
+  const doc = yjDoc();
+  const loader = new YamlJsonLoader();
+  const began = Date.now();
+  const root = yjLoad(loader, doc, text);
+  t.ok("merge bomb: a doubling merge chain loads", root >= 0);
+  t.ok("merge bomb: in linear time, well under a second", Date.now() - began < 1000);
+  t.eqStr("merge bomb: as the empty maps it merges", yjWalk(doc, doc.get(root, "r")), "{}");
+  const self = yjLoad(loader, doc, "a: &a {x: 1, <<: *a}\n");
+  t.ok("merge bomb: a map merging itself is refused or loads, never loops", self < 0 || doc.get(self, "a") >= 0);
+  // A chain of 41 maps merged into each of 500 maps: 20,500 merge visits.
+  let wide = "c0: &c0 {}\n";
+  for (let i: i32 = 1; i <= 40; i += 1) {
+    wide = `${wide}c${i}: &c${i} {<<: *c${i - 1}}\n`;
+  }
+  wide = `${wide}m:\n`;
+  for (let i: i32 = 0; i < 500; i += 1) {
+    wide = `${wide}  - {<<: *c40}\n`;
+  }
+  const narrow = yjDoc();
+  narrow.maxValues = 1000;
+  t.eqI32("merge bomb: merge visits past the budget are refused", yjLoad(loader, narrow, wide), YAML_JSON_ERR_EXPANSION);
+  t.ok("merge bomb: at the merge key it ran out on", yjSlice(wide, loader.errorStart, loader.errorEnd).startsWith("<<: *c"));
+  t.ok("merge bomb: within the default budget it loads", yjLoad(loader, yjDoc(), wide) >= 0);
+  // The count saturates at the array; the merge's adjustment must not take it back under.
+  const sat = yjDoc();
+  sat.maxValues = 8;
+  const over = "a: [1, 2, 3, 4, 5, 6, 7, 8]\n<<: [{}, {}]\n";
+  t.eqI32("merge bomb: a saturated count stays saturated", yjLoad(loader, sat, over), JSON_VALUE_ERR_VALUES);
+  t.eqI32("merge bomb: refused by the count, at the root", loader.errorStart, 0);
+};
+
+const yjMergeShapes = (t: Suite): void => {
+  const doc = yjDoc();
+  const loader = new YamlJsonLoader();
+  const shapes: string[] = ["m: {<<: 5, x: 1}\n", "m: {<<: [1, 2]}\n", "s: &s 5\nm: {<<: *s}\n", "m: {<<: [{a: 1}, x]}\n", "m:\n  <<:\n  x: 1\n"];
+  const at: string[] = ["5", "1", "*s", "x", "<<"];
+  for (let i: i32 = 0; i < toI32(shapes.length); i += 1) {
+    const text = shapes[i];
+    // The parser refuses these before the loader sees them, at the same range.
+    t.eqI32(`merge shape ${i}: a merge value that is not a mapping is refused`, yjLoad(loader, doc, text), YAML_JSON_ERR_YAML);
+    t.eqStr(`merge shape ${i}: at the value`, yjSlice(text, loader.errorStart, loader.errorEnd), at[i]);
+  }
+  t.eqStr("merge shape: named", yamlJsonErrorName(YAML_JSON_ERR_MERGE), "MERGE");
+};
+
 const yjRefusals = (t: Suite): void => {
   const doc = yjDoc();
   const loader = new YamlJsonLoader();
@@ -322,6 +375,8 @@ export const main = (): number => {
   yjTextBomb(t);
   yjKeys(t);
   yjMerge(t);
+  yjMergeBomb(t);
+  yjMergeShapes(t);
   yjRefusals(t);
   return t.done();
 };

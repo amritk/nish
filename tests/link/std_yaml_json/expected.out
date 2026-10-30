@@ -57,6 +57,26 @@ PASS  merge: a merge in a merged map
 PASS  merge: own keys win, then the first map listed
 PASS  merge: a merged key keeps its source range
 PASS  merge: from the anchored map
+PASS  merge bomb: a doubling merge chain loads
+PASS  merge bomb: in linear time, well under a second
+PASS  merge bomb: as the empty maps it merges
+PASS  merge bomb: a map merging itself is refused or loads, never loops
+PASS  merge bomb: merge visits past the budget are refused
+PASS  merge bomb: at the merge key it ran out on
+PASS  merge bomb: within the default budget it loads
+PASS  merge bomb: a saturated count stays saturated
+PASS  merge bomb: refused by the count, at the root
+PASS  merge shape 0: a merge value that is not a mapping is refused
+PASS  merge shape 0: at the value
+PASS  merge shape 1: a merge value that is not a mapping is refused
+PASS  merge shape 1: at the value
+PASS  merge shape 2: a merge value that is not a mapping is refused
+PASS  merge shape 2: at the value
+PASS  merge shape 3: a merge value that is not a mapping is refused
+PASS  merge shape 3: at the value
+PASS  merge shape 4: a merge value that is not a mapping is refused
+PASS  merge shape 4: at the value
+PASS  merge shape: named
 PASS  document: past the last
 PASS  yaml: a document with an error
 PASS  yaml: at its diagnostic
@@ -66,4 +86,4 @@ PASS  depth: 64 deep loads
 PASS  document: the first loads
 PASS  document: an empty one is null
 PASS  names: an unknown code
-std/yaml-json: 68 passed, 0 failed, 0 skipped
+std/yaml-json: 88 passed, 0 failed, 0 skipped

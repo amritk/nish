@@ -51,6 +51,15 @@
  * `JSON_VALUE_ERR_VALUES` when the document has no alias. A merged map counts
  * all its keys, also those the merging map overrides, so a document within a
  * few values of the limit can be refused for merges that would have fit.
+ * Merging is linear too: a map is merged into a given map at most once, however
+ * many paths through the merge keys reach it, and the pairs every merge
+ * visits are charged to a budget of `maxValues` plus the stream's node count,
+ * past which the load is `YAML_JSON_ERR_EXPANSION` at the merge key.
+ *
+ * **A merge key's value** is a mapping, an alias to one, or a sequence of
+ * those; anything else is refused at the value, by the parser as
+ * `YAML_ERR_BAD_MERGE` (so `YAML_JSON_ERR_YAML`) and by the loader as
+ * `YAML_JSON_ERR_MERGE`.
  * The text the copies store is bounded too, while they are built: past the
  * document's `JsonLimits.maxTotalBytes` of string, key and number text, the
  * load is `YAML_JSON_ERR_EXPANSION` at the outermost alias being copied, or
@@ -117,6 +126,12 @@ export const YAML_JSON_ERR_EXPANSION: i32 = -43
 export const YAML_JSON_ERR_DEPTH: i32 = -44
 /** A `0x` or `0o` integer with more than `YAML_JSON_MAX_RADIX_DIGITS` digits. */
 export const YAML_JSON_ERR_NUMBER: i32 = -45
+/**
+ * A merge key's value is not a mapping or a sequence of mappings; the range is
+ * the value's. `parseYaml` refuses these itself (`YAML_ERR_BAD_MERGE`, a load's
+ * `YAML_JSON_ERR_YAML`); this is the loader's own check of the stream it is given.
+ */
+export const YAML_JSON_ERR_MERGE: i32 = -46
 
 /**
  * The most digits a `0x` or `0o` integer may have, which is
@@ -143,7 +158,7 @@ const YAML_JSON_LT: i32 = 60
 
 /** A `YAML_JSON_ERR_*` code's name, without the prefix; `""` for any other code. */
 export const yamlJsonErrorName = (code: i32): string => {
-  const names: string[] = ["DOCUMENT", "YAML", "NOT_FINITE", "EXPANSION", "DEPTH", "NUMBER"]
+  const names: string[] = ["DOCUMENT", "YAML", "NOT_FINITE", "EXPANSION", "DEPTH", "NUMBER", "MERGE"]
   const i: i32 = YAML_JSON_ERR_DOCUMENT - code
   return i >= 0 && i < toI32(names.length) ? names[i] : ""
 }
@@ -188,6 +203,11 @@ export class YamlJsonLoader {
   entryValues: i32[]
   /** Internal: a large map's key texts, to their entry. */
   seen: Map<string, i32>
+  /** Internal: per node, the stamp of the last map it was merged into; and that map's stamp. */
+  mergeMarks: i32[]
+  mergeStamp: i32 = 0
+  /** Internal: the merged pairs the load may still visit. */
+  mergeBudget: i32 = 0
 
   constructor() {
     this.maxDepth = JSON_WRITER_MAX_DEPTH
@@ -199,6 +219,7 @@ export class YamlJsonLoader {
     this.entryPairs = []
     this.entryValues = []
     this.seen = new Map<string, i32>()
+    this.mergeMarks = []
   }
 
   /**
@@ -237,6 +258,7 @@ export class YamlJsonLoader {
       }
       return this.fail(JSON_VALUE_ERR_VALUES, stream.start(root), stream.end(root))
     }
+    this.mergeBudget = room + toI32(stream.kinds.length)
     return this.build(root, origin)
   }
 
@@ -367,11 +389,15 @@ export class YamlJsonLoader {
         const value: i32 = stream.value(pair)
         // A merged map's members join this one's; its own value is not one.
         const merged: boolean = this.isMergeKey(stream.key(pair))
-        total = this.plus(total, this.partSize(value) - (merged ? 1 : 0))
+        const part: i32 = this.partSize(value)
+        let less: i32 = merged ? 1 : 0
         if (merged && stream.kind(stream.resolved(value)) === YAML_SEQ) {
           // A list of maps: the list itself is not one either, nor any map in it.
-          total -= stream.count(stream.resolved(value))
+          less += stream.count(stream.resolved(value))
         }
+        // A saturated part stays saturated: taking the adjustment off it
+        // would bring a bomb back under the cap.
+        total = part > this.cap ? this.cap + 1 : this.plus(total, part - less)
       }
     }
     return total
@@ -500,6 +526,8 @@ export class YamlJsonLoader {
       }
     }
     const outer: i32 = 0
+    this.newMergeStamp()
+    this.markMerged(at)
     if (this.mergeInto(base, at, outer) < 0) {
       return this.failed
     }
@@ -547,34 +575,81 @@ export class YamlJsonLoader {
         if (hops >= YAML_JSON_MERGE_HOPS) {
           return this.fail(YAML_JSON_ERR_DEPTH, stream.start(pair), stream.end(pair))
         }
-        const source: i32 = stream.resolved(stream.value(pair))
-        if (stream.kind(source) === YAML_MAP) {
-          if (this.mergeMap(base, source, hops + 1) < 0) {
+        const value: i32 = stream.value(pair)
+        const source: i32 = stream.resolved(value)
+        if (source >= 0 && stream.kind(source) === YAML_MAP) {
+          if (this.mergeMap(base, pair, source, hops + 1) < 0) {
             return this.failed
           }
-        } else if (stream.kind(source) === YAML_SEQ) {
+        } else if (source >= 0 && stream.kind(source) === YAML_SEQ) {
           for (let j: i32 = 0; j < stream.count(source); j += 1) {
-            const m: i32 = stream.resolved(stream.child(source, j))
-            if (stream.kind(m) === YAML_MAP && this.mergeMap(base, m, hops + 1) < 0) {
+            const item: i32 = stream.child(source, j)
+            const m: i32 = stream.resolved(item)
+            if (m < 0 || stream.kind(m) !== YAML_MAP) {
+              const bad: i32 = item < 0 ? value : item
+              return this.fail(YAML_JSON_ERR_MERGE, stream.start(bad), stream.end(bad))
+            }
+            if (this.mergeMap(base, pair, m, hops + 1) < 0) {
               return this.failed
             }
           }
+        } else {
+          const bad: i32 = value < 0 ? pair : value
+          return this.fail(YAML_JSON_ERR_MERGE, stream.start(bad), stream.end(bad))
         }
       }
     }
     return 0
   }
 
-  /** Internal: merges map `m`'s own keys, then its merge keys' maps. */
-  mergeMap(base: i32, m: i32, hops: i32): i32 {
+  /**
+   * Internal: merges map `m`'s own keys, then its merge keys' maps, for the
+   * merge key `pair`; nothing if `m` is merged into this map already, since
+   * a second merge would find every key taken.
+   */
+  mergeMap(base: i32, pair: i32, m: i32, hops: i32): i32 {
     const stream: YamlStream = this.stream
+    if (!this.markMerged(m)) {
+      return 0
+    }
+    this.mergeBudget -= stream.count(m) + 1
+    if (this.mergeBudget < 0) {
+      return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(pair), stream.end(pair))
+    }
     for (let i: i32 = 0; i < stream.count(m); i += 1) {
-      const pair: i32 = stream.child(m, i)
-      if (!this.isMergeKey(stream.key(pair)) && this.addEntry(base, pair, false) < 0) {
+      const own: i32 = stream.child(m, i)
+      if (!this.isMergeKey(stream.key(own)) && this.addEntry(base, own, false) < 0) {
         return this.failed
       }
     }
     return this.mergeInto(base, m, hops)
+  }
+
+  /** Internal: starts a map's merges, so no node is marked as merged into it yet. */
+  newMergeStamp(): void {
+    const nodes: i32 = toI32(this.stream.kinds.length)
+    const marks: i32[] = this.mergeMarks
+    while (toI32(marks.length) < nodes) {
+      marks.push(0)
+    }
+    this.mergeStamp += 1
+    if (this.mergeStamp >= JSON_VALUE_MAX_VALUES) {
+      // Far past any one load: start the stamps over rather than let them wrap.
+      for (let i: i32 = 0; i < toI32(marks.length); i += 1) {
+        marks[i] = 0
+      }
+      this.mergeStamp = 1
+    }
+  }
+
+  /** Internal: marks node `n` as merged into the current map; `false` if it already was. */
+  markMerged(n: i32): boolean {
+    const marks: i32[] = this.mergeMarks
+    if (n < 0 || n >= toI32(marks.length) || marks[n] === this.mergeStamp) {
+      return false
+    }
+    marks[n] = this.mergeStamp
+    return true
   }
 
   /**
