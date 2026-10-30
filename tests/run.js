@@ -18403,6 +18403,250 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
   }
 }
 
+// ---- The SHA-256 kernel against std/crypto/sha256.ts, end to end ---------------------
+// The compiler lowers every call of std/crypto/sha256.ts's `sha256Compress` to a branch
+// on `nish_sha256_hw`: runtime-sha256.c's `nish_sha256_compress` on one arm, the Nish
+// function on the other, and the walker again when the kernel's own copy of the
+// function's guard refuses the block, so a block outside its buffer panics with the
+// Nish message on either path (src/kernels.ts). `tests/link/sha256_hw_vectors` holds
+// both arms to FIPS 180-4's digests and RFC 4231's HMAC-SHA-256 tags, and
+// `tests/link/sha256_hw_agree` to Node's digests of a seeded corpus hashed whole and
+// in pieces. Each is linked with the kernel wrapped (`-Wl,--wrap`) by a counter that
+// reports its calls on exit, then run with `NISH_SHA256` unset and set to `soft`: the
+// two stdouts must be each other's and `expected.out`, the soft run must call no
+// kernel, and where /proc/cpuinfo says the CPU has the instructions the unset run
+// must call it. The debug profile links them, for the reason the AES section gives.
+//
+// A wasm32 build has no kernel to branch to, so the lowering is skipped there: a
+// `--profile wasi` build must reference no `nish_sha256_` symbol, in its IR or in the
+// link, where the native IR linked the same way is the trace's control. The
+// freestanding `wasm` profile links IR compiled for the host, so build.sh adds
+// runtime-sha256.c for it, whose wasm32 build answers 0, and the walker runs.
+if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
+  const shaDir = path.join(buildDir, "sha256-kernel")
+  fs.rmSync(shaDir, { recursive: true, force: true })
+  fs.mkdirSync(shaDir, { recursive: true })
+  const cpuFlags = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
+  const cpuFeatures = new Set((cpuFlags.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
+  const cpuHasSha =
+    (process.arch === "x64" && cpuFeatures.has("sha_ni") && cpuFeatures.has("sse4_1") && cpuFeatures.has("ssse3")) ||
+    (process.arch === "arm64" && cpuFeatures.has("sha2"))
+  const programs = ["sha256_hw_vectors", "sha256_hw_agree"]
+  /** The modules of tests/link/<program> compiled into a directory of their own, or none with the reason. */
+  const compileSha = (program, dir, flags) => {
+    const r = spawnSync(
+      NISH,
+      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
+      { cwd: root, encoding: "utf8", env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) } }
+    )
+    const lls =
+      r.status === 0
+        ? fs
+            .readdirSync(dir)
+            .filter((f) => f.endsWith(".ll"))
+            .sort()
+            .map((f) => path.join(dir, f))
+        : []
+    return { lls, why: r.status === 0 ? "" : r.stderr }
+  }
+  const expected = (program) => fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+
+  if (!HAS_CLANG) {
+    skip("sha256 kernel: no clang to link the SHA-256 programs against runtime-sha256.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `sha256 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    const counter = path.join(shaDir, "count.c")
+    const arr = "struct nish_array"
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        `${arr};`,
+        "static unsigned long nish_sha256_calls;",
+        `int32_t __real_nish_sha256_compress(${arr} *h, const ${arr} *w, const ${arr} *src, int32_t at);`,
+        `int32_t __wrap_nish_sha256_compress(${arr} *h, const ${arr} *w, const ${arr} *src, int32_t at) { nish_sha256_calls++; return __real_nish_sha256_compress(h, w, src, at); }`,
+        "__attribute__((destructor)) static void nish_sha256_report(void) {",
+        '  fprintf(stderr, "sha256 kernel calls: %lu\\n", nish_sha256_calls);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_SHA256
+    for (const program of programs) {
+      const compiled = compileSha(program, path.join(shaDir, program), [])
+      const exe = path.join(shaDir, `${program}.counted`)
+      const linked =
+        compiled.lls.length > 0
+          ? spawnSync(
+              "bash",
+              [
+                "scripts/build.sh",
+                ...compiled.lls,
+                "runtime/runtime.c",
+                counter,
+                "-Wl,--wrap=nish_sha256_compress",
+                "-o",
+                exe,
+                "--profile",
+                "debug",
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : null
+      if (linked === null || linked.status !== 0) {
+        check(`sha256 kernel: ${program} links with the kernel counted`, false, linked === null ? compiled.why : linked.stderr)
+        continue
+      }
+      const want = expected(program)
+      const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_SHA256: "soft" } })
+      /** The count the wrapper printed, or null. */
+      const calls = (r) => {
+        const m = /^sha256 kernel calls: (\d+)$/m.exec(r.stderr)
+        return m === null ? null : Number(m[1])
+      }
+      check(
+        `sha256 kernel: ${program} prints the same bytes with NISH_SHA256 unset and with NISH_SHA256=soft, and they are its expected.out`,
+        hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_SHA256 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_SHA256=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      check(`sha256 kernel: ${program} under NISH_SHA256=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+      if (cpuHasSha) {
+        check(
+          `sha256 kernel: ${program} with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+          (calls(hw) ?? 0) > 0,
+          hw.stderr
+        )
+      } else {
+        check(
+          `sha256 kernel: ${program} with NISH_SHA256 unset calls no kernel on a CPU /proc/cpuinfo names no SHA-256 instructions for`,
+          calls(hw) === 0,
+          hw.stderr
+        )
+      }
+    }
+  }
+
+  // The freestanding `wasm` profile, as the AES section has it: host IR links with
+  // runtime-wasm.c, build.sh adds runtime-sha256.c once, and the walker hashes as Node.
+  if (has("wasm-ld")) {
+    const freeDir = path.join(shaDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "digest.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { sha256 } from "nish/crypto/sha256"',
+        "",
+        "export const digestByte = (n: i32, at: i32): i32 => {",
+        "  const msg: u8[] = []",
+        "  for (let i: i32 = 0; i < n; i += 1) {",
+        "    msg.push(toU8(i * 7))",
+        "  }",
+        "  const d: u8[] = sha256(msg)",
+        "  if (at < 0 || at >= toI32(d.length)) {",
+        "    return -1",
+        "  }",
+        "  return toI32(d[at])",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const ir = path.join(freeDir, "ir")
+    const r = spawnSync(NISH, [source, "-o", `${ir}${path.sep}`], { cwd: root, encoding: "utf8" })
+    const lls = r.status === 0 ? fs.readdirSync(ir).filter((f) => f.endsWith(".ll")).map((f) => path.join(ir, f)) : []
+    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_sha256_hw("))
+    const wasm = path.join(freeDir, "digest.wasm")
+    const linked =
+      lls.length > 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", ...lls, "runtime/runtime-wasm.c", "-Wl,--trace-symbol=nish_sha256_hw", "-o", wasm, "--profile", "wasm"],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    const definitions =
+      linked === null ? 0 : `${linked.stdout}${linked.stderr}`.split("\n").filter((l) => /definition of nish_sha256_hw/.test(l)).length
+    const lengths = [0, 55, 64, 200]
+    const want = lengths.map((n) =>
+      [...crypto.createHash("sha256").update(Buffer.from(Array.from({ length: n }, (_, i) => (i * 7) & 255))).digest()].join(",")
+    )
+    let got = []
+    let trapped = ""
+    if (linked !== null && linked.status === 0) {
+      try {
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env: {} })
+        got = lengths.map((n) => Array.from({ length: 32 }, (_, at) => instance.exports.digestByte(n, at)).join(","))
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
+    }
+    check(
+      "sha256 kernel: the freestanding --profile wasm link of a SHA-256 module compiled for the host adds runtime-sha256.c once, and hashes as Node does",
+      lowered && linked.status === 0 && definitions === 1 && trapped === "" && got.join(";") === want.join(";"),
+      `${r.stderr}IR calls nish_sha256_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.stderr}objects defining nish_sha256_hw: ${definitions}\n`}${trapped}got  ${got.join(";")}\nwant ${want.join(";")}`
+    )
+  } else {
+    skip("sha256 kernel: no wasm-ld, so the freestanding wasm link of a SHA-256 module is not checked")
+  }
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const program = "sha256_hw_vectors"
+    const wasi = compileSha(program, path.join(shaDir, "wasi"), ["--profile", "wasi"])
+    const native = compileSha(program, path.join(shaDir, "native"), [])
+    const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_sha256_"))
+    /** The modules linked for wasm32-wasi with both SHA-256 symbols traced. */
+    const traced = (lls, out) =>
+      spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...lls,
+          "runtime/runtime.c",
+          "-Wl,--trace-symbol=nish_sha256_hw,--trace-symbol=nish_sha256_compress",
+          "-o",
+          out,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+    const wasm = path.join(shaDir, `${program}.wasm`)
+    const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+    const control = native.lls.length > 0 ? traced(native.lls, path.join(shaDir, "native.wasm")) : null
+    const refs = (r) =>
+      r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_sha256_/.test(l))
+    const ran =
+      linked !== null && linked.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      `sha256 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_sha256_ symbol, and it prints its expected.out`,
+      wasi.lls.length > 0 &&
+        named.length === 0 &&
+        linked.status === 0 &&
+        refs(linked).length === 0 &&
+        control !== null &&
+        control.status === 0 &&
+        refs(control).length > 0 &&
+        ran !== null &&
+        ran.status === 0 &&
+        ran.stdout === expected(program),
+      `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+        `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+        `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+        `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+    )
+  } else {
+    skip(`sha256 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of sha256_hw_vectors is not checked for kernel references`)
+  }
+}
+
 // ---- The CLI contract checked in Nish ------------------------------------------------
 // `tests/nish/cli.ts` asks the questions the WP12 block below asks — the streams and
 // the exit-code bands, `--help` against a usage error, and one flat `--json` object
