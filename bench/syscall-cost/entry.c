@@ -39,13 +39,13 @@
 #define MAX_ROUNDS 64
 
 /* The bytes wrk sends for one GET, and what bench/http1-server.ts answers it
- * with (`curl -si` against a running build/bench/h1, Date included): the
- * header block is the same length for both routes, the bodies are 13 bytes
+ * with (`curl -si` against a running build/bench/h1, Date included): a
+ * 116-byte header block and 13 bytes of text, and a 122-byte header block
  * and `{"message":"Hello, World!","n":<count>}` at a 6-digit count. */
 #define REQ_PLAINTEXT "GET /plaintext HTTP/1.1\r\nHost: 127.0.0.1:8080\r\n\r\n"
 #define REQ_JSON "GET /json HTTP/1.1\r\nHost: 127.0.0.1:8080\r\n\r\n"
-#define RESP_PLAINTEXT 132
-#define RESP_JSON 145
+#define RESP_PLAINTEXT 129
+#define RESP_JSON 160
 
 static long long now_ns(void) {
   struct timespec t;
