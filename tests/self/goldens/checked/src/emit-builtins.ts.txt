@@ -17,7 +17,7 @@ import privateAbi from "./emit-result" -> function @privateAbi
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import paramValue from "./ir" -> function @paramValue
 import emitSimdCall from "./simd" -> function @emitSimdCall
-import simdCallees from "./simd" -> function @simdCallees
+import isSimdAccess from "./simd" -> function @isSimdAccess
 import bufferSignature from "./nish-modules" -> function @bufferSignature
 import isNetExport from "./nish-modules" -> function @isNetExport
 import isSimdExport from "./nish-modules" -> function @isSimdExport
@@ -881,25 +881,25 @@ function identifierBuiltinCalleesNamed(program: CheckedProgram, table: TypeTable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via conversionIntrinsic
   escaping: name
-  calls: builtinConversionTarget conversionIntrinsic isBuiltinFunction isNetExport isSimdExport netRangeBuffer netSymbol nish_array_grow nish_panic_index nish_str_eq panicTailCallees simdCallees
+  calls: builtinConversionTarget conversionIntrinsic isBuiltinFunction isNetExport isSimdAccess isSimdExport netRangeBuffer netSymbol nish_array_grow nish_panic_index nish_str_eq panicTailCallees
   pointer program: size=656 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=conversionIntrinsic#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
   callee +1:7 isSimdExport -> @isSimdExport
-  callee +2:12 simdCallees -> @simdCallees
-  callee +4:8 isBuiltinFunction -> @isBuiltinFunction
-  local +7:9 args: Node (const)
-  local +8:9 firstType: i32 (const)
-  local +9:9 target: i32 (const)
-  callee +9:18 builtinConversionTarget -> @builtinConversionTarget
-  local +11:11 intrinsic: string (const)
-  callee +11:40 conversionIntrinsic -> @conversionIntrinsic
-  callee +192:5 panicTailCallees -> @panicTailCallees
-  callee +223:7 isNetExport -> @isNetExport
-  callee +224:14 netSymbol -> @netSymbol
-  callee +225:9 netRangeBuffer -> @netRangeBuffer
+  callee +3:12 isSimdAccess -> @isSimdAccess
+  callee +5:8 isBuiltinFunction -> @isBuiltinFunction
+  local +8:9 args: Node (const)
+  local +9:9 firstType: i32 (const)
+  local +10:9 target: i32 (const)
+  callee +10:18 builtinConversionTarget -> @builtinConversionTarget
+  local +12:11 intrinsic: string (const)
+  callee +12:40 conversionIntrinsic -> @conversionIntrinsic
+  callee +193:5 panicTailCallees -> @panicTailCallees
+  callee +224:7 isNetExport -> @isNetExport
+  callee +225:14 netSymbol -> @netSymbol
+  callee +226:9 netRangeBuffer -> @netRangeBuffer
 function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emitNetCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitIndex

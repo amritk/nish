@@ -204,17 +204,16 @@ function emitSimdCall(emitter: Emitter, expr: Node, name: string): string -> @em
   local +28:11 x: string (const)
   callee +28:15 Emitter.emitExpression -> @Emitter.emitExpression
   callee +29:11 IRFunction.emitValue -> @IRFunction.emitValue
-function isSimdAccess(name: string): boolean -> @isSimdAccess [exported]
+function isSimdLoad(name: string): boolean -> @isSimdLoad [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: name
-  calls: nish_arena_mark nish_arena_release nish_str_eq simdLaneType simdSuffix
+  calls: nish_arena_mark nish_arena_release simdLaneType simdSuffix
   stackSites=0 stackLocals=0
-  callee +0:23 simdLaneType -> @simdLaneType
-  callee +0:36 simdSuffix -> @simdSuffix
-function simdCallees(name: string): string[] -> @simdCallees [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  callee +0:54 simdLaneType -> @simdLaneType
+  callee +0:67 simdSuffix -> @simdSuffix
+function isSimdAccess(name: string): boolean -> @isSimdAccess [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: isSimdAccess nish_array_grow
+  calls: isSimdLoad nish_str_eq
   stackSites=0 stackLocals=0
-  local +0:9 out: string[] (const)
-  callee +1:7 isSimdAccess -> @isSimdAccess
+  callee +0:76 isSimdLoad -> @isSimdLoad

@@ -152,7 +152,7 @@ import routeCalleesOf from "./emit-map" -> function @routeCalleesOf
 import valueReaderOf from "./emit-map" -> function @valueReaderOf
 import walkMethodsOf from "./emit-map" -> function @walkMethodsOf
 import isCollectionStruct from "./generics" -> function @isCollectionStruct
-import isSimdAccess from "./simd" -> function @isSimdAccess
+import isSimdLoad from "./simd" -> function @isSimdLoad
 import builtinPanicKind from "./panics" -> function @builtinPanicKind
 import PANIC_ARRAY_LENGTH from "./panics" -> const PANIC_ARRAY_LENGTH
 import PANIC_CALL from "./panics" -> const PANIC_CALL
@@ -755,7 +755,7 @@ function isInlineField(program: CheckedProgram, table: TypeTable, access: Node):
   callee +13:28 FieldInfo.inline -> @FieldInfo.inline
 function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, node: Node): ParamUse -> @classifyArgumentUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
-  calls: ParentTable.parentOf argumentUse arrayMethodName builtinArgumentLetters builtinNameOf constructorOf indexInList intrinsicType isPushCall isResultConstructorCall isSimdAccess isSpawnCall isWrittenArgument methodReceiver nish_panic_index nish_panic_overflow nish_str_eq resultMethodName storesInlineElements use
+  calls: ParentTable.parentOf argumentUse arrayMethodName builtinArgumentLetters builtinNameOf constructorOf indexInList intrinsicType isPushCall isResultConstructorCall isSimdLoad isSpawnCall isWrittenArgument methodReceiver nish_panic_index nish_panic_overflow nish_str_eq resultMethodName storesInlineElements use
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=isPushCall#1 storesInlineElements#1 isResultConstructorCall#1 arrayMethodName#1 resultMethodName#1 constructorOf#1
   pointer list: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1 indexInList#0 indexInList#0
@@ -784,7 +784,7 @@ function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, n
   callee +35:14 use -> @use
   local +42:11 read: string (const)
   callee +42:18 builtinNameOf -> @builtinNameOf
-  callee +43:53 isSimdAccess -> @isSimdAccess
+  callee +43:52 isSimdLoad -> @isSimdLoad
   callee +44:14 use -> @use
   callee +49:9 arrayMethodName -> @arrayMethodName
   callee +50:14 use -> @use
@@ -2159,7 +2159,7 @@ function FactCollector.noteWrittenArguments(this: FactCollector, call: Node): vo
 function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: Node): void -> @FactCollector.collectIdentifierBuiltinFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: FactCollector.addCallees FactCollector.noteBuiltin FactCollector.noteBuiltinSite FactCollector.noteWorld FactCollector.noteWrittenArguments StringSet.add builtinCalleesNamed builtinNameOf identifierBuiltinCallees identifierBuiltinCalleesNamed isArenaCall isSimdAccess nish_panic_index nish_str_eq nish_str_index_of nish_str_index_of_from
+  calls: FactCollector.addCallees FactCollector.noteBuiltin FactCollector.noteBuiltinSite FactCollector.noteWorld FactCollector.noteWrittenArguments StringSet.add builtinCalleesNamed builtinNameOf identifierBuiltinCallees identifierBuiltinCalleesNamed isArenaCall isSimdLoad nish_panic_index nish_str_eq nish_str_index_of nish_str_index_of_from
   pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteBuiltinSite#0 FactCollector.noteBuiltin#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.noteWrittenArguments#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteBuiltinSite#1 builtinNameOf#1 FactCollector.noteBuiltin#2 identifierBuiltinCalleesNamed#2 builtinCalleesNamed#3 FactCollector.noteWorld#1 identifierBuiltinCallees#2 FactCollector.noteWorld#1 isArenaCall#1 FactCollector.noteWrittenArguments#1 builtinNameOf#1
   stackSites=0 stackLocals=0
@@ -2180,7 +2180,7 @@ function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: 
   callee +4:5 FactCollector.noteWrittenArguments -> @FactCollector.noteWrittenArguments
   local +10:11 name: string (const)
   callee +10:18 builtinNameOf -> @builtinNameOf
-  callee +13:63 isSimdAccess -> @isSimdAccess
+  callee +13:62 isSimdLoad -> @isSimdLoad
   callee +22:7 StringSet.add -> @StringSet.add
 function initialisesFields(sig: FunctionSig): boolean -> @initialisesFields
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
