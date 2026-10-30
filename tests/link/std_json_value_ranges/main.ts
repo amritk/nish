@@ -156,7 +156,12 @@ const jrDuplicates = (t: Suite): void => {
 
 const jrOff = (t: Suite): void => {
   const doc = jrDoc();
+  t.ok("off: a new document has no range array", doc.ranges === null);
   const text = '{"a":[1,"x",null],"b":{"c":true}}';
+  const small = doc.parseText('{"p":1}');
+  // A parsed object has no spare slot, so these sets move its slots.
+  const moved: i32 = doc.set(small, "q", doc.newNull()) + doc.set(small, "r", doc.newNull());
+  t.ok("off: a slot-moving append on a plain document makes none", small >= 0 && moved === 0 && doc.ranges === null);
   const root = doc.parseText(text);
   if (!t.ok("off: the document parses", root >= 0)) {
     return;
@@ -234,15 +239,27 @@ const jrWrap = (t: Suite): void => {
   doc.generation = 511;
   doc.clear();
   t.eqI32("wrap: the generation wraps to 1", doc.generation, 1);
-  while (doc.generation < ranged - 1) {
-    doc.clear();
-  }
   const r2 = doc.parseText(text);
   if (!t.ok("wrap: a plain parse lands on the ranged parse's generation", r2 >= 0 && doc.generation === ranged)) {
     return;
   }
   t.ok("wrap: its values have no range", doc.start(r2) === -1 && doc.end(doc.get(r2, "a")) === -1);
   t.ok("wrap: nor its keys", doc.keyStart(r2, 0) === -1 && doc.keyEnd(r2, 1) === -1);
+  // Ranges stamped with the last generation, then the wrap: a setter and a ranged parse right after it still answer.
+  doc.generation = 510;
+  const r3 = doc.parseTextRanged(text);
+  t.ok("wrap: a ranged parse on the last generation", r3 >= 0 && doc.generation === 511 && doc.rangeGeneration === 511);
+  doc.clear();
+  t.ok("wrap: the wrap forgets the stamp", doc.generation === 1 && doc.rangeGeneration === 0);
+  const v = doc.newString("s");
+  t.eqI32("wrap: a setter right after the wrap", doc.setRange(v, 3, 6), JSON_VALUE_OK);
+  t.ok("wrap: reads it back", doc.start(v) === 3 && doc.end(v) === 6);
+  const r4 = doc.parseTextRanged(text);
+  if (!t.ok("wrap: a ranged parse after the wrap", r4 >= 0 && doc.generation === 2)) {
+    return;
+  }
+  t.eqStr("wrap: ranges its keys", jrKey(doc, text, r4, 1), '"b"');
+  t.eqStr("wrap: and its values", jrValue(doc, text, doc.get(r4, "a")), "[1,2]");
 };
 
 const jrBuilders = (t: Suite): void => {
@@ -318,11 +335,12 @@ const jrGrowth = (t: Suite): void => {
   t.eqI32("growth: survives the next move", doc.set(root, "six", doc.newNull()) + doc.set(root, "seven", doc.newNull()), 0);
   t.ok("growth: reads back after it", doc.keyStart(root, 4) === 40 && doc.keyEnd(root, 4) === 46);
   t.eqStr("growth: a parsed value keeps its range", jrValue(doc, text, doc.get(root, "inner")), '{"x":0}');
-  // `clear` drops every range, so a loader builds into it and gives each value its own.
+  // After `clear` no value has a range, so a loader builds into it and gives each value its own.
   doc.clear();
   const v = doc.newString("y");
   t.eqI32("growth: after clear, a new value has no range", doc.start(v), -1);
   t.eqI32("growth: and takes one", doc.setRange(v, 0, 3), JSON_VALUE_OK);
+  t.ok("growth: and reads it back", doc.start(v) === 0 && doc.end(v) === 3);
 };
 
 const jrParsedEdits = (t: Suite): void => {

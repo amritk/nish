@@ -53,6 +53,8 @@ PASS  duplicates: a value built on the old root's index has no range
 PASS  duplicates: refused, a wide object without a repeat parses
 PASS  duplicates: refused, every key keeps its range
 PASS  duplicates: refused, and every value
+PASS  off: a new document has no range array
+PASS  off: a slot-moving append on a plain document makes none
 PASS  off: the document parses
 PASS  off: start answers -1
 PASS  off: end answers -1
@@ -95,6 +97,13 @@ PASS  wrap: the generation wraps to 1
 PASS  wrap: a plain parse lands on the ranged parse's generation
 PASS  wrap: its values have no range
 PASS  wrap: nor its keys
+PASS  wrap: a ranged parse on the last generation
+PASS  wrap: the wrap forgets the stamp
+PASS  wrap: a setter right after the wrap
+PASS  wrap: reads it back
+PASS  wrap: a ranged parse after the wrap
+PASS  wrap: ranges its keys
+PASS  wrap: and its values
 PASS  builders: every new value has no range
 PASS  builders: nor the new object
 PASS  builders: a new key has no range
@@ -132,6 +141,7 @@ PASS  growth: reads back after it
 PASS  growth: a parsed value keeps its range
 PASS  growth: after clear, a new value has no range
 PASS  growth: and takes one
+PASS  growth: and reads it back
 PASS  parsed edits: the document parses
 PASS  parsed edits: set over a parsed key
 PASS  parsed edits: the key keeps its parsed range
@@ -163,4 +173,4 @@ PASS  moves: its added key has none
 PASS  moves: a third key on the first container, in the room it had
 PASS  moves: has no range, though the wide document ranged that slot
 PASS  moves: and the root's keys keep theirs
-std/json-value ranges: 165 passed, 0 failed, 0 skipped
+std/json-value ranges: 175 passed, 0 failed, 0 skipped

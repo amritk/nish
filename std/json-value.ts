@@ -226,12 +226,6 @@ const JSON_VALUE_NO_WORD: i32 = 0
 const JSON_VALUE_TRUE_WORD: i32 = 1
 const JSON_VALUE_MINUS: i32 = 45
 
-/**
- * A JSON tree, and the memory every value of it lives in. Make one, then
- * `parse` into it or build with the `new*` methods; the module header has the
- * rules. Its fields and its "Internal" methods are reachable, as every
- * member in Nish is; use the others.
- */
 /** Internal: a `JsonDocument`'s source ranges, made on first use; see `JsonDocument.ranges`. */
 class JsonValueRanges {
   /**
@@ -256,6 +250,12 @@ class JsonValueRanges {
   }
 }
 
+/**
+ * A JSON tree, and the memory every value of it lives in. Make one, then
+ * `parse` into it or build with the `new*` methods; the module header has the
+ * rules. Its fields and its "Internal" methods are reachable, as every
+ * member in Nish is; use the others.
+ */
 export class JsonDocument {
   /** Per value: its `JSON_VALUE_*` kind. */
   kinds: u8[]
