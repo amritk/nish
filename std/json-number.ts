@@ -28,13 +28,15 @@
  * digits: one step per digit of that dividend when the divisor has at most 18
  * significant digits, and one per digit of the dividend per digit of the
  * divisor otherwise, which then also allocates the remainder, one byte per
- * divisor digit.
+ * divisor digit. A step of that long division is a shift, up to ten
+ * comparisons and up to nine subtractions of a byte each, so about twenty
+ * byte operations.
  *
  * **The bounds are stated.** An exponent is at most `JSON_NUMBER_MAX_EXPONENT`
  * in size, which keeps every exponent sum exact (under Node, too), and past
  * it a text is `JSON_NUMBER_ERR_EXPONENT`. A division that would take more
  * than `JSON_NUMBER_MAX_STEPS` steps is `JSON_NUMBER_ERR_GAP` before it
- * starts: `1e1000000000` is 22 bytes, and whether it is a multiple of `3`
+ * starts: `1e1000000000` is 12 bytes, and whether it is a multiple of `3`
  * would otherwise be a billion steps, the cheap input and expensive answer an
  * attacker sends to a validator. A JSON Schema validator reports a refused
  * comparison as the instance failing, and says why.
@@ -55,7 +57,7 @@ export const JSON_NUMBER_ERR_GAP: i32 = -13
 
 /** The largest exponent, in size, a text may write: 10^15, far inside the 2^53 that `i64` is exact to under Node. */
 export const JSON_NUMBER_MAX_EXPONENT: i64 = 1000000000000000
-/** The most digit steps one `jsonNumberMultipleOf` may take, 2^20: a few milliseconds natively. */
+/** The most digit steps one `jsonNumberMultipleOf` may take, 2^20 (the module header says what a step costs). */
 export const JSON_NUMBER_MAX_STEPS: i64 = 1048576
 
 /** The most divisor digits the `u64` remainder holds: 10^18 times ten, plus nine, is below 2^64. */
@@ -409,18 +411,13 @@ export const jsonNumberMultipleOf = (value: string, divisor: string): i32 => {
   if (gap < 0) {
     return 0
   }
-  if (gap > JSON_NUMBER_MAX_STEPS) {
-    return JSON_NUMBER_ERR_GAP
-  }
   const total: i64 = toI64(v.count) + gap
-  if (d.count <= JSON_NUMBER_SMALL_DIVISOR) {
-    if (total > JSON_NUMBER_MAX_STEPS) {
-      return JSON_NUMBER_ERR_GAP
-    }
-    return jsonNumberDividesShort(v, d, total) ? 1 : 0
-  }
-  if (total > JSON_NUMBER_MAX_STEPS / toI64(d.count)) {
+  const short: boolean = d.count <= JSON_NUMBER_SMALL_DIVISOR
+  if (total > (short ? JSON_NUMBER_MAX_STEPS : JSON_NUMBER_MAX_STEPS / toI64(d.count))) {
     return JSON_NUMBER_ERR_GAP
+  }
+  if (short) {
+    return jsonNumberDividesShort(v, d, total) ? 1 : 0
   }
   return jsonNumberDividesLong(v, d, total) ? 1 : 0
 }

@@ -148,15 +148,29 @@ const fetchCheckout = () => {
   return cacheDir
 }
 
-/** The problems with cases.txt; empty when it is the file this script writes. */
+/** Whether the cached clone is checked out at COMMIT, so `--check` can repack it without fetching or checking out. */
+const cachedAtCommit = () => {
+  if (!fs.existsSync(path.join(cacheDir, ".git"))) {
+    return false
+  }
+  try {
+    return execFileSync("git", ["-C", cacheDir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim() === COMMIT
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The problems with cases.txt; empty when it is the file this script writes.
+ * The header, count, shape and sha256 are always checked, and a cached clone
+ * at COMMIT is repacked and compared byte for byte too.
+ */
 const problems = () => {
   const text = fs.readFileSync(casesFile, "utf8")
-  if (fs.existsSync(path.join(cacheDir, ".git"))) {
-    return text === render(readGroups(fetchCheckout()))
-      ? []
-      : ["cases.txt is not what the cached checkout packs to"]
-  }
   const out = []
+  if (cachedAtCommit() && text !== render(readGroups(cacheDir))) {
+    out.push("cases.txt is not what the cached checkout packs to")
+  }
   const lines = text.split("\n")
   if (lines.pop() !== "") {
     out.push("cases.txt does not end in a newline")

@@ -69,8 +69,8 @@ node tests/json-schema-suite/pack.js            # clone the pin into build/json-
 node tests/json-schema-suite/pack.js --check    # verify cases.txt; nothing is fetched or written
 ```
 
-`--check` repacks from the cached checkout when there is one and compares byte
-for byte; without one it checks the header, the group count, each record's
-shape and the body against its sha256. To move the pin, change `COMMIT`, the
+`--check` checks the header, the group count, each record's shape and the
+body against its sha256, and when the cached checkout is at the pinned commit
+it also repacks that and compares byte for byte. To move the pin, change `COMMIT`, the
 file hashes and `GROUP_COUNT` in `pack.js`, repack, and update the counts in
 the table, the link tests and `THIRD_PARTY_NOTICES.md`.

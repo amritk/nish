@@ -74,6 +74,9 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
     return JSS_VALID;
   }
   if (key === "type") {
+    if (doc.kind(arg) !== JSON_VALUE_STRING) {
+      return JSS_UNREAD;
+    }
     return jssType(doc, data, doc.string(arg)) ? JSS_VALID : JSS_INVALID;
   }
   if (key === "const") {
@@ -90,7 +93,8 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
       return JSS_VALID;
     }
     const answer: i32 = jsonNumberMultipleOf(doc.numberText(data), doc.numberText(arg));
-    return answer < 0 ? JSS_UNREAD : answer === 1 ? JSS_VALID : JSS_INVALID;
+    // `jsonNumberMultipleOf`'s answers 1 and 0 are `JSS_VALID` and `JSS_INVALID`.
+    return answer < 0 ? JSS_UNREAD : answer;
   }
   if (key === "minimum") {
     return jssBound(doc, data, arg, 0, 1);
@@ -118,8 +122,11 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
     return JSS_UNREAD;
   }
   if (key === "required") {
+    if (kind !== JSON_VALUE_OBJECT) {
+      return JSS_VALID;
+    }
     for (let i: i32 = 0; i < doc.length(arg); i++) {
-      if (kind === JSON_VALUE_OBJECT && doc.kind(doc.get(data, doc.string(doc.at(arg, i)))) === JSON_VALUE_NONE) {
+      if (doc.kind(doc.get(data, doc.string(doc.at(arg, i)))) === JSON_VALUE_NONE) {
         return JSS_INVALID;
       }
     }
@@ -154,8 +161,14 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
   return JSS_UNREAD;
 };
 
-/** The verdict of every keyword of `schema` on `data`: the first that is not valid, else valid. */
+/** The verdict of every keyword of `schema` on `data`: the first that is not valid, else valid. `true` and `false` decide at once; any other schema that is not an object is unread. */
 const jssSchema = (doc: JsonDocument, schema: JsonValue, data: JsonValue): i32 => {
+  if (doc.kind(schema) === JSON_VALUE_BOOLEAN) {
+    return doc.boolean(schema) ? JSS_VALID : JSS_INVALID;
+  }
+  if (doc.kind(schema) !== JSON_VALUE_OBJECT) {
+    return JSS_UNREAD;
+  }
   for (let i: i32 = 0; i < doc.length(schema); i++) {
     const verdict: i32 = jssKeyword(doc, schema, doc.keyAt(schema, i), doc.at(schema, i), data);
     if (verdict !== JSS_VALID) {
