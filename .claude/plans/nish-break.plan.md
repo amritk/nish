@@ -68,6 +68,9 @@ stages:
       - id: menu-items
         content: Add BreakMenu, newBreakMenu and stepBreakMenu with Play, Start level, How to play and Quit — see break-menu, Items
         status: pending
+      - id: menu-settings
+        content: Add BreakSettings and the Settings screen — frame rate, resolution, graphics, smoothing, effects, stats — answering MENU_APPLY when a change needs the terminal reopened — see break-menu, Settings
+        status: pending
       - id: menu-outro
         content: Add the outro where the logo's bricks come loose and fall, and the screen wipes before stepBreakMenu answers the level — see break-menu, The outro
         status: pending
@@ -94,6 +97,12 @@ stages:
         status: pending
       - id: play-overlay
         content: Toggle the term-rate stats overlay on F3 — see break-play, Fidelity
+        status: pending
+      - id: play-hotkeys
+        content: Apply BreakSettings, and cycle each one live from F4 to F8 with a toast naming the new value, reopening the terminal when a setting needs it — see break-play, Tuning live
+        status: pending
+      - id: play-graphics-option
+        content: Add TerminalOptions.graphics to std/term-io.ts, a backend to use when NISH_TERM_GRAPHICS is unset, with a check and a line in docs/guide/using-nish/terminal.md — see break-play, Tuning live
         status: pending
       - id: play-wire
         content: Replace the placeholder in src/compile.ts main with playBreak, keep the riddle and the file-named-break rule, and update the comment there and the line in .claude/orientation.md — see break-play, Wiring
@@ -221,11 +230,23 @@ export class BreakGame { /* … */ }
 export const newBreakGame = (level: i32, seed: i64): BreakGame // level clamped to 1..BREAK_LEVELS
 export const stepBreakGame = (game: BreakGame, input: TermInput): i32 // a GAME_* code
 export const drawBreakGame = (game: BreakGame, fb: Framebuffer, alpha: f64): void
+// BreakGame.effects: i32 — a public field the director sets: 0 low (no glow, no trails, a quarter of the particles), 1 high (everything; the default)
 
 // src/break-menu.ts
 export const MENU_STAY: i32 = 0
 export const MENU_QUIT: i32 = -1
-export class BreakMenu { /* … */ }
+export const MENU_APPLY: i32 = -2 // a setting changed that needs the terminal reopened; the menu stays where it was
+export const FPS_CHOICES: i32[] = [0, 30, 60, 120, 240] // 0 is adaptive up to 120; the rest are fixed rates
+export const RESOLUTION_CHOICES: i32[] = [270, 360, 540, 720, 1080] // framebuffer heights, 16:9
+export class BreakSettings {
+  fps: i32 = 0             // an index into FPS_CHOICES
+  resolution: i32 = 2      // an index into RESOLUTION_CHOICES (540)
+  graphics: i32 = -1       // -1 auto, else a GRAPHICS_* from std/term-pixels
+  smoothing: boolean = true // interpolate frames by alpha
+  effects: i32 = 1         // 0 low, 1 high
+  stats: boolean = false   // the term-rate overlay
+}
+export class BreakMenu { settings: BreakSettings /* … */ }
 export const newBreakMenu = (level: i32, seed: i64): BreakMenu
 export const stepBreakMenu = (menu: BreakMenu, input: TermInput): i32 // MENU_STAY, MENU_QUIT, or the level 1..6 to play once the outro ends
 export const drawBreakMenu = (menu: BreakMenu, fb: Framebuffer, alpha: f64): void
@@ -382,11 +403,26 @@ dim background wall that regrows.
 - **Play**
 - **Start level** `< 1 >` — ←/→ cycles 1 to 6
 - **How to play** — an overlay with the controls and the power-up letters
+- **Settings** — see Settings
 - **Quit**
 
 ↑/↓, W/S or k/j move the selection with a sliding highlight; Enter or Space
 picks; q or Esc quits, except that Esc closes the How to play overlay first.
 A footer reads `you found the wall.`
+
+### Settings
+
+A screen of `BreakSettings` rows, each `name   < value >`, ↑/↓ to choose and
+←/→ to cycle, Esc or Enter on **Back** to return. The values: frame rate
+`auto` / `30` / `60` / `120` / `240`; resolution `270p` … `1080p`; graphics
+`auto` / `kitty` / `sixel` / `half-block` / `ascii`; smoothing `on` / `off`;
+effects `low` / `high`; stats `on` / `off`. Each row has a one-line hint
+under it saying what it trades (for example "fixed rates turn the adaptive
+controller off"). Leaving the screen answers `MENU_APPLY` once if the frame
+rate or graphics changed, since those are read when the terminal opens; the
+rest apply on the next frame. `newBreakMenu` keeps the settings it is given
+by the director across reopenings (the director passes the old menu's
+`settings` back in).
 
 ### The outro
 
@@ -403,7 +439,7 @@ pixel gets at least 2 framebuffer pixels, a plain `drawText` title below that.
 
 ## break-play
 
-**Owns:** `src/break.ts`, `src/compile.ts`, `tests/run.js`, `.claude/orientation.md`, `tests/link/break_play*/**`, `tests/self/goldens/**/break.ts*`, `tests/self/goldens/**/break_play*`, `tests/self/goldens/checked/src/compile.ts.txt`, `tests/perf-baseline.json`
+**Owns:** `src/break.ts`, `src/compile.ts`, `tests/run.js`, `.claude/orientation.md`, `tests/link/break_play*/**`, `std/term-io.ts`, `tests/link/std_term_io*/**`, `docs/guide/using-nish/terminal.md`, `tests/self/goldens/**/term-io*`, `tests/self/goldens/**/std_term_io*`, `tests/self/goldens/**/break.ts*`, `tests/self/goldens/**/break_play*`, `tests/self/goldens/checked/src/compile.ts.txt`, `tests/perf-baseline.json`
 
 Depends on `break-game` and `break-menu`.
 
@@ -429,6 +465,41 @@ the exit code.
   size and resize once `caps` is known.
 - F3 toggles the stats overlay (`drawStatsOverlay`: frame rate, backend,
   bandwidth) — the hidden show-off inside the hidden game.
+
+### Tuning live
+
+Every rendering setting can be changed while playing, so the settings can be
+compared side by side on a real terminal. The director owns these keys in
+both scenes (they never reach the menu or game):
+
+| key | cycles |
+|---|---|
+| F3 | stats overlay on / off |
+| F4 | frame rate: auto, 30, 60, 120, 240 |
+| F5 | resolution: 270p … 1080p |
+| F6 | graphics: auto, kitty, sixel, half-block, ascii |
+| F7 | smoothing on / off (off draws at alpha 1) |
+| F8 | effects low / high |
+
+Each change shows a toast for a second in the corner (`120 fps fixed`,
+`graphics: sixel (refused: the terminal did not answer for it)`). Resolution,
+smoothing, effects and stats apply on the next frame. Frame rate and graphics
+are read when the terminal opens, so the director ends the current
+`runTerminal`, reopens it with the new `TerminalOptions` and resumes the same
+scene, which is still in memory — a brief re-probe, not a restart. The same
+happens on the menu's `MENU_APPLY`. A fixed rate sets `fixedFps` (the
+controller clamps at 240); auto sets `fixedFps = 0`, `maxFps = 120`,
+`allow120 = true`. The user's `NISH_TERM_FPS` and `NISH_TERM_GRAPHICS` still
+win over both, as they do for every `term-io` program, and the toast says so.
+While the stats overlay is on it also shows the active settings on one line.
+
+Forcing the backend needs one small `std` change: `TerminalOptions.graphics`,
+a string (`""`, `kitty`, `sixel`, `halfblock`, `ascii`) used as
+`NISH_TERM_GRAPHICS` would be when that variable is unset. It is pure Nish
+with no new builtin, so the seed builds it under the rolling freeze. It
+ships with a check in `tests/link/std_term_io*` and a line in
+`docs/guide/using-nish/terminal.md`, the guide page for `term-io`, which
+**must not** mention `nish break`.
 
 ### Wiring
 
@@ -474,16 +545,23 @@ quietly.
   clearing a level advancing to the next; **the difficulty curve** (each
   tuned value matches its formula, and the speed-over-width ratio grows by at
   least 1.5× a level); level 6's advancing wall; the intro and outro lengths
-  and their skip; menu navigation, level cycling and Quit; interpolation (a
+  and their skip; menu navigation, level cycling and Quit; the Settings
+  screen cycling every row both ways and answering `MENU_APPLY` exactly once
+  when, and only when, the frame rate or graphics changed; `effects = 0`
+  drawing no glow pixels; interpolation (a
   draw at alpha 0.5 puts the ball between its two positions); no allocation
   growth across 1,000 steady steps where the harness can see it; one drawn
   frame of each scene pinned at a small size. Plus a negative per stage: a
   level of 0 or 7, a 0×0 or 1×1 framebuffer, a pool spawned past capacity —
   each clamped, never a panic.
 - `break-play`: a pty test in `tests/run.js` under `tests/term-io/relay.mjs`
-  — `nish break`, Enter to play, some frames, Space, F3, p, q, q — that the
+  — `nish break`, Enter to play, some frames, Space, F3, F4 (a reopen),
+  F6 to half-block, p, q, q — that the
   process exits 0, that kitty graphics frames were sent (the relay answers as
-  kitty), and that the last bytes are the restore string; and the existing
+  kitty) and half-block cells after F6, that the game resumed rather than
+  restarted across the reopen, and that the last bytes are the restore
+  string; a `TerminalOptions.graphics` check (the option forces the backend,
+  and `NISH_TERM_GRAPHICS` still wins); and the existing
   checks updated: the riddle and the real-file rule unchanged, `nish break`
   with stdin a pipe now the one line and exit 1.
 
