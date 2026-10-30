@@ -221,6 +221,14 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   outside the column. Each binary decoder checks the column's window against
   its buffer and its length against the type's (2, 4 or 8 for an integer, 1
   for a `bool`, 8 for a `float8` or a time) before it reads a byte.
+  `PgBinaryArray` walks a one-dimensional `int2[]`, `int4[]` or `int8[]` the
+  same way: its header's `ndim` (0 or 1), `hasnull` and element OID (20, 21 or
+  23) are checked, and every element's length word must equal its type's size
+  (a NULL needs `hasnull` 1), each before the bytes it names are read. The
+  walk ends with `PG_ARRAY_END` only when it has consumed the column exactly,
+  so a count the header gives and bytes left over, or a short column, both
+  fail. Its only allocation is its constructor's, and no element is read past
+  the column's window.
 - **The output buffer's doubling is bounded by `maxOutput`.** Every message
   first makes room by moving the unsent bytes to the front (PG-13), so the
   buffer grows past its length only when the unsent bytes need it, and never
@@ -378,6 +386,18 @@ are kept free under `maxOutput` from `bindStartBinary` on.
 PostgreSQL 18 in binary and in text and gets the same line for each, and its
 `stamps_binary` batch (a `PgBatchConfig` with `binary` set) reads the same
 creation times as its `stamps_text` batch.
+
+**Binary arrays**: `link/std_postgres` walks hand-built arrays. "ndim 0: the
+empty array", "one int4", "1000 elements", "a NULL with hasnull 1" and "int2
+elements" read in place and end with `PG_ARRAY_END`. Each refusal sets
+`binary.failed`: "ndim 2", "another element type: text", "a 3-byte int4
+element", "a 4-byte element in an int2 array", "a hasnull that is not 0 or
+1", "a NULL with hasnull 0", "a negative dimension", "more elements promised
+than given", "bytes after an empty array", "truncated inside the element",
+"truncated inside the length word", "truncated inside the header", "a window
+past the buffer" and "a window before it". The live `binary` scenario reads
+int4[] and int8[] columns, each empty, one element or 1000, in binary and in
+text, and gets the same line for each.
 
 **Terminate**: "Terminate drops an open bind", so a half-built Bind is never
 sent, and "terminate drops an open array with its bind".

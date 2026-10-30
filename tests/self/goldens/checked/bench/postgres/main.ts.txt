@@ -542,6 +542,11 @@ const PG_NONCE_BYTES: i32 = 18
 const PG_TAIL: i32 = 17
 const PG_BINARY_TAIL: i32 = 2
 const PG_FORMAT_BINARY: i32 = 1
+const PG_OID_INT8: i32 = 20
+const PG_OID_INT2: i32 = 21
+const PG_OID_INT4: i32 = 23
+const PG_ARRAY_HEADER: i32 = 12
+const PG_ARRAY_DIM: i32 = 8
 const PG_MAX_CAP: i32 = 1073741823
 const PG_MAX_ITERATIONS: i32 = 214748363
 const PG_EPOCH_DAYS: i64 = 730425
@@ -614,6 +619,24 @@ struct PgBinary (class) size=1 align=1 exported
   method float -> @nish.PgBinary.float
   method timestamp -> @nish.PgBinary.timestamp
   method iso -> @nish.PgBinary.iso
+struct PgBinaryArray (class) size=56 align=8 exported
+  field count: i32 index=0 offset=0 initialized
+  field elementOid: i32 index=1 offset=4 initialized
+  field start: i32 index=2 offset=8 initialized
+  field length: i32 index=3 offset=12 initialized
+  field binary: PgBinary index=4 offset=16
+  field b: u8[] index=5 offset=24
+  field pos: i32 index=6 offset=32 initialized
+  field end: i32 index=7 offset=36 initialized
+  field size: i32 index=8 offset=40 initialized
+  field seen: i32 index=9 offset=44 initialized
+  field hasNull: boolean index=10 offset=48 initialized
+  field bad: boolean index=11 offset=49 initialized
+  constructor -> @nish.PgBinaryArray.constructor
+  method begin -> @nish.PgBinaryArray.begin
+  method refuse -> @nish.PgBinaryArray.refuse
+  method next -> @nish.PgBinaryArray.next
+  method int -> @nish.PgBinaryArray.int
 struct PgArrayWalker (class) size=32 align=8 exported
   field start: i32 index=0 offset=0 initialized
   field length: i32 index=1 offset=4 initialized
@@ -1134,6 +1157,55 @@ function PgBinary.iso(this: PgBinary, micros: i64, out: u8[], at: i32): i32 -> @
   callee +35:5 pgDigits -> @nish.pgDigits
   callee +37:5 pgDigits -> @nish.pgDigits
   callee +39:5 pgDigits -> @nish.pgDigits
+function PgBinaryArray.constructor(this: PgBinaryArray, binary: PgBinary): void -> @nish.PgBinaryArray.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: binary
+  pointer this: size=56 writesThrough=true captured=false
+  pointer binary: size=1 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function PgBinaryArray.begin(this: PgBinaryArray, b: u8[], start: i32, length: i32): void -> @nish.PgBinaryArray.begin [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: b start
+  calls: nish.PgBinaryArray.refuse nish.getI32BE nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false passedTo=nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0
+  pointer b: size=0 writesThrough=true captured=true passedTo=nish.getI32BE#0 nish.getI32BE#0 nish.getI32BE#0 nish.getI32BE#0
+  stackSites=0 stackLocals=0
+  callee +8:7 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local +11:11 ndim: i32 (const)
+  callee +11:23 getI32BE -> @nish.getI32BE
+  local +12:11 hasNull: i32 (const)
+  callee +12:26 getI32BE -> @nish.getI32BE
+  local +13:11 oid: i32 (const)
+  callee +13:22 getI32BE -> @nish.getI32BE
+  callee +27:7 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local +35:13 dim: i32 (const)
+  callee +35:24 getI32BE -> @nish.getI32BE
+  callee +37:9 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+function PgBinaryArray.refuse(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.refuse [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function PgBinaryArray.next(this: PgBinaryArray): i32 -> @nish.PgBinaryArray.next [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.PgBinaryArray.refuse nish.getI32BE nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false passedTo=nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0 nish.PgBinaryArray.refuse#0
+  stackSites=0 stackLocals=0
+  callee -6:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  callee -3:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  local -1:11 n: i32 (const)
+  callee -1:20 getI32BE -> @nish.getI32BE
+  callee +4:16 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+  callee +11:14 PgBinaryArray.refuse -> @nish.PgBinaryArray.refuse
+function PgBinaryArray.int(this: PgBinaryArray): i64 -> @nish.PgBinaryArray.int [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.PgBinary.int
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +3:12 PgBinary.int -> @nish.PgBinary.int
 function PgArrayWalker.constructor(this: PgArrayWalker): void -> @nish.PgArrayWalker.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=32 writesThrough=true captured=false
