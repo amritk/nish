@@ -1,5 +1,5 @@
 // WP38: a vectorised Adler-32, measured against std/compress/checksum.ts's
-// adler32Update (docs/wp38-simd.md §3.2). Two kernels, picked at run time:
+// adler32Update (docs/wp38-simd.md §3.1). Two kernels, picked at run time:
 // SSSE3 on x86-64 (`pmaddubsw` for the weighted sum, `psadbw` for the plain
 // one) behind a target("ssse3") attribute and __builtin_cpu_supports, and
 // NEON on AArch64, where it is baseline. Elsewhere, or on a toolchain without

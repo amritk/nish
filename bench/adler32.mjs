@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // WP38: a vectorised Adler-32 against the Nish `adler32Update` at 64 KiB and
-// 1 MiB, and the verdict against the 20% bar (docs/wp38-simd.md §3.2). It
+// 1 MiB, and the verdict against the 20% bar (docs/wp38-simd.md §3.1). It
 // builds bench/adler32.ts and bench/adler32/kernel.c, holds the kernel to the
 // scalar reference, runs every column in interleaved rounds and prints each
 // workload's time in ns/op and throughput in MB/s, then the gain per size.
@@ -20,7 +20,7 @@
 // The gain at a size is the nish median over the kernel median, less one; the
 // band is the larger of the copy's distance from nish at the minimum and at
 // the median. A kernel passes when its gain is 20% or more and above the band
-// at both sizes. MB/s is 10^6 bytes a second.
+// at both sizes; the last line says whether it did. MB/s is 10^6 bytes a second.
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -238,4 +238,6 @@ for (const name of shape.keys()) {
     `${name}: ${columns[2].label} gains ${pct(gain)} over nish (band ${pct(band)}): ${ok ? "passes" : "misses"} the ${pct(BAR)} bar`
   )
 }
-console.log(`verdict on ${process.arch}: the ${kernelPath} kernel ${passes ? "ships" : "does not ship"}`)
+console.log(
+  `verdict on ${process.arch}: the ${kernelPath} kernel ${passes ? "clears" : "misses"} the bar at every size`
+)

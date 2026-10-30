@@ -1,5 +1,5 @@
 // Adler-32 at 64 KiB and 1 MiB on the Nish `adler32Update`: the side of WP38's
-// vector Adler-32 measure that ships today (docs/wp38-simd.md §3.2).
+// vector Adler-32 measure that ships today (docs/wp38-simd.md §3.1).
 // bench/adler32.mjs builds and drives it, beside bench/adler32/kernel.c.
 //
 //   adler32 [scale]
