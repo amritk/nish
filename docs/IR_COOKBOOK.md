@@ -24134,6 +24134,151 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 
 ## Optimisation flags
 
+### `nish:simd`: a vector is an LLVM vector
+
+A `nish:simd` vector is `<N x T>` and nothing else: the constructor is one
+`insertelement` per lane into `undef`, `splat…` is one `insertelement` and a
+`shufflevector` with a `zeroinitializer` mask, and `extract` and `replace` are
+`extractelement` and `insertelement` at the constant lane the checker held in
+range, so none of them can fail. No call names a target: `llc` picks the
+instructions for SSE, NEON or wasm's `v128`, and scalarizes where there are
+none (`docs/LANGUAGE.md` -> `nish:simd`).
+
+<!-- cookbook:begin simd-make -->
+```ts
+import { i32x4, splatF32x4, extract, replace } from "nish:simd"
+
+export const lanes = (a: i32, b: i32): i32 => {
+  const v = replace(i32x4(a, b, 3, 4), 2, a)
+  return extract(v, 2)
+}
+
+export const broadcast = (x: f32): f32 => extract(splatF32x4(x), 3)
+```
+
+```llvm
+define noundef i32 @lanes(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %v.addr = alloca <4 x i32>, align 8
+  %0 = insertelement <4 x i32> undef, i32 %a, i32 0
+  %1 = insertelement <4 x i32> %0, i32 %b, i32 1
+  %2 = insertelement <4 x i32> %1, i32 3, i32 2
+  %3 = insertelement <4 x i32> %2, i32 4, i32 3
+  %4 = insertelement <4 x i32> %3, i32 %a, i32 2
+  store <4 x i32> %4, <4 x i32>* %v.addr, align 8
+  %5 = load <4 x i32>, <4 x i32>* %v.addr, align 8
+  %6 = extractelement <4 x i32> %5, i32 2
+  ret i32 %6
+}
+
+define noundef float @broadcast(float noundef %x) #0 {
+entry:
+  %0 = insertelement <4 x float> undef, float %x, i32 0
+  %1 = shufflevector <4 x float> %0, <4 x float> undef, <4 x i32> zeroinitializer
+  %2 = extractelement <4 x float> %1, i32 3
+  ret float %2
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end simd-make -->
+
+A load or a store is the array's one bounds check for the whole vector —
+`i < len` and `i + N <= len`, so one `nish_panic_index(i, len)` names the
+first index — then the element's address, bitcast to `<N x T>*`, and one
+vector `load` or `store` aligned to the lane, since the array's data is
+aligned to its element and not to sixteen.
+
+<!-- cookbook:begin simd-load-store -->
+```ts
+import { loadU8x16, store } from "nish:simd"
+
+export const copy16 = (src: u8[], dst: u8[], at: i32): void => {
+  store(loadU8x16(src, at), dst, at)
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish_panic_index(i64 noundef, i64 noundef) #1
+
+define void @copy16(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %src, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at) #0 {
+entry:
+  %0 = sext i32 %at to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = add i64 %0, 16
+  %4 = icmp ult i64 %0, %2
+  %5 = icmp ule i64 %3, %2
+  %6 = and i1 %4, %5
+  br i1 %6, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i8*
+  %10 = getelementptr inbounds i8, i8* %9, i64 %0
+  %11 = bitcast i8* %10 to <16 x i8>*
+  %12 = load <16 x i8>, <16 x i8>* %11, align 1
+  %13 = sext i32 %at to i64
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %16 = add i64 %13, 16
+  %17 = icmp ult i64 %13, %15
+  %18 = icmp ule i64 %16, %15
+  %19 = and i1 %17, %18
+  br i1 %19, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 %13, i64 %15)
+  unreachable
+
+bounds.ok.1:
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %22 = bitcast i8* %21 to i8*
+  %23 = getelementptr inbounds i8, i8* %22, i64 %13
+  %24 = bitcast i8* %23 to <16 x i8>*
+  store <16 x i8> %12, <16 x i8>* %24, align 1
+  ret void
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!12, !13, !14, !15, !16}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{i32 8, !"cf-protection-branch", i32 1}
+!13 = !{i32 8, !"cf-protection-return", i32 1}
+!14 = !{i32 8, !"branch-target-enforcement", i32 1}
+!15 = !{i32 8, !"sign-return-address", i32 1}
+!16 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end simd-load-store -->
+
 ### Integer overflow: checked by default, `nsw` where proven
 
 Every user-level **signed** integer `add`, `sub`, and `mul` (binary operators,

@@ -65,7 +65,18 @@ import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructI
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa } from "./tbaa"
-import { accessAlign, ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32, TypeTable } from "./types"
+import {
+  accessAlign,
+  ARRAY_STRUCT,
+  intBits,
+  isFloat,
+  isUnsigned,
+  T_F64,
+  T_I32,
+  T_STRING,
+  T_U32,
+  TypeTable,
+} from "./types"
 
 const HEADER: string = ARRAY_STRUCT
 const HEADER_PTR: string = "%struct.nish_array*"

@@ -357,7 +357,10 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   if (ctx.table.isArray(receiver)) {
     // `indexOf` compares each element with `===`, which a vector does not have.
     if (access.text === "indexOf" && ctx.table.isVector(ctx.table.refOf(receiver))) {
-      ctx.errorAtProperty(access, simdCompareMessage("indexOf", ctx.table.typeName(ctx.table.refOf(receiver))))
+      ctx.errorAtProperty(
+        access,
+        simdCompareMessage("indexOf", ctx.table.typeName(ctx.table.refOf(receiver)))
+      )
       return T_ERROR
     }
     return checkArrayMethod(ctx, expr, access, args, receiver, scope)

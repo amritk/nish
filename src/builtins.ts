@@ -238,7 +238,13 @@ export const requireStatementPosition = (ctx: CheckContext, call: Node, name: st
   }
 }
 
-export const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void => {
+export const checkArgumentType = (
+  ctx: CheckContext,
+  arg: Node,
+  scope: Scope,
+  name: string,
+  want: i32
+): void => {
   const got = checkExpression(ctx, arg, scope, want)
   if (got !== T_ERROR && got !== want) {
     // "an argument of type" rather than the bare type, so the message has a

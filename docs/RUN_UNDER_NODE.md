@@ -128,6 +128,11 @@ clocks. The command lines above stay as they are.
   — as globals and as the `nish:unsafe` import, which the prelude resolves to
   them: a plain read and write, and `| 0`, `Math.imul` or `BigInt.asIntN(64, …)`
   for the wrap
+- `nish:simd` — resolved to `runtime/core.mjs`, where a vector is a fresh
+  typed array of its lanes (`Uint8Array`, `Int32Array`, `Float32Array`, …), so
+  a lane wraps or rounds as its type does; `replace` copies, and a load or a
+  store checks the whole vector and panics with the native words
+  ([`nish:simd`](LANGUAGE.md#nishsimd-sixteen-byte-vectors))
 - `nish:secret` — resolved to `runtime/shim.mjs`, where a `Secret` is a plain
   wrapper and `wipe` zero-fills what it holds; the checker's rules about a
   `Secret` are not enforced under Node, and a zero-fill there promises nothing
