@@ -941,6 +941,21 @@ program's IR is unchanged.
 **What it does not buy.** Numeric code, and any scan whose step is not "find
 the next byte from this set".
 
+**CRC-32 on the same seam.** `nish/compress/checksum`'s `Crc32.update` hands
+its checked window to one private walker, `crc32Walk`, and the compiler
+branches in front of that call on `nish_crc32_hw` (`isCrc32Seam` in
+`src/kernels.ts`, `emitCrc32KernelArm` in `src/emit.ts`), so the
+slicing-by-8 tables stay the fallback and the answer at the edges stays the
+`std` file's. The kernels are `runtime/runtime-checksum.c`, a unit of its own
+with its own ceiling: PCLMULQDQ folding then a Barrett reduction on x86-64
+(never SSE4.2's `crc32`, which is CRC-32C), and the ARMv8 CRC32 instructions on
+AArch64, found through `AT_HWCAP` or `sysctl`. Each is compiled with
+`target(...)` alone. The path is chosen once per process; `NISH_CRC32=soft`
+pins the tables. `tests/simd/crc32.c` holds every path to a bit-at-a-time
+reference, and `bench/crc32.mjs` measures 64 B to 1 MiB and a gzip round trip
+on each path ([bench/README.md](../bench/README.md)). The security record is
+[compress.md](security/compress.md) (COMP-13).
+
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 
 **What.** A builtin module with these types: `u8x16`, `i16x8`, `i32x4`,

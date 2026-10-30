@@ -87,14 +87,15 @@ const cpuinfo = (() => {
 })()
 const flags = new Set((cpuinfo.match(/^(?:flags|Features)\s*:\s*(.+)$/m)?.[1] ?? "").split(/\s+/))
 /** The kernel runtime/runtime-checksum.c picks on this machine, or `tables`. */
-const machinePath =
-  process.arch === "x64" && flags.has("pclmulqdq") && flags.has("sse4_1")
-    ? "pclmul"
-    : process.arch === "arm64" && flags.has("crc32")
-      ? flags.has("pmull")
-        ? "pmull"
-        : "crc32"
-      : "tables"
+const machinePath = (() => {
+  if (process.arch === "x64" && flags.has("pclmulqdq") && flags.has("sse4_1")) {
+    return "pclmul"
+  }
+  if (process.arch === "arm64" && flags.has("crc32")) {
+    return flags.has("pmull") ? "pmull" : "crc32"
+  }
+  return "tables"
+})()
 
 /** The columns, each `{ label, bin, env, path }`, the default first. */
 const unset = { ...process.env }

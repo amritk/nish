@@ -24,7 +24,10 @@ and allocates nothing. Two findings were fixed after the record was first
 written, each with a test that failed before the fix: `respondEncoded` could
 queue stale bytes for the wire after `H1_AGAIN` (COMP-11), and `GzipWriter`
 could panic on incompressible input written into exactly `bound(len)`
-(COMP-12). Two properties are accepted: compressing a response that mixes a
+(COMP-12). The CRC-32 kernels read only the window `Crc32.update` checked
+and answer what the tables answer; a review of their first version found the
+AArch64 path reading four bytes past it, fixed before it shipped (COMP-13).
+Two properties are accepted: compressing a response that mixes a
 secret with attacker-chosen bytes leaks the secret through the length
 (COMP-9, the BREACH class), and a stream of many small dynamic blocks makes
 the decoder rebuild its tables for each (COMP-8).
@@ -37,6 +40,8 @@ the decoder rebuild its tables for each (COMP-8).
 | `std/compress/gzip.ts` | `GzipDecompressor`, `GzipReader`, `gzipReadHeader`; `GzipCompressor`, `GzipWriter` |
 | `std/compress/zlib.ts` | `ZlibDecompressor`, `ZlibCompressor` |
 | `std/compress/checksum.ts` | `Crc32`, `crc32`, `adler32`, `adler32Update` |
+| `runtime/runtime-checksum.c` | `nish_crc32_hw`, `nish_crc32_update`, `nish_crc32_path`, `nish_crc32_cpu`, `nish_crc32_sysctl`, `nish_crc32_clmul`, `nish_crc32_fold`, `nish_crc32_bytes`, `nish_crc32_arm`, `nish_crc32_insn`, `nish_crc32_pmull`: the CRC-32 kernels `Crc32.update` runs where the CPU has them |
+| `src/kernels.ts`, `src/emit.ts` | `isCrc32Seam`, `emitCrc32KernelArm`: the call that hands `crc32Walk`'s window to the kernel |
 | `std/net/http-compress.ts` | `httpAcceptEncoding`, `httpQValue`, `httpCodingIs`, `HttpCompressor` |
 | `std/net/http1-server.ts` | `Http1Connection.acceptEncoding`, `Http1Connection.respondEncoded` (the rest of the file is `http1.md`'s) |
 
@@ -58,9 +63,9 @@ a negative `limit` or a level outside 0 to 9 panics, as caller misuse.
 
 COMP-1 to COMP-7 and COMP-10 are the shapes an attacker's input can take,
 each checked and found to hold; they are recorded so that an audit can see
-what was tried. COMP-8 and COMP-9 are accepted. COMP-11 and COMP-12 were found
-by a review of the first version and fixed; they are the two counted as fixed
-in the index, and none is open.
+what was tried. COMP-8 and COMP-9 are accepted. COMP-11, COMP-12 and COMP-13 were
+found by a review of the first version and fixed; they are the three counted
+as fixed in the index, and none is open.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -75,6 +80,7 @@ in the index, and none is open.
 | COMP-9 | Medium | `HttpCompressor.compress`, `Http1Connection.respondEncoded` | Compressing a response that holds a secret beside bytes an attacker chooses lets the attacker learn the secret from the compressed length (CRIME, BREACH). | **Accepted, by design.** Compression is opt-in per response: the program decides what to compress, and the guide says not to compress a response that reflects attacker input next to a secret (a CSRF token, a session id). The compressor's running time depends on the data too; it is not for secrets. |
 | COMP-11 | Medium | `Http1Connection.respondEncoded` | A response that does not fit behind a half-sent one must leave the output as it was. `respondEncoded` saved `outputEnd`, then called `respond`, whose `room()` moves what is still unsent to the front of the buffer; on `H1_AGAIN` it put the saved end back over the moved bytes, so the connection queued for the wire bytes it had already sent and part of the head it withdrew. On a connection a proxy shares between clients, that desynchronises the responses. | **Fixed.** `respondEncoded` makes the room before it saves anything, so the end it puts back is one nothing moved. Before the fix, `h1 half sent: only the unsent rest is queued` failed (1,633 bytes queued where 633 were unsent); after it, it and `h1 half sent: and it is those bytes` pass. |
 | COMP-12 | Medium | `GzipWriter.bound`, `write`, `flush`, `finish` | A program that sizes each call's output by `bound(len)`, as the guide shows, must never be refused or panic. `bound` assumed at most 64 KB pending, but the writer compressed its first window only once 96 KB were pending, and one call over many 64 KB windows needs each window's framing; incompressible input written 1,000 bytes at a time panicked on about the 98th write (`GzipWriter.write: a block larger than its bound`), and `flush` and `finish` went on with the failed drain's -1. A server streaming an attacker's body through a `GzipWriter` could be stopped. | **Fixed.** The writer compresses whenever 64 KB are pending, the first window too; `bound` adds the framing of every compression one call makes; `flush` and `finish` check the drain. Before the fix, `writer: noise at level 0 into exactly bound` (and 1, 6, 9) panicked; after it, they and `writer: noise at level 6 comes back` pass. |
+| COMP-13 | Medium | `runtime/runtime-checksum.c` `nish_crc32_insn` | The kernels take `Crc32.update`'s window after `checksumWindow` has checked it, and must read no byte outside it: a read past the end of an array's storage can fault, or fold a neighbouring allocation's bytes into nothing the caller sees but the timing. The x86-64 path loads 16 bytes only while 16 remain and its tail is byte at a time; the PMULL path loads only while 64 or 16 remain. The AArch64 CRC32 path folded a 4-byte tail with a masked 8-byte load, reading up to four bytes past the window. The answer was right, so every agreement test passed. Nothing a CRC-32 covers is secret, so the kernels are not wiped or held to constant time. | **Fixed.** The tail loads exactly four bytes. `simd: crc32 native ${arch}` now runs every path on every length 0..256 ending against a no-access page; an over-read by one byte in the x86-64 tail made it fail (`the agreement driver`), and it passes on the fixed file. The AArch64 path before the fix was found by review and not run on ARM64 hardware; CI's `simd-arm64` job runs the test there on every push. |
 | COMP-10 | Medium if it failed | `httpAcceptEncoding`, `Http1Connection.acceptEncoding` | A field value must not pick a coding the client refused, nor panic or allocate on any bytes. | **Holds.** `gzip;q=0`, `*;q=0` and `identity;q=0` are honoured; a malformed q-value or parameter skips its element only; the answer for a client that takes nothing offered and refuses identity is `HTTP_CODING_NONE`. One pass over the window, no allocation. A missing field answers identity. |
 
 ## Properties verified
@@ -115,6 +121,15 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
 - **COMP-12** (`std_compress`): `writer: noise at level ${level} into exactly
   bound` and `writer: noise at level ${level} comes back`, at levels 0, 1, 6
   and 9.
+- **COMP-13** (`tests/simd/crc32.c`, through `tests/run.js`): `simd: crc32
+  native ${arch}: N cases agree across <paths>`, which holds every kernel to a
+  bit-at-a-time reference on the check value, the empty input, lengths
+  0..4,096 at offsets 0..15, 1 to 16 MiB, streamed pieces, and lengths 0..256
+  ending at a guard page; `crc32 kernel: ${program} prints the same bytes with
+  NISH_CRC32 unset and with NISH_CRC32=soft, and they are its expected.out`
+  for `std_compress_crc_paths` and `std_compress_crc_diff`; `crc32 kernel:
+  ${program} under NISH_CRC32=soft calls no kernel`; and `simd: --profile wasi
+  links runtime-checksum.c, and nish_crc32_hw answers 0 there`.
 - Interoperability: `link/std_compress_node: each of the ${judged.lines} streams Nish compresses (every level, raw, gzip, zlib and GzipWriter) inflates under Node's zlib to its input`.
 
 Not fuzzed with libFuzzer yet: the corruption and prefix loops above are the

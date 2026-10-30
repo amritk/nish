@@ -232,6 +232,19 @@ build once, and `crc32` for a one-off) and Adler-32 (`adler32`,
 pieces: start CRC-32 from 0 and Adler-32 from 1. Neither is a cryptographic
 hash; use [`nish/crypto`](standard-library.md#nishcrypto) for that.
 
+A native build on a CPU with the instructions for it computes CRC-32 there:
+PCLMULQDQ on x86-64, the ARMv8 CRC32 instructions on AArch64. The binary
+still runs on any CPU of its target, because the choice is made when the
+program first checksums, not when it is compiled. The answer is the same
+either way, gzip's trailers included. Set `NISH_CRC32=soft` to make a process
+use the lookup tables instead, to compare timings or rule the kernel out:
+
+```bash
+NISH_CRC32=soft ./my-program
+```
+
+Under Node, in wasm and on 32-bit targets the tables always run.
+
 These modules read and write arrays through `nish:unsafe`'s unchecked access
 in their inner loops (each site is justified in the record), so a program
 built with `--deny unsafe` cannot import them.
