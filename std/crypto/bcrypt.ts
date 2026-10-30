@@ -1561,7 +1561,7 @@ const bcryptMagicAt = (st: u32[], at: i32, lr: u32[], dst: u8[], to: i32, l: u32
  * caller made and wipes. The block and digest copies are wiped here.
  */
 const bcryptEksN = (st: u32[], salts: u32[], cost: i32, width: i32, digests: u8[]): void => {
-  if (st.length < 6366 || salts.length < 24 || width < 1 || width > BCRYPT_BATCH_LANES) {
+  if (st.length < 6366 || salts.length < 24 || width < 2 || width > BCRYPT_BATCH_LANES) {
     return
   }
   const lr: u32[] = new Array<u32>(2)
@@ -1994,11 +1994,12 @@ const bcryptVerifyGroup = (
   const prefixes: u8[][] = []
   // Copies, so no callee is handed the caller's `hashes` (the thread rule).
   const given: string[] = []
-  const slots: i32[] = bcryptSlotsOf(group)
+  // The lanes loaded, in slot order: slot s holds lane slots[s].
+  const slots: i32[] = []
   let cost: i32 = 0
-  for (let s: i32 = 0; s < toI32(slots.length) && s < toI32(safety.length); s++) {
-    const k: i32 = slots[s]
-    if (k >= 0 && k < toI32(lanes.length) && k < toI32(hashes.length)) {
+  for (const k of bcryptSlotsOf(group)) {
+    const s: i32 = toI32(slots.length)
+    if (s < toI32(safety.length) && k >= 0 && k < toI32(lanes.length) && k < toI32(hashes.length)) {
       const lane: BcryptParsed = lanes[k]
       const hash: string = hashes[k]
       const setting: BcryptSetting = lane.setting
@@ -2009,6 +2010,7 @@ const bcryptVerifyGroup = (
       }
       given.push(hash)
       prefixes.push(lane.prefix)
+      slots.push(k)
     }
   }
   const batch: BcryptBatch = {
@@ -2031,13 +2033,16 @@ const bcryptVerifyGroup = (
   }
 }
 
+/** The time a width that never hashed is given: an hour, in nanoseconds. */
+const BCRYPT_CALIBRATE_NEVER: i64 = 3600000000000
+
 /** Throwaway passwords hashed when calibrating: one byte each, not secret, wiped all the same. */
 const bcryptCalibrateKey = (k: i32): Secret<u8[]> => secret([toU8(0x41 + k)])
 
 /** Nanoseconds of one cost-4 `bcryptHashN` of `width` throwaway passwords, the least of a few runs. */
 const bcryptCalibrateTime = (width: i32): i64 => {
   const salts: u8[] = new Array<u8>(96)
-  let best: i64 = 0
+  let best: i64 = -1
   for (let run: i32 = 0; run < 3; run++) {
     const p0: Secret<u8[]> = bcryptCalibrateKey(0)
     const p1: Secret<u8[]> | null = width > 1 ? bcryptCalibrateKey(1) : null
@@ -2048,7 +2053,7 @@ const bcryptCalibrateTime = (width: i32): i64 => {
     const start: i64 = monotonicNanos()
     const made: Result<string[], string> = bcryptHashN(p0, p1, p2, p3, p4, p5, salts, BCRYPT_MIN_COST)
     const took: i64 = monotonicNanos() - start
-    if (made.isOk() && (run === 0 || took < best)) {
+    if (made.isOk() && (best < 0 || took < best)) {
       best = took
     }
     wipe(p0)
@@ -2068,7 +2073,8 @@ const bcryptCalibrateTime = (width: i32): i64 => {
       wipe(p5)
     }
   }
-  return best
+  // No run hashed: an hour, so this width never wins and the products stay in range.
+  return best < 0 ? BCRYPT_CALIBRATE_NEVER : best
 }
 
 /**

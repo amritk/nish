@@ -172,8 +172,9 @@ when no task can still read them.
 The scope still joins on the thread that opened it, and runs one of the tasks
 there, so that thread is busy for about one hash, not three. On a server, open
 the scope on a thread other than the one running the event loop, or accept
-that pause of one hash for each burst. The module does no I/O and calls no C, so
-it builds for WebAssembly too, where the tasks run one after another.
+that pause of one hash for each burst. The module calls no C and does no I/O
+but read the monotonic clock in `bcryptCalibrate`, so it builds for WebAssembly
+too, where the tasks run one after another.
 
 ## Several at once on one thread
 
