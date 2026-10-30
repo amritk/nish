@@ -501,13 +501,10 @@ export class JsonDocument {
       } else if (k === JSON_TOK_OBJECT_END || k === JSON_TOK_ARRAY_END) {
         depth -= 1
         const c: i32 = jsonValueGet(this.openValue, depth)
-        const base: i32 = jsonValueGet(this.openBase, depth)
-        const end: i32 = this.pendingTop
-        const code: i32 = this.close(c, base)
+        const code: i32 = this.closeRanged(c, jsonValueGet(this.openBase, depth))
         if (code < 0) {
           return this.parseFailed(code, this.errorAt)
         }
-        this.closeRanges(jsonValueGet(this.first, c), base, end)
         // The container's own key, read before its members' keys overwrote the three locals.
         keyAt = jsonValueGet(this.openKeyAt, depth)
         keyLength = jsonValueGet(this.openKeyLength, depth)
@@ -615,20 +612,39 @@ export class JsonDocument {
     return 0
   }
 
-  /**
-   * Internal: After `close` placed the members pending in `[base, end)` from slot `s`,
-   * records their keys' ranges in the same order. The pending entries are
-   * still there, as `close` only lowered `pendingTop`.
-   */
-  closeRanges(s: i32, base: i32, end: i32): void {
-    let at: i32 = s
-    for (let p: i32 = base; p < end; p += 1) {
-      if (jsonValueGet(this.pendingValue, p) >= 0) {
-        jsonValuePut(this.slotKeyStart, at, jsonValueGet(this.pendingSource, p))
-        jsonValuePut(this.slotKeyEnd, at, jsonValueGet(this.pendingKeyEnd, p))
-        at += 1
+  /** Internal: `close` for `parseRanged`, which also gives each member its key's range. */
+  closeRanged(c: i32, base: i32): i32 {
+    let n: i32 = this.pendingTop - base
+    const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
+    if (object && n > 1) {
+      const code: i32 = this.duplicateKeys(base, n)
+      if (code < 0) {
+        return code
       }
     }
+    const start: i32 = this.slotTop
+    let kept: i32 = 0
+    for (let p: i32 = base; p < base + n; p += 1) {
+      const v: i32 = jsonValueGet(this.pendingValue, p)
+      if (v < 0) {
+        continue
+      }
+      const s: i32 = start + kept
+      jsonValuePut(this.slotValue, s, v)
+      jsonValuePut(this.slotKeyAt, s, jsonValueGet(this.pendingKeyAt, p))
+      jsonValuePut(this.slotKeyLength, s, jsonValueGet(this.pendingKeyLength, p))
+      jsonValuePut(this.slotKeyStart, s, jsonValueGet(this.pendingSource, p))
+      jsonValuePut(this.slotKeyEnd, s, jsonValueGet(this.pendingKeyEnd, p))
+      jsonValuePut(this.parent, v, c)
+      kept += 1
+    }
+    n = kept
+    this.slotTop = start + n
+    jsonValuePut(this.first, c, start)
+    jsonValuePut(this.count, c, n)
+    jsonValuePut(this.room, c, n)
+    this.pendingTop = base
+    return 0
   }
 
   /**
