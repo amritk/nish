@@ -8943,7 +8943,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eleven objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the twelve objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -8952,7 +8952,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the eleven runtime units once",
+      "runtime cache: the miss compiled each of the twelve runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -23300,9 +23300,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eleven runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all twelve runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 11 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 12 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
