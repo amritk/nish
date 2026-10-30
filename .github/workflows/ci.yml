@@ -971,10 +971,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The runner walks the corpus one program at a time, about forty minutes
-    # of one core in all; `--shard` deals the programs two ways, and
-    # scripts/nish-runner-parallel.mjs runs one runner per core on each half,
-    # each in a working directory of its own. Four jobs of one runner each
-    # took 8 to 13 minutes (run 40820090678) with three cores of four idle.
+    # of one core in all; `--shard` deals the programs two ways, and the
+    # runner's own `--jobs` (one process per core by default) runs each half
+    # as several of itself. Four jobs of one runner each took 8 to 13 minutes
+    # (run 40820090678) with three cores of four idle.
     # The `/2` below is this list's length, and tests/run.js checks that the
     # two agree.
     strategy:
@@ -1024,15 +1024,15 @@ jobs:
       # and a runner that answered 1 would still be a green step.
       # The runner is built by the compiler under test and handed it with
       # `--compiler`; with no filter it walks its shard of the whole corpus.
-      # The wrapper's last line sums the runners' summaries in the runner's
-      # own words, and it answers 1 when any runner did.
+      # With `--jobs` (a core each by default) the last line sums the
+      # processes' summaries in the same words, and it answers 1 when any did.
       - name: The corpus, through the Nish runner
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          node scripts/nish-runner-parallel.mjs --runner build/nish-runner --compiler build/nish --shard "$SHARD/2" | tee "$RUNNER_TEMP/nish-runner.log"
+          build/nish-runner --compiler build/nish --shard "$SHARD/2" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()

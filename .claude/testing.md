@@ -320,8 +320,8 @@ answers 1 when any check failed, and names its slowest cases from
 npm run test:nish                 # the whole corpus, about five minutes
 build/nish-runner pop             # only cases whose name contains "pop"
 build/nish-runner --shard 2/4     # the second of four round-robin slices
-node scripts/nish-runner-parallel.mjs --runner build/nish-runner --compiler build/nish --shard 2/2
-                                  # as CI runs it: half the corpus, one runner per core
+build/nish-runner --shard 2/2 --jobs 4
+                                  # half the corpus as four processes (default: one per core, at most 8)
 ```
 
 `npm test` builds it and runs it over the `pop` cases — one golden, one native
