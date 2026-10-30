@@ -70,7 +70,8 @@
           },
           "/generics": { "type": "page", "title": "Generics", "filepath": "docs/guide/language/generics.md" },
           "/modules": { "type": "page", "title": "Modules", "filepath": "docs/guide/language/modules.md" },
-          "/memory": { "type": "page", "title": "Memory", "filepath": "docs/guide/language/memory.md" }
+          "/memory": { "type": "page", "title": "Memory", "filepath": "docs/guide/language/memory.md" },
+          "/simd": { "type": "page", "title": "Vectors (SIMD)", "filepath": "docs/guide/language/simd.md" }
         }
       },
       "/using-nish": {

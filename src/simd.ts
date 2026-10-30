@@ -84,7 +84,10 @@ const checkVectorArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: s
     return T_ERROR
   }
   if (!ctx.table.isVector(type)) {
-    ctx.error(arg, `\`${name}\` takes a \`${SIMD_SPECIFIER}\` vector, got ${ctx.table.typeName(type)}`)
+    ctx.error(
+      arg,
+      `\`${name}\` takes a \`${SIMD_SPECIFIER}\` vector as its first argument, got ${ctx.table.typeName(type)}`
+    )
     return T_ERROR
   }
   return type
@@ -143,7 +146,7 @@ const checkLaneIndex = (ctx: CheckContext, arg: Node, scope: Scope, name: string
   if (index < 0 || index >= toI64(count)) {
     ctx.error(
       arg,
-      `\`${name}\` lane index ${literal.text} is out of range: ${ctx.table.typeName(vector)} has lanes 0 to ${count - 1}`
+      `\`${name}\` lane index ${literal.text} is out of range for ${ctx.table.typeName(vector)}, whose lanes are 0 to ${count - 1}`
     )
   }
 }
