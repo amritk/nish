@@ -1,12 +1,13 @@
 /**
- * The constant-time check of the runtime's AES kernels (WP38 S5): does each
- * function of runtime/runtime-aes.c stay constant time after `clang -O2`?
+ * The constant-time check of the runtime's kernels (WP38 S5): does each
+ * function of runtime/runtime-aes.c and runtime/runtime-sha256.c stay constant
+ * time after `clang -O2`?
  *
  * tests/ct-asm.js reads straight-line Nish functions and refuses every
  * conditional branch. A kernel that encrypts `length` bytes has to loop, so
  * this reads `clang -O2 -S` of the C file for x86-64 and aarch64 and refuses,
- * in every kernel function (`RUNTIME_KERNELS`; the resolver `nish_aes_hw` is
- * the one exception, docs/security/ct-verification.md):
+ * in every kernel function (`RUNTIME_UNITS`; each unit's resolver, `nish_aes_hw`
+ * and `nish_sha256_hw`, is the one exception, docs/security/ct-verification.md):
  *
  *   - **a conditional branch on a secret**: one whose flags, or whose register
  *     for `cbz` / `tbz`, a key, data, H or the GHASH state reaches. What is
@@ -49,8 +50,8 @@
  * time on every processor that has them, by Intel's and Arm's statements), and
  * anything below the instruction set.
  *
- *   node tests/ct-asm-runtime.js   checks runtime/runtime-aes.c and the leaky
- *                                  variants in tests/simd/aes-leaky.c, prints
+ *   node tests/ct-asm-runtime.js   checks runtime/runtime-aes.c, runtime-sha256.c
+ *                                  and the leaky variants in tests/simd/aes-leaky.c, prints
  *                                  one line per check, and exits 1 on a failure
  */
 
@@ -59,14 +60,27 @@ import path from "node:path"
 import { CT_TARGETS, functionBody, parseInstruction, Taint } from "./ct-asm.js"
 
 /**
- * The kernels and what is secret in each, by argument position: the elements
- * of every array (`contents`) and, for GHASH, H's two words.
+ * The runtime's kernel units, each with its resolver and its kernels, and what
+ * is secret in each kernel by argument position beside the elements of every
+ * array (`contents`): for GHASH, H's two words. SHA-256's chaining state, schedule
+ * and message are arrays, and its offset `at` is public.
  */
-const RUNTIME_KERNELS = [
-  { name: "nish_aes_schedule", secretArgs: [] },
-  { name: "nish_aes_block", secretArgs: [] },
-  { name: "nish_aes_ctr", secretArgs: [] },
-  { name: "nish_aes_ghash", secretArgs: [1, 2] },
+const RUNTIME_UNITS = [
+  {
+    file: "runtime-aes.c",
+    resolver: "nish_aes_hw",
+    kernels: [
+      { name: "nish_aes_schedule", secretArgs: [] },
+      { name: "nish_aes_block", secretArgs: [] },
+      { name: "nish_aes_ctr", secretArgs: [] },
+      { name: "nish_aes_ghash", secretArgs: [1, 2] },
+    ],
+  },
+  {
+    file: "runtime-sha256.c",
+    resolver: "nish_sha256_hw",
+    kernels: [{ name: "nish_sha256_compress", secretArgs: [] }],
+  },
 ]
 
 /**
@@ -238,15 +252,15 @@ const runtimeAsm = (root, file, target) => {
 
 /**
  * How a listing's exported functions (its `.globl` symbols) differ from the
- * kernels this file reads and the resolver: `unread`, exported and never read,
- * and `missing`, read and not exported. Both empty means a fifth kernel cannot
- * be added without this file reading it.
+ * kernels this file reads in `unit` and its resolver: `unread`, exported and
+ * never read, and `missing`, read and not exported. Both empty means another
+ * kernel cannot be added without this file reading it.
  */
-const exportGap = (lines) => {
+const exportGap = (lines, unit) => {
   const exported = lines
     .map((line) => line.match(/^\s*\.globl\s+(\w+)/)?.[1])
     .filter((name) => name !== undefined)
-  const named = [...RUNTIME_KERNELS.map((spec) => spec.name), "nish_aes_hw"]
+  const named = [...unit.kernels.map((spec) => spec.name), unit.resolver]
   return {
     unread: exported.filter((name) => !named.includes(name)),
     missing: named.filter((name) => !exported.includes(name)),
@@ -255,8 +269,8 @@ const exportGap = (lines) => {
 
 /**
  * Every reading this file makes, as `{ file, fn, target, kind, expect, ok, detail }`:
- * `kind` `exports` for the unit's exported functions being exactly the kernels
- * read here and the resolver, so a fifth kernel cannot go unread; `kernel` for
+ * `kind` `exports` for each unit's exported functions being exactly the kernels
+ * read here and its resolver (`resolver`), so another kernel cannot go unread; `kernel` for
  * each kernel on each target clean, with at least one loop branch read; and
  * `leak` for each leaky variant refused for its kind (`expect` the words for
  * it). tests/run.js names the checks, so that a record citing one finds it
@@ -283,30 +297,33 @@ export const runtimeChecks = (root, march = "") => {
     return { why: null, ...runtimeViolations(body, secretArgs, target) }
   }
   for (const target of march === "" ? CT_TARGETS : [ctAtLevel(march)]) {
-    const real = runtimeAsm(root, "runtime/runtime-aes.c", target)
-    const { unread, missing } = exportGap(real.ok ? real.lines : [])
-    results.push({
-      file: "runtime-aes.c",
-      fn: "exports",
-      target: ctTargetName(target),
-      kind: "exports",
-      expect: null,
-      ok: real.ok && unread.length === 0 && missing.length === 0,
-      detail: real.ok
-        ? `exported and unread: ${unread.join(" ") || "none"}; read and not exported: ${missing.join(" ") || "none"}`
-        : real.why,
-    })
-    for (const spec of RUNTIME_KERNELS) {
-      const { why, found, branches } = read(real, spec.name, spec.secretArgs, target)
+    for (const unit of RUNTIME_UNITS) {
+      const real = runtimeAsm(root, `runtime/${unit.file}`, target)
+      const { unread, missing } = exportGap(real.ok ? real.lines : [], unit)
       results.push({
-        file: "runtime-aes.c",
-        fn: spec.name,
+        file: unit.file,
+        fn: "exports",
         target: ctTargetName(target),
-        kind: "kernel",
+        kind: "exports",
         expect: null,
-        ok: why === null && found.length === 0 && branches > 0,
-        detail: why ?? (listed(found) || `${branches} conditional branches, all public`),
+        resolver: unit.resolver,
+        ok: real.ok && unread.length === 0 && missing.length === 0,
+        detail: real.ok
+          ? `exported and unread: ${unread.join(" ") || "none"}; read and not exported: ${missing.join(" ") || "none"}`
+          : real.why,
       })
+      for (const spec of unit.kernels) {
+        const { why, found, branches } = read(real, spec.name, spec.secretArgs, target)
+        results.push({
+          file: unit.file,
+          fn: spec.name,
+          target: ctTargetName(target),
+          kind: "kernel",
+          expect: null,
+          ok: why === null && found.length === 0 && branches > 0,
+          detail: why ?? (listed(found) || `${branches} conditional branches, all public`),
+        })
+      }
     }
     const leaky = runtimeAsm(root, path.join("tests", "simd", "aes-leaky.c"), target)
     for (const [fn, kind, what] of RUNTIME_LEAKS) {
@@ -473,22 +490,24 @@ const cornerMisses = () => {
 }
 
 /**
- * The exports comparison's own corners: the unit's five, which pass; a sixth
- * global, which must be named as unread; and one of the five gone, which must
- * be named as missing.
+ * The exports comparison's own corners, for each unit: its exports, which pass;
+ * one more global, which must be named as unread; and its first kernel gone,
+ * which must be named as missing.
  */
 const exportMisses = () => {
-  const five = [...RUNTIME_KERNELS.map((spec) => spec.name), "nish_aes_hw"].map((name) => `\t.globl\t${name}`)
   const missed = []
-  const clean = exportGap(five)
-  if (clean.unread.length > 0 || clean.missing.length > 0) {
-    missed.push("the five exports read as differing from themselves")
-  }
-  if (exportGap([...five, "\t.globl\tnish_aes_extra"]).unread.join() !== "nish_aes_extra") {
-    missed.push("a sixth exported function, nish_aes_extra, is not named as unread")
-  }
-  if (exportGap(five.slice(1)).missing.join() !== RUNTIME_KERNELS[0].name) {
-    missed.push(`${RUNTIME_KERNELS[0].name} left out of the listing is not named as missing`)
+  for (const unit of RUNTIME_UNITS) {
+    const all = [...unit.kernels.map((spec) => spec.name), unit.resolver].map((name) => `\t.globl\t${name}`)
+    const clean = exportGap(all, unit)
+    if (clean.unread.length > 0 || clean.missing.length > 0) {
+      missed.push(`${unit.file}: its exports read as differing from themselves`)
+    }
+    if (exportGap([...all, "\t.globl\tnish_extra"], unit).unread.join() !== "nish_extra") {
+      missed.push(`${unit.file}: one more exported function, nish_extra, is not named as unread`)
+    }
+    if (exportGap(all.slice(1), unit).missing.join() !== unit.kernels[0].name) {
+      missed.push(`${unit.file}: ${unit.kernels[0].name} left out of the listing is not named as missing`)
+    }
   }
   return missed
 }

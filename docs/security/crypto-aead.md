@@ -27,7 +27,7 @@ found, and which test now pins each property.
   [ct-verification.md](ct-verification.md#the-runtimes-aes-kernels).
 - Since the lowering (at `c29cd40`): the branch `src/emit.ts` puts in front of
   each of those four calls (`isAesSeam`, `src/kernels.ts:89`;
-  `emitAesKernelArm`, `src/emit.ts:1473`), and its end-to-end test
+  `emitKernelArm`, `src/emit.ts:1737` today), and its end-to-end test
   `tests/link/crypto_aes_agree`. On the kernel path GHASH reads H and its
   powers from `AesKey.roundKeys`, where the bitsliced path, `ghashLengths` and
   a non-12-byte IV's J0 read `AesKey.h` (`h[0]:h[1]`). `aesKey` and `aesKeyInto` write both

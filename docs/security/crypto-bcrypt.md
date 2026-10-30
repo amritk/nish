@@ -343,6 +343,11 @@ and under `NISH_NUM_THREADS` of 1, 2 and 8; `link/thread_bcrypt_batch` runs
 the batch's hash and verify on two tasks at the same sizes, and its hashes
 match `bcryptHash`'s (BCRYPT-9).
 
+**The half-round's shape**: ``bcrypt barrier: after opt -O3 all 16 of
+bcryptBody's half-rounds end in one XOR with the barrier's `and` (16)``
+counts the XORs that close a half-round after the value barrier's `and`
+([The half-round's critical path](#the-half-rounds-critical-path)).
+
 **wasm32**: the module has no I/O and no C; `crypto_bcrypt` and
 `crypto_bcrypt_batch` build and run under WASI with the rest of `std/crypto`
 (`node tests/run.js wasi`), each printing its `expected.out`.
@@ -351,7 +356,8 @@ match `bcryptHash`'s (BCRYPT-9).
 
 CPU milliseconds per cost-10 hash, single-threaded, on a 4-core x86-64 Xeon
 whose `/proc/cpuinfo` says 2.80 GHz and whose clock measures 3.1 to 3.25 GHz
-(machine C; the clock is measured as on machine B, below)
+(machine C; the clock measured by timing a long chain of dependent `xor`, `add`
+and `imul` instructions)
 (`node bench/crypto/bcrypt/run.mjs --rounds 9`: user time of 8 hashes, median
 and spread of 9 interleaved rounds; a row of w lanes is the time of 8 batches
 over 8w; every row prints the same hash):
@@ -388,7 +394,7 @@ blocks (each of the 1 + 2 × 1024 key expansions encrypts 521, the magic string
 192), so cycles per block = clock × time / 1,067,721. The bench prints 165 for
 the single path at cpuinfo's 2.80 GHz; at the measured 3.2 GHz it is 188, 11.8
 cycles per half-round, against the chain of 11 to 12 cycles one half-round
-waits on (below): the single path is latency-bound. Per lane, the widths take
+waits on ([below](#the-half-rounds-critical-path)): the single path is latency-bound. Per lane, the widths take
 102 (2), 84 (3), 75 (4), 65 (5) and 66 (6) cycles per block, and `crypt_r`
 178.
 
@@ -424,58 +430,93 @@ would be C in `runtime/` holding the secret state outside the checker's
 `bcryptHash4` and 21.6 for `bcryptHashN` at five lanes, outside both spreads.
 The portable Nish is faster than the C, so no C prototype was built.
 
-**Machine A**, an earlier run (`--rounds 5`, before the widths), for comparison:
+**Machine B**, the run that pinned the half-round's order (`--rounds 9`, before
+the widths; a nominal 2.1 GHz), for comparison:
 
 | Implementation | ms per hash |
 | --- | ---: |
-| Nish `bcryptHash` | 52.9 (52.3–53.1) |
-| Nish `bcryptHash4`, four lanes | 16.0 (15.8–16.4) |
-| libxcrypt `crypt_r`, `$2b$` | 48.6 (48.4–49.8) |
-| OpenBSD `bcrypt.c`, `gcc -O2` | 48.8 (48.3–50.1) |
-| OpenBSD `bcrypt.c`, `clang -O2` | 54.1 (53.5–54.3) |
-| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 50.8 (50.5–50.9) |
-| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 23.1 (22.9–23.3) |
-| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 51.6 (51.4–52.0) |
-| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 16.4 (16.2–16.9) |
+| Nish `bcryptHash` | 67.8 (66.5–69.0) |
+| Nish `bcryptHash4`, four lanes | 24.4 (23.3–32.0) |
+| libxcrypt `crypt_r`, `$2b$` | 68.8 (66.0–71.3) |
+| OpenBSD `bcrypt.c`, `gcc -O2` | 69.4 (66.5–70.3) |
+| OpenBSD `bcrypt.c`, `clang -O2` | 75.4 (73.0–78.5) |
+| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 71.4 (70.6–73.3) |
+| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 35.4 (32.1–42.9) |
+| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 72.3 (70.0–75.1) |
+| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 26.2 (23.1–30.2) |
 
-On machine A the single path is 8% behind gcc's builds, 2% ahead of OpenBSD's clang build
-and 2.5% behind tigokraft's one-lane clang build, each outside the noise: no bounds
-check is left in the round (every S-box index is masked to 0–255 and the
-state's length is checked once), and the gap is one XOR on the round's
-critical path that LLVM's Reassociate and InstCombine put there and gcc does not (below):
-the clang build of the same C has it too. Four lanes run in
-the time of 1.2 single hashes, 3.3 times the single path's throughput on one
-core: level with the four-lane C of the tigokraft submission
-(commit `c3012257f2ee`, MIT; fetched by the bench, not copied) built by clang,
-inside its noise, and 1.44 times its gcc build. The C rows of tigokraft are
-built with `-march=native`, as its build does, so they may use any instruction
-this CPU has; the Nish rows (no `--cpu x86-64-v3`) and the other C rows are
-built for baseline x86-64.
+The single path is level with gcc's builds and `crypt_r`, inside the noise,
+and 10% ahead of OpenBSD's clang build. No bounds check is left in the round:
+every S-box index is masked to 0–255 and the state's length is checked once.
+Each half-round closes with one XOR after its last S-box add, as gcc's do and
+clang's do not (below). Before that order was pinned, the single path
+trailed gcc. Two runs of the bench, interleaved with the branch's in one
+session, measured 73.1 (72.0–84.1) and 74.6 (72.1–76.9) ms on `main`
+(`be8e623`). The branch measured 67.8 (66.5–69.0) and 68.9 (66.6–71.0) ms,
+7.3% and 7.6% less, and gcc measured 68.5 to 69.6 ms across the four.
 
-### Why the single path trails gcc
+Four lanes run in the time of 1.4 single hashes, 2.8 times the single path's
+throughput on one core. That is level with the four-lane C of the tigokraft
+submission (commit `c3012257f2ee`, MIT; fetched by the bench, not copied)
+built by clang, inside its noise, and 1.45 times its gcc build. The four-lane
+rows spread widely on this machine (22.0 to 34.7 ms across the session's
+runs), so read them as their medians' order, not their ratios. The C rows of
+tigokraft are built with `-march=native`, as its build does, so they may use
+any instruction this CPU has. The Nish rows (no `--cpu x86-64-v3`) and the
+other C rows are built for baseline x86-64.
+
+### The half-round's critical path
 
 Each half-round is `x ^= P[n] ^ F(y)`, where `F(y)` is four S-box loads joined
 by add, xor, add, and `y` is the half the previous half-round produced. `x` and
 `P[n]` are ready long before `F(y)`, so the fast shape XORs them first, off
 the path, and leaves one XOR after the last S-box add: `(x ^ P[n]) ^ F(y)`.
-gcc builds that shape in all 16 half-rounds. LLVM builds it in the first and
-puts `P[n]` on the path in the other 15, `(P[n] ^ F(y)) ^ x`: two dependent
-XORs after the add instead of one.
+gcc builds that shape in all 16 half-rounds. LLVM, given the expression
+plainly, builds it in the first and puts `P[n]` on the path in the other 15,
+`(P[n] ^ F(y)) ^ x`: two dependent XORs after the add instead of one.
+`bcryptBody` and `bcryptEncrypt` therefore write each half-round as
 
-The verdict is (a), LLVM against gcc. It is not (b), Nish's codegen: the IR
-Nish emits for the round has the source's order, and the order is chosen by
-LLVM passes that also run on clang's build of the C. It is not (c), the shape
-of the `std/` source: every way of writing the XOR tried below gives the same
-machine code.
+```ts
+r = ctSelect(0xffffffff, r ^ st[n], 0) ^ F(l)
+```
+
+`ctSelect(m, a, b)` lowers to `(a & h) | (b & ~h)`, where `h` is `m` passed
+through the value barrier, an empty inline `asm` LLVM cannot see through. With
+`b` 0 the `or` folds away and `(x ^ P[n]) & h` is left. LLVM cannot know that
+`h` is all ones, so it cannot move `P[n]` out of the `and` and into the XOR
+chain: the half-round keeps the order written. The barrier takes a constant,
+so LLVM hoists it out of the loop and merges the copies into one register
+holding `0xffffffff`. Each half-round pays one register `and`, computed off
+the path while the S-box loads are in flight.
+
+The barrier is safe because it is an identity on the value: with an all-ones
+mask, `ctSelect` gives `x ^ P[n]` in every bit, so every hash is unchanged,
+and the bcrypt vectors, the `crypt_r` differential and the batch's
+lane-by-lane comparisons with the single path answer as before. It adds no
+branch and no load. The mask is a constant, not a secret, and the `and` is
+one ALU instruction on registers, so the cache lines the round touches are
+still the four S-box words BCRYPT-6 records and nothing more. The working
+values stay in registers as before, which BCRYPT-7 records. Neither row
+changes.
+
+The batch kernels, `bcryptBody2` to `bcryptBody6`, keep the plain
+`x ^= P[n] ^ F(y)`. Their chains are independent, so a core has other
+work while one chain waits, and one extra XOR on a chain's path costs little
+there. Writing the four-lane kernel's 16 half-rounds with the barrier was measured as a loss: in
+two runs interleaved with the plain form in one session, `bcryptHash4` took
+27.6 (21.4–31.8) and 24.8 (21.0–34.2) ms against 24.2 (22.5–28.3) and 22.9
+(22.3–31.8) ms. Both medians were slower, inside the batch's wide spread, and
+nothing was gained to set against the extra `and` per half-round.
 
 | Build | Loads | Stores | Stack spills | Bounds checks, calls, jumps | Critical path from `y` | `P` on the path |
 | --- | ---: | ---: | ---: | ---: | --- | ---: |
-| Nish `bcryptBody` | 5 | 0 | 0 | 0 | 8 instructions, 12 cycles | 15 of 16 |
+| Nish `bcryptBody` | 5 | 0 | 0 | 0 | 7 instructions, 11 cycles | 0 of 16 |
 | OpenBSD `Blowfish_encipher`, `gcc -O2` | 5 | 0 | 0 | 0 | 6 instructions, 11 cycles | 0 of 16 |
 | OpenBSD `Blowfish_encipher`, `clang -O2` | 5 | 0 | 0 | 0 | 8 instructions, 12 cycles | 15 of 16 |
 
 The first five columns count one half-round, from `perhr` in the recipe below,
-which reads the 15 windows between consecutive S3 adds. Nish stores twice per
+which reads the 15 windows between consecutive S3 adds. The barrier's `and`
+is a register operation, so it adds no load. Nish stores twice per
 block (`st[i]`, `st[i + 1]`) and the C stores its halves through its pointer
 arguments once per call; neither stores inside a round. The critical path is
 the dependent chain from `y` to the next half-round's input, under 1 cycle
@@ -490,12 +531,12 @@ instructions are in program order, several to a line; none is changed:
   mov ecx,[rax+rcx*4]  * add ecx,[rax+r9*4+0x400]  movzx r9d,dl
 * xor ecx,[rax+rbx*4+0x800]  * add ecx,[rax+r9*4+0xc00]
   xor edx,[rax+0x100c] * xor ecx,r8d
-; Nish: (P ^ F) ^ x
-  mov r8d,ebx            mov eax,ebx         * shr eax,0xe
-  shr r8d,0x18         * and eax,0x3fc
-* mov eax,[rsi+rax*1+0x448]  * add eax,[rsi+r8*4+0x48]  movzx r8d,bl  movzx ebp,bh
-* xor eax,[rsi+rbp*4+0x848]  * add eax,[rsi+r8*4+0xc48]
-* xor eax,[rsi+0x8]    * xor eax,edx
+; Nish: ((x ^ P) & h) ^ F, x ^ P and the and computed off the path
+  xor ecx,[rsi+0xc]      mov eax,edx           mov r10d,edx
+* shr r10d,0xe           shr eax,0x18        * and r10d,0x3fc
+* mov ebx,[rsi+r10*1+0x448]  * add ebx,[rsi+rax*4+0x48]  movzx eax,dl  movzx ebp,dh
+* xor ebx,[rsi+rbp*4+0x848]  and ecx,r9d     * add ebx,[rsi+rax*4+0xc48]
+* xor ebx,ecx
 ; clang: (P ^ F) ^ x
   mov r9d,r8d            shr r9d,0x18          mov eax,r8d
 * shr eax,0xe          * and eax,0x3fc
@@ -504,30 +545,20 @@ instructions are in program order, several to a line; none is changed:
 * xor eax,[rdi+0x1008] * xor eax,ecx
 ```
 
-The two index computations of the second S-box cost the same, `shr` and
-`movzx` against `shr` and `and`: the extra cycle is the XOR with `P`. The
-Nish round is otherwise as tight as the C. The 16 half-rounds are fully
-unrolled and the state base and length stay in registers. The second-lowest
-byte is one `movzx …, bh` where clang's C takes a `shr` and an `and`. The C
-expansion loops call `Blowfish_encipher` once per block, which Nish's inlined
-loop does not.
+`r9d` is the hoisted barrier, set to `0xffffffff` once before the loop. The
+Nish path is one instruction longer than gcc's in the same 11 cycles. It
+loads the second S-box word with a `mov` and adds the first to it, where gcc
+loads the first off the path and adds the second to it in one instruction.
+The index computations cost the same, `shr` and `and` against `shr` and
+`movzx`. The 16 half-rounds are fully unrolled and the state
+base and length stay in registers. The second-lowest byte is one
+`movzx …, bh` where clang's C takes a `shr` and an `and`. The C expansion
+loops call `Blowfish_encipher` once per block, which Nish's inlined loop does
+not.
 
-The model's one cycle on 11 would be 9%. A cost-10 hash runs
-521 blocks × (1 + 2 × 1024) + 64 × 3 = 1,067,721 Blowfish blocks, which is
-17,083,536 half-rounds. On a second 4-core Xeon (machine B, nominal 2.1 GHz) the bench measured
-71.5 (70.9–73.3) ms for Nish, 66.8 (65.4–68.3) ms for OpenBSD's gcc build and
-72.4 (72.3–73.8) ms for its clang build: Nish 7.0% behind gcc, and level
-with clang inside the noise. The clock is measured, not nominal: a C loop of
-10⁹ dependent `xor` and `add` instructions on one register, written in
-`asm volatile` so the compiler keeps them, and one of 10⁹ dependent `imul`
-(3 cycles each), both ran at about 2.8 GHz of CPU time on machine B. At that clock the hashes take 10.9
-(gcc), 11.7 (Nish) and 11.9 (clang) cycles per half-round, against the 11 and
-12 of the chain model: Nish's measured gap is 0.8 cycles, not a whole one.
-Machine A's figures (52.9 against 48.8 ms, 8%) are from the table above.
-
-The order is made in the IR, not in the backend. In the pre-link `-O3`
-pipeline, Reassociate turns the source's `x ^ (P[n] ^ F(y))` into
-`(P[n] ^ x) ^ F(y)`, and a later InstCombine flips it to
+The order is made in the IR, not in the backend. Without the barrier, in the
+pre-link `-O3` pipeline, Reassociate turns the source's `x ^ (P[n] ^ F(y))`
+into `(P[n] ^ x) ^ F(y)`, and a later InstCombine flips it to
 `(P[n] ^ F(y)) ^ x`. In the loop it is the InstCombine after the loop
 passes:
 
@@ -542,16 +573,21 @@ passes:
 
 The unrolling is not the cause. A copy of `bcryptBody` with the 16
 half-rounds written out as straight-line code, which was not committed, gave
-the same hash and the same 15 of 16. There the same Reassociate and the
-InstCombine after it make the order in each half-round directly. `llc` keeps
-the tree at `-O1`, `-O2` and `-O3`, and with `-x86-machine-combiner=false`.
-The same 15 of 16 came from three other forms of the source: writing it as
-`(x ^ P[n]) ^ F(y)`, loading `P[n]` into a `const` first, and a loop of one
-half-round with a swap. LLVM canonicalizes the three-operand XOR whatever
-order it arrives in, so `std/` cannot choose the order. Nor could Nish's
-codegen, by emitting a different one. Nish's `opt` and `llc` are the same
-LLVM 18.1.3 as the clang that built the C, and that build ends in the same
-15 of 16. The gap is LLVM 18 against gcc 13, not Nish against C.
+the same hash and the same 15 of 16. `llc` keeps the tree at `-O1`, `-O2`
+and `-O3`, and with `-x86-machine-combiner=false`. Three other plain forms
+of the source gave the same 15 of 16: writing it as `(x ^ P[n]) ^ F(y)`,
+loading `P[n]` into a `const` first, and a loop of one half-round with a
+swap. LLVM canonicalizes a three-operand XOR whatever order it arrives in, so
+only an operand it cannot see through holds the order, which is what the
+barrier's `and` is. Nish's `opt` and `llc` are the same LLVM 18.1.3 as the
+clang that built the C, and that build ends in the same 15 of 16.
+
+`bcrypt barrier` in `tests/run.js` pins the shape. It compiles
+`tests/link/crypto_bcrypt` and runs `opt -O3` on `bcrypt.ll`, then counts the
+XORs in `bcryptBody` that take the barrier's `and` as an operand. There must
+be 16, one per half-round. A source that drops the barrier leaves no such
+`and` to count, and a compiler that stops emitting the barrier opaquely
+folds the `and` away; either fails it.
 
 To reproduce, run `npm run build` and then `node bench/crypto/bcrypt/run.mjs`
 once to build the programs, then:
@@ -570,10 +606,12 @@ for f in "build/bench/bcrypt/nish-g nish.bcryptBody 0xc48" "build/bench/bcrypt/o
 `onpath` finds each add of the last S-box word (state offset `0xc48` in Nish,
 `0xc00` in OpenBSD's context) and checks whether the next instruction XORs a
 state word into the same register. It relies on the add being followed
-directly by that XOR. That was checked against all three listings by hand:
-each S3 add is followed by the `P` XOR on the path or, in Nish's and clang's
-first half-round and in all of gcc's, by an XOR into another register. It
-prints 16 S3 adds and 15, 0 and 15. `perhr` prints 15 half-rounds, 5 loads
+directly by that XOR. That was checked against all three listings by hand.
+In clang's, each S3 add is followed by the `P` XOR on the path or, in the
+first half-round, by an XOR into another register, as in all of gcc's. In
+Nish's, each is followed by the half-round's one closing XOR of two
+registers, directly or after the barrier's `and` of the other half. It
+prints 16 S3 adds and 0, 0 and 15. `perhr` prints 15 half-rounds, 5 loads
 and no stores, stack references, calls or jumps for each. With clang/LLVM
 18.1.3, gcc 13.3.0 and GNU objdump 2.42 on x86-64, the three `dis` listings
 have these sha256s (`dis … | sha256sum`). Branch targets keep their
@@ -582,7 +620,7 @@ well as the toolchain:
 
 | Listing | sha256 |
 | --- | --- |
-| `nish.bcryptBody` | `11273e35c9a1ce10e78e34cd0bd1977e7ba81394be8a61e5ccd24ea4dacbbdb2` |
+| `nish.bcryptBody` | `e5e4a901342e13f1505fa677ba6edec9315d2aae39f479cea5c9c15ea9b0fdec` |
 | `Blowfish_encipher`, gcc | `5bd677c28adadcd01e97a6c9c2a17b55347bda224db42e6266a0db579aa2295d` |
 | `Blowfish_encipher`, clang | `f3c2b0791101df18ec265ca65924336544990e18398d97939d953845d470b396` |
 
