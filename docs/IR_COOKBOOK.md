@@ -24516,6 +24516,8 @@ declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 noca
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_ctr(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 declare void @nish_aes_ghash(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
+declare i32 @nish_crc32_hw() #9
+declare i32 @nish_crc32_update(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #10 {
 entry:

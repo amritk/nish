@@ -454,6 +454,21 @@ const RUNTIME_SIMD_TEXT_BUDGET = 2560
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
 /**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-checksum.c`
+ * -- CRC-32 on the CPU's carry-less multiply (WP38 CRC): `nish_crc32_hw`, its CPUID
+ * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel.
+ *
+ * Measured **718 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the folding kernel with its Barrett reduction 514, the nibble-table tail
+ * 58, the resolver 121 and the entry point 25. An eleventh translation unit rather
+ * than more of `runtime-aes.c`, which shares only the instruction: apart, a program
+ * that checks a gzip trailer carries no AES and one that speaks TLS no CRC. The
+ * AArch64 build is the CRC32 instructions and is smaller; the ceiling is measured
+ * where the gate runs. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_CHECKSUM_TEXT_BUDGET = 768
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
  * `terminalSize`, `setRawMode` and `setTerminalRestore`, with the restore that the
@@ -651,6 +666,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
+  ["runtime/runtime-checksum.c", RUNTIME_CHECKSUM_TEXT_BUDGET, "RUNTIME_CHECKSUM_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],

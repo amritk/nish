@@ -144,7 +144,10 @@ import {
   aesKernelOf,
   BYTES_WALK_NONE,
   bytesWalkOf,
+  CRC32_HW,
+  CRC32_KERNEL,
   isAesSeam,
+  isCrc32Seam,
   isIndexOfAnyWalk,
   isRegexScanWalk,
 } from "./kernels"
@@ -1680,6 +1683,13 @@ export class Emitter {
     const aesSeam = isWasmBuild(this.opts) ? AES_SEAM_NONE : isAesSeam(this.program, sig)
     const aesJoin: IRBlock | null =
       aesSeam === AES_SEAM_NONE ? null : this.emitAesKernelArm(aesSeam, operands)
+    // WP38 CRC: `nish/compress/checksum`'s walk, the same branch, whose arms
+    // meet at a `phi` because the walker answers the CRC.
+    const noCrcKernel: string[] = []
+    const crcKernel =
+      !isWasmBuild(this.opts) && isCrc32Seam(this.program, sig)
+        ? this.emitCrc32KernelArm(operands)
+        : noCrcKernel
     // Elsewhere, WP9: the mark goes after the arguments, so only the
     // callee's own bumps are inside the bracket (`beginReclaim`).
     const reclaim = keepSize >= 0 ? "" : this.beginReclaim(sig)
@@ -1703,6 +1713,9 @@ export class Emitter {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
     let answer = this.fn.emitValue(call)
+    if (crcKernel.length > 0) {
+      answer = this.joinCrc32Arms(crcKernel, answer)
+    }
     // WP27 S3.2: C answers the bytes, and the program keeps a copy
     // (`emitForeignStringResult`).
     if (sig.foreign() && this.table.stripNull(sig.returnType) === T_STRING) {
@@ -1734,6 +1747,36 @@ export class Emitter {
     this.fn.emit(`br label %${join.label}`)
     this.fn.placeBlock(walker)
     return join
+  }
+
+  /**
+   * WP38 CRC: the branch in front of `crc32Walk`'s call, and its kernel arm,
+   * which takes the walker's last four operands (`crc, buf, off, len`; the
+   * tables are the walker's alone). Leaves the walker's arm as the insertion
+   * point, as `emitAesKernelArm` does, and answers what `joinCrc32Arms`
+   * needs: the kernel's value, the join's label and the kernel arm's.
+   */
+  emitCrc32KernelArm(operands: string[]): string[] {
+    const hw = this.fn.emitValue(`call i32 ${this.useRuntime(CRC32_HW)}()`)
+    const taken = this.fn.emitValue(`icmp ne i32 ${hw}, 0`)
+    const kernel = this.fn.newBlock("crc32.kernel")
+    const walker = this.fn.newBlock("crc32.walker")
+    const join = this.fn.newBlock("crc32.join")
+    this.fn.emit(`br i1 ${taken}, label %${kernel.label}, label %${walker.label}`)
+    this.fn.placeBlock(kernel)
+    const args = `${operands[2]}, ${operands[3]}, ${operands[4]}, ${operands[5]}`
+    const value = this.fn.emitValue(`call i32 ${this.useRuntime(CRC32_KERNEL)}(${args})`)
+    this.fn.emit(`br label %${join.label}`)
+    this.fn.placeBlock(walker)
+    return [value, join.label, kernel.label]
+  }
+
+  /** The join after the walker's call: the CRC from whichever arm ran. */
+  joinCrc32Arms(parts: string[], walked: string): string {
+    const walkerLabel = this.fn.currentBlock().label
+    this.fn.emit(`br label %${parts[1]}`)
+    this.fn.placeBlock(new IRBlock(parts[1]))
+    return this.fn.emitValue(`phi i32 [ ${parts[0]}, %${parts[2]} ], [ ${walked}, %${walkerLabel} ]`)
   }
 
   // ---- Context helpers ----------------------------------------------------
