@@ -6,9 +6,10 @@
 // a framebuffer sized to the backend in use, the terminal's cells and the
 // resolution setting. The function keys F3 to F8 change a setting from any
 // scene and say so in a toast. A change the terminal must be opened again for
-// (the frame rate or the graphics) closes it and opens it with the new
-// options; the scene goes on where it was, and the toast says what the
-// terminal made of the change, or that an environment variable won.
+// (the frame rate) closes it and opens it with the new options; the scene
+// goes on where it was, and the toast says what the terminal made of the
+// change, or that an environment variable won. The graphics setting is kept
+// but not yet applied: see `wallGraphicsToast`.
 //
 // Its text is drawn into the framebuffer with the pixel font rather than as
 // screen cells, because a kitty image is drawn above the cells and would hide
