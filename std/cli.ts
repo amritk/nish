@@ -12,13 +12,15 @@
  *     menu.row("--times", "<n>", "say it n times");
  *     console.log(menu.text());
  *
- * **The terminal's own colours.** A `Style` paints with the eight basic SGR
- * colours, bold and faint, never a fixed RGB or 256-palette tone. Every theme
- * redefines those eight, so the menu comes out in whatever palette the reader
- * chose, and a terminal with no theme set paints them in its built-in
- * defaults. A terminal with no colours at all (`tput colors` says fewer than
- * eight) gets the failsafe: the same structure in bold and underline, which a
- * monochrome terminal still shows. Colour that is forced is the theme's.
+ * **The terminal's own colours.** A `Style` paints with the sixteen SGR
+ * colours (the eight basic ones and their bright twins), their backgrounds
+ * and the attributes, never a fixed RGB or 256-palette tone unless the caller
+ * asks for one through `sgr`. Every theme redefines those sixteen, so the
+ * menu comes out in whatever palette the reader chose, and a terminal with no
+ * theme set paints them in its built-in defaults. A terminal with no colours
+ * at all (`tput colors` says fewer than eight) gets the failsafe: the same
+ * structure in bold and underline, which a monochrome terminal still shows,
+ * and no colour from a colour painter. Colour that is forced is the theme's.
  *
  * **Colour is for a person reading a terminal**, and nothing else may see it:
  * a script that captures `--help`, a test that compares it, a pipe into `less`
@@ -56,18 +58,92 @@ const PALETTE_THEME: i32 = 0
 /** `paletteOf`'s answer: marked up in attributes only, the failsafe. */
 const PALETTE_MONO: i32 = 2
 
+/*
+ * The SGR parameters `Style`'s painters use, exported so a caller composes a
+ * list for `sgr` (`${SGR_BOLD};${SGR_RED}`) or a role (`flagThemed`) without
+ * spelling the numbers. The first sixteen are the colours a theme redefines:
+ * the eight basic ones and their bright twins.
+ */
+export const SGR_BLACK: string = "30"
+export const SGR_RED: string = "31"
+export const SGR_GREEN: string = "32"
+export const SGR_YELLOW: string = "33"
+export const SGR_BLUE: string = "34"
+export const SGR_MAGENTA: string = "35"
+export const SGR_CYAN: string = "36"
+export const SGR_WHITE: string = "37"
+export const SGR_BRIGHT_BLACK: string = "90"
+export const SGR_BRIGHT_RED: string = "91"
+export const SGR_BRIGHT_GREEN: string = "92"
+export const SGR_BRIGHT_YELLOW: string = "93"
+export const SGR_BRIGHT_BLUE: string = "94"
+export const SGR_BRIGHT_MAGENTA: string = "95"
+export const SGR_BRIGHT_CYAN: string = "96"
+export const SGR_BRIGHT_WHITE: string = "97"
+export const SGR_BG_BLACK: string = "40"
+export const SGR_BG_RED: string = "41"
+export const SGR_BG_GREEN: string = "42"
+export const SGR_BG_YELLOW: string = "43"
+export const SGR_BG_BLUE: string = "44"
+export const SGR_BG_MAGENTA: string = "45"
+export const SGR_BG_CYAN: string = "46"
+export const SGR_BG_WHITE: string = "47"
+export const SGR_BG_BRIGHT_BLACK: string = "100"
+export const SGR_BG_BRIGHT_RED: string = "101"
+export const SGR_BG_BRIGHT_GREEN: string = "102"
+export const SGR_BG_BRIGHT_YELLOW: string = "103"
+export const SGR_BG_BRIGHT_BLUE: string = "104"
+export const SGR_BG_BRIGHT_MAGENTA: string = "105"
+export const SGR_BG_BRIGHT_CYAN: string = "106"
+export const SGR_BG_BRIGHT_WHITE: string = "107"
+export const SGR_BOLD: string = "1"
+export const SGR_FAINT: string = "2"
+export const SGR_ITALIC: string = "3"
+export const SGR_UNDERLINE: string = "4"
+export const SGR_INVERSE: string = "7"
+export const SGR_STRIKETHROUGH: string = "9"
+
 /**
  * How one output stream is painted. `on` says whether to mark the text up at
  * all, and `colour` whether the terminal has colours to mark it up with;
  * without them each mark falls back to bold, underline or nothing.
+ *
+ * Each help role (`heading`, `name`, `flag`, `meta`, `dim`) keeps a pair of
+ * SGR lists, the theme's and the failsafe's, so a program recolours its menu
+ * by setting a pair (`flagThemed`, `flagMono`) and `styleFor` still decides
+ * whether, and which of the two, it paints. An empty list leaves the role
+ * plain.
  */
 export class Style {
   on: boolean
   colour: boolean
+  headingThemed: string
+  headingMono: string
+  nameThemed: string
+  nameMono: string
+  flagThemed: string
+  flagMono: string
+  metaThemed: string
+  metaMono: string
+  dimThemed: string
+  dimMono: string
 
   constructor(on: boolean, colour: boolean) {
     this.on = on
     this.colour = colour
+    // Bold magenta, spelled out: a template here would allocate per Style.
+    this.headingThemed = "1;35"
+    this.headingMono = SGR_BOLD
+    this.nameThemed = "1;35"
+    this.nameMono = SGR_BOLD
+    this.flagThemed = SGR_CYAN
+    this.flagMono = SGR_BOLD
+    this.metaThemed = SGR_YELLOW
+    this.metaMono = SGR_UNDERLINE
+    // Faint rather than bright black, which Solarized makes the background;
+    // plain without colour, where the bold flags already stand apart from it.
+    this.dimThemed = SGR_FAINT
+    this.dimMono = ""
   }
 
   /**
@@ -84,33 +160,246 @@ export class Style {
     return `${CSI}${code}m${text}${CSI}0m`
   }
 
-  /** A section heading: bold, in the theme's magenta. */
+  /** A section heading, in `headingThemed` or `headingMono`. */
   heading(text: string): string {
-    return this.paint(text, "1;35", "1")
-  }
-
-  /** The tool's own name where it opens a line. */
-  name(text: string): string {
-    return this.paint(text, "1;35", "1")
-  }
-
-  /** A flag, or a command a person would type. */
-  flag(text: string): string {
-    return this.paint(text, "36", "1")
-  }
-
-  /** A placeholder the person fills in: `<file.ts>`, `speed|size`. */
-  meta(text: string): string {
-    return this.paint(text, "33", "4")
+    return this.paint(text, this.headingThemed, this.headingMono)
   }
 
   /**
-   * Text that explains rather than names: descriptions, notes. Faint rather
-   * than bright black, which Solarized makes the background; plain without
-   * colour, where the bold flags already stand apart from it.
+   * The tool's own name where it opens a line, in `nameThemed` or
+   * `nameMono`.
+   */
+  name(text: string): string {
+    return this.paint(text, this.nameThemed, this.nameMono)
+  }
+
+  /**
+   * A flag, or a command a person would type, in `flagThemed` or
+   * `flagMono`.
+   */
+  flag(text: string): string {
+    return this.paint(text, this.flagThemed, this.flagMono)
+  }
+
+  /**
+   * A placeholder the person fills in, such as `<file.ts>` or `speed|size`, in
+   * `metaThemed` or `metaMono`.
+   */
+  meta(text: string): string {
+    return this.paint(text, this.metaThemed, this.metaMono)
+  }
+
+  /**
+   * Text that explains rather than names, such as descriptions and notes, in
+   * `dimThemed` or `dimMono`.
    */
   dim(text: string): string {
-    return this.paint(text, "2", "")
+    return this.paint(text, this.dimThemed, this.dimMono)
+  }
+
+  /**
+   * `text` painted with any SGR parameter list (`"1;31"`, `"38;5;208"`,
+   * `"38;2;255;128;0"`) when colour is on, and unchanged otherwise: the way to
+   * 256-colour and truecolor, which ignore the reader's theme, so they stay
+   * the caller's explicit choice. The failsafe paints nothing, since the list
+   * may name a colour a monochrome terminal cannot show.
+   */
+  sgr(text: string, codes: string): string {
+    return this.paint(text, codes, "")
+  }
+
+  // The colour painters go through `sgr`, so the failsafe, which has no
+  // colours to show, paints none of them; the attribute painters paint under
+  // both.
+
+  /** `text` in the theme's black. */
+  black(text: string): string {
+    return this.sgr(text, SGR_BLACK)
+  }
+
+  /** `text` in the theme's red. */
+  red(text: string): string {
+    return this.sgr(text, SGR_RED)
+  }
+
+  /** `text` in the theme's green. */
+  green(text: string): string {
+    return this.sgr(text, SGR_GREEN)
+  }
+
+  /** `text` in the theme's yellow. */
+  yellow(text: string): string {
+    return this.sgr(text, SGR_YELLOW)
+  }
+
+  /** `text` in the theme's blue. */
+  blue(text: string): string {
+    return this.sgr(text, SGR_BLUE)
+  }
+
+  /** `text` in the theme's magenta. */
+  magenta(text: string): string {
+    return this.sgr(text, SGR_MAGENTA)
+  }
+
+  /** `text` in the theme's cyan. */
+  cyan(text: string): string {
+    return this.sgr(text, SGR_CYAN)
+  }
+
+  /** `text` in the theme's white. */
+  white(text: string): string {
+    return this.sgr(text, SGR_WHITE)
+  }
+
+  /** `text` in the theme's bright black (gray). */
+  brightBlack(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_BLACK)
+  }
+
+  /** `text` in the theme's bright red. */
+  brightRed(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_RED)
+  }
+
+  /** `text` in the theme's bright green. */
+  brightGreen(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_GREEN)
+  }
+
+  /** `text` in the theme's bright yellow. */
+  brightYellow(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_YELLOW)
+  }
+
+  /** `text` in the theme's bright blue. */
+  brightBlue(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_BLUE)
+  }
+
+  /** `text` in the theme's bright magenta. */
+  brightMagenta(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_MAGENTA)
+  }
+
+  /** `text` in the theme's bright cyan. */
+  brightCyan(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_CYAN)
+  }
+
+  /** `text` in the theme's bright white. */
+  brightWhite(text: string): string {
+    return this.sgr(text, SGR_BRIGHT_WHITE)
+  }
+
+  /** `text` on the theme's black. */
+  bgBlack(text: string): string {
+    return this.sgr(text, SGR_BG_BLACK)
+  }
+
+  /** `text` on the theme's red. */
+  bgRed(text: string): string {
+    return this.sgr(text, SGR_BG_RED)
+  }
+
+  /** `text` on the theme's green. */
+  bgGreen(text: string): string {
+    return this.sgr(text, SGR_BG_GREEN)
+  }
+
+  /** `text` on the theme's yellow. */
+  bgYellow(text: string): string {
+    return this.sgr(text, SGR_BG_YELLOW)
+  }
+
+  /** `text` on the theme's blue. */
+  bgBlue(text: string): string {
+    return this.sgr(text, SGR_BG_BLUE)
+  }
+
+  /** `text` on the theme's magenta. */
+  bgMagenta(text: string): string {
+    return this.sgr(text, SGR_BG_MAGENTA)
+  }
+
+  /** `text` on the theme's cyan. */
+  bgCyan(text: string): string {
+    return this.sgr(text, SGR_BG_CYAN)
+  }
+
+  /** `text` on the theme's white. */
+  bgWhite(text: string): string {
+    return this.sgr(text, SGR_BG_WHITE)
+  }
+
+  /** `text` on the theme's bright black. */
+  bgBrightBlack(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_BLACK)
+  }
+
+  /** `text` on the theme's bright red. */
+  bgBrightRed(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_RED)
+  }
+
+  /** `text` on the theme's bright green. */
+  bgBrightGreen(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_GREEN)
+  }
+
+  /** `text` on the theme's bright yellow. */
+  bgBrightYellow(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_YELLOW)
+  }
+
+  /** `text` on the theme's bright blue. */
+  bgBrightBlue(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_BLUE)
+  }
+
+  /** `text` on the theme's bright magenta. */
+  bgBrightMagenta(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_MAGENTA)
+  }
+
+  /** `text` on the theme's bright cyan. */
+  bgBrightCyan(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_CYAN)
+  }
+
+  /** `text` on the theme's bright white. */
+  bgBrightWhite(text: string): string {
+    return this.sgr(text, SGR_BG_BRIGHT_WHITE)
+  }
+
+  /** `text` bold. */
+  bold(text: string): string {
+    return this.paint(text, SGR_BOLD, SGR_BOLD)
+  }
+
+  /** `text` faint. */
+  faint(text: string): string {
+    return this.paint(text, SGR_FAINT, SGR_FAINT)
+  }
+
+  /** `text` italic, where the terminal has it. */
+  italic(text: string): string {
+    return this.paint(text, SGR_ITALIC, SGR_ITALIC)
+  }
+
+  /** `text` underlined. */
+  underline(text: string): string {
+    return this.paint(text, SGR_UNDERLINE, SGR_UNDERLINE)
+  }
+
+  /** `text` with foreground and background swapped. */
+  inverse(text: string): string {
+    return this.paint(text, SGR_INVERSE, SGR_INVERSE)
+  }
+
+  /** `text` struck through. */
+  strikethrough(text: string): string {
+    return this.paint(text, SGR_STRIKETHROUGH, SGR_STRIKETHROUGH)
   }
 }
 
@@ -273,9 +562,25 @@ export class HelpMenu {
 
   /** The opening line, the program's name, `version` and a one-line `summary`, and a blank after it. */
   header(version: string, summary: string): void {
+    this.title(version, summary)
+    this.lines.push("")
+  }
+
+  /**
+   * The opening line alone, without `header`'s blank after it, for a menu that
+   * puts something under its title (`line`) before the blank.
+   */
+  title(version: string, summary: string): void {
     const style = this.style
     this.lines.push(`${style.name(this.program)} ${style.dim(version)}  ${style.dim(summary)}`)
-    this.lines.push("")
+  }
+
+  /**
+   * A line exactly as given, painted (or not) by the caller with the menu's
+   * `style`: a rule, a banner, a blank. Its width is the caller's to keep.
+   */
+  line(text: string): void {
+    this.lines.push(text)
   }
 
   /**

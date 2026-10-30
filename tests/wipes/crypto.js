@@ -154,6 +154,22 @@ export const wipeChecks = [
       ["nish.p256SignSha256Into", 59],
     ],
   },
+  // `nish/crypto/p256`'s ECDH (`p256Ecdh`, for TLS's secp256r1 share).
+  // `p256EcdhExposed` wipes the product's scratch and point, 1 / Z, the
+  // shared x's limbs, and the output it refuses for a product at infinity;
+  // `p256ScalarMult` under it wipes its window table and accumulator, and
+  // `p256ScalarInRange` the key's limbs. `opt` inlines it into `p256Ecdh`, so
+  // the two count the same 25. Deleting `wipe(acc)` (1 / Z) or `wipe(x)` takes
+  // 1 from each.
+  {
+    name: "crypto: the wipes survive opt -O2 (P-256 ECDH's product, scratch, 1 / Z and shared x in p256EcdhExposed)",
+    program: "tests/link/crypto_p256_ecdh/main.ts",
+    modules: P256_MODULES,
+    roots: [
+      ["nish.p256Ecdh", 25],
+      ["nish.p256EcdhExposed", 25],
+    ],
+  },
   // The derivations into a held `Secret` (#668). Each derives into a fresh
   // plain buffer inside `exposeWith`, copies it into the held destination and
   // wipes it before it returns, so every root counts its own HKDF-Expand
@@ -210,18 +226,52 @@ export const wipeChecks = [
     ],
   },
   // `nish/crypto/bcrypt` wipes the Blowfish state and what the key reaches
-  // (docs/security/crypto-bcrypt.md). The roots: `bcryptExposed` 5 (the
+  // (docs/security/crypto-bcrypt.md). The roots: `bcryptHashInto` 5 (the
   // state, the expanded key, the block, the digest, and the 128-byte key
-  // stream of `bcryptSetKey`, which `opt` inlines), and `bcryptHash` and
-  // `bcryptVerify` 5 each, through `bcryptRun`.
+  // stream of `bcryptSetKey`, all in `bcryptExposed`, which `opt` inlines),
+  // `bcryptVerifyExposed` 7 (those 5, and the rebuilt hash and the given
+  // hash's bytes in the inlined `bcryptSameWiped`), and `bcryptHash` 5 and
+  // `bcryptVerify` 7 through them. Turning either of `bcryptSameWiped`'s two
+  // wipes into `fill(0)` dropped `bcryptVerifyExposed` and `bcryptVerify` to 6.
   {
-    name: "crypto: the wipes survive opt -O2 (bcrypt's Blowfish state, expanded key, key stream, block and digest in bcryptExposed)",
+    name: "crypto: the wipes survive opt -O2 (bcrypt's Blowfish state, expanded key, key stream, block, digest, rebuilt and given hash in bcryptVerifyExposed)",
     program: "tests/link/crypto_bcrypt/main.ts",
     modules: BCRYPT_MODULES,
     roots: [
-      ["nish.bcryptExposed", 5],
+      ["nish.bcryptHashInto", 5],
+      ["nish.bcryptVerifyExposed", 7],
       ["nish.bcryptHash", 5],
-      ["nish.bcryptVerify", 5],
+      ["nish.bcryptVerify", 7],
+    ],
+  },
+  // The batch (`bcryptHash4`, `bcryptVerify4`). The roots: `bcryptKeyWord` 2
+  // (its 19-word expanded key and `bcryptKeySchedule`'s 128-byte key stream,
+  // inlined), `bcryptEks4` 3 (the blocks, the digests and one lane's digest),
+  // `bcryptLoad4` 16 (four lane loaders with two `bcryptKeyWord` call sites
+  // each), `bcryptHash4Exposed` 4 (`bcryptEks4`'s 3 and its digests),
+  // `bcryptVerify4Exposed` 6 (those 4, and each lane's joined hash and given
+  // hash bytes in `bcryptJoinedOk`'s inlined `bcryptSameWiped`), `bcryptHash4` 26 (the
+  // 4244-word state, `bcryptLoad4`, `bcryptHash4Exposed` and the one-lane
+  // path's `bcryptHash`, 5), and `bcryptVerify4` 51 (the state, `bcryptLoad4`
+  // and `bcryptVerify4Exposed` through `bcryptVerifyGroup`, 23, and
+  // `bcryptLaneOk`'s four `bcryptVerifyOne` sites, 7 each, for a cost a single
+  // lane holds). Turning into `fill(0)` the wipe of the digests dropped
+  // `bcryptHash4Exposed`, `bcryptVerify4Exposed`, `bcryptHash4` and
+  // `bcryptVerify4` to 3, 5, 25 and 50; either of `bcryptSameWiped`'s two
+  // wipes, `bcryptVerify4Exposed` and `bcryptVerify4` to 5 and 46 (the
+  // group's site and the four `bcryptVerifyOne` sites each lose one).
+  {
+    name: "crypto: the wipes survive opt -O2 (bcrypt's batch state, key words, block, digests, joined and given hashes in bcryptVerify4Exposed)",
+    program: "tests/link/crypto_bcrypt_batch/main.ts",
+    modules: BCRYPT_MODULES,
+    roots: [
+      ["nish.bcryptKeyWord", 2],
+      ["nish.bcryptEks4", 3],
+      ["nish.bcryptLoad4", 16],
+      ["nish.bcryptHash4Exposed", 4],
+      ["nish.bcryptVerify4Exposed", 6],
+      ["nish.bcryptHash4", 26],
+      ["nish.bcryptVerify4", 51],
     ],
   },
 ]

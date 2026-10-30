@@ -15,9 +15,11 @@
  * its own fails loudly rather than writing nowhere.
  *
  * The functions that have no synchronous reading under Node (`spawn`,
- * `waitPid`, `signalFd`, `readSignal`, the `nish:net` set) throw here without
- * asking any host.
+ * `waitPid`, `signalFd`, `readSignal`, the `nish:net` set), and `setNice` and
+ * `setIdlePriority`, which have none at all, throw here without asking any
+ * host.
  */
+import { panicSlice, toIndex } from "./checks.mjs";
 
 /** What every member of the default host throws: no adapter has been imported. */
 export class NishNoHost extends Error {
@@ -48,6 +50,20 @@ const NO_HOST = {
 
 let host = NO_HOST;
 
+/**
+ * What `exit(code)` throws: `code` is the 8-bit status a native exit would
+ * leave. The browser host throws it, since a page cannot end itself; it is
+ * exported here and from `nish/runtime/browser` so a caller tells it apart with `instanceof`, which a thrown
+ * object that only carries the name does not pass.
+ */
+export class NishExit extends Error {
+  constructor(code) {
+    super(`the program exited with ${code}`);
+    this.name = "NishExit";
+    this.code = code & 0xff;
+  }
+}
+
 /** Make `next` the host every later call goes through. */
 export function installHost(next) {
   host = next;
@@ -70,6 +86,18 @@ export function write(s) {
 
 export function writeError(s) {
   host.writeErr(s);
+}
+
+/**
+ * `writeBytes(bytes, off, len)`: the range checked as the compiled call checks
+ * it, `0 <= off <= off + len <= bytes.length`, through the slice panic, then
+ * the host's write of those bytes to stdout.
+ */
+export function writeBytes(bytes, off, len) {
+  const from = toIndex(off);
+  const to = from + toIndex(len);
+  if (!(from >= 0 && from <= to && to <= bytes.length)) panicSlice(from, to, bytes.length);
+  return host.call("writeBytes", [bytes, from, to]);
 }
 
 /** `panic(message)`: the message on stderr, then exit 1. */
@@ -117,6 +145,30 @@ export function appendFileSync(path, data) {
   return host.call("appendFileSync", [path, data]);
 }
 
+export function writeFileBytesSync(path, bytes) {
+  return host.call("writeFileBytesSync", [path, bytes]);
+}
+
+export function renameSync(from, to) {
+  return host.call("renameSync", [from, to]);
+}
+
+export function unlinkSync(path) {
+  return host.call("unlinkSync", [path]);
+}
+
+export function writeFileSyncMode(path, data, mode) {
+  return host.call("writeFileSyncMode", [path, data, mode]);
+}
+
+export function createFileExclusiveSync(path, data, mode) {
+  return host.call("createFileExclusiveSync", [path, data, mode]);
+}
+
+export function mkdirSyncMode(path, mode) {
+  return host.call("mkdirSyncMode", [path, mode]);
+}
+
 export function mkdirSync(path) {
   return host.call("mkdirSync", [path]);
 }
@@ -153,6 +205,18 @@ export function spawnSyncTo(argv, out, err) {
   return host.call("spawnSyncTo", [argv, out, err]);
 }
 
+/**
+ * `spawnPiped(argv, stdin, stdout, stderr)`: the host runs the child and hands
+ * back its status and both streams' bytes, and they are appended here, as the
+ * runtime appends them to the caller's arrays.
+ */
+export function spawnPiped(argv, input, out, err) {
+  const [status, outBytes, errBytes] = host.call("spawnPiped", [argv, input]);
+  for (const b of outBytes) out.push(b);
+  for (const b of errBytes) err.push(b);
+  return status;
+}
+
 export function kill(pid, sig) {
   return host.call("kill", [pid, sig]);
 }
@@ -167,6 +231,10 @@ export function totalMemory() {
 
 export function monotonicNanos() {
   return host.call("monotonicNanos", []);
+}
+
+export function wallClockNanos() {
+  return host.call("wallClockNanos", []);
 }
 
 export function statMtimeSync(path) {
@@ -243,6 +311,24 @@ export function spawn() {
 
 export function waitPid() {
   return noProcessReading("waitPid");
+}
+
+/**
+ * `setNice(n)` and `setIdlePriority()` have no reading under Node: Node has one
+ * of the nice value (`os.setPriority`) but none of `SCHED_IDLE`, and a reading
+ * of one without the other would differ from the native build on the same host.
+ * Each throws, naming itself, as `runtime/nish.mjs` does.
+ */
+function noSchedulingReading(name) {
+  throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
+}
+
+export function setNice() {
+  return noSchedulingReading("setNice");
+}
+
+export function setIdlePriority() {
+  return noSchedulingReading("setIdlePriority");
 }
 
 /**

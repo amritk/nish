@@ -84,18 +84,26 @@ globalThis.console = {
 // `Array#sort`'s UTF-16 order — the two agree on ASCII names only.
 provide("write", shim.write);
 provide("writeError", shim.writeError);
+provide("writeBytes", shim.writeBytes);
 provide("panic", shim.panic);
 provide("readFileSync", shim.readFileSync);
 provide("readFileSyncOrNull", shim.readFileSyncOrNull);
 provide("readFileBytesSync", shim.readFileBytesSync);
 provide("writeFileSync", shim.writeFileSync);
 provide("appendFileSync", shim.appendFileSync);
+provide("writeFileBytesSync", shim.writeFileBytesSync);
+provide("renameSync", shim.renameSync);
+provide("unlinkSync", shim.unlinkSync);
+provide("writeFileSyncMode", shim.writeFileSyncMode);
+provide("createFileExclusiveSync", shim.createFileExclusiveSync);
+provide("mkdirSyncMode", shim.mkdirSyncMode);
 provide("mkdirSync", shim.mkdirSync);
 provide("isDirectorySync", shim.isDirectorySync);
 provide("readdirSync", shim.readdirSync);
 provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
+provide("spawnPiped", shim.spawnPiped);
 // WP34 N12. `spawn` and `waitPid` throw, naming themselves: a child is reaped
 // by Node's event loop. `kill`, `availableParallelism` and `totalMemory` answer.
 provide("spawn", shim.spawn);
@@ -103,6 +111,14 @@ provide("kill", shim.kill);
 provide("waitPid", shim.waitPid);
 provide("availableParallelism", shim.availableParallelism);
 provide("totalMemory", shim.totalMemory);
+// `setNice` and `setIdlePriority` throw, naming themselves: Node has a reading
+// of the nice value (`os.setPriority`) but none of `SCHED_IDLE`, and a reading
+// of one without the other would differ from the native build on the same host.
+for (const name of ["setNice", "setIdlePriority"]) {
+  provide(name, () => {
+    throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
+  });
+}
 provide("getenv", shim.getenv);
 provide("statMtimeSync", shim.statMtimeSync);
 provide("signalFd", shim.signalFd);
@@ -130,9 +146,17 @@ for (const name of [
   "pollModify",
   "pollRemove",
   "pollWait",
+  "netSetOption",
 ]) {
   provide(name, () => shim.noNetReading(name));
 }
+// `netSetOption`'s option ids are plain numbers, so they read the same here
+// as natively: only the call that takes one throws.
+provide("NET_TCP_NODELAY", 1);
+provide("NET_TCP_QUICKACK", 2);
+provide("NET_SO_KEEPALIVE", 3);
+provide("NET_SO_SNDBUF", 4);
+provide("NET_SO_RCVBUF", 5);
 
 // `nish:term`. Whether a descriptor is a terminal and how big stdout's is have
 // Node's answers; reading stdin, waiting for it and raw mode throw, each naming
@@ -180,6 +204,7 @@ if (!("set" in Array.prototype)) {
 // describes. A printed reading can never match a native run: the two origins are
 // both arbitrary, and only the difference between two reads means anything.
 provide("monotonicNanos", shim.monotonicNanos);
+provide("wallClockNanos", shim.wallClockNanos);
 
 // Conversions. In f64 mode `toF64` is the identity and `toI32` is the one that
 // matters (it saturates, where a JavaScript cast would not).
@@ -265,15 +290,12 @@ globalThis.parseFloat = shim.parseFloat;
 // script under Node, which is one index later than Node's own `argv`.
 process.argv = shim.argv();
 
-// There is no arena. `mark`/`release`/`reset` are no-ops rather than errors so
-// that a program which manages memory explicitly still runs; `used()` answers
-// zero, which is the honest number for a host that is not bump-allocating.
+// There is no arena. `mark()` answers zero rather than failing so that a
+// program which reads it still runs; `used()` answers zero too, which is the honest number for a host that is not bump-allocating.
 // Delegated like everything else here rather than written inline, so that the
 // answers cannot drift from the ones the rewritten runner gives.
 provide("Arena", {
   mark: shim.arenaMark,
-  release: shim.arenaRelease,
-  reset: shim.arenaReset,
   used: shim.arenaUsed,
 });
 // `using a = arena()` releases nothing here either: what the block allocated

@@ -65,10 +65,11 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!9, !10, !11, !12, !13}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i1", !1, i64 0}
@@ -78,3 +79,8 @@ attributes #2 = { nounwind willreturn readnone }
 !6 = !{!5, !2, i64 0}
 !7 = !{!5, !3, i64 8}
 !8 = !{!5, !4, i64 16}
+!9 = !{i32 8, !"cf-protection-branch", i32 1}
+!10 = !{i32 8, !"cf-protection-return", i32 1}
+!11 = !{i32 8, !"branch-target-enforcement", i32 1}
+!12 = !{i32 8, !"sign-return-address", i32 1}
+!13 = !{i32 4, !"probe-stack", !"inline-asm"}

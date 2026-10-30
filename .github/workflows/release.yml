@@ -68,6 +68,17 @@ on:
 # that pull request, so it asks for `contents: write` and `pull-requests: write`
 # and nothing else.
 #
+# `release` also asks for `id-token: write` and `attestations: write`, and only
+# it does: they are what actions/attest-build-provenance needs to sign the
+# build provenance of every file the release attaches (SC-16 in
+# docs/security/supply-chain.md), and the signing happens there, between
+# SHA256SUMS being written and `gh release create`. They are granted on that
+# job rather than here so that no other job can mint an OIDC token or write an
+# attestation; `npm` asks for `id-token: write` on its own, for the registry's
+# provenance. `binaries` asks for `attestations: read`, so that the seed it
+# fetches has its own attestation checked once the seed is a release that
+# carries one.
+#
 # What this does NOT do is keep third-party install code away from the write
 # token, because `release` still runs `npm ci` under it. What it no longer has
 # to do is build the compiler first: `npm pack` stopped shipping `dist/` in
@@ -169,6 +180,7 @@ jobs:
     runs-on: ${{ matrix.target.runner }}
     permissions:
       contents: read
+      attestations: read
     strategy:
       fail-fast: false
       matrix:
@@ -319,10 +331,10 @@ jobs:
         run: |
           tar -tzf "$TARBALL" |
             sed "s#^$NAME/##" | sort > "$RUNNER_TEMP/files.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/LICENSE-fast-float std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/pair.ts std/random.ts std/cli.ts std/math.ts std/LICENSE-fdlibm std/regex.ts std/secret.ts std/sqlite.ts std/threads.ts std/term.ts std/term-io.ts std/term-pixels.ts std/term-probe.ts std/term-rate.ts std/collections.ts std/map.ts std/bytes.ts std/base64.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/bcrypt.ts std/crypto/LICENSE-crypt_blowfish std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/postgres.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts LICENSE INSTALL.md docs/AI.md; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/LICENSE-fast-float std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/yaml-write.ts std/pair.ts std/random.ts std/cli.ts std/cli-args.ts std/cli-flags.ts std/math.ts std/LICENSE-fdlibm std/regex.ts std/secret.ts std/sqlite.ts std/threads.ts std/term.ts std/term-io.ts std/term-pixels.ts std/term-probe.ts std/term-rate.ts std/collections.ts std/map.ts std/bytes.ts std/base64.ts std/compress/checksum.ts std/compress/deflate.ts std/compress/gzip.ts std/compress/zlib.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/bcrypt.ts std/crypto/LICENSE-crypt_blowfish std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/p384.ts std/crypto/LICENSE-fiat-crypto-p384 std/crypto/pki.ts std/crypto/pki-roots.ts std/crypto/rsa.ts std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/dns-config.ts std/net/dns-message.ts std/net/dns-resolver.ts std/net/dns.ts std/net/hpack.ts std/net/http-compress.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-client.ts std/net/http-client.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/postgres.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/client.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-client.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/tls/verify.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts LICENSE INSTALL.md docs/AI.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from $NAME.tar.gz"; exit 1; }
           done
-          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the ninety-four that have to be there"
+          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the one hundred and fifteen that have to be there"
 
       # A released compiler that does not work is worse than no release: it is
       # the seed every later release is built from. Unpack the actual tarball
@@ -410,10 +422,24 @@ jobs:
           # which is louder and no less broken. No smoke test of the unpacked
           # tarball can see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/LICENSE-fast-float std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/pair.ts std/random.ts std/cli.ts std/math.ts std/LICENSE-fdlibm std/regex.ts std/secret.ts std/sqlite.ts std/threads.ts std/term.ts std/term-io.ts std/term-pixels.ts std/term-probe.ts std/term-rate.ts std/collections.ts std/map.ts std/bytes.ts std/base64.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/bcrypt.ts std/crypto/LICENSE-crypt_blowfish std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/postgres.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts docs/AI.md package.json; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/LICENSE-fast-float std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/yaml-write.ts std/pair.ts std/random.ts std/cli.ts std/cli-args.ts std/cli-flags.ts std/math.ts std/LICENSE-fdlibm std/regex.ts std/secret.ts std/sqlite.ts std/threads.ts std/term.ts std/term-io.ts std/term-pixels.ts std/term-probe.ts std/term-rate.ts std/collections.ts std/map.ts std/bytes.ts std/base64.ts std/compress/checksum.ts std/compress/deflate.ts std/compress/gzip.ts std/compress/zlib.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/bcrypt.ts std/crypto/LICENSE-crypt_blowfish std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/p384.ts std/crypto/LICENSE-fiat-crypto-p384 std/crypto/pki.ts std/crypto/pki-roots.ts std/crypto/rsa.ts std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/dns-config.ts std/net/dns-message.ts std/net/dns-resolver.ts std/net/dns.ts std/net/hpack.ts std/net/http-compress.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-client.ts std/net/http-client.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/postgres.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/client.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-client.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/tls/verify.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts docs/AI.md package.json; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
+
+      # What built this row's compiler, for the release's SBOM: the runner
+      # image, clang (and so the LLVM version), the linker, Node and the seed.
+      # Only this row can say, because the `release` job that writes the SBOM
+      # runs on one machine and these compilers were built on four.
+      - name: Record the toolchain
+        id: toolchain
+        env:
+          ASSET: ${{ matrix.target.asset }}
+          RUNNER_LABEL: ${{ matrix.target.runner }}
+        run: |
+          out="build/release/toolchain-$ASSET.json"
+          node scripts/sbom.mjs toolchain --asset "$ASSET" --runner "$RUNNER_LABEL" --out "$out"
+          echo "record=$out" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -421,6 +447,7 @@ jobs:
           path: |
             ${{ steps.binary.outputs.asset }}
             ${{ steps.platform.outputs.tarball }}
+            ${{ steps.toolchain.outputs.record }}
           if-no-files-found: error
           retention-days: 1
 
@@ -428,8 +455,15 @@ jobs:
     name: release
     needs: [ci, targets, binaries]
     runs-on: ubuntu-latest
+    # `contents: write` for `gh release create`; `id-token: write` and
+    # `attestations: write` for the provenance step, and for nothing else this
+    # job does (see the comment on `permissions:` at the top of this file).
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     outputs:
-      sums: ${{ steps.create.outputs.sums }}
+      sums: ${{ steps.sums.outputs.sums }}
     steps:
       # This job holds `contents: write` and runs `npm ci`, so the token is not
       # left in .git/config for a dependency's install script to read. Nothing
@@ -516,12 +550,30 @@ jobs:
           test -s build/release/assets.txt || { echo "::error::no native compiler assets to attach"; exit 1; }
           test -s build/release/packages.txt || { echo "::error::no platform packages to attach"; exit 1; }
 
+      # The tagged commit still pins the previous release's platform packages:
+      # the release commit cannot move them, because their lockfile entries
+      # describe tarballs this run is what publishes (release-pr.yml says why).
+      # So the pins move here, in this job's checkout, and the tarball is
+      # opened back up to prove the package that is published installs the
+      # binaries of this release and not the last one.
+      - name: Pin this release's platform packages
+        run: node scripts/pin-platform-packages.mjs "${GITHUB_REF_NAME#v}"
+
       - name: Pack
         id: pack
         run: |
           mkdir -p build/release
           file="$(npm pack --pack-destination build/release | tail -n 1)"
           echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
+          tar -xOzf "build/release/$file" package/package.json | node -e '
+            const v = process.argv[1]
+            const deps = JSON.parse(require("fs").readFileSync(0, "utf8")).optionalDependencies ?? {}
+            const stale = Object.entries(deps).filter(([, pin]) => pin !== v)
+            if (Object.keys(deps).length === 0 || stale.length > 0) {
+              console.log(`::error::the packed package.json pins ${JSON.stringify(deps)}, not every platform package at ${v}`)
+              process.exit(1)
+            }
+          ' "${GITHUB_REF_NAME#v}"
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort | tee build/release/files.txt
           # The tarball must be usable on its own, and this list is what makes that
           # a gate rather than a hope. `runtime-os.c` is on it because a `files`
@@ -535,7 +587,7 @@ jobs:
           # packages the matrix above built. The three `bin/` paths are the command
           # and the two files behind it, and a tarball missing any of them installs
           # a package whose `bin` points at nothing.
-          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/LICENSE-fast-float std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/pair.ts std/random.ts std/cli.ts std/math.ts std/LICENSE-fdlibm std/regex.ts std/secret.ts std/sqlite.ts std/threads.ts std/term.ts std/term-io.ts std/term-pixels.ts std/term-probe.ts std/term-rate.ts std/collections.ts std/map.ts std/bytes.ts std/base64.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/bcrypt.ts std/crypto/LICENSE-crypt_blowfish std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/postgres.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts; do
+          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/LICENSE-fast-float std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/yaml-write.ts std/pair.ts std/random.ts std/cli.ts std/cli-args.ts std/cli-flags.ts std/math.ts std/LICENSE-fdlibm std/regex.ts std/secret.ts std/sqlite.ts std/threads.ts std/term.ts std/term-io.ts std/term-pixels.ts std/term-probe.ts std/term-rate.ts std/collections.ts std/map.ts std/bytes.ts std/base64.ts std/compress/checksum.ts std/compress/deflate.ts std/compress/gzip.ts std/compress/zlib.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/bcrypt.ts std/crypto/LICENSE-crypt_blowfish std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/p384.ts std/crypto/LICENSE-fiat-crypto-p384 std/crypto/pki.ts std/crypto/pki-roots.ts std/crypto/rsa.ts std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/dns-config.ts std/net/dns-message.ts std/net/dns-resolver.ts std/net/dns.ts std/net/hpack.ts std/net/http-compress.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-client.ts std/net/http-client.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/postgres.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/client.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-client.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/tls/verify.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
@@ -564,6 +616,25 @@ jobs:
           fi
           test -s build/release/notes.md || { echo "::error::release notes are empty"; exit 1; }
 
+      # The release's software bill of materials, in SPDX 2.3: the npm
+      # package, every native tarball and platform package with its SHA-256,
+      # the code copied in from elsewhere they carry (THIRD_PARTY_NOTICES.md),
+      # and what built each tarball, from the record its row wrote. It is
+      # attached, and listed in SHA256SUMS and the provenance below, like any
+      # other asset. `--created` is the tagged commit's time rather than now,
+      # so a re-run describes the same release in the same words.
+      - name: Software bill of materials
+        id: sbom
+        env:
+          PACKED: ${{ steps.pack.outputs.tarball }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          out="build/release/nish-$version.spdx.json"
+          test "$(basename "$PACKED")" = "nish-$version.tgz" || { echo "::error::npm pack wrote $PACKED, not nish-$version.tgz"; exit 1; }
+          node scripts/sbom.mjs spdx --dir build/release --version "$version" \
+            --created "$(git log -1 --format=%cI)" --out "$out"
+          echo "file=$out" >> "$GITHUB_OUTPUT"
+
       # One SHA256SUMS over every file this release attaches, attached with
       # them and built from the same list. install.sh (and so
       # scripts/fetch-seed.sh, and every CI job that takes a seed) refuses a
@@ -574,11 +645,11 @@ jobs:
       # (docs/security/supply-chain.md). The sums are also this job's output,
       # which no edit to the release can change, and the `npm` job checks
       # every package it downloads back against them.
-      - name: Create GitHub release
-        id: create
+      - name: SHA256SUMS
+        id: sums
         env:
-          GH_TOKEN: ${{ github.token }}
           PACKED: ${{ steps.pack.outputs.tarball }}
+          SBOM: ${{ steps.sbom.outputs.file }}
         run: |
           # The asset list the step above wrote and checked, so the attach and
           # the check are one list rather than two.
@@ -589,11 +660,35 @@ jobs:
           # release, and a user who cannot reach the registry can still install
           # the pair for their machine by hand (docs/INSTALL.md, §2).
           while IFS= read -r path; do assets+=("$path"); done < build/release/packages.txt
+          assets+=("$SBOM")
+          printf '%s\n' "${assets[@]}" > build/release/attach.txt
           names=()
           for path in "${assets[@]}"; do names+=("$(basename "$path")"); done
           (cd build/release && sha256sum -- "${names[@]}") > build/release/SHA256SUMS
           cat build/release/SHA256SUMS
           { echo "sums<<SHA256SUMS_END"; cat build/release/SHA256SUMS; echo "SHA256SUMS_END"; } >> "$GITHUB_OUTPUT"
+
+      # Build provenance for every file SHA256SUMS names (SC-16): a signed
+      # statement, logged in Sigstore's public transparency log, that this
+      # workflow at this tag built them. SHA256SUMS can only say that the
+      # assets and the sums agree, and both come from the same release, which
+      # whoever could replace one could replace both; an attestation is signed
+      # with a certificate only this workflow's OIDC token can obtain, so it
+      # does not move with them. install.sh checks it with
+      # `gh attestation verify` when gh is installed and signed in, and
+      # docs/INSTALL.md says how to check it by hand. It runs before the
+      # release exists, so a release is never published without it.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: build/release/SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=()
+          while IFS= read -r path; do assets+=("$path"); done < build/release/attach.txt
           gh release create "$GITHUB_REF_NAME" \
             "${assets[@]}" \
             build/release/SHA256SUMS \
@@ -764,22 +859,22 @@ jobs:
   # The lockfile half of the release, which can only be written once the
   # registry has the packages it points at.
   #
-  # release-pr.yml bumps the version and the platform packages' pins in
-  # package.json and in package-lock.json's `packages[""]`, but it cannot move
-  # the lockfile's `node_modules/<scope>-<asset>` entries: their `resolved` and
-  # `integrity` are the URL and the hash of a tarball that does not exist until
-  # the `binaries` job above builds it from the tag and `npm` publishes it. So
-  # every release commit lands on main with those entries still at the previous
-  # release, and `npm ci` rejects main from the moment the publish lands:
+  # release-pr.yml bumps the version in package.json and package-lock.json,
+  # but leaves the platform packages' pins at the previous release, because it
+  # cannot move the lockfile's `node_modules/<scope>-<asset>` entries with
+  # them: their `resolved` and `integrity` are the URL and the hash of a
+  # tarball that does not exist until the `binaries` job above builds it from
+  # the tag and `npm` publishes it. A pin moved without its entry is a main
+  # that disagrees with its own lockfile, and `npm ci` rejects it from the
+  # moment the publish lands:
   #
   #   Invalid: lock file's <scope>-<asset>@0.10.0 does not satisfy <scope>-<asset>@0.11.0
   #
-  # That is what 0.11.0 did. The release commit's own CI was green, because it
-  # ran before the publish and `npm ci` quietly drops an optional dependency
-  # whose version the registry does not have yet; the next pull request to
-  # merge main was the first thing to go red, and it carried the regenerated
-  # lockfile by hand. This job opens that pull request instead and merges it
-  # itself, and ci.yml's `lint` job keeps main red until it lands.
+  # That is what 0.11.0 did, and until 0.26.0 every release commit kept the
+  # `lint` job red on main for the half hour between the release merge and
+  # this job's merge. So the pins stay behind on main, the `release` job pins
+  # the package it packs, and this job moves the pins and the lockfile entries
+  # together, in one pull request it opens and merges itself.
   #
   # Merged here, not left for a human, because there is nothing in it to
   # review: the lockfile is fully determined by the registry and the step
@@ -789,11 +884,11 @@ jobs:
   # an unrelated pull request carried the same lockfile by hand.
   #
   # Checked out at main rather than at the tag, because main is where the stale
-  # lockfile is and where the pull request goes. The token arrangement and the
+  # pins are and where the pull request goes. The token arrangement and the
   # refusal handling are release-pr.yml's, for the same reasons given there.
-  # Idempotent: a re-run whose lockfile already agrees succeeds without doing
-  # anything, and one whose pull request is already open refreshes the branch,
-  # merges that one and does not open a second.
+  # Idempotent: a re-run on a main that already pins this release succeeds
+  # without doing anything, and one whose pull request is already open
+  # refreshes the branch, merges that one and does not open a second.
   lockfile:
     name: regenerate package-lock.json
     needs: [targets, npm]
@@ -862,17 +957,22 @@ jobs:
             echo "$pkg@$version is on the registry"
           done < "$RUNNER_TEMP/packages.txt"
 
-      # `--package-lock-only` resolves and writes the lockfile without
-      # installing anything, and `--ignore-scripts` keeps third-party install
-      # code away from a job holding a write token. `npm ls` then reads the
-      # result back with no registry involved, the check ci.yml's `lint` job
-      # makes, so a lockfile that still disagrees fails here and not on main.
+      # Main still pins the previous release's platform packages, because the
+      # release commit could not move them (release-pr.yml says why). They move
+      # here, in both files, and `--package-lock-only` then resolves and writes
+      # the lockfile entries they point at without installing anything, so the
+      # pins and the entries land in one commit and main never disagrees with
+      # its own lockfile. `--ignore-scripts` keeps third-party install code
+      # away from a job holding a write token. `npm ls` then reads the result
+      # back with no registry involved, the check ci.yml's `lint` job makes, so
+      # a lockfile that still disagrees fails here and not on main.
       - name: Regenerate the lockfile
         if: steps.main.outputs.current == 'true'
         run: |
+          node scripts/pin-platform-packages.mjs "${GITHUB_REF_NAME#v}"
           npm install --package-lock-only --ignore-scripts --prefer-online --no-audit --no-fund
           npm ls --package-lock-only --all > /dev/null
-          git diff --stat -- package-lock.json
+          git diff --stat -- package.json package-lock.json
 
       - name: Open the lockfile pull request
         if: steps.main.outputs.current == 'true'
@@ -883,19 +983,19 @@ jobs:
           branch="release/lockfile-$v"
           # The squash-merge subject, so a conventional commit that pr-title.yml
           # accepts; it lands under "Build" in the next release notes.
-          title="build: regenerate package-lock.json for $v"
-          if git diff --quiet -- package-lock.json; then
-            echo "::notice::package-lock.json on main already agrees with $v; nothing to open"
+          title="build: pin the $v platform packages in package.json and package-lock.json"
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "::notice::main already pins the $v platform packages; nothing to open"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
-          git add package-lock.json
+          git add package.json package-lock.json
           git commit -m "$title"
           git push --force origin "$branch"
 
-          body="$(printf 'The platform packages for **%s** are on the registry now, so `package-lock.json` can point at them.\n\nThe release commit bumped the pins in `package.json` and in the lockfile root, but it could not move the lockfile entries for the platform packages: their `resolved` URL and `integrity` hash belong to tarballs that only exist once `release.yml` has built them from the tag and published them. Until this merges, `npm ci` on main fails with `lock file ... does not satisfy ...`, and so does the `lint` job in CI.\n\nGenerated by the `lockfile` job in `release.yml` with `npm install --package-lock-only --ignore-scripts`.\n' "$v")"
+          body="$(printf 'The platform packages for **%s** are on the registry now, so `main` can pin them.\n\nThe release commit leaves the `optionalDependencies` pins at the previous release, because their lockfile entries (the `resolved` URL and `integrity` hash) belong to tarballs that only exist once `release.yml` has built them from the tag and published them. The published package was pinned to this release when it was packed. This moves the pins in `package.json` and the lockfile root together with the entries they resolve to, so `main` never disagrees with its own lockfile.\n\nGenerated by the `lockfile` job in `release.yml` with `scripts/pin-platform-packages.mjs` and `npm install --package-lock-only --ignore-scripts`.\n' "$v")"
 
           if existing="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" && [ -n "$existing" ]; then
             echo "::notice::the lockfile pull request for $v is already open: #$existing"

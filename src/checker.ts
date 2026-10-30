@@ -164,25 +164,13 @@ export class Checker {
     nodeCount: i32,
     sink: DiagnosticSink,
     numberMode: i32,
-    wrapping: boolean,
-    uncheckedIndexing: boolean,
     strictExports: boolean,
     packageName: string
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
-    this.program.wrapping = wrapping
     this.program.f64Mode = numberMode === NUMBER_MODE_F64
-    this.program.uncheckedIndexing = uncheckedIndexing
     this.declared = []
-    this.ctx = new CheckContext(
-      table,
-      this.program,
-      sink,
-      numberMode,
-      wrapping,
-      uncheckedIndexing,
-      strictExports
-    )
+    this.ctx = new CheckContext(table, this.program, sink, numberMode, strictExports)
   }
 
   /**
@@ -1668,7 +1656,7 @@ export const checkSignatureBody = (
     // are reported, because one of the warnings is about the proofs that did
     // not come off, and it has to be reported by the same source-order walk
     // as the rest of the class.
-    const bounds = analyzeBounds(ctx, body, ctx.uncheckedIndexing)
+    const bounds = analyzeBounds(ctx, body)
     // WP15 §8: the performance warnings, over the same body and the same
     // side tables. Only for a body that checked cleanly — advice about code
     // that does not compile is noise, and a poisoned body has incomplete
@@ -1761,7 +1749,7 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
  * `src/bounds.ts` credits (`orderFacts`), or none at all.
  *
  * An `i32` or ranged index is given `i >= 0 && i < xs.length`, which proves
- * both ends whatever took the proof away, `--wrapping` included; under
+ * both ends whatever took the proof away; under
  * `--number-mode f64` the length is an `f64`, so the bound is spelled
  * `toI32(xs.length)`, which `lengthOf` accepts. A `u8`, `u16` or `u32`
  * index, which that `i32` test does not type-check against, is given the
@@ -2170,9 +2158,7 @@ const checkNotInlinable = (walk: PerfWalk, call: Node): void => {
  * Not reported outside a loop, where the clamp runs once; not reported unless
  * the receiver and the bound are both plain locals, which is the shape the
  * analysis can prove and therefore the shape a guard would help — the same bar
- * `checkSurvivingBoundsCheck` holds itself to. Unlike that one it ignores
- * `--unchecked-indexing`, because the clamp is not a check: the flag does not
- * remove it and neither rewrite depends on it.
+ * `checkSurvivingBoundsCheck` holds itself to.
  *
  * TODO(wp15): the named guard does not compile for an unsigned bound. On a
  * `u32` the message still says to write `if (k >= 0 && k <= s.length)`, and the
@@ -2970,15 +2956,8 @@ const perfOverflowsItsType = (ctx: CheckContext, expr: Node): boolean => {
  * that is the operation that actually goes wrong: in `(a * b) + 1` where the
  * product already overflows, the `+` is a consequence and saying so twice
  * would not tell the reader anything new.
- *
- * Silent under `--wrapping`, where the wrap is the defined answer rather than
- * a panic and the warning would be arguing with a flag the author passed on
- * purpose.
  */
 const checkConstantOverflow = (walk: PerfWalk, expr: Node): void => {
-  if (walk.ctx.wrapping) {
-    return
-  }
   if (expr.text !== "+" && expr.text !== "-" && expr.text !== "*") {
     return
   }
@@ -2997,14 +2976,14 @@ const checkConstantOverflow = (walk: PerfWalk, expr: Node): void => {
     expr,
     `this computes with overflow: the result ${folded.value} does not fit in i32 (the range is ${I32_MIN} to ` +
       `${I32_MAX}), and signed overflow panics when it runs rather than wrapping: widen the operands with ` +
-      `\`toI64\` first, or use --wrapping for two's-complement arithmetic`
+      `\`toI64\` first, or call \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` for two's-complement arithmetic`
   )
 }
 
 /**
  * `toI64(a * b)` and `toF64(a * b)` on `i32` operands: the multiplication is
- * done in `i32`, where a product past its range panics (or wraps, under
- * `--wrapping`) before the conversion widens it, so the wider type never sees
+ * done in `i32`, where a product past its range panics before the conversion
+ * widens it, so the wider type never sees
  * the value the reader expects. The
  * rewrite is mechanical, which is what earns this one its place under the §8
  * bar.

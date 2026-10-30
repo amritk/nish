@@ -1,17 +1,28 @@
 %struct.nish_array = type { i64, i64, i8* }
 
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 @nish_argv = external global %struct.nish_array*, align 8
 
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
+declare double @nish_floor(double) #2
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #0
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #0
 declare double @nish_date_now() #0
-declare double @llvm.floor.f64(double) #2
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -21,7 +32,7 @@ entry:
   store double %0, double* %t.addr, align 8
   %1 = load double, double* %t.addr, align 8
   %2 = load double, double* %t.addr, align 8
-  %3 = call double @llvm.floor.f64(double %2)
+  %3 = call double @nish_floor(double %2)
   %4 = fcmp oeq double %1, %3
   %5 = select i1 %4, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
   call void @nish_print(i8* %5)
@@ -55,10 +66,11 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -70,3 +82,8 @@ attributes #2 = { nounwind willreturn readnone }
 !8 = !{!"header ptr", !6, i64 0}
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}

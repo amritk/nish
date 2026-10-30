@@ -2,7 +2,7 @@
 // and the copy one `llvm.memmove`, so every answer here is the kernel's, held
 // to the walk Node runs. Runs are long enough to cross the 16- and 32-byte
 // blocks, every clamp is taken, and both overlapping copies are made.
-import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes"
+import { copyBytes, skipBlank, skipDigits, skipJsonPlain, skipJsonText } from "nish/bytes"
 
 /** The bytes of `b` in decimal, a space between each. */
 const spaced = (b: u8[]): string => {
@@ -76,6 +76,20 @@ export const main = (): i32 => {
   console.log(
     `text malformed: ${skipJsonText(overlong, 0, 21)} ${skipJsonText(surrogate, 0, 22)} ${skipJsonText(tooHigh, 0, 23)} ${skipJsonText(stray, 0, 20)} ${skipJsonText(cut, 0, 20)} ${skipJsonText(cut, 0, 21)}`
   )
+
+  // JSON plain: the writer's run stops at a quote, a backslash and a control byte,
+  // and runs on through DEL, every byte from 0x80 up and malformed UTF-8 alike.
+  console.log(`plain quote: ${skipJsonPlain(run(97, 45, [toU8(34)]), 0, 46)}`)
+  console.log(`plain backslash: ${skipJsonPlain(run(93, 33, [toU8(92)]), 0, 34)}`)
+  console.log(`plain control: ${skipJsonPlain(run(32, 17, [toU8(31)]), 0, 18)} ${skipJsonPlain(run(97, 40, [toU8(0)]), 0, 41)}`)
+  const high: u8[] = []
+  for (let c: i32 = 0x7f; c <= 0xff; c += 1) {
+    high.push(toU8(c))
+  }
+  high.push(toU8(10))
+  console.log(`plain high: ${skipJsonPlain(high, 0, toI32(high.length))} ${skipJsonPlain(overlong, 0, 21)} ${skipJsonPlain(stray, 0, 20)}`)
+  const p: u8[] = run(97, 50, [toU8(34)])
+  console.log(`plain clamps: ${skipJsonPlain(p, -3, 1000)} ${skipJsonPlain(p, 30, 10)} ${skipJsonPlain(p, 7, 33)} ${skipJsonPlain(p, 51, 51)} ${skipJsonPlain(p, 99, 99)}`)
 
   // copyBytes: a window into another array, then both overlaps within one.
   const src: u8[] = [toU8(1), toU8(2), toU8(3), toU8(4), toU8(5), toU8(6), toU8(7), toU8(8)]

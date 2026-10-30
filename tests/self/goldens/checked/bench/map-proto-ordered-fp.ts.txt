@@ -273,8 +273,7 @@ function report(timing: boolean, name: string, started: i64, checksum: string): 
   calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_overflow nish_print nish_str_concat nish_str_from_i64 nish_write
   stackSites=0 stackLocals=0
 function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
-  sharedWrite: via StrMap.set
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
   calls: StrMap.constructor StrMap.set nish_alloc_struct
   pointer keys: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -283,8 +282,7 @@ function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
   local +1:12 i: i32 (let)
   callee +2:5 StrMap.set -> @StrMap.set
 function fillIntMap(keys: i32[], n: i32): IntMap -> @fillIntMap
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
-  sharedWrite: via IntMap.set
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
   calls: IntMap.constructor IntMap.set nish_alloc_struct
   pointer keys: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

@@ -37,7 +37,7 @@
 //     tree has none. The walks are otherwise the same walks.
 
 import { WIPE_MEMSET } from "./emit-secret"
-import { isPureRuntime, SECRET_WIPE, secretRoleOf } from "./secret"
+import { isPureRuntime, SECRET_MAKE, SECRET_WIPE, secretRoleOf } from "./secret"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
 import { openedHandle } from "./handles"
 import {
@@ -236,6 +236,14 @@ export class PointerParamFacts {
   align: i32
   /** Stores through the pointer, directly or via a callee (fixpoint). */
   writesThrough: boolean
+  /**
+   * `writesThrough`, less a `string` element handed to a call (`p[i]` as an
+   * argument), which `classifyElementUse` counts as a write for LLVM's sake
+   * though a string has no slot a callee can store into: what a caller's
+   * shared write asks of its callee (`writesArgument`), so a function that
+   * reads `hashes[k]` into a callee does not write the caller's `hashes`.
+   */
+  writesShared: boolean
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee. */
   captured: boolean
   /**
@@ -279,6 +287,7 @@ export class PointerParamFacts {
     this.size = size
     this.align = align
     this.writesThrough = false
+    this.writesShared = false
     this.captured = false
     this.outlives = false
     this.writesReach = false
@@ -652,8 +661,9 @@ export class FunctionFacts {
   ownSlotWrites: MemPath[]
   ownSlotSites: Node[]
   /**
-   * The objects this call made, by key (`FactCollector.ownKeyOf`), and the
-   * names it has resolved (`LocalPath`).
+   * The `const`s naming objects this call made, the one at `i` keyed `o<i>`
+   * (`FactCollector.ownKeyOf`): a fresh allocation, or a fresh `Secret` the
+   * body wipes. And the names it has resolved (`LocalPath`).
    */
   ownLocals: Local[]
   localPaths: LocalPath[]
@@ -742,15 +752,13 @@ export class FunctionFacts {
   returnsFreshElements: boolean
   /** The parameter whose elements the call fills with strings it allocated, or -1 (escape.ts, `fillsParam`). */
   fillsParam: i32
-  /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
-  usesArenaControl: boolean
   /**
    * Reads the arena's bump position — `Arena.mark`, `Arena.used` — directly or
    * through a callee (fixpoint). Such a function answers a number that depends
    * on *when* the arena was last reclaimed, which is what stops
    * `marksTailCall` (escape.ts) from moving a scope release across a call to
-   * it. It is deliberately not folded into `usesArenaControl`: reading
-   * the position invalidates nothing, so it must not cost a function its scope.
+   * it. Reading the position invalidates nothing, so it costs no function its
+   * scope.
    */
   readsArenaState: boolean
   /**
@@ -804,7 +812,7 @@ export class FunctionFacts {
   sourceName: string
   /** Allocates from the arena in its own body, before any callee is counted. */
   allocatesItself: boolean
-  /** Calls `Arena.mark`, `Arena.release` or `Arena.reset` in its own body: the program is managing this memory. */
+  /** Calls `Arena.mark` in its own body: the program is managing this memory. */
   managesArena: boolean
   /**
    * Leaves arena memory behind when it returns: it allocates, itself or
@@ -908,7 +916,6 @@ export class FunctionFacts {
     this.returnsAllocation = false
     this.returnsFreshElements = false
     this.fillsParam = -1
-    this.usesArenaControl = false
     this.readsArenaState = false
     this.opensArena = false
     this.callSites = []
@@ -1910,6 +1917,7 @@ class FactCollector {
         pointer.captured = true
         pointer.outlives = true
         pointer.writesThrough = true // an alias may be written through later
+        pointer.writesShared = true
       }
       return
     }
@@ -1927,7 +1935,24 @@ class FactCollector {
     }
     if (found.kind === USE_WRITE && pointer !== null) {
       pointer.writesThrough = true
+      if (!this.handsStringElement(ref)) {
+        pointer.writesShared = true
+      }
     }
+  }
+
+  /**
+   * `ref` is indexed for a `string` handed straight to a call: `f(p[i])`
+   * (`PointerParamFacts.writesShared`).
+   */
+  handsStringElement(ref: Node): boolean {
+    const access = this.unit.parents.parentOf(ref)
+    if (access === null || access.kind !== N_INDEX || access.children[0] !== ref) {
+      return false
+    }
+    const list = this.unit.parents.parentOf(access)
+    const type = this.unit.program.nodeTypes[access.id]
+    return list !== null && list.kind === N_LIST && type === T_STRING
   }
 
   /**
@@ -2042,6 +2067,7 @@ class FactCollector {
       return
     }
     pointer.writesThrough = true
+    pointer.writesShared = true
     this.noteSharedWrite(node)
   }
 
@@ -2099,10 +2125,10 @@ class FactCollector {
   }
 
   /**
-   * A `const` bound to a fresh object or array is an object of this call's
-   * own (`ownKeyOf`); a `const` bound to anything else is what it is bound
-   * to; a `let`, a loop variable or a name with no initialiser may be
-   * anything.
+   * A `const` bound to a fresh object or array, or to a fresh `Secret` the
+   * body wipes, is an object of this call's own (`ownKeyOf`); a `const` bound
+   * to anything else is what it is bound to; a `let`, a loop variable or a
+   * name with no initialiser may be anything.
    */
   resolveLocal(local: Local, depth: i32): MemPath {
     const key = this.ownKeyOf(local)
@@ -2196,8 +2222,9 @@ class FactCollector {
 
   /**
    * The key of the object `local` names when it is a `const` bound to a fresh
-   * allocation (`new`, an array or an object literal), registering it and
-   * what its initialiser stores (`DIRT_INIT`, `DIRT_STORE`); "" otherwise.
+   * allocation (`new`, an array or an object literal) or to a fresh `Secret`
+   * the body wipes (`isWipedFreshSecret`), registering it and what its
+   * initialiser stores (`DIRT_INIT`, `DIRT_STORE`); "" otherwise.
    */
   ownKeyOf(local: Local): string {
     const at = this.facts.ownLocals.indexOf(local)
@@ -2208,13 +2235,71 @@ class FactCollector {
     const decl: Node | null =
       local.mutable || body === null ? null : declarationIn(this.unit.program, body, local)
     const init: Node | null = decl === null ? null : unwrapParens(decl.children[2])
-    if (init === null || (init.kind !== N_NEW && init.kind !== N_ARRAY && init.kind !== N_OBJECT)) {
+    if (init === null) {
+      return ""
+    }
+    const fresh = init.kind === N_NEW || init.kind === N_ARRAY || init.kind === N_OBJECT
+    if (!fresh && !this.isWipedFreshSecret(local, init)) {
       return ""
     }
     const key = `o${this.facts.ownLocals.length}`
     this.facts.ownLocals.push(local)
-    this.noteFreshInit(key, init)
+    if (fresh) {
+      this.noteFreshInit(key, init)
+    } else {
+      // `new Secret(v)` stores `v` in `value`: one more object of this call's own.
+      this.noteStore(key, ".value", init.children[1].children[0])
+    }
     return key
+  }
+
+  /**
+   * #873: whether `init`, the initialiser of the `const` `local`, is
+   * `nish:secret`'s `secret(v)` of a fresh `v` (a `new`, an array literal or
+   * an object literal written in the call) and the body wipes `local` itself.
+   * `secret` answers `new Secret(v)`, so `ownKeyOf` makes the `Secret` an
+   * object of this call's own and records `v` as stored in its `value`: what
+   * `v` holds of anyone else's is a `DirtMark` like any field's. A `secret`
+   * of a parameter, a field, a call's answer or a moved local, and a `Secret`
+   * the body does not wipe, stay what `pathOf` makes of a call: anything
+   * (`tests/link/thread_task_wipe_secret`, `tests/cases/reject_thread_wipe_secret_*`).
+   */
+  isWipedFreshSecret(local: Local, init: Node): boolean {
+    const program = this.unit.program
+    if (init.kind !== N_CALL || secretRoleOf(program.nodeCallees[init.id]) !== SECRET_MAKE) {
+      return false
+    }
+    const args = init.children[1].children
+    if (args.length !== 1) {
+      return false
+    }
+    const value = unwrapParens(args[0])
+    if (value.kind !== N_NEW && value.kind !== N_ARRAY && value.kind !== N_OBJECT) {
+      return false
+    }
+    const body = this.sig.body()
+    if (body === null) {
+      return false
+    }
+    const refs: Node[] = []
+    collectRefs(program, body, local, refs)
+    for (const ref of refs) {
+      let at = ref
+      let list = this.unit.parents.parentOf(at)
+      while (list !== null && list.kind === N_PAREN) {
+        at = list
+        list = this.unit.parents.parentOf(at)
+      }
+      if (list !== null && list.kind === N_LIST) {
+        const call = this.unit.parents.parentOf(list)
+        if (call !== null && call.kind === N_CALL && call.children[1] === list) {
+          if (secretRoleOf(program.nodeCallees[call.id]) === SECRET_WIPE) {
+            return true
+          }
+        }
+      }
+    }
+    return false
   }
 
   /** What `init`, the fresh allocation an object of this call's own was made by, put in it. */
@@ -2713,7 +2798,16 @@ class FactCollector {
     }
     const pointer = this.pointerParamOf(e)
     const name = pointer === null ? "" : pointer.name
-    this.facts.argEdges.push(this.ownEdge(new ArgEdge(callee.name, index, name, null, this.pathOf(e))))
+    // A number, a `boolean`, an enum or a string names no memory a store can
+    // reach, and a function given for a compile-time function parameter is no
+    // value at run time (WP29): a callee can neither write below it nor store
+    // into it, so it pollutes none of the caller's.
+    const type = this.unit.program.nodeTypes[e.id]
+    const path =
+      callee.isCompileTime(index) || type === T_STRING || (type >= 0 && isScalarArgument(this.table, type))
+        ? new MemPath(ROOT_NONE, "", "")
+        : this.pathOf(e)
+    this.facts.argEdges.push(this.ownEdge(new ArgEdge(callee.name, index, name, null, path)))
   }
 
   visit(node: Node): void {
@@ -3018,7 +3112,7 @@ class FactCollector {
       !receiverIsValue(program, node.children[0].children[0])
     ) {
       const name = dottedName(node.children[0])
-      const dotted = builtinCalleesNamed(program, table, node, name)
+      const dotted = builtinCalleesNamed(program, table, this.opts, node, name)
       this.addCallees(dotted)
       this.noteWorld(node, dotted, name)
       if (this.known !== null) {
@@ -3044,9 +3138,7 @@ class FactCollector {
       // also allocate, and `slice` and an unproven `charCodeAt` can reach a panic.
       this.facts.readsMemory = true
       const name = node.children[0].text
-      this.addCallees(
-        stringConstructCallees(name, this.unit.program.uncheckedIndexing, program.nodeProvenIndex[node.id])
-      )
+      this.addCallees(stringConstructCallees(name, program.nodeProvenIndex[node.id]))
       if (name === "charCodeAt") {
         this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
       } else if (name === "slice") {
@@ -3232,7 +3324,7 @@ class FactCollector {
       // proved in range emits no call, so listing `nish_panic_index` here would
       // cost the function `willreturn` for a `noreturn` callee that is not in
       // its IR.
-      if (!this.unit.program.uncheckedIndexing && !program.nodeProvenIndex[node.id]) {
+      if (!program.nodeProvenIndex[node.id]) {
         this.facts.callees.add("nish_panic_index")
       }
       this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
@@ -3287,9 +3379,7 @@ class FactCollector {
         program.nodeProvenIndex[node.children[0].id] &&
         callsAnything(node.children[1])
       ) {
-        if (!this.opts.uncheckedIndexing) {
-          this.facts.callees.add("nish_panic_index")
-        }
+        this.facts.callees.add("nish_panic_index")
         // The check after the right side is a panic site of its own, and an
         // unproven one: the first check's proof does not survive the call.
         this.noteSite(node, PANIC_INDEX, false, "")
@@ -3317,7 +3407,7 @@ class FactCollector {
       this.noteArrayWrite(call, methodReceiver(call))
       this.facts.resizesArray = true
       const proven = this.unit.program.nodeProvenIndex[call.id]
-      if (!this.unit.program.uncheckedIndexing && !proven) {
+      if (!proven) {
         this.facts.callees.add("nish_panic_index")
       }
       this.noteSite(call, PANIC_POP, proven, "")
@@ -3336,9 +3426,7 @@ class FactCollector {
       this.noteArrayWrite(call, methodReceiver(call))
       if (method === "set") {
         this.facts.readsMemory = true
-        if (!this.unit.program.uncheckedIndexing) {
-          this.facts.callees.add("nish_panic_slice")
-        }
+        this.facts.callees.add("nish_panic_slice")
         this.noteSite(call, PANIC_SLICE, false, "")
       }
       return
@@ -3380,13 +3468,12 @@ class FactCollector {
    * Every checked signed `+ - *`, negation and step may call the noreturn
    * overflow panic, as a division may call its own, and is an `overflow` site.
    * One the bounds walk proved fits (`nodeProvenNoOverflow`) is a plain
-   * `add nsw` and calls nothing, so its site is proven; under `--wrapping`
-   * none is checked and none is a site. The question is `checksOverflow`'s,
+   * `add nsw` and calls nothing, so its site is proven. The question is `checksOverflow`'s,
    * the one `emitIntBinary` is reached on, so the two cannot drift apart.
    */
   collectOverflowFacts(node: Node): void {
     const program = this.unit.program
-    if (program.wrapping || !checksOverflow(program, this.table, node)) {
+    if (!checksOverflow(program, this.table, node)) {
       return
     }
     const proven = program.nodeProvenNoOverflow[node.id]
@@ -3455,11 +3542,7 @@ class FactCollector {
     }
   }
 
-  /**
-   * The site a builtin call is, by the name the analysis resolved it to: the
-   * kind does not depend on `--unchecked-indexing`, which drops the net range
-   * check without proving it (`builtinPanicKind`).
-   */
+  /** The site a builtin call is, by the name the analysis resolved it to (`builtinPanicKind`). */
   noteBuiltinSite(call: Node, name: string): void {
     const kind = builtinPanicKind(name)
     if (kind >= 0) {
@@ -3491,7 +3574,6 @@ class FactCollector {
     // answers for. Reading the text here instead would leave a call to `exit`
     // looking like no call at all, and the function would keep a `willreturn`
     // it has not earned.
-    const unchecked = this.unit.program.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
     this.noteBuiltinSite(node, imported.length > 0 ? imported : node.children[0].text)
     if (this.known !== null) {
@@ -3500,12 +3582,12 @@ class FactCollector {
     if (imported.length > 0) {
       const named =
         imported.indexOf(".") < 0
-          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
-          : builtinCalleesNamed(this.unit.program, this.table, node, imported)
+          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
+          : builtinCalleesNamed(this.unit.program, this.table, this.opts, node, imported)
       this.addCallees(named)
       this.noteWorld(node, named, imported)
     } else {
-      const plain = identifierBuiltinCallees(this.unit.program, this.table, node, unchecked)
+      const plain = identifierBuiltinCallees(this.unit.program, this.table, node)
       this.addCallees(plain)
       this.noteWorld(node, plain, node.children[0].text)
     }
@@ -3525,6 +3607,12 @@ class FactCollector {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet") {
       this.facts.effect = EFFECT_WRITE
+    } else if (name === "spawnPiped") {
+      // The runtime appends to `stdout` and `stderr` as `push` does, moving
+      // their `len` and perhaps their `data` (`isResizeCall`).
+      this.facts.effect = EFFECT_WRITE
+      this.facts.resizesArray = true
+      this.facts.callees.add("nish_array_grow")
     }
   }
 }
@@ -3575,7 +3663,6 @@ const collectFacts = (
     facts.returnsAllocation = memory.returnsAllocation
     facts.returnsFreshElements = memory.returnsFreshElements
     facts.fillsParam = memory.fillsParam
-    facts.usesArenaControl = memory.usesArenaControl
     facts.callSites = memory.callSites
     facts.escapingNodes = memory.escapingNodes
     facts.carriedStores = memory.carriedStores
@@ -3647,6 +3734,7 @@ const collectFacts = (
       if (isPointerParam(table, sig.paramTypes[p])) {
         if (isForeignBuffer(table, sig.paramTypes[p]) && !table.isReadonlyArray(sig.paramTypes[p])) {
           facts.pointerParams[at].writesThrough = true
+          facts.pointerParams[at].writesShared = true
         }
         at = at + 1
       }
@@ -3701,6 +3789,7 @@ const collectFacts = (
     const self = facts.pointerParam("this")
     if (self !== null) {
       self.writesThrough = true
+      self.writesShared = true
     }
   }
   // WP31 §9: the prologue that checks a host's arguments may take the panic
@@ -3747,7 +3836,7 @@ const collectFacts = (
   }
 
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used")
-  facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark")
+  facts.managesArena = facts.callees.has("nish_arena_mark")
 
   if (facts.readsMemory) {
     facts.effect = maxEffect(facts.effect, EFFECT_READ)
@@ -3804,6 +3893,7 @@ const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolea
     pp.captured = true
     pp.outlives = pp.outlives || !joined
     pp.writesThrough = true
+    pp.writesShared = true
   }
 }
 
@@ -3864,6 +3954,7 @@ const markWipe = (facts: FunctionFacts): void => {
   if (facts.pointerParams.length > 0) {
     const pp = facts.pointerParams[0]
     pp.writesThrough = true
+    pp.writesShared = true
     pp.writesReach = true
     pp.writesDeep = true
   }
@@ -3908,6 +3999,7 @@ const markChannelSend = (facts: FunctionFacts): void => {
   facts.callees.add("nish_channel_send")
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
+    facts.pointerParams[0].writesShared = true
   }
 }
 
@@ -3929,6 +4021,7 @@ const markAtomic = (facts: FunctionFacts): void => {
   facts.returnsScalar = true
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
+    facts.pointerParams[0].writesShared = true
   }
 }
 
@@ -4121,7 +4214,7 @@ export const analyzeFunctions = (
   propagate(facts, runtime)
   propagateCapabilities(facts)
   for (const f of facts.list) {
-    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl
+    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation
     // What a function stores into a parameter it fills is its caller's, so
     // no scope of its own may release it.
     f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0
@@ -4229,7 +4322,7 @@ const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => 
  * through `makeList` and keeps one `i32`, and every list lived until the
  * harness released its own mark. This adds a second way to earn the bracket:
  *
- *     contained && returnsScalar && !usesArenaControl && some callee net-allocates
+ *     contained && returnsScalar && some callee net-allocates
  *
  * **Why it is sound.** The release rewinds the arena to where it stood on
  * entry, freeing exactly what was allocated while the function ran, by it or
@@ -4238,9 +4331,8 @@ const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => 
  * memory that existed before the call. The return value is a number, a
  * `boolean`, an `enum` or nothing, so it names no memory. `contained` says no
  * allocation made during the call is reachable any other way, which covers the
- * writes. And `usesArenaControl` being false means nothing in the call reset or
- * released the arena under the mark, so the mark still names the entry
- * position when the release runs. Reading the position (`Arena.mark`,
+ * writes. Nothing in the call can move the arena below the mark, so the mark
+ * still names the entry position when the release runs. Reading the position (`Arena.mark`,
  * `Arena.used`) is allowed, exactly as the WP6 rule allows it: it answers a
  * smaller number after a scope reclaimed memory, which is the point, and
  * `readsArenaState` keeps a release from moving ahead of a tail call to one.
@@ -4314,7 +4406,7 @@ const settleScope = (facts: FactsTable, i: i32, state: i32[], before: boolean[])
     }
     c = c + 1
   }
-  if (!f.arenaScope && calleeAllocates && f.contained && f.returnsScalar && !f.usesArenaControl) {
+  if (!f.arenaScope && calleeAllocates && f.contained && f.returnsScalar) {
     f.arenaScope = true
   }
   f.netAllocates = !f.arenaScope && (f.allocatesItself || calleeAllocates)
@@ -4527,18 +4619,24 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
         while (i < pp.passedToCallees.length) {
           const g = facts.get(pp.passedToCallees[i])
           let writes = true
+          let shared = true
           let captures = true
           let outlives = true
           if (g !== null) {
             const target = g.pointerParamAt(pp.passedToIndices[i])
             if (target !== null) {
               writes = target.writesThrough
+              shared = target.writesShared
               captures = target.captured
               outlives = target.outlives
             }
           }
           if (writes && !pp.writesThrough) {
             pp.writesThrough = true
+            changed = true
+          }
+          if (shared && !pp.writesShared) {
+            pp.writesShared = true
             changed = true
           }
           if (captures && !pp.captured) {
@@ -4623,10 +4721,6 @@ const propagateCallee = (
     // header when the callee it invokes does.
     if (calleeFacts.resizesArray && !f.resizesArray) {
       f.resizesArray = true
-      changed = true
-    }
-    if (calleeFacts.usesArenaControl && !f.usesArenaControl) {
-      f.usesArenaControl = true
       changed = true
     }
     if (calleeFacts.readsArenaState && !f.readsArenaState) {
@@ -4815,7 +4909,7 @@ const writesArgument = (g: FunctionFacts | null, index: i32): boolean => {
     return true
   }
   const target = g.pointerParamAt(index)
-  return g.sharedWrite && target !== null && target.writesThrough
+  return g.sharedWrite && target !== null && target.writesShared
 }
 
 /** Whether `g` may keep an array it is handed as its parameter `index`. An unknown callee is assumed to. */
@@ -5100,7 +5194,8 @@ const PAST_ELSEWHERE: i32 = 2
 
 /**
  * The past write the call along `edge` makes its caller when the callee
- * writes below its parameters (`writesElsewhere` clear): none for an object
+ * writes below its parameters (`writesElsewhere` clear): none when it writes
+ * nothing through the one it is handed, none for an object
  * of the caller's own whose memory below it no parameter reaches, below the
  * caller's parameter for memory rooted at one, and anywhere otherwise. A
  * private array is taken as anywhere, as it was before the distinction.
@@ -5109,7 +5204,14 @@ const pastBelow = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 => {
   const g = facts.get(edge.callee)
   // A table's receiver, taken whole (`wholeReaches`), is its `this`.
   const index = edge.index < 0 ? 0 : edge.index
-  if (g === null || !g.writesPastParams || g.writesElsewhere || g.pointerParamAt(index) === null) {
+  // Every write to or below a parameter marks it `writesReach`, or
+  // `writesThrough` for an escape: a callee writes below the one it is handed
+  // only when that one is marked.
+  const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(index)
+  if (g === null || !g.writesPastParams || g.writesElsewhere || target === null) {
+    return PAST_NONE
+  }
+  if (!target.writesReach && !target.writesThrough) {
     return PAST_NONE
   }
   if (edge.owner !== null) {
@@ -5304,6 +5406,10 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     }
     if (!pointer.writesThrough) {
       pointer.writesThrough = true
+      changed = true
+    }
+    if (!pointer.writesShared) {
+      pointer.writesShared = true
       changed = true
     }
   }
@@ -5524,8 +5630,8 @@ const bodyMayExtend = (
   // stores constants only.
   if (body.kind === N_CALL || body.kind === N_NEW) {
     const callee = program.nodeCallees[body.id]
-    // An unresolved callee is a builtin, and no builtin but `push`/`pop`
-    // reaches a user array's header; those two are above.
+    // An unresolved callee is a builtin, and no builtin but `push`, `pop`
+    // and `spawnPiped` reaches a user array's header; those are above.
     if (callee !== null) {
       if (known === null) {
         return true
@@ -5612,14 +5718,23 @@ export const foreignBufferCountProven = (
 }
 
 /**
- * `a.push(v)` or `a.pop()`: the two calls that move an array's `len`, and so
- * the two a hoisted header has to be safe from. Every other array method reads
- * (`indexOf`, `join`), builds something new, or writes elements and leaves
- * the header alone (`set`, `fill`).
+ * `a.push(v)`, `a.pop()` or `spawnPiped(...)`: the calls that move an array's
+ * `len`, and so the ones a hoisted header has to be safe from. Every other
+ * array method reads (`indexOf`, `join`), builds something new, or writes
+ * elements and leaves the header alone (`set`, `fill`); `spawnPiped` appends
+ * to its `stdout` and `stderr` in the runtime.
  */
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const method = arrayMethodName(program, table, node)
-  return method === "push" || method === "pop"
+  if (method === "push" || method === "pop") {
+    return true
+  }
+  return (
+    node.kind === N_CALL &&
+    node.children[0].kind === N_IDENT &&
+    program.nodeCallees[node.id] === null &&
+    builtinNameOf(program, node) === "spawnPiped"
+  )
 }
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */

@@ -113,6 +113,13 @@
  * implementation.
  */
 import { Secret } from "nish:secret"
+import { copyBytes } from "nish/bytes"
+import {
+  HTTP_CODING_IDENTITY,
+  HTTP_OFFER_GZIP,
+  HttpCompressor,
+  httpAcceptEncoding,
+} from "nish/net/http-compress"
 import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
 import {
   HTTP1_BODY,
@@ -120,6 +127,8 @@ import {
   HTTP1_CLOSED,
   HTTP1_END,
   HTTP1_ERROR,
+  HTTP1_FIRST_HEAD,
+  HTTP1_FIRST_INPUT,
   HTTP1_HEAD,
   HTTP1_NO_BODY,
   HTTP1_REFUSED,
@@ -240,6 +249,11 @@ const http1ServerCheckWindow = (what: string, buf: u8[], off: i32, len: i32): vo
 
 /** Copies `src[off .. off + n)` to `out` at `at`, which the caller has made sure holds it, and answers where it ends. */
 const http1ServerCopy = (out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 => {
+  if (n > 0 && at >= 0 && off >= 0 && at <= toI32(out.length) - n && off <= toI32(src.length) - n) {
+    // Both windows fit, as they do for every caller: one move, not a byte loop.
+    copyBytes(out, at, src, off, n)
+    return at + n
+  }
   for (let k: i32 = 0; k < n && at + k < toI32(out.length) && off + k < toI32(src.length); k++) {
     if (at + k >= 0 && off + k >= 0) {
       out[at + k] = src[off + k]
@@ -352,6 +366,15 @@ export class Http1Config {
    * of its head each `idleTimeout` would hold its slot for good (slowloris).
    */
   headTimeout: i32 = 30000
+  /**
+   * Lend a slot's input and head buffers back to the server between
+   * exchanges: once a response is sent and no byte of the next request has
+   * come, the slot gives both to pools the server's slots share, and takes
+   * them again with the next byte. The memory they hold then follows the
+   * connections mid-request rather than every keep-alive connection open,
+   * for two pool operations a request. Off by default.
+   */
+  idleInput: boolean = false
 }
 
 /** The reason phrase a status is sent with; RFC 9112 §4 lets a client ignore it. */
@@ -470,8 +493,12 @@ export class Http1Connection {
   date: HttpDate
   /** The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is the last `H1_REQUEST`'s. */
   parser: Http1Parser
-  /** The frame decoder, once the slot has switched to WebSocket. */
-  ws: WsDecoder
+  /**
+   * The frame decoder: made when the slot first switches to WebSocket, so a
+   * slot that only ever speaks HTTP never holds its buffers, then kept for
+   * the slot's later peers.
+   */
+  ws: WsDecoder | null
   /**
    * Bytes to send are `output[outputStart .. outputEnd)`. Empty until the
    * connection first needs room to write: then its own buffer, made once, or
@@ -482,9 +509,12 @@ export class Http1Connection {
   noOutput: u8[]
   /** Where `output` is borrowed from, for a connection of a pool; null for one that keeps its own. */
   pool: Http1OutputPool | null
+  /** Where the parser's input and head buffers go while the slot rests, with `Http1Config.idleInput`; null otherwise. */
+  inputs: Http1OutputPool | null
+  heads: Http1OutputPool | null
   /** `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. */
   data: u8[]
-  /** A ping's payload, kept until its pong fits. */
+  /** A ping's payload, kept until its pong fits: empty until the first ping. */
   pong: u8[]
   /** No fields, for the responses the connection writes itself: made once. */
   noFields: u8[][]
@@ -561,12 +591,14 @@ export class Http1Connection {
     this.parser = new Http1Parser(config.maxTarget, config.maxHeaderBytes, config.maxHeaders, config.maxBody)
     this.parser.keepText = false
     this.parser.maxChunk = config.chunkSize
-    this.ws = new WsDecoder(true, config.maxMessage)
+    this.ws = null
     this.noOutput = []
     this.output = this.noOutput
     this.pool = null
+    this.inputs = null
+    this.heads = null
     this.data = this.noOutput
-    this.pong = new Array<u8>(WS_MAX_CONTROL)
+    this.pong = this.noOutput
     this.noFields = []
     // A line must fit whole before the parser can read it, so the buffer
     // holds the longest request line or field line however small a chunk is.
@@ -584,7 +616,10 @@ export class Http1Connection {
   /** Puts the connection back as the constructor left it, for the next peer. It allocates nothing. */
   restart(): void {
     this.parser.restart()
-    this.ws.reset()
+    const ws: WsDecoder | null = this.ws
+    if (ws !== null) {
+      ws.reset()
+    }
     this.outputStart = 0
     this.outputEnd = 0
     this.data = this.noOutput
@@ -608,6 +643,49 @@ export class Http1Connection {
     this.headTimed = false
     this.headSince = 0
     this.release()
+    this.park()
+  }
+
+  /**
+   * Gives the parser's input and head buffers to `inputs` and `heads` while
+   * the connection rests between exchanges: speaking HTTP, no request open,
+   * nothing fed and unread. Does nothing without the pools or otherwise.
+   */
+  park(): void {
+    const inputs: Http1OutputPool | null = this.inputs
+    const heads: Http1OutputPool | null = this.heads
+    const p: Http1Parser = this.parser
+    if (inputs === null || heads === null || this.state !== H1_S_HTTP || this.requestOpen || !p.resting()) {
+      return
+    }
+    if (toI32(p.buf.length) > 0) {
+      inputs.give(p.buf)
+      p.buf = this.noOutput
+      p.body = this.noOutput
+      p.start = 0
+      p.end = 0
+      p.scan = 0
+      p.lineStart = 0
+      p.lineEnd = 0
+    }
+    if (toI32(p.head.length) > 0) {
+      heads.give(p.head)
+      p.head = this.noOutput
+    }
+  }
+
+  /** Takes back the buffers `park` gave away, before bytes are fed. */
+  unpark(): void {
+    const inputs: Http1OutputPool | null = this.inputs
+    const heads: Http1OutputPool | null = this.heads
+    const p: Http1Parser = this.parser
+    if (inputs !== null && toI32(p.buf.length) === 0) {
+      p.buf = inputs.take()
+      p.body = p.buf
+    }
+    if (heads !== null && toI32(p.head.length) === 0) {
+      p.head = heads.take()
+    }
   }
 
   // ---- Bytes in and out ---------------------------------------------------------
@@ -622,7 +700,9 @@ export class Http1Connection {
     if (this.writeHeld || this.inputEnded || this.state === H1_S_CLOSING || this.state === H1_S_FAILED) {
       return 0
     }
-    const held: i32 = this.state === H1_S_WEBSOCKET ? this.ws.end - this.ws.start : this.parser.buffered()
+    const ws: WsDecoder | null = this.ws
+    const held: i32 =
+      this.state === H1_S_WEBSOCKET && ws !== null ? ws.end - ws.start : this.parser.buffered()
     const room: i32 = this.inputLimit() - held
     return room > 0 ? room : 0
   }
@@ -640,8 +720,9 @@ export class Http1Connection {
       return 0
     }
     if (this.state === H1_S_WEBSOCKET) {
-      this.ws.feed(buf, off, n)
+      this.decoder().feed(buf, off, n)
     } else {
+      this.unpark()
       this.parser.feed(buf, off, n)
     }
     return n
@@ -727,12 +808,8 @@ export class Http1Connection {
     const output: u8[] = this.output
     const live: i32 = this.outputEnd - this.outputStart
     if (this.outputStart > 0) {
-      for (
-        let k: i32 = 0;
-        k < live && k < toI32(output.length) && this.outputStart + k < toI32(output.length);
-        k++
-      ) {
-        output[k] = output[this.outputStart + k]
+      if (live > 0 && this.outputStart <= toI32(output.length) - live) {
+        copyBytes(output, 0, output, this.outputStart, live)
       }
       this.outputStart = 0
       this.outputEnd = live
@@ -784,8 +861,9 @@ export class Http1Connection {
         this.response = H1_R_NONE
         if (this.upgraded) {
           const p: Http1Parser = this.parser
-          this.ws.reset()
-          this.ws.feed(p.buf, p.start, p.buffered())
+          const ws: WsDecoder = this.decoder()
+          ws.reset()
+          ws.feed(p.buf, p.start, p.buffered())
           this.state = H1_S_WEBSOCKET
           return this.nextFrame()
         }
@@ -867,35 +945,50 @@ export class Http1Connection {
     return H1_ERROR
   }
 
+  /** The frame decoder, made on the slot's first switch to WebSocket. */
+  decoder(): WsDecoder {
+    const ws: WsDecoder | null = this.ws
+    if (ws !== null) {
+      return ws
+    }
+    const made: WsDecoder = new WsDecoder(true, this.config.maxMessage)
+    this.ws = made
+    return made
+  }
+
   /** `next` once the slot has switched to WebSocket. */
   nextFrame(): i32 {
     while (true) {
       if (this.pongPending && !this.sendPong()) {
         return H1_NEED_MORE
       }
-      const event: i32 = this.ws.next()
+      const ws: WsDecoder = this.decoder()
+      const event: i32 = ws.next()
       if (event === WS_MESSAGE) {
-        this.opcode = this.ws.opcode
-        this.data = this.ws.data
+        this.opcode = ws.opcode
+        this.data = ws.data
         this.dataStart = 0
-        this.dataLength = this.ws.dataLen
+        this.dataLength = ws.dataLen
         return H1_WS_MESSAGE
       }
       if (event === WS_PING) {
-        const n: i32 = this.ws.dataLen
-        for (let k: i32 = 0; k < n && k < toI32(this.pong.length) && k < toI32(this.ws.data.length); k++) {
-          this.pong[k] = this.ws.data[k]
+        const n: i32 = ws.dataLen
+        if (this.pong.length === 0) {
+          this.pong = new Array<u8>(WS_MAX_CONTROL)
+        }
+        for (let k: i32 = 0; k < n && k < toI32(this.pong.length) && k < toI32(ws.data.length); k++) {
+          this.pong[k] = ws.data[k]
         }
         this.pongLength = n
         this.pongPending = true
       } else if (event === WS_CLOSE) {
-        this.status = this.ws.closeCode
-        this.sendClose(this.ws.closeCode)
+        this.status = ws.closeCode
+        this.sendClose(ws.closeCode)
         this.state = H1_S_CLOSING
         return H1_WS_CLOSE
       } else if (event === WS_ERROR) {
-        this.status = this.ws.closeCode
-        this.sendClose(this.ws.closeCode)
+        this.status = ws.closeCode
+        this.sendClose(ws.closeCode)
         this.state = H1_S_FAILED
         return H1_ERROR
       } else if (event === WS_NEED_MORE) {
@@ -935,7 +1028,7 @@ export class Http1Connection {
     const payload: u8[] | null = websocketClosePayload(code, "")
     // A code that may not be sent (1005, for a close that had none) is
     // answered with an empty close.
-    const body: u8[] = payload === null ? this.pong : payload
+    const body: u8[] = payload === null ? this.noOutput : payload
     const n: i32 = payload === null ? H1_ZERO : toI32(body.length)
     const end: i32 = websocketWriteFrame(
       this.output,
@@ -1118,6 +1211,98 @@ export class Http1Connection {
     return 0
   }
 
+  // ---- Content coding -----------------------------------------------------------
+
+  /**
+   * The content coding to answer the current request with, read from its
+   * `Accept-Encoding` with gzip offered (`httpAcceptEncoding`):
+   * `HTTP_CODING_GZIP`, `HTTP_CODING_IDENTITY` (also with no such field), or
+   * `HTTP_CODING_NONE` when the client refuses identity and does not take
+   * gzip. Allocates nothing.
+   */
+  acceptEncoding(): i32 {
+    const parser: Http1Parser = this.parser
+    const i: i32 = parser.headerIndex("accept-encoding")
+    const spans: i32[] = parser.spans
+    if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
+      return HTTP_CODING_IDENTITY
+    }
+    const start: i32 = spans[4 * i + 2]
+    const end: i32 = spans[4 * i + 3]
+    if (start < 0 || start > end || end > toI32(parser.head.length)) {
+      return HTTP_CODING_IDENTITY
+    }
+    return httpAcceptEncoding(parser.head, start, end, HTTP_OFFER_GZIP)
+  }
+
+  /**
+   * Answers the current request with all of `body[off .. off + len)` in one
+   * call: `respond`, `write` and `end`, the body compressed by `enc` when
+   * `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it,
+   * with `Content-Encoding: gzip` and the compressed `Content-Length`, and
+   * otherwise sent as it is; `Vary: Accept-Encoding` either way while
+   * `enc.vary` is set. The program's fields may not name `Content-Encoding`
+   * or, with `enc.vary`, `Vary`. The whole response is written or none of
+   * it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says
+   * when to try again, compressing again), `H1_INVALID` for a response
+   * larger than the output could ever hold or one `respond` refuses,
+   * `H1_CLOSED` with no request to answer; 0 once it is queued. A window
+   * outside `body` panics.
+   */
+  respondEncoded(
+    status: i32,
+    names: u8[][],
+    values: u8[][],
+    body: u8[],
+    off: i32,
+    len: i32,
+    enc: HttpCompressor,
+    coding: i32
+  ): i32 {
+    http1ServerCheckWindow("Http1Connection.respondEncoded", body, off, len)
+    if (!this.answerable()) {
+      return H1_CLOSED
+    }
+    const packed: i32 = enc.compress(coding, body, off, len)
+    let n: i32 = len
+    if (packed >= 0) {
+      enc.addFields(names, values)
+      n = packed
+    } else {
+      enc.identityFields(names, values)
+    }
+    // `respond` and the body together, or neither: what `respond` sets is
+    // put back when the body does not fit behind the head. `room` first, so
+    // that what was sent is already moved out of the way and the `outputEnd`
+    // put back is one `respond` did not move.
+    this.room()
+    const outputEnd: i32 = this.outputEnd
+    const closeAfter: boolean = this.closeAfter
+    const r: i32 = this.respond(status, enc.names, enc.values, n)
+    if (r !== 0) {
+      return r
+    }
+    if (!this.responseEmpty && n > this.bodyRoom()) {
+      const fits: boolean = this.outputEnd - outputEnd + n <= this.config.outputSize - H1_CONTROL_RESERVE
+      this.outputEnd = outputEnd
+      this.closeAfter = closeAfter
+      this.response = H1_R_NONE
+      this.responseFraming = 0
+      this.responseLeft = 0
+      this.responseEmpty = false
+      if (!fits) {
+        return H1_INVALID
+      }
+      this.writeHeld = true
+      return H1_AGAIN
+    }
+    const w: i32 = packed >= 0 ? this.write(enc.output, toI32(0), n) : this.write(body, off, n)
+    if (w !== n) {
+      panic("Http1Connection.respondEncoded: a body the room was checked for did not fit")
+    }
+    return this.end()
+  }
+
   // ---- WebSocket ----------------------------------------------------------------
 
   /**
@@ -1245,6 +1430,36 @@ export class Http1Connection {
   expired(now: i64): boolean {
     return this.idle(now) || this.headLate(now)
   }
+
+  /**
+   * The soonest `expired` can turn true at or after `now` (`monotonicNanos`),
+   * however the connection moves from here: `lastActive` only grows, and a
+   * head clock not yet started starts no earlier than `now`, unless an
+   * exchange is open: `nextRequest` starts a pipelined head's clock at
+   * `lastActive` when it ends. Counting a quiet keep-alive's clock from
+   * `lastActive` put it in the past once it was quiet for longer than
+   * `headTimeout`, so each `expire` walked every slot.
+   */
+  expiresNoSooner(now: i64): i64 {
+    const idle: i64 = this.lastActive + toI64(this.config.idleTimeout) * toI64(1000000)
+    let start: i64 = now
+    if (this.headTimed) {
+      start = this.headSince
+    } else if (this.requestOpen) {
+      start = this.lastActive
+    }
+    const head: i64 = start + toI64(this.config.headTimeout) * toI64(1000000)
+    return head < idle ? head : idle
+  }
+}
+
+/**
+ * The soonest any slot accepted after now can expire: no sooner than the
+ * shorter of `idleTimeout` and `headTimeout` from now.
+ */
+const http1ExpireFloor = (config: Http1Config): i64 => {
+  const shorter: i32 = config.headTimeout < config.idleTimeout ? config.headTimeout : config.idleTimeout
+  return monotonicNanos() + toI64(shorter) * toI64(1000000)
 }
 
 // ---- Carriers -------------------------------------------------------------------
@@ -1273,6 +1488,9 @@ export class Http1Server {
   armed: i32[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
+  /** The input and head buffers resting slots lend, with `Http1Config.idleInput`. */
+  inputs: Http1OutputPool
+  heads: Http1OutputPool
   /**
    * The slots closed since they were used, a stack whose top `accept` takes
    * before it builds a slot past the high-water mark: finding one costs the
@@ -1288,6 +1506,14 @@ export class Http1Server {
   slots: i32 = 1
   /** The listening socket, which the program made with `tcpListen` and still owns. */
   listener: i32 = -1
+  /**
+   * No slot can expire before this (`monotonicNanos`), so `expire` called
+   * sooner walks none: it walks every slot only about once per the shorter
+   * timeout, however many there are.
+   */
+  expireAfter: i64 = 0
+  /** How many calls of `expire` walked every slot, for a program measuring its cost. */
+  expireScans: i32 = 0
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`.
@@ -1305,6 +1531,8 @@ export class Http1Server {
     this.free = []
     this.slots = size < 1 ? 1 : size
     this.outputs = new Http1OutputPool(config.outputSize)
+    this.inputs = new Http1OutputPool(HTTP1_FIRST_INPUT)
+    this.heads = new Http1OutputPool(HTTP1_FIRST_HEAD)
     this.date = new HttpDate()
     this.scratch = new Array<u8>(config.chunkSize)
     this.peer = new Array<u8>(H1_ADDRESS_SIZE)
@@ -1315,6 +1543,10 @@ export class Http1Server {
     const conn: Http1Connection = new Http1Connection(this.config)
     conn.pool = this.outputs
     conn.date = this.date
+    if (this.config.idleInput) {
+      conn.inputs = this.inputs
+      conn.heads = this.heads
+    }
     this.connections.push(conn)
     return conn
   }
@@ -1473,6 +1705,7 @@ export class Http1Server {
     if (conn.isDone()) {
       return H1_DONE
     }
+    conn.park()
     let wants: i32 = 0
     if (conn.inputRoom() > 0) {
       wants = wants | H1_WANT_READ
@@ -1538,13 +1771,24 @@ export class Http1Server {
    * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
    */
   expire(now: i64): i32 {
+    if (now < this.expireAfter) {
+      return 0
+    }
+    this.expireScans = this.expireScans + 1
+    let soonest: i64 = http1ExpireFloor(this.config)
     let n: i32 = 0
     for (let k: i32 = 0; k < toI32(this.fds.length) && k < toI32(this.connections.length); k++) {
-      if (this.fds[k] >= 0 && this.connections[k].expired(now)) {
-        this.close(k)
-        n = n + 1
+      if (this.fds[k] >= 0) {
+        const conn = this.connections[k]
+        if (conn.expired(now)) {
+          this.close(k)
+          n = n + 1
+        } else if (conn.expiresNoSooner(now) < soonest) {
+          soonest = conn.expiresNoSooner(now)
+        }
       }
     }
+    this.expireAfter = soonest
     return n
   }
 }
@@ -1580,6 +1824,13 @@ export class Http1TlsServer {
   scratch: u8[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
+  /** The input and head buffers resting slots lend, with `Http1Config.idleInput`. */
+  inputs: Http1OutputPool
+  heads: Http1OutputPool
+  /** No slot can expire before this (`monotonicNanos`): `Http1Server.expireAfter`. */
+  expireAfter: i64 = 0
+  /** How many calls of `expire` walked every slot. */
+  expireScans: i32 = 0
 
   /**
    * A pool of `size` slots, at least one, serving `config` over TLS under
@@ -1593,6 +1844,8 @@ export class Http1TlsServer {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
     this.connections = []
     this.outputs = new Http1OutputPool(config.outputSize)
+    this.inputs = new Http1OutputPool(HTTP1_FIRST_INPUT)
+    this.heads = new Http1OutputPool(HTTP1_FIRST_HEAD)
     this.date = new HttpDate()
     this.scratch = new Array<u8>(config.chunkSize)
   }
@@ -1613,6 +1866,10 @@ export class Http1TlsServer {
     const conn: Http1Connection = new Http1Connection(this.config)
     conn.pool = this.outputs
     conn.date = this.date
+    if (this.config.idleInput) {
+      conn.inputs = this.inputs
+      conn.heads = this.heads
+    }
     return conn
   }
 
@@ -1700,7 +1957,9 @@ export class Http1TlsServer {
   readable(slot: i32): i32 {
     const live: boolean = this.live(slot)
     const now: i64 = monotonicNanos()
-    if (live) {
+    // What a lingering slot drains is not activity, so `idleTimeout` bounds
+    // how long a client that trickles bytes after the close can hold it.
+    if (live && !this.tls.lingering(slot)) {
       this.connections[slot].lastActive = now
     }
     this.tls.readable(slot)
@@ -1776,6 +2035,7 @@ export class Http1TlsServer {
     if (conn.isDone()) {
       return this.tls.shutdown(slot)
     }
+    conn.park()
     const wants: i32 = this.tls.interest(slot)
     return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
   }
@@ -1816,13 +2076,24 @@ export class Http1TlsServer {
    * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
    */
   expire(now: i64): i32 {
+    if (now < this.expireAfter) {
+      return 0
+    }
+    this.expireScans = this.expireScans + 1
+    let soonest: i64 = http1ExpireFloor(this.config)
     let n: i32 = 0
     for (let k: i32 = 0; k < this.tls.size() && k < toI32(this.connections.length); k++) {
-      if (this.tls.holds(k) && this.connections[k].expired(now)) {
-        this.tls.close(k)
-        n = n + 1
+      if (this.tls.holds(k)) {
+        const conn = this.connections[k]
+        if (conn.expired(now)) {
+          this.tls.close(k)
+          n = n + 1
+        } else if (conn.expiresNoSooner(now) < soonest) {
+          soonest = conn.expiresNoSooner(now)
+        }
       }
     }
+    this.expireAfter = soonest
     return n
   }
 }

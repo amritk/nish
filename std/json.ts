@@ -109,6 +109,8 @@
  * (`docs/wp26-stdlib.md` §4).
  */
 
+import { copyBytes, skipJsonPlain } from "nish/bytes"
+
 const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9
 const JSON_NEWLINE: i32 = 10
@@ -1218,8 +1220,9 @@ export class JsonWriter {
    * `bytes[off .. off + len)`, copied as it is and counted as one value: a
    * fragment the caller encoded already, such as a cached object. Nothing in
    * it is checked, so a fragment that is not one whole JSON value makes a
-   * text that is not JSON either. The bytes are copied front to back, so
-   * `bytes` is not the writer's own buffer at a window the copy overtakes.
+   * text that is not JSON either. The bytes are copied in one move
+   * (`copyBytes`), as if all were read before any was written, so a window
+   * of the writer's own buffer comes out as it was.
    * In an indented text the fragment goes in where a value would, after its
    * line break and indent, but its own bytes are not re-indented: an object
    * fragment stays on one line, where `JSON.stringify` would spread it out.
@@ -1241,11 +1244,7 @@ export class JsonWriter {
       this.failed = JSON_WRITE_FULL
       return
     }
-    for (let k: i32 = 0; k < len && off + k < toI32(bytes.length) && at + k < toI32(buf.length); k += 1) {
-      if (off + k >= 0 && at + k >= 0) {
-        buf[at + k] = bytes[off + k]
-      }
-    }
+    copyBytes(buf, at, bytes, off, len)
     this.end = at + len
     jsonWriterValueDone(this)
   }
@@ -1577,13 +1576,25 @@ const jsonWriterPutString = (w: JsonWriter, s: string): boolean => {
 }
 
 /**
+ * The shortest window `jsonWriterPutBytes` hands to `skipJsonPlain` and
+ * `copyBytes`; a shorter one keeps the byte loop, where the two calls cost
+ * more than the bytes they would save (docs/wp38-simd.md, "JsonWriter's byte
+ * writers").
+ */
+const JSON_PLAIN_RUN_MIN: i32 = 16
+
+/**
  * `jsonWriterPutString` over `bytes[off .. off + len)`, a window the caller
  * has checked: the same quotes and escapes, from the same three helpers, so
  * the two write the same bytes for the same text. The loop is its own rather
  * than shared with the string one, so that `string` and `key` keep the code
- * they had.
+ * they had. A window of `JSON_PLAIN_RUN_MIN` bytes or more goes to
+ * `jsonWriterPutRuns` instead.
  */
 const jsonWriterPutBytes = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean => {
+  if (len >= JSON_PLAIN_RUN_MIN) {
+    return jsonWriterPutRuns(w, bytes, off, len)
+  }
   const buf: u8[] = w.buf
   const cap: i32 = toI32(buf.length)
   let at: i32 = w.end
@@ -1605,6 +1616,74 @@ const jsonWriterPutBytes = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boo
       at += 1
       continue
     }
+    const letter: i32 = jsonShortEscape(code)
+    if (letter !== 0) {
+      if (at < 0 || at + 1 >= cap) {
+        w.failed = JSON_WRITE_FULL
+        return false
+      }
+      buf[at] = toU8(JSON_BACKSLASH)
+      buf[at + 1] = toU8(letter)
+      at += 2
+      continue
+    }
+    if (at < 0 || at + 5 >= cap) {
+      w.failed = JSON_WRITE_FULL
+      return false
+    }
+    buf[at] = toU8(JSON_BACKSLASH)
+    buf[at + 1] = toU8(JSON_LETTER_U)
+    buf[at + 2] = toU8(JSON_DIGIT_ZERO)
+    buf[at + 3] = toU8(JSON_DIGIT_ZERO)
+    buf[at + 4] = toU8(jsonHexByte(code >> 4))
+    buf[at + 5] = toU8(jsonHexByte(code & 15))
+    at += 6
+  }
+  if (at >= cap) {
+    w.failed = JSON_WRITE_FULL
+    return false
+  }
+  buf[at] = toU8(JSON_QUOTE)
+  w.end = at + 1
+  return true
+}
+
+/**
+ * `jsonWriterPutBytes` a run at a time: `skipJsonPlain` finds where the bytes
+ * that need no escape end, `copyBytes` moves them in one copy, and only the
+ * byte the walk stopped at is escaped. The same bytes as the byte loop, the
+ * same all-or-nothing on a full buffer. Variable-time, as the loop is: this
+ * writes text, never key material.
+ */
+const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean => {
+  const buf: u8[] = w.buf
+  const cap: i32 = toI32(buf.length)
+  let at: i32 = w.end
+  if (at < 0 || at >= cap) {
+    w.failed = JSON_WRITE_FULL
+    return false
+  }
+  buf[at] = toU8(JSON_QUOTE)
+  at += 1
+  const stop: i32 = off + len
+  let i: i32 = off
+  while (i >= 0 && i < stop && i < toI32(bytes.length)) {
+    const run: i32 = skipJsonPlain(bytes, i, stop)
+    const count: i32 = run - i
+    if (count > 0) {
+      if (at > cap - count) {
+        w.failed = JSON_WRITE_FULL
+        return false
+      }
+      copyBytes(buf, at, bytes, i, count)
+      at += count
+      i = run
+    }
+    if (i < 0 || i >= stop || i >= toI32(bytes.length)) {
+      break
+    }
+    const code: i32 = toI32(bytes[i])
+    i += 1
     const letter: i32 = jsonShortEscape(code)
     if (letter !== 0) {
       if (at < 0 || at + 1 >= cap) {

@@ -274,8 +274,8 @@ Type rules:
     printing `value out of range: expected integer<0, 255>` and exiting 1
     (`rng_param`, `rng_entries`, `rng_bitwise`, `rng_entry_panic`,
     `rng_entry_range_panic`, `rng_entry_push_panic`, `rng_entry_bitwise_panic`). The check is the type's
-    meaning, so `--unchecked-indexing` keeps it and `--wrapping` changes only
-    the arithmetic before it. Under Node nothing is checked, which
+    meaning, so `uncheckedGet` and `uncheckedSet` keep it, and a `wrapping*`
+    call changes only the arithmetic before it. Under Node nothing is checked, which
     [RUN_UNDER_NODE.md](RUN_UNDER_NODE.md#what-stays-divergent) records.
   - **An entry the compiler can prove is free** (WP31 §8). The bounds proof of
     [Element access](#element-access) judges each entry where the value is
@@ -462,7 +462,7 @@ tightly as a C `uint8_t` does.
 
 | Operation | On `i32` / `i64` | On `u8` / `u16` / `u32` / `u64` |
 | --- | --- | --- |
-| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw` where proven to fit, else `llvm.s{add,sub,mul}.with.overflow` and a branch to the panic; plain through `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe`, and in the entry package under the deprecated `--wrapping` | the same instructions, never flagged or checked: unsigned overflow wraps in both modes |
+| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw` where proven to fit, else `llvm.s{add,sub,mul}.with.overflow` and a branch to the panic; plain through `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` | the same instructions, never flagged or checked: unsigned overflow wraps in both modes |
 | `/ %` | `sdiv` / `srem` after a two-part divisor check | `udiv` / `urem` after a single compare ([Checked integer division](#checked-integer-division)) |
 | `< <= > >=` | `icmp slt sle sgt sge` | `icmp ult ule ugt uge` |
 | `>>` | `ashr` | `lshr` |
@@ -474,7 +474,7 @@ tightly as a C `uint8_t` does.
 | `Math.abs` | `llvm.abs` | nothing: the value is already its own magnitude |
 | `Math.min` / `Math.max` | `llvm.smin` / `llvm.smax` | `llvm.umin` / `llvm.umax` |
 | `console.log(x)`, `` `${x}` `` | `nish_str_from_i32` / `_i64` | `zext` to i64, then `nish_str_from_u64` |
-| overflow | a panic, "attempt to add with overflow", exit 1, except a `nish:unsafe` `wrapping*` call (and the entry package under the deprecated `--wrapping`) | nothing, in either mode: unsigned overflow is defined as wrapping |
+| overflow | a panic, "attempt to add with overflow", exit 1, except a `nish:unsafe` `wrapping*` call | nothing, in either mode: unsigned overflow is defined as wrapping |
 
 The consequences worth knowing:
 
@@ -490,7 +490,6 @@ The consequences worth knowing:
   `tests/differential/corpus/u_wrap`). No `nuw` is ever emitted, neither is
   `nsw`, and nothing is checked: wrapping is what hashing and bit-packing are
   written against, and it is half the reason the unsigned widths exist.
-  `--wrapping` therefore changes nothing for them (`tests/cases/opt_wrapping`).
 - **Mixing is an error.** `u32` and `i32` are different types even though both
   are `i32` in the IR, and so are `u8` and `u32`; there is no implicit
   conversion anywhere in this language
@@ -1606,11 +1605,8 @@ having no top-level code and therefore no initialisation order.
   written `wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`, the
   one call a constant's initialiser may make, and that fold wraps:
   `const WRAPPED: i32 = wrappingAdd(2147483647, 1)` is `-2147483648`
-  (`tests/cases/unsafe_wrapping`). Under the deprecated `--wrapping` the
-  instruction wraps too, in the entry package's modules, so there
-  `2147483647 + 1` folds to the same value (`tests/cases/const_wrap`, whose
-  `.args` is `--wrapping` for exactly this reason). Negation is arithmetic too, so `-2147483648` is fine in both modes
-  (its result fits) while `-(-2147483648)` is refused by default. A bare
+  (`tests/cases/unsafe_wrapping`). Negation is arithmetic too, so `-2147483648` is fine
+  (its result fits) while `-(-2147483648)` is refused. A bare
   integer literal takes the width of the constant it initialises, so `const BIG: i64 = 1000000000 * 10` is computed in
   64 bits (`const_i64`). Mixing widths is an error, as it is anywhere else
   (`reject_const_mixed_widths`). `f64` folds in IEEE-754 (`const_f64`), and
@@ -2166,9 +2162,9 @@ and their `.ll` goldens are byte-identical files.
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has:
-  collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
+  collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
   crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256,
-  crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
+  crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
   testing, text, threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
@@ -2213,8 +2209,12 @@ and their `.ll` goldens are byte-identical files.
   one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
   `ct` (constant-time compare), `base64url`, `x25519`, `ed25519` (Ed25519
   signatures), `chacha20poly1305` (ChaCha20-Poly1305), `aes` (AES-128 and
-  AES-256 with GCM), `p256` (P-256 ECDSA) and `x509` (DER, PEM and
-  self-signed P-256 certificates) (`tests/link/crypto_base64url` is the case
+  AES-256 with GCM), `p256` (P-256 ECDSA), `p384` (P-384 ECDSA
+  verification), `rsa` (RSA signature verification), `x509` (DER, PEM and
+  self-signed P-256 certificates), `pki-roots` (the trust anchors from
+  `SSL_CERT_FILE`, `SSL_CERT_DIR` or the system bundle; native only) and
+  `pki` (RFC 5280 path validation and RFC 6125 hostname matching of a TLS
+  server's chain) (`tests/link/crypto_base64url` is the case
   that resolves a nested specifier). Each is ordinary Nish source under the
   rules above, and a byte string is a `u8[]`. They are written branch-free on
   secret data, and WP34 N6's disassembly check (`tests/ct-asm.js`) verifies
@@ -3216,9 +3216,12 @@ from the whole-program facts, and each rule is reported there:
   `console.error` and `process.exit` as much as `console.log`
   (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
   `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
-  read (`tests/link/par_map_table_reads`). The instance performs every store
-  itself, into slots the partitioner has made disjoint, so a function that
-  writes nothing cannot race.
+  read (`tests/link/par_map_table_reads`). Handing a helper a number, a
+  `boolean`, an enum or a `string` — a `string` element of the caller's array
+  included, `verify(hashes[k])` — gives it no slot to store into, so it is a
+  read (`tests/link/thread_bcrypt_batch`, whose task verifies against the
+  parent's hashes). The instance performs every store itself, into slots the
+  partitioner has made disjoint, so a function that writes nothing cannot race.
 - **A store into an array only this call reaches is not a shared write.** A
   `const` the function binds to its own array literal or `new Array(n)` —
   one whose elements are not stored inline — is *private* while every use of
@@ -3282,7 +3285,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -3806,11 +3809,22 @@ element's arena, which a task does not share, and each rule is reported at the
   A `wipe` is a write through its argument like any other, so it is shared
   exactly when its target is: an array the task, or a function it calls,
   allocated itself is private, and wiping it is allowed
-  (`tests/link/thread_task_wipe`); wiping the task's argument, a captured
-  local, a field, an array a call answered, or a `Secret` made with
-  `secret(...)`, which keeps its value, is NL2471
-  (`reject_thread_wipe_param`, `_capture`, `_field`, `_helper`,
-  `_call_result`). The wipe itself is unchanged, one volatile `llvm.memset`.
+  (`tests/link/thread_task_wipe`). So is a `Secret` the function makes with
+  `secret(v)` and wipes, when `v` is allocated in the call — `new`, an array
+  literal or an object literal — and the `Secret` is held by a `const`
+  (`tests/link/thread_task_wipe_secret`). Wiping the task's argument, a
+  captured local, a field, an element, an array a call answered, a `Secret`
+  held by a `let`, made from a call's answer, from a local moved into it or
+  from a record whose constructor is handed an object, a `Secret` a call
+  answers (wiped, or written by a helper first), or one a holder keeps in a
+  field, is NL2471 (`reject_thread_wipe_param`, `_capture`, `_field`,
+  `_element`, `_helper`, `_call_result`,
+  `reject_thread_wipe_secret_call_result`, `_moved`, `_holder`, `_let`,
+  `_call_secret`, `_call_secret_helper`, `_ctor_param`). A helper may write
+  the task's own `Secret` before the wipe. A borrowed `Secret` parameter is
+  refused before it
+  (`reject_thread_wipe_secret_borrowed`). The wipe itself is unchanged, one
+  volatile `llvm.memset`.
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
   tasks of one scope may look keys up in the same table
   (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
@@ -3892,7 +3906,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -4613,7 +4627,7 @@ import { Rng } from "nish/random";
 
 export const main = (): i32 => {
   const r = new Rng(42);
-  const die: i32 = 1 + ((r.nextI32() >>> 1) % 6);
+  const die: i32 = r.nextInt(1, 6); // 1 to 6, each with equal chance
   const u: f64 = r.nextF64(); // in [0, 1)
   console.log(`${die} ${u < 1.0}`);
   return 0;
@@ -4626,10 +4640,17 @@ export const main = (): i32 => {
   answer is MurmurHash3's 32-bit finaliser of it, so every seed, 0 included,
   starts a full sequence, and seeds 1, 2 and 3 start unrelated ones. It is not
   for cryptography: a key comes from `crypto.getRandomValues`.
-- **The same bits under Node** are the point of the design. The two
-  operations that wrap are `wrappingAdd` and `wrappingMul` from
-  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), every shift has a constant count, and
-  `nextF64`'s double is exact, so `tests/link/std_random` prints the same lines
+- **`nextInt(lo, hi)`** answers an `i32` in [lo, hi], both ends included, each
+  with equal chance. It refuses the few `nextI32()` draws below 2^32 mod the
+  span and answers `lo` plus the draw mod the span, so no answer is likelier
+  than another; fewer than half the draws are refused, so a call takes under
+  two steps on average. `nextInt(-2147483648, 2147483647)` is one `nextI32()`,
+  and `lo > hi` panics with `Rng.nextInt: lo is greater than hi`.
+- **The same bits under Node** are the point of the design. The
+  operations that wrap are `wrappingAdd`, `wrappingSub` and `wrappingMul` from
+  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), every shift has a constant count,
+  `nextInt` reads its unsigned counts through `i32` compares and remainders of
+  non-negative values, and `nextF64`'s double is exact, so `tests/link/std_random` prints the same lines
   both ways.
 - **A parallel body or a task steps an `Rng` it made itself**, which is its
   own memory (`const r = new Rng(i)`, "Nor is a write into an object's own
@@ -4690,22 +4711,23 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
-### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` in `nish/bytes`
+### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 
-The three runs answer the first index in `[from, to)` of a `u8[]` whose byte
+The four runs answer the first index in `[from, to)` of a `u8[]` whose byte
 is not in their class, or `to` when every byte there is; `copyBytes` copies a
 window of one array into another, or into itself
 ([wp38-simd.md](wp38-simd.md), S6a). They are the scans and the copy a parser
 spends its time in, and `std/json` is written over them.
 
 ```typescript
-import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes";
+import { copyBytes, skipBlank, skipDigits, skipJsonPlain, skipJsonText } from "nish/bytes";
 
 export const main = (): i32 => {
   const text: u8[] = [32, 10, 52, 50, 44, 34, 104, 105, 34]; // " \n42,\"hi\""
   const start = skipBlank(text, 0, 9);
   console.log(`${start} ${skipDigits(text, start, 9)}`);   // 2 4
   console.log(`${skipJsonText(text, 6, 9)}`);              // 8, the closing quote
+  console.log(`${skipJsonPlain(text, 0, 9)}`);             // 1, the newline
   const word: u8[] = [0, 0];
   copyBytes(word, 0, text, 6, 2);
   console.log(`${word[0]} ${word[1]}`);                    // 104 105
@@ -4721,6 +4743,9 @@ export const main = (): i32 => {
   backslash or a control byte, and at the lead byte of a sequence that is
   overlong, a surrogate, past U+10FFFF, a stray continuation byte or cut short
   by `to`, so where it stops is the byte a decoder has to look at.
+  `skipJsonPlain` skips what a JSON writer copies without an escape: every
+  byte from 0x20 up other than `"` and `\`, DEL and 0x80–0xff included, with
+  no UTF-8 check. It stops at a quote, a backslash or a byte below 0x20.
 - **The runs never panic.** `to` is clamped into `[0, b.length]` and `from`
   into `[0, to]`, as `indexOfAny` clamps: a negative `from` scans from the
   start, and a `from` at or past `to` answers it
@@ -4735,7 +4760,7 @@ export const main = (): i32 => {
   which is what runs under Node. Natively the compiler recognises that call by
   module and name (`src/kernels.ts`), as it does `indexOfAny`'s, and emits the
   runtime's `nish_bytes_skip_blank`, `nish_bytes_skip_digits` or
-  `nish_bytes_skip_json_text` (`runtime/runtime-bytes.c`) in its place, or one
+  `nish_bytes_skip_json_text` or `nish_bytes_skip_json_plain` (`runtime/runtime-bytes.c`) in its place, or one
   `llvm.memmove` for the copy. The kernels pick a scalar, a 16-byte (SSE2,
   NEON or wasm SIMD) or a 32-byte (AVX2) path on their first call, and
   `NISH_SIMD=scalar|base|avx2` pins it, except in a freestanding wasm32 build,
@@ -5211,9 +5236,7 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   bytes than argument 2 (buf) holds ``, exit 1 (`tests/cases/panics_ffi_length`,
   and `panics_ffi_length_memcpy` for the shorter buffer of a run). The count is
   a `u64`, so `toU64(0) - toU64(1)` is the largest count there is, and fails
-  (`panics_ffi_length_wrapped`). `--unchecked-indexing` does not remove the
-  check: C cannot check a count, so the boundary keeps it
-  (`panics_ffi_length_unchecked`).
+  (`panics_ffi_length_wrapped`).
 - **The pointer and the length are read after the last argument is
   evaluated**, so C sees the array as it is at the call: an argument that
   pushes or pops before it is seen (`tests/cases/ffi_buffer_late_load`,
@@ -5717,7 +5740,7 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain under `--wrapping`, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
 | `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
@@ -5923,8 +5946,7 @@ and both come from the program as written:
     `arr_repeat_check_local`; the repeats that keep their check are
     `arr_repeat_check_call`, `_push`, `_field_store`, `_reassign` and
     `_flow`, and `arr_repeat_check_panic` panics past the end on three of
-    them). Under `--unchecked-indexing` there is no check to have passed, so
-    nothing is learned.
+    them).
 
     **`toI32(w.length)` is `w.length`** wherever a length appears above: in
     the hoist `const n: i32 = toI32(w.length)`, in `i < toI32(w.length)` and
@@ -5962,12 +5984,11 @@ and both come from the program as written:
     of its four checks. A checked `w[i + c]` that ran leaves
     `i + c < w.length` behind, and nothing about `i >= 0`. Both halves rest
     on the sum being exact: a signed `i + c` panics on overflow or is proven
-    not to overflow, so it is never a wrap to a small value. Under
-    `--wrapping`, and for an unsigned `i`, whose add wraps by definition, an
-    offset proves nothing and the check stays (`tests/cases/arr_bounds_offset`;
-    `arr_bounds_offset_reach` reads one past its reach, `arr_bounds_offset_floor`
-    has no floor, and `arr_bounds_offset_wrap` wraps `INT_MAX + 1`, and each
-    keeps its check and panics).
+    not to overflow, so it is never a wrap to a small value. For an unsigned
+    `i`, whose add wraps by definition, an offset proves nothing and the check
+    stays (`tests/cases/arr_bounds_offset`; `arr_bounds_offset_reach` reads one
+    past its reach and `arr_bounds_offset_floor` has no floor, and each keeps
+    its check and panics).
 
   - **Any other integer index is proved by its range.** Where none of the
     rules above proves `w[e]`, the values `e` can take decide: every local's
@@ -5979,16 +6000,14 @@ and both come from the program as written:
     check: `freeMaxs[c + r]` and `freeMins[c - r + 7]` with `r` and `c`
     each below 8 into arrays made with 16, or `cells[r * 4 + c]` over a 4
     by 4 board. The range is the value's own only where the arithmetic is
-    exact, which is a signed `i32` or `i64` outside `--wrapping`; an
-    unsigned index, whose arithmetic wraps by definition, an `f64` one, and
-    every index under `--wrapping` keep their check. The length is the one
+    exact, which is a signed `i32` or `i64`; an unsigned index, whose
+    arithmetic wraps by definition, and an `f64` one keep their check. The length is the one
     the index leaves behind, so a call inside the index that shrinks the
     array, a `new` whose constructor does included, proves nothing
     (`tests/cases/arr_bounds_range`; `arr_bounds_range_past` reaches the
     length, `arr_bounds_range_negative` goes below zero, and
     `arr_bounds_range_call` and `arr_bounds_range_new` shrink the array, and
-    each keeps its check and panics; `arr_bounds_range_kept` and
-    `arr_bounds_range_wrap` keep theirs).
+    each keeps its check and panics; `arr_bounds_range_kept` keeps its own).
 
   - **A helper's fresh array has the length it was built with.** A length
     `w` is known to have comes from an array literal or `new Array(n)`
@@ -6030,18 +6049,12 @@ may resize it, because a callee holding the same array may `push` or `pop`
 and move `len` (`tests/cases/arr_bounds_shrink_panic` is the program that
 still panics because of that rule). A decrement keeps the upper bounds and
 loses the lower ones, the mirror of an increment, so the loop that counts
-down from the last index needs only its own `i >= 0`; under `--wrapping` it
-keeps them only where `i >= 0` is known at the decrement, since `INT_MIN - 1`
-is defined to be `INT_MAX` (`arr_range_call_wrap` panics past the end). A **string**'s length cannot change once the variable
+down from the last index needs only its own `i >= 0`. A **string**'s length cannot change once the variable
 holding it is bound, so a string fact survives calls, which is what makes a
 scanner's cursor check-free (`tests/cases/str_bounds_proven`). The increment
-exception needs `nsw`: under `--wrapping` the step past `INT_MAX` is *defined*
-to land on `INT_MIN`, so an incremented counter has no lower bound and the
-check stays — **`--wrapping` therefore costs the bounds-check elimination on
-counted loops**, which is the one thing besides the overflow checks that the
-flag changes (`tests/cases/opt_wrapping` pins both halves). By default the step
-past `INT_MAX` panics instead, so the lower bound holds for the same reason the
-overflow check is there. An `f64` index is never proved, because a bound on the double is
+exception needs `nsw`: the step past `INT_MAX` panics, so the lower bound holds
+for the same reason the overflow check is there; a counter stepped with
+`wrappingAdd` has no lower bound, and its check stays. An `f64` index is never proved, because a bound on the double is
 not a bound on its truncation. `tests/cases/arr_bounds_proven` and
 `perf_bounds_quiet` pin the proofs; the surviving checks warn, below.
 
@@ -6168,8 +6181,7 @@ constructor, a lifted arrow, a function taking a compile-time function, and
 any function called from an arrow or from an instantiation's body
 (`arr_range_call_arrow`, `arr_range_call_generic`). AWFY Permute with its
 class not exported is proved throughout: `swap` carries no check
-(`arr_range_call`), and with it exported the same holds in a `--link` build. `--unchecked-indexing` skips the pass, and its output
-is byte for byte what it was.
+(`arr_range_call`), and with it exported the same holds in a `--link` build.
 
 A generic's instantiations are proved one at a time, each against its own
 verdicts: `rs[0] = x` rewrites a record when `T` is an inline record and
@@ -6182,9 +6194,7 @@ out-of-range index that reaches a check still panics.
 `uncheckedGet` and `uncheckedSet` from
 [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping) are the
 opposite trade and a separate thing: each removes the check at its own site
-and makes an out-of-range index there undefined behaviour. The deprecated
-`--unchecked-indexing` does the same to every index of the entry package's
-modules.
+and makes an out-of-range index there undefined behaviour.
 
 String-keyed access is forbidden by the
 validator (`reject_string_key_access`, `reject_non_numeric_index`), and so
@@ -6368,11 +6378,11 @@ and `io_nish_import_global` and comparing the two bodies.
 
 | Module | Exports |
 | --- | --- |
-| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
-| `nish:io` | `write`, `writeError`, `panic` |
+| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
@@ -6422,6 +6432,7 @@ import { write } from "nish:io";
 | `console.error(x): void` | the same, on **stderr** — the stream a compiler's diagnostics belong on (WP14 B2). Identical rules and identical messages under its own name | write | `io_streams`; `reject_console_error_type` |
 | `write(s: string): void` | `s` to stdout with **no** trailing newline and no conversion (a `string` only); statement position | write | `io_streams` |
 | `writeError(s: string): void` | the same, on stderr | write | `io_streams` |
+| `writeBytes(bytes: readonly u8[], off: i32, len: i32): i32` | the bytes of `bytes[off..off+len)` to stdout, as they are, with no conversion: the one way to send bytes that are not text, a byte of `0x80` or above or a zero byte included. A loop of `write(2)` sends them all, retried on an interrupted call; the answer is `len`, or a **negative errno** if the stream refuses them (`-9` EBADF on a closed descriptor), never a panic; a pipe whose reader has gone raises SIGPIPE natively, as it does for `write`, where Node answers `-32` EPIPE. `off` and `len` are `netWrite`'s buffer range, checked once after the arguments are evaluated: `0 <= off`, `0 <= len`, `off + len <= bytes.length`, anything else **panics** with `slice out of range: [off, off+len) of length n` and exits 1 (a `slice` site). The shape is `netWrite`'s with the descriptor fixed at 1. No capability, as for `write`. A `wasm32` build has no stdout to reach and refuses it. Under Node the range is the same check and the bytes go to `fs.writeSync(1, …)` | write | `io_write_bytes`, `io_write_bytes_bounds`; `reject_write_bytes_arity`, `reject_write_bytes_type` (NL2268), `reject_write_bytes_wasm` |
 | `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it. It is how a program ends on an unmet invariant now that `throw` is gone (WP14 D1, WP16) | write | `io_streams`; `reject_panic_value` |
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
@@ -6433,11 +6444,11 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...) | none | `math_intrinsics`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path | none | `math_intrinsics`, `math_rounding`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
 | `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
 | `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
 | `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
-| `Math.round(x: f64): f64` | JavaScript's round-half-up (`floor` + compare + `select`), then `llvm.copysign.f64` puts `x`'s sign back: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` -> `NaN` | none | `math_intrinsics`, `math_round_negzero` |
+| `Math.round(x: f64): f64` | JavaScript's round-half-up (`Math.floor`'s `floor` + compare + `select`), then `llvm.copysign.f64` puts `x`'s sign back: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` -> `NaN` | none | `math_intrinsics`, `math_round_negzero`, `math_rounding` |
 | `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
 | `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: JavaScript's answer, a NaN operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`). A native build branches as clang compiles the C a programmer writes for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`, and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear (`max`), the three joined by a `phi`; x86 has no instruction for `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A wasm build keeps `llvm.minimum/maximum.<f32\|f64>`, which are wasm's `f64.min`/`f64.max`, so no libm is linked for them | none | `math_i32`, `math_intrinsics`, `math_minmax_float`, `math_minmax_nan`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
 | `Math.clz32(x: i32 \| u32): integer<0, 32>` | the leading zero bits of `x`'s 32 bits, JavaScript's answer (an `i32` and a `u32` are the bits ToUint32 gives): `llvm.ctlz.i32` with `i1 false`, so `0` answers `32`. The answer is ranged (`integer<Lo, Hi>`, see [Types](#types)), so `31 - Math.clz32(word & (0 - word))`, the index of a word's lowest set bit, needs no overflow check. Any other operand type is refused rather than converted | none | `math_clz32`; `reject_math_clz32_type` (`` `Math.clz32` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``) |
@@ -6562,82 +6573,18 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
   same terms, with its copy's `oom` beside it (`ffi_owned_string`). The
   `wrapping*` three are not sites at all: they are defined for every pair.
-- **`--unchecked-indexing` and `--wrapping` are deprecated**, and reach only
-  the **entry package**: the modules in the entry's own package, never a
-  `node_modules` dependency and never a `nish/` standard-library module. A
-  dependency compiled beside an entry that passes both keeps every bounds check
-  and every `nsw` it was written with, byte for byte
-  (`tests/link/unsafe_flag_scope`). Each flag still prints one performance
-  warning per compilation, at the top of the entry, naming its replacement —
-  `` --unchecked-indexing is deprecated and reaches only the modules of the entry package `` (NL9014) and
-  `` --wrapping is deprecated and reaches only the modules of the entry package `` (NL9015)
-  — which `--no-warn-performance` silences with the rest. `nish run`, which
-  prints no other performance warning, prints these two (`tests/nish/cli.ts`).
-  NL9014 ends `` `nish --fix` rewrites each site; then drop the flag ``. The
-  flags are removed in a later release.
-- **`nish --unchecked-indexing --fix` migrates a program off the flag.** Under
-  the flag, every check it leaves out of the entry package is a deprecation
-  warning of its own at the site (NL7002):
-  `` this index is unchecked only because of --unchecked-indexing, which is deprecated ``,
-  then either the rewrite or why there is none
-  (`tests/wordings/nl7002_unchecked_index_site`, and one `nl7002_*` pin per
-  shape that gets no fix, each with its reason). A site is a check the
-  emitter writes without the flag: an element access the checker did not
-  prove in range, the second check of a compound store whose right side calls
-  something, an unproven `charCodeAt` or `pop`, and every `slice`, array `set`
-  and `nish:net` buffer range. A site the checker proved is not reported, and
-  an access left as `xs[i]` stays proven once the flag is gone: the flag
-  records nothing for a check it drops, so what it proves is a subset of what
-  is proven without it. The checker adds what the build without the flag
-  learns from each check the migration leaves in place, so an access that
-  check proves is not a site either: after `const name = names[i]`, whose
-  strings have no `nish:unsafe` form, `i >= 0` holds, and with
-  `if (i < xs.length)` the access `xs[i]` is proven and stays
-  (`unsafe-index-kept`). What a caller's check would prove for its callee is
-  not added, so such a site is still rewritten, to the same meaning. Like
-  NL7001 it is printed by default, `nish run` included, and
-  `--no-warn-performance` does not silence it. Where a rewrite says the
-  same thing, the warning carries it as a `fix`:
-
-  | Shape | Rewrite | Case (`tests/fix/`) |
-  | --- | --- | --- |
-  | `xs[i]` read, a number element and an `i32` or `i32`-based ranged index | `uncheckedGet(xs, i)` | `unsafe-index-get`, `unsafe-index-ranged`, `unsafe-index-readonly` |
-  | `xs[i] = v` as a statement | `uncheckedSet(xs, i, v)` | `unsafe-index-set` |
-  | the same, written in parentheses, `(xs[i] = v)` | the whole parenthesised statement becomes the call | `unsafe-index-paren-store` |
-  | `xs[i] op= v` as a statement, `xs`, `i` and `v` plain reads | `uncheckedSet(xs, i, uncheckedGet(xs, i) op v)`, `v` parenthesised unless it is one operand | `unsafe-index-update` |
-  | `xs[i][j]` with number elements in the inner array | the access to the inner array; `xs[i]` keeps its warning | `unsafe-index-nested` |
-
-  Every other site keeps its warning and gets no fix, and dropping the flag
-  puts its check back, which is the safe direction: an element that is not a
-  number (`unsafe-index-nofix-string`, `-class`), an index that is not an `i32`
-  (`-index-type`), a store whose value is used (`-value-used`), a compound
-  store whose operands call, construct or assign (`-update-call`), since the
-  rewrite evaluates the array and the index twice, the second check of a
-  compound store (`-second-check`), an access in a generic body, whose types
-  are decided per instantiation (`-generic`), a module that already uses the
-  name the import would bind (`-clash`), and `charCodeAt`, `pop`, `slice`,
-  `set` and the socket calls (`-char-code-at`, `-pop`, `-slice`, `-set`,
-  `-net`), which have no `nish:unsafe` form. While the module lacks a name it
-  needs, every fix also carries the one edit that imports every name the
-  module's fixes call: the names after its existing `nish:unsafe` import
-  (`unsafe-index-extend`), else a new import after its last import, else
-  before its first statement. An import that renames is called by its alias
-  (`unsafe-index-alias`). The edits are the same, and `nish --fix` makes an
-  edit once however many fixes carry it, so one round applies every site
-  (`unsafe-index-rounds`). To the bounds proof `uncheckedGet` and
-  `uncheckedSet` are the load and the store `xs[i]` and `xs[i] = v` are,
-  less the check: a rewritten site moves no length, so in
-  `a[at[0]] + b[at[1]]` with `at` an array of two, `at[1]` stays proven after
-  `a[at[0]]` is rewritten, and the fixed point is reached in that one round
-  (`unsafe-index-pair`). Neither records a passed check, because neither has
-  one: a checked `xs[i]` after either keeps its check, and a resize in the
-  value stored still takes the length away
-  (`tests/cases/arr_bounds_unchecked_kept`). The program then compiles without the flag and prints what it
-  printed with it:
-  `tests/link/unsafe-migrate-index-flag` runs `unsafe-index-equivalence`'s
-  sources under the flag and `unsafe-migrate-index-fixed` runs their
-  `.fixed.ts` without it, against one `expected.out`; between them its four
-  modules hold every rewritten shape above.
+- **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
+  the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
+  length, so in `uncheckedGet(a, at[0]) + b[at[1]]` with `at` an array of
+  two, `at[1]` stays proven after the call. Neither records a passed check,
+  because neither has one: a checked `xs[i]` after either keeps its check,
+  and a resize in the value stored still takes the length away
+  (`tests/cases/arr_bounds_unchecked_kept`).
+- **There is no flag that turns the checks off.** `--unchecked-indexing` and
+  `--wrapping` were removed before 1.0, and the CLI refuses each with exit 2
+  and a line naming its replacement (`` `--wrapping` is gone ``,
+  `tests/nish/cli.ts`): an opt-out is written at the site, where `--emit-checked`
+  and the no-panic scope can see it.
 
 ### Constant time: `ctSelect` and `ctEq`
 
@@ -7235,8 +7182,8 @@ passing it to functions, aliasing it with `const args = process.argv`) that
 the `@main` wrapper builds once with `nish_argv_init(argc, argv)` before the
 program runs; every module of the program may read it, and each read is one
 `load` of the runtime global `@nish_argv` (a memory read: the function is at
-most `readonly`). The array lives outside the arena, so `Arena.reset()`
-never invalidates it. Storing into it (`process.argv[i] = s`, `op=`,
+most `readonly`). The array lives outside the arena, so no arena scope's
+release invalidates it. Storing into it (`process.argv[i] = s`, `op=`,
 `++`/`--`, `push`) is rejected. A program without `export const main`, as
 for a wasm or N-API library, has nothing to build it from and rejects every
 use with `` `process.argv` requires a `main` entry point `` (`reject_argv_no_main`,
@@ -7252,6 +7199,33 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061), `reject_bytes_read_type` (NL2268) |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position. A symbolic link as the last component of `path` is refused (`nish: cannot write <path>`), where Node follows it | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position. A symbolic link as the last component is refused, as for `writeFileSync` | write | `io_files` |
+| `writeFileBytesSync(path: string, bytes: readonly u8[]): i32` | create/truncate (`0644`) and write the array's bytes, as they are: `readFileBytesSync`'s other half. A symbolic link as the last component is refused, as for `writeFileSync`. Where `writeFileSync` exits, this **answers**: `bytes.length` written, or a negative errno (`-2` ENOENT for a missing directory, `-13` EACCES, `-21` EISDIR, `-40` ELOOP for the refused link, `-22` EINVAL for a NUL in `path`), never a panic, so a program can report the failure and carry on | write | `io_write_file_bytes`, `io_write_bytes`; `reject_write_file_bytes_arity`, `reject_write_file_bytes_type` (NL2268), `reject_write_file_bytes_wasm` |
+| `renameSync(from: string, to: string): i32` | `rename(2)`: `from` takes the name `to`, replacing a file already there in one step, so a reader sees the old file or the new one and never neither — write a temporary next to the target, then rename it over. `0`, or a negative errno: `-2` ENOENT for a missing `from`, `-18` **EXDEV** when the two are on different filesystems (nothing is copied: write the temporary in the target's directory), `-21` EISDIR or `-20` ENOTDIR for a file against a directory, `-22` EINVAL for a NUL in either path. Never a panic | write | `io_rename`, `caps_fs_replace`; `reject_rename_arity`, `reject_rename_type`, `reject_rename_wasm` |
+| `unlinkSync(path: string): i32` | `unlink(2)`: removes the name, and a symbolic link itself rather than what it names. `0`, or a negative errno: `-2` ENOENT for a missing path, and a **directory is refused** with `-21` EISDIR on Linux or `-1` EPERM where the kernel answers so — there is no fallback to `rmdir`. `-22` EINVAL for a NUL in `path`. Never a panic | write | `io_unlink`, `caps_fs_replace`; `reject_unlink_arity`, `reject_unlink_type`, `reject_unlink_wasm` |
+| `writeFileSyncMode(path: string, data: string, mode: i32): i32` | create/truncate and write `data` as `writeFileSync` does, with the file left at exactly `mode` (`0o600` for a secret): the open passes `mode` and an `fchmod(2)` sets it **before the first byte is written**, so the umask cannot widen it, a file that already existed at `0644` is narrowed before it holds the new contents, and no reader that opens it afterwards finds the secret under the old mode. A descriptor opened *before*, while the file was wider, is not revoked and still reads what is written; to replace a secret, write it to a temporary beside the target and `renameSync` it over. The file is truncated and written **in place**, not through a temporary: a crash or a failed write leaves it empty or partial, and a file this process may write but does not own is emptied before the mode change answers `-1` EPERM — the same temporary and `renameSync` give a file that is always the old one or the new one. A symbolic link as the last component is refused (`-40` ELOOP), its target untouched. The length written, or a negative errno: `-22` EINVAL for a mode outside `0..0o777` (the setuid, setgid and sticky bits are refused, not applied) or a NUL in `path`, `-2` ENOENT for a missing directory, `-13` EACCES. Never a panic | write | `io_write_file_mode`, `caps_fs_mode`, `fs_mode` (modes read back by `stat`, umask `022` and `077`); `reject_write_file_mode_arity`, `reject_write_file_mode_type`, `reject_write_file_mode_wasm` |
+| `createFileExclusiveSync(path: string, data: string, mode: i32): i32` | `O_CREAT\|O_EXCL`: creates `path` at exactly `mode` (set as for `writeFileSyncMode`) and writes `data`, or answers `-17` **EEXIST** when any name is already there — a dangling symbolic link included, which is never followed. Exactly one of any number of processes racing for one path wins, so it is a lock file: create it, and `unlinkSync` it to release. A winner whose write then fails removes the file before it answers, so a failed create never leaves a half-written lock behind. The length written, or a negative errno as for `writeFileSyncMode`. Never a panic | write | `io_create_exclusive`, `fs_mode` (eight children race, one wins; a failed write leaves no file); `reject_create_exclusive_arity`, `reject_create_exclusive_type`, `reject_create_exclusive_mode_type`, `reject_create_exclusive_wasm` |
+| `mkdirSyncMode(path: string, mode: i32): i32` | `mkdir(2)` of one level at `mode`. The kernel applies the process umask to `mode` (a `0o700` directory stays `0o700` under any umask that leaves the owner's bits, as every usual one does; a wider mode may come out narrower), and an existing name is `-17` EEXIST with its mode left as it was, never changed. `0`, or a negative errno: `-2` ENOENT for a missing parent, `-22` EINVAL for a mode outside `0..0o777` (the sticky, setuid and setgid bits included) or a NUL in `path`. Never a panic | write | `io_mkdir_mode`, `caps_fs_mode`, `fs_mode`; `reject_mkdir_mode_arity`, `reject_mkdir_mode_type`, `reject_mkdir_mode_mode_type`, `reject_mkdir_mode_wasm` |
+
+The ones that answer an `i32` answer the same numbers under Node:
+`runtime/nish.mjs` turns the error Node throws into `-errno` from its `code`
+(`ERR_INVALID_ARG_VALUE`, Node's refusal of a NUL in a path, is `-22`). The
+numbers are the platform's errno values, untranslated; the ones shown here are
+Linux's, and another kernel's differ (`ELOOP` is `-62` on Darwin), so compare
+against a negative result, or against a number for the platform at hand. A
+`wasm32` build has none of these, and a WASI build answers `-ENOSYS` from
+the three that take a mode, as WASI has no file modes to set.
+
+**Bytes out, and the string route.** A native string is `{len, bytes}`,
+never validated as UTF-8, and `write`, `writeError`, `writeFileSync` and
+`appendFileSync` send its `len` bytes as they are, so a string built by
+`String.fromBytes` from any bytes, all 256 values included, leaves exactly
+as it came in (`tests/cases/io_write_bytes`, compared with
+`io_write_bytes.bin` byte for byte). That route is native-only. Under the
+prelude (`runtime/nish.mjs`) `String.fromBytes` makes each byte one UTF-16
+unit, which leaves as UTF-8, so a byte above 127 becomes two; under
+`--emit-ts` the bytes decode as UTF-8 and a byte that is not UTF-8 becomes
+U+FFFD. `writeBytes` and `writeFileBytesSync` send a `u8[]` as it is on
+every host, and are the route for bytes that are not text.
 
 Paths are relative to the working directory. `readFileSync`,
 `readFileSyncOrNull` and `readFileBytesSync` treat a file longer than
@@ -7272,6 +7246,7 @@ wins, as it does for every identifier builtin.
 | `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else — a missing path, a plain file, a device node, a parent that cannot be searched. It is the question `-o <dir>` asks of a path, and it is the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
 | `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, with `argv` as its argument vector; wait for it; answer its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` when the vector is **empty** — there is no `argv[0]` to run — and whenever the child cannot be started or cannot be waited for, which is also what a WASI build always answers, since WASI has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
 | `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file rather than inherited: each path is created or truncated at `0644`, as `writeFileSync` does, and a symbolic link as its last component is refused, which answers `-1`. An **empty** path leaves that stream inherited, so one call can capture stdout and let stderr through. Every answer `spawnSync` gives, it gives — the status, `128 + n`, and `-1` for an empty vector, a child that cannot be started, and a WASI build. The two paths must not name one file: each is opened separately, with its own offset, so the streams would overwrite rather than interleave; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
+| `spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32` | the same run, with every stream a pipe: the child reads `stdin`'s bytes and then end of file, and whatever it writes to its stdout and stderr is **appended** to `stdout` and `stderr`, which keep what they held. Answers the status, `128 + n`, and `-1` for an empty vector, a child that cannot be started, a pipe or `poll` that fails, and a WASI build. A stream past **16 MiB** (`NISH_PIPED_CAP`) kills the child with `SIGKILL` and answers `-2`, with that array holding the first 16 MiB; a child that exits without reading its stdin is not a failure. The child inherits the environment and working directory, and no descriptor of the program but its three streams; it starts with SIGPIPE as the program had it, whose own SIGPIPE from writing to a child that stopped reading is absorbed. The two output arrays are grown by the runtime, so they are push receivers to the arena analysis, and `readonly` is refused for them, as is a typed-array spelling (`Int32Array`, ...), whose length is fixed | write | `io_spawn_piped`, `mem_spawn_piped_scope`; `reject_spawn_piped_arity`, `reject_spawn_piped_element_type`, `reject_spawn_piped_stdin_type`, `reject_spawn_piped_output`, `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`, `reject_using_arena_spawn_piped` |
 | `readdirSync(path: string): string[] \| null` | the directory's entries, **sorted ascending by bytes**, without `.` and `..`; every other dotfile is an entry. `null` when the directory cannot be read at all — a missing path, a plain file, a parent that cannot be searched — which is a *different* answer from the empty array an empty directory gives. A WASI build always answers `null`: `fd_readdir` lists a preopened directory rather than a path, which is a different contract and not a port of this one | write | `io_readdir`, `io_readdir_null`; `reject_readdir_arity`, `reject_readdir_type`, `reject_readdir_unchecked` |
 | `realpathSync(path: string): string \| null` | `path` with every symbolic link resolved and every `.`, `..` and repeated separator removed, as an **absolute** path — or `null` when it does not resolve, which a path that does not exist is. Every component but the last must exist for POSIX `realpath` to answer at all, so "does not resolve" is one answer rather than several, and it is the answer the caller asked for rather than an error. The bytes are copied into the arena, so the result is an ordinary string; it is narrowed with `if (p !== null)` like any other nullable (WP19 §5a item 4) | write | `io_realpath`; `reject_realpath_arity`, `reject_realpath_type` |
 
@@ -7307,6 +7282,22 @@ the output as a string, was refused for two reasons: the runtime would have to
 buffer a child that can print more than memory holds, and a harness comparing
 output against a golden wants the bytes on disk anyway, to diff and to keep
 after a failure.
+
+`spawnPiped` is the run whose streams stay in memory, for a child that takes
+a secret: a password manager's or keychain's CLI reads it on stdin, and stdin
+is the one place `ps`, `/proc/<pid>/environ` and the file system do not show.
+Its shape is four arguments with the outputs as out-parameters, the way
+`readBytesInto` fills a caller's array. The rejected shape answered a record
+(`{ status, stdout, stderr }`): no builtin returns a class, and there is no
+way to declare one the checker, both emitters and the TypeScript prelude would
+share, so the record would have been the first and its own construct. The
+out-parameters cost a caller two `const out: u8[] = []` lines; they also let a
+loop reuse one pair of arrays. The runtime writes `stdin` and drains both
+outputs in one `poll` loop, so a child that fills one pipe while the parent
+waits on another cannot deadlock it, and the 16 MiB cap is the answer to the
+reason `spawnSyncTo` gave for refusing to buffer: a child that prints more
+than memory holds is stopped, with a code no exit status can be, rather than
+followed (`docs/security/runtime.md`, RT-27 to RT-31).
 
 `readdirSync` sorts, which neither `readdir(3)` nor Node's `fs.readdirSync`
 does, and that is a decision about this language rather than a convenience:
@@ -7357,6 +7348,7 @@ something that is not valid UTF-8 comes back as those bytes, exactly as
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `monotonicNanos(): i64` | `CLOCK_MONOTONIC` in nanoseconds. The origin is arbitrary, so only the **difference** between two reads means anything: it is not comparable between two processes or two machines, and it is not a date | write | `io_monotonic`; `reject_monotonic_arity` |
+| `wallClockNanos(): i64` | `CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC: a timestamp, `Date.now`'s clock at a nanosecond's grain and as an `i64`. It can go backwards when the system time is set, so a duration is `monotonicNanos`'s job, not this one's. Not refused on wasm, as the monotonic clock is not | write | `wall_clock`; `reject_wall_clock_arity` |
 
 It is an `i64` in both number modes and not a `number`, because a `number` is an
 `i32` by default and would overflow inside a tenth of a second, and an `f64`
@@ -7493,6 +7485,38 @@ itself, on the event loop, so a synchronous wait has nothing to find, and the
 prelude's versions throw, naming themselves, rather than answer (the `os_`
 block of `tests/run.js`).
 
+### Scheduling: `setNice`, `setIdlePriority`
+
+How much of the CPU the program asks for: a batch job or a background indexer
+steps aside for the interactive work on the machine. Both are C in
+`runtime/runtime-os.c`, and each is exported by `nish:process` as well as
+being a global.
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `setNice(n: i32): i32` | set the **nice value** to `n` with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. The kernel clamps `n` to -20..19, so no value is out of range; lowering the value below the current one needs the privilege to, and is -13 (EACCES) without it on Linux and Darwin. Children started afterwards inherit the value | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
+| `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)`, which runs it only when nothing else wants the CPU, and answer 0 or a negative errno. **Linux only**: Darwin has no such policy and the answer there is -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback (`setNice(19)`, or a deadline) for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
+
+**Per thread.** Linux keeps both the nice value and the policy per thread: a
+call sets the calling thread's and every thread started after it. So both
+belong at the top of `main`, before a `scope()` or a parallel loop starts the
+pool, and a task or a parallel body that calls one is refused as any shared
+write is (`reject_os_nice_task`). Neither ever crashes the program: a failure
+is only the answer.
+
+**Capabilities.** Both carry `process.spawn`, the label `kill` carries: neither
+reaches another process, but the priority is the one the program's children
+inherit, and a step down cannot always be taken back.
+
+**On wasm.** A `wasm32` target schedules nothing of the host's, so both are
+refused by the checker with the N3 rule's words (NL2404;
+`reject_os_nice_wasm`, `reject_os_idle_wasm`).
+
+**The TypeScript reading.** Both are **class C** under `runtime/nish.mjs`:
+Node has `os.setPriority` but no `SCHED_IDLE`, and a reading of one without
+the other would differ from the native build on the same host, so both throw,
+naming themselves.
+
 ### `nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop
 
 Sockets for a program that owns its loop (WP34 N5): a server listens, accepts
@@ -7503,7 +7527,7 @@ would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All nineteen functions
+so a child that `spawnSync` starts inherits none of them. All twenty functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -7513,15 +7537,16 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
+| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (no `nish:net` call looks one up; [`nish/net/dns`](../std/net/dns.ts) resolves it first), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
 | `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flags add: `3` is both. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
-| `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
+| `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
+| `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one socket option from a whitelist, named by the ids below: `0`, or the failure, such as `-9` for a closed descriptor and `-88` for one that is not a socket. Any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `value` is `0` or `1` for the switches and a byte count for the buffer sizes. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -7536,7 +7561,7 @@ descriptor, a count, `0`), and a negative number is the failure's errno,
 negated. The codes a loop branches on are **Linux's numbers on every platform**:
 `-11` would block, `-95` unsupported, `-32` the peer has gone, `-104` the
 connection was reset, `-98` the address is in use, `-111` the connection was
-refused, `-110` it timed out and `-22` a bad argument; the Darwin runtime
+refused, `-110` it timed out, `-88` not a socket and `-22` a bad argument; the Darwin runtime
 translates its own. Any other failure is the host's `-errno`
 (`-9` for a descriptor that is not open, on both). `-95` is what `tcpAccept`
 answers for a datagram socket, on both (`net_udp_calls`). A number rather than a
@@ -7549,6 +7574,34 @@ tells "would block" from "the peer has gone" without asking again. No
 `nish:net` call touches the arena (`net_tcp_echo` serves two hundred messages
 in a loop whose pass scope gives back what each pass builds, and prints `flat`
 when that moved the arena no further than one message did).
+
+#### Socket options
+
+`netSetOption`'s `option` is one of five ids `nish:net` exports, each an `i32`
+and each a global too. They are the runtime's own numbers, not the kernel's,
+so a program reads the same on Linux and Darwin, and the runtime maps each to
+its level and name; there is no raw passthrough, because a level, a name and a
+length the program spells is an untyped call into the kernel.
+
+| Id | Value | Sets | `value` |
+| --- | --- | --- | --- |
+| `NET_TCP_NODELAY` | `1` | `IPPROTO_TCP`, `TCP_NODELAY` | `1` sends a small write at once, `0` lets Nagle's algorithm batch it |
+| `NET_TCP_QUICKACK` | `2` | `IPPROTO_TCP`, `TCP_QUICKACK`, Linux only; **`-95` on Darwin** | `1` acknowledges at once, `0` lets the kernel delay the ACK. Linux does not keep the mode: it leaves it on its own, so a server that wants one sets it again after every response |
+| `NET_SO_KEEPALIVE` | `3` | `SOL_SOCKET`, `SO_KEEPALIVE` | `1` probes an idle connection |
+| `NET_SO_SNDBUF` | `4` | `SOL_SOCKET`, `SO_SNDBUF` | bytes; Linux doubles the value it stores |
+| `NET_SO_RCVBUF` | `5` | `SOL_SOCKET`, `SO_RCVBUF` | bytes; Linux doubles the value it stores |
+
+An id is read as a value, as `platform` is: it folds to its number in the IR,
+cannot be assigned, and is not a [module constant](#module-constants), so a
+module constant cannot be initialised from one. A local of the same name
+shadows the global spelling.
+
+```ts nish:ok
+import { NET_TCP_QUICKACK, netSetOption } from "nish:net";
+
+// After each response: Linux may have left quick-ACK mode.
+export const answered = (conn: i32): i32 => netSetOption(conn, NET_TCP_QUICKACK, 1);
+```
 
 #### The address form
 
@@ -7602,7 +7655,7 @@ if (connectResult(fd) === 0) {
 | --- | --- | --- | --- |
 | `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, so several sockets that all ask for it share a port and the kernel spreads the datagrams across them; flag `2` is `UDP_GRO`; any other bit is `-22`. Without flag `1` a port in use is `-98`. The ECN bits of every datagram are always read | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
 | `udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32` | `buf[off, off + len)` to the address `to` in one `sendmsg`: the bytes sent. A `segment` above `0` is **GSO**: the kernel cuts the payload into datagrams of `segment` bytes, the last one shorter, so one call sends many. `ecn` is the two ECN bits of the IP header (`0` not ECN-capable, `1` ECT(1), `2` ECT(0), `3` CE). A `to` shorter than 18 bytes, a `segment` outside `0..65535` or an `ecn` outside `0..3` is `-22`, and so is a payload the kernel will not cut (more segments than it takes in one call, or a segment the route cannot carry); `-11` when the send buffer is full. Not `willreturn`: on a blocking socket the program inherited it waits. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`, `reject_net_udp_task` |
-| `udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32` | the next datagram into `buf[off, off + len)`, cut to `len` if it is longer, in one `recvmsg`: its length, or `-11` when none is waiting. The sender's address goes into `from`, and two numbers into `meta`: `meta[0]` the **GRO** segment size, the size of each datagram the kernel coalesced into this one (`0` when it coalesced none), and `meta[1]` the ECN bits the datagram arrived with. A `from` shorter than 18 bytes or a `meta` shorter than 2 is `-22` before anything is taken. Not `willreturn`, as `udpSendTo`. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`, `net_udp_unchecked`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`, `reject_net_udp_meta_element`, `reject_net_udp_element`, `reject_net_udp_region` |
+| `udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32` | the next datagram into `buf[off, off + len)`, cut to `len` if it is longer, in one `recvmsg`: its length, or `-11` when none is waiting. The sender's address goes into `from`, and two numbers into `meta`: `meta[0]` the **GRO** segment size, the size of each datagram the kernel coalesced into this one (`0` when it coalesced none), and `meta[1]` the ECN bits the datagram arrived with. A `from` shorter than 18 bytes or a `meta` shorter than 2 is `-22` before anything is taken. Not `willreturn`, as `udpSendTo`. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`, `reject_net_udp_meta_element`, `reject_net_udp_element`, `reject_net_udp_region` |
 
 A datagram carries no stream, so an echo is `udpRecvFrom` and then `udpSendTo`
 back to `from`, which is already an address; the `net_` block of
@@ -7714,8 +7767,7 @@ mac, as it runs every `net_` section.
 len <= buf.length` **in the compiled code**, before the call, the way `dst.set(src, at)` checks the range it
 writes, and a range outside it panics with the same words, `slice out of range:
 [4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`). A negative
-`off` or `len` fails it. `--unchecked-indexing` drops the check with every other
-one (`net_tcp_unchecked`, `net_udp_unchecked`). A `peer`, `out`, `to` or `from`
+`off` or `len` fails it. A `peer`, `out`, `to` or `from`
 array shorter than 18 bytes, or a `meta` shorter than 2, is not a panic but
 `-22`, from the runtime, because the length is the argument's
 property rather than the program's arithmetic. So is a `ready` shorter than 2,
@@ -7736,7 +7788,7 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   are the program's own `i32`s (`` `pollWait` fills an `i32[]`, got u8[] ``,
   `reject_net_poll_element`). A descriptor, an offset, a length, a port, a
   backlog, `how`, the flags, a segment size, the ECN bits, a loop, the events,
-  a token and a timeout are `i32` in both number modes, and an
+  a token, a timeout, a socket option and its value are `i32` in both number modes, and an
   `f64` is refused rather than converted (`reject_net_fd_type`).
 - **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer`,
   `netRead`'s `buf`, `udpRecvFrom`'s `buf`, `from` and `meta`, and `pollWait`'s
@@ -7761,10 +7813,12 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
   `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`,
-  `reject_net_reuseport_wasm`). The freestanding `--profile wasm` link, which
+  `reject_net_reuseport_wasm`, `reject_net_set_option_wasm`). The freestanding `--profile wasm` link, which
   takes IR compiled for the host, has no `runtime-net.c` either, so a program
   that calls one fails there at the link, on the undefined `nish_` symbol.
-- **Not yet.** There is no name resolution (`reject_net_unknown_export`), no
+- **Not yet.** No `nish:net` call resolves a name (`reject_net_unknown_export`):
+  the stub resolver is the library module `nish/net/dns`, which drives these
+  calls on the program's own loop. There is no
   `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
   but `pollWait`'s timeout. A program that does not want a loop can still wait
   for a connection, a byte or a datagram by calling again on `-11`, as
@@ -7779,7 +7833,9 @@ function throws `` `netAddress` has no synchronous reading under Node: a socket
 is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
 `net_` block of `tests/run.js`, for `netAddress`, `tcpConnect`, `udpBind` and
-`pollCreate`).
+`pollCreate`). The option ids are plain numbers, so they read the same
+under Node as natively, and only `netSetOption` throws (`net_set_option` in
+`tests/run.js`).
 A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.
@@ -7967,13 +8023,13 @@ bytes — natively and under WASI, and expect the same lines from both.
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
-| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below. `--unchecked-indexing` does not remove the clamp: it is the semantics, not a check | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
-| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy`; `--unchecked-indexing` drops the compares, as it drops `a[i]`'s. Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
+| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
+| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy` Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
 | `s.indexOf(sub: string[, from: number]): number` | the first **byte** offset at or after `from` at which `sub` occurs, or `-1`; `from` defaults to `0`. `from` is clamped into `[0, s.length]` first, as in JavaScript: a negative start searches from `0`, and a start past the end finds nothing, except that the empty needle answers the clamped start, so `s.indexOf("")` is `0`, `s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float start converts as JavaScript's `ToIntegerOrInfinity` does — a fraction truncates and `NaN` is `0` — and an unsigned one is clamped from above only, so a `u64` past 2^63 is past the end. Under Node the program is the same call to `String.prototype.indexOf`, whose answers differ only where every offset does, on text that is not ASCII (NL8001, under "Portability warnings"). One `nish_str_index_of` or `nish_str_index_of_from` call and no allocation: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c), and the clamp is a `llvm.smin` / `llvm.smax` pair in the caller, which a literal `0` does without. A loop that walks every match, `at = s.indexOf(sub, at + sub.length)`, therefore copies nothing | `str_search`, `str_index_of_from`, `str_index_of_from_port`; `reject_str_index_of_type`, `reject_str_index_of_arity`, `reject_str_index_of_from_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
 | `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
-| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1; `--unchecked-indexing` drops the check. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2). `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`, `str_from_bytes_unchecked`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
+| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Natively the string's bytes are the array's, so `write` or `writeFileSync` sends any bytes back out unchanged ([File I/O](#file-io), `io_write_bytes`). Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2); under `--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to U+FFFD. Bytes that are not text go out through `writeBytes` and `writeFileBytesSync`, which agree on every host. `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
 and a code-point index would need a decode per access (`codePointLength` in
@@ -8012,7 +8068,7 @@ whole.
   the same question of a range (`bytes_set_oob`). A range that ends exactly at
   `a.length`, and an empty `src` at `a.length`, are in range
   (`bytes_set_end`). JavaScript throws a `RangeError` for exactly these
-  offsets. `--unchecked-indexing` drops the compares, as it drops `a[i]`'s.
+  offsets.
 - **An overlapping copy behaves as if `src` were read first**, which is
   `TypedArray.prototype.set`'s promise, so `set` lowers to `llvm.memmove`.
   Nish itself can overlap an array only with itself (`a.set(a)`), but a C host
@@ -8238,44 +8294,29 @@ program `tsc` accepts reaches that push.
 
 ### `Arena`
 
-Explicit control of the arena the runtime allocates from
-(`tests/cases/mem_arena_builtins`; [wp6-memory.md](wp6-memory.md#3-explicit-control)).
-The automatic placement described under [Memory model](#memory-model) makes
-these unnecessary for most programs; they exist for code that manages
-batches itself. All four are available in both number modes.
-**`Arena.release` and `Arena.reset` are deprecated** (NL7001, below): they
-still compile and run as they always did, and each call warns, pointing to
-[`using a = arena()`](#using-a--arena), the same release with the proof done
-by the compiler. `Arena.mark` and `Arena.used` are not deprecated: they free
-nothing, and the memory tests read the arena through them.
+Reading the arena the runtime allocates from
+([wp6-memory.md](wp6-memory.md#3-explicit-control)). The automatic placement
+described under [Memory model](#memory-model) frees what a program allocates;
+[`using a = arena()`](#using-a--arena) below frees a batch by hand, with the
+proof done by the compiler. These two read the arena's position, and the
+memory tests watch it through them. Both are available in both number modes.
+`Arena.release` and `Arena.reset`, which freed to a mark with no proof, were
+removed before 1.0: a call to either is an unknown builtin (NL2244, the
+`arena_removed` block of `tests/run.js`).
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Arena.mark(): i64` | the current bump address (`nish_arena_mark`; `0` while the arena is empty) | write | `mem_arena_builtins` |
-| `Arena.release(m: i64): void` | **deprecated** (NL7001): free everything allocated since `m` (`nish_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
-| `Arena.reset(): void` | **deprecated** (NL7001): recycle everything in O(1), keeping the newest chunk (`nish_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
-| `Arena.used(): i64` | bytes bumped in the current chunk (`nish_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
+| `Arena.mark(): i64` | the current bump address (`nish_arena_mark`; `0` while the arena is empty) | write | `mem_callee_scope_control`, `mem_reclaim_guards` |
+| `Arena.used(): i64` | bytes bumped in the current chunk (`nish_arena_used`); the number the memory tests watch | write | `mem_loop_scope_control`, `mem_scope_dynamic_array` |
 
 `mark` and `used` only read the arena, but they are recorded as writes so
 that a caller is never hoisted across an allocation, and a function that calls
 either — itself or through a callee — is never the callee of a tail call whose
 scope release moved ahead of it, so the position it reports is the one it would
-have reported before ([Memory model](#memory-model), item 2). **Safety rule**:
-releasing or resetting while any object, array, or string allocated after
-the mark is still referenced is undefined behaviour (the memory is reused by
-the next allocation). That undefined behaviour belongs to `Arena.release` and
-`Arena.reset` alone: [`using a = arena()`](#using-a--arena) below is the same
-release with the proof done by the compiler, and is the way to free a batch.
-So each call to either still compiles, exits 0 and warns:
-`` `Arena.release` is deprecated: releasing to a mark while anything allocated after it is still referenced is undefined behaviour the compiler does not check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it ``
-(`file:line:col: deprecation: …`, NL7001, `tests/cases/mem_arena_builtins`;
-`Arena.reset`'s reads "resetting the arena while anything allocated in it"
-where this one reads "releasing to a mark …"). Removing them, or refusing
-them, is a later breaking change.
-A function that calls `Arena.release` or `Arena.reset`
-itself, or through a callee, never gets an automatic arena scope, for the
-function or for a loop's pass, so the compiler's own marks are never
-invalidated by user resets.
+have reported before ([Memory model](#memory-model), item 2). A function that
+calls `Arena.mark` in its own body (`managesArena`) never gets an automatic
+arena scope, for the function or for a loop's pass, so the position it reads
+is never moved under it by a scope it did not write.
 
 #### `using a = arena()`
 
@@ -8336,7 +8377,6 @@ const tally = (rows: string[]): i32 => {
   | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return`, `reject_using_arena_declarator_or_return` |
   | a call to a function that stores an allocation into memory | always | NL2424 | `reject_using_arena_callee_stores` |
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
-  | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
   | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
   | `s.spawn(...)` on a scope the same `using` declares ahead of `arena()`, `using s = scope(), a = arena()` | an argument is not older than the block: `s` is disposed after the arena, so it joins after the release | NL2427 | `reject_using_arena_spawn_declarator` |
   | the same, ahead of the statement's last `arena()`, `using a = arena(), s = scope(), b = arena()` | an argument is not older than the block: `b` releases before `s` joins | NL2427 | `reject_using_arena_spawn_last` |
@@ -8373,7 +8413,7 @@ const tally = (rows: string[]): i32 => {
   (`reject_using_arena_spawn_constructor`).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
-  theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
+  theirs; only `Arena.mark` gives those up. And the arena-loop warning, NL9011, says
   nothing about a call inside the block, whose leftovers the block releases
   (`tests/cases/perf_arena_using`).
 
@@ -9089,20 +9129,20 @@ policy](#the-capability-policy); without one, the set is a report.
 
 | Capability | Builtins |
 | --- | --- |
-| `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
+| `clock` | `Date.now`, `monotonicNanos`, `wallClockNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
 | `entropy` | `crypto.getRandomValues`, `Math.random` (`caps_entropy`) |
 | `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
-| `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`) |
+| `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
-Everything else is none: printing (`console.*`, `write`, `writeError`),
+Everything else is none: printing (`console.*`, `write`, `writeError`, `writeBytes`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,
 `Math.*` other than `random`, the conversions, the constant-time builtins, `secureZero`, the
 string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
@@ -9184,14 +9224,8 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   deterministic ("capabilities: `unsafe` reaches a caller two frames up, with
   the whole chain as its witness", "capabilities: a dependency that imports
   `nish:unsafe` gives `unsafe` to its package and to the entry that calls
-  it"). The deprecated `--wrapping` and `--unchecked-indexing` carry no
-  `unsafe`, so `--deny unsafe` passes them: they reach only the entry package
-  and each compile that passes one prints its deprecation note (NL9014).
-  `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
-  which `nish --fix` rewrites into `uncheckedGet` and `uncheckedSet` calls
-  that do carry it; `--wrapping` has no fixer, and its note names the
-  `nish:unsafe` exports to write instead ("capabilities: `--wrapping` and
-  `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them").
+  it"). No flag turns a check off for a whole program, so `nish:unsafe` is
+  the only way to one and `--deny unsafe` sees every unchecked site.
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
@@ -9468,19 +9502,11 @@ entry:
   or `wrappingMul` call from
   [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), the
   plain instruction with no check, like Rust's `wrapping_add`
-  (`tests/cases/unsafe_wrapping`). The deprecated `--wrapping` still makes
-  every operator of the entry package's modules wrap, never a dependency's or
-  the standard library's, and then `2147483647 + 1` is `-2147483648` with no
-  check there (`tests/cases/opt_nsw` for the default, `opt_wrapping`,
-  `ovf_repro_wrapping` and `i64_basic` for the flag;
-  `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`). There is no
-  flag that makes overflow undefined again: `--nsw`, which did, is refused.
-  `--wrapping` is not free either: the bounds proof may not carry a lower
-  bound across `i = i + 1` when the wrap is *defined*, so a counted loop
-  compiled with it keeps the bounds checks the default build removes.
-  `tests/cases/opt_wrapping` pins both halves: no `nsw` and no check anywhere,
-  and one plain instruction for each operation the default build proves or
-  checks.
+  (`tests/cases/unsafe_wrapping`; `tests/cases/opt_nsw` for the default).
+  There is no flag that changes the rule for a whole program: `--nsw`, which
+  made overflow undefined, and `--wrapping`, which made every operator wrap,
+  are both refused with exit 2 and a line naming the `wrapping*` functions
+  (`tests/nish/cli.ts`).
 - **Unsigned integers never carry a no-wrap flag**, in either mode. `u8`,
   `u16`, `u32` and `u64` are *defined* to wrap, so `(255: u8) + 1` is `0`
   (`tests/cases/u_arith_wrap`): `nuw` would be a claim the language does not
@@ -9573,9 +9599,7 @@ entry:
   `s.charCodeAt(i)` and the two ends of `s.slice(a, b)`
   (`tests/cases/str_slice_panic`). `uncheckedGet` and `uncheckedSet` from
   `nish:unsafe` remove the one at their own site (`tests/cases/unsafe_get_set`),
-  and the deprecated `--unchecked-indexing` removes all of them in the entry
-  package's modules (`tests/cases/arr_unchecked`, `tests/link/unsafe_flag_scope`);
-  past either, out-of-range is undefined behaviour.
+  and past one, out-of-range is undefined behaviour.
 - **`new Array<T>(n)` zero-fills** (`0` / `false`), no holes; pointer element
   types are rejected because a zeroed pointer would be null
   (`tests/cases/arr_new_zeroed`, `reject_arr_new_string`).
@@ -9657,9 +9681,8 @@ where its memory lives and when it is reused.
    with it (a dynamic `new Array<T>(n)`, `push` growth on its own array, a
    string concatenation or template, a number printed by `console.log`, a
    callee's returned allocation), that neither returns nor leaks an
-   allocation, has no callee that leaks one, and never calls `Arena.reset` /
-   `Arena.release`, calls `nish_arena_mark` on entry and `nish_arena_release`
-   before every `ret` (`tests/cases/mem_scope_dynamic_array`,
+   allocation, and has no callee that leaks one, calls `nish_arena_mark` on
+   entry and `nish_arena_release` before every `ret` (`tests/cases/mem_scope_dynamic_array`,
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
 
    **A loop's pass gets a scope of its own.** A loop whose body allocates,
@@ -9685,8 +9708,7 @@ where its memory lives and when it is reused.
      or `new Array`;
    - a `return` in the body answers a scalar or a value older than the pass,
      and `orReturn` is refused;
-   - the function neither calls `Arena.mark`, `Arena.release` or
-     `Arena.reset` itself nor reaches a callee that releases or resets.
+   - the function does not call `Arena.mark` itself.
 
    A string pushed onto an array that is only joined is not stored into
    memory. When a function binds a `string[]` local to its own fresh literal
@@ -9773,8 +9795,7 @@ where its memory lives and when it is reused.
 
    **A function whose callees are what allocate gets a scope too.** One that
    allocates nothing of its own, returns a number, a `boolean`, an `enum` or
-   nothing, never calls `Arena.reset` / `Arena.release` itself or through a
-   callee, and calls a function that leaves arena memory behind, brackets
+   nothing, and calls a function that leaves arena memory behind, brackets
    itself the same way when nothing it or its callees allocate can outlive
    the call except through the return value. That holds when no allocation
    is stored into memory anywhere in the call (the escape analysis above), or
@@ -9828,8 +9849,7 @@ where its memory lives and when it is reused.
    mark instead: `nish_arena_mark` after the arguments, then
    `nish_arena_keep(mark, s)`, which moves the returned string down onto the
    mark and releases every temporary the callee bumped underneath it. Emitted
-   only when the callee returns a plain `string`, allocates, never calls
-   `Arena.reset` / `Arena.release`, and never lets an allocation out of its
+   only when the callee returns a plain `string`, allocates, and never lets an allocation out of its
    frame other than through its return value — so a callee that stores what it
    built into an object its caller holds gets no bracket, and neither does one
    returning an array, a struct or a `Result`, whose values name memory outside
@@ -9865,23 +9885,19 @@ by the caller.
   rather than dropping it, as it refuses `-o` and `--link`: fix first, then
   compile for the target. It refuses `-g`, `--threads`, `--runtime-decls` and
   `--plain` the same way, for the same reason.
-- **`--wrapping`** (deprecated, NL9015): see *Signed integer overflow is a
-  checked panic* above (`tests/cases/opt_nsw`, `opt_wrapping`,
-  `ovf_repro_wrapping`). It reaches the entry package's modules only
-  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 - **`--no-strict-exports`**: see *Linkage* above
   (`tests/cases/export_no_strict`).
 - **`--strict-exports`** is still accepted and now says explicitly what the
   compiler does anyway; it exists so a build script written before the default
   changed still runs (`tests/cases/export_strict`).
-- **`--nsw`** is refused, a usage error with exit 2. It said that signed
-  overflow was undefined behaviour the optimiser could assume away, which is
-  the default no longer: overflow is checked, and no flag brings the
-  assumption back. The refusal names the `nish:unsafe` `wrapping*` functions
-  and `--wrapping`, the ways to ask for a wrap (`tests/nish/cli.ts`).
-- **`--unchecked-indexing`** (deprecated, NL9014): see *Bounds checks* above.
-  It reaches the entry package's modules only
-  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
+- **`--nsw`**, **`--wrapping`** and **`--unchecked-indexing`** are refused, a
+  usage error with exit 2. The first said that signed overflow was undefined
+  behaviour the optimiser could assume away, the second made it a defined
+  wrap, and the third dropped every bounds check in the entry package; the
+  rule is a checked panic now, and no flag changes it. Each refusal names the
+  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping) calls
+  that skip one check at their own site: `wrappingAdd`, `wrappingSub` and
+  `wrappingMul`, or `uncheckedGet` and `uncheckedSet` (`tests/nish/cli.ts`).
 - **`--no-stack-alloc`**: see *Memory model* above.
 
 ### The CPU level
@@ -9952,9 +9968,8 @@ by the caller.
   (`tests/cases/diag_order`, `tests/cases/diag_order_pass1`).
   The thirteen below each name the rewrite; the class also holds NL9012, a
   `parallelMapInto` body that allocates per element
-  ([Data parallelism](#data-parallelism-nishthreads)), and NL9014 and NL9015,
-  the deprecated `--unchecked-indexing` and `--wrapping`
-  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)):
+  ([Data parallelism](#data-parallelism-nishthreads)), and the retired NL9014
+  and NL9015, which noted the removed `--unchecked-indexing` and `--wrapping`:
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -10039,9 +10054,8 @@ by the caller.
     update is outside the pass's bracket and is reported as such. It is found
     after the whole-program analysis rather than by the checker, because
     every half of it is that analysis's facts. Not reported in a function
-    that calls `Arena.mark`, `Arena.release` or `Arena.reset` itself, whose
-    author is already managing the memory, whatever it returns
-    (`tests/cases/perf_arena_control`, `mem_callee_scope_control`); when the
+    that calls `Arena.mark` itself, whose author is already managing the
+    memory, whatever it returns (`tests/cases/mem_callee_scope_control`); when the
     callee stores what it allocates, because then the program is keeping it;
     when the result is returned, stored, pushed or passed on; or in a loop
     whose pass can `return` what it allocated, which no bracket could
@@ -10049,11 +10063,11 @@ by the caller.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. By
     default that operation panics when it runs, so the hint is to widen the
-    operands with `toI64` or to pass `--wrapping`
-    (`tests/cases/perf_overflow_const`). Reported on the innermost expression
-    that overflows, so `100000 * 100000 + 1` warns once. Silent under
-    `--wrapping`, where the wrap is the defined answer
-    (`tests/cases/perf_overflow_wrapping`), silent for the unsigned widths,
+    operands with `toI64` or to write it as a `wrapping*` call from
+    `nish:unsafe` (`tests/cases/perf_overflow_const`). Reported on the
+    innermost expression that overflows, so `100000 * 100000 + 1` warns once.
+    Silent for a `wrapping*` call, where the wrap is the defined answer,
+    silent for the unsigned widths,
     which are defined to wrap in both modes, and silent for anything the
     folder does not evaluate — a named `const`, a hexadecimal literal, or a
     value large enough that the fold itself would have to overflow to find out
@@ -10061,8 +10075,7 @@ by the caller.
     warning: its fold is eager and an overflow there is a hard error.
   - **a product widened after it has already overflowed** — `toI64(a * b)` or
     `toF64(a * b)` where the operand expression is `i32`. The multiplication
-    happens in `i32`, where a product past its range panics (or wraps, under
-    `--wrapping`) before the conversion sees it, so the wider type never holds
+    happens in `i32`, where a product past its range panics before the conversion sees it, so the wider type never holds
     the value the reader expects; the hint is to
     convert the operands first (`tests/cases/perf_overflow`). Not reported when
     the arithmetic is already done in the wider type (`toI64(a) * toI64(b)`),
@@ -10103,8 +10116,7 @@ by the caller.
     credits, so an index in range runs as before and one out of range still
     exits 1, at the guard
     (`tests/fix/guard-*`, [`tests/fix/README.md`](../tests/fix/README.md)).
-    Silent outside a loop, where one check is not a cost anybody is paying;
-    silent under `--unchecked-indexing`, where no check survives to report;
+    Silent outside a loop, where one check is not a cost anybody is paying,
     and silent unless the receiver is a plain local and the index a plain
     local or an offset from one, `i + c`, which are the shapes the analysis
     knows how to prove — a field receiver
@@ -10129,9 +10141,7 @@ by the caller.
     or on the target of a compound assignment or an increment, once per
     entry. Silent outside a loop; silent for a proven entry
     (`tests/cases/perf_rng_quiet`); and silent for a range whose lower end is
-    neither 0 nor `-2147483648`, where no guard proves the entry. Like the
-    clamp warning it is **unaffected by `--unchecked-indexing`**, which leaves
-    the entry check in place.
+    neither 0 nor `-2147483648`, where no guard proves the entry.
   - **a `substring` bound whose clamp could not be folded off** —
     `s.substring(a, b)` inside a loop where the proof above could not place `a`
     or `b` in `[0, s.length]`, so that bound keeps the `llvm.smin` /
@@ -10148,10 +10158,7 @@ by the caller.
     outside a loop, where the clamp runs once; silent for a bound the proof
     came off, including the literal `0` that every string proves; and silent
     unless the receiver and the bound are both plain locals, which is the
-    shape a guard could prove (`tests/cases/perf_clamp_quiet`). Unlike the
-    bounds-check warning it is **unaffected by `--unchecked-indexing`**,
-    because the clamp is not a check: the flag does not remove it and neither
-    rewrite depends on it.
+    shape a guard could prove (`tests/cases/perf_clamp_quiet`).
   - **a function kept external by `--no-strict-exports`** — a call, inside a
     loop, to a function the module does not export, while that flag is in
     effect. The default gives such a function `internal` linkage, which is what
@@ -10234,11 +10241,12 @@ by the caller.
   | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
   | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
   | NL8006 | integer `/` (3.1) | `/` or `/=` on an integer type | divides exactly and keeps the fraction |
-  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range |
+  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range |
   | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned |
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
   | NL8010 | *retired* | nothing: the row was `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32`, when `min` and `max` dropped a NaN operand and `round` answered `0` for a negative number that rounds to zero. They lower to a NaN test and a sign-bit pick (`llvm.minimum`/`llvm.maximum` on wasm) and a `llvm.copysign.f64` now, which answer NaN and `-0` as JavaScript does, so no site diverges (`tests/cases/port_num_libm` is quiet). The code stays reserved and is never reused | — |
   | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
+  | NL8012 | a stubbed generic (`--emit-ts` only) | a generic function or method of the program's own modules that no instance reaches, whose body needs the checker's types to translate (a 64-bit integer or a builtin call) | throws when called, where the native build has no body to call at all |
 
   **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)`,
   `s.indexOf(t, i)` or `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) on a
@@ -10366,7 +10374,11 @@ by the caller.
 
   Every row but the retired NL8010 and NL8011 is live, each with a warning case and a
   quiet counterpart among `tests/cases/port_*` and a wording pin in
-  `tests/wordings/`.
+  `tests/wordings/`, but NL8012, which only `--emit-ts` reports: its cases are
+  `tests/emit-ts/records/generic-uncalled.ts` (warned) and
+  `tests/emit-ts/identity/maps.ts` (a standard-library stub, quiet), checked
+  by `tests/run.js`'s emit-ts section, and its pin is
+  `tests/wordings/nl8012_generic_stub`.
 - **Deprecation warnings are the third diagnostic that is not an error.** One
   marks a call the language still compiles, to exactly the IR it always did,
   and is going to take away in a later breaking release, naming what replaces
@@ -10379,11 +10391,10 @@ by the caller.
   an `N deprecation warnings` line, in the order the other two reports use. A
   call in a generic body warns once, however many instantiations check it. The
   standard library and the examples call nothing deprecated, and `npm test`
-  fails the day one of them does. The rules, one code each in band NL7xxx:
-
-  | Code | What is deprecated | Its replacement | Test |
-  | --- | --- | --- | --- |
-  | NL7001 | `Arena.release(m)` and `Arena.reset()`: their undefined behaviour is the one the compiler does not check | [`using a = arena()`](#using-a--arena) | `tests/cases/mem_arena_builtins`, the deprecation block of `tests/run.js`, `tests/wordings/nl7001_arena_release` |
+  fails the day one of them does. **Nothing is deprecated today**: band NL7xxx
+  holds only the retired NL7001 (`Arena.release` and `Arena.reset`) and NL7002
+  (`--unchecked-indexing`'s sites), whose constructs were removed before 1.0
+  rather than kept behind a warning (`tests/wordings/unreachable.txt`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
@@ -10451,15 +10462,18 @@ by the caller.
   written. Last comes `entry.ts`, which imports `nish/runtime/node`, calls
   `main` and exits with what it answered. Imports are rewritten to match: a
   `nish:` specifier becomes `nish/runtime`, the one package the output names,
-  except `nish:secret`, which has source and becomes `./nish/secret.ts`;
-  a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
+  `nish:secret` included (its `std/secret.ts` is not written: the runtime's
+  `wipe` answers it, a zero-fill that cannot reach a copy the engine made, so
+  erasure is the native build's alone: `docs/security/secret.md`, SECRET-6); a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
   imported name that is only a type (an interface, a generic interface, an
   alias) is written `type X`, because Node's type stripping does not know
-  which names are types. A module that needs none of that is written byte for
-  byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
+  which names are types. A module that needs none of that and none of the rows
+  below is written byte for byte (`tests/emit-ts/identity/`; the layout is
+  `tests/emit-ts/layout/`); one row that touches an otherwise untouched module
+  is the `: string` on an unannotated `const` bound to a string literal.
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Four kinds of module are refused, and then nothing is written** (exit 1):
+- **Five kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -10475,6 +10489,24 @@ by the caller.
   one instance and by reference in another (`P` and `P | null`), or element
   types with different zeros in `new Array<T>(n)` (`i32` and `i64`) (NL4013,
   `reject_emit_ts_instances`). Write a function per element type.
+  A generic no instance reaches (a function, a method, or the methods and
+  constructor of a class no type argument list names) has no types and no
+  native body. Where no type would change its text it is written as it is,
+  through the rewrites that need no type (`a[i]` is still checked); where a
+  type would (a 64-bit integer, which is a `bigint` there, `f32`, a builtin
+  call, arithmetic whose width wraps, a string's `.length` or methods, a
+  `Result`'s), it is written with a body that throws. Such a stub in the
+  program's own modules is a portability warning naming it at its
+  declaration (NL8012, `tests/emit-ts/records/generic-uncalled.ts`); the
+  standard library's (`insertAt` of `nish/collections`) are written without
+  one. The fifth refusal is such a generic in the program's own modules whose
+  body copies an element into an array slot, in a module that holds records
+  inline, or fills `new Array<T>(n)` with `T`'s zero, which only an instance
+  would decide, whatever else in it needs a type, a 64-bit integer or a
+  builtin call included (NL4014, `tests/emit-ts/refused/uncalled-zero.ts`,
+  `uncalled-copy.ts`, `uncalled-ctor-zero.ts`, `uncalled-field-zero.ts`,
+  `uncalled-wide-zero.ts`); in the standard library the same body is a stub,
+  without a warning, and the program is written.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/
@@ -10505,9 +10537,9 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | --- | --- | --- |
 | `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
 | `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
-| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`) |
+| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
-| `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). Under the deprecated `--wrapping`, and for a `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul`, nothing is checked and nothing is a site (`tests/cases/panics_overflow_wrapping`) |
+| `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). A `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not a site |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
 | `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
 | `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
@@ -10516,15 +10548,11 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
 | `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
-| `ffi-length` | a call to a [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). `--unchecked-indexing` leaves the check in (`panics_ffi_length_unchecked`) |
+| `ffi-length` | a call to a [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
 | `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
 
-- **`--unchecked-indexing` is not a proof.** It removes a check and makes the
-  out-of-range access undefined behaviour instead of a panic, so the site
-  stays, unproven, and so does every `call` into its function
-  (`tests/cases/panics_unchecked_indexing`).
 - **A `call` names its callee and the kind it reaches** (`"via"`), and is
   decided over the whole program, the standard library and dependencies
   included. The kind is the one the callee reaches first at run time, its own
@@ -10608,10 +10636,6 @@ performance warning about the same check is not printed beside the error.
   what the package says about itself unread. A key is decoded as `JSON.parse`
   decodes it, so `"ni\u0073h"` is `"nish"`; an escape outside ASCII decodes
   to a byte no name contains, so it never matches one.
-- **`--unchecked-indexing` is not a proof, and not an opt-in the scope
-  takes.** It removes a check and makes an access out of range undefined
-  behaviour with nothing in the source to show for it, so an index the flag
-  left unchecked is still refused (`reject_deny_panics_unchecked_indexing`).
 - **A `nish:unsafe` import is the opt-in.** `uncheckedGet` and `uncheckedSet`
   are reached only through `import { … } from "nish:unsafe"` at the top of the
   module that calls them, which is the module's word, visible where a reader
@@ -10630,10 +10654,9 @@ performance warning about the same check is not printed beside the error.
   `wrappingSub(x, y)`, `wrappingMul(x, y)`, `x = wrappingAdd(x, y)` for an
   `op=`, `wrappingSub(0, x)` for a negation and `x = wrappingAdd(x, 1)` or
   `x = wrappingSub(x, 1)` for `++` and `--`. A proven one is accepted, and so is
-  every operation under the deprecated `--wrapping` and every `wrapping*`
-  call, which are defined to wrap and are not sites
+  every `wrapping*` call, which is defined to wrap and is not a site
   (`tests/cases/reject_deny_panics_overflow`, `tests/cases/reject_deny_panics_overflow_ops`, `tests/cases/deny_panics_overflow_proven`,
-  `tests/cases/deny_panics_overflow_wrapping`, `tests/cases/deny_panics_overflow_wrapping_add`,
+  `tests/cases/deny_panics_overflow_wrapping_add`,
   `tests/link/no_panic_overflow`).
 - **What the scope does not cover.** Out of memory is listed but never
   refused: every allocation can fail and no guard prevents it. Stack overflow
@@ -10959,7 +10982,6 @@ messages are exact for the cases cited; other rows quote the checker
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
 | `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_null_narrowing_assigned_in_chain`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
-| `Arena.release` with a non-`i64` argument | `` `Arena.release` expects an argument of type i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
 | non-boolean condition | `Condition must be boolean, got i32 (Nish has no truthiness)` | `reject_cf_nonbool_cond` |
 | `&&`/`\|\|` on numbers | `` Operator `&&` requires boolean operands, got i32 and i32 `` | `reject_cf_logical_numbers` |
@@ -10973,7 +10995,7 @@ messages are exact for the cases cited; other rows quote the checker
 | `Math.*` on an integer | `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) `` | `reject_math_i32` |
 | conversion of a non-number | `` `toI32` expects a number (i32, i64, or f64), got string `` | `reject_toi32_string` |
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
-| I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
+| I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `spawnPiped` expects exactly 4 arguments, got 3 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_spawn_piped_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
 | element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
 | `push` or `pop` on a receiver spelled `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` (NL2415) | `` `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop `` | `reject_typed_push_f64`, `reject_typed_pop_receivers` ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)) |

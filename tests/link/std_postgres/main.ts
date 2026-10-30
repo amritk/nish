@@ -4,6 +4,7 @@
 // std_postgres_replay; these are the frames no well-behaved server sends.
 import {
   PgArrayWalker,
+  PgBinary,
   PgConfig,
   PgConnection,
   PgText,
@@ -32,6 +33,7 @@ import {
   PG_READY,
   PG_ROW,
 } from "nish/net/postgres";
+import { getI32BE, getU16BE, setF64BE, setI64BE } from "nish/bytes";
 import { secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 
@@ -320,6 +322,19 @@ const malformed = (t: Suite): void => {
   pushI16(minus, 1);
   pushI32(minus, -2);
   t.eqStr("a column length of -2", feed(inGroup(), msg("D", minus)), frame);
+  const top: u8[] = [];
+  pushI16(top, 1);
+  pushI32(top, -2147483647 - 1);
+  // Past the row whether the length is read signed or unsigned; "a row with a
+  // NULL" below pins the signed read, as -1 read unsigned is a frame error.
+  t.eqStr("a column length of -2^31, past the row either way", feed(inGroup(), msg("D", cat(top, z("abc")))), frame);
+  const high: u8[] = [];
+  pushI16(high, 1);
+  pushI32(high, 16777216 + 3);
+  t.eqStr("a column length whose high byte is set", feed(inGroup(), msg("D", cat(high, z("abc")))), frame);
+  const huge: u8[] = [toU8(83)];
+  pushI32(huge, -2147483647 - 1);
+  t.eqStr("a message length with its top bit set", feed(open(config()), huge), frame);
   const desc: u8[] = [];
   pushI16(desc, 1);
   t.eqStr("a RowDescription field cut short", feed(inGroup(), msg("T", cat(desc, z("id|abc")))), frame);
@@ -589,6 +604,10 @@ const results = (t: Suite): void => {
   t.eqStr("columnText", conn.columnText(0), "-17");
   t.eqI32("colLength", conn.colLength(0), 3);
   t.eqI32("colStart points into the input buffer", toI32(conn.inputBuffer()[conn.colStart(1)]), 116);
+  const long: string = nines(258);
+  t.eqStr("a column of 258 bytes, its length in two bytes", feed(conn, row([long, "t"], [])), `${PG_ROW}`);
+  t.eqI32("its length", conn.colLength(0), 258);
+  t.ok("the next column follows it", conn.bool(1));
   t.eqStr("a row with a NULL", feed(conn, row(["", "f"], [true, false])), `${PG_ROW}`);
   t.ok("isNull", conn.isNull(0) && !conn.isNull(1));
   t.eqStr("columnText of NULL", conn.columnText(0), "");
@@ -847,6 +866,13 @@ const timestamps = (t: Suite): void => {
   t.eqStr("seven fraction digits", ts(p, "2024-01-02 03:04:05.1234567", 0), "failed");
   t.eqStr("a dot without digits", ts(p, "2024-01-02 03:04:05.+00", 0), "failed");
   t.eqStr("a T where the space goes", ts(p, "2024-01-02T03:04:05", 0), "failed");
+  t.eqStr("year 0001", ts(p, "0001-01-01 00:00:00", 0), "0001-01-01T00:00:00.000Z");
+  t.eqStr("year 1000", ts(p, "1000-01-01 00:00:00", 0), "1000-01-01T00:00:00.000Z");
+  t.eqStr("a letter in a digit's place", ts(p, "2024-0a-02 03:04:05", 0), "failed");
+  t.eqStr("a colon in a digit's place", ts(p, "2024-01-02 03:0::05", 0), "failed");
+  t.eqStr("a digit in a separator's place", ts(p, "2024-01-02 03:04505", 0), "failed");
+  t.eqStr("a separator moved one place", ts(p, "202-401-02 03:04:05", 0), "failed");
+  t.eqStr("the space and a dash swapped", ts(p, "2024 01-02-03:04:05", 0), "failed");
   t.eqStr("no room in out", ts(p, "2024-01-02 03:04:05", 7), "failed");
 };
 
@@ -893,6 +919,402 @@ const arrays = (t: Suite): void => {
   t.eqI32("stays bad", w.next(), PG_ARRAY_BAD);
 };
 
+/** A ready connection with a Bind of `q` open. */
+const bound = (c: PgConfig): PgConnection => {
+  const conn = ready(c);
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  conn.bindStart("q");
+  return conn;
+};
+
+/**
+ * Ends the open Bind of `q` and answers its one parameter: the length word,
+ * then the bytes as `drain` shows them; the Bind starts `at` bytes into the
+ * queued output, and everything is marked sent.
+ */
+const onlyParam = (conn: PgConnection, at: i32): string => {
+  conn.bindEnd();
+  const out: u8[] = conn.outputBuffer();
+  const p: i32 = conn.outputStart() + at + 12;
+  const n: i32 = getI32BE(out, p);
+  const parts: string[] = [`${toI32(getU16BE(out, p - 2))} of ${n}:`];
+  for (let i: i32 = p + 4; i < p + 4 + n; i++) {
+    const c: i32 = toI32(out[i]);
+    parts.push(c === 0 ? "|" : c < 32 || c > 126 ? `<${c}>` : String.fromCharCode(c));
+  }
+  conn.sent(conn.outputEnd() - conn.outputStart());
+  return parts.join("");
+};
+
+const intArrays = (t: Suite): void => {
+  const empty: i64[] = [];
+  let conn = bound(config());
+  t.ok("paramIntArray: the empty array", conn.paramIntArray(empty, 0, 0));
+  t.eqStr("is {}", onlyParam(conn, 0), "1 of 2:{}");
+  const min: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8);
+  const values: i64[] = [toI64(7), toI64(-1), toI64(0), min, -(min + toI64(1))];
+  conn = bound(config());
+  conn.paramIntArray(values, 0, 5);
+  t.eqStr("every value in decimal, the most negative too", onlyParam(conn, 0), "1 of 49:{7,-1,0,-9223372036854775808,9223372036854775807}");
+  conn = bound(config());
+  conn.paramIntArray(values, 1, 2);
+  t.eqStr("a window of the array", onlyParam(conn, 0), "1 of 6:{-1,0}");
+  conn = bound(config());
+  conn.paramIntArray(values, 5, 0);
+  t.eqStr("an empty window at its end", onlyParam(conn, 0), "1 of 2:{}");
+
+  const c = config();
+  c.maxOutput = 1024;
+  // The Bind's first 12 bytes are queued and 17 stay free: 995 for the
+  // parameter, its length word among them; 91 ten-digit values take 1002.
+  const big: i64[] = [];
+  for (let i: i32 = 0; i < 91; i++) {
+    big.push(toI64(1000000000));
+  }
+  conn = bound(c);
+  t.ok("an int8[] that would pass maxOutput is refused", !conn.paramIntArray(big, 0, 91));
+  t.ok("its exact size is asked for: one value less fits", conn.paramIntArray(big, 1, 90));
+  t.eqStr("and the refused one left nothing behind", onlyParam(conn, 0).slice(0, 12), "1 of 991:{10");
+  t.ok("without a bind, refused", !conn.paramIntArray(big, 0, 1));
+};
+
+const arrayBuilder = (t: Suite): void => {
+  let conn = bound(config());
+  t.ok("arrayStart", conn.arrayStart());
+  conn.arrayEnd();
+  t.eqStr("no elements: the empty array", onlyParam(conn, 0), "1 of 2:{}");
+
+  conn = bound(config());
+  conn.arrayStart();
+  t.ok("a NULL element", conn.arrayNull());
+  const awkward: string[] = ["\"", "\\", ",", "{", "}", " x y ", "NULL", "", "é"];
+  for (const item of awkward) {
+    const b: u8[] = z(item);
+    t.ok(`an element of ${toI32(b.length)} bytes`, conn.arrayElement(b, 0, toI32(b.length)));
+  }
+  conn.arrayEnd();
+  t.eqStr(
+    "NULL unquoted, every text element quoted, \" and \\ escaped, UTF-8 as it is",
+    onlyParam(conn, 0),
+    "1 of 51:{NULL,\"\\\"\",\"\\\\\",\",\",\"{\",\"}\",\" x y \",\"NULL\",\"\",\"<195><169>\"}",
+  );
+
+  conn = bound(config());
+  conn.paramInt(toI64(1));
+  conn.arrayStart();
+  conn.arrayElement(z("abcdef"), 2, 3);
+  conn.arrayNull();
+  t.ok("no sync while an array is open", !conn.sync());
+  t.ok("no prepare", !conn.prepare("r", "select 2", none()));
+  t.ok("no closeStatement", !conn.closeStatement("q"));
+  t.ok("no bindStart", !conn.bindStart("q"));
+  conn.arrayEnd();
+  conn.paramText("z");
+  t.ok("bindEnd after arrayEnd", conn.bindEnd());
+  t.eqStr(
+    "an array between two parameters is one parameter, its window bound",
+    drain(conn),
+    "B|||'|q||||<3>|||<1>1|||<12>{\"cde\",NULL}|||<1>z||E|||<9>|||||",
+  );
+
+  const c = config();
+  c.maxOutput = 1024;
+  // 12 bytes of Bind, the length word and `{` are queued and 17 stay free:
+  // 990 for the first element, its quotes and the `}` it owes.
+  conn = bound(c);
+  conn.arrayStart();
+  const quotes: u8[] = z(repeat("\"", 494));
+  t.ok("an element whose escapes pass maxOutput is refused", !conn.arrayElement(quotes, 0, 494));
+  t.ok("its escapes are counted: one less fits", conn.arrayElement(quotes, 1, 493));
+  conn.arrayEnd();
+  t.eqStr("and the refused one left nothing behind", onlyParam(conn, 0).slice(0, 14), "1 of 990:{\"\\\"\\");
+
+  conn = bound(c);
+  conn.arrayStart();
+  const long: u8[] = z(repeat("a", 988));
+  t.ok("an element that would pass maxOutput is refused", !conn.arrayElement(long, 0, 988));
+  t.ok("one byte less fits", conn.arrayElement(long, 1, 987));
+  t.ok("a NULL after it is refused", !conn.arrayNull());
+  t.ok("as is another element", !conn.arrayElement(long, 0, 0));
+  conn.arrayEnd();
+  t.ok("the array still ends", conn.bindEnd());
+  t.ok("and Sync fits", conn.sync());
+  t.eqStr("with the element that fit", drain(conn), `B||<3><240>|q||||<1>||<3><223>{"${repeat("a", 987)}"}||E|||<9>|||||S|||<4>`);
+
+  conn = ready(c);
+  t.ok("without a bind, arrayStart is refused", !conn.arrayStart());
+  conn.prepare("", repeat("y", 500), none());
+  conn.sync();
+  const unsent: u8[] = slice(conn.outputBuffer(), 300, 521);
+  conn.sent(300);
+  conn.bindStart("q");
+  conn.arrayStart();
+  t.eqI32("an open array with sent bytes before it", conn.outputStart(), 300);
+  t.ok("an element that fits under maxOutput but not after the end", conn.arrayElement(long, 0, 500));
+  t.eqI32("moves the unsent bytes to the start", conn.outputStart(), 0);
+  t.eqI32("instead of growing the buffer", toI32(conn.outputBuffer().length), 1024);
+  conn.arrayNull();
+  conn.arrayEnd();
+  t.ok("the unsent bytes as they were", same(conn.outputBuffer(), 0, unsent));
+  t.eqStr("the array's length patched where it moved to", onlyParam(conn, 221).slice(0, 14), "1 of 509:{\"aaa");
+
+  conn = bound(config());
+  conn.arrayStart();
+  conn.arrayNull();
+  conn.terminate();
+  t.eqStr("terminate drops an open array with its bind", drain(conn), "X|||<4>");
+  t.ok("and leaves none open", !conn.paramText("x"));
+
+  conn = bound(config());
+  conn.arrayStart();
+  const min: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8);
+  t.ok("arrayInt", conn.arrayInt(toI64(7)));
+  conn.arrayNull();
+  conn.arrayInt(min);
+  conn.arrayInt(toI64(0));
+  conn.arrayEnd();
+  t.eqStr("arrayInt writes decimal, unquoted, the most negative too", onlyParam(conn, 0), "1 of 31:{7,NULL,-9223372036854775808,0}");
+
+  // 12 bytes of Bind, the length word and `{` are queued and 17 stay free:
+  // 990 for the elements and the `}` they owe.
+  conn = bound(c);
+  conn.arrayStart();
+  conn.arrayElement(long, 0, 975);
+  t.ok("an int whose digits would pass maxOutput is refused", !conn.arrayInt(toI64(-1000000000) * toI64(10)));
+  t.ok("one digit less fits", conn.arrayInt(toI64(-1000000000)));
+  conn.arrayEnd();
+  t.eqStr("and the refused one left nothing behind", onlyParam(conn, 0).slice(983), "aaa\",-1000000000}");
+
+  conn = ready(config());
+  t.ok("bindCancel with no bind open is refused", !conn.bindCancel());
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  conn.bindStart("q");
+  conn.arrayStart();
+  conn.arrayInt(toI64(1));
+  t.eqI32("a bind opens a group, beside the prepare's unanswered one", conn.inFlight, 2);
+  t.ok("bindCancel", conn.bindCancel());
+  t.eqStr("drops the bind and its open array, unsent", drain(conn), "");
+  t.eqI32("and closes the group it opened", conn.inFlight, 1);
+  t.ok("so sync has no group to end", !conn.sync());
+  t.ok("a parameter after it is refused: no bind is open", !conn.paramInt(toI64(1)));
+  conn.prepare("r", "select 2", none());
+  conn.bindStart("q");
+  conn.bindCancel();
+  t.eqI32("a bind in a group already open leaves it open", conn.inFlight, 2);
+  t.ok("so sync still ends it", conn.sync());
+  t.eqStr("with only what was queued before the bind", drain(conn).slice(0, 1), "P");
+};
+
+/** A DataRow of binary `columns`, each the bytes as they are. */
+const binaryRow = (columns: u8[][]): u8[] => {
+  const body: u8[] = [];
+  pushI16(body, toI32(columns.length));
+  for (const col of columns) {
+    pushI32(body, toI32(col.length));
+    for (const b of col) {
+      body.push(b);
+    }
+  }
+  return msg("D", body);
+};
+
+/** `billions` * 10^9 + `rest`, for an i64 no i32 literal spells; both parts take the sign. */
+const big = (billions: i32, rest: i32): i64 => toI64(billions) * toI64(1000000000) + toI64(rest);
+
+/** No bytes. */
+const noBytes = (): u8[] => new Array<u8>(0);
+
+/** `v` as `n` big-endian bytes, `n` 2, 4 or 8. */
+const be = (v: i64, n: i32): u8[] => {
+  const out: u8[] = new Array<u8>(8);
+  setI64BE(out, 0, v);
+  return slice(out, 8 - n, 8);
+};
+
+/** The most negative i64, which a literal cannot spell. */
+const MIN_I64 = (): i64 => (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8);
+
+const binaryBinds = (t: Suite): void => {
+  const conn = ready(config());
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  t.ok("bindStartBinary", conn.bindStartBinary("q"));
+  conn.paramInt(toI64(7));
+  t.ok("bindEnd", conn.bindEnd());
+  t.eqStr("one result format code, 1: every column binary", drain(conn), "B|||<20>|q||||<1>|||<1>7|<1>|<1>E|||<9>|||||");
+  conn.bindStart("q");
+  conn.paramInt(toI64(7));
+  conn.bindEnd();
+  t.eqStr("the next bindStart is text again: no format codes", drain(conn), "B|||<18>|q||||<1>|||<1>7||E|||<9>|||||");
+  conn.bindStartBinary("q");
+  conn.bindCancel();
+  conn.bindStart("q");
+  conn.bindEnd();
+  t.eqStr("nor after a binary bind cancelled", drain(conn), "B|||<13>|q|||||||E|||<9>|||||");
+  conn.sync();
+  drain(conn);
+
+  // Every bind keeps 17 bytes free for bindEnd and Sync; a binary one keeps 19.
+  // A Bind of `q` is 12 bytes before its parameters, one of `n` bytes 4 + n more.
+  const c = config();
+  c.maxOutput = 1024;
+  const text = ready(c);
+  text.bindStart("q");
+  t.ok("a text bind takes a parameter up to 17 short of maxOutput", text.paramText(repeat("p", 1024 - 17 - 12 - 4)));
+  text.bindEnd();
+  text.sync();
+  t.eqI32("its bindEnd and Sync fill maxOutput exactly", text.outputEnd(), 1024);
+  const binary = ready(c);
+  binary.bindStartBinary("q");
+  t.ok("a binary bind refuses that one", !binary.paramText(repeat("p", 1024 - 17 - 12 - 4)));
+  t.ok("and takes one two bytes shorter", binary.paramText(repeat("p", 1024 - 19 - 12 - 4)));
+  t.ok("bindEnd is never refused for room", binary.bindEnd());
+  t.ok("nor is Sync", binary.sync());
+  t.eqI32("which fill maxOutput exactly, two bytes more", binary.outputEnd(), 1024);
+  // A prepare of 980 bytes of SQL queues 996, which leaves the 11 bytes of an
+  // unnamed text Bind and not the 13 a binary one keeps.
+  const full = ready(c);
+  full.prepare("", repeat("x", 1024 - 17 - 16 - 11), none());
+  t.ok("bindStartBinary keeps its two bytes too", !full.bindStartBinary(""));
+  t.ok("where bindStart fits", full.bindStart(""));
+};
+
+const binaryRows = (t: Suite): void => {
+  const conn = inGroup();
+  const ts: u8[] = new Array<u8>(24);
+  t.eqStr(
+    "a binary row",
+    feed(conn, binaryRow([be(toI64(-2), 2), be(toI64(-40000), 4), be(MIN_I64(), 8), [toU8(1)], z("hi"), be(big(820540, 759409876), 8), noBytes()])),
+    `${PG_ROW}`,
+  );
+  t.ok("int2", conn.binaryInt(0) === toI64(-2));
+  t.ok("int4", conn.binaryInt(1) === toI64(-40000));
+  t.ok("int8", conn.binaryInt(2) === MIN_I64());
+  t.ok("bool", conn.binaryBool(3));
+  t.eqStr("text reads as it does in text format", conn.columnText(4), "hi");
+  t.ok("a timestamptz's microseconds", conn.binaryInt(5) === big(820540, 759409876));
+  const n: i32 = conn.binary.timestamp(conn.inputBuffer(), conn.colStart(5), conn.colLength(5), ts, 0);
+  t.eqStr("and as a time", String.fromBytes(ts, 0, n), "2025-12-31T23:59:19.409Z");
+  t.ok("nothing failed", !conn.binary.failed && !conn.text.failed);
+  t.eqI32("an empty column is not NULL", conn.colLength(6), 0);
+  t.ok("an int of no bytes fails", conn.binaryInt(6) === toI64(0) && conn.binary.failed);
+  conn.binary.reset();
+  const f: u8[] = new Array<u8>(8);
+  setF64BE(f, 0, -1.5);
+  t.eqStr("a row with a NULL", feed(conn, binaryRow([f, z("t")])), `${PG_ROW}`);
+  t.ok("float8", conn.binaryFloat(0) === -1.5);
+  t.ok("a text bool is not a binary one", !conn.binaryBool(1) && conn.binary.failed);
+  t.ok("binary failures leave text.failed alone", !conn.text.failed);
+};
+
+/** `b` read as an int by `p`, or `failed`. */
+const binInt = (p: PgBinary, b: u8[]): string => {
+  p.reset();
+  const v: i64 = p.int(b, 0, toI32(b.length));
+  return p.failed ? "failed" : `${v}`;
+};
+
+const binaryInts = (t: Suite): void => {
+  const p = new PgBinary();
+  t.eqStr("int2: 0", binInt(p, be(toI64(0), 2)), "0");
+  t.eqStr("int2: -1", binInt(p, be(toI64(-1), 2)), "-1");
+  t.eqStr("int2: the largest", binInt(p, be(toI64(32767), 2)), "32767");
+  t.eqStr("int2: the most negative", binInt(p, be(toI64(-32768), 2)), "-32768");
+  t.eqStr("int4: -1", binInt(p, be(toI64(-1), 4)), "-1");
+  t.eqStr("int4: the largest", binInt(p, be(toI64(2147483647), 4)), "2147483647");
+  t.eqStr("int4: the most negative", binInt(p, be(big(-2, -147483648), 4)), "-2147483648");
+  t.eqStr("int8: -1", binInt(p, be(toI64(-1), 8)), "-1");
+  t.eqStr("int8: the largest", binInt(p, be(-(MIN_I64() + toI64(1)), 8)), "9223372036854775807");
+  t.eqStr("int8: the most negative", binInt(p, be(MIN_I64(), 8)), "-9223372036854775808");
+  t.eqStr("int8: past 2^53", binInt(p, be(big(9007199, 254740993), 8)), "9007199254740993");
+  t.eqStr("one byte", binInt(p, [toU8(1)]), "failed");
+  t.eqStr("three bytes", binInt(p, [toU8(0), toU8(0), toU8(1)]), "failed");
+  t.eqStr("no bytes", binInt(p, noBytes()), "failed");
+  p.reset();
+  p.int(be(toI64(1), 4), 1, 4);
+  t.ok("a window past the buffer", p.failed);
+  p.reset();
+  p.int(be(toI64(1), 4), -1, 4);
+  t.ok("a window before it", p.failed);
+  p.reset();
+  p.int(be(toI64(1), 4), 0, -1);
+  t.ok("NULL's length", p.failed);
+  p.reset();
+  t.ok("bool: 1", p.bool([toU8(1)], 0, 1) && !p.failed);
+  t.ok("bool: 0", !p.bool([toU8(0)], 0, 1) && !p.failed);
+  t.ok("bool: 2", !p.bool([toU8(2)], 0, 1) && p.failed);
+  p.reset();
+  t.ok("bool: two bytes", !p.bool([toU8(0), toU8(1)], 0, 2) && p.failed);
+  p.reset();
+  const f: u8[] = new Array<u8>(8);
+  setF64BE(f, 0, 0.1);
+  t.ok("float8", p.float(f, 0, 8) === 0.1 && !p.failed);
+  t.ok("float8: four bytes", p.float(f, 0, 4) === 0 && p.failed);
+  p.reset();
+  p.float(f, 1, 8);
+  t.ok("float8: a window past the buffer", p.failed);
+};
+
+/** `micros` as `p.iso` writes it at `at`, or `failed`. */
+const iso = (p: PgBinary, micros: i64, at: i32): string => {
+  const out: u8[] = new Array<u8>(30);
+  p.reset();
+  const n: i32 = p.iso(micros, out, at);
+  return n < 0 || p.failed ? "failed" : String.fromBytes(out, at, at + n);
+};
+
+/** `micros` as an 8-byte column through `p.timestamp`, or `failed`. */
+const binTs = (p: PgBinary, micros: i64): string => {
+  const out: u8[] = new Array<u8>(24);
+  p.reset();
+  const n: i32 = p.timestamp(be(micros, 8), 0, 8, out, 0);
+  return n < 0 || p.failed ? "failed" : String.fromBytes(out, 0, n);
+};
+
+const binaryTimes = (t: Suite): void => {
+  const p = new PgBinary();
+  t.eqStr("the epoch", iso(p, toI64(0), 0), "2000-01-01T00:00:00.000Z");
+  t.eqStr("a time", iso(p, big(820540, 759409876), 0), "2025-12-31T23:59:19.409Z");
+  t.eqStr("microseconds are cut, not rounded", iso(p, big(820540, 759409999), 0), "2025-12-31T23:59:19.409Z");
+  t.eqStr("one microsecond before 2000", iso(p, toI64(-1), 0), "1999-12-31T23:59:59.999Z");
+  t.eqStr("one millisecond before 2000", iso(p, toI64(-1000), 0), "1999-12-31T23:59:59.999Z");
+  t.eqStr("one millisecond and one microsecond before", iso(p, toI64(-1001), 0), "1999-12-31T23:59:59.998Z");
+  t.eqStr("1970", iso(p, big(-946684, -800000000), 3), "1970-01-01T00:00:00.000Z");
+  t.eqStr("2000-02-29, a leap day of a 400th year", iso(p, big(5140, 800000000), 0), "2000-02-29T12:00:00.000Z");
+  t.eqStr("the last microsecond of 2024-02-29", iso(p, big(762566, 399999999), 0), "2024-02-29T23:59:59.999Z");
+  t.eqStr("the next", iso(p, big(762566, 400000000), 0), "2024-03-01T00:00:00.000Z");
+  t.eqStr("2100 is no leap year", iso(p, big(3160857, 599999999), 0), "2100-02-28T23:59:59.999Z");
+  t.eqStr("its 28 February is followed by 1 March", iso(p, big(3160857, 600000000), 0), "2100-03-01T00:00:00.000Z");
+  t.eqStr("nor is 1900", iso(p, big(-3150576, 0), 0), "1900-03-01T00:00:00.000Z");
+  t.eqStr("1600-02-29, before 2000, cut toward the past", iso(p, big(-12617683, -199999500), 0), "1600-02-29T00:00:00.000Z");
+  t.eqStr("the first time of year 0001", iso(p, big(-63082281, -600000000), 0), "0001-01-01T00:00:00.000Z");
+  t.eqStr("one microsecond before it", iso(p, big(-63082281, -600000001), 0), "failed");
+  t.eqStr("the last time of year 9999", iso(p, big(252455615, 999999999), 0), "9999-12-31T23:59:59.999Z");
+  t.eqStr("one microsecond after it", iso(p, big(252455616, 0), 0), "failed");
+  t.eqStr("infinity", iso(p, -(MIN_I64() + toI64(1)), 0), "failed");
+  t.eqStr("-infinity", iso(p, MIN_I64(), 0), "failed");
+  t.eqStr("no room in out", iso(p, toI64(0), 7), "failed");
+  t.eqStr("a negative at", iso(p, toI64(0), -1), "failed");
+  const untouched: u8[] = z("unchanged");
+  p.reset();
+  p.iso(MIN_I64(), untouched, 0);
+  t.eqStr("leaves out as it was", String.fromBytes(untouched, 0, 9), "unchanged");
+  t.eqStr("timestamp: a column", binTs(p, toI64(-1)), "1999-12-31T23:59:59.999Z");
+  t.eqStr("timestamp: infinity", binTs(p, -(MIN_I64() + toI64(1))), "failed");
+  p.reset();
+  const out: u8[] = new Array<u8>(24);
+  t.ok("timestamp: four bytes", p.timestamp(be(toI64(0), 4), 0, 4, out, 0) === -1 && p.failed);
+  const text = new PgText();
+  const same: u8[] = new Array<u8>(24);
+  text.timestamp(z("2025-12-31 23:59:19.409876+00"), 0, 29, same, 0);
+  t.eqStr("the text decoder writes the same", String.fromBytes(same, 0, 24), iso(p, big(820540, 759409876), 0));
+};
+
 export const main = (): number => {
   const t = new Suite("postgres");
   startup(t);
@@ -912,5 +1334,11 @@ export const main = (): number => {
   ints(t);
   timestamps(t);
   arrays(t);
+  intArrays(t);
+  arrayBuilder(t);
+  binaryBinds(t);
+  binaryRows(t);
+  binaryInts(t);
+  binaryTimes(t);
   return t.done();
 };

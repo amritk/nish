@@ -1,0 +1,34 @@
+PASS  an https fetch from a server the roots trust answers
+PASS  and the next fetch reuses the TLS connection
+PASS  an IP literal is matched against the certificate's IP name, on its own connection
+PASS  a client reads its roots once, not again for each connection
+PASS  httpFetch fetches over https too
+PASS  and once its body is read, it ends the connection with a close_notify
+PASS  an expired certificate is HTTP_E_CERTIFICATE
+PASS  and the error says the certificate was refused
+PASS  a certificate for another name is HTTP_E_CERTIFICATE
+PASS  a chain to a root the client does not trust is HTTP_E_CERTIFICATE
+PASS  and so is a good server under roots that are not its own
+PASS  the system roots do not trust the test's root
+PASS  with no root certificate to trust, https is HTTP_E_CERTIFICATE
+PASS  and the error says there was no root to trust
+PASS  and no connection was opened for it
+PASS  a server that does not speak TLS is HTTP_E_TLS
+PASS  a body cut off without a close_notify is HTTP_E_TLS, not a short body
+PASS  and the error says the close_notify never came
+PASS  a body with no length ends at the server's close_notify
+PASS  and read again, it answers 0 with no error
+PASS  a pooled TLS connection the server dropped is retried on a new one
+PASS  a pooled TLS connection the server ends with an alert is retried on a new one
+PASS  a fresh TLS connection the server ends with an alert is HTTP_E_TLS
+PASS  and the error names the alert the server sent
+PASS  a pooled TLS connection the server ended with a close_notify is retried on a new one
+PASS  a server that never answers the handshake is HTTP_E_READ_TIMEOUT
+PASS  a redirect from https to http is refused even with crossOriginRedirects
+PASS  and the error says why, naming the Location without its password or query
+PASS  https through an http proxy is a CONNECT tunnel, then TLS to the origin
+PASS  and the tunnelled connection is reused
+PASS  through a tunnel the origin is sent no Proxy-Authorization, not even the caller's
+PASS  and the CONNECT carries the proxy URL's user and password
+PASS  an alert the proxy sends in the same segment as its 200 is read by TLS, not lost
+http fetch tls: 33 passed, 0 failed, 0 skipped

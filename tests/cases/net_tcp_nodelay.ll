@@ -126,9 +126,50 @@ if.end:
   ret i32 %5
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+define noundef i32 @connecting() #0 {
+entry:
+  %listener.addr = alloca i32, align 4
+  %addr.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [18 x i8], align 8
+  %client.addr = alloca i32, align 4
+  %0 = call i32 @nish_tcp_listen_flags(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 0, i32 4, i32 0)
+  store i32 %0, i32* %listener.addr, align 4
+  %1 = load i32, i32* %listener.addr, align 4
+  %2 = icmp slt i32 %1, 0
+  br i1 %2, label %if.then, label %if.end
 
+if.then:
+  %3 = load i32, i32* %listener.addr, align 4
+  ret i32 %3
+
+if.end:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 18, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 18, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast [18 x i8]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 18, i1 false), !alias.scope !4, !noalias !3
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %addr.addr, align 8
+  %8 = load %struct.nish_array*, %struct.nish_array** %addr.addr, align 8
+  %9 = load i32, i32* %listener.addr, align 4
+  %10 = call i32 @nish_net_local_port(i32 %9)
+  %11 = call i32 @nish_net_address(%struct.nish_array* %8, i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 %10)
+  %12 = load %struct.nish_array*, %struct.nish_array** %addr.addr, align 8
+  %13 = call i32 @nish_tcp_connect(%struct.nish_array* %12)
+  store i32 %13, i32* %client.addr, align 4
+  %14 = load i32, i32* %listener.addr, align 4
+  %15 = call i32 @nish_net_close(i32 %14)
+  %16 = load i32, i32* %client.addr, align 4
+  ret i32 %16
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -142,3 +183,8 @@ attributes #1 = { nounwind willreturn }
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !7, i64 8}
 !12 = !{!9, !8, i64 16}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}

@@ -78,6 +78,18 @@ likely to add to it:
   the link goes through lld) and a stripped binary; `size` optimises for
   bytes; `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
   module instead of a native binary.
+  Every native profile links a hardened binary: position independent, with a
+  read-only GOT (full RELRO), a non-executable stack, stack-clash probes,
+  control-flow protection (CET on x86-64, BTI and pointer authentication on
+  arm64) and the stack protector in the C runtime. You do not need a flag for
+  it, and `node scripts/check-hardening.mjs <binary>` in a checkout reads the
+  protections back from a binary's headers.
+  On Linux every native binary also carries a GNU build id (an
+  `NT_GNU_BUILD_ID` note; `readelf -n app` shows it), which `perf`, `gdb` and
+  debuginfod use to match a binary with its debug information. The id is a
+  hash of the binary's bytes, so linking the same program twice gives the
+  same id, while two different builds (a `-g` link and a plain one, or two
+  profiles) give different ones.
 - **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
   CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
   tight loops faster. It is the one level `nish` accepts; anything else, and
@@ -87,6 +99,22 @@ likely to add to it:
   that stay on machines you know; ship anything else without it.
 - **`-g`** — DWARF debug info, so `gdb` and `lldb` step through your `.ts`
   source.
+
+  To ship a binary without its debug information and keep that information
+  beside it, split the `-g` build rather than linking twice, since a second
+  link would carry a different build id:
+
+  ```sh
+  nish app.ts --link app -g
+  objcopy --only-keep-debug app app.debug
+  strip -g app
+  objcopy --add-gnu-debuglink=app.debug app
+  ```
+
+  `app` and `app.debug` share one build id, so `gdb`, debuginfod or
+  `perf buildid-cache -a app.debug` match the shipped `app` with the DWARF
+  in `app.debug`, and source lines come back for it. (`strip -g` keeps the
+  symbol table, so function names resolve without the debug file.)
 - **`--number-mode f64`** — makes a bare `number` a 64-bit float rather than
   the default `i32`. Code that spells its widths (`i32`, `f64`) means the same
   thing in both modes.
@@ -154,12 +182,13 @@ Node runs, one file per module, and no IR:
 
 ```sh
 nish app.ts --emit-ts out/
-node --experimental-strip-types out/entry.ts
+node out/entry.ts
 ```
 
 The output imports its runtime from the `nish` package, as `nish/runtime`, so
-Node has to find `nish` from `out/`, the way it finds any dependency. A program
-that uses `using` also needs `--js-explicit-resource-management`.
+Node has to find `nish` from `out/`, the way it finds any dependency. Node
+22.18 or newer runs it, with the type stripping it has on by default. A program that uses `using` needs Node 24, or
+`--js-explicit-resource-management` on Node 22.
 
 Inside `out/`:
 
@@ -171,11 +200,13 @@ Inside `out/`:
 - **`entry.ts`** runs your `main` and exits with the number it returns.
 
 Imports are rewritten so Node can follow them. A `nish:` builtin becomes
-`nish/runtime`, the one package the output imports, except `nish:secret`,
-which is written like a standard-library module, as `nish/secret.ts`. A `nish/x` or relative
+`nish/runtime`, the one package the output imports, `nish:secret` included:
+its `wipe` is the runtime's, and `std/secret.ts` is not written. A `nish/x` or relative
 import becomes a relative path ending in `.ts`. An imported interface or type
-alias is marked `import { type Pair }`. A module that needs none of this is
-written unchanged, byte for byte.
+alias is marked `import { type Pair }`. A module that needs none of this, and
+none of the rewrites below, is written byte for byte; one rewrite that reaches
+an otherwise plain module is `const s = "hi"`, written `const s: string = "hi"`
+so TypeScript does not narrow `s` to the literal.
 
 Some constructs JavaScript spells differently are rewritten too:
 
@@ -189,8 +220,8 @@ Some constructs JavaScript spells differently are rewritten too:
   the same name: `enum Shape { Circle, Square = 4 }` is written as
   `const Shape = { Circle: 0, Square: 4 } as const;` and
   `type Shape = (typeof Shape)[keyof typeof Shape];`.
-- **`Arena.used()`** and its siblings become `nish/runtime`'s `arenaUsed`,
-  `arenaMark`, `arenaRelease` and `arenaReset`, and a `Result` annotation
+- **`Arena.used()`** and `Arena.mark()` become `nish/runtime`'s `arenaUsed`
+  and `arenaMark`, and a `Result` annotation
   imports `Result` from it.
 - **An element read `a[i]`** whose index the compiler cannot prove in range
   becomes `idx(a, i)`, and a store `a[i] = v` becomes `setIdx(a, i, v)`.
@@ -206,14 +237,19 @@ Some constructs JavaScript spells differently are rewritten too:
   the record already in the slot, so a later change to `p` leaves `xs`
   alone, as it does natively. A `(P | null)[]` holds references and copies
   nothing.
+- **`i32` arithmetic** that can overflow, `a + b`, `a - b`, `a * b` and
+  `-a`, becomes `checkedAdd(a, b)`, `checkedSub`, `checkedMul` and
+  `checkedNeg`, which panic as the native build does; where the compiler
+  proved the result fits, it is `(a + b) | 0` or
+  `Math.imul(a, b)`. `/` and `%` become `idiv` and `irem`.
 - **`dst.set(src, at)`** between two arrays of one type becomes
-  `arraySet(dst, src, at)`, the copy a plain JavaScript array lacks, which
+  `arraySetAt(dst, src, at)`, the copy a plain JavaScript array lacks, which
   panics past the end as the native one does.
 
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 
-Four kinds of module cannot be written. In each case `nish` exits 1 and
+Five kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
@@ -221,6 +257,7 @@ app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; ke
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
 app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
+app.ts:12:15: error: --emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type
 ```
 
 The second is reported at each `nish:net` import and at each call to a
@@ -237,10 +274,26 @@ record held inline in one call and a `P | null` reference in another, or an
 `i32` and an `i64` element in `new Array<T>(n)`, whose zeros differ. Write a
 function per element type.
 
-Not every builtin has a runtime export yet. The `nish:unsafe` functions
-(`uncheckedGet`, `wrappingAdd`, `readCString` and the rest) are written as
-imports from `nish/runtime` that Node cannot resolve, so a program that uses
-them does not run under Node yet.
+A generic nothing calls is written too: a function or method, or the methods
+and constructor of a class no type argument list names. The native build
+compiles no body for it, so there are no types to translate by. Where no type
+would change its text, it is written as it is, with only the rewrites that
+need no type, such as the bounds check on `a[i]`. Where a type would (a 64-bit
+integer, an `f32`, a builtin call such as `toU32`, arithmetic whose width
+wraps, a string's `.length` or methods), it is written with a body that throws
+instead, and a warning (`portability:`, NL8012) names it and its line when it
+is the program's own; the standard library's are written without one. The
+fifth refusal (NL4014) is a generic of your own whose body fills
+`new Array<T>(n)` with `T`'s zero, or copies an element into an array slot in a
+program that keeps records inline: which code those need depends on a `T` no
+call names, so it is refused rather than stubbed, even where a 64-bit integer
+or a builtin call in the same body would have made it a stub. Call it, or write a function per element type. The same
+body in the standard library is a stub, and the program is written.
+
+The `nish:unsafe` functions are imports from `nish/runtime` too:
+`uncheckedGet`, `uncheckedSet` and the `wrapping*` arithmetic run under Node,
+and `readCString`, which reads C memory, has no export, so a program that
+calls it does not run under Node.
 
 The `nish:term` functions are written as imports from `nish/runtime` too, and
 they resolve. Under Node, `isTerminal` and `terminalSize` answer, and

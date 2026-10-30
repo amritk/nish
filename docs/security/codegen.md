@@ -28,8 +28,8 @@ input, every file and directory it is pointed at, and how large those are.
 The attacker does not write the program and does not choose its flags. The
 programmer is honest but writes ordinary code: a length taken from a header,
 a name returned from a directory listing, a task spawned on a record. A
-finding is a program the compiler accepts, without `--unchecked-indexing`,
-whose run reads or writes outside an object, reads freed memory, races, or
+finding is a program the compiler accepts, without `uncheckedGet` or
+`uncheckedSet`, whose run reads or writes outside an object, reads freed memory, races, or
 reaches LLVM undefined behaviour because of a check the compiler removed or
 an attribute it emitted.
 
@@ -82,6 +82,28 @@ panics instead, and no `nsw` the compiler writes is an assumption.
 - **What the IR changes.** `tests/nish-cmp.js` was run with the base
   compiler as reference and the declarations emptied, so that every byte
   this stage moves in the corpus is listed rather than admitted.
+- **Generated programs against the elision-off oracle and ASan** (#883, at
+  `3313da3`). `tests/differential/soundness.js --gen --asan` takes its
+  programs from `tests/differential/proofgen.js`, which builds each one out of
+  blocks around the accesses the prover reasons about, 26 kinds in eight
+  families (`derived`, `bounds`, `pushpop`, `slice`, `alias`, `closure`,
+  `arena`, `threads`), and makes about half of them end in a one-past variant
+  of their last block, an access that reaches index `length` and no further.
+  Each program is built twice at `clang -O2`, by default and with
+  `--no-elision` (every proof-backed elision off: the oracle), and both runs
+  must print and end the same. A program must also panic `index out of range`
+  exactly when it ends in a one-past block, which catches an elision that
+  removes the check both builds share, and its default build runs a third time
+  under AddressSanitizer (`tests/differential/asan.js`: `sanitize_address` on
+  every definition, the runtime built with `-fsanitize=address,undefined`),
+  where it must panic or finish cleanly as the first run did. A one-past read
+  that stays inside the array's block (`ASAN_BLIND`) is not counted as an ASan
+  verdict, and `threads:mapinto`'s panic belongs to the library
+  (`LIBRARY_CHECKED`). A failure is reduced by ddmin to a `min.ts` with the
+  one-past block kept whole. CI runs 600 programs from seed 20261024 on every
+  pull request (`nish-cmp`, both architectures), and
+  `.github/workflows/soundness-fuzz.yml` runs 20 000 from a random, printed
+  seed each week. The results are under "The generated-program pass" below.
 
 ## Findings
 
@@ -99,6 +121,30 @@ panics instead, and no `nsw` the compiler writes is an assumption.
 | CG-9 | Low | `runtime/runtime-wasm.c:61` | The wasm32 runtime's `nish_alloc_struct` rounds and adds without an overflow check, the same shape as CG-2 | **Open**, for the runtime stage. *Since fixed there as RT-7* (`docs/security/runtime.md`, `tests/link/rt_sec_wasm_arena`) |
 | CG-10 | Low | `src/emit-arrays.ts:1059` (`emitElementAssignment`) | `xs[0] += grow(xs)` computes the slot's address before evaluating the right side, so when `grow` pushes until `xs` moves, the store lands in the old block: 1 where JavaScript gives 6. `zs[2] += shrink(zs)` stores past the new length, inside the old capacity. Arena memory is not freed, so neither is a memory error | **Fixed** (#427). `emitElementAssignment` keeps JavaScript's order (array, index, check, load, right side) and, when the right side can resize the array (`rightSideMayResize`: a `push`, a `pop`, a call the fixpoint says resizes, or a `new` of a class), checks the index again against the length the right side left and takes the slot's address again before the store. *Since CG-11 the predicate is `mayResize`, which counts a `new` only when its constructor resizes.* A hoisted header and an inline field are left as they were: neither can move. Only programs whose right side can resize change, so no existing golden moved; the plain `xs[i] = e` already evaluates `e` before its check and address. `collectArrayFacts` lists the second check's panic wherever the first was proved away and the right side calls anything, so `willreturn` cannot survive it. Tests: `tests/cases/cg_sec_compound_element_order` (`+=`, `*=` and `|=` after a growing call print what Node prints, 61505; a shrinking call panics `index out of range: 2 >= 1` in a child process) |
 | CG-11 | Low | `src/emit-arrays.ts:544` (`callMayResize`); `src/attributes.ts:3205` (`bodyMayExtend`) (lines at `69e5fe8`) | A loop's array header is hoisted only when nothing in the loop can move it, and the question asked a call's callee but not a `new`'s constructor, though the checker records it for the `new` in `nodeCallees` too. A `while` over `xs` that runs `new P(xs)`, whose constructor pushes until `xs` moves, kept the `len` and `data` it loaded before the loop: 6 where JavaScript gives 706 (#435). `isCountedLoop` asked the same question without the constructor, so a `for...of` whose body runs such a `new` on every pass, and so never ends over a non-empty array, was `willreturn`. Arena memory is not freed, so the stale block is a wrong answer rather than a memory error | **Fixed** (#435). `callMayResize` and `bodyMayExtend` read the callee `nodeCallees` holds for a `new` as they do for a call, and so its constructor's fixpoint `resizesArray` fact; a class with no constructor stores constants only. CG-10's `rightSideMayResize` counted every `new` of a class as resizing, so it folds into the same predicate, `mayResize`, which narrows it to the constructors that resize. Two kinds of code change. A loop whose body runs a `new` whose constructor resizes now reloads its header on every pass, or loses `willreturn`. A compound element store whose right side runs a `new` whose constructor does not resize now checks its slot and takes its address once, where CG-10 did both a second time. Against `main`'s compiler, no golden and no corpus program but the new case moved. Tests: `tests/cases/cg_sec_hoist_new_resize` (the #435 loop reloads its header each pass and prints what Node prints, 706; a `for...of` over the same constructor prints 706; `new Q(xs)`, whose constructor only reads, keeps the hoist; `forOfGrows` is not `willreturn`; `xs[0] += new Q(xs).n` stores into the slot it read with no second check) |
+
+## The generated-program pass
+
+No miscompile and no unsound acceptance was found, so this pass adds no row
+to the table. On x86-64 at `3313da3`, with `--asan`:
+
+| Seed | Programs | Ending one-past | Agree | Differ / unexpected / ASan | Time (4 lanes) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 20261024 | 6 000 | 2 980 | 6 000 | 0 / 0 / 0 | 734 s |
+| 3141592653 | 6 000 | 2 996 | 6 000 | 0 / 0 / 0 | 749 s |
+
+Each family was in 1 444 to 1 554 of seed 20261024's programs and ended
+346 to 398 of them one-past; seed 3141592653's were in 1 458 to 1 594
+and 353 to 403. The wiring was checked against a compiler that drops every
+bounds check unless `--no-elision` is passed: over six programs it reported
+the two that end one-past in an elided access (`derived:addlit!`,
+`derived:u16!`) as DIFFER, with an ASan `heap-buffer-overflow` as the
+witness, and reduced them to 21 of 32 and 20 of 23 lines.
+
+What this does not cover: the shapes are proofgen's, so a rule the generator
+never exercises (an elision added after it, or a combination its blocks do
+not form) is not tested; `PROOF_MISSES` shapes prove nothing to remove; an
+`ASAN_BLIND` one-past read is caught only by the panic check, not by ASan; and
+the aarch64 row of CI is the only run on that target.
 
 ## Status after the runtime stage
 
@@ -131,8 +177,8 @@ are fixed (#427), and CG-11 is fixed (#435).
 | No push takes an array past 2^31 − 1 elements | `nish_array_grow` clamps the capacity and refuses a full array | `tests/link/cg_sec_push_limit`, `tests/runtime-test.c` |
 | A narrower unsigned and a literal are not checked; an `i32`, a ranged local among them, is, since CG-2 | `newArrayLengthChecked` | `tests/cases/cg_sec_new_array_guard` (the `plain` and `literal` arrays), `tests/cases/cg_sec_new_array_negative` |
 | An index proved by its declared range (`u8` into 256 elements, `u16` into 65 536) is zero-extended and in range | `convertedRange` | `tests/cases/arr_bounds_ranged` |
-| An offset index `w[i + c]` is proved only where the sum is exact (a signed add, outside `--wrapping`) and `i >= 0` is known, with a reach of at least `c` or a literal bound that `c` more still fits (#561, lines at `a6705ed`) | `offsetIndex` and `proves` in `src/bounds.ts` | `tests/cases/arr_bounds_offset`, and `arr_bounds_offset_reach`, `_floor` and `_wrap`, which keep their check and panic |
-| A computed index is proved by its range only where the arithmetic is exact (a signed `i32` or `i64`, outside `--wrapping`), with nothing inside it writing, and against the length its own evaluation left. This makes `valueRange`, which until then decided only `nsw` and the overflow checks, a memory-safety proof: a range that is too narrow is now an out-of-bounds access, so a change to it is reviewed as one | `provesByRange` and `valueRange` in `src/bounds.ts` | `tests/cases/arr_bounds_range`, and `arr_bounds_range_past`, `_negative`, `_call` and `_new` (a constructor reached by `new`), which keep their check and panic, and `_kept` and `_wrap`, which keep theirs |
+| An offset index `w[i + c]` is proved only where the sum is exact (a signed add) and `i >= 0` is known, with a reach of at least `c` or a literal bound that `c` more still fits (#561, lines at `a6705ed`) | `offsetIndex` and `proves` in `src/bounds.ts` | `tests/cases/arr_bounds_offset`, and `arr_bounds_offset_reach` and `_floor`, which keep their check and panic |
+| A computed index is proved by its range only where the arithmetic is exact (a signed `i32` or `i64`), with nothing inside it writing, and against the length its own evaluation left. This makes `valueRange`, which until then decided only `nsw` and the overflow checks, a memory-safety proof: a range that is too narrow is now an out-of-bounds access, so a change to it is reviewed as one | `provesByRange` and `valueRange` in `src/bounds.ts` | `tests/cases/arr_bounds_range`, and `arr_bounds_range_past`, `_negative`, `_call` and `_new` (a constructor reached by `new`), which keep their check and panic, and `_kept`, which keeps theirs |
 | A call gives its array a length only where the callee is a plain function whose body, read as written, builds a fresh array, lets nothing but indexing, `.length` and `push` touch it, and returns it; with no arrow, nested function, class or `try` in the body; with each size a literal, a constant of the caller's own module, or a parameter the body never declares again or writes. A field store takes the length only through `this` or a `const` local, which the call cannot rebind. The callee's side tables are never read, so the rule holds whatever order the bodies are checked in | `returnedLength` and `storedLength` in `src/bounds.ts` | `tests/cases/arr_bounds_returned`, and `arr_bounds_returned_pop`, `_passed`, `_stored`, `_least`, `_rebind`, `_shadow` and `_shadow_param`, which keep their check and panic, and `_kept`, which keeps its seven |
 | A helper's array keeps its length through a call only where the callee is a plain function of the caller's own module, named by a name the calling body does not declare, whose parameter is only indexed, read for `.length`, pushed to, or handed on to another such parameter, and is never returned or stored. A parameter already being followed is taken to keep the length, which is sound because the walk reaches every body of the cycle and a shrink needs a `pop` or a store there; the walk stops, refusing, past 8 functions. An answer is remembered on the function only when it rested on neither assumption, since one drawn while a cycle was open can be wrong once the cycle closes | `passesKeepingLength` and `keepsParameter` in `src/bounds.ts`, `FunctionSig.keepsLength` | `tests/cases/arr_bounds_returned_through`, and `arr_bounds_returned_through_return`, `_through_deep`, `_through_cycle`, `_through_store`, `_through_param` and `_through_memo`, which keep their check and panic, and `tests/link/arr_bounds_returned_import`, which keeps its check |
 | A compound element store whose right side resizes the array stores into it as the right side left it, checked again | `mayResize` in `src/emit-arrays.ts` | `tests/cases/cg_sec_compound_element_order` |
@@ -146,7 +192,7 @@ are fixed (#427), and CG-11 is fixed (#435).
 | `nocapture` is withheld from a returned `this`, an identity function's parameter, a parameter a method stores, and one handed out through `Ok`, an interface literal or an array literal | `escaping`, `pointerParams` | `tests/cases/mem_callee_scope_escape`, `mem_callee_scope_return` |
 | A callee that pushes into or stores into a parameter denies its caller an arena scope | `allocEscapes` propagated | `tests/cases/mem_callee_scope*`, `mem_loop_scope_escape` |
 | Every allocating builtin is an allocation site | `isAllocatingBuiltin` | `tests/cases/mem_read_or_null_scope`, `mem_getenv_scope`, `mem_readdir_scope`, `mem_read_import_scope`, and now `cg_sec_readdir_*` |
-| `nsw` appears only on signed `add`/`sub`/`mul` and never under `--wrapping` | `intOpcode` in `src/emit-ops.ts` | `tests/cases/opt_nsw`, `opt_wrapping` |
+| `nsw` appears only on signed `add`/`sub`/`mul`, and never on a `nish:unsafe` `wrapping*` call | `intOpcode` in `src/emit-ops.ts` | `tests/cases/opt_nsw`, `unsafe_wrapping` |
 | A parallel body writes nothing its caller can see, through any alias the facts know | `sharedWrite` | `tests/cases/reject_par_shared_write`, `reject_par_shared_write_via` |
 | `dst` is not reachable from an element of `src` | `reachingPath` | `tests/cases/reject_par_reaches_dst` |
 | Between a scope's first `spawn` and its join the parent neither reads a destination nor writes what a task reads, and does not return early through `orReturn` | `walkRegion` | `tests/cases/reject_thread_region_*`, `cg_sec_scope_or_return`, `cg_sec_scope_record_arg` |

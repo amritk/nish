@@ -12,14 +12,10 @@
 // construct and cannot drift: the walk runs after `proveCallSiteRanges`, so
 // every proof it reads is the one the emitter will read.
 //
-// Two departures from the emitter, both in the direction of saying more:
-//
-//   - `--unchecked-indexing` is not a proof. It drops the check and makes an
-//     out-of-range index undefined behaviour instead of a panic, so a site it
-//     dropped is still recorded, and still unproven.
-//   - A call to a function that may panic is a site of the caller (`call`),
-//     resolved here as a fixpoint over the attribute pass's own call graph
-//     (`FunctionFacts.callees`) rather than a second one.
+// One departure from the emitter, in the direction of saying more: a call to
+// a function that may panic is a site of the caller (`call`), resolved here as
+// a fixpoint over the attribute pass's own call graph
+// (`FunctionFacts.callees`) rather than a second one.
 //
 // Out of memory is listed (`oom`, at each arena allocation the escape analysis
 // places) but never counts: no source-level guard removes it. Nor does an
@@ -30,8 +26,8 @@
 // is not a site at all: it has no runtime handler and no check in the IR.
 // Signed overflow is a site (`overflow`) at every checked `+ - *`, negation and
 // step, proven where the bounds walk proved the result fits and the emitter
-// writes `nsw` instead of the check; under `--wrapping`, and for the
-// `nish:unsafe` `wrapping*` calls, nothing is checked and nothing is listed.
+// writes `nsw` instead of the check; for the `nish:unsafe` `wrapping*` calls
+// nothing is checked and nothing is listed.
 
 import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
 import { unwrapBoundsParens } from "./bounds"
@@ -210,9 +206,9 @@ export const builtinPanicKind = (name: string): i32 => {
   if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
     return PANIC_UNCHECKED
   }
-  // `netRead` and its siblings, and `readStdin`, check the range of their
-  // buffer the way `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
-  if ((isNetExport(name) || isTermExport(name)) && netRangeBuffer(name) >= 0) {
+  // `netRead` and its siblings, `readStdin` and `writeBytes` check the range of
+  // their buffer the way `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
+  if ((isNetExport(name) || isTermExport(name) || name === "writeBytes") && netRangeBuffer(name) >= 0) {
     return PANIC_SLICE
   }
   // `String.fromBytes` checks the range it copies with the same panic.
@@ -288,8 +284,7 @@ const inEvaluationOrder = (sites: PanicSite[]): PanicSite[] => {
  *
  * May-panic is a fixpoint over `FunctionFacts.callees`, the graph the
  * attribute pass already built and propagates `callsNoReturn` over. It is not
- * `callsNoReturn` itself, which `process.exit` sets too, and which an
- * `--unchecked-indexing` build clears for the checks it drops.
+ * `callsNoReturn` itself, which `process.exit` sets too.
  */
 export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): void => {
   const ordered: PanicSite[][] = []
@@ -830,11 +825,8 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
     name.length > 0 && holder.length > 0
       ? `\`${i}\` is not proven to be in range for \`${xs}\` here`
       : "this index is not proven to be in range here"
-  const unchecked = program.uncheckedIndexing
-    ? " (`--unchecked-indexing` removes the check without proving it, which makes an access out of range undefined behaviour rather than a proven one)"
-    : ""
   // The guard NL9007 offers, or none where no spelling is credited.
-  return `${what}${unchecked}: ${indexGuardAdvice(program, table, index, i, xs)}`
+  return `${what}: ${indexGuardAdvice(program, table, index, i, xs)}`
 }
 
 /** A `slice`, an array `set`, a `String.fromBytes` or a socket call whose buffer range is checked: no proof removes any of them. */

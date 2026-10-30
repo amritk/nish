@@ -81,8 +81,6 @@ const FIXTURE_NOFIX: string = "nofix.ts";
 const FIXTURE_WARN: string = "warn.ts";
 /** A program that compiles with one arena-retention warning (NL9016), which `--deny-retention` refuses. */
 const FIXTURE_RETAIN: string = "retain.ts";
-/** A program that compiles and calls a deprecated builtin, which warns by default. */
-const FIXTURE_DEPRECATED: string = "deprecated.ts";
 
 /**
  * The flags `--help` has to name. A wrapper that reads the usage text to learn
@@ -100,8 +98,6 @@ const advertisedFlags = (): string[] => [
   "--no-stack-alloc",
   "--no-strict-exports",
   "--no-warn-performance",
-  "--unchecked-indexing",
-  "--wrapping",
   "--number-mode",
   "--runtime-decls",
   "--threads",
@@ -354,14 +350,6 @@ const writeFixtures = (): void => {
       "",
     ].join("\n")
   );
-  // `Arena.release` still compiles, to the call it always did, and warns that
-  // `using a = arena()` replaces it (NL7001).
-  writeFileSync(
-    `${WORK}/${FIXTURE_DEPRECATED}`,
-    ["export const test = (): number => {", "  const m = Arena.mark();", "  Arena.release(m);", "  return 0;", "};", ""].join(
-      "\n"
-    )
-  );
 };
 
 /**
@@ -494,7 +482,6 @@ const checkUsageErrors = (t: Suite, cli: Cli): void => {
   t.eqI32("`--nsw` exits 2", nsw.status, 2);
   t.contains("and says signed overflow is checked", nsw.stderr, "signed overflow is checked");
   t.contains("and names nish:unsafe as the way to wrap", nsw.stderr, "`wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`");
-  t.contains("and the deprecated --wrapping", nsw.stderr, "--wrapping");
   t.contains("and points at --help", nsw.stderr, "--help` for the flags");
   t.eqStr("and the refusal says nothing on stdout", trim(nsw.stdout), "");
 };
@@ -568,42 +555,26 @@ const checkWarningObjects = (t: Suite, cli: Cli): void => {
 };
 
 /**
- * The two deprecated flags: each is one performance object under `--json`, on a
- * program that is otherwise quiet, and its code names the flag, so a wrapper can
- * tell which one a build still passes. `--no-warn-performance` silences both.
+ * The two flags removed before 1.0: each is refused like `--nsw`, exit 2 and
+ * nothing on stdout, and the refusal names the `nish:unsafe` calls that say
+ * the same thing in the source, where it is visible and scoped.
  */
-const checkDeprecatedFlagObjects = (t: Suite, cli: Cli): void => {
+const checkRemovedFlags = (t: Suite, cli: Cli): void => {
   const source = `${WORK}/${FIXTURE_OK}`;
-  const unchecked = cli.plain("unchecked_json", [source, "--unchecked-indexing", "--json", "-o", `${WORK}/unchecked.ll`]);
-  const wrapping = cli.plain("wrapping_json", [source, "--wrapping", "--json", "-o", `${WORK}/wrapping.ll`]);
-  const quiet = cli.plain("deprecated_quiet", [
-    source,
-    "--unchecked-indexing",
-    "--wrapping",
-    "--no-warn-performance",
-    "--json",
-    "-o",
-    `${WORK}/deprecated-quiet.ll`,
-  ]);
-  const uncheckedObjects = cliObjectLines(unchecked.stdout);
-  const wrappingObjects = cliObjectLines(wrapping.stdout);
-  if (
-    !t.eqI32("--unchecked-indexing compiles", unchecked.status, 0) ||
-    !t.eqI32("and is one object on stdout", toI32(uncheckedObjects.length), 1)
-  ) {
-    return;
-  }
-  t.eqStr("a performance one", cliField(uncheckedObjects[0], "severity"), "performance");
-  t.eqStr("whose code is the --unchecked-indexing deprecation", cliField(uncheckedObjects[0], "code"), "NL9014");
-  if (
-    !t.eqI32("--wrapping compiles", wrapping.status, 0) ||
-    !t.eqI32("and is one object on stdout", toI32(wrappingObjects.length), 1)
-  ) {
-    return;
-  }
-  t.eqStr("a performance one", cliField(wrappingObjects[0], "severity"), "performance");
-  t.eqStr("whose code is the --wrapping deprecation", cliField(wrappingObjects[0], "code"), "NL9015");
-  t.eqI32("--no-warn-performance silences both", toI32(cliObjectLines(quiet.stdout).length), 0);
+  const unchecked = cli.plain("unchecked_flag", [source, "--unchecked-indexing", "-o", `${WORK}/unchecked.ll`]);
+  t.eqI32("`--unchecked-indexing` exits 2", unchecked.status, 2);
+  t.contains("and says it is gone", unchecked.stderr, "`--unchecked-indexing` is gone");
+  t.contains("and names the calls that replace it", unchecked.stderr, "`uncheckedGet` or `uncheckedSet` from `nish:unsafe`");
+  t.eqStr("and says nothing on stdout", trim(unchecked.stdout), "");
+  const wrapping = cli.plain("wrapping_flag", [source, "--wrapping", "-o", `${WORK}/wrapping.ll`]);
+  t.eqI32("`--wrapping` exits 2", wrapping.status, 2);
+  t.contains("and says it is gone", wrapping.stderr, "`--wrapping` is gone");
+  t.contains(
+    "and names the calls that replace it",
+    wrapping.stderr,
+    "`wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`"
+  );
+  t.eqStr("and says nothing on stdout", trim(wrapping.stdout), "");
 };
 
 /**
@@ -712,25 +683,6 @@ const checkPortabilityObjects = (t: Suite, cli: Cli): void => {
   }
   t.eqStr("whose severity is `portability`", cliField(objects[1], "severity"), "portability");
   t.eqStr("and whose code is the zero-fill row's", cliField(objects[1], "code"), "NL8005");
-};
-
-/**
- * The deprecation warning, which is on with no flag: under `--json` it is one
- * object with a `severity` of its own and its NL7xxx code, and the program
- * still compiles.
- */
-const checkDeprecationObjects = (t: Suite, cli: Cli): void => {
-  const run = cli.plain("deprecated_json", [`${WORK}/${FIXTURE_DEPRECATED}`, "--json", "-o", `${WORK}/deprecated.ll`]);
-  if (!t.eqI32("a deprecation warning does not refuse the program", run.status, 0)) {
-    return;
-  }
-  const objects = cliObjectLines(run.stdout);
-  if (!t.eqI32("and is an object on stdout", toI32(objects.length), 1)) {
-    return;
-  }
-  t.eqStr("whose severity is `deprecation`", cliField(objects[0], "severity"), "deprecation");
-  t.eqStr("and whose code is `Arena.release`'s", cliField(objects[0], "code"), "NL7001");
-  t.eqStr("on the line of the call", cliField(objects[0], "line"), "3");
 };
 
 /**
@@ -1574,13 +1526,11 @@ const writeRunFixture = (path: string): void => {
 
 /**
  * `nish run` keeps its performance advice to itself, since a script prints on
- * every run, but a deprecated flag it is handed still says so (NL9014,
- * NL9015), on stderr or as a `--json` object, and `--no-warn-performance`
- * silences that too. The script allocates in a loop, so the advice it does not
- * print is really there.
+ * every run. The script allocates in a loop, so the advice it does not print
+ * is really there.
  */
-const checkRunDeprecations = (t: Suite, cli: Cli, cache: string): void => {
-  const script = `${WORK}/run-deprecated.ts`;
+const checkRunQuiet = (t: Suite, cli: Cli, cache: string): void => {
+  const script = `${WORK}/run-quiet.ts`;
   writeFileSync(
     script,
     [
@@ -1596,22 +1546,13 @@ const checkRunDeprecations = (t: Suite, cli: Cli, cache: string): void => {
     ].join("\n")
   );
   const env = [`XDG_CACHE_HOME=${cache}`];
-  const json = cli.run("run_unchecked_json", env, ["run", "--unchecked-indexing", "--json", script]);
-  const objects = cliObjectLines(json.stdout);
-  t.eqI32("nish run --unchecked-indexing runs the script", json.status, 7);
-  if (t.eqI32("and --json carries one object, the deprecation and not the advice", toI32(objects.length), 1)) {
-    t.eqStr("whose code is NL9014", cliField(objects[0], "code"), "NL9014");
-  }
-  const human = cli.run("run_wrapping", env, ["run", "--wrapping", script]);
-  t.eqI32("nish run --wrapping runs the script", human.status, 7);
-  t.contains("and says on stderr that --wrapping is deprecated", human.stderr, "--wrapping is deprecated");
+  const human = cli.run("run_quiet", env, ["run", script]);
+  t.eqI32("nish run runs the script", human.status, 7);
   t.eqBool(
-    "and still prints none of the performance advice",
+    "and prints none of the performance advice",
     contains(human.stderr, "allocates a dynamically sized array"),
     false
   );
-  const quiet = cli.run("run_wrapping_quiet", env, ["run", "--wrapping", "--no-warn-performance", script]);
-  t.eqBool("--no-warn-performance silences it under nish run", contains(quiet.stderr, "deprecated"), false);
 };
 
 /**
@@ -1650,7 +1591,7 @@ const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
   t.contains("CLI-1: and its own output", first.stdout, "cli-sec ran");
   const hit = cli.run("sec_key_hit", [`XDG_CACHE_HOME=${cache}`], ["run", script]);
   t.eqI32("CLI-1: and runs again from the cache", hit.status, 7);
-  checkRunDeprecations(t, cli, cache);
+  checkRunQuiet(t, cli, cache);
 
   t.eqStr(
     "CLI-4: the cache root is private to its owner",
@@ -2118,9 +2059,8 @@ export const main = (): number => {
   checkSuccess(t, cli);
   checkErrorObjects(t, cli);
   checkWarningObjects(t, cli);
-  checkDeprecatedFlagObjects(t, cli);
+  checkRemovedFlags(t, cli);
   checkPortabilityObjects(t, cli);
-  checkDeprecationObjects(t, cli);
   checkFixField(t, cli);
   checkDumps(t, cli);
   checkPanicSites(t, cli);

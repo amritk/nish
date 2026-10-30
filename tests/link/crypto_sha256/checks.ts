@@ -127,9 +127,6 @@ const firstBadCopy = (data: u8[], expected: string): i32 => {
   const n: i32 = toI32(data.length);
   const start: i32 = 0;
   for (let cut: i32 = 0; cut <= n; cut += 1) {
-    // Each pass allocates two hashers and their digests, and nothing of them
-    // outlives the pass, so the pass gives the memory back.
-    const mark: i64 = Arena.mark();
     const h: Sha256 = new Sha256();
     h.update(data, start, cut);
     const twin: Sha256 = h.copy();
@@ -138,7 +135,6 @@ const firstBadCopy = (data: u8[], expected: string): i32 => {
     h.update(data, cut, n - cut);
     const good: boolean =
       hexOf(twin.digest()) === hexOf(sha256(prefix(data, cut))) && hexOf(h.digest()) === expected;
-    Arena.release(mark);
     if (!good) {
       return cut;
     }

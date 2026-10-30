@@ -1,9 +1,9 @@
 # Security record: `nish/bytes` — byte-class runs and `copyBytes`
 
 The record of the byte-class runs of `nish/bytes` (#862): `skipBlank`,
-`skipDigits` and `skipJsonText`. Each of these lowers to a runtime kernel in
-`runtime/runtime-bytes.c` with scalar, SSE2, AVX2, NEON and wasm simd128
-paths. The record also covers `copyBytes`, which lowers to `llvm.memmove`. It
+`skipDigits`, `skipJsonText` and `skipJsonPlain` (#892). Each of these lowers
+to a runtime kernel in `runtime/runtime-bytes.c` with scalar, SSE2, NEON and
+wasm simd128 paths, and AVX2 paths for the first three. The record also covers `copyBytes`, which lowers to `llvm.memmove`. It
 says what each function refuses and with what, where each bound is checked,
 and the test that pins each property. It is written against `main` at
 `804120e` and cites functions rather than lines.
@@ -26,11 +26,11 @@ nothing. Two Low findings are recorded, both fixed:
 
 | File | Functions |
 | --- | --- |
-| `runtime/runtime-bytes.c` | `nish_bytes_skip_blank`, `nish_bytes_skip_digits`, `nish_bytes_skip_json_text`; the helpers `nish_run_in`, `nish_run_utf8`, `nish_run_wide`, `nish_run_scalar`, `nish_run_resume`, the SSE2/AVX2/NEON/wasm block walkers, `nish_cpu_has_avx2`, `nish_run_choose` and the resolver |
-| `std/bytes.ts` | `bytesRunEnd`, `bytesRunStart`, `skipBlank`, `skipDigits`, `skipJsonText`, `copyBytes`, and the walkers they lower from |
+| `runtime/runtime-bytes.c` | `nish_bytes_skip_blank`, `nish_bytes_skip_digits`, `nish_bytes_skip_json_text`, `nish_bytes_skip_json_plain`; the helpers `nish_run_in`, `nish_run_utf8`, `nish_run_wide`, `nish_run_scalar`, `nish_run_resume`, `nish_plain_scalar`, `nish_plain_base`, the SSE2/AVX2/NEON/wasm block walkers, `nish_cpu_has_avx2`, `nish_run_choose`, `nish_run_settle` and the resolver |
+| `std/bytes.ts` | `bytesRunEnd`, `bytesRunStart`, `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain`, `copyBytes`, and the walkers they lower from |
 | `src/kernels.ts`, `src/emit-arrays.ts`, `src/std-modules.ts` | `bytesWalkOf`, `bytesKernelOf`, `emitBytesKernel`, `bytePointer`, `isBytesModule` |
 | `src/runtime.ts`, `runtime/nish.h` | the kernel declarations and their contract |
-| `src/secret.ts` | `isPureRuntime`'s admission of the three kernels |
+| `src/secret.ts` | `isPureRuntime`'s admission of the four kernels |
 
 Out of scope:
 - `std/json-tokenizer.ts`, which calls the runs; its record is
@@ -62,7 +62,7 @@ enforced.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | BYTES-1 | Low | `src/interop-napi.ts` (`nish_napi_array_arg`), `runtime/nish.h`; seen through `std/bytes.ts` (`bytesRunEnd`, `bytesRunStart`, `copyBytes`) | The runtime caps arrays at 2^31-1, but a host can hand in a longer one: a C-ABI `nish_array` with `len` past `INT32_MAX`, or under `--emit-napi` a borrowed `Uint8Array(2**31+5)`, which the shim takes without a cap. In i32 mode `toI32(b.length)` is then negative. `skipBlank(b, 0, 10)` answers `-2147483643`. The `copyBytes` guard's `sub nsw` overflows: poison in the IR, a wrap in practice. A valid small copy then panics and exits the host process. No out-of-bounds access was shown. | **Fixed.** `nish_napi_array_arg` answers -1 for `len > INT32_MAX`, and the shim throws `TypeError: <fn>: argument N (<name>) has more than 2147483647 elements`; `nish.h` states the bound for C hosts, which the runtime cannot check ("N-API: a typed array longer than 2^31-1 is a TypeError, not an array whose length reads negative"). |
-| BYTES-2 | Low | `src/secret.ts` (`isPureRuntime`) | `isPureRuntime` admits the three kernels, which are variable-time, so code inside `expose` may call them. No test pins the rule that `std/crypto` does not, though no `std/crypto` module imports `nish/bytes` today. `nish_str_index_of_any` has the same pattern. | **Fixed.** `tests/run.js` compiles every `std/crypto/*.ts` and refuses IR that names `nish_bytes_skip_*` or `nish_str_index_of_any`; `tests/link/std_bytes_runs` is its control, which must name them ("std/crypto: no module's IR calls a variable-time scan kernel (14 modules; std_bytes_runs, the control, names 6)"). |
+| BYTES-2 | Low | `src/secret.ts` (`isPureRuntime`) | `isPureRuntime` admits the run kernels (three at the audit, four since #892), which are variable-time, so code inside `expose` may call them. No test pins the rule that `std/crypto` does not, though no `std/crypto` module imports `nish/bytes` today. `nish_str_index_of_any` has the same pattern. | **Fixed.** `tests/run.js` compiles every `std/crypto/*.ts` and refuses IR that names `nish_bytes_skip_*` or `nish_str_index_of_any`; `tests/link/std_bytes_runs` is its control, which must name them ("std/crypto: no module's IR calls a variable-time scan kernel (14 modules; std_bytes_runs, the control, names 8)"). |
 
 ## Properties verified
 
@@ -75,8 +75,9 @@ audit also ran these paths under ASan+UBSan and against guard-page windows;
 CI pins agreement between paths, not the sanitizer run.
 
 **Every path answers as the scalar one does** (`simd: byte-runs native x64:
-3690675 cases agree across scalar base avx2; the resolver picks every pin`).
-This covers every class, every alignment and every pin of `NISH_SIMD`.
+7497300 cases agree across scalar base avx2 (plain: scalar base); the resolver
+picks every pin`). This covers every class, the plain class's scalar and
+16-byte paths, every alignment and every pin of `NISH_SIMD`.
 
 **A run answers inside its clamped window** (`link/std_bytes_runs: exits with
 0 and stdout matches expected.out`). `bytesRunEnd` clamps `to` into
@@ -130,7 +131,7 @@ that calls no run, and not again when the inputs name it`;
 `N-API: a typed array longer than 2^31-1 is a TypeError, not an array whose
 length reads negative` (BYTES-1);
 `std/crypto: no module's IR calls a variable-time scan kernel (14 modules;
-std_bytes_runs, the control, names 6)` — the template ending
+std_bytes_runs, the control, names 8)` — the template ending
 `(${cryptoFiles.length} modules; std_bytes_runs, the control, names ${control.length})` (BYTES-2).
 
 ## Divergences from Node

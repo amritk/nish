@@ -363,7 +363,6 @@ hash-table code the gate holds, so a codegen regression in a probe loop, or in
 | Column | Build |
 | --- | --- |
 | Nish | `nish <src> [--number-mode f64] --link <exe> --profile speed` |
-| Nish `--wrapping` | as above plus `--wrapping` (integer benchmarks only): signed arithmetic wraps with no overflow check, so the column against Nish is what the checks the compiler could not prove away cost |
 | Nish (size profile) | `--profile size`, size table only |
 | C `-O3` | `clang -O3 -s <src> -lm` |
 | C `-O3` naive | `strbuild-naive.c` only |
@@ -388,8 +387,8 @@ own result (`verifyResult`) and the harness panics when one is wrong. They
 come from the port in `benchmarks/Nish/` of
 [amritk/are-we-fast-yet](https://github.com/amritk/are-we-fast-yet) and keep
 its code, under the licences in [awfy/LICENSE.md](awfy/LICENSE.md), with one
-change: `Storage.benchmark` no longer brackets its tree with
-`Arena.mark`/`Arena.release`, because the compiler gives it that scope itself
+change: `Storage.benchmark` no longer brackets its tree with an arena scope
+of its own, because the compiler gives it that scope itself
 (the automatic arena scope in [docs/LANGUAGE.md](../docs/LANGUAGE.md#memory-model),
 item 2). The rest is housekeeping: the harness is `main.ts` rather than
 `harness.ts`, Mandelbrot's `escape` is `escaped` and `isKnownBenchmark` has a
@@ -943,7 +942,13 @@ must keep printing it.
 `crypto/bcrypt/run.mjs` times one cost-10 hash of `nish/crypto/bcrypt` against
 libxcrypt's `crypt_r` (`$2b$`) and OpenBSD's `bcrypt.c`, which it fetches from
 the OpenBSD tree into `build/bench/bcrypt/` and builds with `gcc -O2` and
-`clang -O2` behind a small shim for what OpenBSD's libc adds. It is not a
+`clang -O2` behind a small shim for what OpenBSD's libc adds. It also times
+`bcryptHash4` with four lanes against the four-lane C of the tigokraft
+submission (`bc_hash_n`, pinned to one commit, MIT), fetched the same way and
+built with `gcc` and `clang` at `-O2 -march=native`, one lane and four; a
+four-lane row is per hash, a batch's time over four. Every lane of a
+four-lane program must print the single hash's output, not lane 0 alone. The
+Nish programs are built for baseline x86-64, without `-march=native`. It is not a
 `crypto/` family (it has no `family.json`) and is not in this suite's tables;
 [docs/security/crypto-bcrypt.md](../docs/security/crypto-bcrypt.md#speed)
 carries its figures.
@@ -1324,6 +1329,260 @@ measurement after the fix, outside a band of 11), the cause was never found;
 the layout of the two binaries is a hypothesis, not a finding. With the
 rotation made equal and the link flags matched, no Nish-faster result has been
 measurable.
+
+## PostgreSQL
+
+`postgres/run.mjs` measures what
+[`nish/net/postgres`](../docs/guide/using-nish/postgres.md) costs a client
+beside libpq in pipeline mode. It runs the same loop twice: through the module
+(`postgres/main.ts`) and through libpq (`postgres/twin.c`), against one
+PostgreSQL 18 server. The schema, the seed and the queries are those of the
+multicore server challenge. It is not in this suite's tables, and it is not a
+CI test.
+
+```bash
+bash bench/postgres/setup.sh               # once: PostgreSQL 18, libpq, the cluster and its seed
+npm run build
+node bench/postgres/run.mjs --validate     # small counts: both sides must read the same rows and checksums
+node bench/postgres/run.mjs --rounds 12    # timed
+```
+
+**The server.** `setup.sh` clones the challenge at one fixed commit, tunes a
+throwaway cluster with its `box/pg-conf.sh` for this machine, and loads its
+`--dev` seed with its own `seed/make-seed.sh`. `run.mjs` starts the cluster on a
+free port on 127.0.0.1, stops it on exit, and refuses one `setup.sh` did not
+finish. Both sides connect over TCP as the seed's role with SCRAM, on one
+connection, and prepare the same statements with `int8` parameters.
+
+**The workloads.** Each query is its own group ending in Sync, on a statement
+prepared once, but the two sides do not send the same group (below). Every
+run checks that it read its workload's rows per query times its count, so a
+short seed cannot time empty answers. Every column of every row is read as text and folded
+into a checksum in place, from the receive buffer on the Nish side and from
+`PQgetvalue` on the C side, so no string is made on either.
+
+| Workload | Queries in a timed run | In flight | What one query answers |
+| --- | --- | --- | --- |
+| `pk` | 50,000 | 16 | A user by primary key: one row of five columns. |
+| `list` | 3,000 | 16 | The article list, 20 a page: 20 rows of 13 columns. The two timestamps are decoded to ISO 8601 and the tag array is walked to its elements. |
+| `insert` | 5,000 | 1 | An `INSERT … ON CONFLICT DO NOTHING` of a follow; each waits for the one before to finish. The rows its tag counts are folded. |
+
+The messages of one query, on each side:
+
+| Side | Sends | Receives |
+| --- | --- | --- |
+| Nish | Bind, Execute, Sync | BindComplete, DataRow × rows, CommandComplete, ReadyForQuery |
+| libpq | Bind, **Describe Portal**, Execute, Sync | BindComplete, **RowDescription** (NoData for `insert`), DataRow × rows, CommandComplete, ReadyForQuery |
+
+`PQsendQueryPrepared` always describes the portal, so every libpq query also
+receives a RowDescription, which libpq parses into a new `PGresult`: the
+column names copied, and each column's attributes. The module described the
+statement once, at the prepare, and sends none. Measured with `strace` over
+the bytes each side moves, libpq sends 9 more bytes a query (the 7 of the
+Describe, and 2 in a Bind that names one result format where the module's
+names none) and receives 125 more for `pk`, 358 more for `list` and 5 more,
+the NoData, for `insert`.
+
+The calls one query makes, on each side:
+
+- **Nish:** `pool.request`, `pool.dispatch`, `bindStart`, one `paramInt` per
+  parameter (1, 3 and 2), `bindEnd` and `pool.send`; then one `pool.next` per
+  message (4 for `pk`: BindComplete, a row, CommandComplete and ReadyForQuery;
+  23 for `list`; 3 for `insert`) and one more that says it needs more. Per
+  column the fold calls `colLength` and `colStart`; `list` also calls `bool`
+  twice, `text.timestamp` twice and `PgArrayWalker.begin` and `next` per tag.
+  A refill is written with one `netWrite`, and each wakeup reads with one
+  `netRead` into the module's input buffer (8 KiB, its default).
+- **C:** `PQsendQueryPrepared` and `PQsendPipelineSync`; then `PQisBusy` and
+  `PQgetResult` three times (the result, the null that ends the query, then
+  the sync), with `PQresultStatus` and `PQclear` on the two results, and
+  `PQgetisnull`, `PQgetlength` and `PQgetvalue` per column. A refill is
+  sent with one `PQflush`, and each wakeup reads with one `PQconsumeInput`
+  after `poll`, into libpq's input buffer (16 KiB to start).
+
+**Three deviations from the plain libpq loop.**
+
+- **`PQsendPipelineSync`, not `PQpipelineSync`.** `PQpipelineSync` flushes the
+  connection on every call, so a refill of 16 queries would be 16 `send`s
+  where the Nish side makes one `netWrite`. The twin queues the sync with
+  `PQsendPipelineSync` (libpq 17) and flushes once per refill, so each side
+  writes a refill's queries together. How many refills a run makes, and the
+  system calls that follow, are measured below, not assumed.
+- **Nagle is off on both sockets.** libpq sets `TCP_NODELAY` on every TCP
+  connection, and `nish:net`'s `tcpConnect` does not. `main.ts` sets it with
+  `setsockopt` after the connect, so the kernel does the same work for both.
+  With Nagle on, the Nish side's CPU per `pk` query measured 44.9 % under the
+  twin's, from the kernel's time rather than the module's (below).
+  `tcpConnect`'s default is outside this benchmark; it is
+  [#942](https://github.com/amritk/nish/issues/942).
+- **Plain TCP on both.** The twin sets `sslmode=disable` and
+  `gssencmode=disable`, so neither `PGSSLMODE`, `PGGSSENCMODE` nor the
+  cluster's own settings can put it on another transport than the module's.
+
+**The builds.**
+
+- **Nish:** `main.ts` is built with `--link`, which uses the speed profile. The
+  binary is then copied byte for byte.
+- **C:** `twin.c` is compiled with the speed profile's optimisation flags
+  (`-O3 -DNDEBUG`, `-fno-plt`, the section and unwind flags) less `-flto`,
+  since libpq is a shared library and the twin has nothing for LTO to inline,
+  and linked with the link's flags on Linux: `--gc-sections`, `--as-needed`,
+  `-O2`, no build id, stripped, and `lld` when there is one.
+- **Hardening, the same on both.** The twin takes the hardening
+  `scripts/build.sh` gives every object of a native build. `run.mjs` reads it
+  from that script's own block, run for the compiler in use, so it follows the
+  script rather than a copy: `-fcf-protection=full` on x86-64 or
+  `-mbranch-protection=standard` on arm64, and on ELF `-fstack-clash-protection`
+  and `-z relro -z now -z noexecstack`. Position independence is clang's
+  default, for both. It leaves out `-fstack-protector-strong` and
+  `_FORTIFY_SOURCE`: `build.sh` gives those to its C runtime alone, since on
+  the module's IR neither has anything to act on, so the twin's code is built
+  as the module's is. `node scripts/check-hardening.mjs` passes on both
+  binaries: position independent, full RELRO, a non-executable stack, and the
+  x86 feature note naming IBT and SHSTK.
+- **libpq** is the system's, 17 or later, found through `pg_config`. Here it
+  is the PostgreSQL project's Ubuntu package (18.6-1.pgdg24.04+2), as its
+  packagers built it: its code carries that build's flags, not the speed
+  profile's, and its own feature note names IBT and SHSTK too.
+
+**The protocol.**
+
+- A warm-up round runs first and is not counted. Then come `--rounds` rounds,
+  rounded up to a multiple of 3.
+- Each round runs every workload on the build, its copy and the C twin, in an
+  order that rotates by round, so over a multiple of 3 rounds each binary goes
+  first, second and third equally often.
+- A run connects, runs one batch untimed (the connect, SCRAM and the prepares
+  fall in it), then times its own loop. Every run of a workload must print the
+  same row count and checksum.
+- The report is the client's CPU time per query, user and system, from
+  `getrusage` of the client process only, with the system part's median
+  beside it, and queries per second: min, median and interquartile range over
+  the rounds. The server's time is in qps, not in the CPU figure.
+- Nish − C is the build less the twin, given beside the copy less the twin:
+  the two Nish binaries are the same bytes, so the module's difference is the
+  range between them. The noise band is the build against its copy.
+- **The verdict statistic is the median, for every workload.** A median
+  difference is claimed only when it is larger than the median's noise band
+  and than the IQR of both the build and the twin; anything smaller is one
+  this machine cannot see. A result where Nish is faster is unexplained until a
+  measurement says why. The min is reported but is not judged.
+
+**The figures.** Twelve rounds on a four-core virtual machine whose CPU
+reports itself as an Intel Xeon of family 6, model 173 (Granite Rapids), at
+2.7 GHz, with
+Ubuntu clang 18.1.3 and PostgreSQL and libpq 18.6, the server on the same
+machine. CPU is µs per query of the client; qps is the median.
+
+| Workload | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR) | Nish − C, median, build / copy | Noise band, median | System, median, Nish / C | qps Nish / C |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 6.52 / 7.09 (0.44) | 6.61 / 6.94 (0.19) | 7.82 / 8.35 (0.24) | −1.26 / −1.42 (−15.1 % / −17.0 %) | 0.15 | 6.30 / 5.83 | 44,460 / 43,508 |
+| `list` | 30.61 / 34.12 (2.47) | 29.22 / 34.24 (3.53) | 40.03 / 43.51 (1.92) | −9.39 / −9.28 (−21.6 % / −21.3 %) | 0.12 | 17.87 / 20.33 | 595 / 599 |
+| `insert` | 15.76 / 16.11 (0.54) | 15.38 / 15.92 (0.34) | 15.74 / 17.37 (1.67) | −1.26 / −1.45 (−7.2 % / −8.3 %) | 0.19 | 14.96 / 16.37 | 5,060 / 4,942 |
+
+**System calls.** `strace -f -c` over one run of each side, against the same
+server, counts the calls each makes; `strace -f -e
+trace=read,recvfrom,sendto,write,epoll_wait,poll` over another gives the bytes.
+Both slow the client, so how many answers one wakeup finds moves with them;
+the counts are for comparing the sides, not for timing.
+
+| Workload, queries | Nish: `sendto` / `recvfrom` / `epoll_wait` | C: `sendto` / `recvfrom` / `poll` | Bytes per `recvfrom`, Nish / C |
+| --- | --- | --- | --- |
+| `pk`, 10,000 | 826 / 828 / 829 (728 / 729 / 730 in the second run) | 744 / 745 / 747 (710 / 710 / 712) | 2,906 / 4,747 |
+| `list`, 1,000 | 990 / 1,926 / 1,927 | 991 / 1,022 / 1,024 | 4,541 / 8,887 |
+| `insert`, 2,000 | 2,007 / 2,006 / 2,007 | 2,008 / 2,007 / 2,009 | 27 / 32 |
+
+The two sides do not make the same system calls. Each writes a refill's
+queries with one send, but a refill is whatever the last wakeup's answers
+freed, so the count of sends follows the wakeups: the module's `pk` sends were
+826 in one run and 728 in the other, and on `list`, where a wakeup most often
+completes one answer, both sides send about once a query. The module's 8 KiB input buffer takes a `list` answer in about two reads
+where libpq's 16 KiB buffer takes one, and on `pk` how many wakeups a run makes
+moves between runs on both sides. The twin's 32 `read`s, mostly the loader
+reading its shared libraries, come before the timed loop.
+
+**What the figures say.** The module's client CPU per query is under libpq's
+in `pk` and `list`, by more than the noise band and both IQRs, for the build
+and the copy alike; in `insert` it is under by less than the twin's IQR, so no
+difference is claimed there. qps is the server's figure more than the client's,
+and its differences are within a few per cent. The user and system figures
+below are each part's own median, so they do not add up to the total's.
+
+- **`pk`:** −1.26 µs (−1.42 µs for the copy). The system times, 6.30 µs
+  against 5.83, are as far apart as the build's and its copy's (5.95), so the
+  difference is user time: 0.79 µs against 2.52, a gap of 1.73 µs. Callgrind
+  counts about 3,930 instructions per query for Nish and 8,680 for the twin.
+  Each side's user time over its own instructions is 0.20 ns (Nish) and 0.29 ns
+  (the twin) an instruction, and at those rates the 4,750-instruction gap is
+  1.0 to 1.4 µs of the 1.73; the rest is not attributed. Of the 4,750, libpq's
+  RowDescription handling (`getRowDescriptions`, with the `PGresult` it makes
+  and the names it copies) is about 1,070; the rest is libpq's `PGresult` per
+  result, the sync's included, with each value copied into it, where the
+  module reads values in place from its receive buffer.
+- **`list`:** −9.39 µs (−9.28 µs for the copy), unexplained in part. Nish runs
+  about 114,900 instructions per query and the twin about 129,900; of the
+  14,900 difference, libpq's RowDescription handling is about 2,180. The user
+  time is 16.25 µs against 23.18, a gap of 6.93 µs; at each side's own rate
+  (0.14 ns an instruction for Nish, 0.18 for the twin) the 14,900-instruction
+  gap is 2.1 to 2.7 µs of it, and the other 4.2 to 4.8 µs are unexplained. The
+  system times, 17.87 µs against 20.33, are 2.46 µs apart, less than the
+  build's and its copy's (22.04), so no system-time difference is claimed,
+  although the module makes about twice as many `recvfrom` and `epoll_wait`
+  calls.
+- **`insert`:** −1.26 µs (−1.45 µs for the copy), outside the band (0.19) but
+  inside the twin's IQR (1.67), so it is not claimed; earlier sessions put the
+  same comparison outside and inside the noise in turn. The user medians,
+  1.15 µs and 1.00, and the system medians, 14.96 and 16.37, are each within
+  that IQR. Callgrind counts about 2,640 instructions per query against the
+  twin's 4,730, a gap of some 2,090 that the clock does not resolve here.
+  libpq sends 9 more bytes a query, the 7-byte Describe and 2 bytes in a Bind
+  that names one result format where the module's names none, and reads a
+  5-byte NoData; with no columns to describe, libpq's RowDescription handling
+  counts about 0 instructions here.
+- **Callgrind** counts the client's instructions over a run of 16 queries and
+  one of 1,016, against the same server, so the connect, SCRAM and the
+  prepares cancel: per query = (instructions at 1,016 − instructions at 16) /
+  1,000, from the `totals:` line of `valgrind --tool=callgrind
+  --callgrind-out-file=<file> <binary> <workload> <port> conduit conduit
+  conduit_dev <count>`, with valgrind's defaults otherwise. The count is every
+  instruction of the client process, its shared libraries included: libpq,
+  libcrypto and libc for the twin, libc for Nish. The RowDescription figures
+  are the same subtraction over the lines of `getRowDescriptions` in libpq
+  18.6's `fe-protocol3.c` (519 to 689, inlined into `pqParseInput3`), calls
+  from them included, with libpq's debug symbols (`libpq5-dbgsym`) installed.
+
+**Before the module's fixes.** The same protocol on the module before this
+measurement's changes, in the same session as the figures above, put `list` at
+35.47 µs median (IQR 1.69) and `pk` at 6.80 µs (IQR 0.15), against 34.12 and
+7.09 after. Neither difference is outside both IQRs, so the clock cannot see
+the change. Callgrind can: `list` went from 133,970 instructions per query to
+114,920 (−14 %) and `pk` from 4,120 to 3,930; `insert`, 2,690 before, counts
+2,640 after, a difference inside how much the count moves between runs (how
+many messages one read brings). The "before" binary is
+`main.ts` built the same way with `std/net/postgres.ts` as it was before this
+PR's change to it. The changes, with no
+change in what the module accepts or answers:
+
+- **`readRow`** decoded each column's length with a call to `getI32BE`, a fifth
+  of a row's cost; it now reads the four bytes inline, behind one bounds test
+  that also proves the indices.
+- **`next`** reads each message's type and length the same way.
+- **`PgText.timestamp`** checks its separators and digits in one pass and
+  copies the date with `copyBytes`, and tests the year for `0000` with one OR
+  of its digits.
+
+The receive buffer was not copied and no message was framed twice, so there
+was nothing to remove there; rows were already read in place, with no
+allocation per row and no string per column. Binary `int8` results were not
+tried: the module reads results as text only, and a binary format would change
+its API.
+
+**Nagle.** With the `TCP_NODELAY` call taken out of `main.ts`, the same
+protocol put the module's `pk` CPU at 4.60 µs median (IQR 0.36) against the
+twin's 8.35 µs (−44.9 %). The difference is the kernel's: the module's system
+time drops to 3.68 µs, from 6.30 with Nagle off, while its user time stays
+near 0.9 µs. Its qps is 3.2 % under the twin's. The benchmark keeps Nagle off
+on both sides, as libpq does.
 
 ## YAML against @amritk/yaml
 

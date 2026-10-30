@@ -25,17 +25,23 @@
 @.str.14 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
 @.str.15 = private unnamed_addr constant { i64, [51 x i8] } { i64 50, [51 x i8] c"nish/term: a Screen's buffers disagree on its size\00" }, align 8
 @.str.16 = private unnamed_addr constant { i64, [61 x i8] } { i64 60, [61 x i8] c"nish/term: the key decoder used more bytes than it was given\00" }, align 8
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
 @.str.17 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"nish/term: the key decoder stepped back\00" }, align 8
 @.str.18 = private unnamed_addr constant { i64, [42 x i8] } { i64 41, [42 x i8] c"nish/term: the event decoder stepped back\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #5
 declare noundef i64 @nish_arena_mark() #3
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare double @nish_floor(double) #1
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #3
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #6
@@ -43,11 +49,16 @@ declare void @nish_panic_index(i64 noundef, i64 noundef) #6
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
 declare void @nish_panic_div(i1 noundef zeroext) #6
 declare extern_weak void @nish_panic_overflow(i32 noundef) #6
-declare double @llvm.floor.f64(double) #1
 declare double @llvm.fabs.f64(double) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
@@ -6460,7 +6471,7 @@ if.then.1:
   %47 = getelementptr inbounds %struct.FixedStep, %struct.FixedStep* %this, i32 0, i32 0
   %48 = load double, double* %47, align 8, !tbaa !91
   %49 = fdiv double %46, %48
-  %50 = call double @llvm.floor.f64(double %49)
+  %50 = call double @nish_floor(double %49)
   %51 = fmul double %44, %50
   %52 = fsub double %42, %51
   %53 = getelementptr inbounds %struct.FixedStep, %struct.FixedStep* %this, i32 0, i32 1
@@ -11647,15 +11658,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn }
-attributes #4 = { nounwind readonly }
-attributes #5 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #4 = { nounwind readonly "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #6 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!96, !97, !98, !99, !100}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -11752,3 +11764,8 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !93 = !{!90, !63, i64 8}
 !94 = !{!90, !63, i64 16}
 !95 = !{!90, !19, i64 28}
+!96 = !{i32 8, !"cf-protection-branch", i32 1}
+!97 = !{i32 8, !"cf-protection-return", i32 1}
+!98 = !{i32 8, !"branch-target-enforcement", i32 1}
+!99 = !{i32 8, !"sign-return-address", i32 1}
+!100 = !{i32 4, !"probe-stack", !"inline-asm"}

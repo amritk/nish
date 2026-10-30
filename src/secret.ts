@@ -100,7 +100,7 @@ const SECRET_CLASS: string = "Secret"
 /** What an instance of one of `nish:secret`'s templates is. */
 const SECRET_NONE: i32 = 0
 /** `secret(v)`. */
-const SECRET_MAKE: i32 = 1
+export const SECRET_MAKE: i32 = 1
 /** `expose(s, f)`. */
 export const SECRET_EXPOSE: i32 = 2
 /** `exposeWith(s, arg, f)`. */
@@ -2556,13 +2556,19 @@ export const isPureRuntime = (symbol: string): boolean =>
   symbol === "nish_bytes_skip_blank" ||
   symbol === "nish_bytes_skip_digits" ||
   symbol === "nish_bytes_skip_json_text" ||
+  symbol === "nish_bytes_skip_json_plain" ||
   symbol === "nish_regex_scan" ||
   symbol === "nish_str_len" ||
   symbol === "nish_str_from_i32" ||
   symbol === "nish_str_from_f64" ||
   symbol === "nish_str_from_i64" ||
   symbol === "nish_str_from_u64" ||
-  symbol === "nish_parse_number"
+  symbol === "nish_parse_number" ||
+  // `Math.floor` and kin on x86-64 (#943). Without SSE4.1 each is libm's
+  // routine, whose time can say something about a secret operand.
+  symbol === "nish_floor" ||
+  symbol === "nish_ceil" ||
+  symbol === "nish_trunc"
 
 /** How `FunctionFacts.worldVia` names a `declare function`, which `src/attributes.ts` spells the same way. */
 const C_FUNCTION: string = "the C function "

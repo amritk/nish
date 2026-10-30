@@ -72,6 +72,7 @@ import {
   P384_PKCS8_PEM,
   P384_SEC1_PEM,
 } from "./fixtures"
+import { webPkiSuites } from "./extensions"
 import { handshakeSuite } from "./handshake"
 import { fromHex, toHex } from "./hex"
 
@@ -194,7 +195,7 @@ const roundTrips = (notBeforeMs: i64, days: i32): boolean => {
 /**
  * X509-9: the minted certificate ends its TBS with the two critical
  * extensions, octet for octet, reads back through `x509ParseCertificate`
- * (whose `x509DerExtensionsSound` holds `[3]` to one non-empty SEQUENCE), and
+ * (whose `x509ReadExtensions` holds `[3]` to one non-empty SEQUENCE), and
  * its SHA-256 is taken over the DER that carries them.
  */
 const extensionsChecks = (t: Suite, der: u8[] | null): void => {
@@ -465,4 +466,4 @@ const chainSuite = (): i32 => {
   return t.done()
 }
 
-export const main = (): i32 => mintSuite() + parseSuite() + pemSuite() + keySuite() + chainSuite() + handshakeSuite()
+export const main = (): i32 => mintSuite() + parseSuite() + pemSuite() + keySuite() + chainSuite() + handshakeSuite() + webPkiSuites()

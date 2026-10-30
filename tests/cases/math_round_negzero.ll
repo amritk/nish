@@ -1,17 +1,28 @@
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare double @nish_floor(double) #0
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
-declare double @llvm.floor.f64(double) #0
 declare double @llvm.copysign.f64(double, double) #0
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define noundef double @roundHalf(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.floor.f64(double %x)
+  %0 = call double @nish_floor(double %x)
   %1 = fsub double %x, %0
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
@@ -98,6 +109,13 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}

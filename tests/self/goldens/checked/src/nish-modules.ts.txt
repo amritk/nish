@@ -79,7 +79,7 @@ function bufferSignature(name: string): string -> @bufferSignature [exported]
   escaping: name
   calls: netSignature nish_str_eq
   stackSites=0 stackLocals=0
-  callee +0:90 netSignature -> @netSignature
+  callee +0:42 netSignature -> @netSignature
 function netRangeBuffer(name: string): i32 -> @netRangeBuffer [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -94,6 +94,10 @@ function netSymbol(name: string): string -> @netSymbol [exported]
   local +0:9 parts: string[] (const)
   local +1:12 i: i32 (let)
   local +2:11 c: i32 (const)
+function netOption(name: string): i32 -> @netOption [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
 function isNetExport(name: string): boolean -> @isNetExport [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -107,17 +111,19 @@ function isTermExport(name: string): boolean -> @isTermExport [exported]
 function nishExport(specifier: string, name: string): BuiltinExport | null -> @nishExport [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: BuiltinExport.constructor isNetExport isTermExport isUnsafeExport nish_alloc_struct nish_str_concat nish_str_eq unsafeModule
+  calls: BuiltinExport.constructor isNetExport isTermExport isUnsafeExport netOption nish_alloc_struct nish_str_concat nish_str_eq unsafeModule
   stackSites=0 stackLocals=0
   callee +0:14 new BuiltinExport -> @BuiltinExport.constructor
   callee +6:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +21:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +24:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +30:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +35:12 isNetExport -> @isNetExport
-  callee +35:32 new BuiltinExport -> @BuiltinExport.constructor
-  callee +38:12 isTermExport -> @isTermExport
-  callee +38:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +40:21 unsafeModule -> @unsafeModule
-  callee +41:12 isUnsafeExport -> @isUnsafeExport
-  callee +41:35 new BuiltinExport -> @BuiltinExport.constructor
+  callee +25:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +28:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +34:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +39:9 netOption -> @netOption
+  callee +40:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +42:12 isNetExport -> @isNetExport
+  callee +42:32 new BuiltinExport -> @BuiltinExport.constructor
+  callee +45:12 isTermExport -> @isTermExport
+  callee +45:33 new BuiltinExport -> @BuiltinExport.constructor
+  callee +47:21 unsafeModule -> @unsafeModule
+  callee +48:12 isUnsafeExport -> @isUnsafeExport
+  callee +48:35 new BuiltinExport -> @BuiltinExport.constructor

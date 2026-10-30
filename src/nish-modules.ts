@@ -116,13 +116,13 @@ export const isBuiltinSpecifier = (specifier: string): boolean =>
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
-    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync"
+    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, monotonicNanos, signalFd, readSignal, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -130,7 +130,7 @@ export const nishModuleExports = (specifier: string): string => {
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
   }
-  return "write, writeError, panic"
+  return "write, writeError, writeBytes, panic"
 }
 
 /**
@@ -192,6 +192,9 @@ export const netSignature = (name: string): string => {
   if (name === "pollWait") {
     return "imi"
   }
+  if (name === "netSetOption") {
+    return "iii"
+  }
   return ""
 }
 
@@ -222,17 +225,24 @@ export const isNetBufferLetter = (letter: i32): boolean => isNetWrittenLetter(le
 
 /**
  * The buffer letters of a call that takes a range-checked `(buf, off, len)`
- * triple: a `nish:net` signature, and `readStdin`'s, which is `netRead`'s
- * without the descriptor. One string, so the emitter's range check, the
- * written-argument rule and the panic set read `readStdin` as they read
- * `netRead`.
+ * triple: a `nish:net` signature, `readStdin`'s, which is `netRead`'s
+ * without the descriptor, and `writeBytes`'s, which is `netWrite`'s to stdout.
+ * One string, so the emitter's range check, the written-argument rule and the
+ * panic set read `readStdin` and `writeBytes` as they read `netRead` and
+ * `netWrite`.
  */
-export const bufferSignature = (name: string): string => (name === "readStdin" ? "wnn" : netSignature(name))
+export const bufferSignature = (name: string): string => {
+  if (name === "readStdin") {
+    return "wnn"
+  }
+  return name === "writeBytes" ? "rnn" : netSignature(name)
+}
 
 /**
  * Where a `nish:net` call's range-checked `(buf, off, len)` triple starts, or
  * -1: the buffer is the argument before the first `n`. `netRead`, `netWrite`,
- * `udpSendTo` and `udpRecvFrom` have one, at 1, and `readStdin` at 0.
+ * `udpSendTo` and `udpRecvFrom` have one, at 1, and `readStdin` and
+ * `writeBytes` at 0.
  */
 export const netRangeBuffer = (name: string): i32 => {
   const at = bufferSignature(name).indexOf("n")
@@ -256,6 +266,31 @@ export const netSymbol = (name: string): string => {
     }
   }
   return parts.join("")
+}
+
+/**
+ * The id `netSetOption` takes for the socket option `name` names, or 0 for a
+ * name that is not one. The ids are the runtime's own, not the kernel's
+ * level and option pair, so that runtime-net.c's switch over them is the
+ * whole of what a program can set: there is no raw `setsockopt`.
+ */
+export const netOption = (name: string): i32 => {
+  if (name === "NET_TCP_NODELAY") {
+    return 1
+  }
+  if (name === "NET_TCP_QUICKACK") {
+    return 2
+  }
+  if (name === "NET_SO_KEEPALIVE") {
+    return 3
+  }
+  if (name === "NET_SO_SNDBUF") {
+    return 4
+  }
+  if (name === "NET_SO_RCVBUF") {
+    return 5
+  }
+  return 0
 }
 
 /** Whether `nish:net` exports `name`: every name with a signature, and `pollCreate`, whose is empty. */
@@ -288,7 +323,13 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "isDirectorySync" ||
       name === "readdirSync" ||
       name === "realpathSync" ||
-      name === "statMtimeSync"
+      name === "statMtimeSync" ||
+      name === "renameSync" ||
+      name === "unlinkSync" ||
+      name === "writeFileBytesSync" ||
+      name === "writeFileSyncMode" ||
+      name === "createFileExclusiveSync" ||
+      name === "mkdirSyncMode"
     ) {
       return new BuiltinExport("", name, false)
     }
@@ -303,11 +344,15 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "spawnSync" ||
       name === "spawnSyncTo" ||
       name === "spawn" ||
+      name === "spawnPiped" ||
       name === "kill" ||
       name === "waitPid" ||
       name === "availableParallelism" ||
       name === "totalMemory" ||
+      name === "setNice" ||
+      name === "setIdlePriority" ||
       name === "monotonicNanos" ||
+      name === "wallClockNanos" ||
       name === "signalFd" ||
       name === "readSignal"
     ) {
@@ -319,12 +364,15 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
     return null
   }
   if (specifier === `${BUILTIN_SCHEME}io`) {
-    if (name === "write" || name === "writeError" || name === "panic") {
+    if (name === "write" || name === "writeError" || name === "writeBytes" || name === "panic") {
       return new BuiltinExport("", name, false)
     }
     return null
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
+    if (netOption(name) > 0) {
+      return new BuiltinExport("", name, true)
+    }
     return isNetExport(name) ? new BuiltinExport("", name, false) : null
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {

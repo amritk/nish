@@ -1,11 +1,13 @@
 // FNV-1a: one `^` per byte and one wrapping multiply per round. This is the
 // loop the bitwise operators were added for, and it is the reason the mask
 // and the i32 wrap have to agree with JavaScript byte for byte.
+import { wrappingMul } from "nish:unsafe";
+
 function fnv1a(bytes: number[]): number {
   let hash = -2128831035; // the 2166136261 offset basis, read as a signed i32
   for (const b of bytes) {
     hash ^= b;
-    hash *= 16777619;
+    hash = wrappingMul(hash, 16777619);
   }
   return hash;
 }

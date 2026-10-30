@@ -1,0 +1,1 @@
+`createFileExclusiveSync` expects an argument of type string, got u8[]

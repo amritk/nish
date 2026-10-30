@@ -107,8 +107,42 @@ const RUNTIME_TEXT_BUDGET = 3698
  * `availableParallelism` reads it in a build without `--threads` and that build of
  * runtime-parallel.c compiles none of it. The two files together grew by 278. The
  * budget is the next 256-byte boundary above the measurement, leaving 177.
+ *
+ * It measured **2,380 bytes** at the head WP37's file builtins started from. **Raised to
+ * 2,816 by `renameSync`, `unlinkSync`, `writeFileBytesSync` and `writeBytes`**, measured
+ * **2,745 bytes** on 2026-10-29 with clang 18.1.3 on linux-x64, 365 more, as
+ * `-ffunction-sections` sizes them: `nish_rename` 85, `nish_unlink` 53,
+ * `nish_write_file_bytes` 139 and `nish_write_bytes` 34, plus `nish_put_all` (106), the
+ * write loop the two byte writers share with `writeFileSync`, which took `nish_put_file`
+ * from 142 to 93. `writeBytes` lives here rather than beside `write` in runtime.c because
+ * that file is a closed set and its loop answers nothing: sharing it would have grown
+ * runtime.c by 21 bytes past its ceiling. The budget is the next 256-byte boundary above
+ * the measurement, leaving 71.
+ *
+ * **Raised to 3,072 when `main`'s `setNice` and `setIdlePriority` met them**, measured
+ * **2,822 bytes** on 2026-10-29 with clang 18.1.3 on linux-x64: `nish_set_nice` 31 and
+ * `nish_set_idle_priority` 46, which fit the old 2,560 alone and the 2,816 above only
+ * without each other's 77. The budget is the next 256-byte boundary, leaving 250.
+ *
+ * **Raised to 3,328 by `writeFileSyncMode`, `createFileExclusiveSync` and
+ * `mkdirSyncMode`** (#992), measured **3,174 bytes** on 2026-10-29 with clang 18.1.3 on
+ * linux-x64, 346 more, as `-ffunction-sections` sizes them: `nish_put_file_mode` 253,
+ * the open, `fchmod`, write and the `unlink` of a failed exclusive create that the two
+ * file builtins share, `nish_write_file_mode` and
+ * `nish_create_file_exclusive` 12 each, and `nish_mkdir_mode` 72. They are file calls
+ * beside `nish_put_file` and `nish_put_all`, which they reuse, so they belong in this
+ * file. The budget is the next 256-byte boundary above the measurement, leaving 154.
+ *
+ * **Raised to 4,608 for `spawnPiped`**, measured **4,450 bytes** on 2026-10-29 with
+ * clang 18.1.3 on linux-x64, from 3,174 on `main`: under `-ffunction-sections`,
+ * `nish_spawn_piped` 1,082 (three pipes, the `poll` loop that writes stdin while it reads
+ * both outputs, the 16 MiB cap and SIGPIPE blocked on the calling thread,
+ * docs/security/runtime.md RT-27 to RT-31), `nish_pipe` 109 (close-on-exec ends off descriptors 0 to 2), and
+ * `nish_spawn_start` 284 to 365 for the descriptors it now hands the child and the failed `dup2` action it refuses; the rest is
+ * layout. The poll loop is the cost of not deadlocking against a child that writes before
+ * it has read everything. The budget is the next 256-byte boundary, leaving 158.
  */
-const RUNTIME_OS_TEXT_BUDGET = 2560
+const RUNTIME_OS_TEXT_BUDGET = 4608
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
@@ -361,7 +395,8 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
  * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
- * `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`, then `udpBind`,
+ * `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose` and
+ * `netSetOption`, then `udpBind`,
  * `udpSendTo` and `udpRecvFrom`, then the readiness loop: `pollCreate`, `pollAdd`,
  * `pollModify`, `pollRemove` and `pollWait`.
  *
@@ -370,7 +405,8 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * control messages were added (the ceiling went from 1,024 to 2,048), and
  * **2,071 bytes** the same day once the epoll loop was added (2,048 to 2,304), and
  * **2,335 bytes** on 2026-10-20 once `tcpListenFlags` and its `SO_REUSEPORT` were
- * added (2,304 to 2,560).
+ * added (2,304 to 2,560), and **2,588 bytes** on 2026-10-29 once `netSetOption` and
+ * its five-option whitelist were added (2,560 to 2,816).
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -378,7 +414,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 2560
+const NET_TEXT_BUDGET = 2816
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -402,6 +438,13 @@ const NET_TEXT_BUDGET = 2560
  * is the same subject as `indexOfAny` -- a byte search a vector at a time, on the same
  * CPU question and `NISH_SIMD` pin -- so it raised this ceiling with a measurement in
  * docs/wp7-runtime.md rather than opening a file of its own.
+ *
+ * Measured **2,495 bytes** on 2026-10-29 once `Math.floor`, `ceil` and `trunc` took
+ * SSE4.1's `roundsd` behind a CPU question (#943): `nish_round_init`, the
+ * `NISH_SIMD` pin and the `cpuid` leaf it reads and the three libm pointers it
+ * keeps on a CPU without SSE4.1, and the three entry points, each the pointer
+ * test, `roundsd` and the indirect jump to libm. It is the same CPU question and pin
+ * as the kernels above, so it lives here, inside the ceiling.
  */
 const RUNTIME_SIMD_TEXT_BUDGET = 2560
 /**
@@ -451,13 +494,18 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-bytes.c`
  * -- the byte-class runs of `nish/bytes` (WP38 S6a): `nish_bytes_skip_blank`,
- * `nish_bytes_skip_digits` and `nish_bytes_skip_json_text`, their scalar, SSE2 and AVX2
- * paths, the UTF-8 step the JSON text class takes, and the resolver with its CPUID
- * question and `NISH_SIMD` pin.
+ * `nish_bytes_skip_digits`, `nish_bytes_skip_json_text` and `nish_bytes_skip_json_plain`,
+ * their scalar, SSE2 and AVX2 paths, the UTF-8 step the JSON text class takes, and the
+ * resolver with its CPUID question and `NISH_SIMD` pin.
  *
- * Measured **1,303 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * Measured **1,525 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
  * `.text`: the scalar path 137, the SSE2 path 265, the AVX2 path 368, the UTF-8 step
- * 238 and its resume 29, the resolver 204 and the three entry points 62. A tenth
+ * 238 and its resume 26, the plain class's scalar path 49 and SSE2 path 110, the
+ * resolver 249 and the four entry points 83. It was 1,303 with three classes; the
+ * fourth, the writer's plain bytes, added 222: its own paths 159, its entry point 21
+ * and the resolver's second pointer 45 (the resolver 204 to 249), less 3 from the
+ * UTF-8 resume (29 to 26, layout). The three class paths' instructions are as they
+ * were. A tenth
  * translation unit rather than more of `runtime-simd.c`: folded in, the two measured
  * 1,960 bytes against that file's ceiling of 768, and the rule is a new file with its
  * own measured ceiling, never a raised one. Apart, a program that searches text carries
@@ -535,15 +583,16 @@ export const TLS_TCP_START_BYTES = 41728
  * the arena before its first connection, linked by `tests/run.js` from
  * `tests/link/net_http1_server/tls-startup.ts` on the default `Http1Config`.
  *
- * Measured **58,296 bytes** on 2026-10-20 with clang 18 on linux-x64:
+ * Measured **58,384 bytes** on 2026-10-25 with clang 18 on linux-x64:
  * `TLS_TCP_START_BYTES`'s pool and the HTTP/1.1 read scratch, `Date` and empty output
- * pool, with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
+ * pool, and the two empty pools `Http1Config.idleInput` lends input and head buffers
+ * to (88 bytes, against 58,296 before them), with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
  * resident at listening against 4.6 MB now, and 18.1 MB against 4.6 MB at 256 slots
  * (measured as `TLS_TCP_START_BYTES` says). The budget is the next 256-byte boundary
- * above the measurement: the 72 bytes of headroom are intended, and one slot's
+ * above the measurement: the 240 bytes of headroom are intended, and one slot's
  * connection built eagerly again costs far more than they hold.
  */
-export const HTTP1_TLS_SERVER_START_BYTES = 58368
+export const HTTP1_TLS_SERVER_START_BYTES = 58624
 
 /**
  * Ceiling on what `new Http3Server(quicConfig, config, fd, 65536, entropy)` takes from

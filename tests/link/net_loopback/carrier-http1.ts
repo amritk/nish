@@ -12,14 +12,14 @@ import { h3IsPattern, h3Pattern } from "../net_http3/peer";
 import { ClientReader } from "../net_http1_server/harness";
 import { sameBytes } from "../crypto_x509/hex";
 import { CARRIER_H1, TcpLoop } from "./tcp";
-import { TlsClient } from "./tls-client";
+import { LoopbackTlsClient } from "./tls-client";
 import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** The instant the GET's response is dated, so that its bytes are fixed. */
 const H1_PINNED_MS: i64 = 1792138314000;
 
 /** The next response client `c` reads, whole or as far as the stream went, its bytes taken off `plain`. */
-export const h1Response = (c: TlsClient): ClientReader => {
+export const h1Response = (c: LoopbackTlsClient): ClientReader => {
   const r = new ClientReader(false);
   while (!r.advance(c.plain)) {
     if (!c.pump()) {
@@ -38,7 +38,7 @@ const h1Post = (body: u8[], close: boolean): u8[] => {
 };
 
 /** One POST of `body` echoed through `c`; whether it came back whole, chunked. */
-const h1Echoed = (c: TlsClient, body: u8[]): boolean => {
+const h1Echoed = (c: LoopbackTlsClient, body: u8[]): boolean => {
   c.send(h1Post(body, false));
   const r: ClientReader = h1Response(c);
   return r.done && r.status === 200 && r.has("Transfer-Encoding: chunked") && sameBytes(r.body, body);
@@ -47,7 +47,7 @@ const h1Echoed = (c: TlsClient, body: u8[]): boolean => {
 /** Every check of the HTTP/1.1 carrier. */
 export const http1Checks = (t: Suite): void => {
   const lp = new TcpLoop(CARRIER_H1);
-  const c = new TlsClient(lp);
+  const c = new LoopbackTlsClient(lp);
   t.ok("http/1.1: a TLS handshake offering http/1.1 across loopback", c.handshake([H1_ALPN]));
   t.eqStr("http/1.1: ALPN chose it", lp.h1.alpn(toI32(0)), "http/1.1");
   lp.h1.date.pin(H1_PINNED_MS);
@@ -87,12 +87,14 @@ export const http1Checks = (t: Suite): void => {
 
   const whole = new LbMeter(true);
   lp.meter = whole;
-  const d = new TlsClient(lp);
+  const d = new LoopbackTlsClient(lp);
   const shook: boolean = d.handshake([H1_ALPN]);
   d.send(h1Post(ascii("the last one"), true));
   const last: ClientReader = h1Response(d);
   const alert: string = d.awaitAlert();
-  const ended: boolean = lp.awaitEnd(d.index) && lp.awaitClosed(toI32(2));
+  const reached: boolean = lp.awaitEnd(d.index) && lp.peers[d.index].failure === 0;
+  lp.hangUp(d.index);
+  const ended: boolean = reached && lp.awaitClosed(toI32(2));
   lp.meter = null;
   t.ok(
     "http/1.1: a request with Connection: close is answered, then the server closes with close_notify",

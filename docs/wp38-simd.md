@@ -1331,9 +1331,10 @@ a printed checksum.
 | **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Landed (#658)**, taken at `46a1e4d` (§2.3, S3a): the C vector form beats Nish checked by 1.65x on mat-vec and by 1.81x and 3.51x on the two depth documents at the median, outside a noise band within 5%, so both kernels clear 1.5x on x86-64; no AArch64 machine was at hand. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
 | **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). In those three samples, at the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). **The bar holds at the minimum too, against `ce9d394` itself, at `b515c1b`** ([§2.3](#s5-aes-gcm-the-result)): a fourth sample, 48 rounds on a host where the byte-identical copy stayed within 1.4% at the minimum, puts every workload's fallback minimum within +3.0% of `ce9d394`'s (worst +0.8%) and every median within 11.1% (worst +2.0%). That is the raw comparison the bar names. The untouched ChaCha20-Poly1305 rows ran 3.4% to 5.8% faster than `ce9d394` in the same sample, and corrected for that drift `aesHeaderMask`'s minimum could be 4% to 7% slower, so the drift-corrected minimum is open ([§2.3](#s5-aes-gcm-the-result)). |
-| **S6a** | (a): byte-class run kernels on `u8[]` for `JsonTokenizer` and `JsonWriter`: the first index at or after `from`, below `limit`, whose byte is *not* a blank, a digit, or a plain string byte, each class fixed in its kernel, with no set to splat (§7, S6) | On `bench/json-compare` against the `06645ecf` record ([§2.4](#24-jsontokenizer-after-json-parity-the-gap-s6-is-aimed-at)), tokenize on twitter.json and citm_catalog.json are **at least 1.2x** faster at the minimum, and serialize on citm_catalog.json is faster outside its band. No corpus or workload is slower outside its band, and `bench/json-tokenizer`'s 242-byte body is not slower: short runs pay no call. The scalar, 16-byte and 32-byte paths agree on a fuzzed corpus that puts every class boundary at every offset of a block. JSONTestSuite's verdicts, the conformance corpus, the fuzz checksum and #582's mutation-pinned boundaries are unchanged. The unit stays within its ceiling. **Tokenize bar met; serialize not reached by S6a**, recorded at `96899c1` ([BENCHMARKS.md](BENCHMARKS.md#json-against-other-languages), 14 rounds). Against `06645ecf`'s minimums, tokenize on twitter went from 1,247,246 to 737,985 ns (**1.69x**) and on citm from 2,397,781 to 1,468,015 ns (**1.63x**). Against simdjson On-Demand in the same rounds, Nish is now 1.55x behind on twitter (2.20x before S6a) and 1.24x behind on citm (1.59x before), and it trails simdjson by 1.10x on canada. Serialize on citm is 675,503 ns against `06645ecf`'s 870,432, but that gain came before S6a: S6a left `JsonWriter` unchanged, its escape scan is a follow-up, and serialize did not move outside its band against the previous record. In the A/B against the S6b head, canada ran 0.931x, outside the band; see *S6a, the byte-class kernels: what was built*. The host was noisier during this record: every other implementation's minimum rose by 5% to 7% against the previous one, and Nish's bands against its own copy reached 6.6% on citm and 7.3% on typed decode. `bench/json-tokenizer`'s 242-byte body was not measured again. The paths' agreement (`tests/simd/byte-runs.c`), JSONTestSuite, the conformance corpus and the mutation-pinned boundaries pass, and the unit is at 1,303 of 1,536 bytes. |
+| **S6a** | (a): byte-class run kernels on `u8[]` for `JsonTokenizer` and `JsonWriter`: the first index at or after `from`, below `limit`, whose byte is *not* a blank, a digit, or a plain string byte, each class fixed in its kernel, with no set to splat (§7, S6) | On `bench/json-compare` against the `06645ecf` record ([§2.4](#24-jsontokenizer-after-json-parity-the-gap-s6-is-aimed-at)), tokenize on twitter.json and citm_catalog.json are **at least 1.2x** faster at the minimum, and serialize on citm_catalog.json is faster outside its band. No corpus or workload is slower outside its band, and `bench/json-tokenizer`'s 242-byte body is not slower: short runs pay no call. The scalar, 16-byte and 32-byte paths agree on a fuzzed corpus that puts every class boundary at every offset of a block. JSONTestSuite's verdicts, the conformance corpus, the fuzz checksum and #582's mutation-pinned boundaries are unchanged. The unit stays within its ceiling. **Tokenize bar met; serialize not reached by S6a**, recorded at `96899c1` ([BENCHMARKS.md](BENCHMARKS.md#json-against-other-languages), 14 rounds). Against `06645ecf`'s minimums, tokenize on twitter went from 1,247,246 to 737,985 ns (**1.69x**) and on citm from 2,397,781 to 1,468,015 ns (**1.63x**). Against simdjson On-Demand in the same rounds, Nish is now 1.55x behind on twitter (2.20x before S6a) and 1.24x behind on citm (1.59x before), and it trails simdjson by 1.10x on canada. Serialize on citm is 675,503 ns against `06645ecf`'s 870,432, but that gain came before S6a: S6a left `JsonWriter` unchanged, and serialize did not move outside its band against the previous record. The follow-up put `JsonWriter`'s byte writers on a fourth class, `skipJsonPlain`, and found the serialize condition **not reached by the escape scan on citm**: 95.8% of its strings are under the kernel's 16-byte block, so skipping the check for the rest has a ceiling of 1.0139x, inside serialize's 1.4% band by only 0.01 points, and a free check would reach only 1.137x. The next serialize lead is number writing, 37.4% of serialize's instructions, 21.1% in the digit-write loop; see *JsonWriter's byte writers*. In the A/B against the S6b head, canada ran 0.931x, outside the band; see *S6a, the byte-class kernels: what was built*. The host was noisier during this record: every other implementation's minimum rose by 5% to 7% against the previous one, and Nish's bands against its own copy reached 6.6% on citm and 7.3% on typed decode. Measured again after the writer follow-up against main's merge base `3dca351`, with the three class paths' instructions as main's: `bench/json-tokenizer`'s 242-byte body ran 0.99x at the minimum, inside its 0.6% band (the branch against its byte-identical copy); on `bench/json-compare` serialize ran 0.988x, inside its 1.4% band, and two rows ran past theirs, tokenize on citm 0.994x against 0.5% (by 0.1 points) and typed-reuse 0.955x against 4.2% (by 0.3 points). Both run machine code identical to main's, and in typed-reuse the branch's byte-identical copy ran within 0.3% of the base, so the copy band is the evidence for reading them as noise, not a regression. The paths' agreement (`tests/simd/byte-runs.c`), JSONTestSuite, the conformance corpus and the mutation-pinned boundaries pass, and the unit is at 1,303 of 1,536 bytes (1,525 after the writer follow-up, with the three class paths' instructions unchanged). |
 | **S6b** | Eisel–Lemire in `numberF64`, in Nish: a 128-bit product of the significand and a table of powers of five, with `parseFloat` kept for more than 19 significant digits. Not a vector; it is here because it is most of canada's gap (§2.4) | Tokenize on canada.json is **at least 1.5x** faster than the `06645ecf` record at the minimum, and twitter and citm are not slower outside their bands. Every `numberF64` answer is bit-for-bit `parseFloat`'s on canada.json, on every JSONTestSuite number, and on at least 10^8 random doubles printed shortest and at 17 digits, and under Node. **Met.** canada 18.0 → 6.5 ms, 2.78x against the branch it was built on and 3.4x against the record; citm 1.17x faster, twitter unchanged. Bit-for-bit on canada's 978,519 numbers, JSONTestSuite and 10^8 random doubles at both widths (2×10^8 strings), natively and under Node, which runs the same Nish code. |
-| **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Design written, awaiting the owner (§8, Q5)**: see *S6c, the structural index: the design* below. Nothing is built. |
+| **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Accepted (§8, Q5); gate measured: not reachable** (2026-10-24). With the index priced by a prototype, callgrind leaves twitter at 1.37x and citm at 1.22x; see *S6c, the callgrind gate* below. Nothing is built. |
+| **S6d** | Measurement, nothing built: cuts to the per-value work S6c's index keeps (`numberF64`, the depth stack, `stringInto`'s copy, `next`'s entry), each priced by a throwaway prototype under callgrind, for the combination that would let S6c reach 1.5x | A combination whose measured saving out of kept work, with S6c's index and walker as the gate priced them, puts the gate's ceiling at **1.5x or more on twitter.json and on citm_catalog.json**, by the gate's formula and Total. **Measured: not reachable** (2026-10-24, revised 2026-10-25). Seven cuts that save kept work, an integer path in `numberF64`, the innermost container's kind in a field, `stringInto` copying a string with no escape, and the plain runs of one with an escape, whole, a failed state in `next`'s switch, a dispatch fused on the byte and a direct sign read in `numberF64`, save 932,538 instructions an iteration on twitter and 3,720,284 on citm, credited: **1.533x and 1.486x**. citm's best set leaves out the escape path's run copy and stops at **1.490x**, 109,087 instructions short (1.488x on twitter). No set reaches 1.5x on both. A one-comparison limit in `string` saves only setup the index already removes on a string with no escape, so it is not credited. The first five cuts reach 1.490x and 1.443x, and without the run copy 1.448x and 1.447x. See *S6d, the per-value cuts* below. Nothing is built. |
 | **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Met by #561** (Q9): at `5403a55` the guarded kernel compiles to the same `--profile speed` binary as its `uncheckedGet` form, with the `<4 x float>` accumulator; #561's own entry measured it 3.1x faster than before, against a 2.4% band (§3.2.1, and below). |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
@@ -1600,10 +1601,14 @@ built, but the writer was not changed, and three parts differ from the plan:
   - `jsonTokSkipPlain` calls `skipJsonText`.
   - `stringInto` copies each run of plain bytes with `copyBytes` and decodes
     only the escapes.
-- **Not done: `JsonWriter`'s escape scan.** Serialize is therefore unchanged,
-  and the row's serialize condition is unmet. The scan is left as a follow-up:
-  it needs a fourth class, since the writer passes bytes of 128 or more through
-  unescaped without validating them.
+- **`JsonWriter`'s escape scan, a follow-up.** It needed a fourth class, since
+  the writer passes bytes of 128 or more through unescaped without validating
+  them: `skipJsonPlain`, every byte from 0x20 to 0xff except `"` and `\`, with
+  no UTF-8 check. Its one caller is `JsonWriter`'s `u8[]` writers, `keyBytes`
+  and `stringBytes`. The string writers `jsonEncode` calls are unchanged, and on
+  citm the escape scan does not reach the row's serialize condition (its
+  ceiling is inside the band by 0.01 points); see
+  *JsonWriter's byte writers*, below.
 - **One finding about measurement.** An early spike ran citm 1.415x faster than
   its base. The built change ran 1.23x to 1.31x on the same IR shape. Rebuilt
   from the built change's IR, the spike measured 1.317x against the built
@@ -1628,6 +1633,181 @@ same layout effect, but that is not proven, and it stays recorded as a loss.
 The record against `06645ecf`, which is the measure the row's bar uses, is in
 [`BENCHMARKS.md`](BENCHMARKS.md#json-against-other-languages) and in the S6a row of §7's
 table.
+
+*JsonWriter's byte writers.* The follow-up to S6a's "not done", built after
+the record above, at `804120e`.
+
+- **The class.** `skipJsonPlain` (`nish/bytes`) is the set of bytes the writer
+  copies as themselves: 0x20 to 0xff except `"` and `\`. Bytes of 0x80 and
+  above are in it with no UTF-8 check, and 0x7f is in it, because the writer
+  passes both through unchanged today. It is a fourth class in
+  `runtime/runtime-bytes.c` with paths of its own: a scalar loop and a 16-byte
+  loop on every target (SSE2, NEON, wasm SIMD), behind a pointer of its own
+  that the class kernel's resolver sets in the same call. There is no 32-byte
+  plain loop: the writer's runs are short, and the 16-byte block is where the
+  guard below starts. `tests/simd/byte-runs.c` puts every boundary byte at
+  every offset of a block on each path, and checks that each pin resolves
+  both pointers.
+- **The three existing classes are untouched.** A first build put plain into
+  the class paths as a fourth arm. That cost the blank, digit and text loops
+  either a class branch in every block or the compiler's unswitching, and the
+  tokenizer measured slower for it. The class paths are now the same code as
+  on main, and their disassembly at `-O3` was compared instruction by
+  instruction against main's (`clang -O3 -c`, x86-64, registers and
+  addresses normalised): `nish_run_scalar` 145 instructions, `nish_run_base`
+  187, `nish_run_avx2` 182, with none changed, inserted or removed. The file
+  is 1,525 bytes of `.text` at `-Oz` against its 1,536-byte ceiling (main:
+  1,303). The 222 added bytes are the plain paths (159), the second pointer
+  and the resolver's extra store.
+- **The caller.** `keyBytes` and `stringBytes`, through
+  `jsonWriterPutBytes`. A window of 16 bytes or more goes to
+  `jsonWriterPutRuns`, which copies each `skipJsonPlain` run with `copyBytes`
+  and writes an escape only where the walker stops; a shorter one keeps the
+  byte loop. The output is byte for byte the loop's, the full-buffer rule is
+  the same all-or-nothing, and `tests/link/std_json_writer` checks every
+  length from 1 to 80 with `"`, `\`, a control byte and bytes of 0x80 and 0xff
+  on each side of the guard and at the run boundaries against the rule. The
+  walk is variable-time, so it writes text, never key material.
+  `jsonWriterPutString`, the string writer `jsonEncode` and every `string`
+  key and value use, is unchanged.
+- **The guard was measured.** `stringBytes` on plain text, 256 calls a
+  repetition, ns per call, the median of 7 rounds, with the guard set to 1
+  (every window to the kernel) and to 10^9 (none):
+
+  | Bytes | 4 | 8 | 11 | 13 | 15 | 16 | 18 | 24 | 32 | 48 | 64 |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | kernel | 31 | 36 | 37.3 | 38.7 | 42.6 | 19.8 | 24.4 | 36 | 23.6 | 26 | 24 |
+  | loop | 18 | 25 | 30.7 | 34.6 | 37.2 | 40.1 | 43.4 | 56 | 74 | 102 | 140 |
+
+  Below 16 bytes the two calls cost more than the loop; from 16, where the
+  kernel's first block starts, the kernel wins at every length (the 4, 8, 24,
+  48 and 64 byte figures are an earlier 5-round pass). The guard is 16.
+- **Why serialize does not meet the row's condition this way.** The profile is
+  callgrind on citm's timed `jsonEncode`, 230.0M instructions over 20 passes.
+  The output is 452,530 bytes, 43.7% of them string contents:
+
+  | Part of serialize | Instructions |
+  | --- | ---: |
+  | `jsonWriterPutString`, all of it | 38.8% |
+  | &nbsp;&nbsp;its escape check | 12.0% |
+  | &nbsp;&nbsp;its byte copy | 12.1% |
+  | &nbsp;&nbsp;its loop control | 5.6% |
+  | &nbsp;&nbsp;per call | 9.2% |
+  | `i64` numbers | 37.4% |
+  | &nbsp;&nbsp;the digit-count loop | 11.1% |
+  | &nbsp;&nbsp;the digit-write loop | 21.1% |
+  | Structure (commas, braces, keys' framing) | 21.9% |
+  | `jsonEncode`'s dispatch | 1.9% |
+
+  | String length | Strings | String bytes |
+  | --- | ---: | ---: |
+  | 0 to 7 | 48.9% | 34.8% |
+  | 8 to 15 | 46.9% | 53.8% |
+  | 16 to 31 | 3.7% | 9.6% |
+  | 32 or more | 0.4% | 1.7% |
+
+  So 95.8% of citm's strings, and 88.6% of their bytes, sit under the
+  16-byte guard. The Amdahl ceilings on the whole of serialize:
+
+  | If… | Ceiling |
+  | --- | ---: |
+  | the escape check cost nothing at all | 1.137x |
+  | bytes in strings of 8 or more ran at copy speed | 1.085x |
+  | strings of 16 or more lost the whole loop | 1.035x |
+  | strings of 16 or more skipped the check (the guard this caller uses) | 1.0139x |
+
+  The last is the escape scan at the guard the measurement set, and 1.39% is
+  inside serialize's 1.4% band on the minimums (BENCHMARKS.md) by 0.01
+  points, a margin too thin to call either way. Even a free
+  check reaches only 1.137x. So the escape scan does not reach the serialize
+  condition on citm in any way a measurement could tell apart from noise, and `jsonWriterPutString` stays as it is, and the next
+  serialize lead is number writing: 37.4% of the instructions, 21.1% in the
+  loop that writes an integer's digits.
+- **The A/B against `804120e`**, the branch's base, built by a compiler built
+  from it with its own `std/`, in interleaved rounds beside a byte-identical
+  copy of the branch's binary. Every checksum matched. The only modules whose
+  IR differs between the two builds are `json` and `bytes`.
+
+  `bench/json-compare`, 12 rounds, minimum ms per run:
+
+  | Workload | `804120e` | branch | branch speedup | copy against branch |
+  | --- | ---: | ---: | ---: | ---: |
+  | tokenize, twitter | 291.3 | 293.0 | 0.994x | 0.1% |
+  | tokenize, citm | 212.4 | 215.7 | 0.985x | 4.0% |
+  | tokenize, canada | 694.2 | 707.3 | 0.981x | 4.0% |
+  | typed, citm | 284.9 | 289.8 | 0.983x | 1.1% |
+  | typed-reuse, citm | 248.0 | 248.5 | 0.998x | 0.5% |
+  | serialize, citm | 306.6 | 310.2 | 0.988x | 0.3% |
+
+  None of these runs the changed code: tokenize and typed never write, and
+  serialize writes through `jsonWriterPutString`. Every minimum is within
+  1.9% of the base. Three sit past their own copy's band: twitter by 0.5
+  points (0.994x against 0.1%), typed by 0.6 (0.983x against 1.1%) and
+  serialize by 0.9 (0.988x against 0.3%; the re-run below gives it 0.988x
+  against 1.4%, inside). On code that did not change that is layout, as the
+  S6a note above found; the medians moved by up to 16% between the copies.
+
+  `JsonDocument.write`, the one in-tree caller of `stringBytes` and
+  `keyBytes`: each corpus parsed once and written back with a `JsonWriter`,
+  128 MiB of output a run, ns per document. Beside the branch, a second run
+  had a build of the branch with the guard at 10^9, so the kernel is never
+  called and only the code's shape differs:
+
+  | Corpus | `804120e` min | branch min | branch speedup | copy against branch | guard-off build (second run) |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | twitter | 1,186,914 | 798,283 | **1.487x** | 0.4% | 0.980x (branch 1.430x) |
+  | citm | 1,592,723 | 1,542,261 | 1.033x | 2.7% | 1.015x (branch 1.067x) |
+  | canada | 7,859,242 | 5,744,462 | 1.368x | 2.2% | 1.449x (branch 1.400x) |
+
+  Twitter's gain is the kernel's: its tweets' text is long and the guard-off
+  build runs at the base's speed. citm's strings are short and its gain is
+  small. canada's gain is not the kernel's: canada is numbers and short keys,
+  and the guard-off build is as fast, so it is the shape of the code around
+  the writer under LTO, and it is not claimed.
+
+  `bench/json-tokenizer`'s 242-byte body (`measure.mjs --before`, 16
+  interleaved rounds, twice) ran 0.92x and then 0.97x against the base at the
+  minimum, against bands of 2.2% and 1.5% (the branch against its
+  byte-identical copy, the band every A/B here uses), and 1.00x and 0.98x at the median.
+  That build had plain as a fourth arm of the class paths. It does not call
+  the kernel or the writer: its `main` and `json-tokenizer` IR are
+  byte-identical to the base's, and `bytes` differs only by `skipJsonPlain`'s
+  two functions, which it never calls. But its blank and digit runs went
+  through class paths that had changed.
+
+  With the class paths restored to main's instructions (above), the same
+  measure against main's merge base, `3dca351`, built by a compiler built
+  from it, ran **0.99x at the minimum** (1,282 against 1,275 ns a body)
+  and 0.98x at the median: 0.55% slower, inside its 0.6% band, the branch
+  against its byte-identical copy at the minimum (the base against its own
+  copy moved 2.0%). The branch's
+  binary is 296 bytes larger, the plain paths and the second pointer, which
+  the resolver keeps live.
+
+  `bench/json-compare` against the same base, 12 interleaved rounds, minimum
+  ms per run, with the band as the branch against its byte-identical copy.
+  Every checksum matched. Only the `json` and `bytes` modules' IR differ:
+
+  | Workload | `3dca351` | branch | branch speedup | copy against branch |
+  | --- | ---: | ---: | ---: | ---: |
+  | tokenize, twitter | 295.4 | 288.2 | 1.025x | 0.7% |
+  | tokenize, citm | 214.0 | 215.2 | 0.994x | 0.5% |
+  | tokenize, canada | 745.7 | 711.5 | 1.048x | 0.3% |
+  | typed, citm | 297.1 | 296.3 | 1.003x | 0.9% |
+  | typed-reuse, citm | 245.5 | 257.0 | 0.955x | 4.2% |
+  | serialize, citm | 297.3 | 300.9 | 0.988x | 1.4% |
+
+  Serialize is inside its band this time. Two rows are past theirs, so the
+  row's "nothing slower outside its band" is not met to the letter: tokenize
+  on citm, 0.994x against a 0.5% band, by 0.1 points, and typed-reuse, 0.955x
+  against a 4.2% band, by 0.3 points. Both run machine code identical to
+  main's. Neither runs changed
+  code: the tokenizer's IR and its blank, digit and text paths' instructions
+  are main's, and typed-reuse never writes. In typed-reuse, the copy (the
+  same bytes as the branch) ran within 0.3% of the base, so that row is the
+  host's noise. Tokenize on twitter and canada ran faster than the base, by
+  more than their bands, through the same unchanged code. With identical
+  loops, a gap in either direction here is layout, and none is claimed.
 
 *S6b, the float parser.* What it needs:
 
@@ -1663,9 +1843,10 @@ table.
     `parseFloat` call, so nothing new is unbounded.
 
 *S6c, the structural index: the design (Q5).* S1b is re-aimed here. It is
-built only after S6a and S6b, and only if the owner accepts this design (§8,
-Q5). It was written on 2026-10-23, with S6a and S6b landed. Nothing in it is
-built. It decides each point the plan left open, and each decision comes with
+built only after S6a and S6b, and only if callgrind shows the bar reachable.
+It was written on 2026-10-23, with S6a and S6b landed, and the owner accepted
+it as recommended on 2026-10-24 (§8, Q5). The gate that followed found the bar
+out of reach (*S6c, the callgrind gate* below), so nothing in it is built. It decides each point the plan left open, and each decision comes with
 its alternative and the measurement that would overturn it.
 
 - **What it replaces.** After S6a, `next()` reads the bytes between tokens one
@@ -1815,10 +1996,375 @@ its alternative and the measurement that would overturn it.
 This is not the C JSON parser §9 declines. The kernel answers masks; the
 grammar, the limits, the errors and every value stay in `std/json-tokenizer.ts`.
 
+*S6c, the callgrind gate (2026-10-24): not reachable.* Callgrind counts the
+instructions of the tokenize loop on main's head (`2f10882`), splits them
+into the work the index removes and the work it keeps, and prices the index
+with a C prototype. The best the design can buy is 1.37x on twitter and 1.22x
+on citm, short of 1.5x on both, so the stage stops here with nothing built.
+
+- **The runs.** The benchmark is built and counted as follows; a second build
+  adds `-g` for the per-line split. Each file runs at 0 and 20 iterations, and
+  an iteration costs the difference over 20. `at` is the file's digit (twitter
+  631463, citm 1727118).
+
+  ```sh
+  build/nish bench/json-compare/main.ts -o cg/ --link cg/main --profile speed
+  valgrind --tool=callgrind --dump-instr=yes --callgrind-out-file=cg-$n-$it.out \
+    cg/main tokenize bench/json-compare/cache/corpus/$n.json $it $at
+  ```
+
+  | File | 0 iterations | 20 iterations | Per iteration |
+  | --- | ---: | ---: | ---: |
+  | twitter.json | 15,386,749 | 261,195,055 | 12,290,415 |
+  | citm_catalog.json | 28,903,021 | 541,546,320 | 25,632,165 |
+
+- **The split.** Per-line self cost from the `-g` build (12,398,099 and
+  25,482,062 an iteration, within 1% of the build above). A string counts as
+  removable only when its next mark is the closing quote: no escape, so
+  twitter's 312 strings with an escape (12.5% of its string bytes) and citm's
+  one stay scalar. `string`'s loop lines split by the share of calls, its
+  kernel calls by the share of bytes. `string`'s limit test after the loop
+  (`if (i > limit)`) is removable on the same strings: the walker's string
+  fast path does it, and its 8 instructions a mark count it, so it is not
+  counted again among the kept work. The instructions callgrind gives no
+  line (line 0) split in proportion to each function's removable and kept
+  cost.
+
+  | Part of tokenize | twitter | | citm | |
+  | --- | ---: | ---: | ---: | ---: |
+  | *Removable* | | | | |
+  | Blank runs between tokens (`jsonTokSkipBlank` and its kernel calls) | 1,621,911 | 13.1% | 4,546,822 | 17.8% |
+  | Strings whose next mark is the closing quote (`string`'s limit setup, loop and limit test, `jsonTokSkipPlain`, the kernel call) | 2,686,398 | 21.7% | 2,057,725 | 8.1% |
+  | The bounds test on each token's first byte in `next`, `value` and `key` | 473,533 | 3.8% | 1,439,390 | 5.6% |
+  | Their share of line 0 | 499,189 | 4.0% | 1,142,168 | 4.5% |
+  | **Removable** | **5,281,031** | **42.6%** | **9,186,105** | **36.0%** |
+  | *Kept* | | | | |
+  | `stringInto` and its `memcpy` | 2,405,454 | 19.4% | 2,046,683 | 8.0% |
+  | `next`, `value` and `key`: the grammar switch (`next`'s switch on what it wants, `value`'s and `key`'s tests of the first byte) | 757,526 | 6.1% | 1,739,696 | 6.8% |
+  | `next`, `value` and `key`: the rest (entry, `number`'s scan, `open`, `emit`, the inlined `top` and `close`) | 717,579 | 5.8% | 3,493,039 | 13.7% |
+  | `string` per string (entry, emit), and all of every string with an escape | 837,231 | 6.8% | 559,166 | 2.2% |
+  | `numberF64` (S6b) | 396,611 | 3.2% | 4,140,040 | 16.2% |
+  | `literal` | 391,655 | 3.2% | 97,251 | 0.4% |
+  | The depth stack (`top`, `close`) | 204,588 | 1.7% | 757,908 | 3.0% |
+  | The loop harness and the fold (`tokenizeOnce`) | 953,786 | 7.7% | 2,260,956 | 8.9% |
+  | Their share of line 0 | 452,744 | 3.7% | 1,201,297 | 4.7% |
+  | **Kept** | **7,117,174** | **57.4%** | **16,296,036** | **64.0%** |
+
+- **The kernel.** A throwaway C prototype of the design's kernel, not
+  committed: AVX2 nibble lookups for blanks and structural bytes, the
+  backslash carry, PCLMUL prefix XOR for the in-string mask, the
+  pseudo-structural marks, and Keiser–Lemire UTF-8 validation behind an
+  ASCII test per block. It builds 4 KiB chunks of 64 bitmaps into one fixed
+  buffer, pads the tail block with blanks, and folds the bitmaps so the work
+  is kept. Built `clang -O3 -mavx2 -mpclmul` and counted the same way (0 and
+  20 passes), it costs **1,299,916 instructions a pass on twitter (2.06 a
+  byte) and 3,277,635 on citm (1.90 a byte)**. twitter is dearer a byte
+  because 23% of its blocks hold a non-ASCII byte and take the full UTF-8
+  check; citm has 0.3%. It marks 74,585 positions on twitter and 162,590 on
+  citm.
+- **The walker.** Assumed at **8 instructions a mark**: the bit test at the
+  cursor, `tzcnt`, adding the block's base, clearing the bit, the compare
+  and refill, the byte load, and the string fast path's quote and limit
+  test. That is 596,680 on twitter and 1,300,720 on citm.
+- **The ceiling.** Per file, total ÷ (kept + walker + kernel), with the kept
+  share of the `-g` split applied to the benchmark build's total:
+
+  | | twitter | citm |
+  | --- | ---: | ---: |
+  | Total | 12,290,415 | 25,632,165 |
+  | Kept | 7,055,297 | 16,391,978 |
+  | Walker (8 a mark) | 596,680 | 1,300,720 |
+  | Kernel | 1,299,916 | 3,277,635 |
+  | **Ceiling** | **1.37x** | **1.22x** |
+  | The record's time at that ceiling | 537,522 ns | 1,201,021 ns |
+  | The bar | 491,990 ns | 978,677 ns |
+  | With the index and the walker free | 1.74x | 1.56x |
+  | With the kernel free | 1.61x | 1.45x |
+  | Walker at 4 / 16 a mark | 1.42x / 1.29x | 1.26x / 1.15x |
+  | If the first-byte bounds test stays | 1.30x | 1.14x |
+  | If the grammar switch went too | 1.499x | 1.33x |
+
+  The verdict is on instruction counts, as the gate defines it, not on wall
+  time. The two can part either way: the removed work is branchy (blank
+  loops, a call per string, the first-byte switch) and takes its
+  mispredicts with it, and the kernel's instructions are wide, so time could
+  improve more than the count does; the walker's branch on each mark's kind
+  is a new place to mispredict, so it could improve less. How firm the
+  verdict is differs by file. citm stays under the bar even with the kernel
+  free (1.45x), and even with the grammar switch gone as well (1.33x),
+  though the walker keeps it: it still dispatches on each mark's kind. twitter's
+  verdict rests on the kernel's cost: it reaches 1.5x only with the kernel at
+  or under 541,633 instructions a pass, against the 1,299,916 measured, and
+  1.61x with the kernel free.
+- **What would have to move.** Reaching 1.5x needs a further 758,283
+  instructions out of twitter's kept work (10.7% of it) and 3,882,223 out of
+  citm's (23.7%), with the index priced as above. On twitter that is a third
+  of `stringInto` and its `memcpy`, or all of the grammar switch; on citm it
+  is three quarters of `next`, `value` and `key` together (more than twice
+  the switch alone), or nearly all of `numberF64`. None of these is index
+  work. Each is its own stage, and S6c is worth re-measuring only once one of
+  them lands.
+
+*S6d, the per-value cuts (2026-10-24, revised 2026-10-25): not reachable
+on citm.* The gate's last point asks for 758,283 instructions an iteration
+out of twitter's kept work and 3,882,223 out of citm's. S6d looks for them.
+It splits the kept work finer, prices each cut by a throwaway prototype
+under callgrind, and puts the best combination into the gate's formula.
+twitter reaches 1.5x: A, G, C2, C, H2, D and N3 below leave it at
+**1.533x**. citm does not: its best set, A, G, C, H2, D and N3, leaves it
+at **1.490x**, 109,087 instructions short. No measured set reaches 1.5x on
+both files.
+
+- **The runs.** The gate's method, on main at `4fee600`. Main's tokenize
+  loop counts 12,323,582 instructions an iteration on twitter and 25,694,851
+  on citm, 0.27% and 0.24% above the gate's Total. `std/json-tokenizer.ts`,
+  `std/bytes.ts`, the native runtime and the benchmark are unchanged since
+  `2f10882`, so the difference is the compiler's. Each prototype edits
+  `std/json-tokenizer.ts` in a scratch tree, rebuilds the benchmark
+  `--profile speed`, and is counted at 0 and 20 iterations on both files. It
+  counts only if it prints main's checksums (`tokenize 11911328685591958912
+  29573 …` on twitter, `tokenize 1527999386216249920 85035 …` on citm). A
+  cut's saving is main's count less the prototype's, and it comes out of the
+  gate's kept work. The verdict rests on the speed build. The `-g` build
+  inlines differently and once disagreed on the sign of a cut, so it is used
+  only to say where a saving fell.
+- **The finer split.** Per function, from the `-g` build of main (an
+  iteration, self cost, with the inlined helpers where the build kept them
+  apart):
+
+  | Function | twitter | citm |
+  | --- | ---: | ---: |
+  | `next` | 2,317,373 | 6,778,149 |
+  | `value` | 635,230 | 3,452,703 |
+  | `key` | 181,215 | 224,010 |
+  | `string` | 1,674,988 | 2,352,068 |
+  | `stringInto` | 2,160,402 | 1,676,959 |
+  | its `memcpy` | 245,052 | 369,723 |
+  | `numberF64` | 396,611 | 4,140,040 |
+  | `literal` | 391,655 | 97,251 |
+  | `top` | 148,140 | 301,032 |
+  | `close` | 56,448 | 456,876 |
+  | `jsonTokSkipBlank` (removable) | 444,420 | 903,096 |
+
+  - **`numberF64`.** citm's 14,392 numbers are all integers: 13,485 have 9 to
+    15 digits and 907 have 8 or fewer, 126,927 digits in all. Its general
+    digit loop costs 2,936,314 instructions, 23.1 a digit. The rest costs
+    1,203,726, 83.6 a number, for 287.7 a number in all. twitter has 2,109
+    numbers: 1,911 integers of at most 15 digits, 197 of 16 or more (S6b's
+    product path), and one with a fraction.
+  - **Strings.** twitter has 13,345 keys, 9,276 of them under 16 bytes, and
+    4,754 string values: 2,418 under 16 bytes, 1,462 of 16 to 63, and 874 of
+    64 or more. Those 874 hold 136,150 of the values' 201,944 bytes. 312
+    values have an escape. citm has 25,869 keys (24,960 under 16 bytes), 735
+    values, and one escape.
+  - **Tokens.** twitter has 1,264 objects, 1,050 arrays, 12,345 commas and
+    4,737 literals. citm has 10,937 objects, 10,451 arrays, 25,086 commas
+    and 1,263 nulls. citm's grammar work is a key, a colon and an integer or
+    an opener, repeated.
+  - **`stringInto` and its `memcpy`, by length** (the gate's row of
+    2,405,454 on twitter and 2,046,683 on citm). A string with no escape
+    costs `stringInto` a fixed 63.0 instructions, whatever its length: one
+    range test and one `copyBytes`, 10 fewer for an empty string, which
+    calls nothing. Its `memcpy` is glibc's `__memcpy_avx_unaligned_erms`,
+    priced at each length the corpus holds by a C loop calling `memmove`
+    under callgrind. Those prices, times each length's count, give 244,934
+    on twitter and 369,724 on citm, against 245,052 and 369,723 measured.
+    Under 64 bytes a copy is 11 to 16 instructions, whatever its length. At
+    64 or more it is a 32-byte vector loop, 32.6 a call here. A string with
+    an escape takes the byte loop instead, 22.6 instructions a byte. So the
+    cost scales with the number of strings, except in the escape path:
+
+    | Strings | twitter: count, bytes | `stringInto` | `memcpy` | citm: count, bytes | `stringInto` | `memcpy` |
+    | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | No escape, under 16 bytes | 11,694, 92,052 | 735,292 | 164,850 | 25,244, 189,457 | 1,590,372 | 354,499 |
+    | No escape, 16 to 63 | 5,523, 140,457 | 347,949 | 61,510 | 1,359, 31,883 | 85,617 | 15,225 |
+    | No escape, 64 or more | 570, 90,532 | 35,910 | 18,574 | 0 | 0 | 0 |
+    | With an escape | 312, 46,104 | 1,041,369 | 0 | 1, 41 | 970 | 0 |
+
+    The no-escape rows are priced at 63.0 a call (53.0 for an empty
+    string); the escape row is the escape path's lines as measured. So
+    twitter's `stringInto` column sums to 2,160,520, 118 over the measured
+    2,160,402 above; citm's sums exactly.
+
+    A cut to the copy has to lower the 63-instruction call (C saves 0.9 a
+    string on twitter, 1.0 on citm) or the escape path's byte loop (C2).
+    The per-byte work is only in the escape path.
+  - **`next`, `value` and `key`, by part** (the gate's grammar-switch and
+    rest rows, 757,526 + 717,579 = 1,475,105 on twitter and 1,739,696 +
+    3,493,039 = 5,232,735 on citm). Each source line of the three goes to
+    one part. Line 0, the blank skip and the first-byte bounds test stay
+    out, as in the gate. Main's `-g` build counts these lines 6.4% and 5.8%
+    above the gate's two rows together. "On the gate's rows" scales each
+    part to that total, rounded so the column sums to it exactly. The gate drew the line between its two rows with
+    the first-byte load in the switch row, so the parts are mapped onto
+    the rows' sum, not onto each row:
+
+    | Part | twitter | a token | on the gate's rows | citm | a token | on the gate's rows |
+    | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | Dispatch: `next`'s switch on what it wants and its tests of the byte, `value`'s and `key`'s tests of the first byte | 464,226 | 15.7 | 436,154 | 1,537,176 | 18.1 | 1,452,989 |
+    | Entry and the first byte's load in each of the three | 581,744 | 19.7 | 546,565 | 1,605,118 | 18.9 | 1,517,210 |
+    | The calls on: the colon's to `value`, the comma's to `key` or `value`, `string`, `literal` | 281,293 | 9.5 | 264,283 | 514,374 | 6.0 | 486,203 |
+    | `number`'s scan | 109,054 | 51.7 a number | 102,459 | 1,080,757 | 75.1 a number | 1,021,567 |
+    | `open`, inlined | 30,082 | 13.0 an opener | 28,263 | 278,044 | 13.0 an opener | 262,816 |
+    | `emit`, inlined | 29,241 | | 27,473 | 247,175 | | 233,638 |
+    | `top` and `close`, inlined | 74,407 | | 69,908 | 273,279 | | 258,312 |
+    | Together | 1,570,047 | 53.1 | 1,475,105 | 5,535,923 | 65.1 | 5,232,735 |
+
+    twitter's 29,573 tokens are 13,345 keys, 4,754 strings, 2,109 numbers,
+    4,737 literals, 2,314 openers and 2,314 closers. citm's 85,035 are
+    25,869 keys, 735 strings, 14,392 numbers, 1,263 nulls, 21,388 openers
+    and 21,388 closers. Dispatch, entry and the calls on, 35 to 45
+    instructions a token, are the largest part on both files. D below
+    is aimed at them. citm's number scan is 8.5 instructions a digit.
+- **The cuts.** Each saving is measured against the set named before it,
+  in instructions an iteration:
+
+  | Cut | What it changes | Measured on top of | twitter | citm |
+  | --- | --- | --- | ---: | ---: |
+  | A | `numberF64`: an integral token of at most 15 digits accumulates with no per-digit test and converts exactly (10^15 < 2^53) | main | 112,488 | 2,538,377 |
+  | G | The innermost container's kind kept in a field that `open` and `close` set, so the comma path and `close` read no stack | A | 187,271 | 308,644 |
+  | C2 | `stringInto`'s escape path copies each plain run whole with `copyBytes`, not a byte at a time | A, G | 223,820 | −79,452 |
+  | C | `stringInto`'s path for a string with no escape: one `copyBytes` after one range test | A, G, C2 | 16,036 | 26,600 |
+  | H2 | `fail` sets a sixth state, so `next` drops its sticky-error test and its switch answers it | A, G, C2, C | 165,321 | 409,329 |
+  | D | The fused dispatch: `next` switches on the byte first and tests what it wants inside each case, so a quote, colon, comma or closer takes one switch and one test; anything else goes to the old switch on what it wants | A, G, C2, C, H2 | 261,558 | 549,212 |
+  | N3 | `numberF64` reads the sign byte directly after one bounds test of the token, not through `jsonTokByteAt` | D | 6,859 | 57,569 |
+  | E2 | `string`'s room and limit: a field `stringFrom`, set wherever `end` is, says from where a string cannot outgrow `maxStringBytes`, so one comparison picks the limit | D, N3 | 144,788 | 202,045 |
+
+  Where each saving fell, by the `-g` build against main: A's is in
+  `numberF64` (111.3 a number on citm, from 287.7). G's is `top` and the
+  stack read in `close`. C2's and C's are `stringInto` (−830,547 on twitter)
+  less the run kernel C2 now calls (+515,461); C2's part is in strings
+  with an escape, which stay scalar under the index. On citm C2 costs more
+  than it saves: its one escaped string pays nothing back for the longer
+  loop. H2's is `next`'s entry. D's is `next`'s and `key`'s dispatch, but
+  not all of it is kept work. D moves removable lines too, which the gate
+  already credits to the index, and its credit leaves out their net,
+  40,815 on twitter and 89,995 on citm:
+
+  | Removable line D moves | twitter | citm |
+  | --- | ---: | ---: |
+  | `key`'s first-byte bounds test, no longer run | −72,486 | −89,604 |
+  | `next`'s first-byte bounds test, now run for those tokens instead | +69,958 | +67,734 |
+  | `next`'s blank test and skip (`jsonTokSkipBlank`'s lines) | −77,070 | −152,865 |
+  | The blank kernel those skips call | +38,783 | +84,740 |
+  | **Net, not credited** | **−40,815** | **−89,995** |
+
+  So `next`'s first-byte bounds test did move: it took over most of
+  `key`'s, and only the net of the two is left out. The rest of D's
+  saving, 220,743 and 459,217, is credited. N3's is in `numberF64`, kept
+  work.
+
+  `numberF64` after A costs about 54 instructions a number on citm, none of
+  them per digit: entry 8, the kind test 2, the field loads 3, the sign
+  byte through `jsonTokByteAt` 11, the length and integral tests 12, the
+  conversion 7 and the return 10. N3 takes the sign byte's call out; the
+  rest is a function's entry, its tests and its result. `string`, per
+  string on twitter with D and N3: entry about 7, room and limit about 11,
+  the emit about 7, the closing quote's tests about 4.
+
+  Not credited:
+
+  - **E2**, `string`'s room and limit in one comparison. It saves 144,788
+    on twitter and 202,045 on citm on top of D and N3 (−144,789 and
+    −191,263 in `string` by the `-g` build, about 8 of `string`'s 11
+    instructions a string for its room and limit). That setup runs once a
+    string, and on a string with no escape the gate counts it as removable
+    (`string`'s limit setup, in the strings row): the walker's 8
+    instructions a mark pay for it. Only strings with an escape keep it,
+    312 of twitter's 18,099 strings and 1 of citm's 26,604. Split by the
+    share of calls, as the gate split `string`'s lines, E2's kept share is
+    2,496 on twitter and 8 on citm, too little to move either ceiling, so
+    E2 is left out of every set below. It was also measured as built, with
+    `end - 1 - maxStringBytes`, which overflows when `maxStringBytes` is
+    near the i32 maximum; an exact comparison would save no more.
+  - **K**, a key's token consumes the colon after it, so `next` is not
+    called for the colon. It saves 146,794 on twitter and 284,559 on citm
+    on top of A, G, C2, C and H2, but all of that saving is removable
+    work: the blank test and the first-byte bounds test at the colon,
+    which the gate already credits to the index. K2 keeps those tests and
+    drops only the call, the entry and the switch. It costs 98,296 *more*
+    on twitter and 139,776 more on citm, because the inlined `emit` grows.
+  - **M**, a value's token consumes a comma right after it. It costs
+    87,140 more on twitter and 93,678 more on citm, on top of K.
+
+  Rejected:
+
+  - **F**, `literal` compared as bytes, not through `charCodeAt`. It costs
+    149,414 more on twitter and 58,415 more on citm, on top of A and G.
+    The `-g` build showed an 89k saving on twitter: this is the
+    disagreement the runs bullet names.
+  - **B**, `number`'s scan accumulating the mantissa for `numberF64`. It
+    costs 122,563 more on twitter and 336,501 more on citm, on top of A,
+    G, C2 and C. The scan loop grows by more than A's loop costs.
+  - **A2**, A as an early exit at `numberF64`'s top. Measured with G, C2
+    and C, it saves 13,190 more than A on twitter but costs 121,560 more
+    on citm: its loop keeps a bounds test, 7.3 a digit against 6.5.
+  - **O**, eight digits at a time by SWAR in A's path. It costs 714,041
+    more on citm and 14,596 more on twitter, on top of A, G, C2, C and
+    H2. `getU64LE` reads its eight bytes with a checked load each.
+  - **N**, A's path moved to `numberF64`'s top, ahead of the sign byte and
+    the slow path's set-up, on top of D. It costs 4,747 more on twitter
+    and 418,590 more on citm: its loop costs 1,214,303 on citm against
+    A's 824,497.
+  - **N2**, N3's direct sign read with the bounds test moved ahead of it,
+    on top of D. It costs 9,539 more on twitter and 361,021 more on citm.
+    The fixed cost stays 54.0 a number (777,168 on citm), but the loop
+    loses the fact that its index is not negative and goes from 6.5 to 9.3
+    a digit.
+  - **E**, `string`'s emit written out inline, on top of D and N3. It
+    costs 36,198 more on twitter and 53,210 more on citm.
+- **The arithmetic.** Gate Total ÷ (kept − credited saving + walker +
+  kernel), with the gate's Total, kept, walker and kernel as recorded
+  above. Each saving is measured against main; the credited saving takes
+  D's removable share out (D's share was measured with C2, and is taken as
+  the same without it):
+
+  | Combination | Credited, twitter | Credited, citm | Ceiling, twitter | Ceiling, citm |
+  | --- | ---: | ---: | ---: | ---: |
+  | None (the gate) | 0 | 0 | 1.37x | 1.22x |
+  | A | 112,488 | 2,538,377 | 1.390x | 1.391x |
+  | A, G | 299,759 | 2,847,021 | 1.421x | 1.414x |
+  | A, G, C2, C | 539,615 | 2,794,169 | 1.461x | 1.410x |
+  | A, G, C, H2 | 464,794 | 3,256,351 | 1.448x | 1.447x |
+  | A, G, C2, C, H2 | 704,936 | 3,203,498 | 1.490x | 1.443x |
+  | A, G, C2, C, H2, D | 925,679 | 3,662,715 | 1.531x | 1.481x |
+  | **A, G, C2, C, H2, D, N3** | **932,538** | 3,720,284 | **1.533x** | 1.486x |
+  | **A, G, C, H2, D, N3** | 692,396 | **3,773,136** | 1.488x | **1.490x** |
+  | Needed for 1.5x | 758,283 | 3,882,223 | 1.5x | 1.5x |
+
+  The two N3 rows were built and run whole: 11,350,229 and 21,884,572
+  an iteration, against main's 12,323,582 and 25,694,851, and 11,590,371
+  and 21,831,720 without C2. Every build's checksums match main's.
+  twitter, with C2: 12,290,415 ÷ (7,055,297 − 932,538 + 596,680 +
+  1,299,916) = 12,290,415 ÷ 8,019,355 = 1.533x, 174,255 over; without
+  C2, ÷ 8,259,497 = 1.488x, 65,887 short. citm, without C2: 25,632,165 ÷
+  (16,391,978 − 3,773,136 + 1,300,720 + 3,277,635) = 25,632,165 ÷
+  17,197,197 = 1.490x, 109,087 short; with C2, ÷ 17,250,049 = 1.486x,
+  161,939 short. C2 helps twitter and costs citm, so no set between the
+  two does better on citm than the set without it.
+- **Verdict: not reachable.** No measured set reaches 1.5x on both files.
+  twitter's best, A, G, C2, C, H2, D and N3, reaches 1.533x; citm's best,
+  A, G, C, H2, D and N3, stops at 1.490x, 109,087 instructions short,
+  0.43% of its Total. That is more than main's drift since the gate was
+  measured (62,686 instructions, 0.24%), but the verdict is taken on the
+  gate's pinned Total either way. Every cut left out above costs citm or
+  saves only removable work, so no set of the cuts measured here reaches
+  S6c's bar, and there is no set for a build stage to build. The largest
+  kept pool left open on citm is the second walk over a number's digits
+  after A: `number`'s scan at 8.5 instructions a digit, then A's loop at
+  6.5, about 1,904,000 over citm's 126,927 digits. citm's 109,087 gap is
+  about 5.7% of it. Every merge of the two walks tried here (B, O, N and
+  N2) cost more, so it stays a lead, and a future attempt would have to
+  crack it.
+
 **What S6 does not do.** It does not move the default target (§5), add
 `nish:simd` (S3 stays on its own bar), or touch `std/json`'s older reader,
-which S1 measured. Serialize beyond S6a's escape scan is out of scope: its
-remaining gap is per-value work, not a byte scan.
+which S1 measured. Serialize beyond the escape scan is out of scope: its
+remaining gap is per-value work, not a byte scan. On citm the escape scan does
+not reach the serialize condition: its best ceiling is inside the band by 0.01
+points (*JsonWriter's byte writers*, above), and
+the next lead is number writing: 37.4% of serialize's instructions, 21.1% in
+the loop that writes an integer's digits.
 
 **S7: met by #561 (Q9).** It was to come first, as the cheapest way to more
 vector code this note had found: no surface, nothing withdrawn, and, per
@@ -1847,7 +2393,7 @@ first; S6c waits for both, because its bar is a ratio against what they leave.
 
 ## 8. Decisions
 
-The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6. The owner took Q6 on 2026-10-23, as recommended, and Q5's design is written and waits for the owner. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. The reason
+The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6. The owner took Q6 on 2026-10-23 and Q5 on 2026-10-24, each as recommended; Q5's callgrind gate then found the bar out of reach, so S6c is not built. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. The reason
 beside each is the one the recommendation gave, and it is the reason the
 decision stands on: a stage that finds it untrue comes back here before it
 builds anything else.
@@ -1858,8 +2404,8 @@ builds anything else.
 | Q2 | The default target | baseline; a newer level (`x86-64-v2`); `native` | **Baseline.** Wider code is chosen at run time in the runtime, or by an opt-in flag. |
 | Q3 | Integer lanes in (b) | wrap, named so; trap, as scalars do | **Wrap, named so.** A trapping lane costs a mask reduction per operation, and wrapping by name keeps the reading class A. |
 | Q4 | Vector width in (b) | 128 bits only; 128 and 256; scalable | **128 only.** It is the width every target shares, simd128 included. Wider work is the runtime's job (§3.1). |
-| Q5 | S6c's structural index | a bitmask per block kept beside the document; a list of `u32` positions; not built | **Design written, awaiting the owner** (2026-10-23). With S6a and S6b landed, the design in §7 (*S6c, the structural index: the design*) proposes one bitmap per 64-byte block, built in 4 KiB chunks into a fixed buffer the tokenizer keeps across documents. The kernel only gives hints, and every error is still the scalar code's. It is built only if the owner accepts it, and only after callgrind shows that the bar is reachable. |
-| Q6 | Where S6a's functions live | `nish/text`, beside `indexOfAny`; a new `nish/bytes` for `u8[]` scans | **`nish/bytes`** (2026-10-23), as recommended, because `nish/text` is about `string`s and these functions read `u8[]`. It holds `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` ([LANGUAGE.md](LANGUAGE.md#byte-runs-skipblank-skipdigits-skipjsontext-and-copybytes-in-nishbytes)). |
+| Q5 | S6c's structural index | a bitmask per block kept beside the document; a list of `u32` positions; not built | **Accepted as recommended** (2026-10-24): the design in §7 (*S6c, the structural index: the design*), with one bitmap per 64-byte block, built in 4 KiB chunks into a fixed buffer the tokenizer keeps across documents. The kernel only gives hints, and every error is still the scalar code's. It was to be built only if callgrind showed the bar reachable, and it did not: the ceilings are 1.37x on twitter and 1.22x on citm (*S6c, the callgrind gate*), so it is not built. |
+| Q6 | Where S6a's functions live | `nish/text`, beside `indexOfAny`; a new `nish/bytes` for `u8[]` scans | **`nish/bytes`** (2026-10-23), as recommended, because `nish/text` is about `string`s and these functions read `u8[]`. It holds `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` ([LANGUAGE.md](LANGUAGE.md#byte-runs-skipblank-skipdigits-skipjsontext-skipjsonplain-and-copybytes-in-nishbytes)). |
 | Q7 | S2's `--cpu` flag | build it with `x86-64-v3` only; build it with §3.4's levels; defer | **`x86-64-v3` only, for the module and the runtime alike** (2026-10-16). It is the one level that met the bar, and both constant-time checkers already read it cleanly; `native` can never be read, and the SVE levels fail today. Planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
 | Q8 | S3, `nish:simd` | S7, then S3a, then decide; build S3 now; decline it now | **S3a, then decide** (2026-10-16). S7 was already built (#561), so scalar Nish reaches the vector loop for a float kernel with checked indexing; the byte half overlaps S6c's classifier; the surface is large and permanent. S3a is planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
 | Q9 | S7, the offset-index credit | build it ahead of S2 and S3; leave it to WP15 | **Ahead of both** (2026-10-16), and found built: #561 had landed it on 2026-10-10 (§7, S7). |

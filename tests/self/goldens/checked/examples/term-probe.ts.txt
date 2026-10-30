@@ -23,7 +23,7 @@ function backendName(backend: i32): string -> @backendName
   stackSites=1 stackLocals=0
 function round2(x: f64): f64 -> @round2
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.copysign.f64 llvm.floor.f64
+  calls: llvm.copysign.f64 nish_floor
   stackSites=0 stackLocals=0
 function Probe.constructor(this: Probe): void -> @Probe.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -37,7 +37,7 @@ function update(p: Probe, input: TermInput): boolean -> @update$
 function render(p: Probe, frame: Frame): void -> @render$
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: backendName llvm.copysign.f64 llvm.floor.f64 nish.Framebuffer.fill nish.Framebuffer.set nish_array_grow nish_monotonic_nanos nish_panic_div nish_panic_overflow nish_str_concat nish_str_from_f64 nish_str_from_i32 round2
+  calls: backendName llvm.copysign.f64 nish.Framebuffer.fill nish.Framebuffer.set nish_array_grow nish_floor nish_monotonic_nanos nish_panic_div nish_panic_overflow nish_str_concat nish_str_from_f64 nish_str_from_i32 round2
   pointer p: size=32 writesThrough=true captured=false
   pointer frame: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -605,8 +605,7 @@ function termBytesText(bytes: u8[], n: i32): string -> @nish.termBytesText
   local +20:14 k: i32 (let)
   local +24:13 v: i32 (const)
 function Screen.constructor(this: Screen, width: i32, height: i32, palette256: boolean): void -> @nish.Screen.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.Screen.resize
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: height palette256 width
   calls: nish.Screen.resize
   pointer this: size=88 writesThrough=true captured=false passedTo=nish.Screen.resize#0
@@ -1107,7 +1106,7 @@ function FixedStep.advance(this: FixedStep, nowMs: f64): i32 -> @nish.FixedStep.
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
-  calls: llvm.floor.f64
+  calls: nish_floor
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +6:9 steps: i32 (let)
@@ -1812,7 +1811,7 @@ function Terminal.close(this: Terminal): void -> @nish.Terminal.close [exported 
 function Terminal.drainAcks(this: Terminal): void -> @nish.Terminal.drainAcks [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22
-  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64 nish.KeyDecoder.feedEvents nish.KeyDecoder.waiting nish.RateController.unacked nish.termIoIsAck nish.termIoNowMs nish.termIoOnlyAcks nish_panic_overflow nish_panic_slice nish_read_stdin nish_wait_stdin
+  calls: llvm.fptosi.sat.i32.f64 nish.KeyDecoder.feedEvents nish.KeyDecoder.waiting nish.RateController.unacked nish.termIoIsAck nish.termIoNowMs nish.termIoOnlyAcks nish_ceil nish_panic_overflow nish_panic_slice nish_read_stdin nish_wait_stdin
   pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -13:9 owed: i32 (let)
@@ -2013,7 +2012,7 @@ function termIoRefusal(): string -> @nish.termIoRefusal
 function openTerminal(options: TerminalOptions): Result<Terminal, string> -> @nish.openTerminal [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via nish.termIoRefusal
-  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64 nish.TermProbe.constructor nish.TermProbe.done nish.TermProbe.feed nish.TermProbe.finish nish.TermProbe.heldEvents nish.TermProbe.result nish.TermProbe.timedOut nish.Terminal.constructor nish.Terminal.enable nish.enterAltScreen nish.hideCursor nish.leaveAltScreen nish.probeQueries nish.resetStyle nish.showCursor nish.termIoEnv nish.termIoNowMs nish.termIoRefusal nish_alloc_struct nish_panic nish_panic_index nish_panic_slice nish_read_stdin nish_set_raw_mode nish_set_terminal_restore nish_str_concat nish_str_eq nish_terminal_size nish_wait_stdin nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish.TermProbe.constructor nish.TermProbe.done nish.TermProbe.feed nish.TermProbe.finish nish.TermProbe.heldEvents nish.TermProbe.result nish.TermProbe.timedOut nish.Terminal.constructor nish.Terminal.enable nish.enterAltScreen nish.hideCursor nish.leaveAltScreen nish.probeQueries nish.resetStyle nish.showCursor nish.termIoEnv nish.termIoNowMs nish.termIoRefusal nish_alloc_struct nish_ceil nish_panic nish_panic_index nish_panic_slice nish_read_stdin nish_set_raw_mode nish_set_terminal_restore nish_str_concat nish_str_eq nish_terminal_size nish_wait_stdin nish_write
   pointer options: size=56 writesThrough=true captured=true passedTo=nish.Terminal.constructor#1
   stackSites=1 stackLocals=1
   local +0:9 refused: string (const)
@@ -2089,7 +2088,7 @@ function termIoDue(step: FixedStep): f64 -> @nish.termIoDue
   stackSites=0 stackLocals=0
 function termIoWait(term: Terminal, step: FixedStep, nowMs: f64): i32 -> @nish.termIoWait
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64 nish.KeyDecoder.waiting nish.termIoDue
+  calls: llvm.fptosi.sat.i32.f64 nish.KeyDecoder.waiting nish.termIoDue nish_ceil
   pointer term: size=208 writesThrough=false captured=false
   pointer step: size=32 writesThrough=false captured=false passedTo=nish.termIoDue#0
   stackSites=0 stackLocals=0
@@ -2298,8 +2297,7 @@ function TermStats.constructor(this: TermStats): void -> @nish.TermStats.constru
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function RateController.constructor(this: RateController, options: RateOptions): void -> @nish.RateController.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.RateController.publish
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.FixedStep.constructor nish.RateController.publish nish.RateDecision.constructor nish.TermStats.constructor nish.rateFinite nish_alloc_struct nish_array_grow nish_panic_index
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.publish#0
   pointer options: size=40 writesThrough=false captured=false
@@ -2549,7 +2547,7 @@ function RateController.stats(this: RateController): TermStats -> @nish.RateCont
   stackSites=0 stackLocals=0
 function rateWhole(x: f64): i32 -> @nish.rateWhole
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.copysign.f64 llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  calls: llvm.copysign.f64 llvm.fptosi.sat.i32.f64 nish_floor
   stackSites=0 stackLocals=0
 function rateBackendName(cap: i32): string -> @nish.rateBackendName
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2719,7 +2717,7 @@ function pixelsCeilDiv(a: i32, b: i32): i32 -> @nish.pixelsCeilDiv
 function fitFramebuffer(fbW: i32, fbH: i32, cols: i32, rows: i32, cellW: i32, cellH: i32, backend: i32): PixelRect -> @nish.fitFramebuffer [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
   escaping: cellH cellW
-  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64 nish.PixelRect.constructor nish.pixelsCeilDiv nish_alloc_struct nish_panic_overflow
+  calls: llvm.fptosi.sat.i32.f64 nish.PixelRect.constructor nish.pixelsCeilDiv nish_alloc_struct nish_floor nish_panic_overflow
   stackSites=0 stackLocals=0
   callee +0:12 new PixelRect -> @nish.PixelRect.constructor
   local +2:9 inPixels: boolean (const)
@@ -2797,7 +2795,7 @@ function pixelsSampleMap(n: i32, source: i32): i32[] -> @nish.pixelsSampleMap
 function pixelsSampleMapInto(map: i32[], n: i32, source: i32): void -> @nish.pixelsSampleMapInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64 nish_panic_overflow
+  calls: llvm.fptosi.sat.i32.f64 nish_floor nish_panic_overflow
   pointer map: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:12 i: i32 (let)

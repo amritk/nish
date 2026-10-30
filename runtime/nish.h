@@ -162,12 +162,15 @@ int64_t nish_str_index_of_any(const nish_str *s, const nish_str *set, int64_t fr
    newline, carriage return) and `skip_digits` over 0-9. `skip_json_text` steps
    over printable ASCII other than `"` and `\`, and over every well-formed
    UTF-8 sequence (RFC 3629) that ends at or before `to`; a malformed or cut-off
-   sequence stops the run at its lead byte. They live in runtime/runtime-bytes.c
-   and choose their path as `nish_str_index_of_any` does. Variable-time: never
-   call them on a secret. */
+   sequence stops the run at its lead byte. `skip_json_plain` steps over every
+   byte from 0x20 up other than `"` and `\` -- what a JSON writer copies without
+   an escape -- with no UTF-8 check. They live in runtime/runtime-bytes.c and
+   choose their path as `nish_str_index_of_any` does. Variable-time: never call
+   them on a secret. */
 int64_t nish_bytes_skip_blank(const uint8_t *p, int64_t from, int64_t to);
 int64_t nish_bytes_skip_digits(const uint8_t *p, int64_t from, int64_t to);
 int64_t nish_bytes_skip_json_text(const uint8_t *p, int64_t from, int64_t to);
+int64_t nish_bytes_skip_json_plain(const uint8_t *p, int64_t from, int64_t to);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void nish_print(const nish_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
@@ -279,6 +282,20 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
    Variable-time: never call it on a secret. */
 int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t depth, int64_t off, int64_t width,
                         int64_t from);
+/* `Math.floor`, `Math.ceil` and `Math.trunc`, and the floor `Math.round`
+   takes (#943): each answers as C's `floor`, `ceil` and `trunc` do, -0, the
+   infinities and NaN included. A module for x86-64 calls them and registers a
+   constructor in `@llvm.global_ctors` that passes `nish_round_init` libm's
+   `floor`, `ceil` and `trunc`; it asks the CPU for SSE4.1 once before `main`
+   and keeps them on a machine without it, or under `NISH_SIMD=scalar`. Each
+   is otherwise SSE4.1's `roundsd`, so the constructor must run first. The
+   runtime references no libm symbol: the module that rounds does. They live
+   in runtime/runtime-simd.c; runtime-wasm.c has the wasm32 ones for host IR
+   that `scripts/build.sh --profile wasm` links. */
+void nish_round_init(double (*floor_fn)(double), double (*ceil_fn)(double), double (*trunc_fn)(double));
+double nish_floor(double x);
+double nish_ceil(double x);
+double nish_trunc(double x);
 /* No array grows past 2^31 - 1 elements and no string past 2^31 - 1 bytes:
  * `nish_array_grow`, `nish_alloc_array` and `nish_str_concat` fail as an
  * allocation does (`nish: out of memory`, exit 1; a trap on wasm) rather than
@@ -393,6 +410,36 @@ nish_array *nish_readdir(const nish_str *path);
  * and the bytes live in the arena, so copy what you keep before the next reset
  * or release. */
 nish_array *nish_read_file_bytes(const nish_str *path);
+/* `renameSync(from, to)`, `unlinkSync(path)` and `writeFileBytesSync(path,
+ * bytes)`: rename(2), unlink(2), and every element of a `u8[]` written to a
+ * file opened as `nish_write_file` opens it (`O_TRUNC`, 0644, a link refused).
+ * None exits: each answers 0 (the write, the length written) or a negative
+ * errno — -EXDEV for a rename across file systems, which moves nothing, and
+ * -EISDIR or -EPERM for a directory handed to `nish_unlink`, which never calls
+ * rmdir. A path holding a NUL answers -EINVAL, not -ENOENT, so a program can
+ * tell a malformed path from a missing file. The numbers are the platform's
+ * errno values, untranslated: -ELOOP is -40 on Linux and -62 on Darwin. */
+int32_t nish_rename(const nish_str *from, const nish_str *to);
+int32_t nish_unlink(const nish_str *path);
+int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes);
+/* `writeFileSyncMode(path, data, mode)`, `createFileExclusiveSync(path, data,
+ * mode)` and `mkdirSyncMode(path, mode)`: a file written, or created only if
+ * nothing is at the path (`O_EXCL`), then `fchmod`ed to exactly `mode` before a
+ * byte is written; a directory made with `mode & ~umask`. A link at a file's
+ * path is refused. The file writers answer the byte count and `nish_mkdir_mode`
+ * 0, or a negative platform errno: -EEXIST for an exclusive create or a mkdir
+ * that finds the path taken (a directory's mode is then left alone), -EINVAL
+ * for a mode outside 0..0777 (the setuid, setgid and sticky bits included) or
+ * a path holding a NUL, -ENOSYS under WASI. A failed exclusive create leaves
+ * no file behind. */
+int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t mode);
+int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, int32_t mode);
+int32_t nish_mkdir_mode(const nish_str *path, int32_t mode);
+/* `writeBytes(bytes, off, len)` (nish:io), in runtime-os.c: the bytes
+ * `[off, off + len)` of a `u8[]` on stdout, a short write finished and `EINTR`
+ * retried. The caller has range-checked `off` and `len`. Answers `len`, or the
+ * negative errno of the write that failed; never exits. */
+int32_t nish_write_bytes(const nish_array *bytes, int64_t off, int64_t len);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the
@@ -419,6 +466,17 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
  * own error otherwise, and -ENOSYS under WASI. The child is reaped by
  * `nish_wait_pid`. */
 int32_t nish_spawn_child(const nish_array *argv);
+/* `spawnPiped(argv, stdin, stdout, stderr)`: start element 0 of `argv` as
+ * `nish_spawn` does, with the bytes of `stdin` (a `u8[]`) on its standard input
+ * and its standard output and error appended to `stdout` and `stderr`, wait for
+ * it, and answer `nish_spawn`'s status. -1 is `nish_spawn`'s -1, a pipe or
+ * `poll` that fails included, and always under WASI. -2 is a stream that passed
+ * 16 MiB: the child is killed with SIGKILL and reaped, and that array holds the
+ * stream's first 16 MiB. The two output arrays grow as `push` grows them, so
+ * the compiler treats both as pushed. `stdin` is read in place and never
+ * copied; SIGPIPE is blocked on the calling thread for the call, a SIGPIPE the
+ * call raised is consumed, and the thread's mask is restored after it. */
+int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err);
 /* `kill(pid, sig)`: send `sig` to `pid` and answer 0, or a negative errno. Only
  * 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are sent; any other signal, and
  * a pid of 0 or below, is -EINVAL. -ESRCH when no process has the pid, -EPERM
@@ -435,6 +493,15 @@ nish_array *nish_wait_pid(int32_t pid, int32_t flags);
 /* `totalMemory()`: bytes of physical memory (Linux: `_SC_PHYS_PAGES` times the
  * page size; Darwin: `hw.memsize`), or -1 where the host does not say. */
 int64_t nish_total_memory(void);
+/* `setNice(n)`: this process's nice value set to `n` (`setpriority`), 0 or a
+ * negative errno. The kernel clamps `n` to -20..19; lowering it below the
+ * current value without the privilege is -EACCES (or -EPERM). -ENOSYS under
+ * WASI. */
+int32_t nish_set_nice(int32_t n);
+/* `setIdlePriority()`: this process moved to `SCHED_IDLE` (Linux), 0 or a
+ * negative errno; -95 (Linux's EOPNOTSUPP) elsewhere, -ENOSYS under WASI. An
+ * unprivileged process cannot leave the policy again. */
+int32_t nish_set_idle_priority(void);
 
 /* ---- The environment (WP19 R1) ------------------------------------------
  * `getenv(name)`: the value of environment variable `name`, copied into the
@@ -482,6 +549,10 @@ const nish_str *nish_arch(void);
  * purpose: `readnone` would let LLVM fold the two reads around a measured
  * region into one and measure zero. */
 int64_t nish_monotonic_nanos(void);
+/* `wallClockNanos()`: `CLOCK_REALTIME` in nanoseconds since the epoch, the
+ * clock `Date.now` reads at a millisecond's grain. It steps when the system
+ * time is set, so it dates an event and measures nothing. */
+int64_t nish_wall_clock_nanos(void);
 
 /* ---- The host (WP34 N3), runtime/runtime-host.c --------------------------
  * `Date.now()`: the wall clock, `CLOCK_REALTIME`, in whole milliseconds since
@@ -539,6 +610,10 @@ bool nish_is_executable(const nish_str *path);
  * len)` of `buf`, which the compiled call has range-checked; a write to a
  * gone peer is -32, never SIGPIPE. `nish_net_shutdown(fd, how)`: 0 read, 1
  * write, 2 both. `nish_net_close(fd)`.
+ * `nish_net_set_option(fd, option, value)`: one socket option from a
+ * whitelist, by the runtime's own id (1 `TCP_NODELAY`, 2 `TCP_QUICKACK`, 3
+ * `SO_KEEPALIVE`, 4 `SO_SNDBUF`, 5 `SO_RCVBUF`); any other id is -22, and
+ * `TCP_QUICKACK` off Linux is -95.
  * `nish_tcp_connect(addr)`: a new socket connecting to `addr`, answered at
  * once; its `EINPROGRESS` is not a failure, and any other closes it.
  * `nish_connect_result(fd)`: `SO_ERROR` once the socket is writable, 0 when
@@ -573,6 +648,7 @@ int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_shutdown(int32_t fd, int32_t how);
 int32_t nish_net_close(int32_t fd);
+int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value);
 int32_t nish_tcp_connect(const nish_array *addr);
 int32_t nish_connect_result(int32_t fd);
 int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags);

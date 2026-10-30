@@ -1,0 +1,56 @@
+{
+  "version": "0.22.1",
+  "date": "2026-10-26",
+  "tag": "v0.22.1",
+  "range": {
+    "from": "v0.22.0",
+    "to": "217c0e89"
+  },
+  "entries": [
+    {
+      "id": "ask-no-attestation-of-0-21-0-and",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "ask no attestation of 0.21.0, and drop unpublished pins from the lockfile",
+      "body": "install.sh, and so scripts/fetch-seed.sh, verified a build provenance attestation for every release after 0.20.0. The attestation step (#898) landed after v0.21.0 was tagged, so 0.21.0 carries none, and every `binaries` row of the v0.22.0 release refused its 0.21.0 seed. Nothing was published, so the release's `lockfile` job never ran, and main's lockfile kept its platform packages at 0.21.0 against package.json's 0.22.0, which turned ci.yml's `npm ls --package-lock-only` red.\n\nThe threshold is now \"after 0.21.0\". The lockfile is regenerated with `npm install --package-lock-only`, which omits the four platform packages while 0.22.0 is not on the registry; the next release's `lockfile` job writes them back.",
+      "metrics": [],
+      "refs": [
+        "docs/security/supply-chain.md (SC-16)"
+      ],
+      "tests": [
+        "tests/fetch-seed.js \"install.sh asks for no attestation from 0.21.0",
+        "which predates them\""
+      ],
+      "commits": [
+        "ee10659"
+      ],
+      "pr": 964,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-25"
+    },
+    {
+      "id": "coalesce-the-conduit-server-s-same-shape-reads",
+      "type": "perf",
+      "scope": "bench",
+      "breaking": false,
+      "title": "coalesce the Conduit server's same-shape reads into one array-parameter statement",
+      "body": "Each Conduit worker now answers the waiting reads of one shape with a single\nPostgres execution. Article and comment reads run as one statement over\nunnest($1::text[], $2::int8[]) WITH ORDINALITY, with each request's viewer\nbound per element, and rows routed back by ordinal. A missing slug answers\n404 for its own request only. The parameterless tags read answers every\nrequest that was waiting before it was sent, and no result outlives that\nexecution. Writes are unchanged and still commit before their response.\n\nThe read pool gets its own maxInFlight (DB_READ_IN_FLIGHT=4) so PgPool opens\nmore than one read connection while coalescing keeps the queue short. The\nnotebook records O9 to O11, kept and not, and the projection. A concurrency\ncheck fails if any concurrent read differs from its serial answer or if\nnothing was coalesced.\n\nCI: every Ubuntu LLVM install moves off the Azure apt mirror, and the\ninstalls that lacked one now share a cached, stall-cutting composite action\n(.github/actions/apt-install).",
+      "metrics": [
+        "Postgres -20.7 µs/request (-7.3%) paired against main at 4,000 users, think-scale 0.1, three pairs each outside the spread; p99 mean 201 against 173 ms"
+      ],
+      "refs": [
+        "bench/multicore/conduit/README.md"
+      ],
+      "tests": [
+        "conformance 197/197; concurrency 7720/7720 reads match serial"
+      ],
+      "commits": [
+        "217c0e8"
+      ],
+      "pr": 963,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-25"
+    }
+  ]
+}

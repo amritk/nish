@@ -25,9 +25,7 @@
  * byte for byte, module set included (WP14, repointed by WP19 G2.2), reusing
  * the comparison of `tests/nish-cmp.js` so that the generated corpus is held
  * to exactly what the checked-in one is. The pair is the seed release
- * (`NISH_BOOTSTRAP`, or `--reference`) against HEAD, linked once per run. Both
- * compile with `--wrapping` while the seed predates checked signed arithmetic,
- * which changed the IR of every `+ - *` by design (see `stage1Run`).
+ * (`NISH_BOOTSTRAP`, or `--reference`) against HEAD, linked once per run.
  *
  * **An intended change is declared, not waved through.** HEAD is meant to
  * differ from the seed when a release changes what the emitter writes, and
@@ -51,8 +49,19 @@
  * hold, so that comparison is gone rather than frozen; `--stage1` is kept as a
  * spelling of the one mode left, because `tests/run.js` passes it.
  *
+ * **`--emit-ts`** holds the same programs to the other round trip (WP33 R4):
+ * each is built natively and written out with `--emit-ts` by one compiler,
+ * `--candidate` or `build/nish`, and both run, through `compare` of
+ * `tests/differential/emit-ts.js`, so a program is held to exactly what the
+ * corpus is there. A generated program reaches no host API, no ranged integer
+ * and no libm call, so nothing it does is a row the corpus may list: every
+ * verdict but an agreement fails, and the saved program is
+ * build/test/differential/fuzz-emit-ts-fail-<S + i>.ts.
+ *
  * Usage: node tests/differential/fuzz.js [--stage1] [--count N] [--seed S] [--depth D]
  *                                        [--reference <compiler>] [--candidate <compiler>]
+ *        node tests/differential/fuzz.js --emit-ts [--count N] [--seed S] [--depth D]
+ *                                        [--candidate <compiler>] [--jobs N]
  *        node tests/differential/fuzz.js --print --seed S
  *
  * Program i of a run uses seed S + i; a disagreeing program is saved as
@@ -64,6 +73,8 @@ import os from "node:os"
 import path from "node:path"
 import * as lib from "./lib.js"
 import * as cmp from "../nish-cmp.js"
+import { compare as emitTsCompare } from "./emit-ts.js"
+import { jobsFrom, pool } from "../pool.js"
 import ts from "typescript"
 import { fileURLToPath } from "node:url"
 import { root } from "../self/corpus.js"
@@ -535,11 +546,16 @@ const DECLARED = []
  * group change it makes under a function `DECLARED` names, or it counts
  * toward none of them (`groupTransitions`).
  *
- * Empty for the same reason as `DECLARED`: 0.17.0 shipped the dropped
- * division and `pop` checks its last entry declared, with
+ * 0.17.0 shipped the dropped division and `pop` checks an earlier entry
+ * declared, with
  * `explains: (reference, candidate) => onlyDropsChecks(reference, candidate)`.
  * `onlyDropsChecks` stays, held to fabricated pairs on every `npm test`, for
  * the next release that drops a check.
+ *
+ * 0.22.1 shipped the binary hardening, which an entry here stated the way
+ * `tests/nish-cmp.js` states it: `explains: (reference, candidate) =>
+ * cmp.withoutHardening(candidate) === reference`. It is empty while the seed
+ * carries every such change.
  */
 const DECLARED_CHECKS = []
 
@@ -946,14 +962,7 @@ const stage1Run = ({
     const file = path.join(dir, `fuzz-${s}.ts`)
     fs.writeFileSync(file, generateProgram(s, { depth }))
     const t0 = Date.now()
-    // `--wrapping` on both sides: the seed flags every signed `+ - *` `nsw`
-    // unproven and HEAD checks it (`docs/LANGUAGE.md`, "Semantics decisions"),
-    // so every generated program differs in its arithmetic by design. Under
-    // the flag both write the plain instruction, and the comparison keeps
-    // saying something about everything else the program exercises. The
-    // checked lowering itself is pinned by the `ovf_*` goldens. Drop the flag
-    // once the seed is a release that checks.
-    const result = cmp.compare(pair, work, file, { sidecars: false, lines: 3, extraFlags: ["--wrapping"] })
+    const result = cmp.compare(pair, work, file, { sidecars: false, lines: 3 })
     // A generated program carries no `.args` and stays inside the language, so
     // none of the outcomes below can happen for a benign reason: every verdict
     // other than an agreement is a failure worth saving.
@@ -998,7 +1007,43 @@ const stage1Run = ({
   return { seed, count, pair, agreed, declared, stale, unnamed, pending, files, lines, disagreements }
 }
 
-export { generateProgram, selfCheckDeclarations, stage1Run }
+/**
+ * The `--emit-ts` mode: generate `count` programs and require each to print
+ * and exit alike natively and under Node from what `--emit-ts` writes. Answers
+ * `{ seed, count, agreed, disagreements }`, a disagreement `{ seed, verdict,
+ * detail, file }` with `file` the saved reproducer.
+ */
+const emitTsRun = async ({ count = 20, seed = 1, depth = 3, compiler, jobs = 1, log = () => undefined }) => {
+  const dir = path.join(lib.buildDir, "fuzz")
+  fs.mkdirSync(dir, { recursive: true })
+  const seeds = Array.from({ length: count }, (_, i) => (seed + i) >>> 0)
+  const entries = await pool(seeds, jobs, async (s) => {
+    const file = path.join(dir, `fuzz-${s}.ts`)
+    fs.writeFileSync(file, generateProgram(s, { depth }))
+    const t0 = Date.now()
+    const prog = { name: `fuzz/${s}`, entry: file, args: [], argv: [], env: process.env }
+    const result = await emitTsCompare(prog, compiler, path.join(path.dirname(lib.buildDir), "emit-ts-fuzz"))
+    const entry = {
+      seed: s,
+      name: prog.name,
+      verdict: result.verdict,
+      detail: result.reason,
+      ms: Date.now() - t0,
+      file,
+    }
+    if (entry.verdict !== "agree") {
+      const failFile = path.join(lib.buildDir, `fuzz-emit-ts-fail-${s}.ts`)
+      fs.copyFileSync(file, failFile)
+      entry.file = failFile
+    }
+    log(entry)
+    return entry
+  })
+  const disagreements = entries.filter((e) => e.verdict !== "agree")
+  return { seed, count, agreed: entries.length - disagreements.length, disagreements }
+}
+
+export { emitTsRun, generateProgram, selfCheckDeclarations, stage1Run }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2)
@@ -1008,6 +1053,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let printOnly = false
   let reference = null
   let candidate = null
+  let emitTs = false
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--count") {
       count = Number(argv[++i])
@@ -1023,6 +1069,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       reference = argv[++i]
     } else if (argv[i] === "--candidate") {
       candidate = argv[++i]
+    } else if (argv[i] === "--emit-ts") {
+      emitTs = true
+    } else if (argv[i] === "--jobs") {
+      i++
     } else {
       console.error(`unknown option: ${argv[i]}`)
       process.exit(2)
@@ -1035,6 +1085,34 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!lib.hasClang()) {
     console.error("clang not installed")
     process.exit(2)
+  }
+  if (emitTs) {
+    const compiler = path.resolve(candidate ?? path.join(root, "build", "nish"))
+    console.log(`fuzz: emit-ts seed=${seed} count=${count} depth=${depth} compiler=${compiler}`)
+    const t0 = Date.now()
+    const res = await emitTsRun({
+      count,
+      seed,
+      depth,
+      compiler,
+      jobs: jobsFrom(argv),
+      log: (e) =>
+        console.log(
+          `${e.verdict === "agree" ? "ok  " : e.verdict.toUpperCase()}  ${e.name}  ${e.ms} ms${e.detail ? `  ${e.detail}` : ""}`
+        ),
+    })
+    console.log(
+      `\nfuzz: emit-ts seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${((Date.now() - t0) / 1000).toFixed(1)} s)`
+    )
+    const compilerArgs = candidate === null ? "" : ` --candidate ${candidate}`
+    for (const d of res.disagreements) {
+      console.log(`  ${d.verdict}: seed ${d.seed} saved to ${d.file}`)
+      console.log(`      ${d.detail}`)
+      console.log(
+        `      reproduce: node tests/differential/fuzz.js --emit-ts --seed ${d.seed} --count 1${compilerArgs}`
+      )
+    }
+    process.exit(res.disagreements.length === 0 ? 0 : 1)
   }
   const seedName = reference ?? cmp.seedFromEnvironment() ?? "(none)"
   console.log(
@@ -1080,8 +1158,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // A stale entry fails even a one-program reproduction that does not reach
   // it; the line says which, so it does not read as the program's own fault.
   for (const d of res.stale) {
+    // A `DECLARED_CHECKS` entry has no function or groups, only its changelog words.
+    const where = d.function === undefined ? `"${d.changelog}"` : `@${d.function} ${d.seed} -> ${d.head}`
     console.log(
-      `  STALE: no program differs at @${d.function} ${d.seed} -> ${d.head}; the seed carries the change ` +
+      `  STALE: no program differs at ${where}; the seed carries the change ` +
         "or the generator no longer reaches it, so the declaration goes"
     )
   }

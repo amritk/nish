@@ -197,8 +197,7 @@ function Diagnostic.message(this: Diagnostic): string -> @Diagnostic.message [ex
   callee +0:15 Diagnostic.summary -> @Diagnostic.summary
   callee +0:34 Diagnostic.excerpt -> @Diagnostic.excerpt
 function Diagnostic.json(this: Diagnostic): string -> @Diagnostic.json [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via jsonQuote
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Diagnostic.fixJson SourceFile.columnOf SourceFile.lineOf codeFor jsonQuote nish_str_concat nish_str_eq nish_str_from_i32
   pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.fixJson#0
   stackSites=0 stackLocals=0
@@ -215,8 +214,7 @@ function Diagnostic.json(this: Diagnostic): string -> @Diagnostic.json [exported
   callee +6:196 jsonQuote -> @jsonQuote
   callee +6:217 Diagnostic.fixJson -> @Diagnostic.fixJson
 function Diagnostic.fixJson(this: Diagnostic): string -> @Diagnostic.fixJson [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via jsonQuote
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText jsonQuote nish_str_concat nish_str_from_i32
   pointer this: size=48 writesThrough=false captured=false
   stackSites=1 stackLocals=1

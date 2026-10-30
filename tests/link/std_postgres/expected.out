@@ -43,6 +43,9 @@ PASS  ParameterDescription short of its count
 PASS  a column longer than its row
 PASS  a row with bytes after its columns
 PASS  a column length of -2
+PASS  a column length of -2^31, past the row either way
+PASS  a column length whose high byte is set
+PASS  a message length with its top bit set
 PASS  a RowDescription field cut short
 PASS  a row over maxColumns
 PASS  MD5 is refused
@@ -144,6 +147,9 @@ PASS  bool
 PASS  columnText
 PASS  colLength
 PASS  colStart points into the input buffer
+PASS  a column of 258 bytes, its length in two bytes
+PASS  its length
+PASS  the next column follows it
 PASS  a row with a NULL
 PASS  isNull
 PASS  columnText of NULL
@@ -245,6 +251,13 @@ PASS  a year past 9999
 PASS  seven fraction digits
 PASS  a dot without digits
 PASS  a T where the space goes
+PASS  year 0001
+PASS  year 1000
+PASS  a letter in a digit's place
+PASS  a colon in a digit's place
+PASS  a digit in a separator's place
+PASS  a separator moved one place
+PASS  the space and a dash swapped
 PASS  no room in out
 PASS  an empty array
 PASS  plain, NULL, quoted, escaped
@@ -260,4 +273,146 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 262 passed, 0 failed, 0 skipped
+PASS  paramIntArray: the empty array
+PASS  is {}
+PASS  every value in decimal, the most negative too
+PASS  a window of the array
+PASS  an empty window at its end
+PASS  an int8[] that would pass maxOutput is refused
+PASS  its exact size is asked for: one value less fits
+PASS  and the refused one left nothing behind
+PASS  without a bind, refused
+PASS  arrayStart
+PASS  no elements: the empty array
+PASS  a NULL element
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 5 bytes
+PASS  an element of 4 bytes
+PASS  an element of 0 bytes
+PASS  an element of 2 bytes
+PASS  NULL unquoted, every text element quoted, " and \ escaped, UTF-8 as it is
+PASS  no sync while an array is open
+PASS  no prepare
+PASS  no closeStatement
+PASS  no bindStart
+PASS  bindEnd after arrayEnd
+PASS  an array between two parameters is one parameter, its window bound
+PASS  an element whose escapes pass maxOutput is refused
+PASS  its escapes are counted: one less fits
+PASS  and the refused one left nothing behind
+PASS  an element that would pass maxOutput is refused
+PASS  one byte less fits
+PASS  a NULL after it is refused
+PASS  as is another element
+PASS  the array still ends
+PASS  and Sync fits
+PASS  with the element that fit
+PASS  without a bind, arrayStart is refused
+PASS  an open array with sent bytes before it
+PASS  an element that fits under maxOutput but not after the end
+PASS  moves the unsent bytes to the start
+PASS  instead of growing the buffer
+PASS  the unsent bytes as they were
+PASS  the array's length patched where it moved to
+PASS  terminate drops an open array with its bind
+PASS  and leaves none open
+PASS  arrayInt
+PASS  arrayInt writes decimal, unquoted, the most negative too
+PASS  an int whose digits would pass maxOutput is refused
+PASS  one digit less fits
+PASS  and the refused one left nothing behind
+PASS  bindCancel with no bind open is refused
+PASS  a bind opens a group, beside the prepare's unanswered one
+PASS  bindCancel
+PASS  drops the bind and its open array, unsent
+PASS  and closes the group it opened
+PASS  so sync has no group to end
+PASS  a parameter after it is refused: no bind is open
+PASS  a bind in a group already open leaves it open
+PASS  so sync still ends it
+PASS  with only what was queued before the bind
+PASS  bindStartBinary
+PASS  bindEnd
+PASS  one result format code, 1: every column binary
+PASS  the next bindStart is text again: no format codes
+PASS  nor after a binary bind cancelled
+PASS  a text bind takes a parameter up to 17 short of maxOutput
+PASS  its bindEnd and Sync fill maxOutput exactly
+PASS  a binary bind refuses that one
+PASS  and takes one two bytes shorter
+PASS  bindEnd is never refused for room
+PASS  nor is Sync
+PASS  which fill maxOutput exactly, two bytes more
+PASS  bindStartBinary keeps its two bytes too
+PASS  where bindStart fits
+PASS  a binary row
+PASS  int2
+PASS  int4
+PASS  int8
+PASS  bool
+PASS  text reads as it does in text format
+PASS  a timestamptz's microseconds
+PASS  and as a time
+PASS  nothing failed
+PASS  an empty column is not NULL
+PASS  an int of no bytes fails
+PASS  a row with a NULL
+PASS  float8
+PASS  a text bool is not a binary one
+PASS  binary failures leave text.failed alone
+PASS  int2: 0
+PASS  int2: -1
+PASS  int2: the largest
+PASS  int2: the most negative
+PASS  int4: -1
+PASS  int4: the largest
+PASS  int4: the most negative
+PASS  int8: -1
+PASS  int8: the largest
+PASS  int8: the most negative
+PASS  int8: past 2^53
+PASS  one byte
+PASS  three bytes
+PASS  no bytes
+PASS  a window past the buffer
+PASS  a window before it
+PASS  NULL's length
+PASS  bool: 1
+PASS  bool: 0
+PASS  bool: 2
+PASS  bool: two bytes
+PASS  float8
+PASS  float8: four bytes
+PASS  float8: a window past the buffer
+PASS  the epoch
+PASS  a time
+PASS  microseconds are cut, not rounded
+PASS  one microsecond before 2000
+PASS  one millisecond before 2000
+PASS  one millisecond and one microsecond before
+PASS  1970
+PASS  2000-02-29, a leap day of a 400th year
+PASS  the last microsecond of 2024-02-29
+PASS  the next
+PASS  2100 is no leap year
+PASS  its 28 February is followed by 1 March
+PASS  nor is 1900
+PASS  1600-02-29, before 2000, cut toward the past
+PASS  the first time of year 0001
+PASS  one microsecond before it
+PASS  the last time of year 9999
+PASS  one microsecond after it
+PASS  infinity
+PASS  -infinity
+PASS  no room in out
+PASS  a negative at
+PASS  leaves out as it was
+PASS  timestamp: a column
+PASS  timestamp: infinity
+PASS  timestamp: four bytes
+PASS  the text decoder writes the same
+postgres: 417 passed, 0 failed, 0 skipped

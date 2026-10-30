@@ -309,9 +309,7 @@ const seedHashKey = (emitter: Emitter): void => {
   const panic = emitter.useRuntime("nish_panic")
   const message = emitter.stringConstant("Map: the system's entropy source failed")
   const word0 = hashKeyWord(0)
-  emitter.declareGlobal(
-    "@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.hash.seed, i8* null }]"
-  )
+  emitter.addConstructor("@nish.hash.seed")
   emitter.module.addRawDefinition(`define internal void @nish.hash.seed() nounwind {
 entry:
   %k = load i64, i64* ${word0}, align 8

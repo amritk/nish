@@ -46,6 +46,7 @@ language says it is not.
 | Id | Severity | Where (base) | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | SECRET-1 | Medium | `src/secret.ts:1078` (`SecretFlow.move`), `src/secret.ts:1221` (`checkSecretFlow`) | `secret(x)` marked the one local `x` moved, and NL2445 refused a later read of `x`, but nothing asked whether the value had another name. `const alias = raw; const key = secret(raw); wipe(key); alias[0]` compiled and read 0, and before the `wipe` the same name read the key with none of the `Secret`'s rules. Every road listed under Method compiled: `let`, a field (`h.buf = raw`, `{ buf: raw }`), an element (`[raw]`, `xs[0] = raw`, `xs.push(raw)`), a callee that stores or returns its parameter, `secret(id(raw))` with `raw` read after, a ternary (`c ? raw : other` as a value, and as the argument of `secret`, which moved neither arm), `maybe ?? raw`, `Ok(raw)` and `Err(raw)` (the `Result` holds `raw` as its payload or its error), a constructor that keeps its argument or hands `this` out, a method that keeps `this` or answers a field, `rows.pop()`, a `let` given another local's array, a `for...of` binding, a later declarator (`const n = 1, alias = raw`), an assignment to the local used as a value (`alias = raw = [1, 2, 3]`, `const alias = (raw = [...])`, `xs.push(raw = [...])`, `h.k = (raw = [...])`, `keep(h, raw = [...])`, found in review round 3), and, once #609 let an arrow given to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` read the function's `const` locals, a capture of `raw` by such an arrow, and, once #644 let a task spawned as an arrow capture them too, a capture by a task, and a task's argument, which the scope keeps until the task has run (`s.spawn(first, raw, out, 0)`, `s.spawn(sum, raw)`). The ternary also let a parameter past NL2447: `secret(c ? p : [1])`. Medium: no input reaches the rule, so not High, but a program it accepts reads its key outside `expose` without a word, which is more than hardening | **Fixed.** `secret(v)` takes only a value nothing else holds (docs/LANGUAGE.md, "Secrets"; NL2512). `checkSoleReferences` judges each argument over the body it is in (`FreshJudge`): a literal, `null` and a `new` are fresh, a ternary when both arms are, a call when its callee's answer is, and a local when it is no parameter, every value it is given is fresh and not another local, it is no `for...of` binding, and `ReferenceScan` finds no other occurrence that leaves a second name (one inside an arrow, resolved through `sourceLocal` to the local it captures, always does). What only the whole program knows is left as a `SecretNeed`, which `Compilation.checkSecrets` answers with `FreshResults`: a callee's answer, judged over its own body by the same rule as a greatest fixpoint over the calls between them, and whether a callee keeps a parameter, which `PointerParamFacts.captured` says. An assignment to the local is harmless only where its own value is dropped, by a statement or a `for` header (`ReferenceScan.harmlessAt`); anywhere else its value is judged as the local is. `ReferenceScan.handsOn` follows a value through every wrapper that answers it: parentheses, a ternary arm, `??`, `Ok` and `Err`, and `orReturn`, `expect` and `unwrapOr`, so `const r = Ok(raw)` leaves a second name while a callee's `return Ok(out)` is its result. A `Result` method that answers the payload is judged by what the `Result` carries, so `make().orReturn()` is fresh when `make` returns `Ok` of a fresh array. At a `secret(...)` a local carried there (`r.unwrapOr(d)`) is refused, because the move does not reach it. `SecretFlow.move` moves the local in either arm of a ternary, so neither is read again, and refuses a parameter there. The `secret` golden positives and every `std/` caller compile unchanged (see Tests) |
+| SECRET-6 | Low | `runtime/core/result.mjs` (`wipe`, `secureZero`), the `--emit-ts` output | A program written out with `--emit-ts` and run under Node keeps the `nish:secret` API, but its `wipe` is a loop of plain stores into a JavaScript array. Nothing stops the engine from having copied the bytes first (a collector that moved the array, a string or a typed array the value passed through, a JIT spill), and JavaScript has no way to reach those copies, so erasure is not guaranteed: the bytes the program still holds read 0, and nothing more is promised. The native build's volatile `llvm.memset` that `opt -O2` keeps is the guarantee, and it has no TypeScript equivalent | **Open, recorded.** No fix exists inside a JavaScript engine. A key that must be erased is held by the native build; the emitted TypeScript is for reading, diffing and running a program, not for holding a secret (`docs/guide/using-nish/to-typescript.md`) |
 
 ## Properties verified
 
@@ -290,7 +291,7 @@ on a worker. Anchors are at `main` `5d80b08`.
 
 | File | What |
 | --- | --- |
-| `src/attributes.ts` | `writesShared`, which no longer counts `WIPE_MEMSET`, and `markWipe`, which still records the wipe as a write through its argument |
+| `src/attributes.ts` | `writesShared`, which no longer counts `WIPE_MEMSET`, and `markWipe`, which still records the wipe as a write through its argument; `ownKeyOf`, `isWipedFreshSecret` and `isSecretMake`, which admit a `Secret` made from a fresh value as the call's own object |
 | `src/parallel.ts` | `sharedWriteMessage`, which reports the refusal at the `spawn` |
 
 ### Threat model
@@ -314,20 +315,44 @@ reads. The wipe itself is out of scope here: it is the same volatile
   it is handed, a copy made inside `expose`, the task's argument, a captured
   local, a field, the argument wiped by a helper the task calls, and an array
   a call answered.
+- For the `secret(v)` admission (#873, a later stage): `isSecretMake` matches
+  only the std `secret` template, by name, no owner and home program
+  (`isSecretSource`), not a user function of the same name. `ownKeyOf`
+  registers the `Secret` as an own object only when it is held by a `const`,
+  `v` is syntactically `new`, an array literal or an object literal, and the
+  body passes the local straight to a `wipe`. What `v` holds is recorded as
+  dirt on `.value` with `noteStore`, as a field store into an own object
+  would be, so a constructor or literal that takes in a parameter or a
+  captured array still makes the wipe a shared write. A moved local
+  (`secret(buf)`) or a call's answer (`secret(make(n))`) is not syntactically
+  fresh, so it stays foreign; a parameter or field is refused earlier by the
+  sole-reference rule; a `Secret` parameter cannot be wiped by its callee; and
+  a holder's `wipe()` writes its own field, which stays shared.
 
 ### Findings
 
 None. The fresh allocations compile and run on threads; every other road is
 still NL2471, naming the `wipe` instance as the write.
 
-What the rule does not admit, by design: a `Secret` a task makes with
-`secret(...)` and then wipes, because `secret` keeps its value, so its
-storage is not the task's own allocation by the facts the rule reads; and an
+A `Secret` a task makes with `secret(v)` and wipes was refused at first,
+because `secret` keeps its value and the rule did not read through it. It is
+now admitted when `v` is allocated in the call (see Method); the IR is
+unchanged, and the program prints the same at 1, 2 and 8 threads
+(`tests/link/thread_task_wipe_secret`).
+
+What the rule does not admit, by design: a `Secret` held by a `let`; one
+made from a moved local, a call's answer or a record whose constructor is
+handed an object; one a call answers, whether the task wipes it or first
+hands it to a helper that writes it; one kept in a holder's field; and an
 array a call answered (`const st = initState()`), whose freshness the rule
-does not track across a return. The supported pattern for a shared key is
-that the parent makes the `Secret`, each task `expose`s it read-only, and the
-parent wipes it after the scope joins, which the region rule above already
-orders.
+does not track across a return. A helper may write the task's own `Secret`
+before the wipe (`cleared` in `tests/link/thread_task_wipe_secret`). A
+`Secret` of a literal holding a captured array, `secret([buf])`, cannot be
+written at all: `isSecretPayload` takes only an array of integers or a record
+of integer fields, so no negative test exists for it. The supported pattern
+for a shared key is that the parent makes the `Secret`, each task `expose`s
+it read-only, and the parent wipes it after the scope joins, which the region
+rule above already orders.
 
 ### Properties verified
 
@@ -336,6 +361,21 @@ orders.
   under Node.
 - A `wipe` of the task's argument, a capture, a field, the argument a helper
   wipes for it, or a call's answer is still NL2471.
+- A `wipe` of a `const k = secret(<new, array or object literal>)` the task
+  makes is not a shared write, nor is a helper's write through it before the
+  wipe; a `let`, `secret` of a parameter, a field, a call's answer, a moved
+  local or a record whose constructor is handed an object, a `Secret` a call
+  answers (wiped, or written by a helper), a borrowed `Secret` parameter and
+  a holder's `wipe()` are still refused
+  (`tests/cases/reject_thread_wipe_secret_param`, `_field`, `_call_result`,
+  `_moved`, `_borrowed`, `_holder`, `_let`, `_call_secret`,
+  `_call_secret_helper`, `_ctor_param`). A helper that hands an inner record
+  of shared memory to another that writes it stays refused
+  (`reject_thread_wipe_region_past`). A manual `opt -O2` of
+  `tests/link/thread_task_wipe_secret` keeps its four wipes as volatile
+  `llvm.memset`s, one inlined into each task; no test runs that program under
+  `opt -O2`; the volatile store itself is pinned by the `nish:secret` check
+  below.
 - The emitted IR is unchanged: `sharedWrite` feeds no LLVM attribute, and
   every wipe under `opt -O2` is still a volatile `llvm.memset`.
 
@@ -345,8 +385,13 @@ orders.
   `link/${name}: the same exit and stdout under NISH_NUM_THREADS=${threads}`,
   `link/${name}: emitted IR contains every expected.ir line` and
   `link/${name}: ${m.file} matches golden`, for `thread_task_wipe`: the
-  volatile `llvm.memset` of each `wipe` instance is in the IR.
+  volatile `llvm.memset` of each `wipe` instance is in the IR; the same
+  first two, for `thread_task_wipe_secret` and `thread_bcrypt_batch` (whose
+  lanes agree with `bcryptHash` and `bcryptVerify`).
 - `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, for
-  `reject_thread_wipe_param`, `_capture`, `_field`, `_helper` and
-  `_call_result`.
+  `reject_thread_wipe_param`, `_capture`, `_field`, `_helper`, `_element`
+  and `_call_result`; `reject_thread_wipe_secret_param`, `_field`,
+  `_call_result`, `_moved`, `_borrowed`, `_holder`, `_let`, `_call_secret`,
+  `_call_secret_helper` and `_ctor_param`; and
+  `reject_thread_wipe_region_past`.
 - `nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted`.

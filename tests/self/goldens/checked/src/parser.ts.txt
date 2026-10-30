@@ -715,8 +715,7 @@ function Parser.flagged(this: Parser, declaration: Node, flags: i32): Node -> @P
   pointer declaration: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Parser.scanAfterAhead(this: Parser): Lexer -> @Parser.scanAfterAhead [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=72
-  sharedWrite: via Lexer.next
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=72
   calls: Lexer.constructor Lexer.next nish_alloc_struct
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -862,7 +861,7 @@ function Parser.scanDefault(this: Parser, scan: Lexer): boolean -> @Parser.scanD
   callee +15:7 Lexer.next -> @Lexer.next
 function Parser.closingBrace(this: Parser, open: i32): i32 -> @Parser.closingBrace [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  sharedWrite: via StringMap.set
   escaping: open
   calls: Lexer.constructor Lexer.next StringMap.get StringMap.set nish_array_grow nish_panic_index nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false
@@ -894,7 +893,7 @@ function Parser.withStatementAhead(this: Parser): boolean -> @Parser.withStateme
   callee +20:17 Lexer.at -> @Lexer.at
 function Parser.anonymousFunctionAhead(this: Parser): boolean -> @Parser.anonymousFunctionAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Parser.scanAfterAhead
+  sharedWrite: via Lexer.next
   calls: Lexer.next Parser.scanAfterAhead
   pointer this: size=96 writesThrough=false captured=false passedTo=Parser.scanAfterAhead#0
   stackSites=0 stackLocals=0
@@ -1424,8 +1423,7 @@ function Parser.parseTypeParameters(this: Parser): Node -> @Parser.parseTypePara
   callee +14:5 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
   callee +15:12 Parser.closeList -> @Parser.closeList
 function Parser.startsArrowDeclaration(this: Parser): boolean -> @Parser.startsArrowDeclaration [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Lexer.constructor Lexer.next Parser.lineBreakBetween nish_panic_overflow nish_str_eq
   pointer this: size=96 writesThrough=false captured=false passedTo=Parser.lineBreakBetween#0
   stackSites=1 stackLocals=1
@@ -1668,8 +1666,7 @@ function Parser.markedMethodAhead(this: Parser): boolean -> @Parser.markedMethod
   callee +6:5 Lexer.next -> @Lexer.next
   callee +7:5 Lexer.next -> @Lexer.next
 function Parser.disposeNameAhead(this: Parser): boolean -> @Parser.disposeNameAhead [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Lexer.constructor Lexer.next nish_array_grow nish_panic_index nish_str_eq
   pointer this: size=96 writesThrough=false captured=false
   stackSites=3 stackLocals=3
@@ -2029,8 +2026,7 @@ function Parser.parseTypeAlias(this: Parser, start: i32): Node -> @Parser.parseT
   callee +3:24 Parser.parseType -> @Parser.parseType
   callee +4:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.startsConstEnum(this: Parser): boolean -> @Parser.startsConstEnum [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Lexer.constructor Lexer.next nish_str_eq
   pointer this: size=96 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -2209,8 +2205,7 @@ function Parser.parsePrimaryType(this: Parser): Node -> @Parser.parsePrimaryType
   callee +50:7 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
   callee +52:24 Parser.closeList -> @Parser.closeList
 function Parser.startsFunctionType(this: Parser): boolean -> @Parser.startsFunctionType [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Lexer.constructor Lexer.next nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -2992,8 +2987,7 @@ function Parser.asyncArrowAhead(this: Parser): boolean -> @Parser.asyncArrowAhea
   callee +4:18 Parser.scanAfterAhead -> @Parser.scanAfterAhead
   callee +11:12 Parser.arrowParametersAt -> @Parser.arrowParametersAt
 function Parser.arrowParametersAt(this: Parser, open: i32): boolean -> @Parser.arrowParametersAt [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: open
   calls: Lexer.constructor Lexer.next nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false

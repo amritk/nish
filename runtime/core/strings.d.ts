@@ -10,5 +10,5 @@ export declare function indexOf(s: string, sub: string, from?: number | bigint):
 export declare function startsWith(s: string, sub: string): boolean;
 export declare function endsWith(s: string, sub: string): boolean;
 export declare function fromCharCode(code: number | bigint): string;
-export declare function fromBytes(bytes: readonly u8[], start: number, end: number): string;
-export declare function utf8FromBytes(bytes: readonly u8[], start: number, end: number): string;
+export declare function fromBytes(bytes: readonly u8[], start: number | bigint, end: number | bigint): string;
+export declare function utf8FromBytes(bytes: readonly u8[], start: number | bigint, end: number | bigint): string;

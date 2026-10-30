@@ -21,7 +21,7 @@
 // What the row writes, by the type the checker gave the operation:
 //
 // - i32 `+ - *` and unary minus: `(a + b) | 0` and `Math.imul(a, b)` where the
-//   compiler proved no overflow or `--wrapping` is on, else the checked
+//   compiler proved no overflow, else the checked
 //   `checkedAdd`, `checkedSub`, `checkedMul` and `checkedNeg`, which panic as
 //   native does.
 //   `>>>` is `(a >>> n) | 0`, the signed reading of the logical shift.
@@ -143,16 +143,13 @@ const kindName = (type: i32): string => {
 
 const isBig = (type: i32): boolean => type === T_I64 || type === T_U64
 
-/** `node`'s type in the checked program, or -1 when the node has none recorded. */
-const typeOf = (walk: Walk, node: Node): i32 => {
-  const types = walk.program.nodeTypes
-  return node.id >= 0 && node.id < types.length ? types[node.id] : -1
-}
+/** `node`'s type in the checked program, or -1, a miss in an untyped body (`Walk.typeAt`). */
+const typeOf = (walk: Walk, node: Node): i32 => walk.typeAt(node)
 
-/** Whether the operation at `site` may skip its overflow check: proven, or `--wrapping`. */
+/** Whether the operation at `site` may skip its overflow check: it is proven not to overflow. */
 const unchecked = (walk: Walk, site: Node): boolean => {
   const proven = walk.program.nodeProvenNoOverflow
-  return walk.program.wrapping || (site.id >= 0 && site.id < proven.length && proven[site.id])
+  return site.id >= 0 && site.id < proven.length && proven[site.id]
 }
 
 /** `expr` wrapped into the integer width `type`. */
@@ -372,7 +369,7 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
     // after the right side ran, as the right side can shrink the array. The
     // records row writes one whose index is unproven as `idx(a, i)`, which is
     // no target; a proven one keeps its plain read.
-    if (target.kind === N_INDEX && !walk.program.uncheckedIndexing) {
+    if (target.kind === N_INDEX) {
       const args =
         operands.changed[0] && idxArguments(name) !== "" ? idxArguments(name) : elementArguments(name)
       if (args !== "") {
@@ -515,7 +512,7 @@ const stepped = (walk: Walk, node: Node, name: string, postfix: boolean, bare: b
     return null
   }
   const signed = isSigned(type)
-  if (signed && !walk.program.wrapping && unchecked(walk, node)) {
+  if (signed && unchecked(walk, node)) {
     return null
   }
   const one = isBig(type) ? "1n" : "1"

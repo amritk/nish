@@ -4,6 +4,7 @@
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
 @.str.0 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"parallelMapInto: dst has \00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [23 x i8] } { i64 22, [23 x i8] c" elements and src has \00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"spawn: destination index \00" }, align 8
@@ -11,16 +12,26 @@
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c" elements\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare noundef i32 @nish_main$arrow0(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare double @nish_floor(double) #0
+declare double @nish_ceil(double) #0
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #1
-declare double @llvm.floor.f64(double) #0
-declare double @llvm.ceil.f64(double) #0
 declare i32 @llvm.fptosi.sat.i32.f64(double) #0
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -52,7 +63,7 @@ entry:
   %0 = sitofp i32 %n to double
   %1 = sitofp i32 1048576 to double
   %2 = fdiv double %0, %1
-  %3 = call double @llvm.ceil.f64(double %2)
+  %3 = call double @nish_ceil(double %2)
   %4 = call i32 @llvm.fptosi.sat.i32.f64(double %3)
   store i32 %4, i32* %wanted.addr, align 4
   %5 = load i32, i32* %wanted.addr, align 4
@@ -78,7 +89,7 @@ entry:
   %2 = fmul double %0, %1
   %3 = sitofp i32 %blocks to double
   %4 = fdiv double %2, %3
-  %5 = call double @llvm.floor.f64(double %4)
+  %5 = call double @nish_floor(double %4)
   %6 = call i32 @llvm.fptosi.sat.i32.f64(double %5)
   ret i32 %6
 }
@@ -402,13 +413,14 @@ for.end:
   ret void
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!22, !23, !24, !25, !26}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -431,3 +443,8 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !19 = !{!17, !16, i64 16}
 !20 = !{!"element i32", !1, i64 0}
 !21 = !{!20, !20, i64 0}
+!22 = !{i32 8, !"cf-protection-branch", i32 1}
+!23 = !{i32 8, !"cf-protection-return", i32 1}
+!24 = !{i32 8, !"branch-target-enforcement", i32 1}
+!25 = !{i32 8, !"sign-return-address", i32 1}
+!26 = !{i32 4, !"probe-stack", !"inline-asm"}

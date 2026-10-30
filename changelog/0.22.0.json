@@ -1,0 +1,392 @@
+{
+  "version": "0.22.0",
+  "date": "2026-10-25",
+  "tag": "v0.22.0",
+  "range": {
+    "from": "v0.21.0",
+    "to": "5cd44f2b"
+  },
+  "entries": [
+    {
+      "id": "fuzz-the-bounds-check-elision-with-proofgen-programs",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "fuzz the bounds-check elision with proofgen programs under ASan",
+      "body": "CI's soundness step now compiles 600 fixed-seed programs from proofgen.js a second time with --no-elision, alongside the runnable cases and the fuzz corpus. Each program comes in an in-bounds and a one-past variant, and both builds must print and exit the same at -O2. A generated program must also exit cleanly or raise the bounds panic its variant predicts: a hang, a signal or any other panic fails the run. With --asan, the default build runs again under AddressSanitizer and UBSan and must end the same way. A failure prints its reproducer, the command that reruns it, and a minimised min.ts.\n\nA weekly workflow, soundness-fuzz.yml, runs a longer seeded pass and uploads failing programs as a bounded artifact.\n\ndocs/security/codegen.md records the result: no unsound elision found, with the program count and the shapes covered.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/differential/soundness.js --gen --seed 20261024 --count 300 --asan (300 agree)"
+      ],
+      "commits": [
+        "73698fe"
+      ],
+      "pr": 924,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-21-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.21.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "dff3876"
+      ],
+      "pr": 936,
+      "author": "github-actions[bot]",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "close-the-emit-ts-oracle-tsc-strict-the",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "close the --emit-ts oracle: tsc --strict, the known-list pin, fuzz, and the docs",
+      "body": "This is the last stage of the WP33 R3/R4 round trip. The TypeScript that --emit-ts writes now type-checks under `tsc --strict`, and the differential fuzzer runs the native build and the --emit-ts output and requires them to print and exit alike. The known list may hold only rows that are libm, ffi or refused, or that are host or range rows backed by evidence. CI's Node is pinned to 22.23.4, the version the list is regenerated under.\n\nGeneric code that nothing calls is translated without types:\n- A body that needs no type is written as is.\n- A body that does need a type becomes a stub that throws. In the program's own modules each stub comes with an NL8012 portability warning; std stubs are silent.\n- A body that would make a choice depending on its type arguments (zero-filling `new Array<T>(n)`, or copying a record held inline) is refused with the new NL4014.\n\nAlso in this change:\n- NL4013 now points at the node where two generic instances disagree.\n- A runtime helper whose name the program uses itself is imported under an alias.\n- The lazy argument of `expect` and `unwrapOr` stays lazy.\n- `nish/runtime/node` no longer mutates global state: `process.argv` and `nish:process` imports go through `argv()`.\n- Docs: SECRET-6 records what `wipe` cannot reach under Node. The CLI and to-TypeScript guide pages, LANGUAGE.md and the status lines say R3 and R4 are built.",
+      "metrics": [],
+      "refs": [
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/emit-ts/records/generic-uncalled",
+        "tests/emit-ts/refused/uncalled-*",
+        "tests/differential/emit-ts.js"
+      ],
+      "commits": [
+        "4362f01"
+      ],
+      "pr": 917,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-connection-pool-and-an-epoll-carrier-for",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a connection pool and an epoll carrier for nish/net/postgres",
+      "body": "`PgPool` runs many PostgreSQL connections behind one sans-IO interface, so a program's own nish:net loop serves HTTP and queries together without blocking.\n\nThe pool's size is a cap, and each slot's connection is built on first use. `dispatch()` gives a request to the least-busy ready connection, never more than `maxInFlight` groups deep on one, and queues the rest FIFO in a bounded queue. Statements registered once are prepared on each connection in the same write as its first request. Each group's ReadyForQuery is its commit point, so an error such as a 23505 fails only its own group.\n\nA connection that fails reports each of its outstanding requests as `PG_LOST`, oldest first, then `PG_FAILED`, and is rebuilt on demand. Every failure path wipes that connection's copy of the password. A full queue, an over-deep pipeline or an out-of-range slot is a defined refusal or panic, never unbounded growth.\n\ntests/postgres/carrier.ts is the carrier: an HTTP server and the pool on one epoll loop, built on tcpConnect, pollAdd and pollWait, that answers HTTP while a query is in flight.\n\ntests/postgres/live runs the client against PostgreSQL 18 over SCRAM-SHA-256:\n- the Conduit article list, pipelined, printing spec-format rows;\n- 100 groups on 4 connections, at most 16 deep, where the 4 groups that hit a 23505 commit nothing and the other 96 commit and read back;\n- 28P01 on a wrong password;\n- a server that resets mid-startup;\n- `pg_terminate_backend` on a live connection.\n\nA new `postgres-live` CI job runs it on a `postgres:18` service container.\n\nThe Conduit schema and article-list query come from arjaythedev/multicore-server-challenge (MIT) and are listed in THIRD_PARTY_NOTICES.md. docs/security/postgres.md records what a hostile server can make the pool do: discard one queued request per failed connect, and hold about 3 × `maxMessage` per slot. It also records the program's duties: a fresh nonce per connection, and owning the socket's lifetime.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/postgres.md",
+        "docs/security/postgres.md"
+      ],
+      "tests": [
+        "tests/link/std_postgres_pool",
+        "tests/postgres/live"
+      ],
+      "commits": [
+        "e2f88d7"
+      ],
+      "pr": 929,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "s6c-s-callgrind-gate-and-the-owner-s",
+      "type": "docs",
+      "scope": "wp38",
+      "breaking": false,
+      "title": "S6c's callgrind gate, and the owner's Q5 decision",
+      "body": "The owner accepted S6c's structural-index design on 2026-10-24 (§8, Q5): one bitmap per 64-byte block, built in 4 KiB chunks into a fixed buffer kept across documents, with the kernel giving hints only and every error staying the scalar code's. It was to be built only if callgrind showed the 1.5x tokenize bar reachable on twitter.json and citm_catalog.json.\n\nIt does not. On main's tokenize loop, with the index priced by a throwaway AVX2/PCLMUL prototype of the kernel (2.06 instructions a byte on twitter, 1.90 on citm) and the walker at 8 instructions a mark, the instruction-count ceilings are 1.37x on twitter and 1.22x on citm. citm stays under the bar even with the kernel free (1.45x); twitter would need the kernel at or under 541,633 instructions a pass against 1,299,916 measured. So S6c is not built. docs/wp38-simd.md records the split, the sensitivities, and the kept work (stringInto, the grammar switch, numberF64) that would have to move first.",
+      "metrics": [],
+      "refs": [
+        "docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear"
+      ],
+      "tests": [],
+      "commits": [
+        "259c62d"
+      ],
+      "pr": 935,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "attest-build-provenance-attach-an-sbom-and-rebuild",
+      "type": "ci",
+      "scope": "release",
+      "breaking": false,
+      "title": "attest build provenance, attach an SBOM, and rebuild releases from their tags",
+      "body": "Every release now carries a build provenance attestation from actions/attest-build-provenance over each file in SHA256SUMS, with id-token and attestations write scoped to the release job. install.sh and scripts/fetch-seed.sh run `gh attestation verify` when gh is installed and signed in, refuse a release whose attestation gh rejects, and skip with a note when gh is missing, signed out or too old.\n\nEach release also attaches an SPDX 2.3 SBOM written by scripts/sbom.mjs: every attached file with its SHA-256, the vendored code in THIRD_PARTY_NOTICES.md, and the LLVM, Node and seed each tarball was built with.\n\nA Rebuild workflow rebuilds the latest release weekly from its tag, seeded by the previous release, and compares through scripts/rebuild-compare.sh: the tarball's tree must match the tag's sources, and bin/nish must match once both copies lose .comment, whose toolchain version strings move with the runner. Linux rows gate; macOS rows report only.\n\nMonthly, scripts/ddc-chain.sh builds every release tag from the ddc-0.6.0 root that TypeScript builds, each step seeded by the one before, and compares the end with the published x86_64-linux compiler (diverse double-compiling).\n\nFixes #389",
+      "metrics": [],
+      "refs": [
+        "docs/security/supply-chain.md (SC-16",
+        "SC-27",
+        "SC-28",
+        "SC-29)"
+      ],
+      "tests": [
+        "tests/fetch-seed.js"
+      ],
+      "commits": [
+        "cdc0077"
+      ],
+      "pr": 898,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "hash-and-verify-up-to-four-bcrypt-passwords",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "hash and verify up to four bcrypt passwords at once, interleaved",
+      "body": "`bcryptHash4` and `bcryptVerify4` compute up to four independent bcrypt\nhashes in one call with their Blowfish encryptions interleaved, so the four\ndependent S-box load chains overlap. Each lane's answer is byte for byte the\nsingle path's.\n\nA `Secret` cannot sit in an array or a field, so the batch takes fixed-arity\nparameters: lane 0 is required, and lanes 1–3 are `Secret<u8[]> | null`.\n\nAll lanes' Blowfish state is one `Secret<u32[]>` that the call makes and wipes.\nEach password reaches its lane through `exposeWith`. Verify groups lanes by\ncost, and a malformed lane is an `Err` that names it.\n\nThe single path now builds its state in an array the hashing function\nallocates itself, so a `std/threads` task can call `bcryptHash` and\n`bcryptVerify`; the guide shows a server handing hashing to a worker thread.\n\nThe batch cannot yet run on a task, because a task's wipe of a `secret(...)`\nvalue is a shared write (NL2471). That is recorded as BCRYPT-9, and a\nfollow-up checker change lifts it.",
+      "metrics": [
+        "4-lane 16.0 ms (15.8–16.4) CPU per cost-10 hash against tigokraft's 4-lane bcrypt.c clang -O2 -march=native 16.4 ms (16.2–16.9) and gcc 23.1 ms; single path 52.9 ms (52.3–53.1) against OpenBSD bcrypt.c clang -O2 54.1 ms (53.5–54.3); median of 5 rounds, min–max band"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md (BCRYPT-9)",
+        "docs/guide/using-nish/password-hashing.md"
+      ],
+      "tests": [
+        "tests/link/crypto_bcrypt_batch",
+        "tests/link/thread_bcrypt_task",
+        "tests/link/thread_bcrypt_batch_refused",
+        "tests/wipes/crypto.js"
+      ],
+      "commits": [
+        "803a174"
+      ],
+      "pr": 938,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "harden-every-native-binary-the-toolchain-links-916",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "harden every native binary the toolchain links",
+      "body": "Every native profile of scripts/build.sh, and so nish --link, nish run and the released nish, now links with full RELRO, a non-executable stack, PIE and stack-clash protection; IBT and the shadow stack on x86-64 (-fcf-protection=full), BTI and PAC on arm64 (-mbranch-protection=standard). The C runtime alone adds -fstack-protector-strong and, outside debug, -D_FORTIFY_SOURCE=3. Because clang reads no code-generation flags for a .ll input, the emitted IR carries the same protection as module flags and a \"probe-stack\" attribute, so every object agrees and the linker marks the binary. scripts/check-hardening.mjs reads the result back from ELF and Mach-O headers, in tests/run.js and in CI's bootstrap job. Recorded as RT-HARDEN in docs/security/runtime.md.",
+      "metrics": [
+        "+328 to +1,136 B per speed binary; 12 of 14 benchmarks inside the ±1.5% band, cursor +6.1% and aes-gcm +3.6% from CET; strbuild +0.99% instructions, map-wordcount +0.11%, map-presize +0.24% from the stack protector"
+      ],
+      "refs": [
+        "docs/ARCHITECTURE.md",
+        "docs/security/runtime.md#rt-harden"
+      ],
+      "tests": [
+        "tests/run.js hardening"
+      ],
+      "commits": [
+        "b5ec793"
+      ],
+      "pr": 916,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "say-a-random-hash-key-miscounts-map-fingerprint",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "say a random hash key miscounts map_fingerprint_miss by one or two",
+      "body": "The fixed hash key under map_fingerprint_miss landed with #916. Its comments said a random key leaves the compare count off by one, but in 1000 runs under the random key 2 of the 29 failures were off by two. Both comments now say one or two.\n\nMeasured: 29 of 1000 runs wrong under the random key, 0 of 1000 under the fixed key\nTests: tests/cases/map_fingerprint_miss\nFixes #922",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "50da6d9"
+      ],
+      "pr": 934,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "rng-nextint-answers-an-unbiased-integer-in-a",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "Rng.nextInt answers an unbiased integer in a range",
+      "body": "`Rng.nextInt(lo, hi)` in `nish/random` answers an `i32` in [lo, hi], both\nends included, each with equal chance, so a die is `r.nextInt(1, 6)` rather\nthan `(r.nextI32() >>> 1) % 6`, which leans toward the low faces. A draw\nbelow 2^32 mod the span is refused and drawn again, so fewer than half are\never refused; the whole `i32` range answers one `nextI32()`, and `lo > hi`\npanics with `Rng.nextInt: lo is greater than hi`. The unsigned arithmetic is\nspelled with `i32` operations that answer the same bits under Node, so a seed\nanswers the same integers natively and under the prelude. `nextI32` and\n`nextF64` are unchanged, and every doc that rolls a die now uses `nextInt`.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#random-numbers-rng-in-nishrandom"
+      ],
+      "tests": [
+        "tests/link/std_random"
+      ],
+      "commits": [
+        "1e1ef21"
+      ],
+      "pr": 939,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "leave-a-wall-of-bricks-in-the-help",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "leave a wall of bricks in the help, and a door behind it",
+      "body": "`nish --help` now shows a faint row of bricks under its title, with one brick knocked out. It is painted with the menu's own dim style, and is plain under NO_COLOR, in a pipe, or for an agent. Behind it, the undocumented `nish break` answers with a placeholder until the game ships. A few near-miss words get a riddle. A real file of either name still compiles as usual.\n\n`nish/cli`'s `HelpMenu` gains the general-purpose `title(version, summary)` and `line(text)`. `header` now delegates to `title`.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_cli",
+        "tests/run.js help section"
+      ],
+      "commits": [
+        "c171204"
+      ],
+      "pr": 940,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "measure-nish-net-postgres-against-libpq-pipeline-mode",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "measure nish/net/postgres against libpq pipeline mode",
+      "body": "bench/postgres measures nish/net/postgres's client CPU per query against libpq 18 in pipeline mode, on PostgreSQL 18 with the multicore server challenge's --dev seed. bench/postgres/setup.sh builds the cluster and seed from the challenge at a pinned commit.\n\nThe workloads:\n- a primary-key SELECT 16 deep;\n- the Conduit article list, 16 deep, with its timestamps decoded and its tag array walked;\n- an INSERT.\n\nBoth sides use the same prepared statements, parameters and pipeline depth, fold every column into a checksum, and must print the same rows. Both binaries are built with the hardening scripts/build.sh applies, read from build.sh itself, and both pass scripts/check-hardening.mjs.\n\nThe two sides don't exchange the same messages. libpq's PQsendQueryPrepared sends Describe Portal on every query, and parses the RowDescription it gets back. nish/net/postgres describes once, at prepare, and sends Bind, Execute and Sync. The README counts the messages, bytes and system calls per query on each side (strace), with user and system time split, and callgrind instructions.\n\nUnder the protocol's rule (the median, claimed only beyond the build-against-copy band and both sides' IQR):\n- pk: −1.26 µs (−15.1 %), mostly user-space instructions;\n- list: −9.39 µs (−21.6 %), of which instructions explain about 2 to 3 µs at each side's own rate and kernel time some more, and the rest is stated as unexplained;\n- insert: not claimed, since it falls inside libpq's spread and moves between sessions.\n\nThe module itself got faster on the way: `next` and `readRow` read lengths inline, and `timestamp` checks its shape in one pass. Its answers are unchanged, which new tests pin: lengths with the top or high bit set, a 258-byte column, and misshapen timestamps. callgrind puts list at 133,970 → 114,919 instructions a query (−14 %), though the clock can't see it.\n\nSetting TCP_NODELAY by hand mattered more than any of that. `tcpConnect` leaves Nagle on, which cost the Nish side about 45 % on pk, all of it system time (#942).",
+      "metrics": [
+        "pk nish 7.09 (0.44) µs/query vs libpq 8.35 (0.24); −1.26 (−15.1 %), band 0.15",
+        "list nish 34.12 (2.47) vs libpq 43.51 (1.92); −9.39 (−21.6 %), band 0.12",
+        "insert nish 16.11 (0.54) vs libpq 17.37 (1.67); −1.26, inside libpq's IQR, not claimed",
+        "callgrind/query nish vs libpq: pk 3,928 / 8,680; list 114,919 / 129,865; insert 2,642 / 4,726"
+      ],
+      "refs": [
+        "bench/README.md#postgresql"
+      ],
+      "tests": [
+        "tests/link/std_postgres"
+      ],
+      "commits": [
+        "9b581a0"
+      ],
+      "pr": 941,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-std-threads-task-may-wipe-a-secret",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a std/threads task may wipe a Secret it made from a fresh value",
+      "body": "A task's wipe of an array it allocated has been a local write since #894,\nbut a `Secret` made with `secret(...)` and wiped stayed a shared write\n(NL2471). The bcrypt batch keeps its one state as a `Secret` of a fresh\narray, so no task could call it.\n\n`secret(v)` now counts as the function's own storage when `v` is\nsyntactically fresh (`new`, an array literal or an object literal holding\nno shared value), the `Secret` is held by a `const`, and the same body\npasses it straight to `wipe`. Every other `Secret` keeps today's facts:\n- one made from a parameter, a field, a capture, a call's answer or a moved\n  local;\n- one bound by `let`;\n- a borrowed parameter;\n- a holder's field.\n\nThe wipe is still one volatile `llvm.memset`. The shared-write facts feed no\nLLVM attribute, so the emitted IR does not change.\n\nA string element handed to a call is now a read of its array, and a helper\nwrites below an argument only through a parameter it writes. Without those two\nchanges, a task calling `bcryptVerify4` read as writing the caller's\n`hashes`.\n\n`bcryptHash4` and `bcryptVerify4` now run on `std/threads` tasks, which\ncloses BCRYPT-9.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (NL2471)",
+        "docs/security/secret.md",
+        "docs/security/crypto-bcrypt.md (BCRYPT-9)"
+      ],
+      "tests": [
+        "tests/link/thread_task_wipe_secret",
+        "tests/link/thread_bcrypt_batch",
+        "tests/cases/reject_thread_wipe_secret_{let",
+        "ctor_param",
+        "moved",
+        "holder",
+        "borrowed",
+        "param",
+        "field",
+        "call_result",
+        "call_secret",
+        "call_secret_helper}",
+        "tests/cases/reject_thread_wipe_{element",
+        "region_past}"
+      ],
+      "commits": [
+        "932bbb5"
+      ],
+      "pr": 945,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "record-two-emit-ts-conventions-in-claude-md",
+      "type": "docs",
+      "breaking": false,
+      "title": "record two --emit-ts conventions in CLAUDE.md",
+      "body": "",
+      "metrics": [],
+      "refs": [
+        "#844"
+      ],
+      "tests": [],
+      "commits": [
+        "4fee600"
+      ],
+      "pr": 951,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "s6d-the-per-value-cuts-that-would-let",
+      "type": "docs",
+      "scope": "wp38",
+      "breaking": false,
+      "title": "S6d, the per-value cuts that would let S6c reach its bar",
+      "body": "S6c's callgrind gate left the structural index at 1.37x on twitter and\n1.22x on citm. S6d measured whether cutting the per-value work the index\nkeeps could lift that ceiling to 1.5x on both files, with the gate's Total\npinned to the record S6b left. It prices each candidate cut with a\nthrowaway prototype under callgrind and builds nothing.\n\nA finer split of the kept work covers numberF64, stringInto and its memcpy\nby length band, and next/value/key by part. On top of it come the cuts:\nan integer path in numberF64, the innermost container's kind in a field,\nwhole-run copies in stringInto, a failed state in next's switch, the\ngrammar dispatch fused on the byte, and numberF64's sign read directly.\nA saving that falls on work the gate already credits to the index is not\ncounted, so E2, K and M are left out.\n\nNot reachable: twitter's best set reaches 1.533x and citm's best stops at\n1.490x, 109,087 instructions short. The largest pool left open is citm's\nsecond walk over a number's digits. The build and re-gate stages are not\nstarted.\n\nRefs: docs/wp38-simd.md (S6d row in §7; *S6d, the per-value cuts*)\nPart of #952",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f43fe12"
+      ],
+      "pr": 954,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "name-the-bcrypt-single-path-gap-as-llvm",
+      "type": "docs",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "name the bcrypt single-path gap as LLVM's xor order",
+      "body": "The single bcrypt hash trails gcc's build of OpenBSD's bcrypt.c by about\n7%. The security record now shows why, with the instructions counted. Each\nhalf-round computes x ^= P[n] ^ F(y). gcc keeps P[n] off the critical path,\n(x ^ P[n]) ^ F(y), in all 16 half-rounds. LLVM does so only in the first:\nReassociate and a later InstCombine leave the other 15 as (P[n] ^ F(y)) ^ x,\none more dependent XOR after the last S-box add. clang's build of the same C\nmakes the same 15 of 16 choice, so the gap is LLVM 18 against gcc 13 (verdict\n(a)), not Nish's codegen (b) or the std source shape (c). A straight-line\ncopy of the round and three other source orders give the same IR, so nothing\nin std/ changes; no code changes.\n\nPer half-round, Nish, gcc and clang each do 5 loads, 0 stores, 0 spills and\nno checks, calls or jumps. The chain from y is 8 instructions and 12 cycles\nfor Nish and clang against 6 and 11 for gcc. That is 11.7, 10.9 and 11.9\nmeasured cycles per half-round at 17,083,536 half-rounds per cost-10 hash.\nThe record carries one marked half-round from each listing, the objdump\nrecipe that prints the counts, the sha256 of each listing, and the wrapper\nthat reproduces the -print-changed trace.\n\nMeasured: Nish 71.5 (70.9-73.3) ms, gcc 66.8 (65.4-68.3) ms, clang 72.4 (72.3-73.8) ms per cost-10 hash, 5 interleaved rounds; no code change\nRefs: docs/security/crypto-bcrypt.md#why-the-single-path-trails-gcc\nPart of #953",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d00685e"
+      ],
+      "pr": 957,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "wipe-the-hash-bcrypt-verify-recomputes-959",
+      "type": "fix",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "wipe the hash bcrypt verify recomputes",
+      "body": "* fix(crypto): wipe the hash bcrypt verify recomputes (wip)\n\n* refactor(crypto): share bcrypt verify's compare-and-wipe tail\n\nbcryptVerifyExposed and bcryptJoinedOk now end in one bcryptSameWiped, so the\ntwo wipes the -O2 pin counts live in one place; bcryptHash4 fills its result\narray in place.\n\n* fix(crypto): keep bcryptHash4's lane loop free of bounds checks\n\nThe in-place fill of the result array kept a bounds check the performance\ngate refuses; build a fresh array as before.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "eafc76a"
+      ],
+      "pr": 959,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-conduit-server-for-the-multicore-server-challenge",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "a Conduit server for the multicore server challenge",
+      "body": "* fix(runtime): set TCP_NODELAY on every tcpConnect socket\n\ntcpConnect left Nagle's algorithm on, so a client writing a small request\nbehind another waited on a delayed ACK. libpq and Go's net package turn it\noff on every client socket; the runtime now does too, before connect, and a\nrefused option closes the socket and answers the error. bench/postgres drops\nits hand-declared setsockopt workaround.\n\nFixes #942\nRefs: docs/security/runtime.md (RT-22)\nTests: tests/cases/net_tcp_nodelay\n\n* feat(net): a prefork supervisor that does not restart its workers\n\n`PreforkConfig.restart`, on by default, can now be turned off. A worker\nthat exits then stays gone, and once none is left `preforkWith` answers\n`PREFORK_WORKERS_EXITED` (-3), so a service under systemd or a\ncontainer runtime lets that restart policy decide instead of hiding a\ncrash loop behind its own. SIGTERM and SIGINT still stop the rest and\nanswer `PREFORK_STOPPED`.\n\nTests: tests/link/net_prefork_no_restart\n\n* perf(net): walk the slots in Http1Server.expire only when one can be due\n\n`expire` walked every slot up to the high-water mark on each call, so a\nloop calling it every turn paid for every connection, idle or not, at\n100,000 connections. A walk now records the soonest any slot can expire\n(a slot's `lastActive` only grows, and a slot accepted later is due no\nsooner than the shorter timeout from now), and a call before then\nreturns at once. `Http1TlsServer.expire` does the same. `expireScans`\ncounts the walks.\n\nTests: tests/link/net_http1_server\n\n* perf(net): make an HTTP/1.1 slot's WebSocket decoder on its first upgrade\n\nAn Http1Connection used to allocate its WebSocket frame decoder (about\n1.4 KiB of buffers) and a 125-byte pong buffer when it was built, so every\nslot of a server paid for them whether or not it ever switched protocols.\nThe decoder is now made on the slot's first upgrade and kept for its later\npeers, and the pong buffer on its first ping. With arena allocation, memory\nnot allocated is the only memory saved.\n\nMeasured: 3.93 -> 2.23 KiB RSS per idle keep-alive connection (8000 connections, one worker)\nTests: tests/link/net_http1_server\n\n* test(bench): a full-seed PostgreSQL setup for the multicore challenge\n\nbench/postgres/setup.sh takes PG_BENCH_SEED=full to load the challenge's\nfull seed (conduit_seed) beside the dev one, and bench/multicore/setup.sh\nwraps it with a free-space check for the load that bench/multicore/run.sh\ndrives.\n\n* test(bench): a Conduit server for the multicore server challenge\n\nbench/multicore/conduit is a RealWorld Conduit server on nish/net's\nHttp1Server, PgPool, JsonWriter, the HMAC and bcrypt modules and prefork\nwith restarts off. Each HTTP worker binds the port with SO_REUSEPORT and\nruns its own read and write pools; one more worker is the bcrypt service,\nwhich the others reach over loopback TCP and which batches up to four\nhashes or checks into bcryptHash4 or bcryptVerify4. The SQL is the\nchallenge's reference SQL. It passes the challenge's 197 conformance\nchecks on the dev seed.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* test(bench): drive the multicore server with the challenge's own load generator\n\nbench/multicore/run.sh builds the Conduit server, runs the challenge's\nconformance suite against it on a fresh dev database, then runs the\nchallenge's loadgen at fixed user counts on a fresh full-seed database\nand reads /proc for the CPU every postgres process and every server\nprocess used over the measured window, per completed request. It ends\nwith the server's RSS per idle keep-alive connection.\n\nThe article a create reads back is found by a scalar subquery over\ncurrval, which the planner runs once: compared with each row's id, the\nvolatile call scanned the whole primary key and held the write\nconnection for over a second under load.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* test(bench): stage the multicore challenge submission\n\nbench/multicore/submission/nish-std-amritk is the folder the challenge\nreceives: install.sh (LLVM 18 from apt, a checked Node.js 22.18.0 tarball\nand nish 0.22.0 from npm), build.sh, start.sh, the MIT licence and a\n.gitignore. bench/multicore/stage.mjs copies the server's source into it\nand --check says when the copy is stale.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* feat(net): lend an idle HTTP/1.1 slot's input buffers back to the server\n\nHttp1Config.idleInput, off by default, makes a slot that has answered its\nrequest and holds no byte of the next give its parser's input and head\nbuffers to pools its server's slots share, and take them back with the\nnext byte, so their memory follows the connections mid-request rather\nthan every keep-alive connection open. Http1Parser makes both buffers on\nfirst use instead of in its constructor, so a slot that lends them never\nallocates its own.\n\nTests: tests/link/net_http1_server\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(net): record the idle-input option and the multicore baseline\n\nThe networking guide and the HTTP/1.1 security record describe\nHttp1Config.idleInput: when a slot lends its buffers, what a lent buffer\nstill holds, and the tests that pin it. The Conduit server's README\nrecords the baseline on the reference SQL with its noise band.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* test(net): pin the idle-input checks and the TLS server's start-up bytes\n\nThe sans-IO checks read the H1_END a request answered at its head still\ngives, and expected.out carries the new checks; the two empty pools the\noption lends buffers to move Http1TlsServer's start-up bytes by 88.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): lend idle connections' input buffers in the Conduit server\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): name an article's tags by primary key\n\nJoined to tags, the generic plan hash-joined a scan of all 200 tags for\nevery article of a page; a lookup per tag reads one row each.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): count capped pages with index-only scans\n\nThe global count walks the primary key from its oldest, all-visible end;\nthe feed's count takes the followees as an array and walks\narticles_author_idx once over them.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the idle-input and tag-lookup measurements\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): answer GET /api/tags from one array row\n\nEvery tag comes back as one text[] the server walks in place, so the\nconnection frames one DataRow instead of two hundred.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): drop the index-only capped counts\n\nMeasured at 2,000 users they moved Postgres µs/request by nothing past\nthe noise (275-300 against 274-287), so the counts are SPEC.md's again.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the dropped count change\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the tag-list row and why the counts changed nothing\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): cut a list page before its columns are computed\n\nWith LIMIT and OFFSET over the whole select, the per-article subqueries\nran for every row the OFFSET skipped too; the global and author lists now\ncut the page in a subquery first, as the tag, favorited and feed lists\nalready did.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* test(bench): run two builds of the multicore server in turn\n\n--alt <binary> runs another build A then B at each repeat, on fresh\ndatabases, so a comparison meets the same machine: two sessions on one\nbuild differed by up to 4% in Postgres µs/request.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): read an article's comments in one statement\n\nThe comments come through a LEFT JOIN LATERAL from the article, one row\nwith NULL comment columns when it has none and no row when the slug names\nno article, instead of a lookup and then the list in a second statement.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the page cut and the paired runs\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): run a list page and its capped count as one statement\n\nThe count is a WITH joined to the page, so a list request is one Execute\ninstead of two, and an empty page is one row with NULL article columns\ncarrying the count.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): keep a list page and its count as two statements\n\nMeasured by the backend's own CPU with pgbench, the two statements\npipelined in one group cost what the joined one does (343-381 against\n360-386 µs a request), so the simpler pair stays.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the comment and list-count measurements\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): re-arm a Postgres socket only when its interest changes\n\nEvery turn of the loop called pollModify on every connected pool socket,\nso a worker made about 2.4 epoll_ctl calls a request (strace -c over ten\nseconds at 2,000 users: 41,062 of them beside 34,931 sends); each socket\nnow remembers what it was armed with, and the same ten seconds make 41.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* test(bench): sweep the multicore server's settings in pairs\n\n--alt-env K=V,... runs B with those variables over the environment's,\nthe same build when no --alt names another, so a topology sweep is\npaired like a code change.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(net): move HTTP/1.1 bytes with copyBytes, not byte loops\n\nA response body went into the output, a read into the parser's input,\na header line into the head and the unsent output down to its start one\nbounds-checked byte at a time. Each is now one copyBytes, which is one\nmemmove natively; the loops stay where a window would not fit, which no\ncaller reaches, so nothing that refused before panics now.\n\nMeasured: 148,000 -> 97,000 instructions a request in the Conduit\nserver's HTTP worker (callgrind, 11,700 requests of the challenge mix)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(json): copy a JsonWriter.raw fragment in one move\n\nraw copied its fragment a bounds-checked byte at a time; both windows are\nchecked before the copy, so it is now one copyBytes, a memmove natively.\nA window of the writer's own buffer now comes out as it was, where the\nbyte loop could overtake it.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): write the Conduit server's articles and tag lists directly\n\nAn article is the same fourteen keys every time, so json-out.ts copies\nits fixed text in as pre-encoded fragments and escapes only the column\nvalues, with JSON.stringify's escapes; a text[] with no quoted element\nand nothing JSON escapes becomes its JSON array in one pass of block\ncopies. A row that might not fit, or whose tags need the walker, still\ngoes through JsonWriter.\n\nMeasured: 1,022M -> 892M instructions in the HTTP worker over 11,600\nrequests of the challenge mix (callgrind); article rows 249M -> 134M\nTests: tests/link/conduit_json_out\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): read a token's header without decoding it when it is the one issued\n\nEvery token the server issues, and every one golang-jwt mints, starts\nwith the same base64url header, whose alg is HS256; such a header is\ncompared byte for byte, and any other is still decoded and read.\n\nMeasured: Jwt.verify 250M -> 230M instructions over 11,500 requests\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the HTTP worker's instruction counts\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record what the HTTP worker's changes measure\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the read-connection sweep\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record the worker-count sweep\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): the multicore server's figures and projection\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): commit the Conduit server's writes in groups\n\nWrites wait in a ring until the write connection has no batch in flight,\nthen up to 128 go as one pipelined group: one implicit transaction, one\nWAL flush, each answer written into the request's own buffer and sent\nonce the group's ReadyForQuery says it committed. A group that fails has\nrolled back every write in it, so each is sent again alone; a group lost\nwith its connection may have committed, so its writes answer 500 and are\nnot sent again. No timer: an idle server sends a write at once.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): record group commit's measurements\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): batch the Conduit server's reads into shared groups\n\nThe group-commit ring now serves both pools. Up to 32 reads waiting while\na read connection is busy go out as one pipelined group, one implicit\ntransaction, so Postgres starts and ends one transaction for all of them\nrather than one each; a read is answered as soon as its last statement\ncompletes. A failed group sends each read it skipped again alone; a read\nlost with its connection is sent again once, alone.\n\nTests: conformance 197/197; 10,000 concurrent mixed reads match serial answers\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* perf(bench): make the Conduit server's read batch size and depth settable\n\nDB_READ_BATCH (32) caps the reads in one group and DB_BATCH_DEPTH (1) the\nbatches each connection holds at once, so the trade between Postgres CPU\nand the wait a read spends behind a running batch can be measured.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* feat(net): PgConnection.flush, so a pipelined group's answers go out early\n\nPostgres holds a group's answers until its Sync. `flush()` queues a Flush,\nwhich the server does not answer, so what it has answered so far is sent\nat once. The Conduit server sends one after each read it batches into a\nshared group, so a read is not held for the whole batch.\n\nTests: tests/link/std_postgres\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* fix(bench): open every Conduit Postgres connection a batch can use\n\nPgPool opens a connection only once the queue holds more than\nmaxInFlight groups per connection starting, and batching keeps no more\nthan a batch per connection waiting, so each worker ran its reads on one\nconnection. The pools' cap is now the batch depth: a busy connection makes\nthe pool open the next. DB_MAX_IN_FLIGHT is gone. Also corrects the\nstd_postgres pass count.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* revert(bench): drop read batching, which measured inside the noise\n\nReverts 338a013, 0642f05, 2c3bac4 and 82fa2ed. Read batching's first\nbuild saved 11-13% of Postgres CPU a request only because PgPool opened\none connection a worker, which put every read on one backend and\nquadrupled p95. With every connection open it measured 231-245 µs\nagainst group commit's 233-246, so the server goes back to group commit\nalone, and PgConnection.flush, which nothing needs, goes with it. The\nREADME records the experiment as O8.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* docs(bench): the Conduit submission's README, notices and current figures\n\nThe staged submission gets the README the challenge asks for (Front,\nversions, every optimization, local figures). THIRD_PARTY_NOTICES lists\nthe SPEC.md SQL in the server and its staged copy, and the one idea taken\nfrom a submission is cited where it is written. The lab notebook's design\nand standing figures now describe group commit.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* test(self): regenerate the goldens for the std/net and std/json changes\n\nAlso records, in the Conduit README, what the benchmark server leaves\nopen: an unauthenticated loopback bcrypt service and the copies of a\npassword the request buffers keep.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* style(bench): format the Conduit server and harness, and lint them clean\n\nBiome's formatting, nested ternaries rewritten as if chains, and a\nrenamed parameter that shadowed the harness's template. No behaviour\nchanges: conformance 197/197 and the concurrency checks pass on the\nrebuilt server.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* fix(bench): bound Conduit write batches and never send a cut JSON answer\n\nReview fixes in the Conduit server and its harness:\n\n- A write batch now stops at a 2 MiB budget for its binds. Sixteen ~900 KB\n  article creates at once had overrun the 4 MiB output limit mid-bind, which\n  left the write pool's group half built: ten answered 500 and every later\n  write hung. All sixteen now answer 201.\n- An answer whose JsonWriter ran out of room answers 500 instead of\n  sending a truncated 200. Login writes into a buffer sized from the\n  user's fields, so a 12,000-character bio now logs in with valid JSON\n  where it was cut at 8 KiB.\n- A sign-up, login or update answered before its body was parsed wipes\n  the body, password included.\n- The bcrypt service answers a job refused for a full queue without\n  allocating a queue for the reply.\n- run.mjs drops the run's database and stops the load generators when a\n  run fails or is interrupted, and a failed `loadgen merge` fails the run\n  instead of reporting the last run's figures.\n- Comment and README fixes: the 72-byte password rule is the server's\n  own, the pinned challenge commit lives in bench/postgres/setup.sh, the\n  results table renders, and the submission says it needs 0.22.0.\n\nTests: conformance 197/197; concurrency and large-write checks on a live server\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* fix(bench): recover the Conduit write pool from a half-built group\n\nA bind refused part way leaves the pool's group open with a bind in it,\nwhich no Sync can end, so the pool waited on it for good. The batch\nbudget keeps that from happening inside one batch, but resends of a\nfailed batch's writes queue beside it unbudgeted. When the binds wrote\nand the send then fails, the worker now drops that connection and makes\nit again, as on a socket error. A refusal that wrote nothing (the pool\nhas already discarded the group) keeps the connection. With the budget\nlifted, sixteen ~900 KB creates at once answer five 500s and the next\nwrite 201, where the pool had stopped.\n\nTests: conformance 197/197; concurrency and large-write checks on a live server\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* fix(bench): end a half-built Conduit bind instead of dropping its connection\n\nThe last commit dropped the write connection when a group was left open\nwith a bind in it, but it detected that from the connection's queued\nbytes, which an open bind hides, so a single request refused part way\nthrough its parameters still stalled the pool. Now the worker ends any\nbind left open with the parameters it has (`bindEnd` is never refused\nfor room). Postgres refuses the short bind (\"bind message supplies 3\nparameters, but prepared statement \"article_create\" requires 4\"), the\ngroup fails and rolls back, and the Sync ends it, so the connection and\nits other groups are kept. With the batch budget lifted, sixteen ~900 KB\ncreates at once answer their 500s and the next write 201.\n\nTests: conformance 197/197; concurrency and large-write checks on a live server\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* fix(bench): hold back a Conduit write that would not fit rather than fail it\n\nA write's bind refused for room failed the group, or, when it was refused\nat its start, sent the writes bound before it while every request in the\nbatch answered 500, so writes that committed were reported as failed.\nbindAll now checks each write's upper-bound bind size (twice its text and\n512 bytes) against what already waits on the connection before binding\nit. The group ends before a write that might not fit, and that write and\nthe ones after it go again at the end of the pump, once the output has\nbeen sent. A bind is never refused for room, and no write answers 500\nfor want of it. With the batch budget lifted, forty ~900 KB creates at\nonce and a write after them all answer 201, with 41 rows stored.\n\nThe bindEnd recovery stays for a bind refused for any other reason.\n\nTests: conformance 197/197; concurrency and large-write checks on a live server\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* fix(bench): detach held-back Conduit writes from their group's ticket\n\nA write bindAll holds back now drops its ticket at once, so the group it\nleft (sent with only the statements dispatch prepared, or lost in the\nsame pump) cannot answer it before it is resubmitted, nor count its batch\ntwice.\n\nTests: conformance 197/197; concurrency and large-write checks on a live server\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* fix(self): reserve fchmod, fchmodat and getcwd, which wasi-libc now pulls in\n\nCI's runner image moved to a wasi-libc whose members a `--profile wasi`\nlink of tests/c-symbols/math.ts and lowered.ts pull in now define or\nreference `fchmod`, `fchmodat` and `getcwd`. The c-symbols check names\neach one, and src/c-symbols.ts's own header says to add what it reports:\na program function of one of those names would bind a member's\nreference to itself, as `sbrk` and `strdup` did.\n\nTests: tests/run.js c-symbols\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj\n\n* test: count map-proto-ordered on CI's valgrind 3.26.0\n\nCI's runner image now has valgrind 3.26.0 where bench/instructions.json\nwas counted with 3.22.0, and map-proto-ordered counts 253,169,464 there\nagainst 251,932,347, +0.491% past the 0.1% tolerance, on every run of\nthree. The program imports nothing and neither the compiler nor the\nruntime code it runs changed: here, under valgrind 3.22.0, it counts\n252,098,102 with this branch's runtime and with main's alike. The other\ntwenty-one counts stay inside the tolerance on the new runner (four map\nprograms and two AWFY ports read lower). The entry takes CI's count with\nits own valgrind and commit stamps, as bench/README.md's \"Raising a\nbaseline\" describes for one entry; a local `--update` would write this\ncontainer's 3.22.0 count, which CI would still exceed.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_012AGckAZ9R7km3KiYtkRsHj",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5cd44f2"
+      ],
+      "pr": 961,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-25"
+    }
+  ]
+}

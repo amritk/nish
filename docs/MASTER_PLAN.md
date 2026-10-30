@@ -99,7 +99,7 @@ Design rules that every WP must respect:
   | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
   | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
   | `runtime-term.c` | 1,825 (2026-10-24) | 2,048 |
-  | `runtime-bytes.c` | 1,303 (2026-10-23) | 1,536 |
+  | `runtime-bytes.c` | 1,525 (2026-10-24) | 1,536 |
 
   `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
   functions it calls. [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)
@@ -153,9 +153,8 @@ table with each message and the idiom to write instead.
 - Signed integer overflow is a checked panic: an operation the bounds walk
   cannot prove fits is `llvm.s*.with.overflow` and a branch to
   `nish_panic_overflow`, and one it can is `nsw` (#426). `wrappingAdd`,
-  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap at one site, and the
-  deprecated `--wrapping` makes the entry package's operators wrap. `--nsw` is
-  refused. Unsigned overflow wraps. Was "overflow wraps" until WP15 §3 made it
+  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap at one site, and no
+  flag makes a whole program wrap: `--nsw` and `--wrapping` are refused. Unsigned overflow wraps. Was "overflow wraps" until WP15 §3 made it
   `nsw` undefined behaviour, and that until #426 made it checked.
 - Strings are immutable and shared by pointer; equality is by content.
 - Functions are `nounwind`; there is no `throw` (WP16), and `panic(message)`
@@ -168,8 +167,8 @@ table with each message and the idiom to write instead.
   `internal`, so LLVM may inline, specialise or drop it. `--no-strict-exports`
   makes them all external again (WP15 §3).
 - An out-of-range index panics. `uncheckedGet` and `uncheckedSet` from
-  `nish:unsafe` opt one site out; `--unchecked-indexing` is deprecated
-  (NL9014), and `nish --fix` migrates it (#459).
+  `nish:unsafe` opt one site out; `--unchecked-indexing`, which dropped every
+  check, was removed before 1.0.
 
 ### 3.4 Open decisions
 
@@ -255,7 +254,7 @@ is its plan. [README.md](README.md) indexes them.
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
 | 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
 | 32 | `Map` and `Set` | landed in 0.11.0 and 0.12.0; a `Map` read in a parallel body (§9.3) is still open | [wp32](wp32-map.md) |
-| 33 | The round trip to TypeScript | R0–R2 built, R5's exact half built; R3, R4 open | [wp33](wp33-round-trip.md) |
+| 33 | The round trip to TypeScript | R0–R4 built, R5's exact half built; R5's review tier and R6 open | [wp33](wp33-round-trip.md) |
 | 34 | Hosting cs: the network stack | in progress | [wp34](wp34-hosting-cs.md) |
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
@@ -265,7 +264,7 @@ is its plan. [README.md](README.md) indexes them.
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
 | 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; stage 1, the router, built | [wp43](wp43-http-app-layer.md) |
 | 44 | Streaming file reads: a descriptor, a positional read, a size and a close | proposed; design only, open questions for the owner | [wp44](wp44-streaming-files.md) |
-| 45 | Name resolution for `nish:net`: a DNS stub resolver | proposed | [wp45](wp45-name-resolution.md) |
+| 45 | Name resolution for `nish:net`: a DNS stub resolver | built: `nish/net/dns` on the caller's loop, `resolveHost` for start-up | [wp45](wp45-name-resolution.md) |
 | 46 | Memory for programs that do not exit: regions | proposed | [wp46](wp46-long-running-memory.md) |
 
 A package's plan said where its work would be done, which for everything up
@@ -423,13 +422,14 @@ major. Whether it happens at all is still wp22 §10's open question.
    and, now that 0.17.0 carries R2, the cs side: `services/relay` replaced,
    `boot-check`'s wire pass and `bench:offload` against the Rust relay. §5 of
    the note has the lane table and what each lane left.
-2. **WP33 R3 and R4, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
-   R1 (the `portability` class behind `--warn-portability`) and R2 (the
-   typed-array names lose `push` and `pop`) are built, and so is R5's exact
-   half, `nish --fix`. Next are R3, the runtime split by host, and R4,
-   `--emit ts` with its live differential. Its rule binds now: every construct
-   states its TypeScript reading, and no stage moves a `.ll` golden or raises
-   `bench/instructions.json`.
+2. **WP33, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
+   R1 (the `portability` class behind `--warn-portability`), R2 (the
+   typed-array names lose `push` and `pop`), R5's exact half (`nish --fix`),
+   R3 (the runtime split by host) and R4 (`--emit-ts <dir>` with its live
+   differential, `tsc --strict` over its output and a fuzz mode) are built.
+   Next are R5's review tier and R6. Its rule binds: every construct states
+   its TypeScript reading, a class-C one ships its `--emit-ts` translation,
+   and no stage moves a `.ll` golden or raises `bench/instructions.json`.
 3. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
    the process with Landlock and seccomp to the capabilities the compiler
    computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. Its note,

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "entry": "caps_process_spawn_piped.ts",
+  "deterministic": false,
+  "capabilities": ["process.spawn"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["process.spawn"],
+      "modules": [
+        {
+          "path": "caps_process_spawn_piped.ts",
+          "capabilities": ["process.spawn"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["process.spawn"],
+              "witnesses": {
+                "process.spawn": [
+                  { "function": "main", "at": "caps_process_spawn_piped.ts:11:18", "calls": "run" },
+                  { "function": "run", "at": "caps_process_spawn_piped.ts:5:10", "calls": "spawnPiped" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_process_spawn_piped.ts:9:21", "allowed": true },
+                { "kind": "oom", "at": "caps_process_spawn_piped.ts:10:21", "allowed": true },
+                { "kind": "oom", "at": "caps_process_spawn_piped.ts:12:15", "allowed": true }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

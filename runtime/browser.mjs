@@ -10,26 +10,15 @@
  *   - `exit(code)` throws a `NishExit` carrying the code, since a page cannot
  *     end itself; the caller that started the program catches it, and does
  *     not call the module again (docs/security/runtime-browser.md, BROWSER-2).
- *   - `monotonicNanos` reads `performance.now()`, `getenv` answers `null`,
- *     `isTerminal` answers `false` and `terminalSize` `[-25, 0]`, and `argv()`
- *     is the program alone.
+ *   - `monotonicNanos` reads `performance.now()`, `wallClockNanos` `Date.now()`,
+ *     `getenv` answers `null`, `isTerminal` answers `false` and `terminalSize`
+ *     `[-25, 0]`, and `argv()` is the program alone.
  *   - Every file-system, process and machine call panics, naming itself and
  *     the browser.
  */
-import { installHost, panic } from "./core/host.mjs";
+import { installHost, NishExit, panic } from "./core/host.mjs";
 
-/**
- * What `exit(code)` throws: `code` is the 8-bit status a native exit would
- * leave. Exported so a caller tells it apart with `instanceof`, which a thrown
- * object that only carries the name does not pass.
- */
-export class NishExit extends Error {
-  constructor(code) {
-    super(`the program exited with ${code}`);
-    this.name = "NishExit";
-    this.code = code & 0xff;
-  }
-}
+export { NishExit };
 
 /**
  * One console stream, buffered to the next newline. The `"%s"` keeps a `%d`
@@ -80,6 +69,7 @@ installHost({
   call(name) {
     if (name === "getenv") return null;
     if (name === "monotonicNanos") return BigInt(Math.round(performance.now() * 1e6));
+    if (name === "wallClockNanos") return BigInt(Date.now()) * 1000000n;
     // A page has no terminal, which `nish:term` answers as a pipe does.
     if (name === "isTerminal") return false;
     if (name === "terminalSize") return [-25, 0];

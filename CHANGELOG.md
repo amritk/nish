@@ -26,6 +26,273 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-29
+
+### Added
+
+- runtime: Files and directories with an explicit mode, and exclusive create, in nish:fs ([#1020](https://github.com/amritk/nish/pull/1020))
+- runtime: SpawnPiped runs a child with stdin from memory and stdout/stderr captured ([#1025](https://github.com/amritk/nish/pull/1025))
+- runtime: A packing dispatch policy for nish/net/postgres's PgPool ([#1036](https://github.com/amritk/nish/pull/1036))
+- runtime: Binary result columns for nish/net/postgres ([#1037](https://github.com/amritk/nish/pull/1037))
+
+### Build
+
+- Regenerate package-lock.json for v0.25.0 ([#1035](https://github.com/amritk/nish/pull/1035))
+- deps: Bump github.com/klauspost/compress ([#1021](https://github.com/amritk/nish/pull/1021))
+
+
+## [0.25.0] - 2026-10-29
+
+### Added
+
+- runtime: SetNice and setIdlePriority in nish:process ([#985](https://github.com/amritk/nish/pull/985))
+- crypto: ECDSA verification over P-384 ([#1009](https://github.com/amritk/nish/pull/1009))
+- crypto: Load trust anchors from SSL_CERT_FILE, SSL_CERT_DIR and the system bundles ([#998](https://github.com/amritk/nish/pull/998))
+- runtime: RenameSync, unlinkSync and u8[] output in nish:fs and nish:io ([#1016](https://github.com/amritk/nish/pull/1016))
+- cli: ANSI colours and recolourable help roles on Style ([#1001](https://github.com/amritk/nish/pull/1001))
+- net: DNS message codec and resolv.conf / hosts parsers ([#1007](https://github.com/amritk/nish/pull/1007))
+- std: Write a JSON value as YAML (nish/yaml-write) ([#1000](https://github.com/amritk/nish/pull/1000))
+- stdlib: Parse absolute URLs and resolve references in nish/net/url ([#1017](https://github.com/amritk/nish/pull/1017))
+- runtime: NetSetOption with a whitelist of socket options ([#1014](https://github.com/amritk/nish/pull/1014))
+- std: Parse command-line flags from a declared table (nish/cli-flags) ([#1002](https://github.com/amritk/nish/pull/1002))
+- crypto: Read X.509 v3 extensions, names and every signature algorithm a Web PKI chain uses ([#1011](https://github.com/amritk/nish/pull/1011))
+- runtime: A wall clock in nish:process ([#1004](https://github.com/amritk/nish/pull/1004))
+- net: Nish/net/dns, a stub resolver on the caller's loop ([#1019](https://github.com/amritk/nish/pull/1019))
+- cli: Nish/cli-args, a command-tree parser for large CLIs ([#1003](https://github.com/amritk/nish/pull/1003))
+- crypto: RSA signature verification, PKCS#1 v1.5 and PSS ([#1006](https://github.com/amritk/nish/pull/1006))
+- net: The sans-IO TLS 1.3 client handshake and record layer ([#1018](https://github.com/amritk/nish/pull/1018))
+- crypto: RFC 5280 path validation and RFC 6125 hostname matching for TLS servers ([#1027](https://github.com/amritk/nish/pull/1027))
+- stdlib: Sans-IO HTTP/1.1 request writer and response parser ([#1013](https://github.com/amritk/nish/pull/1013))
+- net: The TLS client over TCP, server authentication and a blocking connect ([#1029](https://github.com/amritk/nish/pull/1029))
+
+### Fixed
+
+- runtime: Linger after a TLS close so a client never sees a reset ([#996](https://github.com/amritk/nish/pull/996))
+
+### Performance
+
+- compress: Faster gunzip, gzip and CRC-32, and two fixes from #984's review ([#1010](https://github.com/amritk/nish/pull/1010))
+
+### Documentation
+
+- Plan WebSocket client opening handshake (ws-client stage) ([#1015](https://github.com/amritk/nish/pull/1015))
+
+### Tests
+
+- crypto: Run the x509-limbo server-authentication cases against nish/crypto/pki ([#1030](https://github.com/amritk/nish/pull/1030))
+
+### Build
+
+- Regenerate package-lock.json for v0.24.0 ([#999](https://github.com/amritk/nish/pull/999))
+- cli: Link ELF binaries with a GNU build-id note ([#997](https://github.com/amritk/nish/pull/997))
+
+### CI
+
+- Deal the slow sections across the test shards and run the Nish runner on every core ([#1026](https://github.com/amritk/nish/pull/1026))
+
+
+## [0.24.0] - 2026-10-28
+
+### Breaking changes
+
+- checker: Remove Arena.release, Arena.reset, --wrapping and --unchecked-indexing ([#983](https://github.com/amritk/nish/pull/983))
+
+### Added
+
+- compress: Add gzip, zlib and DEFLATE, and gzip HTTP responses ([#984](https://github.com/amritk/nish/pull/984))
+
+### Fixed
+
+- interop: Keep the simulator's last packets in the runner's pcaps ([#979](https://github.com/amritk/nish/pull/979))
+
+### Build
+
+- Regenerate package-lock.json for v0.23.1 ([#981](https://github.com/amritk/nish/pull/981))
+
+
+## [0.23.1] - 2026-10-28
+
+### Fixed
+
+- std: An idle keep-alive no longer makes every http1 expire walk every slot ([#978](https://github.com/amritk/nish/pull/978))
+
+### Documentation
+
+- Bring the README up to date with the language ([#976](https://github.com/amritk/nish/pull/976))
+- bench: Record where nish/net/postgres's client time goes ([#974](https://github.com/amritk/nish/pull/974))
+
+### Build
+
+- Regenerate package-lock.json for v0.23.0 ([#975](https://github.com/amritk/nish/pull/975))
+
+
+## [0.23.0] - 2026-10-27
+
+### Added
+
+- runtime: Int8[] and incremental text[] parameters for nish/net/postgres ([#972](https://github.com/amritk/nish/pull/972))
+- runtime: A sans-IO batching helper for nish/net/postgres ([#973](https://github.com/amritk/nish/pull/973))
+
+### Fixed
+
+- bench: Pin the Conduit submission to nish 0.22.1 ([#968](https://github.com/amritk/nish/pull/968))
+
+### Build
+
+- Regenerate package-lock.json for v0.22.1 ([#967](https://github.com/amritk/nish/pull/967))
+
+### Internal
+
+- bench: Remove the multicore Conduit server, now kept in the challenge fork ([#970](https://github.com/amritk/nish/pull/970))
+
+
+## [0.22.1] - 2026-10-26
+
+### Fixed
+
+- cli: Ask no attestation of 0.21.0, and drop unpublished pins from the lockfile ([#964](https://github.com/amritk/nish/pull/964))
+
+### Performance
+
+- bench: Coalesce the Conduit server's same-shape reads into one array-parameter statement ([#963](https://github.com/amritk/nish/pull/963))
+
+
+## [0.22.0] - 2026-10-25
+
+### Added
+
+- cli: Close the --emit-ts oracle: tsc --strict, the known-list pin, fuzz, and the docs ([#917](https://github.com/amritk/nish/pull/917))
+- runtime: A connection pool and an epoll carrier for nish/net/postgres ([#929](https://github.com/amritk/nish/pull/929))
+- codegen: Harden every native binary the toolchain links ([#916](https://github.com/amritk/nish/pull/916))
+- std: Rng.nextInt answers an unbiased integer in a range ([#939](https://github.com/amritk/nish/pull/939))
+- cli: Leave a wall of bricks in the help, and a door behind it ([#940](https://github.com/amritk/nish/pull/940))
+- net: A Conduit server for the multicore server challenge ([#961](https://github.com/amritk/nish/pull/961))
+
+### Fixed
+
+- checker: A std/threads task may wipe a Secret it made from a fresh value ([#945](https://github.com/amritk/nish/pull/945))
+- crypto: Wipe the hash bcrypt verify recomputes ([#959](https://github.com/amritk/nish/pull/959))
+
+### Performance
+
+- crypto: Hash and verify up to four bcrypt passwords at once, interleaved ([#938](https://github.com/amritk/nish/pull/938))
+- runtime: Measure nish/net/postgres against libpq pipeline mode ([#941](https://github.com/amritk/nish/pull/941))
+
+### Documentation
+
+- wp38: S6c's callgrind gate, and the owner's Q5 decision ([#935](https://github.com/amritk/nish/pull/935))
+- Record two --emit-ts conventions in CLAUDE.md ([#951](https://github.com/amritk/nish/pull/951))
+- wp38: S6d, the per-value cuts that would let S6c reach its bar ([#954](https://github.com/amritk/nish/pull/954))
+- crypto: Name the bcrypt single-path gap as LLVM's xor order ([#957](https://github.com/amritk/nish/pull/957))
+
+### Tests
+
+- self: Fuzz the bounds-check elision with proofgen programs under ASan ([#924](https://github.com/amritk/nish/pull/924))
+- runtime: Say a random hash key miscounts map_fingerprint_miss by one or two ([#934](https://github.com/amritk/nish/pull/934))
+
+### Build
+
+- Regenerate package-lock.json for v0.21.0 ([#936](https://github.com/amritk/nish/pull/936))
+
+### CI
+
+- release: Attest build provenance, attach an SBOM, and rebuild releases from their tags ([#898](https://github.com/amritk/nish/pull/898))
+
+
+## [0.21.0] - 2026-10-24
+
+### Breaking changes
+
+- checker: Refuse a dependency's unsafe, ffi, net and process.spawn unless the root package grants them ([#905](https://github.com/amritk/nish/pull/905))
+
+### Added
+
+- std: Tell an integer-valued JSON number by its value ([#837](https://github.com/amritk/nish/pull/837))
+- std: Add nish/term, terminal frames and key decoding with no I/O ([#846](https://github.com/amritk/nish/pull/846))
+- runtime: Publish nish/runtime with a browser adapter and declarations ([#851](https://github.com/amritk/nish/pull/851))
+- checker: Check the owned foreign handle class ([#850](https://github.com/amritk/nish/pull/850))
+- std: Nish/yaml, a YAML parser with byte ranges, lines and paths ([#852](https://github.com/amritk/nish/pull/852))
+- cli: Write a program back out as TypeScript with --emit-ts ([#853](https://github.com/amritk/nish/pull/853))
+- std: Add nish/regex, a linear-time regex engine with a lazy DFA ([#858](https://github.com/amritk/nish/pull/858))
+- std: Count code points in std/text ([#838](https://github.com/amritk/nish/pull/838))
+- std: Nish/yaml paths follow merge keys, held to the yaml-test-suite ([#857](https://github.com/amritk/nish/pull/857))
+- cli: Group and colour --help, and keep it plain for agents ([#855](https://github.com/amritk/nish/pull/855))
+- cli: Translate the string rows in --emit-ts ([#859](https://github.com/amritk/nish/pull/859))
+- runtime: Add nish:term, terminal input for real-time terminal programs ([#854](https://github.com/amritk/nish/pull/854))
+- cli: Translate the number rows in --emit-ts ([#866](https://github.com/amritk/nish/pull/866))
+- cli: Translate orReturn, Result and enums in --emit-ts ([#864](https://github.com/amritk/nish/pull/864))
+- codegen: `using` of a handle class closes it at every exit of its block ([#861](https://github.com/amritk/nish/pull/861))
+- std: Byte-class runs and copyBytes in nish/bytes, on runtime kernels ([#862](https://github.com/amritk/nish/pull/862))
+- runtime: Add PBKDF2-HMAC-SHA256 to nish/crypto/hmac ([#871](https://github.com/amritk/nish/pull/871))
+- codegen: Give Math.round, min and max JavaScript's -0 and NaN, and add atan2, tan, hypot, sign, imul and f32ToBits ([#847](https://github.com/amritk/nish/pull/847))
+- runtime: Nish:term setTerminalRestore writes a mode reset on exit, panic and signal ([#876](https://github.com/amritk/nish/pull/876))
+- std: One event stream from nish/term's KeyDecoder ([#877](https://github.com/amritk/nish/pull/877))
+- std: Add nish/cli, and paint --help in the terminal theme's colours ([#879](https://github.com/amritk/nish/pull/879))
+- cli: Vendor SQLite and link it when a program uses it ([#870](https://github.com/amritk/nish/pull/870))
+- std: Nish/term-rate chooses the refresh rate a machine and link sustain ([#906](https://github.com/amritk/nish/pull/906))
+- cli: Translate the array and record rows in --emit-ts ([#867](https://github.com/amritk/nish/pull/867))
+- std: Nish/term-probe detects what a terminal can do ([#903](https://github.com/amritk/nish/pull/903))
+- std: Framebuffer and the kitty, Sixel, half-block and ASCII backends ([#911](https://github.com/amritk/nish/pull/911))
+- runtime: Add nish/sqlite, a SQLite client ([#878](https://github.com/amritk/nish/pull/878))
+- std: Nish/term-io opens a terminal and runs a frame loop that adapts to it ([#920](https://github.com/amritk/nish/pull/920))
+- cli: A capability lockfile that fails a build when a dependency reaches a new capability ([#923](https://github.com/amritk/nish/pull/923))
+- runtime: Add nish/net/postgres, a sans-IO PostgreSQL client ([#891](https://github.com/amritk/nish/pull/891))
+- crypto: Bcrypt hash and verify in nish/crypto/bcrypt ([#884](https://github.com/amritk/nish/pull/884))
+
+### Fixed
+
+- checker: Tie NL8001's loop cursor to the string it counts ([#845](https://github.com/amritk/nish/pull/845))
+- checker: Bind a declare function in a package to its bare C symbol ([#869](https://github.com/amritk/nish/pull/869))
+- checker: A std/threads task may call a function that wipes memory the task allocated ([#894](https://github.com/amritk/nish/pull/894))
+- runtime: Audit regex, term, bytes, PBKDF2 and the browser host ([#904](https://github.com/amritk/nish/pull/904))
+- std: A deadline for an HTTP/1 head and HPACK decoding into caller storage (H1-1, H2-1) ([#895](https://github.com/amritk/nish/pull/895))
+- runtime: Seed the string hash of every Map and Set (JSON-13) ([#900](https://github.com/amritk/nish/pull/900))
+- std: Mark ECT on QUIC datagrams the carriers send (QUIC-10) ([#914](https://github.com/amritk/nish/pull/914))
+- std: Nish/term-rate keeps its latency and bandwidth estimates apart on small frames ([#925](https://github.com/amritk/nish/pull/925))
+
+### Performance
+
+- codegen: A foreign call does not resize an array ([#836](https://github.com/amritk/nish/pull/836))
+- cli: Link the speed profile in parallel ([#907](https://github.com/amritk/nish/pull/907))
+- tests: Link most tests/link programs under a cheaper profile ([#909](https://github.com/amritk/nish/pull/909))
+- self: Run the tests/link programs through a worker pool ([#913](https://github.com/amritk/nish/pull/913))
+- runtime: Measure nish/sqlite against C on the challenge schema ([#921](https://github.com/amritk/nish/pull/921))
+- runtime: A JSON-plain byte class, and JsonWriter's byte writers on it ([#892](https://github.com/amritk/nish/pull/892))
+
+### Changed
+
+- runtime: Split the Node runtime into a host-agnostic core and a Node adapter ([#848](https://github.com/amritk/nish/pull/848))
+
+### Documentation
+
+- Add issue forms that ask for what a fix needs ([#860](https://github.com/amritk/nish/pull/860))
+- Make CI's test shards the full-suite gate ([#890](https://github.com/amritk/nish/pull/890))
+- security: Bring the audit index in line with the records ([#919](https://github.com/amritk/nish/pull/919))
+
+### Tests
+
+- yaml: Vendor the yaml-test-suite as packed test data ([#849](https://github.com/amritk/nish/pull/849))
+- bench: Compare nish/yaml with @amritk/yaml ([#856](https://github.com/amritk/nish/pull/856))
+- checker: Pin use after close of a handle and its sibling shapes ([#874](https://github.com/amritk/nish/pull/874))
+- security: LibFuzzer harness, sanitizer runtime build, CI fuzz jobs, JSON/URL/regex targets ([#908](https://github.com/amritk/nish/pull/908))
+- codegen: An elision-off reference build and a soundness differential ([#897](https://github.com/amritk/nish/pull/897))
+- runtime: A proof-shaped program generator and an AddressSanitizer build ([#902](https://github.com/amritk/nish/pull/902))
+- std: Nish/term-io pins the restore of mouse and focus, the silent probe and the env overrides ([#928](https://github.com/amritk/nish/pull/928))
+- security: Fuzz targets for TLS, QUIC, HPACK, HTTP/1, WebSocket and X.509 ([#910](https://github.com/amritk/nish/pull/910))
+
+### Build
+
+- Regenerate package-lock.json for v0.20.0 ([#835](https://github.com/amritk/nish/pull/835))
+
+### CI
+
+- Seed the interop image from a published release ([#840](https://github.com/amritk/nish/pull/840))
+- Split runtime-net three ways and run only the platform's checks on macOS ([#841](https://github.com/amritk/nish/pull/841))
+- Cache interop's tshark packages and retry them off the Azure mirror ([#863](https://github.com/amritk/nish/pull/863))
+- Disable the macOS jobs ([#865](https://github.com/amritk/nish/pull/865))
+- Refuse attacker-facing code that ships without its security record ([#893](https://github.com/amritk/nish/pull/893))
+
+
 ## [0.20.0] - 2026-10-23
 
 ### Breaking changes
@@ -1055,3 +1322,11 @@ hand — the git log is the working account until a release turns it into one.
 [0.18.0]: https://github.com/amritk/nish/releases/tag/v0.18.0
 [0.19.0]: https://github.com/amritk/nish/releases/tag/v0.19.0
 [0.20.0]: https://github.com/amritk/nish/releases/tag/v0.20.0
+[0.21.0]: https://github.com/amritk/nish/releases/tag/v0.21.0
+[0.22.0]: https://github.com/amritk/nish/releases/tag/v0.22.0
+[0.22.1]: https://github.com/amritk/nish/releases/tag/v0.22.1
+[0.23.0]: https://github.com/amritk/nish/releases/tag/v0.23.0
+[0.23.1]: https://github.com/amritk/nish/releases/tag/v0.23.1
+[0.24.0]: https://github.com/amritk/nish/releases/tag/v0.24.0
+[0.25.0]: https://github.com/amritk/nish/releases/tag/v0.25.0
+[0.26.0]: https://github.com/amritk/nish/releases/tag/v0.26.0

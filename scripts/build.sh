@@ -10,7 +10,8 @@
 # threads, <dir>/runtime-cross.c, the copies that carry a string or an array
 # from one thread's arena to another's, <dir>/runtime-host.c, the wall clock, entropy, file times and
 # signals, <dir>/runtime-net.c, the sockets of `nish:net`,
-# <dir>/runtime-simd.c, the byte searches that read a vector at a time,
+# <dir>/runtime-simd.c, the byte searches that read a vector at a time and
+# the SSE4.1 rounding of `Math.floor` and its kin,
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
 # <dir>/runtime-term.c, stdin and the terminal of `nish:term`,
 # <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`, and
@@ -62,6 +63,10 @@
 # step of the speed/size/napi profiles, so the DWARF that `nish -g`
 # put in the .ll (line table, variables) reaches the binary. `nish
 # --link -g` passes it through automatically.
+#
+# Build id: every native ELF binary carries an NT_GNU_BUILD_ID note
+# (--build-id=sha1). A -g link hashes other bytes than a plain one, so strip
+# the -g build to pair a binary with its debug file (docs/guide/using-nish/cli.md).
 #
 # CPU level (WP38 S2): `--cpu x86-64-v3` compiles and links every input --
 # the module, the runtime and any other C -- with -march=x86-64-v3
@@ -292,8 +297,8 @@ case "$(uname -s)" in
     # followed by SIGABRT, so the stage1 that linked went on to abort the
     # moment the bootstrap ran it. Measured too, on the run after the one that
     # named the UUID. An unloadable compiler is worse than any reproducibility,
-    # so the UUID stays. The ELF branch's --build-id=none below is the flag
-    # this would have been; ELF has no loader that insists on one.
+    # so the UUID stays. ELF's twin is the build-id note below, which ELF's
+    # loader never asks for and which is a hash of the output's bytes anyway.
     #
     # It costs nothing, because the UUID was measured stable across two links
     # of one input to one output path, and differing on a link to another. That
@@ -305,8 +310,14 @@ case "$(uname -s)" in
     strip_flag=(-Wl,-x) ;;
   *)
     # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
-    gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
+    gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2); strip_flag=(-s)
     elf=(-fno-plt)
+    # A GNU build-id note on every native link, debug included, so perf, gdb
+    # and debuginfod can match a stripped binary to its debug file. sha1 is a
+    # hash of the output's own bytes in lld, GNU ld and gold, so one input
+    # links to one id and `stage3 == stage2` holds; uuid would be random.
+    # shellcheck disable=SC2054
+    common+=(-Wl,--build-id=sha1)
     # GNU ld needs the gold plugin for LTO; prefer lld when clang can find it.
     if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); lld=1; fi ;;
 esac
@@ -345,6 +356,39 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # float than the baseline build (docs/LANGUAGE.md, "The CPU level").
 if [ -n "$cpu" ]; then common+=(-march=x86-64-v3 -ffp-contract=off); fi
 
+# Hardening, on every native profile (the wasm and wasi ones build their own
+# command line and have none of these to give). docs/security/runtime.md
+# records what each one closes and what it costs.
+#
+# The control-flow flag names the target's own scheme: -fcf-protection is an
+# error on arm64 and -mbranch-protection one on x86, so the triple decides.
+# Nish's IR carries both targets' module flags, and each backend reads its own;
+# these make clang's C units agree, because the linker marks the binary only
+# when every object asks for it. -fstack-clash-protection is ELF's alone: on
+# Mach-O clang ignores it with a warning, and the kernel's guard is the stack
+# itself. -z relro -z now leaves the GOT read-only after relocation, and
+# -z noexecstack says so even when an object without the note slips in.
+#
+# -fstack-protector-strong and _FORTIFY_SOURCE reach the C runtime alone: on a
+# .ll input clang adds no ssp attribute and the macro has no source to change,
+# so one flag list serves the one-command link too. FORTIFY wants an optimiser
+# and is left out of debug, where it would only warn. -U first, because a
+# distribution clang may already define it at another level.
+case "$("$CC" -dumpmachine 2>/dev/null)" in
+  x86_64*|amd64*) common+=(-fcf-protection=full); landing=1 ;;
+  aarch64*|arm64*) common+=(-mbranch-protection=standard); landing=1 ;;
+  *) landing=0 ;;
+esac
+common+=(-fstack-protector-strong)
+if [ "$profile" != debug ]; then common+=(-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3); fi
+case "$(uname -s)" in
+  Darwin) ;;
+  *)
+    common+=(-fstack-clash-protection)
+    # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
+    common+=(-Wl,-z,relro,-z,now -Wl,-z,noexecstack) ;;
+esac
+
 tls=()
 if [ "$threads" = 1 ]; then
   common+=(-DNISH_THREADS=1 -ftls-model=initial-exec -pthread)
@@ -364,7 +408,7 @@ case "$profile" in
     optimise=(-Oz -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
       -ffunction-sections -fdata-sections -fomit-frame-pointer
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}
-      -fno-stack-protector -fvisibility=hidden) ;;
+      -fvisibility=hidden) ;;
   napi)
     optimise=(-O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
       -ffunction-sections -fdata-sections -fomit-frame-pointer
@@ -373,14 +417,18 @@ esac
 
 # The speed link splits full LTO's code generation into one partition per core,
 # run in parallel: lld's --lto-partitions, after the whole program is optimised
-# as one module, so inlining and the instructions a program runs do not change
-# (bench/instructions.json agrees to a few instructions in hundreds of
-# millions). The bytes depend on the count, so one machine links one input to
-# one output, as scripts/bootstrap.sh needs. ld64 and GNU ld have no such flag
-# and link as before, and so does every other profile. The count comes
-# from nproc (Linux), else getconf (both), else sysctl (macOS).
+# as one module, so inlining does not change. But a partition boundary promotes
+# the internal functions called across it to external ones, and under the
+# control-flow hardening above every external function opens with a landing pad
+# (endbr64, or bti c), which the hot calls then run: fib runs 6.5% more
+# instructions with two partitions than with one. So a target with landing pads
+# links in one partition, and the split is left to the rest. The bytes depend
+# on the count, so one machine links one input to one output, as
+# scripts/bootstrap.sh needs. ld64 and GNU ld have no such flag and link as
+# before, and so does every other profile. The count comes from nproc (Linux),
+# else getconf (both), else sysctl (macOS).
 lto_parts=()
-if [ "$profile" = speed ] && [ "$lld" = 1 ]; then
+if [ "$profile" = speed ] && [ "$lld" = 1 ] && [ "$landing" = 0 ]; then
   cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null ||
     sysctl -n hw.ncpu 2>/dev/null || echo 1)
   # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
@@ -390,15 +438,22 @@ fi
 # --runtime-objects and --runtime-from: the one-command link split in two, with
 # every compile it held run at once. A `$CC -c` takes `common` and `optimise`,
 # which is what the one command compiles each input with -- less
-# -fuse-ld=lld, which only names the linker -- so a runtime unit compiles to the
-# same object either way: native code for debug, -flto bitcode for speed and
-# size, which the link still optimises together with the program. The link
-# takes the same line the profile always uses, with objects for sources.
+# -fuse-ld=lld and the -Wl, flags, which only speak to the linker -- so a
+# runtime unit compiles to the same object either way: native code for debug,
+# -flto bitcode for speed and size, which the link still optimises together
+# with the program. The link takes the same line the profile always uses, with
+# objects for sources.
 compile=()
 for flag in "${common[@]}"; do
-  case "$flag" in -fuse-ld=*) ;; *) compile+=("$flag") ;; esac
+  case "$flag" in -fuse-ld=*|-Wl,*) ;; *) compile+=("$flag") ;; esac
 done
 compile+=(${optimise[@]+"${optimise[@]}"})
+# A program's modules are .ll alone, and clang warns that a -U it cannot
+# apply to one went unused, so their compile leaves the FORTIFY pair out.
+module_compile=()
+for flag in "${compile[@]}"; do
+  case "$flag" in -U_FORTIFY_SOURCE|-D_FORTIFY_SOURCE=*) ;; *) module_compile+=("$flag") ;; esac
+done
 # Waits for every job, not just the last, and fails when any of them did.
 # bash 3.2 has no `wait -n`, so the jobs are waited for in order.
 pids=()
@@ -553,7 +608,7 @@ if [ -n "$objects_from" ]; then
   for i in "${inputs[@]}"; do
     case "$i" in */runtime.c|runtime.c) echo "error: --runtime-from links the runtime in $objects_from, so $i is not an input" >&2; exit 2 ;; esac
     n=$((n + 1))
-    "$CC" "${compile[@]}" -c "$i" -o "$work/$n.o" &
+    "$CC" "${module_compile[@]}" -c "$i" -o "$work/$n.o" &
     pids+=("$!")
     objects+=("$work/$n.o")
   done
@@ -621,6 +676,20 @@ case "$profile" in
     done
     if [ "$bytes_wanted" = 1 ] && [ "$bytes_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-bytes.c")
+    fi
+    # IR compiled for the host rounds through runtime-simd.c's `nish_floor` and its
+    # kin behind the constructor `nish_round_init` (#943). runtime-wasm.c has their
+    # wasm32 bodies, and it is added the same way when such IR does not name it.
+    wasm_named=0
+    round_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        */runtime-wasm.c|runtime-wasm.c) wasm_named=1 ;;
+        *.ll) if grep -q '@nish_round_init' "$i"; then round_wanted=1; fi ;;
+      esac
+    done
+    if [ "$round_wanted" = 1 ] && [ "$wasm_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-wasm.c")
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 716
+export const RULE_COUNT: i32 = 718
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -129,6 +129,8 @@ const diagnosticRules = (): string[] => [
   "NL2416",
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
   "NL2481",
+  "--emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type",
+  "NL4014",
   "`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call",
   "NL2500",
   "` is set from something other than `secret(...)`: a `Secret` field is set in its class's constructor, from `secret(v)`, so the holder is the only owner of the key it makes, and its `wipe()` the one place that key ends",
@@ -161,8 +163,6 @@ const diagnosticRules = (): string[] => [
   "NL2482",
   "`: a handle class declares exactly one `CPtr` or `CPtr | null` field, `readonly` and with no initialiser, so the one pointer it owns is written once by its constructor and closed once by its dispose",
   "NL2564",
-  "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block",
-  "NL2351",
   "`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the module's top-level names, so it can capture nothing",
   "NL2335",
   "; a constructor or method is named after its class, so two classes that share a name anywhere in the program cannot both declare it, whether or not either is exported; rename one of the classes",
@@ -255,6 +255,8 @@ const diagnosticRules = (): string[] => [
   "NL2349",
   " and cannot be the default of another `??`: the default stands in for a missing value, so it is a value; give this one a default of its own first, `a ?? (b ?? d)`",
   "NL2371",
+  "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block",
+  "NL2351",
   "--emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const",
   "NL4012",
   "` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new ",
@@ -1448,6 +1450,8 @@ const diagnosticRules = (): string[] => [
 const portabilityRules = (): string[] => [
   "overwrites the element a reference still reads, and TypeScript replaces the object instead",
   "NL8004",
+  "is never instantiated, and its body needs the checker's types to translate",
+  "NL8012",
   "is copied into the array here, and TypeScript stores the same object",
   "NL8003",
   "follows the native NaN and signed-zero rules here, not JavaScript's",

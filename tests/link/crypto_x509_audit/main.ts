@@ -10,13 +10,19 @@
 // X509-5 block pins what the record states `x509ParseChain` and
 // `x509ParseCertificate` do not check, so a change that starts checking one
 // has to say so here. X509-8: a version-1 PKCS#8 key's outer `[1]` public key
-// was stepped over, so arbitrary bytes there parsed.
+// was stepped over, so arbitrary bytes there parsed. X509-10: an extension was
+// only framed, so a repeated one, or a known one with bytes past its value,
+// parsed. X509-11 pins that an unknown critical extension is reported, not
+// refused, and X509-12 and X509-13 pin the Name comparison the record leaves
+// open: byte for byte, with DER's SET OF order unchecked.
 import { Suite } from "nish/testing"
 import {
   X509Certificate,
   derToPem,
   pemToDer,
   x509ParseCertificate,
+  x509NameEqual,
+  x509NameIsPrefix,
   x509ParseChain,
   x509VerifySignature,
 } from "nish/crypto/x509"
@@ -91,8 +97,50 @@ const withTrailing = (extraHex: string): u8[] => {
   return out
 }
 
+/** `n` as a two-octet DER length, `82 hi lo`, pushed onto `out`. */
+const pushLong = (out: u8[], tag: i32, n: i32): void => {
+  out.push(toU8(tag))
+  out.push(0x82)
+  out.push(toU8(n >> 8))
+  out.push(toU8(n & 0xff))
+}
+
+/**
+ * The old golden with `count` distinct private extensions after the key, 1.2.0
+ * up to 1.2.(count - 1), each `30 06 06 02 2a k 04 00`. Past `withTrailing`'s
+ * 50 octets, so every length here is the two-octet form, which DER makes
+ * minimal only from 256 octets: `count` is 32 to 127, the top so each arc is
+ * one octet.
+ */
+const withExtensions = (count: i32): u8[] => {
+  const g: u8[] = fromHex(GOLDEN_NO_EXTENSIONS)
+  const list: i32 = 8 * count
+  const tbs: i32 = 0xca + list + 8
+  const out: u8[] = []
+  pushLong(out, 0x30, 4 + tbs + toI32(g.length) - 209)
+  pushLong(out, 0x30, tbs)
+  for (let i: i32 = 7; i < 209 && i < toI32(g.length); i++) {
+    out.push(g[i])
+  }
+  pushLong(out, 0xa3, list + 4)
+  pushLong(out, 0x30, list)
+  for (let k: i32 = 0; k < count; k++) {
+    const ext: u8[] = [0x30, 0x06, 0x06, 0x02, 0x2a, toU8(k), 0x04, 0x00]
+    for (const b of ext) {
+      out.push(b)
+    }
+  }
+  for (let i: i32 = 209; i < toI32(g.length); i++) {
+    out.push(g[i])
+  }
+  return out
+}
+
 /** Whether `x509ParseCertificate` reads the old golden with `extraHex` after the key. */
 const readsWith = (extraHex: string): boolean => x509ParseCertificate(withTrailing(extraHex)) !== null
+
+/** The old golden with `extraHex` after the key, read back, or null. */
+const readWith = (extraHex: string): X509Certificate | null => x509ParseCertificate(withTrailing(extraHex))
 
 /** The mint with the golden's key, time and days, serial 1, under `name`. */
 const mintName = (name: string): u8[] | null =>
@@ -172,11 +220,11 @@ const trailingSuite = (): i32 => {
   t.ok("[3] holding a real extension reads", readsWith("a310300e300c0603551d130101ff04023000"))
   t.eqBool("[3] holding a NULL is refused", readsWith("a3020500"), false)
   t.eqBool("[3] holding an empty SEQUENCE is refused", readsWith("a3023000"), false)
-  t.eqBool("[3] holding a SEQUENCE and then more is refused", readsWith("a306300205003000"), false)
-  t.eqBool("two [3] elements are refused", readsWith("a30430020500a30430020500"), false)
+  t.eqBool("[3] holding a SEQUENCE and then more is refused", readsWith("a312300e300c0603551d130101ff040230003000"), false)
+  t.eqBool("two [3] elements are refused", readsWith("a310300e300c0603551d130101ff04023000a310300e300c0603551d130101ff04023000"), false)
   t.ok("[1] as an empty BIT STRING, 81 01 00, reads", readsWith("810100"))
   t.ok("[1] with four unused bits of one octet reads", readsWith("810204f0"))
-  t.ok("[1], [2] and [3] in order read", readsWith("810100820100a30430020500"))
+  t.ok("[1], [2] and [3] in order read", readsWith("810100820100a310300e300c0603551d130101ff04023000"))
   t.eqBool("[1] with no contents at all is refused", readsWith("8100"), false)
   t.eqBool("[1] claiming 8 unused bits is refused", readsWith("810108"), false)
   t.eqBool("[1] claiming unused bits with no octet is refused", readsWith("810103"), false)
@@ -213,4 +261,68 @@ const outerKeySuite = (): i32 => {
   return t.done()
 }
 
-export const main = (): i32 => pemSuite() + nameSuite() + trailingSuite() + scopeSuite() + outerKeySuite()
+// basicConstraints, critical, cA FALSE: 300c 0603551d13 0101ff 0402 3000.
+const BC: string = "300c0603551d130101ff04023000"
+// The extension 1.2.3, 06 02 2a03, with an empty value, non-critical and critical.
+const PRIVATE_EXT: string = "300606022a030400"
+const PRIVATE_CRITICAL: string = "300906022a030101ff0400"
+
+const extensionSuite = (): i32 => {
+  const t = new Suite("X509-10: each extension once, and each known one whole")
+  t.ok("one basicConstraints reads", readsWith(`a310300e${BC}`))
+  t.eqBool("basicConstraints twice is refused", readsWith(`a31e301c${BC}${BC}`), false)
+  t.ok("one private extension reads", readsWith(`a30a3008${PRIVATE_EXT}`))
+  t.eqBool("a private extension twice is refused", readsWith(`a3123010${PRIVATE_EXT}${PRIVATE_EXT}`), false)
+  t.eqBool("basicConstraints with a NULL after its SEQUENCE is refused", readsWith("a3123010300e0603551d130101ff040430000500"), false)
+  t.eqBool("basicConstraints with cA FALSE written out, a DEFAULT DER omits, is refused", readsWith("a3133011300f0603551d130101ff04053003010100"), false)
+  t.eqBool("keyUsage critical and then again non-critical is refused", readsWith(
+    "a31f301d300e0603551d0f0101ff040403020284300b0603551d0f040403020284"
+  ), false)
+  const ca: X509Certificate | null = readWith("a3133011300f0603551d130101ff040530030101ff")
+  t.ok("cA TRUE reads as a CA with no path length", ca !== null && ca.bcPresent && ca.bcCa && ca.bcPathLen === -1)
+  return t.done()
+}
+
+const extensionCapSuite = (): i32 => {
+  const t = new Suite("X509-14: at most 64 extensions")
+  t.ok("32 distinct extensions read", x509ParseCertificate(withExtensions(32)) !== null)
+  t.ok("64 distinct extensions read", x509ParseCertificate(withExtensions(64)) !== null)
+  t.eqBool("65 distinct extensions are refused", x509ParseCertificate(withExtensions(65)) !== null, false)
+  t.eqBool("127 distinct extensions are refused", x509ParseCertificate(withExtensions(127)) !== null, false)
+  return t.done()
+}
+
+const criticalSuite = (): i32 => {
+  const t = new Suite("X509-11: an unknown critical extension is reported")
+  const plain: X509Certificate | null = readWith(`a30a3008${PRIVATE_EXT}`)
+  t.ok("a non-critical private extension leaves unknownCritical clear", plain !== null && !plain.unknownCritical)
+  const critical: X509Certificate | null = readWith(`a30d300b${PRIVATE_CRITICAL}`)
+  t.ok("a critical private extension reads, with unknownCritical set", critical !== null && critical.unknownCritical)
+  const known: X509Certificate | null = readWith(`a310300e${BC}`)
+  t.ok("a critical basicConstraints leaves it clear", known !== null && !known.unknownCritical)
+  const g: X509Certificate | null = x509ParseCertificate(golden())
+  t.ok("the golden P-256 certificate leaves it clear", g !== null && !g.unknownCritical)
+  return t.done()
+}
+
+// CN=localhost as a UTF8String, as a PrintableString, and capitalised.
+const LOCALHOST: string = "30143112301006035504030c096c6f63616c686f7374"
+const LOCALHOST_PRINTABLE: string = "301431123010060355040313096c6f63616c686f7374"
+const LOCALHOST_CAPITAL: string = "30143112301006035504030c094c6f63616c686f7374"
+// One RDN of CN=a and O=b, in DER's SET OF order (CN's encoding sorts first) and reversed.
+const RDN_SORTED: string = "30163114300806035504030c01613008060355040a0c0162"
+const RDN_UNSORTED: string = "301631143008060355040a0c0162300806035504030c0161"
+
+const nameEqualSuite = (): i32 => {
+  const t = new Suite("X509-12 and X509-13: Names compare byte for byte")
+  t.ok("a Name equals itself", x509NameEqual(fromHex(LOCALHOST), fromHex(LOCALHOST)))
+  t.eqBool("open, X509-12: a PrintableString spelling does not match a UTF8String", x509NameEqual(fromHex(LOCALHOST), fromHex(LOCALHOST_PRINTABLE)), false)
+  t.eqBool("open, X509-12: nor does another case", x509NameEqual(fromHex(LOCALHOST), fromHex(LOCALHOST_CAPITAL)), false)
+  t.ok("open, X509-13: an RDN out of SET OF order is still a Name", x509NameIsPrefix(fromHex(RDN_UNSORTED), fromHex(RDN_UNSORTED)))
+  t.eqBool("open, X509-13: and does not match the sorted one", x509NameEqual(fromHex(RDN_SORTED), fromHex(RDN_UNSORTED)), false)
+  t.eqBool("nor is it a prefix of it", x509NameIsPrefix(fromHex(RDN_UNSORTED), fromHex(RDN_SORTED)), false)
+  return t.done()
+}
+
+export const main = (): i32 =>
+  pemSuite() + nameSuite() + trailingSuite() + scopeSuite() + outerKeySuite() + extensionSuite() + extensionCapSuite() + criticalSuite() + nameEqualSuite()

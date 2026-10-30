@@ -90,7 +90,7 @@ export function ctEq(a, b) {
 // ---- Checked arithmetic (wp33 R4) ----------------------------------------------------
 //
 // What `--emit-ts` writes for a signed `+ - *` and unary minus the compiler
-// neither proved in range nor was told to wrap (`--wrapping`): the exact
+// did not prove in range: the exact
 // answer, or the panic `nish_panic_overflow` prints, in its words. An i32 is
 // exact in a double until it leaves the range, and `Math.imul` is the
 // wrapped product, so a product that differs from the double one overflowed.
@@ -121,8 +121,7 @@ function checkI64(r, op) {
 }
 
 // `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`: the
-// two's-complement answer at the operands' width, i32 or i64, whatever
-// `--wrapping` says.
+// two's-complement answer at the operands' width, i32 or i64.
 export function wrappingAdd(a, b) {
   return typeof a === "bigint" ? BigInt.asIntN(64, a + b) : (a + b) | 0;
 }
@@ -248,9 +247,36 @@ export function maxU64(a, b) {
  * what `sext`/`zext`/`trunc` do natively.
  */
 export function convert(x, from, to) {
-  // A zext of an unsigned 32-bit-or-narrower value to u64 keeps the value as it
-  // is, and skips the BigInt wrap below: a hot path in u64 arithmetic.
-  if (to === "u64" && (from === "u32" || from === "u16" || from === "u8")) return BigInt(x);
+  // The hot paths of u64 arithmetic written over i64 (`toU64(a) * toU64(b)`)
+  // stay in a function small enough for V8 to inline at the call: the two
+  // 64-bit kinds reinterpret each other's bits, and a zext of an unsigned
+  // 32-bit-or-narrower value to u64 keeps the value as it is.
+  if (typeof x === "bigint") {
+    if (to === "u64") return BigInt.asUintN(64, x);
+    if (to === "i64") return BigInt.asIntN(64, x);
+  } else if (to === "u64" && (from === "u32" || from === "u16" || from === "u8")) {
+    return BigInt(x);
+  }
+  return convertOther(x, from, to);
+}
+
+/** Every conversion `convert` does not answer inline. */
+function convertOther(x, from, to) {
+  if (typeof x === "bigint") {
+    // A BigInt source narrowed to 32 bits or less skips the `number` round trip.
+    const narrow = INT_KINDS[to];
+    if (narrow !== undefined) {
+      return Number(narrow.signed ? BigInt.asIntN(narrow.bits, x) : BigInt.asUintN(narrow.bits, x));
+    }
+  } else if (from === "i32" || from === "u32" || from === "u16" || from === "u8") {
+    // An integer `number` source narrowed to a `number` kind: the 32-bit wrap
+    // `|0` / `>>>0` and a mask do what trunc/sext/zext do, without a BigInt.
+    if (to === "i32") return x | 0;
+    if (to === "u32") return x >>> 0;
+    if (to === "u16") return x & 0xffff;
+    if (to === "u8") return x & 0xff;
+    if (to === "i64") return BigInt(x);
+  }
   const num = typeof x === "bigint" ? Number(x) : x;
   if (to === "f64") return num; // sitofp / uitofp / fpext
   if (to === "f32") return Math.fround(num); // ... / fptrunc, then rounded to a float
