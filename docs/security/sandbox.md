@@ -265,3 +265,11 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   the capability drop did not run` instead. It runs, and passes, on a machine
   that allows unprivileged user namespaces; on CI the drop is proved only by
   its read-back, which fails closed.
+- `sandbox: a pool without fs.read keeps to a cgroup quota of N CPUs, primed
+  before confinement` needs a private mount namespace in a user namespace
+  (`unshare -rm`) to put a tmpfs over `/sys/fs/cgroup`, so it is refused on
+  those runners for the same reason and prints `SKIP sandbox: no mount
+  namespace with a cgroup tmpfs; the primed CPU count was not checked`. It
+  also skips on a host with fewer than 3 CPUs, or more than 65, where the
+  pool's own cap of 64 decides the count. It runs, and passes, where the drop
+  above does.

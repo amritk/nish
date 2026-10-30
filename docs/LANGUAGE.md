@@ -9403,7 +9403,8 @@ entry:
   `process.spawn` can read any file the user can whether or not it reaches
   `fs.read`. Without `net`, `socket`, `socketpair`, `connect`,
   `bind`, `listen`, `accept` and `accept4` kill it. `ffi`, `unsafe`, `tty`,
-  `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing.
+  `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing of their
+  own; the ABI 6 scopes under **Always** apply whatever `main` reaches.
 - **The CPU count.** Before it confines anything, `nish_sandbox` reads the
   CPU count (the affinity mask and the cgroup quota) and keeps it as the
   thread pool's ceiling, since without `fs.read` the quota under

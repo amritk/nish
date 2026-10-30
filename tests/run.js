@@ -11169,10 +11169,16 @@ if (!only || "sandbox".includes(only)) {
     const userCgroup = has("unshare")
       ? spawnSync("unshare", ["-rm", "sh", "-c", "mount -t tmpfs none /sys/fs/cgroup"], { encoding: "utf8" })
       : null
-    if (cpus < 3 || userCgroup === null || userCgroup.status !== 0) {
-      skip(
-        `sandbox: ${cpus < 3 ? `${cpus} CPUs leave no quota below the count` : "no mount namespace with a cgroup tmpfs"}; the primed CPU count was not checked`
-      )
+    // Past 65 CPUs the quota sits above the pool's own cap (NISH_PAR_MAX, 64),
+    // which would decide the count instead.
+    if (cpus < 3 || cpus > 65 || userCgroup === null || userCgroup.status !== 0) {
+      const why =
+        cpus < 3
+          ? `${cpus} CPUs leave no quota below the count`
+          : cpus > 65
+            ? `${cpus} CPUs put the quota above the pool's cap of 64`
+            : "no mount namespace with a cgroup tmpfs"
+      skip(`sandbox: ${why}; the primed CPU count was not checked`)
     } else {
       const ceiling = cpus - 1
       const underQuota = (exe) =>

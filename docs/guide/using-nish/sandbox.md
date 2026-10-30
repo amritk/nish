@@ -58,8 +58,11 @@ A few things are refused whatever `main` reaches: attaching to, reading or
 writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
 and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
 of another architecture (a 32-bit `int 0x80`), and io_uring unless the
-program reaches both `net` and `process.spawn`. The other capabilities —
-`clock`, `entropy`, `env`, `exit`, `signal`, `tty`, `ffi`, `unsafe` —
+program reaches both `net` and `process.spawn`. On a kernel whose Landlock
+is ABI 6 or later, so is signalling a process outside the sandbox and
+connecting to an abstract Unix socket created outside it, even when `main`
+reaches `signal`; the program can still signal itself. The other
+capabilities — `clock`, `entropy`, `env`, `exit`, `tty`, `ffi`, `unsafe` —
 withhold nothing.
 
 A refused file operation fails with an error your program sees, as a missing
