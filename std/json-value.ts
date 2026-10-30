@@ -42,7 +42,8 @@
  * negative handle, or one past the last value, is `JSON_VALUE_NONE` too.
  *
  * **The document's size is bounded.** Each value costs about 46 bytes of the
- * arrays the document keeps for its life, on top of the decoded text of its
+ * arrays the document keeps for its life, 66 with `keepRanges` on, on top of
+ * the decoded text of its
  * strings, keys and numbers, which `JsonLimits.maxTotalBytes` bounds through
  * the input (`docs/security/json.md`, JSON-10). `maxValues` caps the first
  * part by capping how many values one document holds:
@@ -60,6 +61,22 @@
  * integer type, and `0.1000000000000000055511151231257827`, more digits than an
  * `f64` holds, come back out exactly as they went in, where JavaScript's
  * `JSON.parse` turns both into the nearest double.
+ *
+ * **Source ranges are opt-in.** Set `keepRanges` before a `parse` and every
+ * value and every member key keeps the range of bytes it was read from:
+ * `start(v)` and `end(v)` bound a value, `keyStart(o, i)` and `keyEnd(o, i)`
+ * the key of member `i`, its quotes included. They are offsets into the bytes
+ * `parse` was given, or `parseText`'s string, so a line index over that text
+ * (`YamlLineIndex` is one) turns them into a line and a column. That costs
+ * 20 bytes per value more, two offsets for the value, two for its key and one
+ * on the parse's stack. With it off, the default, the range arrays stay empty
+ * and every reader answers `-1`. `keepRanges` takes effect at the next
+ * `parse` or `clear`, so a loader that builds a document from another text
+ * sets it, `clear`s, and gives each value it makes its range with `setRange`
+ * and each key with `setKeyRange`; until then a built value or key answers
+ * `-1`. `set` over an existing key keeps the member's key range and takes the
+ * new value's own. Under `JSON_VALUE_DUPLICATE_LAST` a repeated key's member
+ * keeps its first key's range and holds the last value, with that value's.
  *
  * **Objects keep insertion order**, the order the members were written in or
  * added. `get` finds a member by its key with a scan, so it is for a handful of
@@ -159,12 +176,14 @@ export const JSON_VALUE_ERR_ATTACHED: i32 = -32
 export const JSON_VALUE_ERR_NUMBER: i32 = -33
 /** One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at its first byte) or a builder. */
 export const JSON_VALUE_ERR_VALUES: i32 = -34
+/** `setRange` or `setKeyRange` on a document that keeps no ranges, or with a range that is not `0 <= start <= end`. */
+export const JSON_VALUE_ERR_RANGE: i32 = -35
 
 /**
  * The most values one document holds by default: a parse that would make
  * more is `JSON_VALUE_ERR_VALUES`. Each value costs the document about 46
- * bytes of arrays it keeps (`docs/security/json.md`, JSON-10), so this caps
- * them near 12 MB; a program raises `maxValues` up to
+ * bytes of arrays it keeps, 66 with `keepRanges` on (`docs/security/json.md`,
+ * JSON-10), so this caps them near 12 MB, or 17 MB; a program raises `maxValues` up to
  * `JSON_VALUE_MAX_VALUES` for larger documents.
  */
 export const JSON_VALUE_DEFAULT_MAX_VALUES: i32 = 262144
@@ -222,6 +241,15 @@ export class JsonDocument {
   /** The bytes of every string, key and number, decoded, one after the other. */
   bytes: u8[]
   /**
+   * While `ranged`: per value, its first byte in the parsed bytes and one past
+   * its last; per member slot, its key's, quotes included. `-1` where nothing
+   * was recorded. They stay empty in a document that never keeps ranges.
+   */
+  valueStart: i32[]
+  valueEnd: i32[]
+  slotKeyStart: i32[]
+  slotKeyEnd: i32[]
+  /**
    * The parse's own stacks: the open containers, where each one's members
    * start in the pending arrays and the key it is the value of, if any; and
    * the pending arrays, which hold every member read and not yet
@@ -238,6 +266,9 @@ export class JsonDocument {
   pendingKeyAt: i32[]
   pendingKeyLength: i32[]
   pendingSource: i32[]
+  /** While `ranged`: where each open container's key and each pending member's key end; `openKeySource` and `pendingSource` hold where they start. */
+  openKeyEnd: i32[]
+  pendingKeyEnd: i32[]
   sortA: i32[]
   sortB: i32[]
   /** `parseText`'s copy of its string. */
@@ -265,6 +296,10 @@ export class JsonDocument {
   generation: i32 = 1
   /** Whether the last `unsigned` read a number that fits a `u64`. */
   unsignedFits: boolean = false
+  /** Whether the contents the next `parse` or `clear` starts keep source ranges; see the module header. */
+  keepRanges: boolean = false
+  /** Whether the current contents keep them: `keepRanges` as it was at the last `parse` or `clear`. */
+  ranged: boolean = false
 
   constructor(limits: JsonLimits) {
     this.maxValues = JSON_VALUE_DEFAULT_MAX_VALUES
@@ -277,6 +312,10 @@ export class JsonDocument {
     this.slotKeyAt = []
     this.slotKeyLength = []
     this.bytes = []
+    this.valueStart = []
+    this.valueEnd = []
+    this.slotKeyStart = []
+    this.slotKeyEnd = []
     this.openValue = []
     this.openBase = []
     this.openKeyAt = []
@@ -286,6 +325,8 @@ export class JsonDocument {
     this.pendingKeyAt = []
     this.pendingKeyLength = []
     this.pendingSource = []
+    this.openKeyEnd = []
+    this.pendingKeyEnd = []
     this.sortA = []
     this.sortB = []
     this.textBytes = []
@@ -313,6 +354,7 @@ export class JsonDocument {
     this.pendingTop = 0
     this.failed = 0
     this.errorAt = -1
+    this.ranged = this.keepRanges
   }
 
   // ---- Parsing ----------------------------------------------------------------
@@ -332,11 +374,15 @@ export class JsonDocument {
     let keyAt: i32 = 0
     let keyLength: i32 = 0
     let keySource: i32 = 0
+    let keyEnd: i32 = 0
+    // Read once: every range write below is behind this, so a parse without ranges stores nothing more.
+    const ranged: boolean = this.ranged
     let k: i32 = tok.next()
     while (k > 0) {
       let v: i32 = -1
       if (k === JSON_TOK_KEY) {
         keySource = tok.tokStart
+        keyEnd = tok.tokEnd
         keyAt = this.byteTop
         keyLength = this.storeString(tok)
       } else if (k === JSON_TOK_OBJECT_BEGIN || k === JSON_TOK_ARRAY_BEGIN) {
@@ -353,6 +399,12 @@ export class JsonDocument {
         jsonValuePut(this.openKeyAt, depth, keyAt)
         jsonValuePut(this.openKeyLength, depth, keyLength)
         jsonValuePut(this.openKeySource, depth, keySource)
+        if (ranged) {
+          // The end is a placeholder until the closer, so that both arrays grow in step with the values.
+          jsonValuePut(this.valueStart, c, tok.tokStart)
+          jsonValuePut(this.valueEnd, c, -1)
+          jsonValuePut(this.openKeyEnd, depth, keyEnd)
+        }
         depth += 1
       } else if (k === JSON_TOK_OBJECT_END || k === JSON_TOK_ARRAY_END) {
         depth -= 1
@@ -365,6 +417,10 @@ export class JsonDocument {
         keyAt = jsonValueGet(this.openKeyAt, depth)
         keyLength = jsonValueGet(this.openKeyLength, depth)
         keySource = jsonValueGet(this.openKeySource, depth)
+        if (ranged) {
+          jsonValuePut(this.valueEnd, c, tok.tokEnd)
+          keyEnd = jsonValueGet(this.openKeyEnd, depth)
+        }
         v = c
       } else if (k === JSON_TOK_STRING) {
         v = this.newNode(JSON_VALUE_STRING, this.byteTop, this.storeString(tok))
@@ -384,6 +440,10 @@ export class JsonDocument {
         return this.parseFailed(v, tok.tokStart)
       }
       if (v >= 0) {
+        if (ranged && k !== JSON_TOK_OBJECT_END && k !== JSON_TOK_ARRAY_END) {
+          jsonValuePut(this.valueStart, v, tok.tokStart)
+          jsonValuePut(this.valueEnd, v, tok.tokEnd)
+        }
         if (depth === 0) {
           root = v
         } else {
@@ -392,6 +452,9 @@ export class JsonDocument {
           jsonValuePut(this.pendingKeyAt, p, keyAt)
           jsonValuePut(this.pendingKeyLength, p, keyLength)
           jsonValuePut(this.pendingSource, p, keySource)
+          if (ranged) {
+            jsonValuePut(this.pendingKeyEnd, p, keyEnd)
+          }
           this.pendingTop = p + 1
         }
       }
@@ -437,6 +500,7 @@ export class JsonDocument {
       }
     }
     const start: i32 = this.slotTop
+    const ranged: boolean = this.ranged
     let kept: i32 = 0
     for (let p: i32 = base; p < base + n; p += 1) {
       const v: i32 = jsonValueGet(this.pendingValue, p)
@@ -447,6 +511,10 @@ export class JsonDocument {
       jsonValuePut(this.slotValue, s, v)
       jsonValuePut(this.slotKeyAt, s, jsonValueGet(this.pendingKeyAt, p))
       jsonValuePut(this.slotKeyLength, s, jsonValueGet(this.pendingKeyLength, p))
+      if (ranged) {
+        jsonValuePut(this.slotKeyStart, s, jsonValueGet(this.pendingSource, p))
+        jsonValuePut(this.slotKeyEnd, s, jsonValueGet(this.pendingKeyEnd, p))
+      }
       jsonValuePut(this.parent, v, c)
       kept += 1
     }
@@ -864,16 +932,84 @@ export class JsonDocument {
     return true
   }
 
+  // ---- Ranges -----------------------------------------------------------------
+  // Each reader answers `-1` for a handle that names nothing, for a member
+  // that is not there, for a value or key a builder made and no setter gave a
+  // range, and for every value of a document that keeps no ranges.
+
+  /** The offset of `v`'s first byte in the bytes the document parsed. */
+  start(v: JsonValue): i32 {
+    return this.ranged ? jsonValueGet(this.valueStart, this.index(v)) : -1
+  }
+
+  /** One past the offset of `v`'s last byte: `v` is `src[start(v), end(v))`. */
+  end(v: JsonValue): i32 {
+    return this.ranged ? jsonValueGet(this.valueEnd, this.index(v)) : -1
+  }
+
+  /** The offset of the first byte of the key of member `i` of object `o`, its opening quote. */
+  keyStart(o: JsonValue, i: i32): i32 {
+    return this.ranged ? jsonValueGet(this.slotKeyStart, this.keySlot(this.index(o), i)) : -1
+  }
+
+  /** One past the offset of the last byte of the key of member `i` of object `o`, its closing quote. */
+  keyEnd(o: JsonValue, i: i32): i32 {
+    return this.ranged ? jsonValueGet(this.slotKeyEnd, this.keySlot(this.index(o), i)) : -1
+  }
+
+  /**
+   * Gives `v` the range `[start, end)`, for a loader that builds a document
+   * from another text with the `new*` methods and keeps where each value
+   * came from. `JSON_VALUE_OK`, `JSON_VALUE_ERR_HANDLE`, or
+   * `JSON_VALUE_ERR_RANGE` when the document keeps no ranges or
+   * `0 <= start <= end` does not hold.
+   */
+  setRange(v: JsonValue, start: i32, end: i32): i32 {
+    const x: i32 = this.index(v)
+    if (this.kindAt(x) === JSON_VALUE_NONE) {
+      return JSON_VALUE_ERR_HANDLE
+    }
+    if (!this.ranged || start < 0 || end < start) {
+      return JSON_VALUE_ERR_RANGE
+    }
+    jsonValuePut(this.valueStart, x, start)
+    jsonValuePut(this.valueEnd, x, end)
+    return JSON_VALUE_OK
+  }
+
+  /**
+   * Gives the key of member `i` of object `o` the range `[start, end)`, as
+   * `setRange` does a value's. `JSON_VALUE_ERR_HANDLE` when `o` is not an
+   * object or has no member `i`.
+   */
+  setKeyRange(o: JsonValue, i: i32, start: i32, end: i32): i32 {
+    const s: i32 = this.keySlot(this.index(o), i)
+    if (s < 0) {
+      return JSON_VALUE_ERR_HANDLE
+    }
+    if (!this.ranged || start < 0 || end < start) {
+      return JSON_VALUE_ERR_RANGE
+    }
+    jsonValuePut(this.slotKeyStart, s, start)
+    jsonValuePut(this.slotKeyEnd, s, end)
+    return JSON_VALUE_OK
+  }
+
+  /** Internal: the slot of member `i` of the object at index `x`, or `-1` when `x` is not an object or has no member `i`. */
+  keySlot(x: i32, i: i32): i32 {
+    return this.kindAt(x) === JSON_VALUE_OBJECT ? this.slotAt(x, i) : -1
+  }
+
   // ---- Building ---------------------------------------------------------------
   // Each `new*` answers a handle, or `JSON_VALUE_ERR_VALUES` when the document
   // already holds `maxValues`.
 
   newNull(): JsonValue {
-    return this.handle(this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD))
+    return this.built(this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD))
   }
 
   newBoolean(b: boolean): JsonValue {
-    return this.handle(
+    return this.built(
       this.newNode(JSON_VALUE_BOOLEAN, b ? JSON_VALUE_TRUE_WORD : JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
     )
   }
@@ -924,15 +1060,15 @@ export class JsonDocument {
       this.byteTop = at
       return JSON_VALUE_ERR_NUMBER
     }
-    return this.handle(this.newNode(JSON_VALUE_NUMBER, at, n))
+    return this.built(this.newNode(JSON_VALUE_NUMBER, at, n))
   }
 
   newArray(): JsonValue {
-    return this.handle(this.newNode(JSON_VALUE_ARRAY, this.slotTop, JSON_VALUE_NO_WORD))
+    return this.built(this.newNode(JSON_VALUE_ARRAY, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
   newObject(): JsonValue {
-    return this.handle(this.newNode(JSON_VALUE_OBJECT, this.slotTop, JSON_VALUE_NO_WORD))
+    return this.built(this.newNode(JSON_VALUE_OBJECT, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
   /** Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. */
@@ -1020,6 +1156,10 @@ export class JsonDocument {
           jsonValuePut(this.slotValue, moved + i, jsonValueGet(this.slotValue, start + i))
           jsonValuePut(this.slotKeyAt, moved + i, jsonValueGet(this.slotKeyAt, start + i))
           jsonValuePut(this.slotKeyLength, moved + i, jsonValueGet(this.slotKeyLength, start + i))
+          if (this.ranged) {
+            jsonValuePut(this.slotKeyStart, moved + i, jsonValueGet(this.slotKeyStart, start + i))
+            jsonValuePut(this.slotKeyEnd, moved + i, jsonValueGet(this.slotKeyEnd, start + i))
+          }
         }
         start = moved
         jsonValuePut(this.first, c, start)
@@ -1028,18 +1168,38 @@ export class JsonDocument {
       this.slotValue = jsonValueRoomI32(this.slotValue, this.slotTop)
       this.slotKeyAt = jsonValueRoomI32(this.slotKeyAt, this.slotTop)
       this.slotKeyLength = jsonValueRoomI32(this.slotKeyLength, this.slotTop)
+      if (this.ranged) {
+        this.slotKeyStart = jsonValueRoomI32(this.slotKeyStart, this.slotTop)
+        this.slotKeyEnd = jsonValueRoomI32(this.slotKeyEnd, this.slotTop)
+      }
       jsonValuePut(this.room, c, grown)
     }
     jsonValuePut(this.slotValue, start + n, v)
     jsonValuePut(this.slotKeyAt, start + n, keyAt)
     jsonValuePut(this.slotKeyLength, start + n, keyLength)
+    if (this.ranged) {
+      jsonValuePut(this.slotKeyStart, start + n, -1)
+      jsonValuePut(this.slotKeyEnd, start + n, -1)
+    }
     jsonValuePut(this.count, c, n + 1)
     jsonValuePut(this.parent, v, c)
   }
 
   /** Internal: a new value of `kind` holding `s`'s bytes, as a handle. */
   newStored(kind: i32, s: string): JsonValue {
-    return this.handle(this.newNode(kind, this.byteTop, this.storeText(s)))
+    return this.built(this.newNode(kind, this.byteTop, this.storeText(s)))
+  }
+
+  /**
+   * Internal: the handle of index `x`, which a builder just made, with no
+   * range while the document keeps them; a negative `x` is answered as it is.
+   */
+  built(x: i32): JsonValue {
+    if (x >= 0 && this.ranged) {
+      jsonValuePut(this.valueStart, x, -1)
+      jsonValuePut(this.valueEnd, x, -1)
+    }
+    return this.handle(x)
   }
 
   /** Internal: `s`'s bytes onto the end of `bytes`; answers how many. */
