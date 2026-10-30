@@ -243,6 +243,18 @@ try {
     check("a kept-out feat does not move the version", next.stdout === "0.9.1\n", next.stdout + next.stderr)
   }
   {
+    // A version someone asked for is an explicit request, not a bump the notes
+    // must explain, so it holds on a kept-out commit too.
+    const dir = repo("0.9.0", [fix, `${releaseAs("0.12.0", hiddenA)}\nChangelog: skip`])
+    dirs.push(dir)
+    const r = run(dir, ["--next"])
+    check(
+      "a kept-out commit's Release-As still applies",
+      r.status === 0 && r.stdout === "0.12.0\n" && !leaks(r.stderr),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+  {
     // Nothing left to announce is the empty release, refused with a count.
     const dir = repo("0.9.0", [`${hiddenA}\n\nChangelog: skip`])
     dirs.push(dir)

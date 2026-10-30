@@ -48,8 +48,10 @@
 // at least seven hex digits is a prefix of the full one), so a squash merge
 // can drop commits that landed earlier in the same release. A SHA outside the
 // range is ignored, since it may name a commit an earlier release already
-// covered. The commits they drop are counted on stderr, never listed, and do
-// not move the version: a bump the notes cannot explain would be a mystery.
+// covered. The commits they drop are counted on stderr, never listed, and their
+// types do not move the version: a bump the notes cannot explain would be a
+// mystery. A `Release-As:` on a dropped commit still applies, since it is an
+// explicit request rather than a bump the types imply.
 //
 // `type!` or a `BREAKING CHANGE:` trailer marks a breaking change.
 //
