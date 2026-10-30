@@ -1,0 +1,7 @@
+connected: positive
+listening: -1
+datagram: -1
+closed: -1
+never open: -1
+unconnected: -1
+pipe: -1

@@ -192,7 +192,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -223,7 +223,7 @@ export const netSignature = (name: string): string => {
   if (name === "netAddress") {
     return "wsi"
   }
-  if (name === "netLocalPort" || name === "netClose" || name === "connectResult") {
+  if (name === "netLocalPort" || name === "netClose" || name === "connectResult" || name === "netMss") {
     return "i"
   }
   if (name === "tcpListen") {
