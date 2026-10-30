@@ -8,13 +8,15 @@
 //   npm run build && node bench/sha256/run.mjs [options] [--compiler <nish>]
 //     --rounds N         timed rounds a case runs at least (default 11); the
 //                        median is reported
-//     --binary <path>    another build of main.ts as a column (repeatable),
-//                        such as the same program built from `main`:
+//     --binary [name=]<path>
+//                        another build of main.ts as a column (repeatable),
+//                        headed `name` or the path, such as the same program
+//                        built from `main`:
 //
 //       git worktree add ../base origin/main && cp -r bench/sha256 ../base/bench/
 //       (cd ../base && npm ci && npm run build &&
 //        build/nish bench/sha256/main.ts -o build/b/ --link build/b/sha256 --profile speed)
-//       node bench/sha256/run.mjs --binary ../base/build/b/sha256
+//       node bench/sha256/run.mjs --binary main=../base/build/b/sha256
 //
 // The build is main.ts by the compiler with `--profile speed`, into
 // build/bench/sha256/. Each case calibrates one iteration count on the build
@@ -61,7 +63,10 @@ for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--rounds") {
     rounds = Number(argv[++i])
   } else if (argv[i] === "--binary") {
-    binaries.push(path.resolve(argv[++i] ?? ""))
+    const spec = argv[++i] ?? ""
+    const eq = spec.indexOf("=")
+    const file = path.resolve(eq > 0 ? spec.slice(eq + 1) : spec)
+    binaries.push({ id: eq > 0 ? spec.slice(0, eq) : path.relative(root, file), bin: file })
   } else {
     fail(`unknown option ${argv[i]}`)
   }
@@ -70,8 +75,8 @@ if (!(Number.isInteger(rounds) && rounds >= 1)) {
   fail("--rounds needs a positive count")
 }
 for (const b of binaries) {
-  if (!fs.existsSync(b)) {
-    fail(`--binary ${b}: no such file`)
+  if (!fs.existsSync(b.bin)) {
+    fail(`--binary ${b.bin}: no such file`)
   }
 }
 
@@ -101,11 +106,7 @@ if (build.status !== 0) {
 fs.copyFileSync(exe, `${exe}-copy`)
 
 /** The columns, each `{ id, bin }`, the build first and its copy second. */
-const columns = [
-  { id: "nish", bin: exe },
-  { id: "nish-copy", bin: `${exe}-copy` },
-  ...binaries.map((b) => ({ id: rel(b), bin: b })),
-]
+const columns = [{ id: "nish", bin: exe }, { id: "nish-copy", bin: `${exe}-copy` }, ...binaries]
 
 /** One run under bench/crypto/README.md's contract: `{ checksum, ns }`. */
 const runOnce = (column, c, iterations) => {
