@@ -1028,13 +1028,17 @@ jobs:
       # `--compiler`; with no filter it walks its shard of the whole corpus.
       # With `--jobs` (a core each by default) the last line sums the
       # processes' summaries in the same words, and it answers 1 when any did.
+      # `env --default-signal` is load-bearing too: the Actions runner starts
+      # the step shell with SIGPIPE ignored, `exec` keeps an ignored signal,
+      # and `io_spawn_piped` checks that a child starts with SIGPIPE at its
+      # default. Node reset it when it started the runner; nothing else does.
       - name: The corpus, through the Nish runner
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
+          env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()
