@@ -1,0 +1,3 @@
+`i32x4` is a `nish:simd` name and is used only through an import of it: add `import { i32x4 } from "nish:simd"`
+`f64x2` is a `nish:simd` name and is used only through an import of it: add `import { f64x2 } from "nish:simd"`
+2 errors

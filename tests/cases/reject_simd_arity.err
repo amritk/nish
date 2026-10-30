@@ -1,0 +1,4 @@
+`i32x4` expects exactly 4 arguments, got 3
+`loadI32x4` expects exactly 2 arguments, got 1
+`store` returns void and can only be used as a statement
+3 errors

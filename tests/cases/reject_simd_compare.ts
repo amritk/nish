@@ -13,5 +13,3 @@ export const f = (a: i32x4, b: i32x4): i32 => {
 };
 
 export const g = (xs: i32x4[]): i32 => xs.indexOf(splatI32x4(0));
-
-export const h = (a: i32x4, b: i32x4): boolean => a == b;

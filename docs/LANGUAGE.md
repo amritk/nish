@@ -6671,7 +6671,7 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
   (NL2581, `reject_simd_compare`): a lane-wise compare answers a vector, not a
   boolean, and under Node a vector is a typed array whose `===` is identity. A
   vector is not a `Map` key (`reject_simd_map_key`), not `Secret`
-  (`reject_simd_secret`) and not nullable (`reject_simd_operators`).
+  (`reject_simd_secret`) and not nullable (`reject_simd_nullable`).
 - **Under Node** `runtime/nish.mjs` resolves the import to `runtime/core.mjs`,
   where a vector is a fresh typed array of its lanes, made once and never
   written after (`replace` copies), whose element type does the lane's

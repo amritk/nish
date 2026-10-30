@@ -20,7 +20,7 @@ import {
 
 export const main = (): number => {
   const b = u8x16(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 255);
-  console.log(extract(b, 0) + extract(b, 15));
+  console.log(extract(b, 15) - extract(b, 0));
   const h = replace(u16x8(1, 2, 3, 4, 5, 6, 7, 8), 7, 65535);
   console.log(extract(h, 7));
   const w = i32x4(-1, 2, -3, 4);

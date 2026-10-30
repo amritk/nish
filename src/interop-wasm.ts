@@ -161,20 +161,30 @@ export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
   if (sig.name === "main") {
     return "`main` is reserved for a process entry"
   }
-  const tail = " runtime the freestanding wasm profile does not include"
   let i = 0
   while (i < sig.paramTypes.length) {
     if (!wasmCrosses(table, sig.paramTypes[i], POS_PARAM)) {
-      const t = tsKeyword(table, sig.paramTypes[i])
-      return `argument ${i + 1} (${sig.paramNames[i]}) is \`${t}\`, which needs the ${LANGUAGE}${tail}`
+      return `argument ${i + 1} (${sig.paramNames[i]}) is ${wasmMissing(table, sig.paramTypes[i])}`
     }
     i = i + 1
   }
   if (!wasmCrosses(table, sig.returnType, POS_RETURN)) {
-    const t = tsKeyword(table, sig.returnType)
-    return `the result is \`${t}\`, which needs the ${LANGUAGE}${tail}`
+    return `the result is ${wasmMissing(table, sig.returnType)}`
   }
   return ""
+}
+
+/**
+ * A type the bridge does not carry, and why: a `nish:simd` vector because no
+ * wasm export signature here spells a `v128`, the rest because they need the
+ * runtime the freestanding profile leaves out.
+ */
+const wasmMissing = (table: TypeTable, t: i32): string => {
+  const shown = `\`${tsKeyword(table, t)}\``
+  if (table.isVector(t)) {
+    return `${shown}, a \`nish:simd\` vector, which the wasm bridge does not carry yet`
+  }
+  return `${shown}, which needs the ${LANGUAGE} runtime the freestanding wasm profile does not include`
 }
 
 /**

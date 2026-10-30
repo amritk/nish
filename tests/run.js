@@ -10740,6 +10740,120 @@ for (const name of ["unsafe_get_set", "unsafe_wrapping"]) {
   )
 }
 
+// WP38 S3: `nish:simd` three ways. Each positive `simd_*` program is linked
+// natively, built with `--profile wasi` and run under Node's WASI where a
+// sysroot is installed, and run from source under `runtime/nish.mjs`, where a
+// vector is a typed array; all three must print the `.out` section A holds the
+// native build to. Then the out-of-range load panics with the same words on
+// both sides, an exported function with a vector in its signature is left out
+// of the C header and the `.d.ts` with a comment naming the type, and no
+// golden names a target's intrinsic: the lowering is generic IR.
+if (!only || "nish:simd".includes(only) || only.includes("simd")) {
+  const simdDir = path.join(buildDir, "simd")
+  fs.rmSync(simdDir, { recursive: true, force: true })
+  fs.mkdirSync(simdDir, { recursive: true })
+  const wasi = WASI_SYSROOT && has("wasm-ld")
+  for (const name of ["simd_lanes", "simd_access", "simd_values"]) {
+    const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+    const exe = buildCaseIn(simdDir, name)
+    if (exe !== null) {
+      const native = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
+      check(`${name}: native prints the .out`, native.status === 0 && native.stdout === want, shown(native))
+    }
+    const node = runCaseUnderPrelude(name, [])
+    check(
+      `${name}: runs under runtime/nish.mjs and prints the native .out`,
+      node.status === 0 && node.stdout === want,
+      `--- native (.out)\n${want}--- node\n${shown(node)}`
+    )
+    if (wasi) {
+      const wasm = path.join(simdDir, `${name}.wasm`)
+      const built = spawnSync(
+        NISH,
+        [
+          path.join(casesDir, `${name}.ts`),
+          "-o",
+          path.join(simdDir, `wasi_${name}`) + path.sep,
+          "--link",
+          wasm,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run =
+        built.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+          : built
+      check(
+        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the native .out under Node's WASI`,
+        built.status === 0 && run.status === 0 && run.stdout === want,
+        shown(run)
+      )
+    }
+  }
+  if (!wasi) {
+    skip(
+      `skipped: simd: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of simd_* are not run`
+    )
+  }
+
+  // A load whose last lane is past the end panics before it reads, naming the
+  // first index and the length, as `xs[i]` does.
+  const oobWords = "index out of range: 2 >= 5"
+  const oobExe = buildCaseIn(simdDir, "simd_access_oob")
+  if (oobExe !== null) {
+    const native = spawnSync(oobExe, [], { cwd: root, encoding: "utf8" })
+    check(
+      "simd_access_oob: a load past the end panics natively, after the load before it",
+      native.status !== 0 && native.stdout === "5\n" && native.stderr.includes(oobWords),
+      shown(native)
+    )
+  }
+  const oobNode = runCaseUnderPrelude("simd_access_oob", [])
+  check(
+    "simd_access_oob: a load past the end panics under runtime/nish.mjs with the native words",
+    oobNode.status !== 0 && oobNode.stdout === "5\n" && oobNode.stderr.includes(oobWords),
+    shown(oobNode)
+  )
+
+  // The sidecars spell no vector: the function is skipped, and the comment says
+  // which type stopped it.
+  const lib = path.join(simdDir, "lib.ts")
+  fs.writeFileSync(
+    lib,
+    'import { i32x4, extract } from "nish:simd";\n' +
+      "export const first = (v: i32x4): i32 => extract(v, 0);\n" +
+      "export const twice = (x: i32): i32 => x * 2;\n"
+  )
+  const header = path.join(simdDir, "lib.h")
+  const dts = path.join(simdDir, "lib.d.ts")
+  const sides = spawnSync(
+    NISH,
+    [lib, "-o", path.join(simdDir, "lib.ll"), "--emit-header", header, "--emit-dts", dts],
+    { cwd: root, encoding: "utf8" }
+  )
+  const h = sides.status === 0 ? fs.readFileSync(header, "utf8") : ""
+  const d = sides.status === 0 ? fs.readFileSync(dts, "utf8") : ""
+  check(
+    "simd: --emit-header and --emit-dts skip a function with a vector parameter, naming i32x4",
+    sides.status === 0 &&
+      h.includes("int32_t twice(int32_t x);") &&
+      !/\bfirst\(/.test(h.replace(/\/\*[\s\S]*?\*\//g, "")) &&
+      h.includes("first(v: i32x4)") &&
+      d.includes("twice(x: number): number;") &&
+      d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector"),
+    `${shown(sides)}\n--- lib.h\n${h}\n--- lib.d.ts\n${d}`
+  )
+
+  // Generic IR only: LLVM picks the instructions for the target it is given.
+  const named = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^simd_.*\.ll$/.test(f))
+    .filter((f) => /llvm\.(x86|aarch64)\./.test(fs.readFileSync(path.join(casesDir, f), "utf8")))
+  check("simd: no simd_*.ll golden calls an llvm.x86. or llvm.aarch64. intrinsic", named.length === 0, named.join(", "))
+}
+
 // RT-4 under Node (#405): `runtime/shim.mjs` opens what `writeFileSync`,
 // `appendFileSync` and `spawnSyncTo` write with `O_NOFOLLOW`, as runtime-os.c
 // does, so a symbolic link planted at the name is refused rather than followed
