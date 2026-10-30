@@ -279,6 +279,46 @@ const testHowTo = (t: Suite): void => {
   t.eqI32("q quits from it", pressChar(m, CH_Q), MENU_QUIT)
 }
 
+/** One step whose events are `first` then `second`, both pressed. */
+const burst = (menu: BreakMenu, first: i32, second: i32): i32 => {
+  const input = keyInput(first, 0, ACTION_PRESS)
+  const e = new TermEvent(EVENT_KEY)
+  e.key = second
+  e.action = ACTION_PRESS
+  input.events.push(e)
+  return stepBreakMenu(menu, input)
+}
+
+/** A held key repeats only the moves; a burst changes at most one screen. */
+const testHeld = (t: Suite): void => {
+  const m = settled(1)
+  press(m, KEY_DOWN)
+  press(m, KEY_DOWN)
+  press(m, KEY_ENTER)
+  t.eqI32("Esc held after How to play closes does not quit", press(m, KEY_ESCAPE), MENU_STAY)
+  t.eqI32("the repeat is ignored", stepBreakMenu(m, keyInput(KEY_ESCAPE, 0, ACTION_REPEAT)), MENU_STAY)
+  t.eqI32("still on the title", m.screen, SCREEN_TITLE)
+  stepBreakMenu(m, keyInput(KEY_ENTER, 0, ACTION_REPEAT))
+  t.eqI32("a held Enter does not reopen it", m.screen, SCREEN_TITLE)
+  t.eqI32("Enter then Esc in one step opens How to play", burst(m, KEY_ENTER, KEY_ESCAPE), MENU_STAY)
+  t.eqI32("and the Esc aimed at the title is dropped", m.screen, SCREEN_HOWTO)
+  press(m, KEY_ESCAPE)
+  burst(m, KEY_DOWN, KEY_DOWN)
+  t.eqI32("two moves in one step both land", m.selected, 4)
+
+  const s = settled(1)
+  press(s, KEY_UP)
+  press(s, KEY_UP)
+  press(s, KEY_ENTER)
+  const held = keyInput(KEY_ENTER, 0, ACTION_REPEAT)
+  for (let i: i32 = 0; i < 3; i++) {
+    stepBreakMenu(s, held)
+  }
+  t.eqI32("a held Enter opens Settings without cycling the frame rate", s.settings.fps, 0)
+  stepBreakMenu(s, keyInput(KEY_RIGHT, 0, ACTION_REPEAT))
+  t.eqI32("a held arrow still cycles it", s.settings.fps, 1)
+}
+
 /** A settled menu with Settings open. */
 const inSettings = (): BreakMenu => {
   const m = settled(1)
@@ -535,37 +575,37 @@ const testDraw = (t: Suite): void => {
   const small = new Framebuffer(160, 90)
   const title = settled(1)
   drawBreakMenu(title, big, 0.25)
-  t.eqI32("the title at 640x360", hashOf(big), 1518263520)
+  t.eqI32("the title at 640x360", hashOf(big), 592711343)
   drawBreakMenu(title, small, 0.25)
-  t.eqI32("the title at 160x90, compact", hashOf(small), -1235850064)
+  t.eqI32("the title at 160x90, compact", hashOf(small), -1621917949)
   const howTo = settled(1)
   press(howTo, KEY_UP)
   press(howTo, KEY_UP)
   press(howTo, KEY_UP)
   press(howTo, KEY_ENTER)
   drawBreakMenu(howTo, big, 0.5)
-  t.eqI32("how to play at 640x360", hashOf(big), 585464461)
+  t.eqI32("how to play at 640x360", hashOf(big), 143556489)
   drawBreakMenu(howTo, small, 0.5)
-  t.eqI32("how to play at 160x90", hashOf(small), -1931180570)
+  t.eqI32("how to play at 160x90", hashOf(small), 1904136362)
   const settings = inSettings()
   press(settings, KEY_DOWN)
   drawBreakMenu(settings, big, 0.5)
-  t.eqI32("Settings at 640x360", hashOf(big), -1966622721)
+  t.eqI32("Settings at 640x360", hashOf(big), -1599294725)
   drawBreakMenu(settings, small, 0.5)
-  t.eqI32("Settings at 160x90, compact", hashOf(small), -1390818938)
+  t.eqI32("Settings at 160x90, compact", hashOf(small), 1350802634)
   const outro = settled(1)
   press(outro, KEY_ENTER)
   idle(outro, 40)
   drawBreakMenu(outro, big, 0.5)
-  t.eqI32("the outro at 640x360", hashOf(big), 148994113)
+  t.eqI32("the outro at 640x360", hashOf(big), -658084989)
   const intro = newBreakMenu(1, toI64(3))
   idle(intro, 20)
   drawBreakMenu(intro, big, 0.5)
-  t.eqI32("the logo dropping in at 640x360", hashOf(big), -284754725)
+  t.eqI32("the logo dropping in at 640x360", hashOf(big), 1842479832)
   // At 80x45 a logo cell is under two pixels tall, so the title is drawn as text.
   const tiny = new Framebuffer(80, 45)
   drawBreakMenu(title, tiny, 0.25)
-  t.eqI32("the title at 80x45, as text", hashOf(tiny), -626613092)
+  t.eqI32("the title at 80x45, as text", hashOf(tiny), -880170419)
 }
 
 export const main = (): number => {
@@ -573,6 +613,7 @@ export const main = (): number => {
   testInterface(t)
   testTitle(t)
   testHowTo(t)
+  testHeld(t)
   testSettings(t)
   testOutro(t)
   testWall(t)

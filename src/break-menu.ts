@@ -135,7 +135,7 @@ export class BreakSettings {
   resolution: i32
   /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. */
   graphics: i32
-  /** 0 low (no glow, no trails, a quarter of the sparks), 1 high. */
+  /** 0 low (no glow, no trails, a third of the sparks), 1 high. */
   effects: i32
   /** Whether frames are interpolated by `alpha`. */
   smoothing: boolean
@@ -172,6 +172,8 @@ const MENU_LEVELS: i32 = 6
 
 /** The title items, top to bottom: Play, Start level, How to play, Settings, Quit. */
 const ITEM_COUNT: i32 = 5
+/** Where `tick` goes back to 0: 2^30, half the i32 range. */
+const TICK_WRAP: i32 = 1073741824
 const ITEM_PLAY: i32 = 0
 const ITEM_LEVEL: i32 = 1
 const ITEM_HOWTO: i32 = 2
@@ -331,7 +333,7 @@ export class BreakMenu {
   /** The view `drawBreakMenu` reuses, so a frame allocates none. */
   view: View
 
-  // The 32-bit fields last, widest first above them, so the class packs with no padding.
+  // The 32-bit fields last, widest first above them, so the padding is at most the tail after them.
   /** A `SCREEN_*`. */
   screen: i32
   /** Steps since the menu was made: the clock every time-driven animation reads. */
@@ -499,7 +501,9 @@ const serveBall = (menu: BreakMenu): void => {
  * or the level to play on the step the outro ends.
  */
 export const stepBreakMenu = (menu: BreakMenu, input: TermInput): i32 => {
-  menu.tick = menu.tick + 1
+  // Wrapped long before i32 runs out, so a menu left open for months does not
+  // panic on the checked add; the animations jump once a billion steps.
+  menu.tick = menu.tick >= TICK_WRAP ? 0 : menu.tick + 1
   stepWall(menu)
   stepBall(menu)
   stepParticles(menu.sparks, 160.0, 1.5)
@@ -508,14 +512,22 @@ export const stepBreakMenu = (menu: BreakMenu, input: TermInput): i32 => {
     return stepOutro(menu, input)
   }
   let answer: i32 = MENU_STAY
+  const entered: i32 = menu.screen
   for (const e of input.events) {
-    if (answer !== MENU_STAY || menu.screen === SCREEN_OUTRO) {
+    // One screen change a step: the rest of a burst was aimed at the screen just left.
+    if (answer !== MENU_STAY || menu.screen !== entered) {
       break
     }
     if (e.type !== EVENT_KEY || (e.action !== ACTION_PRESS && e.action !== ACTION_REPEAT)) {
       continue
     }
     const act: i32 = actionOf(e)
+    // A held arrow keeps moving, but a held Esc or Enter acts once: its repeats
+    // would otherwise close How to play and then quit, or open Settings and cycle it.
+    const moves: boolean = act === ACT_UP || act === ACT_DOWN || act === ACT_LEFT || act === ACT_RIGHT
+    if (e.action === ACTION_REPEAT && !moves) {
+      continue
+    }
     if (menu.screen === SCREEN_TITLE) {
       answer = actOnTitle(menu, act)
     } else if (menu.screen === SCREEN_HOWTO) {
@@ -577,7 +589,7 @@ const wrap = (value: i32, by: i32, count: i32): i32 => {
   return next >= count ? 0 : next
 }
 
-/** Act on the title screen. */
+/** A title-screen action: arrows move or change the level, and only a pick or a quit leaves. */
 const actOnTitle = (menu: BreakMenu, act: i32): i32 => {
   if (act === ACT_UP || act === ACT_DOWN) {
     menu.selected = wrap(menu.selected, act === ACT_UP ? -1 : 1, ITEM_COUNT)
@@ -591,7 +603,7 @@ const actOnTitle = (menu: BreakMenu, act: i32): i32 => {
   return MENU_STAY
 }
 
-/** Pick the selected title item. */
+/** The selected item picked. Opening Settings records the frame rate and graphics, so leaving can tell whether the director must reapply. */
 const pickTitle = (menu: BreakMenu): i32 => {
   if (menu.selected === ITEM_PLAY || menu.selected === ITEM_LEVEL) {
     startOutro(menu)
@@ -620,7 +632,7 @@ const actOnHowTo = (menu: BreakMenu, act: i32): i32 => {
   return MENU_STAY
 }
 
-/** Act on the Settings screen. */
+/** A Settings action: Enter cycles like Right so one key works every row, except on Back, where it leaves. */
 const actOnSettings = (menu: BreakMenu, act: i32): i32 => {
   if (act === ACT_QUIT) {
     return MENU_QUIT
@@ -785,7 +797,9 @@ const stepBall = (menu: BreakMenu): void => {
   if (Math.abs(menu.ballVY) < BALL_MIN_VY) {
     menu.ballVY = menu.ballVY < 0.0 ? -BALL_MIN_VY : BALL_MIN_VY
   }
-  pushTrail(menu.trail, menu.ballX, menu.ballY)
+  // The trail gets where the ball was before this step, the start of the
+  // segment the frame interpolates along, so it never runs ahead of the drawn ball.
+  pushTrail(menu.trail, menu.prevBallX, menu.prevBallY)
 }
 
 // ---- The outro --------------------------------------------------------------
@@ -971,8 +985,8 @@ const drawLogo = (menu: BreakMenu, view: View, alpha: f64, time: f64): void => {
     return
   }
   const n: i32 = logoSlots(menu)
+  const outro: boolean = menu.screen === SCREEN_OUTRO
   for (let i: i32 = 0; i < n; i++) {
-    const outro: boolean = menu.screen === SCREEN_OUTRO
     const x: f64 = outro ? lerp(menu.prevXs[i], menu.xs[i], alpha) : menu.homeXs[i]
     const y: f64 = outro ? lerp(menu.prevYs[i], menu.ys[i], alpha) : titleLogoY(menu, i, time)
     bevelBrick(view, x, y, CELL_W - 0.5, CELL_H - 0.5, logoColour(menu.columns[i], time))
@@ -1114,7 +1128,7 @@ const drawSettings = (menu: BreakMenu, view: View, alpha: f64, time: f64): void 
   drawTextCentred(view, WORLD_W / 2.0, 160.0, scale, rowHint(menu.settings, menu.row), MUTED, NO_SHADOW)
 }
 
-/** Settings row `r`'s name. */
+/** Settings row `r`'s name, lower case like the rest of the menu's text. */
 const rowName = (r: i32): string => {
   if (r === ROW_FPS) {
     return "frame rate"
@@ -1265,7 +1279,7 @@ const drawCapsule = (view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64)
     view,
     cx,
     top + 0.5,
-    Math.max(fontScaleFor(view, 7.0), 1),
+    scale,
     capsuleLetter(k),
     SHADOW,
     NO_SHADOW

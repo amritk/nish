@@ -66,6 +66,15 @@ PASS  back on the title
 PASS  space opens it too
 PASS  enter closes it
 PASS  q quits from it
+PASS  Esc held after How to play closes does not quit
+PASS  the repeat is ignored
+PASS  still on the title
+PASS  a held Enter does not reopen it
+PASS  Enter then Esc in one step opens How to play
+PASS  and the Esc aimed at the title is dropped
+PASS  two moves in one step both land
+PASS  a held Enter opens Settings without cycling the frame rate
+PASS  a held arrow still cycles it
 PASS  Settings opens on its first row
 PASS  the highlight snaps to the first row
 PASS  up from the first row wraps to back
@@ -156,4 +165,4 @@ PASS  Settings at 160x90, compact
 PASS  the outro at 640x360
 PASS  the logo dropping in at 640x360
 PASS  the title at 80x45, as text
-break-menu: 158 passed, 0 failed, 0 skipped
+break-menu: 167 passed, 0 failed, 0 skipped
