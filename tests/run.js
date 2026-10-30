@@ -14007,7 +14007,8 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // 8-bit bytes and keys past 72 bytes among them) and salts at cost 4 to 6, both
 // ways: Nish makes crypt_r's `$2b$` hash, crypt_r accepts Nish's, and Nish
 // answers crypt_r's `$2a$`, `$2b$` and `$2y$` hashes and a wrong password as
-// crypt_r does (tests/differential/bcrypt.js). Without a C compiler or
+// crypt_r does, one at a time and batched two to six at a time through
+// `bcryptHashN` and `bcryptVerifyN` (tests/differential/bcrypt.js). Without a C compiler or
 // libxcrypt it skips and says which.
 if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includes(only))) {
   const r = spawnSync("node", [path.join(root, "tests", "differential", "bcrypt.js"), "--compiler", NISH], {
@@ -14026,11 +14027,11 @@ if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includ
   }
 }
 
-// The bcrypt vectors of tests/link/crypto_bcrypt, and the four-lane batch of
-// tests/link/crypto_bcrypt_batch, as `--profile wasi` modules under Node's
-// WASI: both are pure, so they build for wasm32 and answer every case there as
-// natively.
-for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
+// The bcrypt vectors of tests/link/crypto_bcrypt, the four-lane batch of
+// tests/link/crypto_bcrypt_batch and the widths one to six of
+// tests/link/crypto_bcrypt_width, as `--profile wasi` modules under Node's
+// WASI: all three build for wasm32 and answer every case there as natively.
+for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch", "crypto_bcrypt_width"]) {
   if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
     continue
   }
@@ -14054,7 +14055,7 @@ for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
     )
   } else {
     skip(
-      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program === "crypto_bcrypt" ? "the bcrypt vectors" : "the bcrypt batch"} is not run`
+      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${{ crypto_bcrypt: "the bcrypt vectors", crypto_bcrypt_batch: "the bcrypt batch", crypto_bcrypt_width: "the bcrypt widths" }[program]} is not run`
     )
   }
 }

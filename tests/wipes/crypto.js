@@ -244,34 +244,38 @@ export const wipeChecks = [
       ["nish.bcryptVerify", 7],
     ],
   },
-  // The batch (`bcryptHash4`, `bcryptVerify4`). The roots: `bcryptKeyWord` 2
-  // (its 19-word expanded key and `bcryptKeySchedule`'s 128-byte key stream,
-  // inlined), `bcryptEks4` 3 (the blocks, the digests and one lane's digest),
-  // `bcryptLoad4` 16 (four lane loaders with two `bcryptKeyWord` call sites
-  // each), `bcryptHash4Exposed` 4 (`bcryptEks4`'s 3 and its digests),
-  // `bcryptVerify4Exposed` 6 (those 4, and each lane's joined hash and given
-  // hash bytes in `bcryptJoinedOk`'s inlined `bcryptSameWiped`), `bcryptHash4` 26 (the
-  // 4244-word state, `bcryptLoad4`, `bcryptHash4Exposed` and the one-lane
-  // path's `bcryptHash`, 5), and `bcryptVerify4` 51 (the state, `bcryptLoad4`
-  // and `bcryptVerify4Exposed` through `bcryptVerifyGroup`, 23, and
-  // `bcryptLaneOk`'s four `bcryptVerifyOne` sites, 7 each, for a cost a single
-  // lane holds). Turning into `fill(0)` the wipe of the digests dropped
-  // `bcryptHash4Exposed`, `bcryptVerify4Exposed`, `bcryptHash4` and
-  // `bcryptVerify4` to 3, 5, 25 and 50; either of `bcryptSameWiped`'s two
-  // wipes, `bcryptVerify4Exposed` and `bcryptVerify4` to 5 and 46 (the
-  // group's site and the four `bcryptVerifyOne` sites each lose one).
+  // The batch (`bcryptHashN`, `bcryptVerifyN`, and `bcryptHash4` and
+  // `bcryptVerify4` over them). The roots: `bcryptKeyWord` 2 (its 19-word
+  // expanded key and `bcryptKeySchedule`'s 128-byte key stream, inlined),
+  // `bcryptEksN` 2 (the block and one lane's digest), `bcryptLoadN` 4 (one
+  // `bcryptLoadLane` site, two `bcryptKeyWord` sites in it),
+  // `bcryptHashNExposed` 3 (`bcryptEksN`'s 2 and the digests),
+  // `bcryptVerifyNExposed` 5 (those 3, and the joined hash and given hash
+  // bytes in `bcryptJoinedOk`'s inlined `bcryptSameWiped`), `bcryptHashN` 13
+  // (the 6366-word state, `bcryptLoadN`, `bcryptHashNExposed` and the one-lane
+  // path's `bcryptHash`, 5), `bcryptVerifyN` 52 (`bcryptVerifyGroup`'s state,
+  // `bcryptLoadN` and `bcryptVerifyNExposed`, 10, and `bcryptLaneOk`'s six
+  // `bcryptVerifyOne` sites, 7 each, for a cost a single lane holds),
+  // `bcryptHash4` and `bcryptVerify4` the same through their one call, and
+  // `bcryptCalibrateTime` 19 (its six throwaway keys and `bcryptHashN`).
+  // Turning into `fill(0)` the wipes of the digests in `bcryptHashNExposed`
+  // and `bcryptVerifyNExposed` dropped each, `bcryptHashN`, `bcryptVerifyN`,
+  // `bcryptHash4`, `bcryptVerify4` and `bcryptCalibrateTime` by one.
   {
     name: "crypto: the wipes survive opt -O2 (bcrypt's batch state, key words, block, digests, joined and given hashes in bcryptVerify4Exposed)",
     program: "tests/link/crypto_bcrypt_batch/main.ts",
     modules: BCRYPT_MODULES,
     roots: [
       ["nish.bcryptKeyWord", 2],
-      ["nish.bcryptEks4", 3],
-      ["nish.bcryptLoad4", 16],
-      ["nish.bcryptHash4Exposed", 4],
-      ["nish.bcryptVerify4Exposed", 6],
-      ["nish.bcryptHash4", 26],
-      ["nish.bcryptVerify4", 51],
+      ["nish.bcryptEksN", 2],
+      ["nish.bcryptLoadN", 4],
+      ["nish.bcryptHashNExposed", 3],
+      ["nish.bcryptVerifyNExposed", 5],
+      ["nish.bcryptHashN", 13],
+      ["nish.bcryptVerifyN", 52],
+      ["nish.bcryptHash4", 13],
+      ["nish.bcryptVerify4", 52],
+      ["nish.bcryptCalibrateTime", 19],
     ],
   },
 ]
