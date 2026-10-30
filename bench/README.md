@@ -1786,11 +1786,11 @@ reads groups 1 and 3) over one of eight copies of the corpus that differ in
 their first line, a different copy each pass. Eight cases use none of the
 Unicode features (`literal`, `class`, `alternation`, `group`, `anchored`,
 `icase-ascii`, `icase-class`, `exec`) and three do (`property`, `script`,
-`icase-unicode`). Four `compile-` cases time `regexCompile` alone, 50 times
+`icase-unicode`). Five `compile-` cases time `regexCompile` alone, 50 times
 as many passes as a match case: a large class with and without `i`
 (`compile-class`, `compile-icase-class`), `\S+` under `i`
-(`compile-nonspace-icase`) and ten small patterns (`compile-many`). Not run
-in CI.
+(`compile-nonspace-icase`), `é` under `i` (`compile-icase-literal`) and ten
+small patterns (`compile-many`). Not run in CI.
 
 ```bash
 npm run build
