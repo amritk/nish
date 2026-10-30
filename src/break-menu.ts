@@ -1275,15 +1275,7 @@ const drawCapsule = (view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64)
   disc(view, cx - 7.0, top + 4.0, 4.0, colour)
   disc(view, cx + 7.0, top + 4.0, 4.0, colour)
   fillRect(view, cx - 7.0, top, 14.0, 8.0, colour)
-  drawTextCentred(
-    view,
-    cx,
-    top + 0.5,
-    scale,
-    capsuleLetter(k),
-    SHADOW,
-    NO_SHADOW
-  )
+  drawTextCentred(view, cx, top + 0.5, scale, capsuleLetter(k), SHADOW, NO_SHADOW)
   drawTextCentred(view, cx, y + 12.0, scale, capsuleName(k), TEXT, NO_SHADOW)
 }
 
