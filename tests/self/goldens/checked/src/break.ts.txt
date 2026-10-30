@@ -3168,11 +3168,10 @@ import newBreakGame from "./break-game" -> function @newBreakGame
 import stepBreakGame from "./break-game" -> function @stepBreakGame
 import BreakMenu from "./break-menu" -> struct BreakMenu
 import BreakSettings from "./break-menu" -> struct BreakSettings
-import FPS_CHOICE_COUNT from "./break-menu" -> const FPS_CHOICE_COUNT
 import MENU_APPLY from "./break-menu" -> const MENU_APPLY
 import MENU_QUIT from "./break-menu" -> const MENU_QUIT
 import MENU_STAY from "./break-menu" -> const MENU_STAY
-import RESOLUTION_CHOICE_COUNT from "./break-menu" -> const RESOLUTION_CHOICE_COUNT
+import cycleSetting from "./break-menu" -> function @cycleSetting
 import drawBreakMenu from "./break-menu" -> function @drawBreakMenu
 import fpsChoice from "./break-menu" -> function @fpsChoice
 import newBreakMenuWith from "./break-menu" -> function @newBreakMenuWith
@@ -3221,9 +3220,6 @@ function wallToast(run: WallRun, text: string): void -> @wallToast
 function wallGraphicsLabel(graphics: i32): string -> @wallGraphicsLabel
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function wallNextGraphics(graphics: i32): i32 -> @wallNextGraphics
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function wallGraphicsToast(graphics: i32): string -> @wallGraphicsToast
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: graphics
@@ -3243,18 +3239,18 @@ function wallHotkey(e: TermEvent): boolean -> @wallHotkey
 function wallApplyKey(run: WallRun, key: i32): void -> @wallApplyKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic_overflow nish_str_concat nish_str_from_i32 resolutionChoice wallGraphicsToast wallNextGraphics wallToast
+  calls: cycleSetting nish_panic_overflow nish_str_concat nish_str_from_i32 resolutionChoice wallGraphicsToast wallToast
   pointer run: size=80 writesThrough=true captured=false passedTo=wallToast#0 wallToast#0 wallToast#0 wallToast#0 wallToast#0
   stackSites=0 stackLocals=0
-  local -2:9 s: BreakSettings (const)
-  callee +1:5 wallToast -> @wallToast
+  local -5:9 s: BreakSettings (const)
+  callee -4:3 cycleSetting -> @cycleSetting
+  callee -2:5 wallToast -> @wallToast
+  callee +2:5 wallToast -> @wallToast
+  callee +2:35 resolutionChoice -> @resolutionChoice
+  callee +5:5 wallToast -> @wallToast
+  callee +5:20 wallGraphicsToast -> @wallGraphicsToast
   callee +7:5 wallToast -> @wallToast
-  callee +7:35 resolutionChoice -> @resolutionChoice
-  callee +9:18 wallNextGraphics -> @wallNextGraphics
-  callee +11:5 wallToast -> @wallToast
-  callee +11:20 wallGraphicsToast -> @wallGraphicsToast
-  callee +14:5 wallToast -> @wallToast
-  callee +17:5 wallToast -> @wallToast
+  callee +9:5 wallToast -> @wallToast
 function wallTakeHotkeys(run: WallRun, events: TermEvent[]): void -> @wallTakeHotkeys
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
