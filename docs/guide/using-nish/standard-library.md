@@ -283,6 +283,8 @@ ranges to its classes. Offsets are UTF-8 bytes, as `s.length` is, and `\w`,
 letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
 `Σ` and `ς`. One difference from JavaScript: no letter outside ASCII folds to
 one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`.
+Under `i` both still count as word characters to `\w`, `\W`, `\b` and `\B`,
+as they do in JavaScript with `iu`.
 Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in JavaScript:
 `\P{Lu}` is everything outside `\p{Lu}`, closed under folding, so it
 matches `A` through `a`, while `[^\p{Lu}]` negates the folded class

@@ -36,13 +36,16 @@
  * one, kept to their members above ASCII: the ASCII letters fold by their own
  * table and nothing crosses into it, so ſ (U+017F) and the Kelvin sign
  * (U+212A) do not match `s` or `k`. An orbit left with fewer than two members
- * is dropped. It is a count, then per member, by code point, the gap since
+ * is dropped. It is, per member by code point, the gap since
  * the last member and the zigzag-coded step to the next member of its orbit,
  * the last member stepping back to the first. **The fold runs**
  * `REGEX_FOLD_SPANS` are the same code points as maximal runs, at a fixed
  * width so `regexCompile` can binary-search them without reading the fold
  * table: a class with no folding code point, or none in its gaps, such as
- * `\S` under `i`, then never decodes it.
+ * `\S` under `i`, then never decodes it. **The fold index** `REGEX_FOLD_INDEX`
+ * holds, per block of `FOLD_BLOCK` members, the first member and the offset
+ * of its step, so `regexCompile` reads only the block a code point falls in
+ * rather than decoding the table.
  *
  * **The oracle** `tests/link/std_regex_unicode/oracle.ts` is what this
  * Node's `RegExp` answers over the sample text the test builds: per property,
@@ -234,6 +237,8 @@ const byValue = (text) => {
 // ---- The encoding ---------------------------------------------------------------
 
 const DIGIT0 = 48
+/** The members of `REGEX_FOLD_DATA` per entry of `REGEX_FOLD_INDEX`. */
+const FOLD_BLOCK = 16
 
 const varint = (v) => {
   if (!Number.isInteger(v) || v < 0) {
@@ -451,12 +456,18 @@ const tables = (db) => {
   const members = db.orbits
     .flatMap((o) => o.map((c, i) => [c, o[(i + 1) % o.length]]))
     .sort((a, b) => a[0] - b[0])
-  let fold = varint(members.length)
+  let fold = ""
   let prev = 0
-  for (const [c, next] of members) {
-    fold += varint(c - prev) + varint(zigzag(next - c))
+  // Per block of `FOLD_BLOCK` members, the first member and where its step starts.
+  const blocks = []
+  members.forEach(([c, next], i) => {
+    fold += varint(c - prev)
+    if (i % FOLD_BLOCK === 0) {
+      blocks.push([c, fold.length])
+    }
+    fold += varint(zigzag(next - c))
     prev = c
-  }
+  })
   // The folding code points as maximal runs, each end four base-32 digits.
   const runs = []
   for (const [c] of members) {
@@ -468,12 +479,13 @@ const tables = (db) => {
   }
   const fixed = (v) => {
     if (v >= 1 << 20) {
-      throw new Error(`gen-regex-unicode: U+${v.toString(16)} needs more than four digits`)
+      throw new Error(`gen-regex-unicode: ${v} needs more than four digits`)
     }
     return String.fromCharCode(...[15, 10, 5, 0].map((b) => DIGIT0 + ((v >>> b) & 31)))
   }
   const spans = runs.map(([lo, hi]) => fixed(lo) + fixed(hi)).join("")
-  return { index, data, fold, spans }
+  const foldIndex = blocks.map(([c, at]) => fixed(c) + fixed(at)).join("")
+  return { index, data, fold, spans, foldIndex }
 }
 
 // ---- The region ----------------------------------------------------------------
@@ -496,6 +508,9 @@ const region = (t) =>
     "/** The code points `REGEX_FOLD_DATA` folds, as runs: per run its first and last, four base-32 digits each. */",
     "const REGEX_FOLD_SPANS: string =",
     `  ${literal(t.spans)}`,
+    `/** Per block of ${FOLD_BLOCK} members in \`REGEX_FOLD_DATA\`, the first and where its step starts, four base-32 digits each. */`,
+    "const REGEX_FOLD_INDEX: string =",
+    `  ${literal(t.foldIndex)}`,
     END,
   ].join("\n")
 
@@ -504,16 +519,21 @@ const region = (t) =>
 /**
  * The sample text's code points, as the test builds them: every code point
  * up to U+323AF and from U+E0000 to U+E01EF, one in 251 of the rest and the
- * plane edges in `EDGES`, less the surrogates and the six whose folding
- * crosses ASCII (`s`, `S`, `k`, `K`, ſ and the Kelvin sign).
+ * plane edges in `EDGES`, less the surrogates and the four ASCII letters
+ * whose folding crosses ASCII (`s`, `S`, `k` and `K`), which would join ſ and
+ * the Kelvin sign to their neighbours' runs.
  */
-const SKIP = new Set([0x53, 0x73, 0x4b, 0x6b, 0x17f, 0x212a])
+const SKIP = new Set([0x53, 0x73, 0x4b, 0x6b])
 // The ends of the unassigned run after plane 3, of planes 4 to 13, of plane
 // 14's tags and of the private-use planes 15 and 16, with their noncharacters.
 const EDGES = new Set([
   0x323b0, 0x3fffe, 0x3ffff, 0x40000, 0xdfffe, 0xdffff, 0xe01f0, 0xefffe, 0xeffff, 0xf0000, 0xffffd, 0xffffe,
   0xfffff, 0x100000, 0x10fffd, 0x10fffe, 0x10ffff,
 ])
+// `\w`, `\b` and `\B` under `i` around ſ and the Kelvin sign, which are word
+// characters there, and a shorthand before a folded atom above ASCII.
+const WORD_TEXT = "aſ ſa \u212a k\u212ab s_ſ é É aÉ ſ\u212a -ſ- x"
+const WORD_PATTERNS = ["\\w+", "\\W+", "[\\w]+", "[^\\w]+", "\\b.", ".\\b", "\\B.", ".\\B", "\\b\\w+\\b", "\\wé", "\\Wé"]
 const sample = () => {
   const out = []
   for (let c = 0; c <= MAX_CP; c++) {
@@ -589,12 +609,19 @@ const oracle = (db, cps) => {
     "[^\\p{Lt}]",
     "[\\u{80}-\\u{10ffff}]",
     "\\S",
+    "\\w",
     "\\W",
+    "[\\w]",
+    "[\\W]",
     "\\D",
   ]
   for (const cls of iClasses) {
     const re = new RegExp(`^${cls}$`, "iu")
-    const [count, digest] = digestRuns(cps, (c) => re.test(String.fromCodePoint(c)))
+    // Nothing folds across ASCII but `\w` and `\W`, so ſ and the Kelvin sign
+    // meet every other class as they are, as under `u` alone.
+    const across = /\\[wW]/.test(cls) ? re : new RegExp(`^${cls}$`, "u")
+    const test = (c) => (c === 0x17f || c === 0x212a ? across : re).test(String.fromCodePoint(c))
+    const [count, digest] = digestRuns(cps, test)
     folds.push(`  "${cls.replaceAll("\\", "\\\\")} ${count} ${digest}",`)
   }
   const foldText = db.orbits.flat().sort((a, b) => a - b)
@@ -603,6 +630,22 @@ const oracle = (db, cps) => {
     const re = new RegExp(`^\\u{${c.toString(16)}}$`, "iu")
     const [count, digest] = digestRuns(foldText, (d) => re.test(String.fromCodePoint(d)))
     lits.push(`  "${c} ${count} ${digest}",`)
+  }
+  // Patterns under `i` over `WORD_TEXT`: the runs `exec` finds one after another.
+  const words = []
+  for (const src of WORD_PATTERNS) {
+    const re = new RegExp(src, "giu")
+    let count = 0
+    let digest = 0
+    let m = re.exec(WORD_TEXT)
+    while (m !== null) {
+      const start = Buffer.byteLength(WORD_TEXT.slice(0, m.index))
+      const end = start + Buffer.byteLength(m[0])
+      count += 1
+      digest = (Math.imul(digest, 31) + start * 7 + end) | 0
+      m = re.exec(WORD_TEXT)
+    }
+    words.push(`  "${src.replaceAll("\\", "\\\\")} ${count} ${digest}",`)
   }
   return [
     "// Generated by scripts/gen-regex-unicode.mjs from this Node's RegExp; do not edit.",
@@ -616,6 +659,14 @@ const oracle = (db, cps) => {
     "/** Per class under `i`: the same, over the sample text. */",
     "export const foldClassRows = (): string[] => [",
     ...folds,
+    "]",
+    "",
+    "/** The text the word rows run over. */",
+    `export const wordText = (): string => "${WORD_TEXT}"`,
+    "",
+    "/** Per pattern under `i`: the runs it finds in `wordText`, one after another. */",
+    "export const wordRows = (): string[] => [",
+    ...words,
     "]",
     "",
     "/** Every code point that folds to another above ASCII, in order. */",

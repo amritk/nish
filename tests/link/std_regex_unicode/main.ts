@@ -6,7 +6,7 @@
 import { Suite } from "../../../std/testing";
 import { Regex, RegexMatch, regexCompile } from "../../../std/regex";
 import { wrappingAdd, wrappingMul } from "nish:unsafe";
-import { foldCharRows, foldClassRows, foldCodePoints, propertyRows } from "./oracle";
+import { foldCharRows, foldClassRows, foldCodePoints, propertyRows, wordRows, wordText } from "./oracle";
 
 /** `c` as UTF-8. */
 const utf8 = (c: i32): string => {
@@ -26,7 +26,7 @@ const utf8 = (c: i32): string => {
 /**
  * The generator's sample text: every code point up to U+323AF and from
  * U+E0000 to U+E01EF, one in 251 of the rest and the plane edges in `edges`,
- * less the surrogates and the six whose folding crosses ASCII.
+ * less the surrogates and the four ASCII letters whose folding crosses ASCII.
  */
 const sample = (): string => {
   const edges: i32[] = [
@@ -37,8 +37,7 @@ const sample = (): string => {
   let c: i32 = 0
   while (c <= 1114111) {
     const dense: boolean = c <= 205743 || (c >= 917504 && c <= 917999) || edges.indexOf(c) >= 0
-    const skip: boolean =
-      (c >= 55296 && c <= 57343) || c === 83 || c === 115 || c === 75 || c === 107 || c === 383 || c === 8490
+    const skip: boolean = (c >= 55296 && c <= 57343) || c === 83 || c === 115 || c === 75 || c === 107
     if ((dense || c % 251 === 0) && !skip) {
       parts.push(utf8(c))
     }
@@ -94,5 +93,7 @@ export const main = (): i32 => {
   const chars: string[] = foldCharRows()
   const differs: string[] = differ(chars, (key: string): string => `${utf8(toI32(parseInt(key)))}+`, "i", folded.join(""))
   t.eqLines(`${chars.length} code points under i`, differs, none)
+  const words: string[] = wordRows()
+  t.eqLines(`${words.length} word patterns under i`, differ(words, (key: string): string => key, "i", wordText()), none)
   return t.done()
 }

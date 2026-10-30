@@ -1,4 +1,5 @@
 PASS  851 property escapes
-PASS  13 classes under i
+PASS  16 classes under i
 PASS  2884 code points under i
-regex unicode: 3 passed, 0 failed, 0 skipped
+PASS  11 word patterns under i
+regex unicode: 4 passed, 0 failed, 0 skipped

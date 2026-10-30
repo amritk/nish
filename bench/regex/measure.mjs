@@ -46,6 +46,7 @@ const CASES = [
   "compile-class",
   "compile-icase-class",
   "compile-nonspace-icase",
+  "compile-icase-literal",
   "compile-many",
 ]
 const cases = only === null ? CASES : only.split(",")

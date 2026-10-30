@@ -136,6 +136,9 @@ const compilePatterns = (name: string): string[] => {
   if (name === "compile-nonspace-icase") {
     return ["\\S+"]
   }
+  if (name === "compile-icase-literal") {
+    return ["é"]
+  }
   if (name === "compile-many") {
     return [
       "needle",
@@ -162,7 +165,8 @@ const benchFlags = (name: string): string => {
     name === "icase-class" ||
     name === "icase-unicode" ||
     name === "compile-icase-class" ||
-    name === "compile-nonspace-icase"
+    name === "compile-nonspace-icase" ||
+    name === "compile-icase-literal"
   ) {
     return "i"
   }

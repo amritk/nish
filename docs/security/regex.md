@@ -43,7 +43,9 @@ Out of scope: lookaround and backreferences, which are refused at compile
 time; the Unicode data itself, which the generator takes as published once its
 hash matches; and the callers' use of matches. Folding never crosses into
 ASCII (K does not match U+212A KELVIN SIGN, s does not match U+017F) — a
-documented difference from JavaScript, not a gap.
+documented difference from JavaScript, not a gap; under `i` the two are word
+characters to `\w`, `\W`, `\b` and `\B`, as JavaScript's `iu` has them, and
+`tests/link/std_regex_unicode` pins both views against Node.
 
 ## Threat model
 
