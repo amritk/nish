@@ -17502,7 +17502,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
