@@ -1,0 +1,12 @@
+setUp 1
+attempt 0: -98, descriptors +0
+attempt 1: -98, descriptors +0
+attempt 2: -98, descriptors +0
+attempt 3: -17, descriptors +0
+attempt 4: -111, descriptors +0
+attempt 5: -2, descriptors +0
+attempt 6: -22, descriptors +0
+attempt 7: -22, descriptors +0
+attempt 8: -2, descriptors +0
+attempt 9: -22, descriptors +0
+tearDown 0

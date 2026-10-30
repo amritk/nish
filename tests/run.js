@@ -2780,6 +2780,40 @@ if (!only || "net_set_option".includes(only)) {
   )
 }
 
+// The Unix-domain calls under the prelude, by their global spellings: each of
+// the five throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls` and
+// `net_unix_paths` are the native half).
+if (!only || "net_unix".includes(only)) {
+  const unixDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(unixDir, { recursive: true })
+  const kindsEntry = path.join(unixDir, "unix-kinds.ts")
+  fs.writeFileSync(
+    kindsEntry,
+    "export const main = (): number => " +
+      "NET_UNIX_UNLINK_STALE * 100 + NET_UNIX_STREAM * 10 + NET_UNIX_SEQPACKET === 112 ? 0 : 1;\n"
+  )
+  const kinds = runUnderPrelude(kindsEntry, [])
+  check("net_unix: under the prelude the flag and the pair kinds read 1, 1 and 2, as natively", kinds.status === 0, shown(kinds))
+  const calls = [
+    ["unixListen", 'unixListen("@nish", 4, 0)'],
+    ["unixListenMode", 'unixListenMode("nish.sock", 4, 0, 384)'],
+    ["unixConnect", 'unixConnect("@nish")'],
+    ["unixAccept", "unixAccept(3)"],
+    ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+  ]
+  for (const [name, call] of calls) {
+    const entry = path.join(unixDir, `${name}.ts`)
+    fs.writeFileSync(entry, `export const main = (): number => ${call};\n`)
+    const loud = runUnderPrelude(entry, [])
+    check(
+      `net_unix: under the prelude ${name} fails loudly rather than answering`,
+      loud.status !== 0 && loud.stderr.includes(`\`${name}\` has no synchronous reading under Node`),
+      shown(loud)
+    )
+  }
+}
+
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
 //
 // `tests/cases/net_udp_echo` binds, prints its port and echoes each datagram to

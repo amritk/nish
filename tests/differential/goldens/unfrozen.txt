@@ -327,6 +327,7 @@ cases/net_tcp_reuseport added after R6: no rewriter to freeze it with
 cases/net_udp_calls added after R6: no rewriter to freeze it with
 cases/net_udp_echo added after R6: no rewriter to freeze it with
 cases/net_udp_offload added after R6: no rewriter to freeze it with
+cases/net_unix_calls added after R6: no rewriter to freeze it with
 cases/nullish_nullable added after R6: no rewriter to freeze it with
 cases/nullish_nullable_default_context added after R6: no rewriter to freeze it with
 cases/nullish_nullable_default_null added after R6: no rewriter to freeze it with
