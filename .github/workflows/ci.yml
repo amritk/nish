@@ -1171,6 +1171,15 @@ jobs:
           node bench/crc32.mjs --check --compiler build/nish-test
           node bench/crc32.mjs --self --runs 9 --compiler build/nish-test
 
+      # The figures, not a gate: WP38's NEON Adler-32 held to the scalar
+      # reference, then timed against the Nish adler32Update at 64 KiB and
+      # 1 MiB with a copy column for the noise band, and its verdict against
+      # the 20% bar (docs/wp38-simd.md §3.1).
+      - name: Adler-32 throughput on AArch64
+        run: |
+          node bench/adler32.mjs --check --compiler build/nish-test
+          node bench/adler32.mjs --runs 12 --compiler build/nish-test
+
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on
   # Darwin -- and two socket setups (MSG_NOSIGNAL against SO_NOSIGPIPE), with

@@ -624,6 +624,42 @@ to 7% on the Xeon and about 1% on the ARM runner. The reading is in
 | gzip-compress-1m | 58,558,905 | 59,432,084 | 59,025,291 | 35,006,497 | 35,008,259 | 35,259,514 |
 | gzip-decompress-1m | 4,541,521 | 4,866,916 | 5,066,379 | 2,314,526 | 2,313,356 | 2,574,127 |
 
+## Adler-32
+
+`adler32.ts` times `adler32Update` on 64 KiB and 1 MiB windows, 64 MiB of
+input each, in ns/op. It is WP38's measure of a vector Adler-32
+([docs/wp38-simd.md §3.1](../docs/wp38-simd.md)). It is not in this suite's
+tables, and it has no twins. `adler32/kernel.c` times the same chain on the
+same bytes, through either its vector kernel (SSSE3 on x86-64, NEON on
+AArch64, picked at run time) or a scalar C copy of the Nish loop. `adler32.mjs`
+builds both, with clang at `-O2` and no CPU flag. It holds the kernel to the
+scalar reference (`kernel verify`), then runs four columns in interleaved
+rounds: `nish`, `nish (copy)` (the same binary again, the noise band),
+`kernel ssse3` or `kernel neon`, and `scalar C`:
+
+```bash
+npm run build
+node bench/adler32.mjs --check          # one short run per column; each checksum against the pinned one
+node bench/adler32.mjs --runs 16        # every column, minimum and median, then the verdict
+```
+
+Each call's answer is the next call's starting value, and its window moves a
+byte a turn, so every start offset mod 16 is timed. Every column must print the
+same checksum, or the run stops. After the table come the gain at each size
+(the `nish` median over the kernel median, less one), the band (the copy's
+larger distance from `nish`, at the minimum and at the median), and whether the
+kernel clears the 20% bar at both sizes.
+
+Median ns/op on two machines. The x86-64 run is `--runs 16` on an Intel Xeon
+at 2.10 GHz, at 9046339. The AArch64 run is CI's `simd-arm64` job on
+`ubuntu-24.04-arm` at 9046339, `--runs 12`. The reading is in
+[docs/wp38-simd.md §3.1](../docs/wp38-simd.md).
+
+| Workload | x86-64 nish | copy | ssse3 | scalar C | AArch64 nish | copy | neon | scalar C |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| adler-64k | 22,719 | 22,691 | 3,199 | 20,806 | 21,699 | 21,691 | 2,878 | 33,096 |
+| adler-1m | 375,586 | 368,880 | 53,562 | 343,377 | 347,110 | 347,366 | 48,164 | 530,742 |
+
 ## HTTP
 
 `http1-server.ts` is a program built on `nish/net/http1-server` the way the
@@ -1822,6 +1858,36 @@ These scans still step one byte at a time:
   at a break or at a ` #`.
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
+
+## Regular expressions
+
+`regex/` times `nish/regex` over a 64 KB corpus of mixed ASCII and non-ASCII
+lines: English, Greek, French, German and CJK words, numbers and addresses.
+Each case compiles one pattern, then counts its matches (`exec` walks them and
+reads groups 1 and 3) over one of eight copies of the corpus that differ in
+their first line, a different copy each pass. Eight cases use none of the
+Unicode features (`literal`, `class`, `alternation`, `group`, `anchored`,
+`icase-ascii`, `icase-class`, `exec`) and three do (`property`, `script`,
+`icase-unicode`). Five `compile-` cases time `regexCompile` alone, 50 times
+as many passes as a match case: a large class with and without `i`
+(`compile-class`, `compile-icase-class`), `\S+` under `i`
+(`compile-nonspace-icase`), `é` under `i` (`compile-icase-literal`) and ten
+small patterns (`compile-many`). Not run in CI.
+
+```bash
+npm run build
+node bench/regex/measure.mjs                         # this build against its byte-identical copy
+node bench/regex/measure.mjs --before <nish> --size  # and against another compiler's std/
+```
+
+`--before` builds the same program with another compiler, which links its own
+`std/`, so a `build/nish` copied into a worktree of an older commit measures
+that commit's `nish/regex`. It runs the three Unicode cases on this build
+only, since a build without property escapes refuses them. Every binary must
+print the same checksum for a case, or the script exits 1. `--size` also prints
+the linked size of `regex/size.ts`, a program that imports `nish/regex` and
+uses no property escape. The figures are in
+[docs/BENCHMARKS.md](../docs/BENCHMARKS.md#regular-expressions).
 
 ## Loading YAML into a JsonDocument
 
