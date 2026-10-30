@@ -39,7 +39,6 @@
     "!scripts/rebuild-compare.sh",
     "!scripts/ddc-chain.sh",
     "!scripts/nish-runner-parallel.mjs",
-    "!scripts/pin-platform-packages.mjs",
     "std",
     "README.md",
     "LICENSE",
@@ -94,10 +93,10 @@
     "nish"
   ],
   "optionalDependencies": {
-    "@amritk/nish-x86_64-linux": "0.26.0",
-    "@amritk/nish-aarch64-linux": "0.26.0",
-    "@amritk/nish-aarch64-darwin": "0.26.0",
-    "@amritk/nish-x86_64-darwin": "0.26.0"
+    "@amritk/nish-x86_64-linux": "0.27.1",
+    "@amritk/nish-aarch64-linux": "0.27.1",
+    "@amritk/nish-aarch64-darwin": "0.27.1",
+    "@amritk/nish-x86_64-darwin": "0.27.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
