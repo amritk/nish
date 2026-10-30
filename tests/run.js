@@ -18028,18 +18028,18 @@ if (!only || "simd runtime-aes wipe survives -O2".includes(only)) {
   }
 }
 
-// The constant-time reading of runtime/runtime-aes.c (tests/ct-asm-runtime.js): every
-// kernel function's `clang -O2` assembly, for x86-64 and aarch64, holds no branch on a
-// secret, no call, no load or store at a secret address and no divide of one, and
-// reads at least one loop branch; tests/simd/aes-leaky.c's two leaks are each refused.
-if (!only || "ct_asm constant time assembly runtime-aes".includes(only)) {
+// The constant-time reading of runtime/runtime-aes.c and runtime-sha256.c
+// (tests/ct-asm-runtime.js): every kernel function's `clang -O2` assembly, for x86-64
+// and aarch64, holds no branch on a secret, no call, no load or store at a secret
+// address and no divide of one, and reads at least one loop branch; tests/simd/aes-leaky.c's two leaks are each refused.
+if (!only || "ct_asm constant time assembly runtime-aes runtime-sha256".includes(only)) {
   if (!HAS_CLANG) {
-    skip("ct_asm: no clang to compile runtime-aes.c to assembly")
+    skip("ct_asm: no clang to compile runtime-aes.c and runtime-sha256.c to assembly")
   } else {
     // x86-64 is read again at the one `--cpu` level, as the fixtures are (CT-16).
     for (const r of [...runtimeChecks(root), ...runtimeChecks(root, "x86-64-v3")]) {
       const promises = {
-        exports: "exports exactly the kernels read here and nish_aes_hw",
+        exports: `exports exactly the kernels read here and ${r.resolver}`,
         kernel: "no branch on a secret, call, secret-indexed access or secret-dependent latency",
         leak: `refused for ${r.expect}`,
       }
