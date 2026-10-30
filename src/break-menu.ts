@@ -13,17 +13,12 @@
 // is drawn at `lerp(previous, current, alpha)` (or at a time that `alpha`
 // carries between steps), so a frame rate above the step rate stays smooth.
 
-// The import order is deliberate. break-gfx and its `../std/term-pixels` load
-// first, so term-pixels is the root package's here as it is under break-gfx
-// alone; term-io comes as `../std/term-io` after them, a root module of its
-// own, so the `nish` modules it pulls in follow it and not break-gfx. Either
-// way round, break-gfx's checked dump would differ from the one it has alone.
-import { Framebuffer } from "../std/term-pixels"
+import { Framebuffer } from "nish/term-pixels"
 import {
   NO_SHADOW,
   Particles,
   STEPS_PER_SECOND,
-  Trail,
+  GfxTrail,
   View,
   WORLD_H,
   WORLD_W,
@@ -45,7 +40,7 @@ import {
   gradient,
   hue,
   lerp,
-  mix,
+  gfxMix,
   outBounce,
   outCubic,
   pushTrail,
@@ -67,7 +62,7 @@ import {
   KEY_UP,
   TermEvent,
 } from "nish/term"
-import { TermInput } from "../std/term-io"
+import { TermInput } from "nish/term-io"
 
 // ---- The interface the director reads ---------------------------------------
 
@@ -328,7 +323,7 @@ export class BreakMenu {
   prevBallY: f64
   ballVX: f64
   ballVY: f64
-  trail: Trail
+  trail: GfxTrail
   sparks: Particles
   /** The view `drawBreakMenu` reuses, so a frame allocates none. */
   view: View
@@ -397,7 +392,7 @@ export class BreakMenu {
     this.prevBallY = this.ballY
     this.ballVX = 0.0
     this.ballVY = 0.0
-    this.trail = new Trail(TRAIL_POINTS)
+    this.trail = new GfxTrail(TRAIL_POINTS)
     this.sparks = new Particles(SPARK_CAPACITY)
     this.view = new View()
   }
@@ -423,9 +418,8 @@ export const newBreakMenuWith = (level: i32, seed: i64, settings: BreakSettings)
 
 /**
  * A number in [`lo`, `hi`], both ends included, from Marsaglia's xorshift32.
- * The menu keeps its own rather than `std/random`'s `Rng`, whose private
- * `mix` would clash with break-gfx's `mix` in one program; a slight modulo
- * bias does not matter to sparks and slants.
+ * Four shifts in the menu's own state cost less than another module, and a
+ * slight modulo bias does not matter to sparks and slants.
  */
 const menuRandom = (menu: BreakMenu, lo: i32, hi: i32): i32 => {
   let x: i32 = menu.rngState
@@ -963,7 +957,7 @@ const logoColour = (column: i32, time: f64): i32 => {
   const sweep: f64 = time * 1.8
   const band: f64 = sweep - Math.floor(sweep / 480.0) * 480.0 - 60.0
   const near: f64 = clamp(toF64(1) - Math.abs(x - band) / 28.0, 0.0, 1.0)
-  return mix(base, WHITE, near * 0.75)
+  return gfxMix(base, WHITE, near * 0.75)
 }
 
 /** A logo brick's y on the title at `time`: dropping in with a bounce, then bobbing on a slow wave. */
@@ -1016,17 +1010,17 @@ const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
   const accent: i32 = hue(time / 400.0)
   if (scale < 1) {
     // Compact: the selected item alone, between arrows, where the list would be.
-    drawTextCentred(view, WORLD_W / 2.0, 104.0, 1, "<", mix(BG_MID, MUTED, fade), NO_SHADOW)
+    drawTextCentred(view, WORLD_W / 2.0, 104.0, 1, "<", gfxMix(BG_MID, MUTED, fade), NO_SHADOW)
     drawTextCentred(
       view,
       WORLD_W / 2.0,
       116.0,
       1,
       itemLabel(menu, menu.selected),
-      mix(BG_MID, WHITE, fade),
+      gfxMix(BG_MID, WHITE, fade),
       NO_SHADOW
     )
-    drawTextCentred(view, WORLD_W / 2.0, 128.0, 1, ">", mix(BG_MID, MUTED, fade), NO_SHADOW)
+    drawTextCentred(view, WORLD_W / 2.0, 128.0, 1, ">", gfxMix(BG_MID, MUTED, fade), NO_SHADOW)
     return
   }
   const y: f64 = lerp(menu.prevHighlightY, menu.highlightY, alpha)
@@ -1039,8 +1033,8 @@ const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
       ITEM_TOP + toF64(i) * ITEM_GAP,
       scale,
       itemLabel(menu, i),
-      mix(BG_MID, colour, fade),
-      mix(BG_MID, SHADOW, fade)
+      gfxMix(BG_MID, colour, fade),
+      gfxMix(BG_MID, SHADOW, fade)
     )
   }
   drawTextCentred(
@@ -1049,7 +1043,7 @@ const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
     166.0,
     scale,
     "you found the wall.",
-    mix(BG_MID, MUTED, fade),
+    gfxMix(BG_MID, MUTED, fade),
     NO_SHADOW
   )
 }
@@ -1061,8 +1055,8 @@ const drawTitle = (menu: BreakMenu, view: View, alpha: f64, time: f64, fade: f64
 const drawBar = (view: View, y: f64, width: f64, accent: i32, fade: f64): void => {
   const left: f64 = (WORLD_W - width) / 2.0
   blendRect(view, left, y - 2.0, width, 11.0, accent, 0.22 * fade)
-  fillRect(view, left - 3.0, y - 2.0, 2.0, 11.0, mix(BG_MID, accent, fade))
-  fillRect(view, left + width + 1.0, y - 2.0, 2.0, 11.0, mix(BG_MID, accent, fade))
+  fillRect(view, left - 3.0, y - 2.0, 2.0, 11.0, gfxMix(BG_MID, accent, fade))
+  fillRect(view, left + width + 1.0, y - 2.0, 2.0, 11.0, gfxMix(BG_MID, accent, fade))
 }
 
 /** Title item `i`'s label; Start level carries the level between arrows. */

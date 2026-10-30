@@ -24,7 +24,7 @@ import {
   TermEvent,
 } from "nish/term"
 import { TermInput } from "nish/term-io"
-import { Framebuffer } from "../../../std/term-pixels"
+import { Framebuffer } from "nish/term-pixels"
 import {
   BreakMenu,
   BreakSettings,
