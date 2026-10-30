@@ -610,9 +610,9 @@ table reference.
 
 Median ns/op from `--self --runs 9`, on two machines. The x86-64 run is an
 Intel Xeon at 2.10 GHz on the `pclmul` path. The AArch64 run is CI's
-`simd-arm64` job on `ubuntu-24.04-arm`, on the `crc32` path. `copy` is the
-default binary run again, so its gap from `default` is the noise band: 2 to 7%
-on the Xeon and under 1% on the ARM runner. The reading is in
+`simd-arm64` job on `ubuntu-24.04-arm` at 43c4bbd, on the `crc32` path. `copy`
+is the default binary run again, so its gap from `default` is the noise band: 2
+to 7% on the Xeon and about 1% on the ARM runner. The reading is in
 [docs/wp38-simd.md §3.1](../docs/wp38-simd.md).
 
 | Workload | x86-64 default | copy | soft | AArch64 default | copy | soft |

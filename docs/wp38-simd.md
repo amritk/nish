@@ -996,7 +996,8 @@ band is under 1%. The CRC-32 rows run at 22.0 to 26.3 GB/s from 4 KiB up at
 the median, against about 3.5 GB/s on the tables. The 11% on decompressing is
 past this band, but it is still a small gain. The PMULL verdict above, 21.0
 against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at 1 MiB, measured on this
-runner, is a 20% and a 17% gap: more than twenty times this run's own band.
+runner, is a 22% and a 17% gap, from one C-driver run: about twenty times the
+bench's band.
 
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 

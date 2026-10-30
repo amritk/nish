@@ -18613,8 +18613,8 @@ if (
   // build answers 0, so the walk runs; held to Node's zlib.crc32. `--trace-symbol`
   // says which objects define `nish_crc32_hw`. checksum.ts's panic message joins
   // strings with `nish_str_concat`, which runtime-wasm.c does not define, so it is
-  // left an import that throws: no window here panics.
-  if (has("wasm-ld")) {
+  // left an import that throws: no window here panics. `zlib.crc32` is Node 22.2 on.
+  if (has("wasm-ld") && typeof zlib.crc32 === "function") {
     const freeDir = path.join(crcDir, "freestanding")
     fs.mkdirSync(freeDir, { recursive: true })
     const source = path.join(freeDir, "crc.ts")
@@ -18700,7 +18700,11 @@ if (
       `${built.stderr}IR calls nish_crc32_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.stderr}objects defining nish_crc32_hw: ${definitions}\n`}${trapped}got  ${got.join(",")}\nwant ${want.join(",")}`
     )
   } else {
-    skip("crc32 kernel: no wasm-ld, so the freestanding wasm link of a CRC-32 module is not checked")
+    skip(
+      has("wasm-ld")
+        ? "crc32 kernel: this Node has no zlib.crc32, so the freestanding wasm link of a CRC-32 module is not checked"
+        : "crc32 kernel: no wasm-ld, so the freestanding wasm link of a CRC-32 module is not checked"
+    )
   }
 
   if (WASI_SYSROOT && has("wasm-ld")) {

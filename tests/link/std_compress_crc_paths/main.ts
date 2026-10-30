@@ -59,6 +59,7 @@ export const main = (): i32 => {
   const whole: u32 = crc32(data, 0, 4096)
   console.log(`whole: ${toI64(whole)}`)
   const pieces: i32[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 63, 64, 65, 127, 128, 129]
+  let chained: i32 = 0
   for (const piece of pieces) {
     let c: u32 = toU32(0)
     for (let at: i32 = 0; at < 4096; at += piece) {
@@ -68,9 +69,11 @@ export const main = (): i32 => {
       console.log(`pieces of ${piece}: ${toI64(c)}, not the whole`)
       bad += 1
     }
+    chained += 1
   }
-  console.log(`pieces: ${pieces.length} splits`)
+  console.log(`pieces: ${chained} chains compared with the whole`)
   const lengths: i32[] = [4096, 4093]
+  let cuts: i32 = 0
   for (const total of lengths) {
     const all: u32 = crc32(data, 0, total)
     console.log(`whole ${total}: ${toI64(all)}`)
@@ -80,8 +83,9 @@ export const main = (): i32 => {
         console.log(`${cut} then ${total - cut}: ${toI64(c)}, not the whole`)
         bad += 1
       }
+      cuts += 1
     }
   }
-  console.log(`split once: ${pieces.length * lengths.length} cuts`)
+  console.log(`split once: ${cuts} cuts compared with the whole`)
   return bad === 0 ? 0 : 1
 }

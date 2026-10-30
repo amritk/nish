@@ -5,7 +5,7 @@ gzip check: crc 3421780262 isize 9
 gzip 4 KiB: crc 1684516404 isize 4096
 gzip 1 MiB: crc 908540874 isize 1048576
 whole: 1966423732
-pieces: 22 splits
+pieces: 22 chains compared with the whole
 whole 4096: 1966423732
 whole 4093: 779364846
-split once: 44 cuts
+split once: 44 cuts compared with the whole
