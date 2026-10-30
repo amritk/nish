@@ -1890,11 +1890,11 @@ function http1ClientRequestNeed(method: string, target: string, names: string[],
   callee +22:33 http1IsFieldText -> @nish.http1IsFieldText
   callee +26:7 http1SameWord -> @nish.http1SameWord
   callee +27:7 http1SameWord -> @nish.http1SameWord
-  callee +31:9 http1SameWord -> @nish.http1SameWord
-  callee +31:75 http1ClientListHas -> @nish.http1ClientListHas
-  callee +34:22 http1SameWord -> @nish.http1SameWord
-  callee +37:9 http1SameWord -> @nish.http1SameWord
-  callee +46:30 http1ClientDigits -> @nish.http1ClientDigits
+  callee +32:7 http1SameWord -> @nish.http1SameWord
+  callee +33:21 http1ClientListHas -> @nish.http1ClientListHas
+  callee +37:22 http1SameWord -> @nish.http1SameWord
+  callee +40:9 http1SameWord -> @nish.http1SameWord
+  callee +49:30 http1ClientDigits -> @nish.http1ClientDigits
 function http1ClientPutField(out: u8[], at: i32, names: string[], values: string[], i: i32): i32 -> @nish.http1ClientPutField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.http1PutText
