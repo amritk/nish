@@ -13,6 +13,7 @@
 # <dir>/runtime-simd.c, the byte searches that read a vector at a time and
 # the SSE4.1 rounding of `Math.floor` and its kin,
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
+# <dir>/runtime-sha256.c, SHA-256 on the CPU's SHA instructions,
 # <dir>/runtime-term.c, stdin and the terminal of `nish:term`, and
 # <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`. Each of those
 # files says why they are compiled and measured apart.
@@ -195,14 +196,15 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is ten translation units, and a caller names one: whoever passes
+# The runtime is eleven translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
-# <dir>/runtime-aes.c, <dir>/runtime-term.c and <dir>/runtime-bytes.c compiled beside it, on every profile,
+# <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-term.c and <dir>/runtime-bytes.c
+# compiled beside it, on every profile,
 # wasi included: runtime-simd.c and runtime-bytes.c take their scalar paths there
 # unless the build adds -msimd128,
-# runtime-aes.c compiles to an answer of 0 and stubs that nothing calls,
-# because the compiler emits no call to its kernels for wasm32, and
+# runtime-aes.c and runtime-sha256.c compile to an answer of 0 and stubs that
+# nothing calls, because the compiler emits no call to their kernels for wasm32, and
 # runtime-term.c reads stdin and answers "not a terminal". They were one file until the
 # operating-system half was split out for its own size budget, and the parallel
 # half followed for the same reason (each file's header comment says why), and
@@ -213,7 +215,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-term.c runtime-bytes.c"
+halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-term.c runtime-bytes.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -650,6 +652,18 @@ case "$profile" in
     done
     if [ "$aes_wanted" = 1 ] && [ "$aes_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-aes.c")
+    fi
+    # std/crypto/sha256.ts's block function, behind `nish_sha256_hw`, the same way.
+    sha256_named=0
+    sha256_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        */runtime-sha256.c|runtime-sha256.c) sha256_named=1 ;;
+        *.ll) if grep -q '@nish_sha256_hw(' "$i"; then sha256_wanted=1; fi ;;
+      esac
+    done
+    if [ "$sha256_wanted" = 1 ] && [ "$sha256_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-sha256.c")
     fi
     # IR of either kind that imports std/json or calls nish/bytes's byte-class runs
     # calls runtime-bytes.c's kernels (src/kernels.ts), which compile freestanding:

@@ -1289,6 +1289,26 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // SHA-256 on the CPU's SHA instructions, runtime-sha256.c
+    // (`src/kernels.ts`): a resolver of `nish_aes_hw`'s kind, and a kernel
+    // that writes `h`'s elements and only reads the others, with the AES
+    // kernels' attributes for their reasons.
+    this.add(
+      new RuntimeFunction(
+        "nish_sha256_hw",
+        "declare i32 @nish_sha256_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_sha256_compress",
+        `declare noundef i32 @nish_sha256_compress(${AES_ARRAY}, ${AES_ARRAY}, ${AES_ARRAY}, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
     this.buildIntrinsics()
   }
 

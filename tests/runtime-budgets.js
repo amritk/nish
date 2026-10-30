@@ -454,6 +454,20 @@ const RUNTIME_SIMD_TEXT_BUDGET = 2560
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
 /**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sha256.c`
+ * -- the SHA-256 block on the CPU's SHA instructions: `nish_sha256_hw`, its CPU
+ * question and `NISH_SHA256` pin, and `nish_sha256_compress` on SHA-NI (or the ARMv8
+ * SHA-256 instructions on AArch64).
+ *
+ * Measured **491 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the guard and the block 337, the resolver 154; the round constants are
+ * `.rodata`. Its own translation unit rather than more of `runtime-aes.c`: a program
+ * that hashes carries no AES, and the rule is a new file with its own measured
+ * ceiling, never a raised one. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_SHA256_TEXT_BUDGET = 512
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
  * `terminalSize`, `setRawMode` and `setTerminalRestore`, with the restore that the
@@ -651,6 +665,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
+  ["runtime/runtime-sha256.c", RUNTIME_SHA256_TEXT_BUDGET, "RUNTIME_SHA256_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],

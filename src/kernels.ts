@@ -50,6 +50,15 @@
 // branch to: the call is emitted as written there, and the module references
 // no `nish_aes_` symbol at all.
 //
+// `std/crypto/sha256.ts`'s block function, `sha256Compress`, is a seam of the
+// same kind (`isSha256Seam`), on SHA-NI or the ARMv8 SHA-256 instructions in
+// `runtime/runtime-sha256.c`, behind `nish_sha256_hw` and `NISH_SHA256`, and
+// emitted as written on wasm32. It differs in one way: its guard is in the
+// function, not its callers, so the kernel checks the same guard and answers
+// whether it ran, and the branch falls to the Nish call, which panics with its
+// own message, when it did not. The schedule array it is handed is the Nish
+// code's scratch, which the kernel keeps in registers instead.
+//
 // WP38 S6a: `nish/bytes` has five walks lowered S1's way, the call replaced
 // outright (`bytesWalkOf`). Four are byte-class runs — JSON's blanks, the
 // digits, the bytes a JSON string holds as themselves, and the bytes a JSON
@@ -61,7 +70,8 @@
 // the copy only ranges that lie inside their arrays.
 
 import { CheckedProgram, FunctionSig } from "./program"
-import { isBytesModule, isCryptoAesModule, isRegexModule, isTextModule } from "./std-modules"
+import { CLI } from "./branding"
+import { isBytesModule, isCryptoAesModule, isRegexModule, isTextModule, stdModuleName } from "./std-modules"
 import { T_VOID } from "./types"
 
 /** The runtime symbol the walker's call becomes. */
@@ -152,6 +162,26 @@ export const aesKernelOf = (seam: i32): string => {
   }
   return "nish_aes_ghash"
 }
+
+/** The runtime's answer to whether this process runs the SHA-256 kernel. */
+export const SHA256_HW: string = "nish_sha256_hw"
+
+/** The runtime kernel `sha256Compress`'s call becomes on the hardware arm, which answers whether it ran. */
+export const SHA256_KERNEL: string = "nish_sha256_compress"
+
+/**
+ * Whether a call in `program` to `sig` is `nish/crypto/sha256`'s block
+ * function, tested as `isAesSeam` tests its seams: private, `void`, and in the
+ * standard library's own `std/crypto/sha256.ts`. The module test is spelled
+ * here because it has no other asker.
+ */
+export const isSha256Seam = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.returnType === T_VOID &&
+  sig.sourceName === "sha256Compress" &&
+  program.packageName === CLI &&
+  program.source.path === stdModuleName("nish/crypto/sha256")
 
 /** A call that is none of `nish/bytes`'s walks. */
 export const BYTES_WALK_NONE: i32 = 0

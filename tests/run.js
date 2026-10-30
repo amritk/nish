@@ -131,12 +131,13 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
- * CPU's AES instructions, `runtime-term.c` stdin and the terminal of
+ * CPU's AES instructions, `runtime-sha256.c` the SHA-256 block on its SHA
+ * instructions, `runtime-term.c` stdin and the terminal of
  * `nish:term` and `runtime-bytes.c` the byte-class runs of `nish/bytes`,
  * split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same ten:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eleven:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -155,6 +156,7 @@ const RUNTIME_C = [
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
+  "runtime/runtime-sha256.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
 ]
@@ -8984,6 +8986,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-net.c",
       "runtime-simd.c",
       "runtime-aes.c",
+      "runtime-sha256.c",
       "runtime-term.c",
       "runtime-bytes.c",
     ]
@@ -8993,7 +8996,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the ten objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eleven objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -16619,7 +16622,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-term.c and runtime-bytes.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-term.c and runtime-bytes.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -23015,6 +23018,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-simd.c",
       // And the seventh (WP38 S5): AES-GCM on the CPU's AES instructions.
       "runtime/runtime-aes.c",
+      // And the eleventh: the SHA-256 block on the CPU's SHA instructions.
+      "runtime/runtime-sha256.c",
       // And the tenth (WP38 S6a): the byte-class runs of `nish/bytes`, which
       // std/json's tokenizer calls.
       "runtime/runtime-bytes.c",
