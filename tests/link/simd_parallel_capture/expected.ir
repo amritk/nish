@@ -1,6 +1,5 @@
 %task.payload = alloca { <4 x i32>, %struct.nish_array*, i32, i32 }, align 8
-store <4 x i32> %arg, <4 x i32>* %12, align 8
-%2 = load <4 x i32>, <4 x i32>* %1, align 8
+store <4 x i32> %arg, <4 x i32>*
+load <4 x i32>, <4 x i32>*
 %par.ctx = alloca { %struct.nish_array*, %struct.nish_array*, <4 x i32> }, align 8
-store <4 x i32> %cap.0, <4 x i32>* %16, align 8
-%6 = load <4 x i32>, <4 x i32>* %5, align 8
+store <4 x i32> %cap.0, <4 x i32>*

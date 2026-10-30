@@ -41,6 +41,7 @@ import {
   POS_PARAM,
   POS_RETURN,
   pushAll,
+  structsHoldingVectors,
   tsKeyword,
   tsSignatureLine,
   TypedView,
@@ -159,19 +160,19 @@ const wasmCrosses = (table: TypeTable, t: i32, position: i32): boolean =>
  * as a comment and the loader omits exactly the same functions, because both
  * ask this.
  */
-export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
+export const wasmSkipReason = (table: TypeTable, sig: FunctionSig, vectored: StringSet): string => {
   if (sig.name === "main") {
     return "`main` is reserved for a process entry"
   }
   let i = 0
   while (i < sig.paramTypes.length) {
     if (!wasmCrosses(table, sig.paramTypes[i], POS_PARAM)) {
-      return `argument ${i + 1} (${sig.paramNames[i]}) is ${wasmMissing(table, sig.paramTypes[i])}`
+      return `argument ${i + 1} (${sig.paramNames[i]}) is ${wasmMissing(table, sig.paramTypes[i], vectored)}`
     }
     i = i + 1
   }
   if (!wasmCrosses(table, sig.returnType, POS_RETURN)) {
-    return `the result is ${wasmMissing(table, sig.returnType)}`
+    return `the result is ${wasmMissing(table, sig.returnType, vectored)}`
   }
   return ""
 }
@@ -180,13 +181,14 @@ export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
  * A type the bridge does not carry, and why: a `nish:simd` vector, or a type
  * holding one, because no wasm export signature here spells a `v128`, the rest
  * because they need the runtime the freestanding profile leaves out.
+ * `vectored` names the records that hold a vector (`structsHoldingVectors`).
  */
-const wasmMissing = (table: TypeTable, t: i32): string => {
+const wasmMissing = (table: TypeTable, t: i32, vectored: StringSet): string => {
   const shown = `\`${tsKeyword(table, t)}\``
   if (table.isVector(t)) {
     return `${shown}, a \`nish:simd\` vector, which the wasm bridge does not carry yet`
   }
-  if (holdsVector(table, t, new StringSet())) {
+  if (holdsVector(table, t, vectored)) {
     return `${shown}, which holds a \`nish:simd\` vector the wasm bridge does not carry yet`
   }
   return `${shown}, which needs the ${LANGUAGE} runtime the freestanding wasm profile does not include`
@@ -410,10 +412,10 @@ const wasmTakesPacked = (table: TypeTable, sig: FunctionSig): boolean => {
   return false
 }
 
-export const wasmBridged = (table: TypeTable, fns: ExternalFunction[]): WasmBridge => {
+export const wasmBridged = (table: TypeTable, fns: ExternalFunction[], vectored: StringSet): WasmBridge => {
   const bridged: ExternalFunction[] = []
   for (const fn of fns) {
-    if (wasmSkipReason(table, fn.sig).length === 0) {
+    if (wasmSkipReason(table, fn.sig, vectored).length === 0) {
       bridged.push(fn)
     }
   }
@@ -681,7 +683,7 @@ export const generateWasmLoader = (
   dtsFile: string
 ): string => {
   const table = compilation.table
-  const bridge = wasmBridged(table, fns)
+  const bridge = wasmBridged(table, fns, structsHoldingVectors(compilation))
   const lines: string[] = []
   lines.push(banner(compilation, "--emit-dts", "// "))
   lines.push(`// Loader for the wasm build; ${basename(dtsFile)} declares it. Build the module with`)

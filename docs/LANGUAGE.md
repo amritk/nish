@@ -5835,9 +5835,10 @@ divide with overflow` is simply unreachable on an unsigned type.
   on the stack when the object provably does not escape
   ([Memory model](#memory-model)), and runs the constructor (or the inline
   initializers) (`tests/cases/cls_point`, `mem_stack_struct`).
-- `new Array<T>(n)`: `n` zero-filled elements; `T` must be a scalar or a
+- `new Array<T>(n)`: `n` zero-filled elements; `T` must be a scalar, a
+  `nish:simd` vector (every lane zero) or a
   `U | null` (whose zero fill is `null`); type argument and length required
-  (`tests/cases/arr_new_zeroed`, `mem_nullable`;
+  (`tests/cases/arr_new_zeroed`, `mem_nullable`, `simd_zero_fill`;
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
   A length no array can hold panics with `array length out of range` before
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
@@ -6622,8 +6623,8 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
 | --- | --- | --- |
 | `i32x4(a, b, c, d)`, one argument per lane | one `insertelement` per lane into `undef`, which `opt` folds to a constant vector when every lane is one | `simd_lanes`; `reject_simd_arity`, `reject_simd_lane_type` |
 | `splatI32x4(x)` | one `insertelement` into lane 0 and a `shufflevector` whose mask is `zeroinitializer` | `simd_lanes` |
-| `loadI32x4(xs, i)` | one bounds check for the whole vector, `i < len` and `i + N <= len`, branching to `nish_panic_index(i, len)`; then the element's address bitcast to `<N x T>*` and one `load` aligned to the lane | `simd_access`, `simd_access_oob`; `reject_simd_lane_type` |
-| `store(v, xs, i)` | the same check, then one `store`; a statement | `simd_access`; `reject_simd_lane_type`, `reject_simd_arity` |
+| `loadI32x4(xs, i)` | one bounds check for the whole vector, `i < len` and `i + N <= len`, branching to `nish_panic_index(i, len)`; then the element's address bitcast to `<N x T>*` and one `load` aligned to the lane | `simd_access`, `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`; `reject_simd_lane_type` |
+| `store(v, xs, i)` | the same check, then one `store`; a statement | `simd_access`, `simd_store_oob`; `reject_simd_lane_type`, `reject_simd_arity` |
 | `extract(v, k)` | `extractelement` at the constant `k` | `simd_lanes`; `reject_simd_lane_index` |
 | `replace(v, k, x)` | `insertelement` at the constant `k`: a new vector, `v` unchanged | `simd_lanes`, `simd_values`; `reject_simd_lane_index` |
 

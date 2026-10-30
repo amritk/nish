@@ -11,6 +11,7 @@ import jsExportName from "./interop-abi" -> function @jsExportName
 import POS_PARAM from "./interop-abi" -> const POS_PARAM
 import POS_RETURN from "./interop-abi" -> const POS_RETURN
 import pushAll from "./interop-abi" -> function @pushAll
+import structsHoldingVectors from "./interop-abi" -> function @structsHoldingVectors
 import tsKeyword from "./interop-abi" -> function @tsKeyword
 import tsSignatureLine from "./interop-abi" -> function @tsSignatureLine
 import TypedView from "./interop-abi" -> struct TypedView
@@ -68,28 +69,29 @@ function wasmCrosses(table: TypeTable, t: i32, position: i32): boolean -> @wasmC
   pointer table: size=96 writesThrough=false captured=false passedTo=wasmType#0
   stackSites=0 stackLocals=0
   callee +0:3 wasmType -> @wasmType
-function wasmSkipReason(table: TypeTable, sig: FunctionSig): string -> @wasmSkipReason [exported]
+function wasmSkipReason(table: TypeTable, sig: FunctionSig, vectored: StringSet): string -> @wasmSkipReason [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 wasmCrosses wasmMissing
   pointer table: size=96 writesThrough=false captured=false passedTo=wasmCrosses#0 wasmMissing#0 wasmCrosses#0 wasmMissing#0
   pointer sig: size=136 writesThrough=false captured=false
+  pointer vectored: size=8 writesThrough=false captured=false passedTo=wasmMissing#2 wasmMissing#2
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   callee +2:10 wasmCrosses -> @wasmCrosses
   callee +3:61 wasmMissing -> @wasmMissing
   callee +7:8 wasmCrosses -> @wasmCrosses
   callee +8:29 wasmMissing -> @wasmMissing
-function wasmMissing(table: TypeTable, t: i32): string -> @wasmMissing
+function wasmMissing(table: TypeTable, t: i32, vectored: StringSet): string -> @wasmMissing
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
-  calls: StringSet.constructor TypeTable.isVector holdsVector nish_str_concat tsKeyword
+  calls: TypeTable.isVector holdsVector nish_str_concat tsKeyword
   pointer table: size=96 writesThrough=false captured=false passedTo=tsKeyword#0 TypeTable.isVector#0 holdsVector#0
-  stackSites=1 stackLocals=0
+  pointer vectored: size=8 writesThrough=false captured=false passedTo=holdsVector#2
+  stackSites=0 stackLocals=0
   local +0:9 shown: string (const)
   callee +0:22 tsKeyword -> @tsKeyword
   callee +1:7 TypeTable.isVector -> @TypeTable.isVector
   callee +4:7 holdsVector -> @holdsVector
-  callee +4:29 new StringSet -> @StringSet.constructor
 function wasmUnsignedIn(table: TypeTable, t: i32): string -> @wasmUnsignedIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: t
@@ -213,12 +215,13 @@ function wasmTakesPacked(table: TypeTable, sig: FunctionSig): boolean -> @wasmTa
   callee +0:7 TypeTable.resultByValue -> @TypeTable.resultByValue
   local +3:7 i: i32 (let)
   callee +5:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-function wasmBridged(table: TypeTable, fns: ExternalFunction[]): WasmBridge -> @wasmBridged [exported]
+function wasmBridged(table: TypeTable, fns: ExternalFunction[], vectored: StringSet): WasmBridge -> @wasmBridged [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: +0:7
   calls: WasmBridge.constructor nish_alloc_struct nish_arena_release nish_array_grow takesRange typedView wasmSkipReason
   pointer table: size=96 writesThrough=false captured=false passedTo=wasmSkipReason#0 takesRange#0 typedView#0 typedView#0
   pointer fns: size=0 writesThrough=false captured=false
+  pointer vectored: size=8 writesThrough=false captured=false passedTo=wasmSkipReason#2
   stackSites=0 stackLocals=0
   local -3:9 bridged: ExternalFunction[] (const)
   local -2:14 fn: ExternalFunction (const)
@@ -354,13 +357,14 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via wasmBridged
   escaping: dtsFile
-  calls: banner basename nish_alloc_struct nish_array_grow nish_str_concat pushAll tsSignatureLine wasmBridged wasmRangeHelper wasmResultHelpers wasmWrapper
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=banner#0
+  calls: banner basename nish_alloc_struct nish_array_grow nish_str_concat pushAll structsHoldingVectors tsSignatureLine wasmBridged wasmRangeHelper wasmResultHelpers wasmWrapper
+  pointer compilation: size=160 writesThrough=false captured=false passedTo=structsHoldingVectors#0 banner#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=wasmBridged#1
   stackSites=1 stackLocals=1
   local +0:9 table: TypeTable (const)
   local +1:9 bridge: WasmBridge (const)
   callee +1:18 wasmBridged -> @wasmBridged
+  callee +1:42 structsHoldingVectors -> @structsHoldingVectors
   local +2:9 lines: string[] (const)
   callee +3:14 banner -> @banner
   callee +4:47 basename -> @basename

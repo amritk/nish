@@ -10684,8 +10684,9 @@ for (const name of ["unsafe_get_set", "unsafe_wrapping"]) {
 
 // WP38 S3: `nish:simd` three ways. Each `simd_*` program with a `.out` is linked
 // natively, built with `--profile wasi` and run under Node's WASI where a
-// sysroot is installed, and run from source under `runtime/nish.mjs`, where a
-// vector is a typed array; all three must print the `.out` section A holds the
+// sysroot is installed, and run from source under `runtime/nish.mjs` (or, one
+// that zero-fills vectors, as `--emit-ts` writes it), where a vector is a typed
+// array; all three must print the `.out` section A holds the
 // native build to. Then the out-of-range load panics with the same words on
 // both sides, an exported function with a vector in its signature is left out
 // of the C header and the `.d.ts` with a comment naming the type, and no
@@ -10700,6 +10701,9 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     .filter((f) => /^simd_.*\.out$/.test(f))
     .map((f) => f.slice(0, -".out".length))
   check("simd: the section finds the simd_* programs with a .out", programs.length >= 3, programs.join(", "))
+  // Each slot of a `new Array<V>(n)` is a fresh zero vector, which only the
+  // `--emit-ts` route can build: its rewriter reads the element type.
+  const zeroFilled = new Set(["simd_zero_fill"])
   for (const name of programs) {
     const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
     const exe = buildCaseIn(simdDir, name)
@@ -10707,12 +10711,31 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
       const native = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
       check(`${name}: native prints the .out`, native.status === 0 && native.stdout === want, shown(native))
     }
-    const node = runCaseUnderPrelude(name, [])
-    check(
-      `${name}: runs under runtime/nish.mjs and prints the native .out`,
-      node.status === 0 && node.stdout === want,
-      `--- native (.out)\n${want}--- node\n${shown(node)}`
-    )
+    if (zeroFilled.has(name)) {
+      // `new Array<V>(n)` has holes under the prelude, which sees no type
+      // argument (docs/RUN_UNDER_NODE.md): Node runs it as `--emit-ts` writes it.
+      const out = path.join(simdDir, `ts_${name}`)
+      const emitted = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--emit-ts", out + path.sep], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const node =
+        emitted.status === 0
+          ? spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
+          : emitted
+      check(
+        `${name}: written by --emit-ts, runs under Node and prints the native .out`,
+        emitted.status === 0 && node.status === 0 && node.stdout === want,
+        `--- native (.out)\n${want}--- node\n${shown(node)}`
+      )
+    } else {
+      const node = runCaseUnderPrelude(name, [])
+      check(
+        `${name}: runs under runtime/nish.mjs and prints the native .out`,
+        node.status === 0 && node.stdout === want,
+        `--- native (.out)\n${want}--- node\n${shown(node)}`
+      )
+    }
     if (wasi) {
       const wasm = path.join(simdDir, `${name}.wasm`)
       const built = spawnSync(
@@ -10829,7 +10852,7 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     `${shown(sides)}\n--- lib.h\n${h}`
   )
   check(
-    "simd: --emit-napi bridges none of the vector signatures, naming the type",
+    "simd: --emit-napi bridges none of the vector signatures, naming the type, nor a class that holds one",
     sides.status === 0 &&
       n.includes('{"twice", nish_napi_twice}') &&
       !/nish_napi_(first|make|sum)\b/.test(n) &&
@@ -10837,11 +10860,14 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
       n.includes("make(x: number): i32x4 -- not bridged: it returns i32x4") &&
       n.includes("sum(vs: i32x4[]): number -- not bridged: parameter 1 (vs) is i32x4[]") &&
       !/nish_napi_pair\b/.test(n) &&
-      n.includes("pair(x: number): Result<f64x2, string> -- not bridged: it returns Result<f64x2, string>"),
+      n.includes("pair(x: number): Result<f64x2, string> -- not bridged: it returns Result<f64x2, string>") &&
+      !/nish_napi_peek(Nested)?\b/.test(n) &&
+      n.includes("peek(h: Holder): number -- not bridged: parameter 1 (h) is Holder") &&
+      n.includes("peekNested(h: Nested): number -- not bridged: parameter 1 (h) is Nested"),
     `${shown(sides)}\n--- lib_napi.c\n${n}`
   )
   check(
-    "simd: --emit-dts and its wasm loader export none of the vector signatures, naming the type",
+    "simd: --emit-dts and its wasm loader export none of the vector signatures, naming the type, nor a class that holds one",
     sides.status === 0 &&
       d.includes("twice(x: number): number;") &&
       m.includes("twice: raw.twice") &&
@@ -10850,7 +10876,10 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
       d.includes("the result is `i32x4`, a `nish:simd` vector") &&
       d.includes("sum(vs: i32x4[]): number  -- not exported to JS") &&
       !/\bpair: raw\./.test(m) &&
-      d.includes("the result is `Result<f64x2, string>`, which holds a `nish:simd` vector"),
+      d.includes("the result is `Result<f64x2, string>`, which holds a `nish:simd` vector") &&
+      !/\bpeek(Nested)?: raw\./.test(m) &&
+      d.includes("peek(h: Holder): number  -- not exported to JS: argument 1 (h) is `Holder`, which holds a `nish:simd` vector") &&
+      d.includes("peekNested(h: Nested): number  -- not exported to JS: argument 1 (h) is `Nested`, which holds a `nish:simd` vector"),
     `${shown(sides)}\n--- lib.d.ts\n${d}\n--- lib.mjs\n${m}`
   )
 

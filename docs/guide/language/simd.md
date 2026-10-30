@@ -41,8 +41,11 @@ That prints `30` and `0.5`.
 `store(v, xs, i)` writes a vector's lanes back to the same places. The array's
 elements must be the lane type: an `i32x4` comes from an `i32[]`, a `u8x16`
 from a `u8[]`. The index is checked once for the whole vector, and if any of
-its lanes would fall outside the array the program stops with the same
-`index out of range: i >= len` message an `xs[i]` gives:
+its lanes would fall outside the array the program stops with the
+`index out of range: … >= len` message an `xs[i]` gives. It names `i` when
+`i` itself is out of range, and otherwise the last lane, `i + N - 1`, where
+`N` is the lane count: `loadI32x4(xs, 2)` on a five-element array stops with
+`index out of range: 5 >= 5`.
 
 ```ts nish:ok
 import { loadU8x16, store } from "nish:simd";

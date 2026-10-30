@@ -7,6 +7,7 @@ import ExternalFunction from "./interop-abi" -> struct ExternalFunction
 import jsExportName from "./interop-abi" -> function @jsExportName
 import POS_PARAM from "./interop-abi" -> const POS_PARAM
 import POS_RETURN from "./interop-abi" -> const POS_RETURN
+import structsHoldingVectors from "./interop-abi" -> function @structsHoldingVectors
 import tsSignatureLine from "./interop-abi" -> function @tsSignatureLine
 import wasmBridged from "./interop-wasm" -> function @wasmBridged
 import wasmSkipReason from "./interop-wasm" -> function @wasmSkipReason
@@ -35,23 +36,25 @@ function docComment(table: TypeTable, fn: ExternalFunction): string -> @docComme
 function generateDts(compilation: Compilation, fns: ExternalFunction[]): string -> @generateDts [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via wasmBridged
-  calls: banner docComment jsExportName nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat tsSignatureLine wasmBridged wasmSkipReason wasmType
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=banner#0
+  calls: banner docComment jsExportName nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat structsHoldingVectors tsSignatureLine wasmBridged wasmSkipReason wasmType
+  pointer compilation: size=160 writesThrough=false captured=false passedTo=structsHoldingVectors#0 banner#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=wasmBridged#1
   stackSites=2 stackLocals=2
   local +0:9 table: TypeTable (const)
-  local +1:9 bridge: WasmBridge (const)
-  callee +1:18 wasmBridged -> @wasmBridged
-  local +2:9 lines: string[] (const)
-  callee +3:14 banner -> @banner
-  local +38:7 count: i32 (let)
-  local +39:14 fn: ExternalFunction (const)
-  local +40:11 skip: string (const)
-  callee +40:18 wasmSkipReason -> @wasmSkipReason
-  callee +42:18 tsSignatureLine -> @tsSignatureLine
-  local +45:11 params: string[] (const)
-  local +46:9 i: i32 (let)
-  callee +48:47 wasmType -> @wasmType
-  callee +52:16 docComment -> @docComment
-  callee +54:12 jsExportName -> @jsExportName
-  callee +54:59 wasmType -> @wasmType
+  local +1:9 vectored: StringSet (const)
+  callee +1:20 structsHoldingVectors -> @structsHoldingVectors
+  local +2:9 bridge: WasmBridge (const)
+  callee +2:18 wasmBridged -> @wasmBridged
+  local +3:9 lines: string[] (const)
+  callee +4:14 banner -> @banner
+  local +39:7 count: i32 (let)
+  local +40:14 fn: ExternalFunction (const)
+  local +41:11 skip: string (const)
+  callee +41:18 wasmSkipReason -> @wasmSkipReason
+  callee +43:18 tsSignatureLine -> @tsSignatureLine
+  local +46:11 params: string[] (const)
+  local +47:9 i: i32 (let)
+  callee +49:47 wasmType -> @wasmType
+  callee +53:16 docComment -> @docComment
+  callee +55:12 jsExportName -> @jsExportName
+  callee +55:59 wasmType -> @wasmType

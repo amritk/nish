@@ -194,7 +194,10 @@ no prelude can reach it. They are language decisions
   under Node.
 - **`new Array<T>(n)` has holes here.** Natively it zero-fills, and under Node
   every slot is `undefined` until written, so `a[1] + 1.0` is `1` natively and
-  `NaN` here.
+  `NaN` here. A slot of a `nish:simd` vector array is the zero vector
+  natively and `undefined` here, so `extract(a[1], 0)` is `0` natively and
+  `replace(a[1], 0, x)` throws here. `--emit-ts` writes each of these as a
+  zero-filled `newArray`, each vector slot its own zero typed array.
 - **The typed-array names are plain arrays natively, without `push` and
   `pop`.** `Float64Array` is `f64[]` in the language, and under Node it is
   JavaScript's fixed-length typed array. A receiver spelled with the name

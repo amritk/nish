@@ -467,6 +467,7 @@ cases/simd_access_oob_negative added after R6: no rewriter to freeze it with
 cases/simd_lanes added after R6: no rewriter to freeze it with
 cases/simd_store_oob added after R6: no rewriter to freeze it with
 cases/simd_values added after R6: no rewriter to freeze it with
+cases/simd_zero_fill added after R6: no rewriter to freeze it with
 cases/str_from_bytes added after R6: no rewriter to freeze it with
 cases/str_from_bytes_arrow added after R6: no rewriter to freeze it with
 cases/str_from_bytes_lifetime added after R6: no rewriter to freeze it with
