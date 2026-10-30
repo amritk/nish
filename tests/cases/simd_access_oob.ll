@@ -42,42 +42,46 @@ entry:
   br i1 %16, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 1, i64 %12)
+  %17 = add i64 1, 3
+  %18 = select i1 %14, i64 %17, i64 1
+  call void @nish_panic_index(i64 %18, i64 %12)
   unreachable
 
 bounds.ok:
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %19 = bitcast i8* %18 to i32*
-  %20 = getelementptr inbounds i32, i32* %19, i64 1
-  %21 = bitcast i32* %20 to <4 x i32>*
-  %22 = load <4 x i32>, <4 x i32>* %21, align 4
-  %23 = extractelement <4 x i32> %22, i32 3
-  %24 = call i8* @nish_str_from_i32(i32 %23)
-  call void @nish_print(i8* %24)
-  %25 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 0
-  %27 = load i64, i64* %26, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %28 = add i64 2, 4
-  %29 = icmp ult i64 2, %27
-  %30 = icmp ule i64 %28, %27
-  %31 = and i1 %29, %30
-  br i1 %31, label %bounds.ok.1, label %bounds.fail.1
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %20 = load i8*, i8** %19, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %21 = bitcast i8* %20 to i32*
+  %22 = getelementptr inbounds i32, i32* %21, i64 1
+  %23 = bitcast i32* %22 to <4 x i32>*
+  %24 = load <4 x i32>, <4 x i32>* %23, align 4
+  %25 = extractelement <4 x i32> %24, i32 3
+  %26 = call i8* @nish_str_from_i32(i32 %25)
+  call void @nish_print(i8* %26)
+  %27 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0
+  %29 = load i64, i64* %28, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %30 = add i64 2, 4
+  %31 = icmp ult i64 2, %29
+  %32 = icmp ule i64 %30, %29
+  %33 = and i1 %31, %32
+  br i1 %33, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 2, i64 %27)
+  %34 = add i64 2, 3
+  %35 = select i1 %31, i64 %34, i64 2
+  call void @nish_panic_index(i64 %35, i64 %29)
   unreachable
 
 bounds.ok.1:
-  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 2
-  %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %34 = bitcast i8* %33 to i32*
-  %35 = getelementptr inbounds i32, i32* %34, i64 2
-  %36 = bitcast i32* %35 to <4 x i32>*
-  %37 = load <4 x i32>, <4 x i32>* %36, align 4
-  %38 = extractelement <4 x i32> %37, i32 0
-  %39 = call i8* @nish_str_from_i32(i32 %38)
-  call void @nish_print(i8* %39)
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2
+  %37 = load i8*, i8** %36, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %38 = bitcast i8* %37 to i32*
+  %39 = getelementptr inbounds i32, i32* %38, i64 2
+  %40 = bitcast i32* %39 to <4 x i32>*
+  %41 = load <4 x i32>, <4 x i32>* %40, align 4
+  %42 = extractelement <4 x i32> %41, i32 0
+  %43 = call i8* @nish_str_from_i32(i32 %42)
+  call void @nish_print(i8* %43)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
