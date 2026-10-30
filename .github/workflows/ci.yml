@@ -454,18 +454,14 @@ jobs:
         if: matrix.shard == 1
         run: |
           calls=build/test/simd/sha256-calls.speed
-          # bench/sha256/run.mjs is another stage's; until it lands this says so
-          # rather than fail. Each path is named by the resolver's own answer.
-          if [ ! -f bench/sha256/run.mjs ]; then
-            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
-            exit 0
-          fi
+          # Each path is named by the resolver's own answer. The bench compiles
+          # with build/nish-test, the compiler tests/run.js linked above.
           for pin in unset soft; do
             if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
             said="$($run "$calls")"
             if [ -z "$said" ]; then echo "::error::$calls printed nothing under NISH_SHA256 $pin"; exit 1; fi
             echo "NISH_SHA256 $pin: ${said%%$'\n'*}"
-            $run node bench/sha256/run.mjs
+            $run node bench/sha256/run.mjs --compiler build/nish-test
           done
 
       # #619: `par_map_vector` links its modules with `llvm-link` and runs `opt
@@ -1154,18 +1150,14 @@ jobs:
       - name: SHA-256 throughput on each path
         run: |
           calls=build/test/simd/sha256-calls.speed
-          # bench/sha256/run.mjs is another stage's; until it lands this says so
-          # rather than fail. Each path is named by the resolver's own answer.
-          if [ ! -f bench/sha256/run.mjs ]; then
-            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
-            exit 0
-          fi
+          # Each path is named by the resolver's own answer. The bench compiles
+          # with build/nish-test, the compiler tests/run.js linked above.
           for pin in unset soft; do
             if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
             said="$($run "$calls")"
             if [ -z "$said" ]; then echo "::error::$calls printed nothing under NISH_SHA256 $pin"; exit 1; fi
             echo "NISH_SHA256 $pin: ${said%%$'\n'*}"
-            $run node bench/sha256/run.mjs
+            $run node bench/sha256/run.mjs --compiler build/nish-test
           done
 
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
@@ -1342,7 +1334,7 @@ jobs:
           for pin in unset soft; do
             if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
             $run node tests/run.js sha256_hw | tee "$RUNNER_TEMP/sha256-$pin.log"
-            grep -E '^[1-9][0-9]* passed, 0 failed\.$' "$RUNNER_TEMP/sha256-$pin.log"
+            grep -E '^[1-9][0-9]* passed, 0 failed(, [0-9]+ skipped)?\.$' "$RUNNER_TEMP/sha256-$pin.log"
             grep -E '^PASS  link/sha256_hw_vectors: exits with 0 and stdout matches expected\.out$' "$RUNNER_TEMP/sha256-$pin.log"
             grep -E '^PASS  link/sha256_hw_agree: exits with 0 and stdout matches expected\.out$' "$RUNNER_TEMP/sha256-$pin.log"
             if grep -E '^SKIP  ' "$RUNNER_TEMP/sha256-$pin.log" | grep -vE '^SKIP  sha256 kernel: '; then exit 1; fi
@@ -1352,18 +1344,14 @@ jobs:
         run: |
           calls="$RUNNER_TEMP/sha256-calls"
           clang -std=c11 -O2 tests/simd/sha256-calls.c runtime/runtime-sha256.c -o "$calls"
-          # bench/sha256/run.mjs is another stage's; until it lands this says so
-          # rather than fail. Each path is named by the resolver's own answer.
-          if [ ! -f bench/sha256/run.mjs ]; then
-            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
-            exit 0
-          fi
+          # Each path is named by the resolver's own answer. The bench compiles
+          # with build/nish-test, the compiler tests/run.js linked above.
           for pin in unset soft; do
             if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
             said="$($run "$calls")"
             if [ -z "$said" ]; then echo "::error::$calls printed nothing under NISH_SHA256 $pin"; exit 1; fi
             echo "NISH_SHA256 $pin: ${said%%$'\n'*}"
-            $run node bench/sha256/run.mjs
+            $run node bench/sha256/run.mjs --compiler build/nish-test
           done
 
   # Every fuzz target in tests/fuzz/targets/ built under
