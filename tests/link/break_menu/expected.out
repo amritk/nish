@@ -1,0 +1,180 @@
+PASS  MENU_STAY
+PASS  MENU_QUIT
+PASS  MENU_APPLY
+PASS  five frame rates
+PASS  five resolutions
+PASS  the first frame rate is adaptive
+PASS  then 30
+PASS  then 60
+PASS  then 120
+PASS  then 240
+PASS  the resolutions start at 270
+PASS  then 360
+PASS  then 540
+PASS  then 720
+PASS  and end at 1080
+PASS  a frame rate index below range reads the first
+PASS  a frame rate index above range reads the last
+PASS  a resolution index below range reads the first
+PASS  a resolution index above range reads the last
+PASS  default fps is adaptive
+PASS  default resolution is 540
+PASS  default graphics is automatic
+PASS  default smoothing is on
+PASS  default effects are high
+PASS  default stats are off
+PASS  a new menu is on the title
+PASS  a new menu selects Play
+PASS  a new menu keeps its level
+PASS  a new menu has the default settings
+PASS  level 0 is clamped to 1
+PASS  level 7 is clamped to 6
+PASS  newBreakMenuWith edits the settings it is given
+PASS  newBreakMenuWith keeps the frame rate
+PASS  newBreakMenuWith keeps the level
+PASS  one seed plays the same attract scene
+PASS  a seed's high half changes the scene
+PASS  down selects Start level
+PASS  j moves down
+PASS  S moves down
+PASS  down from Quit wraps to Play
+PASS  up from Play wraps to Quit
+PASS  k and w move up
+PASS  a held key repeats
+PASS  a release does nothing
+PASS  an unbound letter does nothing
+PASS  right raises the level
+PASS  d raises it to 6
+PASS  right from 6 wraps to 1
+PASS  left from 1 wraps to 6
+PASS  h lowers it
+PASS  left and right move nothing off Start level
+PASS  the highlight moves the step after
+PASS  the highlight is still on its way
+PASS  the highlight settles on Start level
+PASS  a settled highlight stands still
+PASS  Esc quits
+PASS  q quits
+PASS  Q quits
+PASS  picking Quit quits
+PASS  a quiet step stays
+PASS  How to play opens on enter
+PASS  it is the how-to-play screen
+PASS  arrows do nothing under it
+PASS  Esc closes it rather than quits
+PASS  back on the title
+PASS  space opens it too
+PASS  enter closes it
+PASS  q quits from it
+PASS  Esc held after How to play closes does not quit
+PASS  the repeat is ignored
+PASS  still on the title
+PASS  a held Enter does not reopen it
+PASS  Enter then Esc in one step opens How to play
+PASS  and the Esc aimed at the title is dropped
+PASS  two moves in one step both land
+PASS  a held Enter opens Settings without cycling the frame rate
+PASS  a held arrow still cycles it
+PASS  Settings opens on its first row
+PASS  the highlight snaps to the first row
+PASS  up from the first row wraps to back
+PASS  down from back wraps to the first
+PASS  right: 30 fps
+PASS  then 240
+PASS  wrapping to auto
+PASS  left from auto wraps to 240
+PASS  a fixed rate's hint
+PASS  enter on a value cycles it forward
+PASS  the adaptive hint
+PASS  resolution left: 360p
+PASS  resolution wraps to 1080p
+PASS  resolution wraps up to 360p
+PASS  resolution 720p
+PASS  resolution back to 540p
+PASS  resolution's hint
+PASS  graphics starts automatic
+PASS  the automatic hint
+PASS  then kitty
+PASS  kitty is GRAPHICS_KITTY
+PASS  a forced backend's hint
+PASS  then sixel
+PASS  then half-block
+PASS  then ascii
+PASS  ascii is GRAPHICS_ASCII
+PASS  and round to automatic
+PASS  left from automatic wraps to ascii
+PASS  smoothing starts on
+PASS  smoothing's hint
+PASS  smoothing off
+PASS  no smoothing's hint
+PASS  smoothing on again
+PASS  effects start high
+PASS  high effects' hint
+PASS  effects low
+PASS  low effects' hint
+PASS  effects high again
+PASS  stats start off
+PASS  stats on
+PASS  stats' hint
+PASS  back has no value
+PASS  back's hint
+PASS  left and right on back change nothing
+PASS  every hint fits inside the panel
+PASS  leaving with only resolution and toggles touched stays
+PASS  picking back returns to the title
+PASS  a change alone does not apply
+PASS  Esc out of a changed frame rate applies
+PASS  Esc leaves Settings for the title
+PASS  the next step does not apply again
+PASS  reopened, it is Settings
+PASS  leaving unchanged after an apply stays
+PASS  a graphics change applies on back
+PASS  a change undone does not apply
+PASS  q quits from Settings
+PASS  an fps past the end cycles from the last
+PASS  a resolution below range cycles from the first
+PASS  an unknown backend cycles from automatic
+PASS  a row past the last changes nothing
+PASS  Play starts the outro
+PASS  the outro is on
+PASS  the outro lasts OUTRO_STEPS after the pick
+PASS  it is a second of steps
+PASS  it answers the level
+PASS  and answers it once
+PASS  the outro's last frame is wiped clean
+PASS  and the next step answers
+PASS  the first brick has fallen
+PASS  every logo brick is released on an outro step
+PASS  the wipe covers part of the world
+PASS  Start level starts the outro
+PASS  a key held over does not skip it
+PASS  a fresh press skips to the level
+PASS  the attract ball knocks a brick out
+PASS  the brick grows back
+PASS  the ball stays in the world
+PASS  alpha 0.5 draws the ball halfway across the step
+PASS  and halfway down it
+PASS  alpha 0 and 1 draw a step apart
+PASS  0x0 draws nothing
+PASS  1x1 draws without panic
+PASS  the title at 640x360
+PASS  the title at 160x90, compact
+PASS  how to play at 640x360
+PASS  how to play at 160x90
+PASS  Settings at 640x360
+PASS  Settings at 160x90, compact
+PASS  the outro at 640x360
+PASS  the logo dropping in at 640x360
+PASS  the title at 80x45, as text
+PASS  the ball has a trail to draw
+PASS  high effects draws the trail
+PASS  low effects draws no trail
+PASS  high effects lights the ball's surroundings
+PASS  low effects draws no glow
+PASS  high effects bursts 8 sparks a knock
+PASS  low effects bursts 2 sparks a knock
+PASS  high effects puffs 3 sparks a loosened brick
+PASS  low effects puffs 1 spark a loosened brick
+PASS  a key skips the outro to the level
+PASS  and a second key does not answer it again
+break-menu: 179 passed, 0 failed, 0 skipped
