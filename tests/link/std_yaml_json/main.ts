@@ -304,7 +304,9 @@ const yjMergeBomb = (t: Suite): void => {
   t.ok("merge bomb: in linear time, well under a second", Date.now() - began < 1000);
   t.eqStr("merge bomb: as the empty maps it merges", yjWalk(doc, doc.get(root, "r")), "{}");
   const self = yjLoad(loader, doc, "a: &a {x: 1, <<: *a}\n");
-  t.ok("merge bomb: a map merging itself is refused or loads, never loops", self < 0 || doc.get(self, "a") >= 0);
+  // The parser refuses the alias, since `&a` binds only once its map ends.
+  t.eqI32("merge bomb: a map merging itself is refused by the parser", self, YAML_JSON_ERR_YAML);
+  t.eqStr("merge bomb: at the alias to the unfinished map", yjSlice("a: &a {x: 1, <<: *a}\n", loader.errorStart, loader.errorEnd), "*a");
   // A chain of 41 maps merged into each of 500 maps: 20,500 merge visits.
   let wide = "c0: &c0 {}\n";
   for (let i: i32 = 1; i <= 40; i += 1) {
@@ -319,6 +321,20 @@ const yjMergeBomb = (t: Suite): void => {
   t.eqI32("merge bomb: merge visits past the budget are refused", yjLoad(loader, narrow, wide), YAML_JSON_ERR_EXPANSION);
   t.ok("merge bomb: at the merge key it ran out on", yjSlice(wide, loader.errorStart, loader.errorEnd).startsWith("<<: *c"));
   t.ok("merge bomb: within the default budget it loads", yjLoad(loader, yjDoc(), wide) >= 0);
+  // A merge sequence of 200 items named by 200 maps: 40,000 items walked, all but one per map merged already.
+  let shared = "x: &x {}\ns: &s [*x";
+  for (let i: i32 = 1; i < 200; i += 1) {
+    shared = `${shared}, *x`;
+  }
+  shared = `${shared}]\nm:\n`;
+  for (let i: i32 = 0; i < 200; i += 1) {
+    shared = `${shared}  - {<<: *s}\n`;
+  }
+  const tight = yjDoc();
+  tight.maxValues = 1000;
+  t.eqI32("merge bomb: the walks of a shared merge sequence are charged", yjLoad(loader, tight, shared), YAML_JSON_ERR_EXPANSION);
+  t.ok("merge bomb: at the merge key that names the sequence", yjSlice(shared, loader.errorStart, loader.errorEnd).startsWith("<<: *s"));
+  t.ok("merge bomb: a shared merge sequence loads within the default budget", yjLoad(loader, yjDoc(), shared) >= 0);
   // The count saturates at the array; the merge's adjustment must not take it back under.
   const sat = yjDoc();
   sat.maxValues = 8;
@@ -338,6 +354,21 @@ const yjMergeShapes = (t: Suite): void => {
     t.eqI32(`merge shape ${i}: a merge value that is not a mapping is refused`, yjLoad(loader, doc, text), YAML_JSON_ERR_YAML);
     t.eqStr(`merge shape ${i}: at the value`, yjSlice(text, loader.errorStart, loader.errorEnd), at[i]);
   }
+  // Parsed with merging off, the parser checks no merge value; merging on again, the loader's own check refuses them.
+  const off = new YamlOptions();
+  off.merge = false;
+  const own: string[] = ["5", "1", "*s", "x", "<<"];
+  for (let i: i32 = 0; i < toI32(shapes.length); i += 1) {
+    const text = shapes[i];
+    const stream = parseYamlWith(text, off);
+    stream.merge = true;
+    t.eqI32(`merge shape ${i}: the loader refuses it too`, loader.load(stream, 0, doc), YAML_JSON_ERR_MERGE);
+    t.eqStr(`merge shape ${i}: the loader refuses it at the value`, yjSlice(text, loader.errorStart, loader.errorEnd), own[i]);
+  }
+  const plain = "m: {<<: {a: 1}, b: 2}\n";
+  const root = loader.load(parseYamlWith(plain, off), 0, doc);
+  t.ok("merge off: loads", root >= 0);
+  t.eqStr("merge off: `<<` is an ordinary key", yjWalk(doc, doc.get(root, "m")), "{<<<>:{<a>:#1},<b>:#2}");
   t.eqStr("merge shape: named", yamlJsonErrorName(YAML_JSON_ERR_MERGE), "MERGE");
 };
 

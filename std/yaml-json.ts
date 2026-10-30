@@ -51,10 +51,13 @@
  * `JSON_VALUE_ERR_VALUES` when the document has no alias. A merged map counts
  * all its keys, also those the merging map overrides, so a document within a
  * few values of the limit can be refused for merges that would have fit.
- * Merging is linear too: a map is merged into a given map at most once, however
- * many paths through the merge keys reach it, and the pairs every merge
- * visits are charged to a budget of `maxValues` plus the stream's node count,
- * past which the load is `YAML_JSON_ERR_EXPANSION` at the merge key.
+ * The loader's merging is linear too: a map is merged into a given map at
+ * most once, however many paths through the merge keys reach it, and the
+ * pairs every merge visits and the items of every merge sequence it walks are
+ * charged to a budget of `maxValues` plus the stream's node count, past which
+ * the load is `YAML_JSON_ERR_EXPANSION` at the merge key. `parseYaml`'s own
+ * merge check is not bounded this way: it walks a shared merge sequence once
+ * for each merge key that names it.
  *
  * **A merge key's value** is a mapping, an alias to one, or a sequence of
  * those; anything else is refused at the value, by the parser as
@@ -598,6 +601,11 @@ export class YamlJsonLoader {
             return this.failed
           }
         } else if (source >= 0 && stream.kind(source) === YAML_SEQ) {
+          // The walk itself is charged, since its items may all be merged already.
+          this.mergeBudget -= stream.count(source)
+          if (this.mergeBudget < 0) {
+            return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(pair), stream.end(pair))
+          }
           for (let j: i32 = 0; j < stream.count(source); j += 1) {
             const item: i32 = stream.child(source, j)
             const m: i32 = stream.resolved(item)
@@ -725,7 +733,11 @@ export class YamlJsonLoader {
     return e ?? -1
   }
 
-  /** Internal: whether `key` is a merge key, as the stream reads one: a plain `<<`, untagged or `!!merge`. */
+  /**
+   * Internal: whether `key` is a merge key, as the stream reads one: a plain
+   * `<<`, untagged or `!!merge`. Keep in step with `yamlIsMergeKey` in
+   * `std/yaml.ts`, which is not exported.
+   */
   isMergeKey(key: i32): boolean {
     const stream: YamlStream = this.stream
     if (!stream.merge || key < 0 || stream.kind(key) !== YAML_SCALAR || stream.style(key) !== YAML_PLAIN) {

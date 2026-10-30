@@ -8237,44 +8237,48 @@ function YamlJsonLoader.buildMap(this: YamlJsonLoader, at: i32, depth: i32): i32
   callee -3:16 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
 function YamlJsonLoader.mergeInto(this: YamlJsonLoader, base: i32, at: i32, hops: i32): i32 -> @nish.YamlJsonLoader.mergeInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.YamlJsonLoader.fail
+  sharedWrite: +0:11
   escaping: at base
-  calls: nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeMap nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start nish.YamlStream.value
-  pointer this: size=136 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0
+  calls: nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeMap nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start nish.YamlStream.value nish_panic_overflow
+  pointer this: size=136 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
-  local +0:11 stream: YamlStream (const)
-  local +1:14 i: i32 (let)
-  callee +1:30 YamlStream.count -> @nish.YamlStream.count
-  local +2:13 pair: i32 (const)
-  callee +2:25 YamlStream.child -> @nish.YamlStream.child
-  callee +3:11 YamlJsonLoader.isMergeKey -> @nish.YamlJsonLoader.isMergeKey
-  callee +3:27 YamlStream.key -> @nish.YamlStream.key
-  callee +5:18 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
-  callee +5:49 YamlStream.start -> @nish.YamlStream.start
-  callee +5:69 YamlStream.end -> @nish.YamlStream.end
-  local +7:15 value: i32 (const)
-  callee +7:28 YamlStream.value -> @nish.YamlStream.value
-  local +8:15 source: i32 (const)
-  callee +8:29 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +9:28 YamlStream.kind -> @nish.YamlStream.kind
-  callee +10:15 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
-  callee +13:35 YamlStream.kind -> @nish.YamlStream.kind
-  local +14:20 j: i32 (let)
-  callee +14:36 YamlStream.count -> @nish.YamlStream.count
-  local +15:19 item: i32 (const)
-  callee +15:31 YamlStream.child -> @nish.YamlStream.child
-  local +16:19 m: i32 (const)
-  callee +16:28 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +17:26 YamlStream.kind -> @nish.YamlStream.kind
-  local +18:21 bad: i32 (const)
-  callee +19:22 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
-  callee +19:53 YamlStream.start -> @nish.YamlStream.start
-  callee +19:72 YamlStream.end -> @nish.YamlStream.end
-  callee +21:17 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
-  local +26:17 bad: i32 (const)
-  callee +27:18 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
-  callee +27:49 YamlStream.start -> @nish.YamlStream.start
-  callee +27:68 YamlStream.end -> @nish.YamlStream.end
+  local -15:11 stream: YamlStream (const)
+  local -14:14 i: i32 (let)
+  callee -14:30 YamlStream.count -> @nish.YamlStream.count
+  local -13:13 pair: i32 (const)
+  callee -13:25 YamlStream.child -> @nish.YamlStream.child
+  callee -12:11 YamlJsonLoader.isMergeKey -> @nish.YamlJsonLoader.isMergeKey
+  callee -12:27 YamlStream.key -> @nish.YamlStream.key
+  callee -10:18 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
+  callee -10:49 YamlStream.start -> @nish.YamlStream.start
+  callee -10:69 YamlStream.end -> @nish.YamlStream.end
+  local -8:15 value: i32 (const)
+  callee -8:28 YamlStream.value -> @nish.YamlStream.value
+  local -7:15 source: i32 (const)
+  callee -7:29 YamlStream.resolved -> @nish.YamlStream.resolved
+  callee -6:28 YamlStream.kind -> @nish.YamlStream.kind
+  callee -5:15 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
+  callee -2:35 YamlStream.kind -> @nish.YamlStream.kind
+  callee +0:31 YamlStream.count -> @nish.YamlStream.count
+  callee +2:20 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
+  callee +2:55 YamlStream.start -> @nish.YamlStream.start
+  callee +2:75 YamlStream.end -> @nish.YamlStream.end
+  local +4:20 j: i32 (let)
+  callee +4:36 YamlStream.count -> @nish.YamlStream.count
+  local +5:19 item: i32 (const)
+  callee +5:31 YamlStream.child -> @nish.YamlStream.child
+  local +6:19 m: i32 (const)
+  callee +6:28 YamlStream.resolved -> @nish.YamlStream.resolved
+  callee +7:26 YamlStream.kind -> @nish.YamlStream.kind
+  local +8:21 bad: i32 (const)
+  callee +9:22 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
+  callee +9:53 YamlStream.start -> @nish.YamlStream.start
+  callee +9:72 YamlStream.end -> @nish.YamlStream.end
+  callee +11:17 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
+  local +16:17 bad: i32 (const)
+  callee +17:18 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
+  callee +17:49 YamlStream.start -> @nish.YamlStream.start
+  callee +17:68 YamlStream.end -> @nish.YamlStream.end
 function YamlJsonLoader.mergeMap(this: YamlJsonLoader, base: i32, pair: i32, m: i32, hops: i32): i32 -> @nish.YamlJsonLoader.mergeMap [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
