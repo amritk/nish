@@ -17462,6 +17462,34 @@ if (!only || "runtime-parallel".includes(only)) {
 // the same: 1..8 positions of random sets with the window anywhere in them, every
 // planted position of every length 0..300, and the resolver's pick, on the same
 // targets.
+/** The CPU feature words /proc/cpuinfo names (`flags` on x86-64, `Features` on AArch64); none off Linux. */
+const cpuFeatures = new Set(
+  ((fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : "").match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "")
+    .trim()
+    .split(/\s+/)
+)
+/** Whether /proc/cpuinfo names the instructions runtime-sha256.c's kernel runs on. */
+const cpuHasSha =
+  (process.arch === "x64" && cpuFeatures.has("sha_ni") && cpuFeatures.has("sse4_1") && cpuFeatures.has("ssse3")) ||
+  (process.arch === "arm64" && cpuFeatures.has("sha2"))
+/** The modules of tests/link/<program> compiled into a directory of their own, or none with the reason. */
+const compileLinkModules = (program, dir, flags) => {
+  const r = spawnSync(NISH, [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
+  })
+  const lls =
+    r.status === 0
+      ? fs
+          .readdirSync(dir)
+          .filter((f) => f.endsWith(".ll"))
+          .sort()
+          .map((f) => path.join(dir, f))
+      : []
+  return { lls, why: r.status === 0 ? "" : r.stderr }
+}
+
 if (!only || "simd".includes(only)) {
   const simdDir = path.join(buildDir, "simd")
   fs.mkdirSync(simdDir, { recursive: true })
@@ -17520,8 +17548,7 @@ if (!only || "simd".includes(only)) {
     native,
     "tests/simd/aes-gcm.c"
   )
-  const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
-  const features = new Set((cpuinfo.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
+  const features = cpuFeatures
   let wantPath = null
   if (process.arch === "x64" && features.has("aes") && features.has("pclmulqdq")) {
     wantPath = "aesni-pclmul"
@@ -17548,12 +17575,7 @@ if (!only || "simd".includes(only)) {
   // `nish_sha256_hw` under each `NISH_SHA256`. As with AES, /proc/cpuinfo's word
   // decides whether the line must name the path.
   const shaSaid = agree(`sha256 native ${process.arch}`, [], path.join(simdDir, "sha256"), native, "tests/simd/sha256.c")
-  let wantSha = null
-  if (process.arch === "x64" && features.has("sha_ni") && features.has("sse4_1") && features.has("ssse3")) {
-    wantSha = "sha-ni"
-  } else if (process.arch === "arm64" && features.has("sha2")) {
-    wantSha = "armv8-sha2"
-  }
+  const wantSha = cpuHasSha ? (process.arch === "x64" ? "sha-ni" : "armv8-sha2") : null
   if (wantSha === null) {
     skip(
       `simd: sha256: /proc/cpuinfo names no SHA-256 instructions for ${process.platform}-${process.arch}, so no kernel path is required to run`
@@ -17714,28 +17736,24 @@ if (!only || "simd".includes(only)) {
       return { ok: true, names, bytes: fs.readFileSync(out), why: "" }
     }
     const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
-    // The runtime as it was before build.sh paired runtime-aes.c: every file but that one.
-    const noAesDir = path.join(simdDir, "runtime-without-aes")
-    fs.rmSync(noAesDir, { recursive: true, force: true })
-    fs.mkdirSync(noAesDir, { recursive: true })
-    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
-      if (/\.(c|h)$/.test(file) && file !== "runtime-aes.c") {
-        fs.copyFileSync(path.join(root, "runtime", file), path.join(noAesDir, file))
+    /** The runtime as it was before build.sh paired `unit`: every file but that one. */
+    const runtimeWithout = (unit) => {
+      const dir = path.join(simdDir, `runtime-without-${unit.replace(/^runtime-|\.c$/g, "")}`)
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+        if (/\.(c|h)$/.test(file) && file !== unit) {
+          fs.copyFileSync(path.join(root, "runtime", file), path.join(dir, file))
+        }
       }
+      return dir
     }
+    const noAesDir = runtimeWithout("runtime-aes.c")
     const shaControl =
       wantSha === null
         ? null
         : "nish_sha256_hw: 1\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n"
-    // And the runtime as it was before build.sh paired runtime-sha256.c.
-    const noShaDir = path.join(simdDir, "runtime-without-sha256")
-    fs.rmSync(noShaDir, { recursive: true, force: true })
-    fs.mkdirSync(noShaDir, { recursive: true })
-    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
-      if (/\.(c|h)$/.test(file) && file !== "runtime-sha256.c") {
-        fs.copyFileSync(path.join(root, "runtime", file), path.join(noShaDir, file))
-      }
-    }
+    const noShaDir = runtimeWithout("runtime-sha256.c")
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
@@ -18079,32 +18097,9 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
   const kernelDir = path.join(buildDir, "aes-kernel")
   fs.rmSync(kernelDir, { recursive: true, force: true })
   fs.mkdirSync(kernelDir, { recursive: true })
-  const cpuFlags = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
-  const cpuFeatures = new Set((cpuFlags.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
   const cpuHasAes =
     (process.arch === "x64" && cpuFeatures.has("aes") && cpuFeatures.has("pclmulqdq")) ||
     (process.arch === "arm64" && cpuFeatures.has("aes") && cpuFeatures.has("pmull"))
-  /** The modules of tests/link/<program> compiled into a directory of their own, or null with the reason. */
-  const compileAes = (program, dir, flags) => {
-    const r = spawnSync(
-      NISH,
-      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
-      {
-        cwd: root,
-        encoding: "utf8",
-        env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
-      }
-    )
-    const lls =
-      r.status === 0
-        ? fs
-            .readdirSync(dir)
-            .filter((f) => f.endsWith(".ll"))
-            .sort()
-            .map((f) => path.join(dir, f))
-        : []
-    return { lls, why: r.status === 0 ? "" : r.stderr }
-  }
 
   if (!HAS_CLANG) {
     skip("aes kernel: no clang to link the AES programs against runtime-aes.c")
@@ -18152,7 +18147,7 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
     delete unset.NISH_AES
     for (const program of ["crypto_aes", "crypto_aes_agree"]) {
       const dir = path.join(kernelDir, program)
-      const compiled = compileAes(program, dir, [])
+      const compiled = compileLinkModules(program, dir, [])
       const exe = path.join(kernelDir, `${program}.counted`)
       const linked =
         compiled.lls.length > 0
@@ -18339,9 +18334,9 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
 
   if (WASI_SYSROOT && has("wasm-ld")) {
     const wasiDir = path.join(kernelDir, "wasi")
-    const wasi = compileAes("crypto_aes_agree", wasiDir, ["--profile", "wasi"])
+    const wasi = compileLinkModules("crypto_aes_agree", wasiDir, ["--profile", "wasi"])
     const nativeDir = path.join(kernelDir, "native")
-    const native = compileAes("crypto_aes_agree", nativeDir, [])
+    const native = compileLinkModules("crypto_aes_agree", nativeDir, [])
     const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_aes_"))
     /** The modules linked for wasm32-wasi with every AES symbol traced, and what the linker said. */
     const traced = (lls, out) =>
@@ -18426,29 +18421,7 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
   const shaDir = path.join(buildDir, "sha256-kernel")
   fs.rmSync(shaDir, { recursive: true, force: true })
   fs.mkdirSync(shaDir, { recursive: true })
-  const cpuFlags = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
-  const cpuFeatures = new Set((cpuFlags.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
-  const cpuHasSha =
-    (process.arch === "x64" && cpuFeatures.has("sha_ni") && cpuFeatures.has("sse4_1") && cpuFeatures.has("ssse3")) ||
-    (process.arch === "arm64" && cpuFeatures.has("sha2"))
   const programs = ["sha256_hw_vectors", "sha256_hw_agree"]
-  /** The modules of tests/link/<program> compiled into a directory of their own, or none with the reason. */
-  const compileSha = (program, dir, flags) => {
-    const r = spawnSync(
-      NISH,
-      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
-      { cwd: root, encoding: "utf8", env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) } }
-    )
-    const lls =
-      r.status === 0
-        ? fs
-            .readdirSync(dir)
-            .filter((f) => f.endsWith(".ll"))
-            .sort()
-            .map((f) => path.join(dir, f))
-        : []
-    return { lls, why: r.status === 0 ? "" : r.stderr }
-  }
   const expected = (program) => fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
 
   if (!HAS_CLANG) {
@@ -18478,7 +18451,7 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
     const unset = { ...process.env }
     delete unset.NISH_SHA256
     for (const program of programs) {
-      const compiled = compileSha(program, path.join(shaDir, program), [])
+      const compiled = compileLinkModules(program, path.join(shaDir, program), [])
       const exe = path.join(shaDir, `${program}.counted`)
       const linked =
         compiled.lls.length > 0
@@ -18597,8 +18570,8 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
 
   if (WASI_SYSROOT && has("wasm-ld")) {
     const program = "sha256_hw_vectors"
-    const wasi = compileSha(program, path.join(shaDir, "wasi"), ["--profile", "wasi"])
-    const native = compileSha(program, path.join(shaDir, "native"), [])
+    const wasi = compileLinkModules(program, path.join(shaDir, "wasi"), ["--profile", "wasi"])
+    const native = compileLinkModules(program, path.join(shaDir, "native"), [])
     const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_sha256_"))
     /** The modules linked for wasm32-wasi with both SHA-256 symbols traced. */
     const traced = (lls, out) =>

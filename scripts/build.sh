@@ -637,34 +637,25 @@ case "$profile" in
       exit 2
     fi
     # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
-    # AES kernels behind `nish_aes_hw` (src/kernels.ts). runtime-aes.c's wasm32 build
-    # answers 0 there, so the bitsliced code runs, and it is added only for such IR:
-    # every other module links the bytes it always did.
-    # A caller that names runtime-aes.c itself is left alone, as `halves` leaves it:
+    # AES kernels behind `nish_aes_hw`, and std/crypto/sha256.ts's block function
+    # behind `nish_sha256_hw` (src/kernels.ts). runtime-aes.c's and runtime-sha256.c's
+    # wasm32 builds answer 0 there, so the Nish code runs, and each is added only for
+    # such IR: every other module links the bytes it always did.
+    # A caller that names the unit itself is left alone, as `halves` leaves it:
     # one object named twice is a duplicate-symbol error.
-    aes_named=0
-    aes_wanted=0
-    for i in ${inputs[@]+"${inputs[@]}"}; do
-      case "$i" in
-        */runtime-aes.c|runtime-aes.c) aes_named=1 ;;
-        *.ll) if grep -q '@nish_aes_hw(' "$i"; then aes_wanted=1; fi ;;
-      esac
+    for kernel in aes sha256; do
+      named=0
+      wanted=0
+      for i in ${inputs[@]+"${inputs[@]}"}; do
+        case "$i" in
+          */runtime-$kernel.c|runtime-$kernel.c) named=1 ;;
+          *.ll) if grep -q "@nish_${kernel}_hw(" "$i"; then wanted=1; fi ;;
+        esac
+      done
+      if [ "$wanted" = 1 ] && [ "$named" = 0 ]; then
+        inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-$kernel.c")
+      fi
     done
-    if [ "$aes_wanted" = 1 ] && [ "$aes_named" = 0 ]; then
-      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-aes.c")
-    fi
-    # std/crypto/sha256.ts's block function, behind `nish_sha256_hw`, the same way.
-    sha256_named=0
-    sha256_wanted=0
-    for i in ${inputs[@]+"${inputs[@]}"}; do
-      case "$i" in
-        */runtime-sha256.c|runtime-sha256.c) sha256_named=1 ;;
-        *.ll) if grep -q '@nish_sha256_hw(' "$i"; then sha256_wanted=1; fi ;;
-      esac
-    done
-    if [ "$sha256_wanted" = 1 ] && [ "$sha256_named" = 0 ]; then
-      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-sha256.c")
-    fi
     # IR of either kind that imports std/json or calls nish/bytes's byte-class runs
     # calls runtime-bytes.c's kernels (src/kernels.ts), which compile freestanding:
     # the scalar path, or the 128-bit one under -msimd128. It is added the same way,

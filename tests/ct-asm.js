@@ -1370,7 +1370,13 @@ const AUDIT_CORNERS = [
     "aarch64",
     "a",
     "load",
-    ["fmov d0, x0", "movi v1.2d, #0000000000000000", "sha256su0 v0.4s, v1.4s", "fmov x2, d0", "ldr w3, [x4, x2]"],
+    [
+      "fmov d0, x0",
+      "movi v1.2d, #0000000000000000",
+      "sha256su0 v0.4s, v1.4s",
+      "fmov x2, d0",
+      "ldr w3, [x4, x2]",
+    ],
   ],
   // The SSE4.2 string compares: each writes the flags and a register it does not
   // name, %ecx or %xmm0, from its operands. Under `preciseFlags` a flag read after
