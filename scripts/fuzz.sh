@@ -56,6 +56,7 @@ RUNTIME_C=(
   runtime/runtime-term.c
   runtime/runtime-bytes.c
   runtime/runtime-sandbox.c
+  runtime/runtime-shm.c
 )
 
 SAN_FLAGS=(-g -O1 "-fsanitize=fuzzer,address,undefined" -fno-sanitize-recover=undefined)

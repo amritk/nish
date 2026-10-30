@@ -3,7 +3,7 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is eleven translation units and is named as one: an input
+# The C runtime is thirteen translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
@@ -15,8 +15,9 @@
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
 # <dir>/runtime-checksum.c, CRC-32 on its carry-less multiply or CRC instructions,
 # <dir>/runtime-term.c, stdin and the terminal of `nish:term`,
-# <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`, and
-# <dir>/runtime-sandbox.c, the confinement `--sandbox` applies. Each of those
+# <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`,
+# <dir>/runtime-sandbox.c, the confinement `--sandbox` applies, and
+# <dir>/runtime-shm.c, the shared-memory regions of `nish/sync/shm`. Each of those
 # files says why they are compiled and measured apart.
 #
 # Profiles:
@@ -206,17 +207,18 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is eleven translation units, and a caller names one: whoever passes
+# The runtime is thirteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
-# <dir>/runtime-aes.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c, <dir>/runtime-bytes.c
-# and <dir>/runtime-sandbox.c compiled beside it, on every profile,
+# <dir>/runtime-aes.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c, <dir>/runtime-bytes.c,
+# <dir>/runtime-sandbox.c and <dir>/runtime-shm.c compiled beside it, on every profile,
 # wasi included: runtime-simd.c and runtime-bytes.c take their scalar paths there
 # unless the build adds -msimd128,
 # runtime-aes.c and runtime-checksum.c compile to an answer of 0 and stubs that nothing calls,
 # because the compiler emits no call to its kernels for wasm32, and
 # runtime-term.c reads stdin and answers "not a terminal", and runtime-sandbox.c
-# compiles to two functions that refuse to run, which no wasm build calls. They were one file until the
+# compiles to two functions that refuse to run, which no wasm build calls, and
+# runtime-shm.c answers -95 for every region. They were one file until the
 # operating-system half was split out for its own size budget, and the parallel
 # half followed for the same reason (each file's header comment says why), and
 # a link line is where those splits
@@ -226,7 +228,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c"
+halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)

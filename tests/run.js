@@ -134,11 +134,12 @@ process.env.XDG_CACHE_HOME = suiteCache
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, `runtime-checksum.c` CRC-32 on its carry-less
  * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
- * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes` and
- * `runtime-sandbox.c` the `--sandbox` confinement, split apart so that each carries its own `.text*`
+ * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes`,
+ * `runtime-sandbox.c` the `--sandbox` confinement and `runtime-shm.c` the
+ * shared-memory regions of `nish/sync/shm`, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eleven:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same thirteen:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -161,6 +162,7 @@ const RUNTIME_C = [
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
   "runtime/runtime-sandbox.c",
+  "runtime/runtime-shm.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -8968,7 +8970,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's eleven translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's thirteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9027,6 +9029,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-term.c",
       "runtime-bytes.c",
       "runtime-sandbox.c",
+      "runtime-shm.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -9034,7 +9037,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the twelve objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the thirteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9043,7 +9046,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the twelve runtime units once",
+      "runtime cache: the miss compiled each of the thirteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -17515,7 +17518,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c and runtime-sandbox.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c and runtime-shm.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -23674,7 +23677,7 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all twelve runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all thirteen runtime units, the module and the link",
         level.status === 0 &&
           levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 12 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
@@ -24426,6 +24429,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // And the tenth: the confinement `--sandbox` applies before `main`, which
       // build.sh pairs with runtime.c on every native link.
       "runtime/runtime-sandbox.c",
+      // And the eleventh: the shared-memory regions of `nish/sync/shm`.
+      "runtime/runtime-shm.c",
       // The vendored SQLite, which build.sh compiles for a program that calls
       // it, and the notice that names its dedication to the public domain.
       // Read from the directory, so a unit added there is held to shipping too.

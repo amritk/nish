@@ -23,6 +23,9 @@ from racing on memory or deadlocking on a lock or a channel.
 The same program also runs under Node, one task at a time, and prints the same
 answer ([RUN_UNDER_NODE.md](../../RUN_UNDER_NODE.md) says how).
 
+Threads share one process. To share memory between processes, such as
+prefork workers, see [Shared memory between processes](shared-memory.md).
+
 ## One function over an array: `parallelMapInto` and `parallelReduce`
 
 `parallelMapInto(src, dst, f)` writes `f(src[i])` into `dst[i]` for every

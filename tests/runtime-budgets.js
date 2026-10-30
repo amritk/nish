@@ -542,6 +542,22 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * set.
  */
 const RUNTIME_SANDBOX_TEXT_BUDGET = 2304
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
+ * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`
+ * (docs/wp47-shared-memory.md, docs/security/shm.md): the handle table, the create,
+ * open, unlink and close of a named region, the 32- and 64-bit slot accesses with
+ * their bounds, alignment and ordering checks, the byte copies, the futex wait and
+ * wake, and the panic text they build.
+ *
+ * Measured **2,488 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64 (2,525 with
+ * `-DNISH_THREADS=1`, where the table is thread-local; the ceiling holds both). A
+ * thirteenth translation unit rather than more of `runtime-os.c`, so a program that
+ * imports neither module links none of it: the linker drops the object nothing
+ * references. The budget is the next 256-byte boundary above the measurement, as
+ * every ceiling here was set.
+ */
+const RUNTIME_SHM_TEXT_BUDGET = 2560
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
@@ -694,6 +710,8 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
   ["runtime/runtime-sandbox.c", RUNTIME_SANDBOX_TEXT_BUDGET, "RUNTIME_SANDBOX_TEXT_BUDGET", []],
+  ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", []],
+  ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
