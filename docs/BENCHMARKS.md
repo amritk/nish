@@ -691,37 +691,40 @@ Run 1 put everything together 1.48 µs under main on `list`, outside that run's 
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/regex/measure.mjs --before <nish> --rounds 24 --size` times `nish/regex` over a 64 KB corpus of mixed ASCII and non-ASCII lines, against a byte-identical copy of the binary for the noise band and against the same program built with another compiler's `std/` ([bench/README.md](../bench/README.md#regular-expressions) describes it). 2026-10-30: this branch against `main` at 384371b, before property escapes and non-ASCII folding, one run of 24 interleaved rounds, four cores, x86-64.
 
-The cases without the Unicode features. The ratio is main's time over this branch's, so above 1 means this branch is faster. A slower build shows on both statistics. No case here is slower on both beyond the larger noise band. Where one statistic falls outside, the other points the other way: `group` and `icase-ascii` read 0.93x at the median but 0.99x and 1.00x at the minimum, and `alternation` reads 0.979x at the minimum but 1.025x at the median.
+The cases without the Unicode features. Timings this short move by more than any difference between the two builds, so the verdict is the instructions a pass retires, counted with `valgrind --tool=cachegrind` as the difference between a run of 40 passes and one of 20 (no setup). The time ratio is main's over this branch's, so above 1 means this branch is faster.
 
-| Case | Pattern | Median, main | Median, branch | Ratio (min / median) | Noise band (median, main / branch) |
-| --- | --- | ---: | ---: | ---: | --- |
-| `literal` | `needle` | 8.7 µs | 8.0 µs | 1.011x / 1.079x | 4.5% / 0.9% |
-| `class` | `[0-9]+` | 30.3 µs | 28.7 µs | 0.993x / 1.056x | 3.3% / 0.6% |
-| `alternation` | `fox\|dog\|needle\|World` | 50.4 µs | 49.2 µs | 0.979x / 1.025x | 6.1% / 1.7% |
-| `group` | `(?:[a-z]+ ){2}[a-z]+` | 246.4 µs | 265.1 µs | 0.987x / 0.929x | 5.4% / 5.2% |
-| `anchored` | `^[A-Z][a-z]+` (`m`) | 20.0 µs | 20.5 µs | 1.012x / 0.973x | 2.0% / 0.0% |
-| `icase-ascii` | `hello world\|quick` (`i`) | 21.2 µs | 22.7 µs | 0.996x / 0.933x | 4.3% / 0.6% |
-| `icase-class` | `[A-Za-z]+` (`i`) | 407.4 µs | 408.2 µs | 1.012x / 0.998x | 1.5% / 1.6% |
-| `exec` | `(\w+)@(\w+)\.(com\|org)` | 515.5 µs | 493.8 µs | 1.006x / 1.044x | 4.7% / 1.7% |
+| Case | Pattern | Instructions a pass, main | Branch / main | Median, main | Median, branch | Time ratio (min / median) | Noise band (median, main / branch) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `literal` | `needle` | 2,287,433 | 1.000x | 8.3 µs | 8.3 µs | 0.999x / 0.997x | 0.1% / 0.7% |
+| `class` | `[0-9]+` | 6,541,349 | 1.005x | 34.3 µs | 30.7 µs | 1.094x / 1.119x | 3.2% / 0.1% |
+| `alternation` | `fox\|dog\|needle\|World` | 9,476,316 | 1.005x | 60.7 µs | 59.9 µs | 1.035x / 1.014x | 3.0% / 0.5% |
+| `group` | `(?:[a-z]+ ){2}[a-z]+` | 34,539,693 | 1.001x | 269.8 µs | 257.4 µs | 1.010x / 1.048x | 1.9% / 4.8% |
+| `anchored` | `^[A-Z][a-z]+` (`m`) | 5,661,809 | 0.998x | 21.1 µs | 20.1 µs | 0.997x / 1.050x | 0.3% / 3.4% |
+| `icase-ascii` | `hello world\|quick` (`i`) | 5,267,624 | 1.002x | 25.0 µs | 24.2 µs | 0.976x / 1.033x | 0.3% / 1.6% |
+| `icase-class` | `[A-Za-z]+` (`i`) | 62,588,112 | 1.005x | 438.0 µs | 432.4 µs | 1.049x / 1.013x | 4.0% / 4.3% |
+| `exec` | `(\w+)@(\w+)\.(com\|org)` | 169,456,575 | 0.927x | 515.8 µs | 530.7 µs | 1.094x / 0.972x | 10.3% / 11.3% |
 
-Compiling alone: a pass compiles the case's patterns once, 10,000 passes a run.
+`class`, `alternation` and `icase-class` retire 0.5% more instructions a pass. The match loop they run is unchanged, so this is the compiler laying out the same code differently, and it is below every noise band in the table. `anchored` was 2.6% more until a context read under `i` stopped testing U+017F and U+212A on ASCII bytes.
 
-| Case | Patterns | Median, main | Median, branch | Ratio (min / median) | Noise band (median, main / branch) |
-| --- | --- | ---: | ---: | ---: | --- |
-| `compile-class` | a large class with non-ASCII letters | 4.7 µs | 4.6 µs | 1.001x / 1.036x | 4.3% / 0.4% |
-| `compile-icase-class` | the same class under `i` | 4.7 µs | 54.8 µs | 0.087x / 0.085x | 10.6% / 2.7% |
-| `compile-nonspace-icase` | `\S+` (`i`) | 3.5 µs | 3.5 µs | 1.006x / 0.999x | 4.0% / 0.0% |
-| `compile-many` | ten small patterns | 45.6 µs | 46.1 µs | 0.982x / 0.991x | 1.9% / 2.4% |
+Compiling alone: a pass compiles the case's patterns once, 10,000 passes a run. Instructions are per compile, counted the same way between 4,000 and 2,000 passes.
 
-`compile-icase-class` is the one real cost: main folds no letter outside ASCII, and this branch decodes the folding table, about 50 µs, the first time a pattern folds one. A pattern that folds nothing above ASCII never reads it. `\S`, `\D` and `\W` under `i` don't either, being closed under folding already.
+| Case | Patterns | Instructions, main | Branch / main | Median, main | Median, branch | Time ratio (min / median) | Noise band (median, main / branch) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `compile-class` | a large class with non-ASCII letters | 26,785 | 0.991x | 5.0 µs | 5.2 µs | 1.006x / 0.979x | 0.8% / 1.0% |
+| `compile-icase-class` | the same class under `i` | 27,376 | 5.67x | 5.0 µs | 17.1 µs | 0.321x / 0.291x | 3.9% / 9.5% |
+| `compile-nonspace-icase` | `\S+` (`i`) | 16,891 | 0.967x | 3.6 µs | 3.8 µs | 1.016x / 0.944x | 1.3% / 5.1% |
+| `compile-icase-literal` | `é` (`i`) | 3,885 | 1.53x | 1.9 µs | 2.1 µs | 0.951x / 0.893x | 0.8% / 4.7% |
+| `compile-many` | ten small patterns | 274,390 | 1.002x | 47.2 µs | 46.7 µs | 0.977x / 1.011x | 2.5% / 1.0% |
+
+The two folding rows are the real cost, and they are work main does not do: main folds no letter outside ASCII. A compile reads the folding table in place, so nothing is decoded ahead of time and nothing is kept between compiles. An index of every sixteenth folding code point finds a letter's place, and a flag on two-letter orbits saves the second lookup. The large class costs about 12 µs more than main. A single `é` costs about 0.2 µs. A pattern that folds nothing above ASCII never reads the table. `\S`, `\D` and `\W` under `i` don't either, being closed under folding already.
 
 The three cases with the Unicode features. Main refuses `\p{…}` and folds no non-ASCII letter, so these time this branch alone:
 
 | Case | Pattern | Median | Noise band (median) |
 | --- | --- | ---: | --- |
-| `property` | `\p{L}+` | 578.4 µs | 0.8% |
-| `script` | `\p{Script=Greek}+` | 338.7 µs | 0.9% |
-| `icase-unicode` | `σοφία\|école\|straße\|über` (`i`) | 338.8 µs | 1.9% |
+| `property` | `\p{L}+` | 601.7 µs | 0.0% |
+| `script` | `\p{Script=Greek}+` | 354.5 µs | 2.0% |
+| `icase-unicode` | `σοφία\|école\|straße\|über` (`i`) | 358.2 µs | 5.6% |
 
-Linked size of `bench/regex/size.ts`, which imports `nish/regex` and compiles `[0-9]+`: 92,824 bytes from main and 172,744 from this branch. The 79,920 bytes are mostly the Unicode tables, about 70 KB of packed strings. `regexCompile`'s parser reaches them, so they are linked whether or not a pattern names a property.
+Linked size of `bench/regex/size.ts`, which imports `nish/regex` and compiles `[0-9]+`: 92,824 bytes from main and 177,448 from this branch. The 84,624 bytes are mostly the Unicode tables, about 70 KB of packed strings, plus the code that reads them. `regexCompile`'s parser reaches them, so they are linked whether or not a pattern names a property.
 <!-- regex:end -->
