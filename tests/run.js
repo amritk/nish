@@ -23307,7 +23307,47 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       check(`npm pack excludes ${f}`, !files.includes(f))
     }
 
-    const tarball = path.join(pkgDir, info.filename)
+    // What gets installed is the package `release.yml` publishes, not the checkout as
+    // it stands: the `release` job runs `scripts/pin-platform-packages.mjs` on the tag
+    // just before `npm pack`, and the release commit does not (#1039). So between a
+    // release commit and its lockfile pull request, `main` is `nish@X` pinning the
+    // platform packages at the release before X -- correctly, and the pins checks
+    // above allow it -- and a tarball packed from it as-is asks for that release.
+    // The platform package staged below is versioned X, does not satisfy the pin, and
+    // npm fetches the published one and nests it under `nish/node_modules/`, where
+    // the launcher finds it first; 0.27.0 went red on exactly that. So the tarball is
+    // unpacked, pinned to its own version the way the release job pins it, and packed
+    // again -- packed rather than installed as a directory, so `files` stays the thing
+    // deciding what ships. The checkout's own files are never touched: CI shards share
+    // the tree.
+    const stampDir = path.join(pkgDir, "stamped")
+    fs.mkdirSync(stampDir)
+    const unpacked = path.join(stampDir, "package")
+    const untarred = spawnSync("tar", ["-xzf", path.join(pkgDir, info.filename), "-C", stampDir], {
+      encoding: "utf8",
+    })
+    const pinned =
+      untarred.status === 0
+        ? spawnSync(
+            process.execPath,
+            [path.join(root, "scripts", "pin-platform-packages.mjs"), info.version, "--dir", unpacked],
+            { encoding: "utf8" }
+          )
+        : untarred
+    const stamped =
+      pinned.status === 0
+        ? spawnSync(npm, ["pack", "--pack-destination", stampDir], {
+            cwd: unpacked,
+            encoding: "utf8",
+          })
+        : pinned
+    check(
+      `the packed package's platform pins are stamped to ${info.version}, as release.yml stamps them`,
+      stamped.status === 0,
+      stamped.stdout + stamped.stderr
+    )
+
+    const tarball = path.join(stamped.status === 0 ? stampDir : pkgDir, info.filename)
     const prefix = path.join(pkgDir, "prefix")
     const install = spawnSync(
       npm,
@@ -23549,6 +23589,16 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           "npm install <platform tarball> into the same prefix succeeds",
           addPlatform.status === 0,
           addPlatform.stdout + addPlatform.stderr
+        )
+        // The staged package satisfied the main package's pin, so npm fetched nothing
+        // and nested nothing. A platform package under `nish/node_modules/` is the
+        // published one shadowing the staged one -- the launcher resolves it first --
+        // and every check below would fail on it without saying why.
+        const nested = path.join(prefix, "node_modules", "nish", "node_modules", "@amritk")
+        check(
+          "the main package's pins accept the staged platform package, so none is nested under it",
+          !fs.existsSync(nested),
+          fs.existsSync(nested) ? fs.readdirSync(nested).join(", ") : ""
         )
         const platformDir = path.join(prefix, "node_modules", ...platformPackageName(hostAsset).split("/"))
         {
