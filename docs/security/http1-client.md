@@ -1,7 +1,8 @@
 # Security record: HTTP/1.1 — the client's request writer and response parser
 
 The record of the sans-IO HTTP/1.1 client, `nish/net/http1-client`: the
-request writer (`http1WriteRequestHead`, `http1RequestHead`) and the
+request writer (`http1WriteRequestHead`, `http1RequestHead`,
+`http1UpgradeRequestHead`) and the
 incremental response parser (`Http1ResponseParser`). It says what each
 refuses and with which code, what it caps and where the cap is set, what it
 keeps in memory, and the test that pins each property. It is written with the
@@ -22,7 +23,7 @@ the memory each response's fields leave in the arena.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1-client.ts` | `http1WriteRequestHead`, `http1RequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientPutHead`, `http1ClientListHas`); `Http1ResponseParser` (`expect`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`) and its helpers (`http1ClientReserve`, `http1ClientClamp`, `http1ClientFail`, `http1ClientStartHead`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientDigitAt`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientConnectionHas`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientCloseBody`, `http1ClientNext`), and the byte and text helpers both halves use (`http1ClientDigits`, `http1ClientPutDecimal`, `http1ClientIsSchemeByte`, `http1ClientIsComma`, `http1ClientTrimStart`, `http1ClientTrimEnd`) |
+| `std/net/http1-client.ts` | `http1WriteRequestHead`, `http1RequestHead`, `http1UpgradeRequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientHeadArray`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientPutHead`, `http1ClientListHas`); `Http1ResponseParser` (`expect`, `expectUpgrade`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`) and its helpers (`http1ClientReserve`, `http1ClientClamp`, `http1ClientFail`, `http1ClientStartHead`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientDigitAt`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientConnectionHas`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientCloseBody`, `http1ClientNext`), and the byte and text helpers both halves use (`http1ClientDigits`, `http1ClientPutDecimal`, `http1ClientIsSchemeByte`, `http1ClientIsComma`, `http1ClientTrimStart`, `http1ClientTrimEnd`) |
 
 Out of scope: `std/net/http1.ts`, whose byte classes, text helpers and chunk
 writers the client imports and whose record is
@@ -107,8 +108,10 @@ an HTTP/1.0 response (`HTTP1_E_CODING`), a bare LF anywhere a line ends
 byte in a value (`HTTP1_E_FIELD`), a chunk size with no digits, a `0x`, BWS
 with no extension, a control byte in an extension, chunk data longer than
 its size or followed by anything but CRLF (`HTTP1_E_CHUNK`, but a bare LF
-there is `HTTP1_E_BARE_LF`, even after data that ends in CR), and a 101 the
-client never asks for (`HTTP1_E_SWITCH`) — each `refused with N (…)` line.
+there is `HTTP1_E_BARE_LF`, even after data that ends in CR), and a 101 to a
+request that did not ask to switch (`HTTP1_E_SWITCH`; the target never
+calls `expectUpgrade`, whose 101 `tests/fuzz/targets/websocket-client.ts`
+drives) — each `refused with N (…)` line.
 A 2xx to CONNECT is a tunnel whose framing fields are ignored (RFC 9110
 §9.3.6), and any other answer to CONNECT has a body like any response.
 
@@ -127,6 +130,30 @@ first status line and is forgotten after its end (`expect inside a response
 does nothing: its body still comes`, `expect is forgotten after HTTP1_END:
 the next 200 has a body again`, `expect after an interim response does
 nothing: HEAD still holds`).
+
+**A switch only when asked** (`expectUpgrade`). A 101 is refused with
+`HTTP1_E_SWITCH` unless the program said, after `expect` and before the
+response's first status line, that the request asked to switch protocols;
+then the 101 answers `HTTP1_HEAD`, `HTTP1_END` and `HTTP1_UPGRADE`, its
+`Content-Length` and `Transfer-Encoding` are ignored (RFC 9110 §15.2.2: the
+bytes after its empty line are the new protocol's), and `tunnelBytes()`
+answers what was fed past the head (`a 101 to a request that asked to switch
+protocols, frame bytes glued to its head`, `a 101 that asked to switch
+protocols ignores its framing fields`). Any other answer to
+such a request is read as it would be without it (`a request that asked to
+switch protocols, answered 200, reads as any other`, `asked to switch, a 200
+ends`). The opt-in lasts one request: `expect` clears it (`refused: expect()
+after expectUpgrade() asks for no switch again`), it does nothing once a
+response has begun (`refused: expectUpgrade() once a response has begun does
+nothing`, and a 101 after a 100 is refused, `a 101 after a 100 to a request
+that asked for no switch`), and the next response on a kept-alive connection
+is not asked to switch (`refused: the next response on the connection is not
+asked to switch`). `http1UpgradeRequestHead` writes `Upgrade` and
+`Connection: Upgrade` itself and no body, and refuses an empty upgrade, one
+that is not a token or holds CR LF, the caller's own `Connection` or
+`Upgrade` in any case, and no `Host` (`http1UpgradeRequestHead writes Upgrade
+and Connection itself`, the `refused upgrade: …` checks). What reads the 101's
+fields for WebSocket is `nish/net/websocket`'s, in [`http1.md`](http1.md).
 
 **Caps, all fixed at construction.** The status line (`maxStatusLine`), the
 header section (`maxHeaderBytes`), the fields of a response, its trailers
@@ -174,7 +201,9 @@ userinfo, `*` for OPTIONS; a `host:port` with another method is well-formed
 absolute-form, the host its scheme, and is sent) or that holds a space, a control byte, DEL, a
 non-ASCII byte or a `#`; a field name that is not a token; a value holding CR,
 LF or another control byte; not exactly one `Host`; the caller's own
-`Content-Length` or `Transfer-Encoding`; a `Connection` that lists `upgrade`;
+`Content-Length` or `Transfer-Encoding`; a `Connection` that lists `upgrade`,
+which only `http1UpgradeRequestHead` writes (`refused: http1WriteRequestHead
+with a Connection that lists upgrade`);
 names and values of different lengths; a body length below -2. The head is
 counted in 64 bits before a byte is written, so `HTTP1_NO_ROOM` (one byte
 short, a negative offset, an offset past the end) and `HTTP1_REFUSED` leave
@@ -258,7 +287,9 @@ across a feed), CONNECT's `persistent = false` (`http1ClientStartHead` has
 already cleared it for that response, and nothing sets it before that branch),
 `next()`'s write of the closed state before it answers `HTTP1_CLOSED`, a
 writer offset test implied by the room test, and a saturation flag implied by
-the length test. Before them and the checks that kill the rest, the same sweep
+the length test. The sweep predates `expectUpgrade`; each condition the opt-in added is
+pinned by one of the checks named under "A switch only when asked" above.
+Before them and the checks that kill the rest, the same sweep
 of the 594 mutants then in the module killed 367, left 223 and found 4
 invalid. A negative status-line limit had been recorded as equivalent to 0;
 the sweep showed it is not (an empty line is within a limit of 0 and over an

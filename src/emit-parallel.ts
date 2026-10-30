@@ -176,7 +176,7 @@ export const emitParallelRegion = (
     const type = fieldTypes[i]
     const value = fieldValues[i]
     const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${slot}, i32 0, i32 ${i}`)
-    fn.emit(`store ${type} ${value}, ${type}* ${at}`)
+    fn.emit(`store ${type} ${value}, ${type}* ${at}${slotAlign(type)}`)
     i = i + 1
   }
   const list = crosses
@@ -287,7 +287,7 @@ const chunkTrampoline = (
   while (i < fieldTypes.length) {
     const type = fieldTypes[i]
     const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${typed}, i32 0, i32 ${i}`)
-    const value = fn.emitValue(`load ${type}, ${type}* ${at}`)
+    const value = fn.emitValue(`load ${type}, ${type}* ${at}${slotAlign(type)}`)
     if (i < written) {
       operands.push(`${type} ${value}`)
     } else {
@@ -418,7 +418,7 @@ export const emitSpawnTask = (
     const type = types[i]
     const value = values[i]
     const at = fn.emitValue(`getelementptr inbounds ${payloadType}, ${payloadType}* ${slot}, i32 0, i32 ${i}`)
-    fn.emit(`store ${type} ${value}, ${type}* ${at}`)
+    fn.emit(`store ${type} ${value}, ${type}* ${at}${slotAlign(type)}`)
     i = i + 1
   }
   // WP29 P3: every channel the task may send on stays open until it returns.
@@ -491,6 +491,14 @@ const taskFunction = (emitter: Emitter, name: string): IRFunction => {
   return fn
 }
 
+/**
+ * The alignment a context or payload slot's access states: a vector's eight,
+ * because its block is aligned to eight and a bare access would claim the
+ * vector's sixteen. Every other slot's type asks no more than eight, which an
+ * access without one already claims.
+ */
+const slotAlign = (type: string): string => (type.startsWith("<") ? ", align 8" : "")
+
 /** Field `index` of the payload `%p` points at, loaded as `type`. */
 const loadPayload = (
   fn: IRFunction,
@@ -502,7 +510,7 @@ const loadPayload = (
   const at = fn.emitValue(
     `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${index}`
   )
-  return fn.emitValue(`load ${type}, ${type}* ${at}`)
+  return fn.emitValue(`load ${type}, ${type}* ${at}${slotAlign(type)}`)
 }
 
 /**
@@ -635,7 +643,7 @@ const taskRun = (
     const at = fn.emitValue(
       `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${inputs.types.length}`
     )
-    fn.emit(`store ${result} ${r}, ${result}* ${at}`)
+    fn.emit(`store ${result} ${r}, ${result}* ${at}${slotAlign(result)}`)
   } else {
     fn.emit(call) // a task with no destination answers `void` (`voidTaskResultMessage`)
     fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)

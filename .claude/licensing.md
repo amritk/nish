@@ -71,6 +71,7 @@ public domain / CC0 / Unlicense**. Where upstream offers a choice, take the one
 with the lighter obligation for what ships: Ryu is Apache-2.0 *or* BSL-1.0, and
 this repository takes BSL-1.0 because it exempts compiled object code, so
 neither `nish` nor a program it links needs a notice.
+The **Unicode License v3** is allowed for Unicode's data files (the UCD tables in `std/regex.ts`); the owner allowed it at sign-off on 2026-10-30.
 
 **Never take code from:**
 

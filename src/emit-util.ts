@@ -203,6 +203,10 @@ export const builtinArgumentLetters = (program: CheckedProgram, call: Node): str
     if (name === "spawnPiped") {
       return "rrww"
     }
+    if (name === "store") {
+      // `nish:simd`'s `store(v, xs, i)` writes elements of `xs`.
+      return "nw"
+    }
     return name === "secureZero" || name === "uncheckedSet" ? "w" : bufferSignature(name)
   }
   const fills =

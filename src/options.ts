@@ -211,6 +211,17 @@ export class Options {
   /** WP36: the capabilities `--deny` refuses, as a mask; 0 when none was given. */
   denyCapabilities: i32
   /**
+   * WP37: `--sandbox`, 0 when it was not given, 1 for strict and 2 for
+   * `--sandbox=best-effort`. The entry wrapper passes it to `nish_sandbox`
+   * from `.preinit_array`; 0 leaves the IR byte for byte what it was.
+   */
+  sandbox: i32
+  /**
+   * WP37: the capabilities `main` reaches, as a mask, which the sandbox lets
+   * through. Set by `Compilation.emit` from the facts it computes anyway.
+   */
+  sandboxCapabilities: i32
+  /**
    * WP40: `--update-capability-lock` computes the capability lockfile instead
    * of holding the build to it (`Compilation.checkCapabilityLock`).
    */
@@ -246,6 +257,8 @@ export class Options {
     this.capabilityReport = false
     this.allowCapabilities = -1
     this.denyCapabilities = 0
+    this.sandbox = 0
+    this.sandboxCapabilities = 0
     this.updateCapabilityLock = false
   }
 

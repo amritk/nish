@@ -435,8 +435,8 @@ index out of range, or `128 + n` for a signal.
 
 ## Asking what a program can do
 
-A few flags report on a program rather than build it; each leaves the IR
-unchanged.
+A few flags report on a program rather than build it; each but `--sandbox`
+leaves the IR unchanged.
 
 - **`--capabilities`** prints, on stderr, what the program can reach — files,
   processes, the network, the environment, the clock and so on — and
@@ -479,6 +479,10 @@ unchanged.
   grants refuse writes no lockfile. `nish run` takes the flag; `--fix` and
   `--emit-ast` do not. See
   [The capability lockfile](../../LANGUAGE.md#the-capability-lockfile).
+- **`--sandbox`** goes one step further on Linux: the built program asks the
+  kernel, before `main` runs, to refuse the files, processes and sockets its
+  `main` does not reach — C code it links included. It adds a few lines to the
+  IR. See [The sandbox](sandbox.md).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](../../LANGUAGE.md#the-no-panic-scope)).
