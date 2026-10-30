@@ -208,6 +208,38 @@ Rows do not say which format they are in; the program knows which of its
 binds asked for binary and reads that execution's rows with
 `conn.binary`, whose `failed` is set as `conn.text.failed` is.
 
+A [`PgBatcher`](#batching-keyed-reads) whose `PgBatchConfig` sets `binary` does
+the same for each of its batches: `take` opens the bind with
+`bindStartBinary`, so every row comes in binary, and `row` reads the routing
+ordinal, the last column, with `binaryInt` (an `int8`, the `unnest` ordinal
+PostgreSQL sends in binary). It saves and restores `binary.failed` as it
+does `text.failed` for a text batch, so the program's own decoding is left as
+it was. A batch that leaves `binary` false is unchanged.
+
+A one-dimensional `int2[]`, `int4[]` or `int8[]` column is the exception: it
+is read in place by `PgBinaryArray`, which takes the column's window and walks
+its elements in order:
+
+```ts
+// on PG_ROW, column 3 is an int4[] of ids:
+const ids: PgBinaryArray = new PgBinaryArray(conn.binary);
+ids.begin(conn.inputBuffer(), conn.colStart(3), conn.colLength(3));
+let sum: i64 = 0;
+let r: i32 = ids.next();
+while (r === PG_ARRAY_ELEMENT) {
+  sum += ids.int();
+  r = ids.next();
+}
+// r is PG_ARRAY_END when the array was read whole, `ids.count` elements
+```
+
+`begin` reads the header; `next()` answers `PG_ARRAY_ELEMENT`, `PG_ARRAY_NULL`
+(an element that is NULL, which is not an error) or `PG_ARRAY_END`, and
+`PG_ARRAY_BAD` for an array it refuses. An empty array has no elements, and
+`ids.count` is 0 for it. An `ndim` above 1 is refused, as is another element
+type, an element whose length is not its type's size, and bytes left over
+after the last element; each refusal sets `conn.binary.failed`.
+
 ## Statements, groups and pipelining
 
 Every statement goes through the extended protocol, so parameters never meet
@@ -537,8 +569,10 @@ if (due && !asked && pool.request() >= 0) {
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
 cancellation, binary-format parameters, binary results for a type other
-than an integer, `bool`, `float8`, time or text, a mix of text and binary
-columns in one execution, and the simple query protocol. A pool
+than an integer, `bool`, `float8`, time, text or a one-dimensional `int2[]`,
+`int4[]` or `int8[]`, so a `text[]`, a `numeric` and an array of more than
+one dimension stay in text, a mix of text and binary columns in one execution,
+and the simple query protocol. A pool
 neither reads a clock nor retries: a request waits in its queue until a
 connection takes it, and one lost with its connection is the program's to run
 again.

@@ -27,7 +27,8 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 `totalMemory`) to size a pool of workers; see
 [Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
 A batch job steps aside for interactive work with `setNice(n)` (the nice value,
--20..19) or, on Linux, `setIdlePriority()` (`SCHED_IDLE`: the CPU only when
+0..19, lower-only: `-22` outside that range and `-13` below the current value,
+even as root) or, on Linux, `setIdlePriority()` (`SCHED_IDLE`: the CPU only when
 nothing else wants it). Each answers 0 or a negative errno and never throws;
 `setIdlePriority` is -95 on Darwin. An unprivileged process can never leave
 `SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
