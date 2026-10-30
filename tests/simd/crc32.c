@@ -15,7 +15,9 @@
  * every length 0..4,096 at every offset 0..15 from an aligned block, each from
  * a random register; inputs of 1 to 16 MiB; and a 4,096-byte input streamed in
  * pieces of 1..16, 63/64/65 and 127/128/129 bytes, which must give the
- * one-call answer.
+ * one-call answer. And every length 0..256 ending at the last byte before a
+ * page no access is allowed to, so a path that reads one byte past its input
+ * faults rather than passing on whatever lay there.
  *
  * The runtime file is included rather than linked, as tests/simd/aes-gcm.c
  * includes runtime-aes.c, so the resolver's stored answer can be reset and
@@ -30,7 +32,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "../../runtime/runtime-checksum.c"
 
@@ -203,6 +207,22 @@ static int streaming(const uint8_t *data) {
   return 1;
 }
 
+static int edges(void) {
+  size_t page = (size_t)sysconf(_SC_PAGESIZE);
+  uint8_t *map = mmap(NULL, 2 * page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (map == MAP_FAILED || mprotect(map + page, page, PROT_NONE) != 0) {
+    printf("FAIL: no guard page for the edge cases\n");
+    return 0;
+  }
+  for (size_t i = 0; i < page; i++) map[i] = (uint8_t)rnd();
+  for (int i = 0; i < npaths; i++)
+    for (size_t len = 0; len <= 256; len++)
+      if (!agree(&paths[i], (uint32_t)rnd(), map + page - len, len, page - len, "an input ending at a guard page"))
+        return 0;
+  munmap(map, 2 * page);
+  return 1;
+}
+
 /* ---- The resolver ----------------------------------------------------------- */
 
 #if defined(NISH_CRC32_X86) || defined(NISH_CRC32_ARM)
@@ -321,7 +341,7 @@ int main(int argc, char **argv) {
     return bench(big);
   }
 
-  if (!constants() || !vectors() || !differential(big, big_len) || !streaming(big)) return 1;
+  if (!constants() || !vectors() || !differential(big, big_len) || !streaming(big) || !edges()) return 1;
 #if defined(NISH_CRC32_X86) || defined(NISH_CRC32_ARM)
   /* The pin, and the best this machine has for no pin, `hw`, and a value it
      does not know. */

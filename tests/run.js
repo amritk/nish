@@ -17549,7 +17549,8 @@ if (!only || "simd".includes(only)) {
   // includes the file, computes its fold constants again from the polynomial, and
   // holds every path this machine has to a bit-at-a-time reference: the check value,
   // the empty input, every length 0..4,096 at offsets 0..15, inputs of 1 to 16 MiB and
-  // streamed pieces of 1..16, 63..65 and 127..129 bytes; then `nish_crc32_hw` under
+  // streamed pieces of 1..16, 63..65 and 127..129 bytes, every length 0..256 ending
+  // at a no-access page so an over-read faults; then `nish_crc32_hw` under
   // each `NISH_CRC32`. As for AES, the line must name the path /proc/cpuinfo says the
   // CPU has.
   const crcSaid = agree(`crc32 native ${process.arch}`, [], path.join(simdDir, "crc32"), native, "tests/simd/crc32.c")

@@ -82,6 +82,7 @@ char *getenv(const char *name);
 
 /* Unaligned loads from an array's data, which may alias anything. */
 typedef uint64_t nish_crc32_u64u __attribute__((aligned(1), may_alias));
+typedef uint32_t nish_crc32_u32u __attribute__((aligned(1), may_alias));
 
 #if defined(NISH_CRC32_X86)
 
@@ -167,7 +168,7 @@ static inline __attribute__((always_inline)) NISH_CRC32_TARGET uint32_t nish_crc
                                                                                          uint64_t n) {
   for (; n >= 8; p += 8, n -= 8) c = __crc32d(c, *(const nish_crc32_u64u *)p);
   if (n & 4) {
-    c = __crc32w(c, (uint32_t)*(const nish_crc32_u64u *)p & 0xffffffffu);
+    c = __crc32w(c, *(const nish_crc32_u32u *)p);
     p += 4;
   }
   if (n & 2) {
