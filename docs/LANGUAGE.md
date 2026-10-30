@@ -9597,8 +9597,8 @@ entry:
   `bind`, `listen`, `accept` and `accept4` kill it. With `net` but without
   `fs.write`, a pathname `unixListen` or `unixListenMode` is **`-13`**:
   Landlock counts making the socket file as a write (`MAKE_SOCK`), while an
-  abstract name binds. Landlock has no right for connecting to a pathname
-  socket, so `net` alone still lets `unixConnect` reach any pathname
+  abstract name binds. The sandbox uses no Landlock right that covers
+  connecting to a pathname socket, so `net` alone still lets `unixConnect` reach any pathname
   listener whose file and directories the user may reach; only abstract
   names outside the sandbox are scoped, from ABI 6. `ffi`, `unsafe`, `tty`,
   `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing of their

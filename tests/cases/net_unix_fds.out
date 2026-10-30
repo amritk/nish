@@ -22,5 +22,11 @@ attempt 19: -11, descriptors +0
 attempt 20: 0, descriptors +0
 attempt 21: 0, descriptors +0
 attempt 22: 0, descriptors +0
+listen 1: cloexec 1 nonblock 1
+connect 1: cloexec 1 nonblock 1
+accept 1: cloexec 1 nonblock 1
+pair 0 1: cloexec 1 nonblock 1
+pair 1 1: cloexec 1 nonblock 1
+release 0
 left behind 0
 tearDown 0

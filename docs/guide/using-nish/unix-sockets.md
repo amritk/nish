@@ -99,10 +99,10 @@ once the server stops.
 - **The directory is what protects it.** Whoever can write the socket's
   directory can replace the file, so put it in a directory only its owner can
   write, such as `$XDG_RUNTIME_DIR`.
-- **Length.** A path longer than the kernel's limit, 107 bytes on Linux and
-  103 on macOS, answers `-36`. The limit is on the path as written, so a
-  relative path counts only its own bytes; it is resolved from the working
-  directory.
+- **Length.** A path is at most 107 bytes on Linux and 103 on macOS, and an
+  abstract name at most 107 bytes after its `@`; a longer one answers `-36`.
+  The limit is on the path as written, so a relative path counts only its own
+  bytes; it is resolved from the working directory.
 
 ```ts nish:ok
 import { NET_UNIX_UNLINK_STALE, netClose, unixListenMode } from "nish:net";

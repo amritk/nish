@@ -9,6 +9,9 @@
 // what they made before they answer, so their change is 0 as well. The
 // driver's `chmod` fails for `nuf-chmodfail.sock`, and once every attempt has
 // run it reports which of the paths the attempts named are still on disk.
+// `hold` then makes one descriptor of each kind, a listener, a connect, its
+// accept and each end of a stream pair, which the driver keeps open to read
+// their flags: each is close-on-exec and non-blocking from creation.
 import {
   NET_UNIX_STREAM,
   NET_UNIX_UNLINK_STALE,
@@ -27,6 +30,7 @@ const DEAD: string = "build/test/nuf-dead.sock";
 const FILE: string = "build/test/nuf-file.sock";
 const CYCLE: string = "build/test/nuf-cycle.sock";
 const IDLE: string = "build/test/nuf-idle.sock";
+const HELD: string = "build/test/nuf-held.sock";
 
 /** A path of exactly `n` bytes in the test's directory. */
 const longPath = (n: i32): string => {
@@ -176,6 +180,30 @@ export const attempt = (k: i32): i32 => {
   }
   return rebind();
 };
+
+/** The `k`th descriptor the driver keeps to read its flags: a listener at `HELD`, a connect to it, the accept of that connect on `listener`, then end 0 and end 1 of a stream pair, the other end closed. */
+export const hold = (k: i32, listener: i32): i32 => {
+  if (k === 0) {
+    unlinkSync(HELD);
+    return unixListen(HELD, 4, 0);
+  }
+  if (k === 1) {
+    return unixConnect(HELD);
+  }
+  if (k === 2) {
+    return unixAccept(listener);
+  }
+  const fds: i32[] = new Array<i32>(2);
+  const answer = unixSocketPair(NET_UNIX_STREAM, fds);
+  if (answer < 0) {
+    return answer;
+  }
+  netClose(fds[4 - k]);
+  return fds[k - 3];
+};
+
+/** Remove the socket file `hold` made. */
+export const release = (): i32 => unlinkSync(HELD);
 
 /** Close the live listener and remove the files `setUp` made. */
 export const tearDown = (live: i32): i32 => {

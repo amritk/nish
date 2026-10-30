@@ -482,7 +482,7 @@ declare const NET_SO_RCVBUF: i32;
 declare function unixListen(path: string, backlog: i32, flags: i32): i32;
 /** `unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`. */
 declare function unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32;
-/** A non-blocking socket connected to the listener at `path`; -11 a full backlog, -111 nothing listening. */
+/** A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening. */
 declare function unixConnect(path: string): i32;
 /** The next connection on a Unix listener, non-blocking; -11 when none is waiting. */
 declare function unixAccept(fd: i32): i32;
@@ -713,7 +713,7 @@ declare module "nish:net" {
   export function unixListen(path: string, backlog: i32, flags: i32): i32;
   /** `unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`. */
   export function unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32;
-  /** A non-blocking socket connected to the listener at `path`; -11 a full backlog, -111 nothing listening. */
+  /** A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening. */
   export function unixConnect(path: string): i32;
   /** The next connection on a Unix listener, non-blocking; -11 when none is waiting. */
   export function unixAccept(fd: i32): i32;

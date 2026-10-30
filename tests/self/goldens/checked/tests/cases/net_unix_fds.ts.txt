@@ -17,6 +17,7 @@ const DEAD: string = "build/test/nuf-dead.sock"
 const FILE: string = "build/test/nuf-file.sock"
 const CYCLE: string = "build/test/nuf-cycle.sock"
 const IDLE: string = "build/test/nuf-idle.sock"
+const HELD: string = "build/test/nuf-held.sock"
 function longPath(n: i32): string -> @longPath
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct nish_array_grow
@@ -73,6 +74,18 @@ function attempt(k: i32): i32 -> @attempt [exported]
   callee +27:12 cycle -> @cycle
   callee +30:12 pair -> @pair
   callee +32:10 rebind -> @rebind
+function hold(k: i32, listener: i32): i32 -> @hold [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_unlink
+  calls: nish_net_close nish_panic_index nish_panic_overflow nish_unix_accept nish_unix_connect nish_unix_listen nish_unix_socket_pair nish_unlink
+  stackSites=1 stackLocals=1
+  local +0:9 fds: i32[] (const)
+  local +1:9 answer: i32 (const)
+function release(): i32 -> @release [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_unlink
+  calls: nish_unlink
+  stackSites=0 stackLocals=0
 function tearDown(live: i32): i32 -> @tearDown [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_net_close

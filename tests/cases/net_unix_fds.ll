@@ -18,6 +18,7 @@
 @.str.14 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"build/test/nuf-flags.sock\00" }, align 8
 @.str.15 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"@nish-net-unix-fds\00" }, align 8
 @.str.16 = private unnamed_addr constant { i64, [30 x i8] } { i64 29, [30 x i8] c"build/test/nuf-chmodfail.sock\00" }, align 8
+@.str.17 = private unnamed_addr constant { i64, [25 x i8] } { i64 24, [25 x i8] c"build/test/nuf-held.sock\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
@@ -36,6 +37,8 @@ declare noundef i32 @nish_unix_accept(i32 noundef) #1
 declare noundef i32 @nish_unix_socket_pair(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -658,6 +661,119 @@ if.end.21:
   call void @nish_arena_release(i64 %arena.mark)
   %60 = tail call i32 @rebind()
   ret i32 %60
+}
+
+define noundef i32 @hold(i32 noundef %k, i32 noundef %listener) #1 {
+entry:
+  %fds.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [2 x i32], align 8
+  %answer.addr = alloca i32, align 4
+  %0 = icmp eq i32 %k, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = call i32 @nish_unlink(i8* bitcast ({ i64, [25 x i8] }* @.str.17 to i8*))
+  %2 = call i32 @nish_unix_listen(i8* bitcast ({ i64, [25 x i8] }* @.str.17 to i8*), i32 4, i32 0)
+  ret i32 %2
+
+if.end:
+  %3 = icmp eq i32 %k, 1
+  br i1 %3, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %4 = call i32 @nish_unix_connect(i8* bitcast ({ i64, [25 x i8] }* @.str.17 to i8*))
+  ret i32 %4
+
+if.end.1:
+  %5 = icmp eq i32 %k, 2
+  br i1 %5, label %if.then.2, label %if.end.2
+
+if.then.2:
+  %6 = call i32 @nish_unix_accept(i32 %listener)
+  ret i32 %6
+
+if.end.2:
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 2, i64* %7, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 2, i64* %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = mul i64 2, 4
+  %10 = bitcast [2 x i32]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %10, i8 0, i64 %9, i1 false), !alias.scope !4, !noalias !3
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %10, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %fds.addr, align 8
+  %12 = load %struct.nish_array*, %struct.nish_array** %fds.addr, align 8
+  %13 = call i32 @nish_unix_socket_pair(i32 1, %struct.nish_array* %12)
+  store i32 %13, i32* %answer.addr, align 4
+  %14 = load i32, i32* %answer.addr, align 4
+  %15 = icmp slt i32 %14, 0
+  br i1 %15, label %if.then.3, label %if.end.3
+
+if.then.3:
+  %16 = load i32, i32* %answer.addr, align 4
+  ret i32 %16
+
+if.end.3:
+  %17 = load %struct.nish_array*, %struct.nish_array** %fds.addr, align 8
+  %18 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 4, i32 %k)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %21 = sext i32 %19 to i64
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  %23 = load i64, i64* %22, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %24 = icmp ult i64 %21, %23
+  br i1 %24, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %21, i64 %23)
+  unreachable
+
+bounds.ok:
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %27 = bitcast i8* %26 to i32*
+  %28 = getelementptr inbounds i32, i32* %27, i64 %21
+  %29 = load i32, i32* %28, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  %30 = call i32 @nish_net_close(i32 %29)
+  %31 = load %struct.nish_array*, %struct.nish_array** %fds.addr, align 8
+  %32 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %k, i32 3)
+  %33 = extractvalue { i32, i1 } %32, 0
+  %34 = extractvalue { i32, i1 } %32, 1
+  br i1 %34, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %35 = sext i32 %33 to i64
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %31, i64 0, i32 0
+  %37 = load i64, i64* %36, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %38 = icmp ult i64 %35, %37
+  br i1 %38, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 %35, i64 %37)
+  unreachable
+
+bounds.ok.1:
+  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %31, i64 0, i32 2
+  %40 = load i8*, i8** %39, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %41 = bitcast i8* %40 to i32*
+  %42 = getelementptr inbounds i32, i32* %41, i64 %35
+  %43 = load i32, i32* %42, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  ret i32 %43
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define noundef i32 @release() #1 {
+entry:
+  %0 = call i32 @nish_unlink(i8* bitcast ({ i64, [25 x i8] }* @.str.17 to i8*))
+  ret i32 %0
 }
 
 define noundef i32 @tearDown(i32 noundef %live) #1 {

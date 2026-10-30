@@ -207,8 +207,9 @@ recorded rather than counted.
   call and does not infer `fs.write`, since the path is data; a program that
   listens on a path asks for both, or uses an abstract name. Pinned by the
   two `sandbox: granted net …` checks in `tests/run.js`.
-- **A pathname Unix connect is not confined.** Landlock has no right for
-  connecting to a pathname socket, on any ABI, and the abstract-socket scope
+- **A pathname Unix connect is not confined.** The sandbox uses no Landlock
+  right that covers connecting to a pathname socket, on the ABIs
+  `runtime/runtime-sandbox.c` asks for, and the abstract-socket scope
   covers abstract names only. A sandboxed program granted `net` can therefore
   `unixConnect` to any pathname listener outside the sandbox whose file it
   may write and whose directories it may search, such as a system daemon's

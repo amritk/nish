@@ -685,7 +685,7 @@ bool nish_is_executable(const nish_str *path);
  * flag 1 (`NET_UNIX_UNLINK_STALE`) unlinks a socket file nothing listens on
  * (anything but a socket is -17, a live listener -98). `nish_unix_listen_mode`
  * takes the mode (0..0o777, -22 for an abstract name). `nish_unix_connect(path)`
- * connects, -11 for a full backlog. `nish_unix_accept(fd)` takes the next
+ * connects, -11 for a full backlog on Linux (-111 on Darwin). `nish_unix_accept(fd)` takes the next
  * connection, -11 when none waits. `nish_unix_socket_pair(kind, fds)` writes
  * two connected sockets into `fds` (element type `int32_t`, at least 2): kind
  * 1 a stream, kind 2 `SOCK_SEQPACKET` (-95 on Darwin). Every descriptor is

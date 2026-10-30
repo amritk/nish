@@ -2232,6 +2232,7 @@ beside it; any other id is `-22`. Linux drops quick-ACK mode on its own, so set
 it again after each response. The ids are not module constants: pass them
 directly. None
 exists on a wasm target, and under Node each throws.
+
 Unix-domain stream sockets: `unixListen(path, backlog, flags)` listens on a
 socket file left at 0600 (`unixListenMode(path, backlog, flags, mode)` for
 another mode), `unixConnect(path)` and `unixAccept(fd)` answer descriptors
@@ -2244,11 +2245,13 @@ file so named. A path that exists is `-98`; flag `NET_UNIX_UNLINK_STALE`
 first removes a socket file nobody listens on (Linux; on Darwin it is `-95`
 at a socket file, since a full backlog and a dead file both refuse there).
 `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM` and `NET_TCP_NODELAY` are all `1`,
-so pass the constant each call names. A path past `sun_path` as written (107
-bytes on Linux, 103 on Darwin) is `-36`. A full backlog makes `unixConnect`
+so pass the constant each call names. A path as written is at most 107
+bytes (103 on Darwin) and an abstract name at most 107 after its `@`; longer
+is `-36`. A full backlog makes `unixConnect`
 `-11` on Linux and `-111` on Darwin. Under `--sandbox`, a listener on a path
 also needs `fs.write` (`-13` without it); an abstract name does not, and a
-connect to a path is not confined.
+connect to a path is not confined. The Unix calls are refused on a wasm
+target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write
