@@ -26,6 +26,48 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-30
+
+### Fixed
+
+- cli: Install the main package with its pins stamped, as release.yml publishes it ([#1070](https://github.com/amritk/nish/pull/1070))
+
+### Tests
+
+- self: Keep package modules in the program's own golden ([#1060](https://github.com/amritk/nish/pull/1060))
+
+
+## [0.27.0] - 2026-10-30
+
+### Added
+
+- stdlib: HttpFetch, a blocking HTTP/1.1 client for CLIs ([#1032](https://github.com/amritk/nish/pull/1032))
+- net: Read PgBatcher rows and int arrays in binary ([#1046](https://github.com/amritk/nish/pull/1046))
+
+### Fixed
+
+- runtime: SetNice refuses a raise and values outside 0..19 ([`3db5a5d`](https://github.com/amritk/nish/commit/3db5a5d))
+- cli: Chalk that keeps to its own names ([#1058](https://github.com/amritk/nish/pull/1058))
+
+### Performance
+
+- codegen: Round on SSE4.1 when the CPU has it ([#960](https://github.com/amritk/nish/pull/960))
+- crypto: Tune the portable SHA-256 path ([#1050](https://github.com/amritk/nish/pull/1050))
+- self: Link the Nish runner's programs under the suite's profile, in three shards ([#1061](https://github.com/amritk/nish/pull/1061))
+
+### Build
+
+- Regenerate package-lock.json for v0.26.0 ([#1038](https://github.com/amritk/nish/pull/1038))
+
+### CI
+
+- Keep main's platform pins one release behind so every commit agrees with its lockfile ([#1039](https://github.com/amritk/nish/pull/1039))
+
+### Internal
+
+- cli: Chalk for the wall ([#1049](https://github.com/amritk/nish/pull/1049))
+
+
 ## [0.26.0] - 2026-10-29
 
 ### Added
@@ -1330,3 +1372,5 @@ hand — the git log is the working account until a release turns it into one.
 [0.24.0]: https://github.com/amritk/nish/releases/tag/v0.24.0
 [0.25.0]: https://github.com/amritk/nish/releases/tag/v0.25.0
 [0.26.0]: https://github.com/amritk/nish/releases/tag/v0.26.0
+[0.27.0]: https://github.com/amritk/nish/releases/tag/v0.27.0
+[0.27.1]: https://github.com/amritk/nish/releases/tag/v0.27.1

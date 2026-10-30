@@ -46,7 +46,9 @@ over one list, so `n` CI jobs share the corpus between them.
  * extra flags — compiled module by module, assembled and verified the same way,
  * and checked against `expected.err` for a program that must be refused, or
  * `expected.code`, `expected.out`, `expected.ir` and any per-module
- * `<module>.ll` golden for one that must not be.
+ * `<module>.ll` golden for one that must not be. It links under the profile
+ * `tests/run.js` gives it: `--profile debug` unless `tests/speed-link.txt`
+ * names it or its `args` name a profile.
  *
  * Four things are skipped rather than passed over in silence, because a skip that
  * is counted is a to-do list and one that is not is a green run that proved less
@@ -72,6 +74,8 @@ const WORK: string = "build/nish-cases";
 /** `tests/run.js`'s own build directory, which some cases write into by that literal path. */
 const CASE_WORK: string = "build/test";
 const LINK_WORK: string = "build/nish-link";
+/** The `tests/link` programs that keep the speed profile; see `speedLinkNames`. */
+const SPEED_LINK: string = "tests/speed-link.txt";
 /** The compiler nobody named: the one `npm run build` leaves behind. */
 const DEFAULT_CLI: string = "build/nish";
 /** How many of the slowest cases the closing report names. */
@@ -536,6 +540,26 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
 };
 
 /**
+ * The programs `tests/speed-link.txt` names: the first word of every line that
+ * is neither blank nor a `#` comment. The rest of a line is its reason, for the
+ * reader of that file.
+ */
+const speedLinkNames = (): string[] => {
+  const text = readFileSyncOrNull(SPEED_LINK);
+  if (text === null) {
+    panic(`cannot read ${SPEED_LINK} (run this from the repository root)`);
+  }
+  const names: string[] = [];
+  for (const line of splitLines(text)) {
+    const words = splitWhitespace(line);
+    if (words.length > 0 && !words[0].startsWith("#")) {
+      names.push(words[0]);
+    }
+  }
+  return names;
+};
+
+/**
  * One `tests/link/<name>/` program: `main.ts` is the entry, the whole program is
  * compiled to one `.ll` per module and — when clang is here — linked into a
  * binary whose exit code and stdout are the golden.
@@ -546,7 +570,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
  * is the process's exit *code* rather than a `test()` return value a driver
  * prints.
  */
-const runLinkCase = (t: Suite, tools: Tools, name: string): void => {
+const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string): void => {
   const dir = `${LINKS}/${name}`;
   const outDir = `${LINK_WORK}/${name}`;
   const label = `link/${name}`;
@@ -561,10 +585,15 @@ const runLinkCase = (t: Suite, tools: Tools, name: string): void => {
     argv.push(exe);
   }
   const args = readFileSyncOrNull(`${dir}/args`);
-  if (args !== null) {
-    for (const flag of splitWhitespace(args)) {
-      argv.push(flag);
-    }
+  const flags: string[] = args === null ? [] : splitWhitespace(args);
+  for (const flag of flags) {
+    argv.push(flag);
+  }
+  // `linkProfile` in tests/run.js: an unoptimised link is about a third of
+  // the speed one's time, and the profile never changes a byte of the IR.
+  if (tools.clang && flags.indexOf("--profile") < 0 && speedLink.indexOf(name) < 0) {
+    argv.push("--profile");
+    argv.push("debug");
   }
   const work = `${WORK}/link_${name}`;
   const status = spawnSyncTo(argv, `${work}.compile.out`, `${work}.compile.err`);
@@ -731,6 +760,7 @@ export const main = (): number => {
   if (!linkReady) {
     t.skip("tests/link programs", `cannot empty ${LINK_WORK}, and a stale module would read as this run's`);
   } else {
+    const speedLink = speedLinkNames();
     for (const name of linkNames()) {
       if (filter.length > 0 && name.indexOf(filter) < 0) {
         continue;
@@ -740,7 +770,7 @@ export const main = (): number => {
         continue;
       }
       const at = monotonicNanos();
-      runLinkCase(t, tools, name);
+      runLinkCase(t, tools, speedLink, name);
       slow.record(`link/${name}`, monotonicNanos() - at);
     }
   }
