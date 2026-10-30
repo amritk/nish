@@ -165,14 +165,7 @@ const jrOff = (t: Suite): void => {
   t.eqI32("off: end answers -1", doc.end(doc.get(root, "a")), -1);
   t.eqI32("off: keyStart answers -1", doc.keyStart(root, 0), -1);
   t.eqI32("off: keyEnd answers -1", doc.keyEnd(root, 1), -1);
-  const ranges: i32 =
-    toI32(doc.valueStart.length) +
-    toI32(doc.valueEnd.length) +
-    toI32(doc.slotKeyStart.length) +
-    toI32(doc.slotKeyEnd.length) +
-    toI32(doc.openKeyEnd.length) +
-    toI32(doc.pendingKeyEnd.length);
-  t.eqI32("off: no range array holds anything", ranges, 0);
+  t.ok("off: no range array is made", doc.ranges === null);
   // A setter gives a parsed value its first range; the values around it keep none.
   t.eqI32("off: setRange on a parsed value", doc.setRange(doc.get(root, "b"), 22, 32), JSON_VALUE_OK);
   t.eqStr("off: the value reads it back", jrValue(doc, text, doc.get(root, "b")), '{"c":true}');

@@ -58,7 +58,7 @@ PASS  off: start answers -1
 PASS  off: end answers -1
 PASS  off: keyStart answers -1
 PASS  off: keyEnd answers -1
-PASS  off: no range array holds anything
+PASS  off: no range array is made
 PASS  off: setRange on a parsed value
 PASS  off: the value reads it back
 PASS  off: a value below it has none
