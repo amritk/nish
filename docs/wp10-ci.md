@@ -41,7 +41,7 @@ them for review.
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
-| `runner (shard <i>/2)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs half of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/2`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
+| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
 | `lint` | Ubuntu | `npm ls --package-lock-only` (skipped on tags, on `release/next` and on the Release PR's merge-queue run), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
 
@@ -146,7 +146,7 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   The shard-1 steps after the suite that require a `PASS` line (`simd`, the
   AES kernels, `cpu-level`) grep the Test step's log for it rather than
   running their section again, so those sections stay in shard 1.
-- **`runner`**, two ways, and one process per core in each.
+- **`runner`**, three ways, and one process per core in each.
   `build/nish-runner --shard <i>/<n>` starts itself `--jobs` times (the core
   count up to 8 by default), each on a slice it deals round-robin, so job `i`
   runs exactly the programs `--shard <i>/<n>` names. Each process keeps its
@@ -157,7 +157,13 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   three of a runner's four cores idle: in run 40820090678 the four jobs took
   13.1, 13.0, 8.8 and 8.3 minutes, and the split was even -- 212 cases each,
   290 s of them on shards 1 and 2 and 160 s on 3 and 4, which were faster
-  machines.
+  machines. Two ways of four processes, the corpus took 8.1 minutes on one
+  job and passed the 15-minute limit on the other in run 40997535378: the
+  four slices of each job finished within seconds of one another, so the
+  split was even again and the machines were not. Every `tests/link` program
+  then linked at -O3 with LTO, about 20 of `net_loopback`'s 26 s; the runner
+  now links them under the profile `tests/run.js` gives them
+  (`tests/speed-link.txt`), and the corpus is dealt three ways.
 - **`runtime-net`**, three ways. `node tests/run.js net_ --shard <i>/3` is a
   filtered run, which deals only the link programs its filter selects and
   starts shard 1 at nothing, so each mac shard gets about a third of the 188

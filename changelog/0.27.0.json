@@ -1,0 +1,206 @@
+{
+  "version": "0.27.0",
+  "date": "2026-10-30",
+  "tag": "v0.27.0",
+  "range": {
+    "from": "v0.26.0",
+    "to": "094a587e"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-26-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.26.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4f5959c"
+      ],
+      "pr": 1038,
+      "author": "github-actions[bot]",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "keep-main-s-platform-pins-one-release-behind",
+      "type": "ci",
+      "breaking": false,
+      "title": "keep main's platform pins one release behind so every commit agrees with its lockfile",
+      "body": "The release commit moved the optionalDependencies pins to the new version while the lockfile entries they resolve to describe tarballs that exist only after release.yml publishes the tag, so main disagreed with its own lockfile and CI's lint job was red on every release commit.\n\nrelease-pr.yml now bumps only the version. The release job stamps the pins with scripts/pin-platform-packages.mjs just before npm pack and verifies the packed package.json, and the lockfile job moves the pins and their lockfile entries together in one pull request. The lockfile check no longer skips the Release PR and tags.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5db6f0b"
+      ],
+      "pr": 1039,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "httpfetch-a-blocking-http-1-1-client-for",
+      "type": "feat",
+      "scope": "stdlib",
+      "breaking": false,
+      "title": "httpFetch, a blocking HTTP/1.1 client for CLIs",
+      "body": "`nish/net/http-client` fetches an http or https URL from a command-line program. `httpFetch(request, options)` covers a one-shot request, and `HttpClient` keeps one connection alive across requests.\n\nIt dials through the std DNS resolver and makes a non-blocking connect over each address within `connectTimeoutMs`. https goes over the std TLS 1.3 client, and the server's chain is checked against trusted roots with RFC 6125 host matching: `rootsPemPath`, else SSL_CERT_FILE / SSL_CERT_DIR / the system bundles. There is no insecure switch. A missing root store is refused before any byte is sent.\n\n- **Timeouts and the body.** `readTimeoutMs` bounds each wait. `totalTimeoutMs` bounds the whole fetch, redirects and the body reader included. The body reader hands out bytes as they arrive, so Server-Sent Events and JSON lines can be parsed while they stream.\n- **Keep-alive.** A connection is reused only when the previous response was fully read and nothing is left in the parser, the TLS layer or the idle socket. That closes response-queue poisoning. An idempotent request lost before any byte is retried once.\n- **Redirects** are off by default, and same-origin only unless cross-origin is allowed. Authorization, Proxy-Authorization and Cookie are dropped across origins, and https→http is always refused.\n- **Proxies.** HTTPS_PROXY tunnels through CONNECT and HTTP_PROXY sends the absolute form, both honouring NO_PROXY. httpoxy is guarded against. Proxy userinfo goes to the proxy only.\n- **Error text** never echoes userinfo, a query or a fragment: URLs are named from their parsed form, and text that does not parse is not echoed at all.\n\nThe tests are pinned by a mechanical mutation sweep. Every remaining survivor is argued in docs/security/http-client.md, which also records the threat model and HF-1 to HF-9. examples/http-get-json.ts GETs a live HTTPS JSON API; a run through this environment's proxy to api.github.com is in the PR.\n\nTests: tests/link/net_http_fetch (+ _f64, _tls)\nRefs: docs/security/http-client.md, docs/guide/using-nish/http-client.md\nPart of #994",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "71e3f38"
+      ],
+      "pr": 1032,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "round-on-sse4-1-when-the-cpu-has",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "round on SSE4.1 when the CPU has it",
+      "body": "On the default x86-64 target (the SSE2 baseline), `Math.floor`, `Math.ceil`, `Math.trunc` and the floor inside `Math.round` lowered to calls of libm through the GOT. They now call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which are one `roundsd` on any CPU with SSE4.1. The default target is not raised, so a binary still runs on baseline x86-64.\n\nA module that rounds registers an internal constructor at priority 101. The constructor passes libm's `floor`, `ceil` and `trunc` to `nish_round_init`. The runtime asks the CPU once:\n- With SSE4.1, it keeps nothing, and each call is the inline instruction.\n- Without SSE4.1, or under `NISH_SIMD=scalar`, it keeps the libm pointers, and each call jumps to libm, with the same bits as before.\n\nThe runtime names no libm symbol, so a C host, or a program that never rounds, still links without `-lm`.\n\nUnchanged:\n- `--cpu x86-64-v3` builds are byte-identical to before.\n- aarch64 and wasm lowering do not change, and a build with no `--target` dispatches only on an x86-64 host.\n\n`tests/cases/math_rounding` pins every edge of the four functions (±0, NaN, the infinities, the subnormals, 2^52 and beyond) against Node, and runs again under `NISH_SIMD=scalar` so CI covers the libm path.",
+      "metrics": [
+        "round kernel 513 ms vs 574/566 ms median (-9.7%), min 484 vs 536/538, 25 interleaved pinned runs; A/A noise band 8 ms median, 2 ms min; --cpu x86-64-v3 byte-identical; NISH_SIMD=scalar fallback +11%"
+      ],
+      "refs": [
+        "#943"
+      ],
+      "tests": [
+        "tests/cases/math_rounding",
+        "tests/cases/math_round_negzero",
+        "tests/cases/math_intrinsics"
+      ],
+      "commits": [
+        "384371b"
+      ],
+      "pr": 960,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "setnice-refuses-a-raise-and-values-outside-0",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "setNice refuses a raise and values outside 0..19",
+      "body": "setNice passed its argument straight to setpriority, which the kernel clamps to -20..19, so a privileged process could raise its own priority. It now takes 0..19 only: a value outside that range answers -22 (EINVAL) with no system call, and a value below the current nice value answers -13 (EACCES) with no setpriority call. The refusal applies to root too.\n\nsetIdlePriority is unchanged. It already only lowers, moving the process to SCHED_IDLE on Linux and answering -95 elsewhere.",
+      "metrics": [],
+      "refs": [
+        "#1041"
+      ],
+      "tests": [],
+      "commits": [
+        "3db5a5d"
+      ],
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "chalk-for-the-wall-1049",
+      "type": "chore",
+      "scope": "cli",
+      "breaking": false,
+      "title": "chalk for the wall",
+      "body": "An allocation-free drawing kit in src/break-gfx.ts: a fixed 320x180 world\nmapped onto any framebuffer, anti-aliased discs and glow, bevelled bricks,\na 5x7 pixel font, colour and easing helpers, trails and a particle pool.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/break_gfx"
+      ],
+      "commits": [
+        "0db6350"
+      ],
+      "pr": 1049,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "tune-the-portable-sha-256-path-1050",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "tune the portable SHA-256 path",
+      "body": "SHA-256's portable compression, which every CPU without the SHA extensions runs, now has its 64 rounds written out with each round constant as an immediate. A block costs one bounds check, and words 0 to 14 each load as one load and a byte swap. Every read stays checked: nothing imports nish:unsafe, so hashing never makes a caller reach `unsafe`. The private sha256Compress keeps its name, signature and once-per-block meaning, and HMAC-SHA256, PBKDF2 and HS256 pick the speed-up up with no API change.\n\nbench/sha256 times sha256 on 64 B, 1 KiB and 1 MiB inputs and an HS256 sign+verify in ns/op. Before any timing, each build must print a pinned known checksum per case.",
+      "metrics": [
+        "sha256 64 B 1.13x (band ±2.3%), 1 KiB 1.30x (±2.4%), 1 MiB 1.37x (±4.2%), HS256 sign+verify 1.22x (±0.2%), medians over 12 interleaved rounds against main, 4-core Xeon @ 2.10GHz"
+      ],
+      "refs": [
+        "#1022"
+      ],
+      "tests": [
+        "tests/link/crypto_sha256",
+        "tests/link/crypto_hmac",
+        "bench/sha256"
+      ],
+      "commits": [
+        "f0460df"
+      ],
+      "pr": 1050,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "chalk-that-keeps-to-its-own-names-1058",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "chalk that keeps to its own names",
+      "body": "The drawing kit shared names with std and with the compiler, so any program\nimporting it beside std/term-io or std/random was refused. rgb, mix and the\nclass Trail become gfxRgb, gfxMix and GfxTrail, and the kit imports\nFramebuffer from nish/term-pixels, the package std/term-io draws through.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/break_gfx"
+      ],
+      "commits": [
+        "b1dac44"
+      ],
+      "pr": 1058,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "read-pgbatcher-rows-and-int-arrays-in-binary",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "read PgBatcher rows and int arrays in binary",
+      "body": "* docs(plan): plan binary PgBatcher results and int array decoding\n\nTwo stages in std/net/postgres.ts: PgBatcher binary results with the\nrouting ordinal read in binary, then a one-dimensional int2/int4/int8\nbinary array walker. Acceptance criteria are in the plan.\n\nCo-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01L7QsVLAZQ6cZbBtbnc92LF\n\n* feat(net): read PgBatcher rows in binary with PgBatchConfig.binary\n\nA PgBatcher built with PgBatchConfig.binary set opens each batch with\nbindStartBinary, so every row comes in binary, and reads the routing\nordinal with binaryInt. Its refusals are the ones a text batch makes,\nand binary.failed is saved and restored around the ordinal read, so the\ncaller's own decoding is left as it was. A batch that leaves binary\nfalse is byte-identical to before.\n\nThe link test covers a binary take's Bind, its ordinals, the caller's\nbinary.failed, and text and NULL ordinals refused. The live binary\nscenario reads the same creation times through a binary batch and a\ntext batch.\n\nRefs: docs/security/postgres.md (PG-14)\nTests: tests/link/std_postgres_batch, tests/postgres/live binary batch\n\n* feat(net): read one-dimensional int2, int4 and int8 binary arrays\n\nPgBinaryArray walks a one-dimensional int2[], int4[] or int8[] column\nread in binary format. It checks the array header (ndim 0 or 1, hasnull\n0 or 1, element OID 20, 21 or 23) and each element's length word against\nthe element's size before it reads any bytes, and it ends with\nPG_ARRAY_END only when the column is consumed exactly. Truncated,\nover-counted and malformed arrays refuse with PG_ARRAY_BAD and set the\nPgBinary failed flag. Multi-dimensional arrays, text[] and numeric[]\nstill come back in text format.\n\nTests: tests/link/std_postgres, tests/postgres/live binary",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a3a4dec"
+      ],
+      "pr": 1046,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "link-the-nish-runner-s-programs-under-the",
+      "type": "perf",
+      "scope": "self",
+      "breaking": false,
+      "title": "link the Nish runner's programs under the suite's profile, in three shards",
+      "body": "The golden runner written in Nish linked every tests/link program under\nthe speed profile, -O3 with LTO, where tests/run.js links all but a listed\nfew under --profile debug. The native link was most of each program's\ntime, and CI's `runner` job hit its 15-minute limit on whichever shard drew\na slow machine. The runner now picks the profile the same way, and the\nlist of programs that keep the speed profile, with the reason for each,\nmoves out of tests/run.js into tests/speed-link.txt, which both harnesses\nread. The profile changes the link, never the IR, so every golden and\nexpected.ir check is unchanged. The job deals the corpus three ways\ninstead of two.",
+      "metrics": [
+        "runner job corpus step 3.9, 6.4 and 4.0 min over three shards, against 8.1 and >13.9 min over two (run 40997535378); the 32 net_tls programs on 4 cores, 107 s before and 63 s after"
+      ],
+      "refs": [],
+      "tests": [
+        "node tests/run.js speed-link",
+        "node tests/run.js nish-runner",
+        "node tests/run.js selfhost"
+      ],
+      "commits": [
+        "094a587"
+      ],
+      "pr": 1061,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    }
+  ]
+}

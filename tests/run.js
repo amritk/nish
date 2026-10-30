@@ -3029,78 +3029,20 @@ if (!only || "net_loop".includes(only)) {
 
 // ---- The link profile of a `tests/link` program (WP5) -------------------------
 //
-// A program links under `--profile debug` (no optimiser, no LTO, the runtime's asserts
-// on) unless it is on `SPEED_LINK` or its args name a profile of its own. The profile
-// changes the link, never a byte of the IR (src/compile.ts), so the goldens, expected.ir
-// and the wipe checks read what they always read. Measured on main at 804120e, every
-// positive program built under each profile on one 4-core machine, speed twice:
-//   541 positive programs   build    run   total
-//   speed, first          738.5 s  83.6 s  822.1 s
-//   speed, second         735.1 s  64.0 s  799.1 s
-//   debug                 173.1 s 171.7 s  344.8 s
-// The two speed passes differ by 0.5% in build and 23 s in run (the first run of each
-// binary pays a cold start), so the band is about 3%; debug saves 454-477 s, far
-// outside it, and the default is debug. No program's exit code or stdout differed
-// between the profiles; only stderr's timings and addresses did.
-// The programs below keep the speed profile, each for the reason beside it.
-const SPEED_LINK = new Map([
-  // expected.ir pins alias metadata, which only an optimised link acts on.
-  ["class_export", "expected.ir pins `noalias`"],
-  ["generic_import", "expected.ir pins `noalias`"],
-  ["net_prefork", "expected.ir pins `noalias`"],
-  ["result_import", "expected.ir pins `noalias`"],
-  // arr_* aliasing domains.
-  ["arr_bounds_returned_import", "an arr_* aliasing domain"],
-  // Wipes that must survive optimisation: tests/wipes and the `-O2` wipe checks
-  // compile these, so the binary the link loop runs is the optimised one too.
-  ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
-  ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
-  ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
-  ["crypto_bcrypt_batch", "tests/wipes counts its wipes after -O2"],
-  ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
-  ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
-  ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
-  ["crypto_p256", "tests/wipes and the p256ScalarInverse wipes survive opt -O2"],
-  ["crypto_p256_ecdh", "tests/wipes counts its wipes after -O2"],
-  ["net_quic_server_wipes", "tests/wipes counts its wipes after -O2"],
-  ["net_quic_server_wipes_f64", "the f64 twin of net_quic_server_wipes"],
-  ["net_quic_wipes", "tests/wipes counts its wipes after -O2"],
-  ["net_quic_wipes_f64", "the f64 twin of net_quic_wipes"],
-  ["net_tls_client_record", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_rfc8448", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_ticket", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_wipes", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_wipes_f64", "the f64 twin of net_tls_wipes"],
-  ["std_pbkdf2", "tests/wipes counts its wipes after -O2"],
-  // SIMD kernels: runtime-simd.c's byte search and regex scan, runtime-aes.c's
-  // AES rounds, and a parallel map whose element loop vectorises.
-  ["crypto_aes", "runtime-aes.c's kernels"],
-  ["crypto_aes_agree", "runtime-aes.c's kernels"],
-  ["crypto_aes_f64", "runtime-aes.c's kernels"],
-  ["crypto_aes_into", "runtime-aes.c's kernels"],
-  ["crypto_aes_into_f64", "runtime-aes.c's kernels"],
-  ["par_map_vector", "its element loop vectorises"],
-  ["std_regex", "runtime-simd.c's regex scan"],
-  ["std_regex_f64", "runtime-simd.c's regex scan"],
-  ["std_text_index_of_any", "runtime-simd.c's byte search"],
-  ["std_text_index_of_any_non_ascii_offset", "runtime-simd.c's byte search"],
-  // Size and performance figures a check after the loop reads from the binary.
-  ["net_tls_resume_bench", "a timed handshake ratio"],
-  ["par_map_idle", "an RSS bound"],
-  ["par_map_join_small", "an RSS bound"],
-  ["par_map_reclaim", "an RSS bound"],
-  ["par_map_release", "an RSS bound"],
-  ["thread_channel_string_many", "a wall-clock bound"],
-  ["thread_scope_reclaim", "an RSS bound"],
-  ["thread_task_release", "an RSS bound"],
-  ["net_relay_soak", "an RSS bound, and 4.9 s of run becomes 37.8 s"],
-  // Run so much slower unoptimised that the debug build costs more in all
-  // (speed build + run, then debug build + run).
-  ["crypto_x25519", "1.7 + 0.2 s, against 0.2 + 2.3 s"],
-  ["crypto_x509_malformed", "2.2 + 2.0 s, against 0.5 + 11.7 s"],
-  ["net_tls_memory", "4.8 + 1.3 s, against 0.8 + 14.4 s"],
-  ["net_tls_memory_f64", "4.7 + 1.5 s, against 0.8 + 15.2 s"],
-])
+// A program links under `--profile debug` unless it is on `SPEED_LINK` or its args
+// name a profile of its own. The list, the measurement that made debug the default
+// and the reason each program keeps the speed profile are in tests/speed-link.txt,
+// which tests/nish/run.ts reads too, so the two harnesses link every program alike.
+const SPEED_LINK = new Map(
+  fs
+    .readFileSync(path.join(root, "tests", "speed-link.txt"), "utf8")
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !line.startsWith("#"))
+    .map((line) => {
+      const [name, ...reason] = line.trim().split(/\s+/)
+      return [name, reason.join(" ")]
+    })
+)
 /**
  * The `--profile` flags a link of `tests/link/<name>` adds: none when its `args` name a
  * profile or it is on `SPEED_LINK` (build.sh's default, speed), and `debug` otherwise.
@@ -23206,19 +23148,12 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js reaches for a compiler of its own instead of refusing; " +
         "a platform with no prebuilt binary must be told, not quietly served something else"
     )
-    // One row per attached seed, all at one version. Two ways this goes wrong and
+    // One row per attached seed, at exactly this version. Two ways this goes wrong and
     // neither shows up in a build: a platform that gets a binary built and attached but
     // no package published, so every install on it refuses for want of a package that
-    // was never uploaded; and pins left behind, so every install resolves last
-    // release's binary against this release's compiler.
-    //
-    // The version is this release's or the one before it, and nothing older. The
-    // release commit leaves the pins behind on purpose, because their lockfile entries
-    // describe tarballs that are not published yet (release-pr.yml says why), and
-    // release.yml's `lockfile` job moves them after the publish. What a user installs
-    // never sees the gap: release.yml pins the package it packs to the tag, and checks
-    // the tarball it packed. Pins two releases behind mean a `lockfile` job that never
-    // landed, and the next publish would not notice that either.
+    // was never uploaded; and a version bump that moves package.json and leaves these
+    // behind, so every install resolves last release's binary against this release's
+    // compiler. `release-pr.yml` bumps them with the version for that second reason.
     const seedAssets = JSON.parse(
       fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
     ).targets.map((t) => t.asset)
@@ -23230,21 +23165,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       JSON.stringify(Object.keys(optional).sort()) === JSON.stringify(expectedOptional),
       `optionalDependencies is ${Object.keys(optional).sort().join(", ")}; expected ${expectedOptional.join(", ")}`
     )
-    const released = fs
-      .readdirSync(path.join(root, "changelog"))
-      .filter((f) => /^\d+\.\d+\.\d+\.json$/.test(f))
-      .map((f) => f.slice(0, -".json".length))
-    const previous = released
-      .filter((v) => v !== manifest.version && notAfter(v, manifest.version))
-      .reduce((a, v) => (a === undefined || notAfter(a, v) ? v : a), undefined)
-    const allowedPins = previous === undefined ? [manifest.version] : [manifest.version, previous]
-    const pinVersions = [...new Set(Object.values(optional))]
+    const misversioned = Object.entries(optional).filter(([, v]) => v !== manifest.version)
     check(
-      `every platform package is pinned to one version, this one or the release before (${allowedPins.join(" or ")})`,
-      pinVersions.length === 1 && allowedPins.includes(pinVersions[0]),
-      Object.entries(optional)
-        .map(([k, v]) => `${k} is pinned to ${v}`)
-        .join("\n")
+      `every platform package is pinned to this version (${manifest.version})`,
+      misversioned.length === 0,
+      misversioned.map(([k, v]) => `${k} is pinned to ${v}, not ${manifest.version}`).join("\n")
     )
     // And the lockfile's copy of that same list, which is a second file saying the same
     // thing and therefore a second thing to go stale. It did: 0.4.0 shipped with
@@ -23252,8 +23177,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // release bump read `optionalDependencies` at the top level and a lockfile keeps the
     // root package under `packages[""]`. Nothing was red -- `npm ci` tolerates it and
     // `npm install` rewrites the file under whoever runs it next, which is how it stayed
-    // invisible. `scripts/pin-platform-packages.mjs` moves both now, and this is the check
-    // that would have noticed whatever moved them apart.
+    // invisible. `release-pr.yml` moves both now, and this is the check that would have
+    // noticed whatever moved them apart.
     const lockRoot = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8")).packages?.[""]
       ?.optionalDependencies
     const lockDisagrees = Object.entries(optional).filter(([k, v]) => (lockRoot ?? {})[k] !== v)
@@ -23791,9 +23716,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- WP12: the release train's version bump ------------------------------------------
-// `release-pr.yml` bumps three things in one `node -e` script: package.json's version,
-// package-lock.json's two copies of it, and VERSION in src/branding.ts, and leaves the
-// platform packages pinned in optionalDependencies alone. Nothing ran it. It is a
+// `release-pr.yml` bumps four things in one `node -e` script: package.json's version,
+// package-lock.json's two copies of it, every platform package pinned in
+// optionalDependencies, and VERSION in src/branding.ts. Nothing ran it. It is a
 // workflow step, so it executes exactly once per merge to main, in a place where a
 // failure stops the release train rather than a pull request -- and the person who finds
 // out is whoever wanted to cut a release.
@@ -23844,34 +23769,34 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
         bumped.version === next && lock.version === next && lock.packages?.[""]?.version === next,
         `package.json ${bumped.version}, lock ${lock.version}, lock.packages[""] ${lock.packages?.[""]?.version}`
       )
-      // The pins are the half this bump must leave alone, in both copies of the list.
-      // package.json keeps optionalDependencies at the top level and a lockfile keeps
-      // the root package under `packages[""]`, and both are compared to what they were
-      // before the bump. A bump that moved them would put main out of step with its own
-      // lockfile until release.yml's `lockfile` job landed -- the red `lint` job on
-      // every release commit up to 0.26.0 -- because the entries those pins resolve to
-      // describe tarballs that are not published yet. release.yml moves the pins
-      // instead, in the package it packs and in the lockfile pull request.
-      const before = {
-        "package.json": JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).optionalDependencies,
-        'package-lock.json packages[""]': JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-          .packages?.[""]?.optionalDependencies,
-      }
+      // The half that was added with the installer, and the reason this block exists: a
+      // release whose optionalDependencies were left behind installs a compiler that
+      // resolves the previous release's binaries. It succeeds, it runs, and it is one
+      // version stale in the half nobody looks at.
+      //
+      // Both copies of that list, which is the half this check did not have. package.json
+      // keeps optionalDependencies at the top level and a lockfile keeps the root
+      // package under `packages[""]`, so a bump reading only the top level moves one and
+      // leaves the other -- and reading only the top level is what this check did too,
+      // so it passed while 0.4.0 shipped a lockfile still pinned to 0.3.0. `npm ci`
+      // tolerates the disagreement and `npm install` silently rewrites it, so nothing
+      // anywhere went red. A check that looks where the code looks cannot see the code
+      // looking in the wrong place: both places are named here.
       const pinSets = [
         ["package.json", bumped.optionalDependencies ?? {}],
         ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
       ]
-      const moved = pinSets.flatMap(([where, deps]) =>
+      const stale = pinSets.flatMap(([where, deps]) =>
         Object.entries(deps)
-          .filter(([k, v]) => (before[where] ?? {})[k] !== v)
-          .map(([k, v]) => `${where}: ${k} moved from ${(before[where] ?? {})[k]} to ${v}`)
+          .filter(([, v]) => v !== next)
+          .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
       )
       const pinCount = pinSets.reduce((n, [, deps]) => n + Object.keys(deps).length, 0)
       check(
-        `release-pr: the bump leaves every platform package pin alone in BOTH files (${pinCount})`,
-        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && moved.length === 0,
-        moved.length > 0
-          ? moved.join("\n")
+        `release-pr: the bump moves every platform package in BOTH files (${pinCount})`,
+        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
+        stale.length > 0
+          ? stale.join("\n")
           : pinSets.map(([where, deps]) => `${where} pins ${Object.keys(deps).length}`).join("; ")
       )
       const branding = fs.readFileSync(path.join(work, "src", "branding.ts"), "utf8")
@@ -23882,104 +23807,6 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       )
     }
   }
-}
-
-// ---- WP12: the pins release.yml moves -----------------------------------------------
-// The release commit leaves the platform packages pinned to the previous release, so
-// `scripts/pin-platform-packages.mjs` is what moves them: in the `release` job before
-// `npm pack`, and in the `lockfile` job with the entries they resolve to. Both run once
-// per release, after the tag, where a script that moved one file and not the other
-// would publish a package or a lockfile pinned to the last release. So it is run here,
-// against copies, with both workflow steps checked to call it.
-if (!only || "pin-platform".includes(only) || "wp12".includes(only)) {
-  const work = path.join(buildDir, "pin-platform-packages")
-  fs.rmSync(work, { recursive: true, force: true })
-  fs.mkdirSync(work, { recursive: true })
-  for (const f of ["package.json", "package-lock.json"]) {
-    fs.copyFileSync(path.join(root, f), path.join(work, f))
-  }
-  const script = path.join(root, "scripts", "pin-platform-packages.mjs")
-  const ran = spawnSync(process.execPath, [script, "9.9.9", "--dir", work], { encoding: "utf8" })
-  check("pin-platform-packages: runs against a copy of package.json and the lockfile", ran.status === 0, ran.stderr)
-  if (ran.status === 0) {
-    const pinned = JSON.parse(fs.readFileSync(path.join(work, "package.json"), "utf8"))
-    const lock = JSON.parse(fs.readFileSync(path.join(work, "package-lock.json"), "utf8"))
-    const pinSets = [
-      ["package.json", pinned.optionalDependencies ?? {}],
-      ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
-    ]
-    const stale = pinSets.flatMap(([where, deps]) =>
-      Object.entries(deps)
-        .filter(([, v]) => v !== "9.9.9")
-        .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
-    )
-    check(
-      "pin-platform-packages: moves every platform package in BOTH files",
-      pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
-      stale.join("\n")
-    )
-    // The lockfile job commits and merges whatever this writes, so a rewrite that
-    // touched anything else would land on main with nobody reading it.
-    const original = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
-    const originalLock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-    lock.packages[""].optionalDependencies = originalLock.packages[""].optionalDependencies
-    check(
-      "pin-platform-packages: changes nothing in either file but the pins",
-      JSON.stringify({ ...pinned, optionalDependencies: original.optionalDependencies }) === JSON.stringify(original) &&
-        JSON.stringify(lock) === JSON.stringify(originalLock),
-      "package.json or package-lock.json differs from the original outside the pins"
-    )
-  }
-  const refused = spawnSync(process.execPath, [script, "v9.9.9", "--dir", work], { encoding: "utf8" })
-  check(
-    "pin-platform-packages: refuses a version that is not one (a tag name with its `v`)",
-    refused.status === 2,
-    `exit ${refused.status}: ${refused.stderr}`
-  )
-  // An empty `--dir "$X"` must not mean the current directory, which here is the checkout.
-  const noDir = spawnSync(process.execPath, [script, "9.9.9", "--dir"], { encoding: "utf8", cwd: work })
-  check(
-    "pin-platform-packages: refuses a `--dir` with nothing after it",
-    noDir.status === 2,
-    `exit ${noDir.status}: ${noDir.stderr}`
-  )
-  // A lockfile without the root copy of the pins is refused before either file is written,
-  // so a failed run never leaves package.json moved and the lockfile not.
-  const half = path.join(work, "half")
-  fs.mkdirSync(half, { recursive: true })
-  fs.copyFileSync(path.join(root, "package.json"), path.join(half, "package.json"))
-  const bare = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-  delete bare.packages[""].optionalDependencies
-  fs.writeFileSync(path.join(half, "package-lock.json"), `${JSON.stringify(bare, null, 2)}\n`)
-  const halfRun = spawnSync(process.execPath, [script, "9.9.9", "--dir", half], { encoding: "utf8" })
-  check(
-    "pin-platform-packages: a lockfile with no root pins fails it before package.json is written",
-    halfRun.status === 1 &&
-      fs.readFileSync(path.join(half, "package.json"), "utf8") ===
-        fs.readFileSync(path.join(root, "package.json"), "utf8"),
-    `exit ${halfRun.status}: ${halfRun.stderr}`
-  )
-  const release = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
-  // Line numbers, not offsets: the lockfile pull request's body names the script too. Each
-  // call is held to its job, because one moved into `binaries` would pin a checkout on
-  // another runner and leave the `release` job packing the previous release's pins.
-  const lines = release.split("\n")
-  const lineOf = (text) => lines.findIndex((l) => l.includes(text))
-  const jobOf = (at) => lines.slice(0, at + 1).findLast((l) => /^ {2}[a-z][a-z0-9-]*:\s*$/.test(l))?.trim()
-  const calls = lines.flatMap((l, i) => (l.includes('node scripts/pin-platform-packages.mjs "${GITHUB_REF_NAME#v}"') ? [i] : []))
-  const pack = lineOf("npm pack --pack-destination build/release")
-  const relock = lineOf("npm install --package-lock-only")
-  check(
-    "pin-platform-packages: release.yml calls it twice, before `npm pack` and in the lockfile job",
-    calls.length === 2 &&
-      jobOf(calls[0]) === "release:" &&
-      jobOf(pack) === "release:" &&
-      calls[0] < pack &&
-      jobOf(calls[1]) === "lockfile:" &&
-      jobOf(relock) === "lockfile:" &&
-      calls[1] < relock,
-    `found calls on lines ${calls.map((i) => `${i + 1} (${jobOf(i)})`).join(", ")}`
-  )
 }
 
 // ---- The seed fetch -------------------------------------------------------------------
