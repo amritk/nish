@@ -460,6 +460,10 @@ cases/set_iter added after R6: no rewriter to freeze it with
 cases/set_iter_keys added after R6: no rewriter to freeze it with
 cases/set_iter_values added after R6: no rewriter to freeze it with
 cases/set_str added after R6: no rewriter to freeze it with
+cases/simd_access added after R6: no rewriter to freeze it with
+cases/simd_access_oob added after R6: no rewriter to freeze it with
+cases/simd_lanes added after R6: no rewriter to freeze it with
+cases/simd_values added after R6: no rewriter to freeze it with
 cases/str_from_bytes added after R6: no rewriter to freeze it with
 cases/str_from_bytes_arrow added after R6: no rewriter to freeze it with
 cases/str_from_bytes_lifetime added after R6: no rewriter to freeze it with
