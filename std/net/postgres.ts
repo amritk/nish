@@ -81,7 +81,11 @@
  * A `text` column is the same bytes in either format, so `columnText` and the
  * column windows read it unchanged. The program knows which of its binds
  * asked for which, and reads each execution's rows with the matching
- * decoders.
+ * decoders. A `PgBatcher` with `binary` set opens each batch this way and
+ * reads its routing ordinal with `binaryInt`, so its rows are binary too.
+ * `PgBinaryArray` walks a one-dimensional `int2[]`, `int4[]` or `int8[]`
+ * column in its binary layout, and refuses any other array (a `text[]` or a
+ * multi-dimensional one among them).
  *
  * **Authentication.** SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`).
  * The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a
@@ -237,6 +241,15 @@ const PG_TAIL: i32 = 17
 const PG_BINARY_TAIL: i32 = 2
 // The result format code for binary.
 const PG_FORMAT_BINARY: i32 = 1
+// The element types `PgBinaryArray` reads, by OID: int8, int2 and int4.
+const PG_OID_INT8: i32 = 20
+const PG_OID_INT2: i32 = 21
+const PG_OID_INT4: i32 = 23
+// The bytes a binary array's header takes before its dimensions: ndim,
+// hasnull and the element OID, one i32 each; one dimension adds its length
+// and lower bound, another two i32s.
+const PG_ARRAY_HEADER: i32 = 12
+const PG_ARRAY_DIM: i32 = 8
 // The largest `maxMessage` and `maxOutput`. The input buffer doubles up to one
 // past them; the output buffer doubles only while twice its size fits in an i32.
 const PG_MAX_CAP: i32 = 1073741823
@@ -855,6 +868,139 @@ export class PgBinary {
     pgDigits(out, at + 20, millis % 1000, 3)
     out[at + 23] = toU8(90)
     return 24
+  }
+}
+
+/**
+ * A walk over a one-dimensional `int2[]`, `int4[]` or `int8[]` column in
+ * PostgreSQL's binary array layout, in place: `begin` the column, then
+ * `next()` until `PG_ARRAY_END` or `PG_ARRAY_BAD`, and `int()` decodes the
+ * current element through `binary`. The header is `ndim`, `hasnull` and the
+ * element OID, then for `ndim` 1 the dimension's length and lower bound (the
+ * bound is read and not used); each element is a length word and its bytes,
+ * and a NULL is a length of -1 with no bytes. `ndim` 0 is the empty array.
+ * Every refusal sets `binary.failed`: an `ndim` above 1, another element
+ * type, an element whose length is not its type's size, a NULL when
+ * `hasnull` is 0, a column cut short, or bytes after the last element. The
+ * walk allocates nothing, and it reads nothing outside the column.
+ */
+export class PgBinaryArray {
+  /** The number of elements the header gives: 0 for an empty array. */
+  count: i32 = 0
+  /** The element type's OID, 20, 21 or 23, once `begin` has read a header it accepts. */
+  elementOid: i32 = 0
+  /** The current element's first byte in the buffer. */
+  start: i32 = 0
+  /** The current element's length: its type's size, or 0 for a NULL. */
+  length: i32 = 0
+  private binary: PgBinary
+  private b: u8[]
+  private pos: i32 = 0
+  private end: i32 = 0
+  private size: i32 = 0
+  private seen: i32 = 0
+  private hasNull: boolean = false
+  private bad: boolean = true
+
+  constructor(binary: PgBinary) {
+    this.binary = binary
+    this.b = []
+  }
+
+  /** Starts a walk over `b[start, start + length)`; a header this walker does not read is refused. */
+  begin(b: u8[], start: i32, length: i32): void {
+    this.b = b
+    this.count = 0
+    this.elementOid = 0
+    this.seen = 0
+    this.start = 0
+    this.length = 0
+    this.bad = !(start >= 0 && length >= PG_ARRAY_HEADER && start <= toI32(b.length) - length)
+    if (this.bad) {
+      this.refuse()
+      return
+    }
+    const ndim: i32 = getI32BE(b, start)
+    const hasNull: i32 = getI32BE(b, start + 4)
+    const oid: i32 = getI32BE(b, start + 8)
+    this.size = 0
+    if (oid === PG_OID_INT8) {
+      this.size = 8
+    } else if (oid === PG_OID_INT2) {
+      this.size = 2
+    } else if (oid === PG_OID_INT4) {
+      this.size = 4
+    }
+    this.bad = (ndim !== 0 && ndim !== 1) || (hasNull !== 0 && hasNull !== 1) || this.size === 0
+    if (ndim === 1 && !this.bad) {
+      this.bad = length < PG_ARRAY_HEADER + PG_ARRAY_DIM
+    }
+    if (this.bad) {
+      this.refuse()
+      return
+    }
+    this.elementOid = oid
+    this.hasNull = hasNull === 1
+    this.pos = start + PG_ARRAY_HEADER
+    this.end = start + length
+    if (ndim === 1) {
+      const dim: i32 = getI32BE(b, start + PG_ARRAY_HEADER)
+      if (dim < 0) {
+        this.refuse()
+        return
+      }
+      this.count = dim
+      this.pos += PG_ARRAY_DIM
+    }
+  }
+
+  private refuse(): i32 {
+    this.bad = true
+    this.binary.failed = true
+    return PG_ARRAY_BAD
+  }
+
+  /** The next element: `PG_ARRAY_ELEMENT`, `PG_ARRAY_NULL`, `PG_ARRAY_END` or `PG_ARRAY_BAD`. */
+  next(): i32 {
+    if (this.bad) {
+      return PG_ARRAY_BAD
+    }
+    if (this.seen === this.count) {
+      if (this.pos === this.end) {
+        return PG_ARRAY_END
+      }
+      return this.refuse()
+    }
+    if (this.end - this.pos < 4) {
+      return this.refuse()
+    }
+    const n: i32 = getI32BE(this.b, this.pos)
+    this.pos += 4
+    this.seen += 1
+    if (n === -1) {
+      if (!this.hasNull) {
+        return this.refuse()
+      }
+      this.start = this.pos
+      this.length = 0
+      return PG_ARRAY_NULL
+    }
+    if (n !== this.size || this.end - this.pos < n) {
+      return this.refuse()
+    }
+    this.start = this.pos
+    this.length = n
+    this.pos += n
+    return PG_ARRAY_ELEMENT
+  }
+
+  /** The current element as an integer, through `PgBinary.int`; a NULL, or a walk that was refused, sets `binary.failed`. */
+  int(): i64 {
+    if (this.bad) {
+      this.binary.failed = true
+      return 0
+    }
+    return this.binary.int(this.b, this.start, this.length)
   }
 }
 
@@ -1935,10 +2081,13 @@ export class PgConnection {
    * format rather than text: fixed-size integers, booleans, floats and
    * times, read in place by `binaryInt`, `binaryBool`, `binaryFloat` and
    * `binary.timestamp`. A `text` column's bytes are the same in either
-   * format, so `columnText` and the column windows read it as before; a
-   * `text[]` or `numeric` column comes in PostgreSQL's binary layout, which
-   * no decoder here reads. Its `bindEnd()` writes two bytes more, kept free
-   * under `maxOutput` from here on. False as `prepare` is.
+   * format, so `columnText` and the column windows read it as before. An
+   * `int2[]`, `int4[]` or `int8[]` column comes in PostgreSQL's binary layout,
+   * which `PgBinaryArray` reads; a `text[]` or `numeric` column comes in that
+   * layout too, and no decoder here reads it. `PgBatcher` opens its batches
+   * with this when its `binary` is set, and reads their routing ordinals with
+   * `binaryInt`. Its `bindEnd()` writes two bytes more, kept free under
+   * `maxOutput` from here on. False as `prepare` is.
    */
   bindStartBinary(name: string): boolean {
     return this.openBind(name, true)
@@ -2863,6 +3012,8 @@ export class PgBatchConfig {
   queueBytes: i32 = 65536
   /** The most executions in flight at once. */
   runs: i32 = 16
+  /** Whether every row of a batch comes in binary format, read with the binary decoders and its ordinal by `binaryInt`; false for text. */
+  binary: boolean = false
 }
 
 /** One execution's requests, grouped by key, and how far its rows have been routed. */
@@ -2913,7 +3064,10 @@ class PgBatchRun {
  * connection to `fail(run)`; after each, `next(run)` answers events until
  * `PG_BATCH_NONE`, `tag` naming the request each is about. Every row goes to
  * every request for its key, and every request gets one last event:
- * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`.
+ * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`. A batch with
+ * `binary` set comes in binary format: its rows are read with the binary
+ * decoders, `binaryInt` for each ordinal, and the caller's `binary.failed`
+ * is left as it was.
  *
  * Nothing outlives its execution: a run is free again once the events
  * `end` or `fail` owe are answered, and its handle is then spent. What the
@@ -2960,6 +3114,7 @@ export class PgBatcher {
   private readonly keyType: i32
   private readonly maxRequests: i32
   private readonly maxBytes: i32
+  private readonly binary: boolean
   private storeEnd: i32 = 0
   private head: i32 = 0
   private count: i32 = 0
@@ -2997,6 +3152,7 @@ export class PgBatcher {
     this.keyType = keyType
     this.maxRequests = maxRequests
     this.maxBytes = config.maxBytes
+    this.binary = config.binary
     this.name = config.name
     const type: string = keyType === PG_BATCH_INT ? "int8" : "text"
     const order: string = config.orderBy.length > 0 ? `, ${config.orderBy}` : ""
@@ -3164,7 +3320,7 @@ export class PgBatcher {
         break
       }
     }
-    if (r < 0 || !conn.bindStart(this.name)) {
+    if (r < 0 || !(this.binary ? conn.bindStartBinary(this.name) : conn.bindStart(this.name))) {
       return -1
     }
     if (!conn.arrayStart()) {
@@ -3296,7 +3452,14 @@ export class PgBatcher {
     const last: i32 = conn.columns - 1
     let ordinal: i64 = 0
     let bad: boolean = last < 0 || conn.isNull(last)
-    if (!bad) {
+    if (!bad && this.binary) {
+      // Read without touching `binary.failed`, which belongs to the program's own decoding.
+      const failed: boolean = conn.binary.failed
+      conn.binary.failed = false
+      ordinal = conn.binaryInt(last)
+      bad = conn.binary.failed
+      conn.binary.failed = failed
+    } else if (!bad) {
       // Read without touching `text.failed`, which belongs to the program's own decoding.
       const failed: boolean = conn.text.failed
       conn.text.failed = false
