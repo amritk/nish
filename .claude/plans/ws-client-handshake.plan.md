@@ -8,6 +8,9 @@ stages:
     verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_websocket && node tests/run.js net_loopback && node tests/run.js fuzz && node scripts/security-scope.mjs && node docs/check-links.mjs
     status: pending
     todos:
+      - id: http1-upgrade-opt-in
+        content: Give std/net/http1-client.ts an explicit, per-request upgrade opt-in so a client can write Connection Upgrade and read a 101 as HTTP1_UPGRADE with tunnelBytes(). Without the opt-in, both stay refused. See ws-client, The upgrade opt-in
+        status: pending
       - id: client-key
         content: Add websocketClientKey(nonce) to std/net/websocket.ts. It turns 16 caller-drawn bytes into the base64 key, and the module draws no randomness. See ws-client, Key
         status: pending
@@ -68,9 +71,13 @@ HTTP/1.1 client and a std TLS client.
   the fields and the bytes after the head) and the std TLS client are both
   merged to `main`. It builds on whatever they export, and adds no second
   request writer, response parser or TLS client. The names this plan uses for
-  them are placeholders. If either lands without something this stage needs,
-  the worker opens its PR as a draft and names the gap. It does not build the
-  missing piece itself.
+  them are placeholders. Both have landed: #1013 (`nish/net/http1-client`)
+  and #1018/#1029 (`nish/net/tls/client`, `nish/net/tls-tcp`). The HTTP/1.1
+  client refuses an upgrade on purpose: its writer refuses a `Connection`
+  that lists `upgrade`, and its parser refuses every 101 with
+  `HTTP1_E_SWITCH`. The owner agreed (2026-10-30) that this stage also owns a
+  narrow opt-in there (see "The upgrade opt-in"). It still adds no second
+  request writer, response parser or TLS client.
 - **The module stays sans-IO and draws no randomness.** It already takes the
   mask key as an argument, and the handshake nonce follows that rule. That
   keeps `nish/net/websocket` compiling to wasm32. The caller draws both from
@@ -78,8 +85,9 @@ HTTP/1.1 client and a std TLS client.
 - **Fail closed, and say why.** Each of RFC 6455 §4.1's client requirements
   is its own refusal, with a result the caller can tell apart. A non-101
   status stays readable so a caller can report a 401 or a redirect.
-- **One pull request.** The key, the request, the response check and the
-  server's offer parser are about 200 lines over one module. The tests, the
+- **One pull request.** The upgrade opt-in, the key, the request, the
+  response check and the server's offer parser are a few hundred lines over
+  two modules. The tests, the
   record and the guide page make up the rest.
 
 ## ws-client — client side of the opening handshake
@@ -91,11 +99,36 @@ HTTP/1.1 client and a std TLS client.
 `docs/security/http1.md`, `docs/security/README.md`,
 `docs/guide/using-nish/websocket.md` (new),
 `docs/guide/using-nish/standard-library.md`, `scalar.config.json`,
-`std/README.md`, `llms.txt`, `README.md`, `tests/self/goldens/checked/**`
+`std/README.md`, `llms.txt`, `README.md`, `std/net/http1-client.ts`,
+`tests/link/net_http1_client*/**`, `docs/security/http1-client.md`,
+`docs/guide/using-nish/http-client.md`, `tests/self/goldens/checked/**`
 (generated).
 
-Not owned: the HTTP/1.1 client and TLS client modules, and their tests and
-records. They belong to the other sessions.
+Not owned: the TLS client modules, their tests and records.
+
+### The upgrade opt-in
+
+`nish/net/http1-client` refuses an upgrade by design, and it keeps doing so
+by default. This stage adds one explicit opt-in. The API is the worker's to
+choose, for example a writer that takes an upgrade token, or an `expect`
+flag. Whatever form it takes, it must keep these rules:
+
+- **The writer.** Only a request that opted in may carry `Connection`
+  listing `upgrade`, and only together with an `Upgrade` field. A plain
+  request that lists it is still `HTTP1_REFUSED`.
+- **The parser.** Only after an `expect` that opted in does a 101 answer
+  `HTTP1_UPGRADE`. Its status and fields stay readable, and `tunnelBytes()`
+  gives the bytes fed past the head, the same way CONNECT already works.
+  Without the opt-in, a 101 is still `HTTP1_E_SWITCH`. Under the opt-in, any
+  other status is handled as it is today, so a 401 or a 3xx stays readable.
+  The parser decides nothing about WebSocket itself:
+  `websocketCheckResponse` does that.
+- **Tests and record.** `tests/link/net_http1_client` (and its `_f64` twin)
+  gains positive checks for the opt-in, and negative checks proving that the
+  default still refuses both. The split-point corpus covers a 101 with bytes
+  glued to the head. `docs/security/http1-client.md` records the widened
+  surface, and `docs/guide/using-nish/http-client.md` names the opt-in and
+  points to the WebSocket page.
 
 ### Key
 
