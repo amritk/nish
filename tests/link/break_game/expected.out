@@ -1,0 +1,212 @@
+PASS  six levels
+PASS  level 0 clamps to 1
+PASS  level 7 clamps to 6
+PASS  newBreakGame clamps a low level
+PASS  newBreakGame clamps a high level
+PASS  level 1 is First Light
+PASS  level 6 is NISH
+PASS  level 1 has 4 rows
+PASS  level 5 has 8 rows
+PASS  '3' is a normal brick
+PASS  '3' takes three hits
+PASS  'S' is steel
+PASS  'X' is explosive
+PASS  '?' is a mystery
+PASS  '.' is empty and takes no hits
+PASS  every level's numbers are their formulas
+PASS  speed over width grows at least 1.5x a level
+PASS  level 6 serves at 90 x 1.25^5
+PASS  level 6's paddle is 48 x 0.8^5
+PASS  level 5's wall stays put
+PASS  level 6's wall advances every 12 s
+PASS  slow slows to 0.6
+PASS  slow slows less on level 6
+PASS  level 1 has 48 bricks to break
+PASS  the game takes its level's serve speed
+PASS  the game takes its level's paddle
+PASS  steel does not count toward a clear
+PASS  level 3 row 5 is steel
+PASS  a two takes two hits
+PASS  off the grid is empty
+PASS  off the grid takes no hits
+PASS  a new game starts in its intro
+PASS  a new game has three lives
+PASS  the intro lasts its steps
+PASS  the intro answers playing
+PASS  the intro ends on its own
+PASS  a key skips the intro
+PASS  the ball waits on the paddle
+PASS  one ball is served
+PASS  a held key moves the paddle right
+PASS  a held key speeds the paddle up
+PASS  the stuck ball rides the paddle
+PASS  the paddle stops at the right rail
+PASS  a released key stops the paddle
+PASS  space launches the ball
+PASS  the ball leaves upward
+PASS  a launch starts the clock
+PASS  the clock counts launched steps
+PASS  the serve angle comes from the seed
+PASS  the serve stays within 18 degrees of upright
+PASS  the same seed serves the same way
+PASS  the left rail turns the ball right
+PASS  the ball never passes the left rail
+PASS  the right rail turns the ball left
+PASS  the ball never passes the right rail
+PASS  the ceiling turns the ball down
+PASS  the ball never passes the ceiling
+PASS  a brick turns the ball down
+PASS  the brick hit breaks
+PASS  the brick above it stands
+PASS  one brick fewer to clear
+PASS  a one-hit brick scores 10
+PASS  a break starts the combo
+PASS  the ball stops at the brick's face
+PASS  a ball at 2000 u/s dents the brick it meets
+PASS  a ball at 2000 u/s bounces off a brick
+PASS  a ball at 2000 u/s never enters a brick
+PASS  a ball at 2000 u/s comes back off the paddle
+PASS  a ball at 2000 u/s never enters the paddle
+PASS  the paddle's centre sends the ball straight up
+PASS  the paddle sends the ball up
+PASS  a paddle hit speeds the ball up by the level's speed-up
+PASS  a paddle hit ends the combo
+PASS  the paddle's end turns the ball out
+PASS  no bounce leaves flatter than 70 degrees
+PASS  the left end turns the ball left
+PASS  a paddle hit never passes the speed cap
+PASS  the explosive hit breaks
+PASS  an explosion breaks its neighbour above
+PASS  an explosion chains to the next explosive
+PASS  the chain reaches the far explosive's neighbour
+PASS  the chain stops where the explosives end
+PASS  the chain stops two rows up
+PASS  twelve bricks break in one hit
+PASS  each break in a chain grows the combo
+PASS  an explosion shakes the screen
+PASS  an explosion throws sparks
+PASS  the third break in a combo scores triple
+PASS  the combo multiplier stops at 8
+PASS  level 2 row 5 col 0 takes two hits
+PASS  one hit dents a two
+PASS  a dent scores nothing
+PASS  a mystery brick scores 15
+PASS  a mystery brick always drops a capsule
+PASS  steel never breaks
+PASS  steel turns the ball
+PASS  wide lasts 15 s
+PASS  wide grows the paddle half again
+PASS  a power runs out
+PASS  the paddle shrinks back when wide runs out
+PASS  multi makes three balls
+PASS  multi launches a waiting ball
+PASS  multi splits the balls apart
+PASS  multi stops at the pool's eight balls
+PASS  slow lasts 10 s
+PASS  slow eases the ball to 0.6 of its speed
+PASS  slow eases level 6's ball only to 0.85
+PASS  catch lasts 15 s
+PASS  catch holds the ball on the paddle
+PASS  a caught ball keeps where it landed
+PASS  a caught ball leaves at its landing angle
+PASS  fire lasts 8 s
+PASS  a fireball breaks every brick in its path
+PASS  a fireball carries on through
+PASS  a fireball reaches past the wall
+PASS  a fireball leaves steel standing
+PASS  a fireball passes through steel
+PASS  a life capsule adds a life
+PASS  lives stop at 9
+PASS  a caught capsule takes effect
+PASS  a caught capsule scores 50
+PASS  a caught capsule is gone
+PASS  a missed capsule does nothing
+PASS  a missed capsule falls away
+PASS  capsules stop at the pool's eight
+PASS  a lost ball costs a life
+PASS  a lost life serves a new ball on the paddle
+PASS  a lost life ends the combo
+PASS  a lost life ends the powers
+PASS  a lost life keeps playing
+PASS  one ball left in play keeps the life
+PASS  the last life lost is game over
+PASS  game over leaves no lives
+PASS  confirm before the dismiss delay is ignored
+PASS  confirm after the delay answers game over
+PASS  the answer sticks
+PASS  a finished game no longer steps
+PASS  the time bonus: (60 + 20L - s) x 10L
+PASS  a slow clear earns no time bonus
+PASS  level 6's fastest time bonus
+PASS  the lives bonus: lives x 250L
+PASS  the last brick clears the level
+PASS  the clear scores the time bonus
+PASS  the clear scores the lives bonus
+PASS  the clear takes the balls off
+PASS  the tally counts up
+PASS  the score counts up with it
+PASS  the tally lands on the total
+PASS  the clear holds after the tally
+PASS  the clear moves on to the next level
+PASS  the next level opens on its intro
+PASS  the score carries over
+PASS  the lives carry over
+PASS  the next level serves faster
+PASS  confirm skips the tally
+PASS  a skipped tally still pays in full
+PASS  clearing level 6 wins
+PASS  the win sets off fireworks
+PASS  confirm before the win's delay is ignored
+PASS  confirm after the delay answers won
+PASS  the win sticks
+PASS  level 6's wall ends below its sixth row
+PASS  the wall waits for the serve
+PASS  the wall holds for 12 s
+PASS  the wall advances a row after 12 s
+PASS  the wall eases down a row
+PASS  the wall's bottom comes with it
+PASS  the bricks come with it
+PASS  the wall reaching the paddle is game over
+PASS  the wall takes every life
+PASS  no other level's wall moves
+PASS  p pauses
+PASS  a paused ball stays put
+PASS  a pause stops the clock
+PASS  a pause answers playing
+PASS  another key leaves the pause on
+PASS  p again resumes
+PASS  escape pauses
+PASS  space resumes
+PASS  Q pauses too
+PASS  q from the pause quits
+PASS  quit sticks
+PASS  escape from the pause quits
+PASS  the brick breaks before the pause
+PASS  a pause draws the same frame at any alpha
+PASS  a pause draws the same frame step after step
+PASS  a held D moves the paddle right
+PASS  alpha 0 draws the ball where it was
+PASS  alpha 1 draws the ball where it is
+PASS  alpha 0.5 draws the ball midway across
+PASS  alpha 0.5 draws the ball midway down
+PASS  a ball out of range draws at 0
+PASS  a frame lights the screen
+PASS  the paddle is drawn
+PASS  a brick is drawn
+PASS  alpha moves what is drawn
+PASS  low effects drop the glow
+PASS  high effects light the ball's surroundings
+PASS  low effects leave the ball's surroundings bare
+PASS  low effects still draw the ball
+PASS  every scene draws at every size
+PASS  the HUD's text has width
+PASS  no text is no width
+PASS  the compact intro is two lines apart
+PASS  the compact pause is three lines apart
+PASS  the tally is up
+PASS  the compact tally is two lines apart
+PASS  the compact last screen is three lines apart
+PASS  a perfect player clears level 1
+PASS  a perfect player wins
+PASS  the pools never grow
+break-game: 211 passed, 0 failed, 0 skipped
