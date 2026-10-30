@@ -1,6 +1,6 @@
 {
   "name": "nish",
-  "version": "0.27.0",
+  "version": "0.27.2",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
@@ -39,7 +39,6 @@
     "!scripts/rebuild-compare.sh",
     "!scripts/ddc-chain.sh",
     "!scripts/nish-runner-parallel.mjs",
-    "!scripts/pin-platform-packages.mjs",
     "std",
     "README.md",
     "LICENSE",
@@ -94,10 +93,10 @@
     "nish"
   ],
   "optionalDependencies": {
-    "@amritk/nish-x86_64-linux": "0.26.0",
-    "@amritk/nish-aarch64-linux": "0.26.0",
-    "@amritk/nish-aarch64-darwin": "0.26.0",
-    "@amritk/nish-x86_64-darwin": "0.26.0"
+    "@amritk/nish-x86_64-linux": "0.27.2",
+    "@amritk/nish-aarch64-linux": "0.27.2",
+    "@amritk/nish-aarch64-darwin": "0.27.2",
+    "@amritk/nish-x86_64-darwin": "0.27.2"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

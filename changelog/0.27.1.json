@@ -1,0 +1,49 @@
+{
+  "version": "0.27.1",
+  "date": "2026-10-30",
+  "tag": "v0.27.1",
+  "range": {
+    "from": "v0.27.0",
+    "to": "9ed9675e"
+  },
+  "entries": [
+    {
+      "id": "keep-package-modules-in-the-program-s-own",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "keep package modules in the program's own golden",
+      "body": "tests/self/goldens.js split a program's checker dump only on plain and\nentry module headers, so a `module … [package …]` block was glued onto\nwhichever module was dumped before it, and a src/ module imported after\nnish/ package modules dumped differently under two programs. A package\nheader now closes the current module, and the package's lines are kept in\nthe program's own golden under its entry line, compared per program: package\nmodules carry each program's instantiations, so they cannot be deduplicated.\nThe regenerated goldens are a pure reorder; the sorted lines are identical.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/self/goldens"
+      ],
+      "commits": [
+        "1391cf8"
+      ],
+      "pr": 1060,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "install-the-main-package-with-its-pins-stamped",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "install the main package with its pins stamped, as release.yml publishes it",
+      "body": "The package section packed the checkout as it stands and installed that. Since #1039 the release commit moves only `version`, and the platform pins follow in release.yml's lockfile pull request, so between the two `main` is nish@0.27.0 pinning @amritk/nish-x86_64-linux@0.26.0. The staged platform package (0.27.0) did not satisfy that pin, npm fetched the published 0.26.0 and nested it under nish/node_modules/, and the launcher ran it: seven checks failed, CI on main went red at the 0.27.0 release commit, and the release's own CI gate held back the publish.\n\nThe section now unpacks the tarball, pins it to its own version with scripts/pin-platform-packages.mjs exactly as the release job does before `npm pack`, and packs it again, so `files` still decides what ships and the checkout is never edited. A new check asserts nothing is nested under the installed main package, which names this regression directly instead of through its seven symptoms.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "node tests/run.js package"
+      ],
+      "commits": [
+        "9ed9675"
+      ],
+      "pr": 1070,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    }
+  ]
+}
