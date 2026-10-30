@@ -168,7 +168,8 @@ response body. It is opt-in: nothing is compressed unless your program asks,
 and an `HttpCompressor` declines a body shorter than its `minLength`, longer
 than its `maxLength`, or that gzip would not make smaller. On HTTP/1.1 one call
 does all of it — `Content-Encoding: gzip`, the compressed `Content-Length`,
-and `Vary: Accept-Encoding` so that caches keep the two forms apart:
+and `Vary: Accept-Encoding` on every response whose form depended on the
+request, so that caches keep the two forms apart:
 
 ```ts
 const enc = new HttpCompressor(DEFLATE_FAST, 1024, 65536); // once per thread
@@ -210,6 +211,74 @@ export const main = (): number => {
   return 0;
 };
 ```
+
+### Compressing only when it pays
+
+Compressing costs CPU on every response, and a body that already fits in one
+TCP segment arrives no sooner gzipped. An `HttpCompressor` sends the
+compressed form only when it is worth it:
+
+- `minLength`: shorter bodies are sent as they are, uncompressed.
+- `minSaving` and `minSavingPercent`: the compressed body must be at least
+  that many bytes, and that percentage, smaller. By default any saving counts.
+- `segmentMode`: `respondEncoded` sends the compressed response only when,
+  head included, it takes fewer TCP segments than the plain one. Segments
+  are `mss` bytes: the connection's own `mss` if you set it, otherwise the
+  compressor's, which defaults to `HTTP_DEFAULT_MSS` (1448, an Ethernet
+  path's).
+
+When a body does not pay, it goes out as it is and the compressed bytes are
+dropped. After each call, `decision` says what happened and why:
+`HTTP_COMPRESS_SENT`, `HTTP_COMPRESS_NOT_ACCEPTED`, `HTTP_COMPRESS_TOO_SMALL`,
+`HTTP_COMPRESS_TOO_LARGE`, `HTTP_COMPRESS_TOO_LITTLE_SAVED` or
+`HTTP_COMPRESS_NO_FEWER_SEGMENTS`. Count these to see what compression
+does for your traffic.
+
+Bodies up to `fixedLimit` (16 KB) go through a small-body encoder: one
+fixed-Huffman block, no state kept between calls. On 0.5 to 16 KB of JSON
+it runs two to four times faster than `DEFLATE_FAST`, and its output is
+about a third larger. Larger bodies use the level you gave. To force one
+encoder for every size, set `encoder` to `HTTP_ENCODER_FIXED` or
+`HTTP_ENCODER_LEVEL`.
+
+```ts nish:ok
+import { DEFLATE_FAST } from "nish/compress/deflate";
+import {
+  HTTP_CODING_GZIP,
+  HTTP_COMPRESS_SENT,
+  HTTP_COMPRESS_TOO_LITTLE_SAVED,
+  HttpCompressor,
+} from "nish/net/http-compress";
+
+export const main = (): number => {
+  const enc = new HttpCompressor(DEFLATE_FAST, 0, 65536);
+  enc.minSavingPercent = 20;
+  const item = '{"id":1,"ok":true},';
+  const json: u8[] = [];
+  for (let i: i32 = 0; i < 100; i++) {
+    for (let k: i32 = 0; k < toI32(item.length); k++) {
+      json.push(toU8(item.charCodeAt(k)));
+    }
+  }
+  const noise: u8[] = [];
+  let x: u32 = toU32(1);
+  for (let i: i32 = 0; i < 1000; i++) {
+    x = x * toU32(1103515245) + toU32(12345);
+    noise.push(toU8(x >> toU32(24)));
+  }
+  const m: i32 = enc.compress(HTTP_CODING_GZIP, json, 0, toI32(json.length));
+  console.log(enc.decision === HTTP_COMPRESS_SENT ? `json: ${toI32(json.length)} -> ${m}` : "json: as it is");
+  enc.compress(HTTP_CODING_GZIP, noise, 0, toI32(noise.length));
+  console.log(enc.decision === HTTP_COMPRESS_TOO_LITTLE_SAVED ? "noise: as it is" : "noise: gzip");
+  return 0;
+};
+```
+
+`Vary: Accept-Encoding` goes on a response that was compressed, and on one
+sent as it is because the request did not accept gzip. A body that is too
+small, too large or did not pay is sent the same to every client, so it
+carries no `Vary`. A request that refuses identity (`identity;q=0`) but
+accepts gzip is sent gzip whatever the policy says.
 
 The negotiation follows RFC 9110: q-values (`gzip;q=0` refuses gzip), `*`,
 `x-gzip`, and `identity`, which is acceptable unless the field gives it q=0. A

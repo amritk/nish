@@ -2619,7 +2619,8 @@ negative `DEFLATE_ERR_*` / `GZIP_ERR_*` code for any malformed stream, so test
 it before reading `out`. `GzipWriter` and `GzipReader` stream. On HTTP/1.1,
 `conn.respondEncoded(status, names, values, body, off, len, enc,
 conn.acceptEncoding())` with an `HttpCompressor` from `nish/net/http-compress`
-negotiates, compresses and sets the fields. Do not compress a secret beside
+negotiates, compresses when it pays (`minLength`, `minSavingPercent`,
+`segmentMode`; `enc.decision` says why not) and sets the fields. Do not compress a secret beside
 text the client chose (BREACH). (No block, as for `nish/text`;
 `tests/link/std_compress` is its program, and the user guide's
 [compression page](guide/using-nish/compression.md) its walk-through.)
