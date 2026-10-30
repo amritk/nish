@@ -1,0 +1,176 @@
+PASS  kinds: the document parses
+PASS  kinds: the root runs from its brace to its brace
+PASS  kinds: a string with escapes, quotes and escapes as written
+PASS  kinds: true
+PASS  kinds: false
+PASS  kinds: null
+PASS  kinds: a number as written
+PASS  kinds: an array, blanks inside it included
+PASS  kinds: an element
+PASS  kinds: an empty array
+PASS  kinds: an empty object
+PASS  kinds: start is a byte offset
+PASS  kinds: end is one past the last byte
+PASS  keys: every key, quotes included
+PASS  keys: keyStart is the opening quote
+PASS  keys: keyEnd is one past the closing quote
+PASS  keys: an array's member has no key range
+PASS  keys: nor a key end
+PASS  keys: a member past the last has none
+PASS  keys: nor a negative one
+PASS  kinds: a handle that names nothing has no start
+PASS  kinds: nor an end
+PASS  nesting: the document parses
+PASS  nesting: the outer object
+PASS  nesting: an array inside it
+PASS  nesting: an object in the array
+PASS  nesting: the deepest object
+PASS  nesting: the deepest key
+PASS  nesting: the deepest value
+PASS  nesting: a container's key after its members' keys
+PASS  nesting: the key after a nested container
+PASS  nesting: the value after a nested container
+PASS  nesting: the last member's key
+PASS  nesting: the last member
+PASS  window: the window parses
+PASS  window: the root starts at its offset in the array
+PASS  window: the root
+PASS  window: a key
+PASS  window: a value
+PASS  duplicates: last parses
+PASS  duplicates: one member per key
+PASS  duplicates: the member keeps its first key's range
+PASS  duplicates: and holds the last value, with its range
+PASS  duplicates: the next member keeps its own key
+PASS  duplicates: a wide object parses
+PASS  duplicates: sorted, the member keeps its first key
+PASS  duplicates: at the first key's offset
+PASS  duplicates: sorted, the last value with its range
+PASS  duplicates: sorted, the last member keeps its key
+PASS  duplicates: refused, the parse fails
+PASS  duplicates: errorAt is the repeated key
+PASS  duplicates: a value built on the old root's index has no range
+PASS  duplicates: refused, a wide object without a repeat parses
+PASS  duplicates: refused, every key keeps its range
+PASS  duplicates: refused, and every value
+PASS  off: a new document has no range array
+PASS  off: a slot-moving append on a plain document makes none
+PASS  off: the document parses
+PASS  off: start answers -1
+PASS  off: end answers -1
+PASS  off: keyStart answers -1
+PASS  off: keyEnd answers -1
+PASS  off: no range array is made
+PASS  off: setRange on a parsed value
+PASS  off: the value reads it back
+PASS  off: a value below it has none
+PASS  off: setKeyRange on a parsed key
+PASS  off: the key reads it back
+PASS  off: the key before it has none
+PASS  off: a range that ends before it starts is refused
+PASS  off: parseRanged after it ranges every value
+PASS  off: and parse after that keeps none
+PASS  off: nor any key
+PASS  off: setRange after that
+PASS  off: reads it back
+PASS  off: and not the ranged parse's ranges below it
+PASS  off: setKeyRange after that
+PASS  off: nor its key ranges
+PASS  reparse: the first document's ranges
+PASS  reparse: the second document parses
+PASS  reparse: the second document's root
+PASS  reparse: its key
+PASS  reparse: its value
+PASS  reparse: a handle from the first document has no range
+PASS  reparse: a value built past the second document has no range
+PASS  reparse: through parse, the document parses
+PASS  reparse: through parse, a reparse answers -1
+PASS  reparse: through parse, for keys too
+PASS  reparse: ranged again, the ranges are back
+PASS  reparse: a failed parse fails
+PASS  reparse: and clears what it built
+PASS  reparse: and leaves no value range behind
+PASS  reparse: a member set after it
+PASS  reparse: nor a key range
+PASS  wrap: the ranged parse
+PASS  wrap: the generation wraps to 1
+PASS  wrap: a plain parse lands on the ranged parse's generation
+PASS  wrap: its values have no range
+PASS  wrap: nor its keys
+PASS  wrap: a ranged parse on the last generation
+PASS  wrap: the wrap forgets the stamp
+PASS  wrap: a setter right after the wrap
+PASS  wrap: reads it back
+PASS  wrap: a ranged parse after the wrap
+PASS  wrap: ranges its keys
+PASS  wrap: and its values
+PASS  builders: every new value has no range
+PASS  builders: nor the new object
+PASS  builders: a new key has no range
+PASS  builders: nor an end
+PASS  builders: setRange
+PASS  builders: start reads it back
+PASS  builders: end reads it back
+PASS  builders: an empty range is one
+PASS  builders: setKeyRange
+PASS  builders: keyStart and keyEnd read it back
+PASS  builders: another key keeps none
+PASS  builders: setRange on nothing
+PASS  builders: setRange before 0
+PASS  builders: setRange ending before it starts
+PASS  builders: setKeyRange on an array
+PASS  builders: setKeyRange past the last member
+PASS  builders: setKeyRange on nothing
+PASS  builders: setKeyRange before 0
+PASS  builders: setKeyRange ending before it starts
+PASS  builders: set over an existing key
+PASS  builders: the member keeps its key range
+PASS  builders: and has the new value's range
+PASS  builders: the old value keeps its own
+PASS  builders: a push onto an array
+PASS  builders: the pushed value has no range
+PASS  growth: the document parses
+PASS  growth: set of a new key
+PASS  growth: and of another, past the first growth's room
+PASS  growth: the parsed keys keep their ranges after the move
+PASS  growth: the added keys have none
+PASS  growth: the last added key has none
+PASS  growth: a range set on an added key
+PASS  growth: survives the next move
+PASS  growth: reads back after it
+PASS  growth: a parsed value keeps its range
+PASS  growth: after clear, a new value has no range
+PASS  growth: and takes one
+PASS  growth: and reads it back
+PASS  parsed edits: the document parses
+PASS  parsed edits: set over a parsed key
+PASS  parsed edits: the key keeps its parsed range
+PASS  parsed edits: the new value has none
+PASS  parsed edits: the replaced value keeps its own
+PASS  parsed edits: set again, with a value that has a range
+PASS  parsed edits: the member reads that range
+PASS  parsed edits: and still its parsed key
+PASS  parsed edits: a push onto a parsed array
+PASS  parsed edits: the parsed element keeps its range
+PASS  parsed edits: the pushed one has none
+PASS  parsed edits: a longer document parses
+PASS  parsed edits: then a shorter one
+PASS  parsed edits: a value built on an index the longer one ranged has none
+PASS  parsed edits: a set of a new key
+PASS  parsed edits: on a slot the longer one ranged has none
+PASS  parsed edits: a handle from the longer document is not adopted
+PASS  parsed edits: and adds no member
+PASS  limits: parse
+PASS  limits: parseRanged answers the same, and ranges its root
+PASS  moves: a wide document parses
+PASS  moves: the document parses
+PASS  moves: set of a new key on the first container
+PASS  moves: and on the second
+PASS  moves: the first container's parsed key keeps its range
+PASS  moves: its added key has none
+PASS  moves: the second container's parsed key keeps its range
+PASS  moves: its added key has none
+PASS  moves: a third key on the first container, in the room it had
+PASS  moves: has no range, though the wide document ranged that slot
+PASS  moves: and the root's keys keep theirs
+std/json-value ranges: 175 passed, 0 failed, 0 skipped

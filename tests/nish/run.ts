@@ -490,7 +490,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   // arrays, number formatting, the panics), the syscall wrappers, the host
   // calls (the wall clock, entropy, file times, signals), the sockets of
   // `nish:net`, the byte searches that read a vector at a time, AES-GCM on
-  // the CPU's AES instructions, the stdin and terminal calls of `nish:term`
+  // the CPU's AES instructions, CRC-32 on its CRC instructions, the stdin and terminal calls of `nish:term`
   // and the byte-class runs of `nish/bytes`, split apart so each carries its own size budget. A direct `clang` line names them; only `scripts/build.sh` pairs
   // them for its callers.
   link.push("runtime/runtime.c");
@@ -499,6 +499,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   link.push("runtime/runtime-net.c");
   link.push("runtime/runtime-simd.c");
   link.push("runtime/runtime-aes.c");
+  link.push("runtime/runtime-checksum.c");
   link.push("runtime/runtime-term.c");
   link.push("runtime/runtime-bytes.c");
   link.push("-lm");
