@@ -473,7 +473,7 @@ export const runSuite = (): i32 => {
     rep("\\p{L}", toI32(200)),
     "regex: property escapes and case folding add more than 100000 ranges at byte 735"
   )
-  t.ok("property escapes of 100000 ranges compile", regexCompile(rep("\\p{L}", toI32(100)), "").isOk())
+  t.ok("property escapes just under 100000 ranges compile", regexCompile(rep("\\p{L}", toI32(147)), "").isOk())
   // \p{L} first, so that the 49th class's folding rather than its escape passes the cap.
   const folding = regexCompile(`\\p{L}${rep("[\\p{Lu}]", toI32(60))}`, "i")
   if (folding.isErr()) {

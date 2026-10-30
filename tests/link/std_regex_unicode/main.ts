@@ -25,14 +25,18 @@ const utf8 = (c: i32): string => {
 
 /**
  * The generator's sample text: every code point up to U+323AF and from
- * U+E0000 to U+E01EF, and one in 251 of the rest, less the surrogates and
- * the six whose folding crosses ASCII.
+ * U+E0000 to U+E01EF, one in 251 of the rest and the plane edges in `edges`,
+ * less the surrogates and the six whose folding crosses ASCII.
  */
 const sample = (): string => {
+  const edges: i32[] = [
+    0x323b0, 0x3fffe, 0x3ffff, 0x40000, 0xdfffe, 0xdffff, 0xe01f0, 0xefffe, 0xeffff, 0xf0000, 0xffffd, 0xffffe,
+    0xfffff, 0x100000, 0x10fffd, 0x10fffe, 0x10ffff,
+  ]
   const parts: string[] = []
   let c: i32 = 0
   while (c <= 1114111) {
-    const dense: boolean = c <= 205743 || (c >= 917504 && c <= 917999)
+    const dense: boolean = c <= 205743 || (c >= 917504 && c <= 917999) || edges.indexOf(c) >= 0
     const skip: boolean =
       (c >= 55296 && c <= 57343) || c === 83 || c === 115 || c === 75 || c === 107 || c === 383 || c === 8490
     if ((dense || c % 251 === 0) && !skip) {

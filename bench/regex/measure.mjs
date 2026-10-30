@@ -38,10 +38,15 @@ const CASES = [
   "group",
   "anchored",
   "icase-ascii",
+  "icase-class",
   "exec",
   "property",
   "script",
   "icase-unicode",
+  "compile-class",
+  "compile-icase-class",
+  "compile-nonspace-icase",
+  "compile-many",
 ]
 const cases = only === null ? CASES : only.split(",")
 // The cases a build from before the Unicode features cannot run: it refuses
@@ -78,9 +83,18 @@ if (beforeCompiler !== null) {
   impls.push({ label: "before", exe: b.app }, { label: "before-copy", exe: b.copy })
 }
 
-// The program prints its checksum, then ns per pass over the 64 KB corpus.
+// A `compile-` pass compiles a few patterns and takes microseconds, so it runs
+// this many times more passes than a match case for a timer-worthy run.
+const COMPILE_PASSES = 50
+const passes = (name) =>
+  name.startsWith("compile-") ? String(Number(iterations) * COMPILE_PASSES) : iterations
+
+// The program prints its checksum, then ns per pass: over the 64 KB corpus, or
+// for a `compile-` case, of compiling its patterns once.
 const run = (exe, name) => {
-  const [checksum, timing] = execFileSync(exe, [name, iterations], { encoding: "utf8" }).trim().split("\n")
+  const [checksum, timing] = execFileSync(exe, [name, passes(name)], { encoding: "utf8" })
+    .trim()
+    .split("\n")
   return { checksum, ns: Number.parseFloat(timing) }
 }
 
@@ -106,7 +120,7 @@ const min = (xs) => Math.min(...xs)
 const pct = (x, y) => `${((Math.abs(x - y) / y) * 100).toFixed(1)}%`
 const us = (ns) => (ns / 1000).toFixed(1)
 const out = [
-  `${rounds} interleaved rounds of ${impls.length} binaries, ${iterations} passes over 64 KB per run`,
+  `${rounds} interleaved rounds of ${impls.length} binaries, ${iterations} passes over 64 KB per run (${passes("compile-")} compiles of a compile- case's patterns)`,
 ]
 cases.forEach((name, k) => {
   const t = times[k]

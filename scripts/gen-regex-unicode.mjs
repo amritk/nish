@@ -38,7 +38,11 @@
  * (U+212A) do not match `s` or `k`. An orbit left with fewer than two members
  * is dropped. It is a count, then per member, by code point, the gap since
  * the last member and the zigzag-coded step to the next member of its orbit,
- * the last member stepping back to the first.
+ * the last member stepping back to the first. **The fold runs**
+ * `REGEX_FOLD_SPANS` are the same code points as maximal runs, at a fixed
+ * width so `regexCompile` can binary-search them without reading the fold
+ * table: a class with no folding code point, or none in its gaps, such as
+ * `\S` under `i`, then never decodes it.
  *
  * **The oracle** `tests/link/std_regex_unicode/oracle.ts` is what this
  * Node's `RegExp` answers over the sample text the test builds: per property,
@@ -453,7 +457,23 @@ const tables = (db) => {
     fold += varint(c - prev) + varint(zigzag(next - c))
     prev = c
   }
-  return { index, data, fold }
+  // The folding code points as maximal runs, each end four base-32 digits.
+  const runs = []
+  for (const [c] of members) {
+    if (runs.length > 0 && runs[runs.length - 1][1] === c - 1) {
+      runs[runs.length - 1][1] = c
+    } else {
+      runs.push([c, c])
+    }
+  }
+  const fixed = (v) => {
+    if (v >= 1 << 20) {
+      throw new Error(`gen-regex-unicode: U+${v.toString(16)} needs more than four digits`)
+    }
+    return String.fromCharCode(...[15, 10, 5, 0].map((b) => DIGIT0 + ((v >>> b) & 31)))
+  }
+  const spans = runs.map(([lo, hi]) => fixed(lo) + fixed(hi)).join("")
+  return { index, data, fold, spans }
 }
 
 // ---- The region ----------------------------------------------------------------
@@ -473,6 +493,9 @@ const region = (t) =>
     "/** Simple case folding above ASCII: per member of an orbit, its gap and the zigzag step to the next member. */",
     "const REGEX_FOLD_DATA: string =",
     `  ${literal(t.fold)}`,
+    "/** The code points `REGEX_FOLD_DATA` folds, as runs: per run its first and last, four base-32 digits each. */",
+    "const REGEX_FOLD_SPANS: string =",
+    `  ${literal(t.spans)}`,
     END,
   ].join("\n")
 
@@ -480,16 +503,22 @@ const region = (t) =>
 
 /**
  * The sample text's code points, as the test builds them: every code point
- * up to U+323AF and from U+E0000 to U+E01EF, and one in 251 of the rest, less
- * the surrogates and the six whose folding crosses ASCII (`s`, `S`, `k`, `K`,
- * ſ and the Kelvin sign).
+ * up to U+323AF and from U+E0000 to U+E01EF, one in 251 of the rest and the
+ * plane edges in `EDGES`, less the surrogates and the six whose folding
+ * crosses ASCII (`s`, `S`, `k`, `K`, ſ and the Kelvin sign).
  */
 const SKIP = new Set([0x53, 0x73, 0x4b, 0x6b, 0x17f, 0x212a])
+// The ends of the unassigned run after plane 3, of planes 4 to 13, of plane
+// 14's tags and of the private-use planes 15 and 16, with their noncharacters.
+const EDGES = new Set([
+  0x323b0, 0x3fffe, 0x3ffff, 0x40000, 0xdfffe, 0xdffff, 0xe01f0, 0xefffe, 0xeffff, 0xf0000, 0xffffd, 0xffffe,
+  0xfffff, 0x100000, 0x10fffd, 0x10fffe, 0x10ffff,
+])
 const sample = () => {
   const out = []
   for (let c = 0; c <= MAX_CP; c++) {
     const dense = c <= 0x323af || (c >= 0xe0000 && c <= 0xe01ef)
-    if ((dense || c % 251 === 0) && !(c >= 0xd800 && c <= 0xdfff) && !SKIP.has(c)) {
+    if ((dense || c % 251 === 0 || EDGES.has(c)) && !(c >= 0xd800 && c <= 0xdfff) && !SKIP.has(c)) {
       out.push(c)
     }
   }
@@ -548,7 +577,21 @@ const oracle = (db, cps) => {
   }
   // Under `i`, a sample of property and range classes, and each folded code point.
   const folds = []
-  const iClasses = ["\\p{Lu}", "\\p{Ll}", "\\P{Ll}", "\\p{Script=Greek}", "[\\u{100}-\\u{17e}]", "[^\\p{Lt}]"]
+  const iClasses = [
+    "\\p{Lu}",
+    "\\p{Ll}",
+    "\\P{Ll}",
+    "\\P{Lu}",
+    "[^\\P{Ll}]",
+    "[^\\P{Lu}]",
+    "\\p{Script=Greek}",
+    "[\\u{100}-\\u{17e}]",
+    "[^\\p{Lt}]",
+    "[\\u{80}-\\u{10ffff}]",
+    "\\S",
+    "\\W",
+    "\\D",
+  ]
   for (const cls of iClasses) {
     const re = new RegExp(`^${cls}$`, "iu")
     const [count, digest] = digestRuns(cps, (c) => re.test(String.fromCodePoint(c)))
@@ -703,13 +746,13 @@ if (process.argv.includes("--check")) {
     process.exit(1)
   }
   console.log(
-    `gen-regex-unicode: the tables match Unicode ${UNICODE_VERSION} and this Node's RegExp (${built.index.length + built.data.length + built.fold.length} bytes)`
+    `gen-regex-unicode: the tables match Unicode ${UNICODE_VERSION} and this Node's RegExp (${built.index.length + built.data.length + built.fold.length + built.spans.length} bytes)`
   )
 } else {
   fs.writeFileSync(target, next)
   fs.mkdirSync(path.dirname(oracleFile), { recursive: true })
   fs.writeFileSync(oracleFile, nextOracle)
   console.log(
-    `gen-regex-unicode: names ${built.index.length} bytes, ranges ${built.data.length}, folds ${built.fold.length}; wrote std/regex.ts and ${path.relative(root, oracleFile)}`
+    `gen-regex-unicode: names ${built.index.length} bytes, ranges ${built.data.length}, folds ${built.fold.length}, fold runs ${built.spans.length}; wrote std/regex.ts and ${path.relative(root, oracleFile)}`
   )
 }

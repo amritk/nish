@@ -261,7 +261,15 @@ JavaScript's names from Unicode 16.0: a General_Category value (`\p{L}`,
 (`\p{Alphabetic}`, `\p{Emoji}`, `\p{White_Space}`, `\p{Any}`,
 `\p{Assigned}`). They work inside classes too, as in `[\p{L}\p{Nd}_]+`. A
 name JavaScript does not know is refused: `regex: invalid property name at
-byte 0`, or `invalid property value` for `\p{sc=Lu}`.
+byte 0`, or `invalid property value` for `\p{sc=Lu}`. A property escape
+cannot end a range in a class: `[\p{L}-z]` is refused (`regex: invalid class
+range at byte 1`), as it is in JavaScript.
+
+The property and folding tables add about 80 KB to every program that
+imports `nish/regex`, whether or not it uses `\p{…}` or `i`: a pattern is
+read at run time, so the tables cannot be left out. Compiling a pattern
+whose `i` class or character folds a letter outside ASCII reads the folding
+table once for that pattern, about 50 µs; other patterns never read it.
 
 Matching never backtracks, so a pattern cannot make one search slow:
 `(a+)+$` against a long run of `a`s takes as long as `a+$`. The price is
@@ -275,6 +283,11 @@ ranges to its classes. Offsets are UTF-8 bytes, as `s.length` is, and `\w`,
 letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
 `Σ` and `ς`. One difference from JavaScript: no letter outside ASCII folds to
 one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`.
+Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in JavaScript:
+`\P{Lu}` is everything outside `\p{Lu}`, closed under folding, so it
+matches `A` through `a`, while `[^\p{Lu}]` negates the folded class
+`[\p{Lu}]`, which holds every cased letter, so it matches neither `A` nor
+`a`.
 
 Finding every match is one search per match, so `findAll`, `count`,
 `replaceAll` and `split` are quadratic when a long branch is preferred to a

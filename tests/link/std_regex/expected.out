@@ -307,7 +307,7 @@ PASS  a{0} repeated 1000^3 times compiles
 PASS  a class of 10001 ranges
 PASS  a class of 10000 ranges compiles
 PASS  property escapes past 100000 ranges
-PASS  property escapes of 100000 ranges compile
+PASS  property escapes just under 100000 ranges compile
 PASS  case folding past 100000 ranges
 PASS  1025 groups
 PASS  500 groups compile
