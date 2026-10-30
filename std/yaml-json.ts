@@ -182,6 +182,9 @@ export class YamlJsonLoader {
   doc: JsonDocument
   /** Internal: per node, the values it expands to (`0` not counted yet, `-1` being counted). */
   sizes: i32[]
+  /** Internal: the nodes the last count set a size on, the first `countedTop` of them: all a count clears. */
+  counted: i32[]
+  countedTop: i32 = 0
   /** Internal: the count's own stack of nodes. */
   pending: i32[]
   /** Internal: the most values the document may hold; a size saturates one past it. */
@@ -214,6 +217,7 @@ export class YamlJsonLoader {
     this.stream = parseYaml("")
     this.doc = new JsonDocument(new JsonLimits())
     this.sizes = []
+    this.counted = []
     this.pending = []
     this.entryKeys = []
     this.entryPairs = []
@@ -292,7 +296,8 @@ export class YamlJsonLoader {
    * Internal: how many values node `root` expands to, saturating at `cap + 1`.
    * Each node is counted once and its count kept, on a stack of its own
    * rather than by recursion, because a chain of aliases can be as long as
-   * the text. Sets `bigAlias`.
+   * the text. Sets `bigAlias`. Clears only the sizes the last count set, so a
+   * stream of many documents is not cleared whole for each.
    */
   count(root: i32, cap: i32): i32 {
     const stream: YamlStream = this.stream
@@ -301,9 +306,14 @@ export class YamlJsonLoader {
     while (toI32(sizes.length) < nodes) {
       sizes.push(0)
     }
-    for (let i: i32 = 0; i < nodes && i < toI32(sizes.length); i += 1) {
-      sizes[i] = 0
+    const counted: i32[] = this.counted
+    for (let i: i32 = 0; i < this.countedTop && i < toI32(counted.length); i += 1) {
+      const c: i32 = counted[i]
+      if (c >= 0 && c < toI32(sizes.length)) {
+        sizes[c] = 0
+      }
     }
+    this.countedTop = 0
     this.cap = cap
     this.bigAlias = -1
     this.bigSize = 0
@@ -318,6 +328,12 @@ export class YamlJsonLoader {
       } else if (sizes[n] === 0) {
         // First visit: count the nodes it is made of first.
         sizes[n] = -1
+        if (this.countedTop < toI32(counted.length)) {
+          counted[this.countedTop] = n
+        } else {
+          counted.push(n)
+        }
+        this.countedTop += 1
         top = this.pushParts(top, n)
       } else {
         const size: i32 = this.sizeOf(n)
