@@ -11047,6 +11047,53 @@ if (!only || "sandbox".includes(only)) {
         said(to)
       )
 
+      // The Unix-domain calls (tests/link/net_unix_sandbox): granted `net`
+      // alone, abstract names work and a pathname bind is -13, since Landlock
+      // counts making the socket file as a write; granted `fs.write` too, it
+      // binds. On ABI 6 a connect to an abstract listener outside the sandbox
+      // is -1, the scope's EPERM. The listener outside is the same fixture
+      // built without the sandbox, waiting in `pollWait` until it is killed.
+      const unixDir = path.join(linkDir, "net_unix_sandbox")
+      const unixBuild = (name, flags) => {
+        const ll = path.join(dir, `${name}.ll`)
+        const exe = path.join(dir, name)
+        const c = spawnSync(NISH, [path.join(unixDir, `${name.split("-")[0]}.ts`), ...flags, "-o", ll], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const l = c.status === 0 ? linkNative(exe, ll) : c
+        if (l.status !== 0) check(`sandbox: net_unix_sandbox/${name} compiles and links`, false, shown(l))
+        return l.status === 0 ? exe : null
+      }
+      const serveExe = unixBuild("net-plain", [])
+      const server = serveExe !== null ? spawn(serveExe, ["serve"], { stdio: "ignore" }) : null
+      const outside = "@nish-net-unix-sandbox-outside"
+      for (let k = 0; k < 200 && server !== null; k++) {
+        if (fs.readFileSync("/proc/net/unix", "utf8").includes(outside)) break
+        spawnSync("sleep", ["0.05"])
+      }
+      const unixNet = run(unixBuild("net-sandbox", ["--sandbox"]), ["probe"])
+      if (server !== null) server.kill()
+      check(
+        `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13${abi >= 6 ? ", and an abstract listener outside is -1" : ""}`,
+        unixNet !== null &&
+          unixNet.status === 0 &&
+          (abi >= 6
+            ? unixNet.stdout === "abstract true true\npathname -13\noutside -1\n"
+            : /^abstract true true\npathname -13\noutside \d+\n$/.test(unixNet.stdout)) &&
+          !fs.existsSync(path.join(W, "net.sock")),
+        said(unixNet)
+      )
+      const unixWrite = run(unixBuild("write-sandbox", ["--sandbox"]), [])
+      check(
+        "sandbox: granted net and fs.write, a pathname Unix listener binds and is unlinked",
+        unixWrite !== null &&
+          unixWrite.status === 0 &&
+          unixWrite.stdout === "pathname true true\nunlink 0\n" &&
+          !fs.existsSync(path.join(W, "write.sock")),
+        said(unixWrite)
+      )
+
       // What main is granted runs the same: a file written and read back, a
       // child and the CPU count, with and without the sandbox and the pool.
       const grantedDir = (name) => {
