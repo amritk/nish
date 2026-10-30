@@ -375,18 +375,18 @@ export class HttpCompressor {
   readonly minLength: i32
   readonly maxLength: i32
   /**
-   * Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which
-   * a cache needs whenever the same resource may be sent either way. On by
-   * default; turn it off when the program sets its own `Vary`.
-   */
-  vary: boolean
-  /**
    * The least a compressed body must save to be sent: `minSaving` bytes and
    * `minSavingPercent` percent of the body, whichever is more. 1 and 0 by
    * default (any saving at all); a value below those counts as them.
    */
   minSaving: i32
   minSavingPercent: i32
+  /**
+   * Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which
+   * a cache needs whenever the same resource may be sent either way. On by
+   * default; turn it off when the program sets its own `Vary`.
+   */
+  vary: boolean
   /**
    * Whether `respondEncoded` also sends the compressed response only when,
    * head included, it takes fewer TCP segments of `mss` bytes than the body
