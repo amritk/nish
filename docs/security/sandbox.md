@@ -173,7 +173,17 @@ recorded rather than counted.
   `ioctl` there; strict runs anyway, since a terminal already on fd 0 gives
   the same on every ABI (open question 12).
 - **The scopes below ABI 6.** Signals to the same uid and abstract Unix
-  sockets are not scoped; strict runs anyway (open question 8).
+  sockets are not scoped; strict runs anyway (open question 8). `nish:net`'s
+  `unixConnect` reaches abstract names, so below ABI 6 a sandboxed program
+  granted `net` can connect to an abstract listener outside the sandbox; from
+  ABI 6 that connect is -1 (`EPERM`), and its own abstract listeners still
+  work.
+- **A pathname Unix listener needs `fs.write`.** Landlock counts binding a
+  socket file as MAKE_SOCK, a write, so `unixListen` on a path under `net`
+  alone is -13 and leaves no file. The capability pass grants `net` for the
+  call and does not infer `fs.write`, since the path is data; a program that
+  listens on a path asks for both, or uses an abstract name. Pinned by the
+  two `sandbox: granted net …` checks in `tests/run.js`.
 - **Non-Linux.** Both symbols print `nish: --sandbox: this platform has no
   sandbox` and exit 126, so a `.ll` built for Linux and linked elsewhere
   refuses to run rather than run unconfined.

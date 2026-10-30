@@ -54,6 +54,13 @@ on every file beneath `/`, since a child has to load its program and
 libraries. So a program that reaches `process.spawn` can read any file the
 user can, even when its `main` does not reach `fs.read`.
 
+A Unix-domain listener on a path makes a socket file, which the kernel counts
+as a write: under `net` alone, `unixListen("app.sock", …)` answers -13 and
+makes nothing. Reaching `net` does not reach `fs.write` for you, because the
+path is data the compiler cannot see. Reach `fs.write` as well, or listen on
+an abstract name (`"@app"`), which makes no file
+([Unix sockets](unix-sockets.md)).
+
 A few things are refused whatever `main` reaches: attaching to, reading or
 writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
 and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls

@@ -2232,6 +2232,18 @@ beside it; any other id is `-22`. Linux drops quick-ACK mode on its own, so set
 it again after each response. The ids are not module constants: pass them
 directly. None
 exists on a wasm target, and under Node each throws.
+Unix-domain stream sockets: `unixListen(path, backlog, flags)` listens on a
+socket file left at 0600 (`unixListenMode(path, backlog, flags, mode)` for
+another mode), `unixConnect(path)` and `unixAccept(fd)` answer descriptors
+that `netRead`, `netWrite`, `netShutdown`, `netClose` and the loop take as
+they are, and `unixSocketPair(NET_UNIX_STREAM, fds)` fills `fds: i32[]` with
+two connected ends (`NET_UNIX_SEQPACKET` keeps message boundaries; Linux
+only, `-95` on Darwin). A path starting with `@` is Linux's abstract
+namespace and makes no file. A path that exists is `-98`; flag
+`NET_UNIX_UNLINK_STALE` first removes a socket file nobody listens on. A path
+past `sun_path` (107 bytes on Linux, 103 on Darwin) is `-36`. Under
+`--sandbox`, a listener on a path also needs `fs.write` (`-13` without it);
+an abstract name does not.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write
