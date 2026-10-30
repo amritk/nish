@@ -10949,6 +10949,42 @@ if (!only || "sandbox".includes(only)) {
         `${said(fIn)}\n--- outside\n${said(fOut)}`
       )
 
+      // A scope is the directory's real path, resolved at build time: a path
+      // through `..`, one relative to the compiler's working directory and a
+      // symbolic link to a directory each name the target itself, in the
+      // constant and in the rule, so a read through the link is granted.
+      const target = scopeDir("scope-target", "t.txt")
+      const targetReal = fs.realpathSync(target)
+      const targetConst = targetReal.replace(/\\/g, "\\5C").replace(/"/g, "\\22")
+      const link = path.join(W, "scope-link")
+      fs.symlinkSync(target, link)
+      for (const [form, scope] of [
+        ["`..`", path.join(inside, "..", "scope-target")],
+        ["relative", path.relative(root, target)],
+        ["symlinked", link],
+      ]) {
+        const name = `read-canon-${form.replace(/`/g, "").replace(".", "dot")}`
+        const exe = build(name, "read", ["--sandbox", "--allow", `ffi,fs.read=${scope}`])
+        const ll = exe === null ? "" : fs.readFileSync(path.join(dir, `${name}.ll`), "utf8")
+        const viaLink = run(exe, ["open", path.join(link, "t.txt")])
+        const direct = run(exe, ["open", path.join(targetReal, "t.txt")])
+        const beside = run(exe, ["open", insideFile])
+        check(
+          `sandbox: a ${form} fs.read=<dir> is its real path, in the IR and at run time`,
+          ll.includes(`c"${targetConst}\\00\\00"`) &&
+            viaLink !== null &&
+            viaLink.stdout === "open: ok\n" &&
+            direct !== null &&
+            direct.stdout === "open: ok\n" &&
+            beside !== null &&
+            beside.stdout === "open: EACCES\n",
+          `${scope}\n${ll
+            .split("\n")
+            .filter((l) => l.startsWith("@.sandbox"))
+            .join("\n")}\n--- through the link\n${said(viaLink)}\n--- the target\n${said(direct)}\n--- beside\n${said(beside)}`
+        )
+      }
+
       // A scope directory gone between the build and the run: strict refuses
       // naming it, best-effort names it once and grants nothing beneath it.
       const gone = scopeDir("scope-gone")

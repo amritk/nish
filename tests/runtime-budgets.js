@@ -541,14 +541,13 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * budget is the next 256-byte boundary above the measurement, as every ceiling here was
  * set.
  *
- * Raised by 241, to 2,545, for the `fs.read=<dir>` and `fs.write=<dir>` scopes (WP37
- * stage 2): one Landlock rule per scope directory, the strict refusal and best-effort
- * line for a directory gone since the build, and the metadata rows kept for a scoped
- * write. Measured 2,545 against 2,264 before it on 2026-10-30 with clang 18 on
- * linux-x64; the raise is the measured size and nothing more. Only a sandboxed build
- * links any of it.
+ * Raised to 2,560, the next 256-byte boundary, for the `fs.read=<dir>` and
+ * `fs.write=<dir>` scopes (WP37 stage 2): one Landlock rule per scope directory, the
+ * strict refusal and best-effort line for a directory gone since the build, and the
+ * metadata rows kept for a scoped write. Measured 2,545 against 2,264 before it on
+ * 2026-10-30 with clang 18 on linux-x64. Only a sandboxed build links any of it.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 2545
+const RUNTIME_SANDBOX_TEXT_BUDGET = 2560
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`

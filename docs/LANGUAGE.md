@@ -9421,7 +9421,9 @@ entry:
   `@.sandbox.read = private unnamed_addr constant [N x i8] c"/srv/data\00\00"`,
   passed as `nish_sandbox`'s third (`fs.read`) and fourth (`fs.write`)
   operand, `null` when `main` does not reach the capability. Landlock grants
-  the scoped access beneath each directory and nothing else; `chmod`,
+  the scoped access beneath each directory and nothing else, except that a
+  `main` reaching `process.spawn` keeps reading every file beneath `/`
+  (`READ_FILE`, so that `exec` can load a program), scope or not; `chmod`,
   `chown`, `utimensat`, `setxattr` and their siblings still answer `EPERM`
   inside an `fs.write` scope, since seccomp cannot read a path. A main that
   reaches `ffi` is widened by the policy's `net`, `fs.read`, `fs.write` and

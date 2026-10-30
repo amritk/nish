@@ -444,6 +444,8 @@ jobs:
         if: matrix.shard == 1
         run: |
           uname -r
+          printf '#include <stdio.h>\n#include <sys/syscall.h>\n#include <unistd.h>\nint main(void) { printf("Landlock ABI %%ld\\n", syscall(444, NULL, 0, 1)); return 0; }\n' \
+            | clang -x c - -o "$RUNNER_TEMP/landlock-abi" && "$RUNNER_TEMP/landlock-abi" || true
           grep -E '^SKIP  sandbox: .*Landlock' "$RUNNER_TEMP/test.log" || true
           grep -E '^PASS  sandbox: fs.read=<dir> reads inside and not outside' "$RUNNER_TEMP/test.log"
           grep -E '^PASS  sandbox: fs.write=<dir> creates inside and not outside' "$RUNNER_TEMP/test.log"

@@ -188,7 +188,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 | `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore, and the restore bytes | 2,048 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,825 (2026-10-24) |
-| `runtime/runtime-sandbox.c` | `--sandbox`: the capability drop, the Landlock ruleset and the seccomp filter `nish_sandbox` applies from `.preinit_array`, and `nish_sandbox_check`, with the `fs.read=<dir>` / `fs.write=<dir>` scope rules ([wp37](wp37-os-sandbox.md) stages 1 and 2, [security/sandbox.md](security/sandbox.md)) | 2,545 (`RUNTIME_SANDBOX_TEXT_BUDGET`) | 2,545 (2026-10-30) |
+| `runtime/runtime-sandbox.c` | `--sandbox`: the capability drop, the Landlock ruleset and the seccomp filter `nish_sandbox` applies from `.preinit_array`, and `nish_sandbox_check`, with the `fs.read=<dir>` / `fs.write=<dir>` scope rules ([wp37](wp37-os-sandbox.md) stages 1 and 2, [security/sandbox.md](security/sandbox.md)) | 2,560 (`RUNTIME_SANDBOX_TEXT_BUDGET`) | 2,545 (2026-10-30) |
 
 **How the ceilings moved.**
 
@@ -235,7 +235,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-29 | `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (#992): `runtime-os.c` 2,828 → 3,174, `nish_put_file_mode` 253, its two callers 12 each, `nish_mkdir_mode` 72 | os 3,328 |
 | 2026-10-29 | `spawnPiped`: `runtime-os.c` 3,174 → 4,450. `nish_spawn_piped` 1,082 (the poll loop that writes stdin while it drains both outputs, the 16 MiB cap and its kill, SIGPIPE blocked on the calling thread), `nish_pipe` 109 (`pipe2` with `O_CLOEXEC`, both ends moved off 0–2), and `nish_spawn_start` 284 → 365 for the three `dup2` actions and the check that each was recorded; the rest is the shared helpers' growth | os 4,608 |
 | 2026-10-30 | `runtime-checksum.c` (718), wp38 CRC: the PCLMULQDQ folding kernel 514, its byte tail 58, the resolver 121 and the entry point 25 | checksum 768 |
-| 2026-10-30 | the `fs.read=<dir>` / `fs.write=<dir>` scopes, wp37 stage 2: `runtime-sandbox.c` 2,264 → 2,545. One Landlock rule per scope directory (`nish_sb_rule`, `nish_sb_scope`), the strict refusal and the best-effort line for a directory gone since the build, and the root rule granting only what is granted whole. Raised in place to the measurement: the rules are built inside the ruleset this file already makes | sandbox 2,545 |
+| 2026-10-30 | the `fs.read=<dir>` / `fs.write=<dir>` scopes, wp37 stage 2: `runtime-sandbox.c` 2,264 → 2,545. One Landlock rule per scope directory (`nish_sb_rule`, `nish_sb_scope`), the strict refusal and the best-effort line for a directory gone since the build, and the root rule granting only what is granted whole. Raised to the next 256-byte boundary above the measurement: the rules are built inside the ruleset this file already makes | sandbox 2,560 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
