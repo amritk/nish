@@ -60,7 +60,6 @@ cases/net_udp_calls refused  # refused: NL4011 under --emit-ts
 cases/net_udp_echo refused  # refused: NL4011 under --emit-ts
 cases/net_udp_offload refused  # refused: NL4011 under --emit-ts
 cases/os_kill host  # differ: exit 0 vs 1: throw new Error( [spawn]
-cases/os_nice host  # differ: exit 0 vs 1: throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`); [setNice]
 cases/os_signal refused  # refused: NL4011 under --emit-ts
 cases/os_signal_import refused  # refused: NL4011 under --emit-ts
 cases/os_spawn host  # differ: exit 0 vs 1: throw new Error( [spawn]

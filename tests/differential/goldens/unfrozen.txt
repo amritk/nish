@@ -345,7 +345,6 @@ cases/os_cpu added after R6: no rewriter to freeze it with
 cases/os_kill added after R6: no rewriter to freeze it with
 cases/os_memory added after R6: no rewriter to freeze it with
 cases/os_mtime added after R6: no rewriter to freeze it with
-cases/os_nice added after R6: no rewriter to freeze it with
 cases/os_now added after R6: no rewriter to freeze it with
 cases/os_random added after R6: no rewriter to freeze it with
 cases/os_random_limit added after R6: no rewriter to freeze it with

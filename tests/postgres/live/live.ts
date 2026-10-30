@@ -13,7 +13,8 @@
 //               pool; the slot is built again on its next request
 //   pipeline    an error in the middle of five pipelined groups
 //   arrays      text[], int8[] and int4[] parameters, unnested by the server
-//   binary      one statement's rows in binary and in text, read alike
+//   binary      one statement's rows in binary and in text, read alike; two
+//               batches of creation times, binary and text, read alike
 //   conduit     the Conduit article list, prepared once and run pipelined
 //   batch       keyed reads through PgBatcher: users by id, articles by slug,
 //               tags by article; duplicate and missing keys, two takes
@@ -35,6 +36,7 @@ import {
   PG_BATCH_ROW,
   PG_BATCH_TEXT,
   PG_COMPLETE,
+  PG_ARRAY_BAD,
   PG_ARRAY_END,
   PG_ARRAY_NULL,
   PG_ERROR,
@@ -45,6 +47,7 @@ import {
   PG_POOL_NONE,
   PG_ROW,
   PgArrayWalker,
+  PgBinaryArray,
   PgBatchConfig,
   PgBatcher,
   PgConfig,
@@ -700,17 +703,67 @@ const arrays = (port: i32): i32 => {
   return 0
 }
 
-/** The statement `binary` runs: every column kind the binary decoders read, at its edges. */
+/**
+ * The statement `binary` runs: every column kind the binary decoders read, at
+ * its edges, then an `int4[]` and an `int8[]` column, each empty, one element
+ * or 1000 elements across the rows.
+ */
 const KINDS: string =
-  "select x.n::int2, x.n::int4, x.big, x.ok, x.f, x.label, x.at, x.at::timestamp from (values " +
-  "(-7, '-9223372036854775808'::int8, true, -1.5::float8, 'é€ text', '2025-12-31 23:59:19.409876+00'::timestamptz), " +
-  "(32767, 9223372036854775807, false, 0.1, '', '1999-12-31 23:59:59.999999+00'), " +
-  "(-32768, 9007199254740993, null, null, null, '2024-02-29 23:59:59.9995+00'), " +
-  "(0, -1, true, 0, 'x', '0001-01-01 00:00:00+00'), " +
-  "(1, 1, false, 1e300, 'y', 'infinity')) as x(n, big, ok, f, label, at)"
+  "select x.n::int2, x.n::int4, x.big, x.ok, x.f, x.label, x.at, x.at::timestamp, x.ia, x.la from (values " +
+  "(-7, '-9223372036854775808'::int8, true, -1.5::float8, 'é€ text', '2025-12-31 23:59:19.409876+00'::timestamptz, '{}'::int4[], '{-9223372036854775808}'::int8[]), " +
+  "(32767, 9223372036854775807, false, 0.1, '', '1999-12-31 23:59:59.999999+00', '{2147483647}'::int4[], '{}'::int8[]), " +
+  "(-32768, 9007199254740993, null, null, null, '2024-02-29 23:59:59.9995+00', array(select g from generate_series(-500, 499) g), array(select g::int8 * 4294967296 from generate_series(-500, 499) g)), " +
+  "(0, -1, true, 0, 'x', '0001-01-01 00:00:00+00', '{}'::int4[], '{0}'::int8[]), " +
+  "(1, 1, false, 1e300, 'y', 'infinity', '{-1,1}'::int4[], '{}'::int8[])) as x(n, big, ok, f, label, at, ia, la)"
 
 /** The time a decoder wrote to `out` when it answered `n`, or `?` when it refused it. */
 const timeOf = (n: i32, out: u8[]): string => (n < 0 ? "?" : String.fromBytes(out, 0, n))
+
+/**
+ * An int array column in binary as `[count first last]`, `[0]` when it is
+ * empty, or `?` when `PgBinaryArray` refuses it.
+ */
+const arrayOfBinary = (conn: PgConnection, c: i32): string => {
+  const w: PgBinaryArray = new PgBinaryArray(conn.binary)
+  w.begin(conn.inputBuffer(), conn.colStart(c), conn.colLength(c))
+  let first: string = ""
+  let last: string = ""
+  let r: i32 = w.next()
+  while (r === PG_ARRAY_ELEMENT) {
+    last = `${w.int()}`
+    if (first === "") {
+      first = last
+    }
+    r = w.next()
+  }
+  if (r !== PG_ARRAY_END) {
+    return "?"
+  }
+  return w.count === 0 ? "[0]" : `[${w.count} ${first} ${last}]`
+}
+
+/** The same array column in text, in the same form as `arrayOfBinary`. */
+const arrayOfText = (conn: PgConnection, c: i32): string => {
+  const w: PgArrayWalker = new PgArrayWalker()
+  const b: u8[] = conn.inputBuffer()
+  w.begin(b, conn.colStart(c), conn.colLength(c))
+  let count: i32 = 0
+  let first: string = ""
+  let last: string = ""
+  let r: i32 = w.next()
+  while (r === PG_ARRAY_ELEMENT) {
+    last = String.fromBytes(b, w.start, w.start + w.length)
+    if (count === 0) {
+      first = last
+    }
+    count += 1
+    r = w.next()
+  }
+  if (r !== PG_ARRAY_END) {
+    return "?"
+  }
+  return count === 0 ? "[0]" : `[${count} ${first} ${last}]`
+}
 
 /** A row of `KINDS`, each column read with the binary or the text decoder for its type, NULL as `NULL`. */
 const kindsRow = (conn: PgConnection, binary: boolean, out: u8[]): string => {
@@ -727,6 +780,8 @@ const kindsRow = (conn: PgConnection, binary: boolean, out: u8[]): string => {
       parts.push(binary ? `${conn.binaryFloat(c)}` : conn.columnText(c))
     } else if (c === 5) {
       parts.push(`[${conn.columnText(c)}]`)
+    } else if (c >= 8) {
+      parts.push(binary ? arrayOfBinary(conn, c) : arrayOfText(conn, c))
     } else if (binary) {
       parts.push(timeOf(conn.binary.timestamp(b, conn.colStart(c), conn.colLength(c), out, toI32(0)), out))
     } else {
@@ -736,14 +791,64 @@ const kindsRow = (conn: PgConnection, binary: boolean, out: u8[]): string => {
   return parts.join(" ")
 }
 
+/** `binary`'s batched statement: each article's creation time, read by a batch in binary or in text. */
+const STAMPS: string = "select a.created_at from articles a where a.id = q.key"
+
+/** A batcher named `name` for `STAMPS`, its rows in binary when `binary`. */
+const stamps = (name: string, binary: boolean): PgBatcher => {
+  const config = new PgBatchConfig()
+  config.name = name
+  config.keyType = PG_BATCH_INT
+  config.select = STAMPS
+  config.binary = binary
+  return new PgBatcher(config)
+}
+
+/** Logs the events `row`, `end` or `fail` left on batcher `b`'s run `r`, each row's creation time read in binary when `binary`. */
+const stampEvents = (b: PgBatcher, r: i32, binary: boolean, conn: PgConnection, out: u8[]): void => {
+  let event: i32 = b.next(r)
+  while (event !== PG_BATCH_NONE) {
+    if (event === PG_BATCH_ROW) {
+      const buf: u8[] = conn.inputBuffer()
+      const n: i32 = binary
+        ? conn.binary.timestamp(buf, conn.colStart(toI32(0)), conn.colLength(toI32(0)), out, toI32(0))
+        : conn.text.timestamp(buf, conn.colStart(toI32(0)), conn.colLength(toI32(0)), out, toI32(0))
+      console.log(`${b.name} ${b.tag}: ${timeOf(n, out)}`)
+    } else if (event === PG_BATCH_DONE) {
+      console.log(`${b.name} ${b.tag} done`)
+    } else if (event === PG_BATCH_MISSING) {
+      console.log(`${b.name} ${b.tag} missing`)
+    } else if (event === PG_BATCH_FAILED) {
+      console.log(`${b.name} ${b.tag} failed`)
+    }
+    event = b.next(r)
+  }
+}
+
 /**
  * `binary`: one statement bound twice in one group, its rows asked for in
  * binary, then in text; ints at their edges, a bool, a float8, UTF-8 text,
  * times before and after 2000 cut to milliseconds, and infinity refused.
+ * int4[] and int8[] columns, empty, one element and many, read as
+ * `PgBinaryArray` reads them in binary and as `PgArrayWalker` in text.
+ * Then the same group takes two batches of `STAMPS`, one binary and one
+ * text: each routes by its ordinal, binary's read with `binaryInt`, and the
+ * two print the same creation times.
  */
 const binary = (port: i32): i32 => {
   const pool = makePool(toI32(1), toI32(8), "")
   pool.register("kinds", KINDS, noTypes())
+  const stampers: PgBatcher[] = [stamps("stamps_binary", true), stamps("stamps_text", false)]
+  for (const s of stampers) {
+    pool.register(s.name, s.sql, noTypes())
+  }
+  const articleIds: i64[] = [toI64(2), toI64(1), toI64(9), toI64(2)]
+  for (let t: i32 = 0; t < toI32(articleIds.length); t++) {
+    for (const s of stampers) {
+      s.addInt(articleIds[t], t)
+    }
+  }
+  const runs: i32[] = [-1, -1]
   const d = new Driver(pool, port)
   const out: u8[] = new Array<u8>(24)
   pool.request()
@@ -757,6 +862,9 @@ const binary = (port: i32): i32 => {
       conn.bindEnd()
       conn.bindStart("kinds")
       conn.bindEnd()
+      for (let k: i32 = 0; k < toI32(stampers.length) && k < toI32(runs.length); k++) {
+        runs[k] = stampers[k].take(conn)
+      }
       pool.send()
       slot = pool.dispatch()
     }
@@ -767,7 +875,11 @@ const binary = (port: i32): i32 => {
     let event: i32 = d.next()
     while (event !== PG_NEED_MORE) {
       const conn = pool.connection(d.slot)
-      if (event === PG_ROW) {
+      if (event === PG_ROW && executions >= 2) {
+        const k: i32 = executions - 2
+        stampers[k].row(runs[k], conn)
+        stampEvents(stampers[k], runs[k], k === 0, conn, out)
+      } else if (event === PG_ROW) {
         const isBinary: boolean = executions === 0
         conn.text.reset()
         conn.binary.reset()
@@ -775,7 +887,16 @@ const binary = (port: i32): i32 => {
         const failed: boolean = isBinary ? conn.binary.failed : conn.text.failed
         console.log(`${isBinary ? "binary" : "text"}: ${line}${failed ? " (failed)" : ""}`)
       } else if (event === PG_COMPLETE) {
+        if (executions >= 2) {
+          const k: i32 = executions - 2
+          stampers[k].end(runs[k])
+          stampEvents(stampers[k], runs[k], k === 0, conn, out)
+        }
         executions += 1
+      } else if (event === PG_ERROR && executions >= 2) {
+        const k: i32 = executions - 2
+        stampers[k].fail(runs[k])
+        stampEvents(stampers[k], runs[k], k === 0, conn, out)
       } else if (event === PG_ERROR) {
         console.log(failed(pool.ticket, conn))
       } else if (event === PG_GROUP_DONE) {
