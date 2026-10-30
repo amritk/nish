@@ -258,11 +258,11 @@ const REGROW_SPREAD: i32 = 240
 const GROW_STEPS: i32 = 24
 
 /** The attract ball's radius and its slowest vertical speed (so it never skims a wall for ever). */
-const BALL_R: f64 = 2.5
+const MENU_BALL_R: f64 = 2.5
 const BALL_MIN_VY: f64 = 30.0
 
 /** The points the ball's trail keeps, and the sparks alive at once. */
-const TRAIL_POINTS: i32 = 10
+const MENU_TRAIL_POINTS: i32 = 10
 const SPARK_CAPACITY: i32 = 160
 
 // ---- Colours ----------------------------------------------------------------
@@ -395,7 +395,7 @@ export class BreakMenu {
     this.prevBallY = this.ballY
     this.ballVX = 0.0
     this.ballVY = 0.0
-    this.trail = new GfxTrail(TRAIL_POINTS)
+    this.trail = new GfxTrail(MENU_TRAIL_POINTS)
     this.sparks = new Particles(SPARK_CAPACITY)
     this.view = new View()
   }
@@ -501,8 +501,8 @@ export const stepBreakMenu = (menu: BreakMenu, input: TermInput): i32 => {
   // Wrapped long before i32 runs out, so a menu left open for months does not
   // panic on the checked add; the animations jump once a billion steps.
   menu.tick = menu.tick >= TICK_WRAP ? 0 : menu.tick + 1
-  stepWall(menu)
-  stepBall(menu)
+  menuStepWall(menu)
+  menuStepBall(menu)
   stepParticles(menu.sparks, 160.0, 1.5)
   menu.prevHighlightY = menu.highlightY
   if (menu.screen === SCREEN_OUTRO) {
@@ -721,15 +721,15 @@ const ballOverlaps = (menu: BreakMenu, cell: i32): boolean => {
   const x: f64 = toF64(cell % WALL_COLS) * WALL_BRICK_W
   const y: f64 = WALL_TOP + toF64(cell / WALL_COLS) * WALL_BRICK_H
   return (
-    menu.ballX + BALL_R > x &&
-    menu.ballX - BALL_R < x + WALL_BRICK_W &&
-    menu.ballY + BALL_R > y &&
-    menu.ballY - BALL_R < y + WALL_BRICK_H
+    menu.ballX + MENU_BALL_R > x &&
+    menu.ballX - MENU_BALL_R < x + WALL_BRICK_W &&
+    menu.ballY + MENU_BALL_R > y &&
+    menu.ballY - MENU_BALL_R < y + WALL_BRICK_H
   )
 }
 
 /** Count down the bricks that are away and grow back the ones whose time is up, unless the ball is in the way. */
-const stepWall = (menu: BreakMenu): void => {
+const menuStepWall = (menu: BreakMenu): void => {
   const n: i32 = Math.min(toI32(menu.wallAway.length), toI32(menu.wallAge.length))
   for (let i: i32 = 0; i < n; i++) {
     if (menu.wallAway[i] > 1 || (menu.wallAway[i] === 1 && !ballOverlaps(menu, i))) {
@@ -762,17 +762,17 @@ const knock = (menu: BreakMenu, cell: i32): void => {
 }
 
 /** One step of the attract ball: it bounces off the world's edges and knocks out any wall brick it meets. */
-const stepBall = (menu: BreakMenu): void => {
+const menuStepBall = (menu: BreakMenu): void => {
   const dt: f64 = 1.0 / toF64(STEPS_PER_SECOND)
   menu.prevBallX = menu.ballX
   menu.prevBallY = menu.ballY
   // Each axis moves on its own, so a brick met on one axis reflects only that one.
   let x: f64 = menu.ballX + menu.ballVX * dt
-  if (x < BALL_R || x > WORLD_W - BALL_R) {
+  if (x < MENU_BALL_R || x > WORLD_W - MENU_BALL_R) {
     menu.ballVX = -menu.ballVX
-    x = clamp(x, BALL_R, WORLD_W - BALL_R)
+    x = clamp(x, MENU_BALL_R, WORLD_W - MENU_BALL_R)
   }
-  const hitX: i32 = wallCellAt(x + (menu.ballVX > 0.0 ? BALL_R : -BALL_R), menu.ballY)
+  const hitX: i32 = wallCellAt(x + (menu.ballVX > 0.0 ? MENU_BALL_R : -MENU_BALL_R), menu.ballY)
   if (hitX >= 0 && menu.wallAway[hitX] === 0) {
     knock(menu, hitX)
     menu.ballVX = -menu.ballVX
@@ -780,11 +780,11 @@ const stepBall = (menu: BreakMenu): void => {
   }
   menu.ballX = x
   let y: f64 = menu.ballY + menu.ballVY * dt
-  if (y < BALL_R || y > WORLD_H - BALL_R) {
+  if (y < MENU_BALL_R || y > WORLD_H - MENU_BALL_R) {
     menu.ballVY = -menu.ballVY
-    y = clamp(y, BALL_R, WORLD_H - BALL_R)
+    y = clamp(y, MENU_BALL_R, WORLD_H - MENU_BALL_R)
   }
-  const hitY: i32 = wallCellAt(menu.ballX, y + (menu.ballVY > 0.0 ? BALL_R : -BALL_R))
+  const hitY: i32 = wallCellAt(menu.ballX, y + (menu.ballVY > 0.0 ? MENU_BALL_R : -MENU_BALL_R))
   if (hitY >= 0 && menu.wallAway[hitY] === 0) {
     knock(menu, hitY)
     menu.ballVY = -menu.ballVY
@@ -895,7 +895,7 @@ export const drawBreakMenu = (menu: BreakMenu, fb: Framebuffer, alpha: f64): voi
   const a: f64 = clamp(alpha, 0.0, 1.0)
   const time: f64 = Math.max(toF64(menu.tick - 1) + a, 0.0)
   gradient(view, BG_TOP, BG_BOTTOM)
-  drawWall(menu, view, a)
+  menuDrawWall(menu, view, a)
   drawBall(menu, view, a)
   drawParticles(view, menu.sparks, a)
   drawLogo(menu, view, a, time)
@@ -927,7 +927,7 @@ const itemsFade = (menu: BreakMenu, time: f64, alpha: f64): f64 => {
 const wallColour = (row: i32): i32 => dim(hue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
 
 /** The attract wall: every brick there, and returning ones growing from their centre. */
-const drawWall = (menu: BreakMenu, view: View, alpha: f64): void => {
+const menuDrawWall = (menu: BreakMenu, view: View, alpha: f64): void => {
   const n: i32 = Math.min(toI32(menu.wallAway.length), toI32(menu.wallAge.length))
   for (let i: i32 = 0; i < n; i++) {
     if (menu.wallAway[i] !== 0) {
@@ -955,9 +955,9 @@ const drawBall = (menu: BreakMenu, view: View, alpha: f64): void => {
   const y: f64 = lerp(menu.prevBallY, menu.ballY, alpha)
   if (menu.settings.effects !== 0) {
     glow(view, x, y, 12.0, 0x705020, 0.6)
-    drawTrail(view, menu.trail, BALL_R, 0xffc070, 0.45)
+    drawTrail(view, menu.trail, MENU_BALL_R, 0xffc070, 0.45)
   }
-  disc(view, x, y, BALL_R, BALL)
+  disc(view, x, y, MENU_BALL_R, BALL)
 }
 
 /**
@@ -1078,7 +1078,7 @@ const itemLabel = (menu: BreakMenu, i: i32): string => {
     return "Play"
   }
   if (i === ITEM_LEVEL) {
-    return levelLabel(menu.level)
+    return menuLevelLabel(menu.level)
   }
   if (i === ITEM_HOWTO) {
     return "How to play"
@@ -1087,7 +1087,7 @@ const itemLabel = (menu: BreakMenu, i: i32): string => {
 }
 
 /** "Start level < n >" for each level, spelled out so a frame builds no string. */
-const levelLabel = (level: i32): string => {
+const menuLevelLabel = (level: i32): string => {
   if (level <= 1) {
     return "Start level  < 1 >"
   }
@@ -1282,12 +1282,12 @@ const drawCapsule = (view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64)
   disc(view, cx - 7.0, top + 4.0, 4.0, colour)
   disc(view, cx + 7.0, top + 4.0, 4.0, colour)
   fillRect(view, cx - 7.0, top, 14.0, 8.0, colour)
-  drawTextCentred(view, cx, top + 0.5, scale, capsuleLetter(k), SHADOW, NO_SHADOW)
+  drawTextCentred(view, cx, top + 0.5, scale, menuCapsuleLetter(k), SHADOW, NO_SHADOW)
   drawTextCentred(view, cx, y + 12.0, scale, capsuleName(k), TEXT, NO_SHADOW)
 }
 
 /** Power-up `k`'s letter on its capsule. */
-const capsuleLetter = (k: i32): string => {
+const menuCapsuleLetter = (k: i32): string => {
   if (k === 0) {
     return "W"
   }

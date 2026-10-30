@@ -3095,9 +3095,9 @@ const WALL_TOP: f64 = 6
 const REGROW_STEPS: i32 = 480
 const REGROW_SPREAD: i32 = 240
 const GROW_STEPS: i32 = 24
-const BALL_R: f64 = 2.5
+const MENU_BALL_R: f64 = 2.5
 const BALL_MIN_VY: f64 = 30
-const TRAIL_POINTS: i32 = 10
+const MENU_TRAIL_POINTS: i32 = 10
 const SPARK_CAPACITY: i32 = 160
 const BG_TOP: i32 = 657440
 const BG_BOTTOM: i32 = 1969200
@@ -3264,12 +3264,12 @@ function serveBall(menu: BreakMenu): void -> @serveBall
 function stepBreakMenu(menu: BreakMenu, input: TermInput): i32 -> @stepBreakMenu [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: actOnHowTo actOnSettings actOnTitle actionOf nish_panic_overflow slideHighlight stepBall stepOutro stepParticles stepWall
-  pointer menu: size=232 writesThrough=true captured=false passedTo=stepWall#0 stepBall#0 stepOutro#0 actOnTitle#0 actOnHowTo#0 actOnSettings#0 slideHighlight#0
+  calls: actOnHowTo actOnSettings actOnTitle actionOf menuStepBall menuStepWall nish_panic_overflow slideHighlight stepOutro stepParticles
+  pointer menu: size=232 writesThrough=true captured=false passedTo=menuStepWall#0 menuStepBall#0 stepOutro#0 actOnTitle#0 actOnHowTo#0 actOnSettings#0 slideHighlight#0
   pointer input: size=16 writesThrough=false captured=false passedTo=stepOutro#1
   stackSites=0 stackLocals=0
-  callee +1:3 stepWall -> @stepWall
-  callee +2:3 stepBall -> @stepBall
+  callee +1:3 menuStepWall -> @menuStepWall
+  callee +2:3 menuStepBall -> @menuStepBall
   callee +3:3 stepParticles -> @stepParticles
   callee +6:12 stepOutro -> @stepOutro
   local +8:7 answer: i32 (let)
@@ -3384,7 +3384,7 @@ function ballOverlaps(menu: BreakMenu, cell: i32): boolean -> @ballOverlaps
   stackSites=0 stackLocals=0
   local +0:9 x: f64 (const)
   local +1:9 y: f64 (const)
-function stepWall(menu: BreakMenu): void -> @stepWall
+function menuStepWall(menu: BreakMenu): void -> @menuStepWall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: ballOverlaps llvm.smin.i32 nish_panic_index nish_panic_overflow
@@ -3415,7 +3415,7 @@ function knock(menu: BreakMenu, cell: i32): void -> @knock
   local +8:11 life: f64 (const)
   callee +8:29 menuRandom -> @menuRandom
   callee +9:5 spawnParticle -> @spawnParticle
-function stepBall(menu: BreakMenu): void -> @stepBall
+function menuStepBall(menu: BreakMenu): void -> @menuStepBall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: clamp knock llvm.fabs.f64 nish_panic_index pushTrail wallCellAt
@@ -3488,8 +3488,8 @@ function drawBreakMenu(menu: BreakMenu, fb: Framebuffer, alpha: f64): void -> @d
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via viewFor
   escaping: alpha
-  calls: clamp drawBall drawHowTo drawLogo drawParticles drawSettings drawTitle drawWall drawWipe fillLetterbox gradient itemsFade llvm.maximum.f64 nish_panic_overflow viewFor
-  pointer menu: size=232 writesThrough=false captured=false passedTo=drawWall#0 drawBall#0 drawLogo#0 itemsFade#0 drawSettings#0 drawTitle#0
+  calls: clamp drawBall drawHowTo drawLogo drawParticles drawSettings drawTitle drawWipe fillLetterbox gradient itemsFade llvm.maximum.f64 menuDrawWall nish_panic_overflow viewFor
+  pointer menu: size=232 writesThrough=false captured=false passedTo=menuDrawWall#0 drawBall#0 drawLogo#0 itemsFade#0 drawSettings#0 drawTitle#0
   pointer fb: size=16 writesThrough=true captured=true passedTo=viewFor#1
   stackSites=0 stackLocals=0
   local +0:9 view: View (const)
@@ -3498,7 +3498,7 @@ function drawBreakMenu(menu: BreakMenu, fb: Framebuffer, alpha: f64): void -> @d
   callee +2:18 clamp -> @clamp
   local +3:9 time: f64 (const)
   callee +4:3 gradient -> @gradient
-  callee +5:3 drawWall -> @drawWall
+  callee +5:3 menuDrawWall -> @menuDrawWall
   callee +6:3 drawBall -> @drawBall
   callee +7:3 drawParticles -> @drawParticles
   callee +8:3 drawLogo -> @drawLogo
@@ -3524,7 +3524,7 @@ function wallColour(row: i32): i32 -> @wallColour
   stackSites=0 stackLocals=0
   callee +0:39 dim -> @dim
   callee +0:43 hue -> @hue
-function drawWall(menu: BreakMenu, view: View, alpha: f64): void -> @drawWall
+function menuDrawWall(menu: BreakMenu, view: View, alpha: f64): void -> @menuDrawWall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via bevelBrick
   calls: bevelBrick clamp llvm.smin.i32 nish_panic_index nish_panic_overflow outCubic wallColour
@@ -3663,11 +3663,11 @@ function drawBar(view: View, y: f64, width: f64, accent: i32, fade: f64): void -
   callee +3:58 gfxMix -> @gfxMix
 function itemLabel(menu: BreakMenu, i: i32): string -> @itemLabel
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: levelLabel
+  calls: menuLevelLabel
   pointer menu: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:12 levelLabel -> @levelLabel
-function levelLabel(level: i32): string -> @levelLabel
+  callee +0:12 menuLevelLabel -> @menuLevelLabel
+function menuLevelLabel(level: i32): string -> @menuLevelLabel
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function drawPanel(view: View, time: f64): void -> @drawPanel
@@ -3767,7 +3767,7 @@ function drawCapsule(view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64)
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via disc
   escaping: cx k scale
-  calls: capsuleLetter capsuleName disc drawTextCentred fillRect hue llvm.sin.f64
+  calls: capsuleName disc drawTextCentred fillRect hue llvm.sin.f64 menuCapsuleLetter
   pointer view: size=64 writesThrough=false captured=false passedTo=disc#0 disc#0 fillRect#0 drawTextCentred#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   local +0:9 colour: i32 (const)
@@ -3778,10 +3778,10 @@ function drawCapsule(view: View, cx: f64, y: f64, scale: i32, k: i32, time: f64)
   callee +4:3 disc -> @disc
   callee +5:3 fillRect -> @fillRect
   callee +6:3 drawTextCentred -> @drawTextCentred
-  callee +6:47 capsuleLetter -> @capsuleLetter
+  callee +6:47 menuCapsuleLetter -> @menuCapsuleLetter
   callee +7:3 drawTextCentred -> @drawTextCentred
   callee +7:46 capsuleName -> @capsuleName
-function capsuleLetter(k: i32): string -> @capsuleLetter
+function menuCapsuleLetter(k: i32): string -> @menuCapsuleLetter
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function capsuleName(k: i32): string -> @capsuleName
