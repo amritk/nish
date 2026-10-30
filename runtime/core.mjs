@@ -64,7 +64,7 @@ export * from "./core/strings.mjs";
 // through `Float32Array`. `load…` and `store` check the whole vector once, and
 // panic with the native words: the first index, and the array's length.
 
-const simdMake = (Lanes) => (...lanes) => Lanes.from(lanes);
+const simdMake = (Lanes) => (...lanes) => new Lanes(lanes);
 const simdSplat = (Lanes) => (x) => new Lanes(16 / Lanes.BYTES_PER_ELEMENT).fill(x);
 // The first index of `count` lanes at `i` in `xs`, or the native panic naming
 // a lane that is out of range: the first when it is, else the last. A negative
@@ -79,7 +79,9 @@ const simdAt = (xs, i, count) => {
 const simdLoad = (Lanes) => (xs, i) => {
   const count = 16 / Lanes.BYTES_PER_ELEMENT;
   const k = simdAt(xs, i, count);
-  return Lanes.from(xs.slice(k, k + count));
+  const out = new Lanes(count);
+  for (let j = 0; j < count; j++) out[j] = xs[k + j];
+  return out;
 };
 
 export const u8x16 = simdMake(Uint8Array);

@@ -192,7 +192,7 @@ import {
   walkMethodsOf,
 } from "./emit-map"
 import { isCollectionStruct } from "./generics"
-import { isSimdAccess } from "./simd"
+import { isSimdLoad } from "./simd"
 import {
   builtinPanicKind,
   PANIC_ARRAY_LENGTH,
@@ -1371,7 +1371,7 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     // is the written argument above.
     // A `nish:simd` load reads elements of its array the same way.
     const read = builtinNameOf(program, owner)
-    if (index === 0 && (read === "uncheckedGet" || (isSimdAccess(read) && read !== "store"))) {
+    if (index === 0 && (read === "uncheckedGet" || isSimdLoad(read))) {
       return use(USE_READ)
     }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
@@ -3607,8 +3607,8 @@ class FactCollector {
     // up to the `NUL` (WP27 S3.3).
     const name = builtinNameOf(this.unit.program, node)
     // `nish:simd`'s load reads elements and its store writes them, as an
-    // element access does, through a bounds check (`simdCallees`).
-    if (name === "uncheckedGet" || name === "readCString" || (isSimdAccess(name) && name !== "store")) {
+    // element access does, through a bounds check (`isSimdAccess`).
+    if (name === "uncheckedGet" || name === "readCString" || isSimdLoad(name)) {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet" || name === "store") {
       this.facts.effect = EFFECT_WRITE

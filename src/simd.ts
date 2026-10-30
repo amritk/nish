@@ -254,15 +254,8 @@ export const emitSimdCall = (emitter: Emitter, expr: Node, name: string): string
   return acc
 }
 
-/** Whether `name` is the `nish:simd` load or store, the two calls that touch an array. */
-export const isSimdAccess = (name: string): boolean =>
-  name === "store" || simdLaneType(simdSuffix(name, "load")) !== T_ERROR
+/** Whether `name` is one of `nish:simd`'s `load…` calls, which read an array. */
+export const isSimdLoad = (name: string): boolean => simdLaneType(simdSuffix(name, "load")) !== T_ERROR
 
-/** The runtime a call can reach: a load's or a store's out-of-range panic, and nothing for the rest. */
-export const simdCallees = (name: string): string[] => {
-  const out: string[] = []
-  if (isSimdAccess(name)) {
-    out.push("nish_panic_index")
-  }
-  return out
-}
+/** Whether `name` is the `nish:simd` load or store, the two calls that touch an array. */
+export const isSimdAccess = (name: string): boolean => name === "store" || isSimdLoad(name)

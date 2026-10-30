@@ -33,7 +33,7 @@ import { emitWrapping } from "./emit-ops"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
-import { emitSimdCall, simdCallees } from "./simd"
+import { emitSimdCall, isSimdAccess } from "./simd"
 import {
   bufferSignature,
   isNetExport,
@@ -1160,7 +1160,8 @@ export const identifierBuiltinCalleesNamed = (
 ): string[] => {
   const out: string[] = []
   if (isSimdExport(name)) {
-    return simdCallees(name)
+    // A load's or a store's out-of-range panic, and nothing for the rest.
+    return isSimdAccess(name) ? ["nish_panic_index"] : out
   }
   if (!isBuiltinFunction(name)) {
     return out
