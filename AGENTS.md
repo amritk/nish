@@ -331,7 +331,7 @@ what is blocking and what you need — and keep watching.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/attributes.ts` beside the code.
 - **A struct layout change touches `src/runtime.ts` and `runtime.c` in the same
-  commit** and extends a layout test. The C runtime is eleven translation units
+  commit** and extends a layout test. The C runtime is thirteen translation units
   with a budget each — `runtime.c` for the core, `runtime-os.c` for the
   syscall wrappers, `runtime-parallel.c` for threads, `runtime-cross.c` for
   the copies between their arenas, `runtime-host.c` for the clock, entropy,

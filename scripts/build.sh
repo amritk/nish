@@ -3,7 +3,7 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is eleven translation units and is named as one: an input
+# The C runtime is thirteen translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
@@ -207,7 +207,7 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is eleven translation units, and a caller names one: whoever passes
+# The runtime is thirteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
 # <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,

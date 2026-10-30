@@ -8871,7 +8871,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's eleven translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's thirteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
