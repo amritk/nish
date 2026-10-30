@@ -175,21 +175,38 @@ the scope on a thread other than the one running the event loop, or accept
 that pause of one hash for each burst. The module does no I/O and calls no C, so
 it builds for WebAssembly too, where the tasks run one after another.
 
-## Four at once on one thread
+## Several at once on one thread
 
-`bcryptHash4(p0, p1, p2, p3, salts, cost)` and
-`bcryptVerify4(p0, p1, p2, p3, hashes)` take up to four passwords and run
-their hashes interleaved on the calling thread: four take about the time of
-1.2 single hashes on one core, since the four chains of table lookups overlap
-where one would leave the core waiting. Lane 0 is always given and a `null`
-lane is skipped. Each lane answers what `bcryptHash` or `bcryptVerify` would
-(a skipped lane answers `""` or `false`), `salts` is the four 16-byte salts
-end to end, and a verify of hashes with different costs runs each cost as its
-own group. A malformed hash in any given lane makes the whole verify an `Err`
-that names the lane, before anything is hashed.
+`bcryptHashN(p0, p1, p2, p3, p4, p5, salts, cost)` and
+`bcryptVerifyN(p0, p1, p2, p3, p4, p5, hashes)` take up to six passwords and
+run their hashes interleaved on the calling thread, since the chains of table
+lookups overlap where one would leave the core waiting. Lane 0 is always given
+and a `null` lane is skipped. Each lane answers what `bcryptHash` or
+`bcryptVerify` would (a skipped lane answers `""` or `false`), `salts` is the
+six 16-byte salts end to end (96 bytes), `hashes` is six strings, and a verify
+of hashes with different costs runs each cost as its own group. A malformed
+hash in any given lane makes the whole verify an `Err` that names the lane,
+before anything is hashed. `bcryptHash4` and `bcryptVerify4` are the same for
+up to four passwords, with 64 bytes of salts.
+
+How many lanes are fastest per hash depends on the core. On the Xeon the
+module was measured on, five lanes took 21.6 ms a hash at cost 10 against
+62.8 ms for one, and six were no faster than five. `bcryptCalibrate()` times
+each width from one to six on throwaway passwords and returns the fastest. It
+takes a few tens of milliseconds and keeps nothing, so call it once, at
+startup, and keep the answer:
+
+```ts nish:ok
+import { bcryptCalibrate } from "nish/crypto/bcrypt"
+
+const width: i32 = bcryptCalibrate()
+console.log(width >= 1 && width <= 6 ? "calibrated" : "out of range")
+```
+
+Then give each batch up to `width` of the logins that arrive together.
 
 A task may call the batch too: the `Secret` it makes its state in comes from
 an array the call made, so its wipe is the task's own scratch
 ([BCRYPT-9](../../security/crypto-bcrypt.md#findings)). On a server with
-spare cores, hash singly on tasks as above, or give each task a batch of four;
+spare cores, hash singly on tasks as above, or give each task a batch;
 on one core, batch the logins that arrive together.

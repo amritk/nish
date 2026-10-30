@@ -8,8 +8,10 @@
  * pinned commit, run with one lane and with four; and `bcryptHashN` at each
  * width from one to six, so the widths are measured on this core rather than
  * guessed. The single path's row is also given in cycles per Blowfish block:
- * the clock (`--ghz`, else the first `cpu MHz` of /proc/cpuinfo) times its
- * time per hash over the 2^cost × 1042 + 713 blocks a hash encrypts.
+ * the clock (`--ghz`, else the first `cpu MHz` of /proc/cpuinfo, which on a
+ * virtual machine is often the nominal clock and not the one it runs at)
+ * times its time per hash over the 2^cost × 1042 + 713 blocks a hash
+ * encrypts.
  *
  * Each program hashes "U*U" under an all-zero salt `--hashes` times (a
  * four-lane program `--hashes` batches of four) and prints the last hash, a
@@ -53,7 +55,8 @@ for (const [name, value, lo, hi] of [
 const blocks = 2 ** cost * 1042 + 713
 const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
 const mhz = cpuinfo.match(/^cpu MHz\s*:\s*([0-9.]+)/m)
-const ghz = Number(argValue("--ghz", mhz ? String(Number(mhz[1]) / 1000) : "0"))
+const given = argValue("--ghz", "")
+const ghz = Number(given || (mhz ? String(Number(mhz[1]) / 1000) : "0"))
 if (!Number.isFinite(ghz) || ghz < 0) {
   console.error("--ghz must be a clock in GHz")
   process.exit(1)
@@ -453,7 +456,7 @@ if (ghz > 0) {
   const single = median(samples[0]) / 1000
   console.log(
     `\nThe single path: ${((ghz * 1e9 * single) / blocks).toFixed(0)} cycles per Blowfish block ` +
-      `(${ghz.toFixed(2)} GHz × ${(single * 1000).toFixed(1)} ms / ${blocks} blocks)`
+      `(${ghz.toFixed(2)} GHz${given ? "" : " from /proc/cpuinfo, pass --ghz for a measured clock"} × ${(single * 1000).toFixed(1)} ms / ${blocks} blocks)`
   )
 } else {
   notes.push("cycles per block left out: no clock in /proc/cpuinfo; pass --ghz")
