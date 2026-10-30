@@ -515,7 +515,7 @@ export class JsonDocument {
       } else if (k === JSON_TOK_STRING) {
         v = this.newNode(JSON_VALUE_STRING, this.byteTop, this.storeString(tok))
       } else if (k === JSON_TOK_NUMBER) {
-        v = this.newNode(JSON_VALUE_NUMBER, this.byteTop, this.storeSource(tok))
+        v = this.newNode(JSON_VALUE_NUMBER, this.byteTop, this.storeSourceRanged(tok))
       } else if (k === JSON_TOK_NULL) {
         v = this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
       } else {
@@ -617,7 +617,7 @@ export class JsonDocument {
     let n: i32 = this.pendingTop - base
     const object: boolean = this.kindAt(c) === JSON_VALUE_OBJECT
     if (object && n > 1) {
-      const code: i32 = this.duplicateKeys(base, n)
+      const code: i32 = this.duplicateKeysRanged(base, n)
       if (code < 0) {
         return code
       }
@@ -656,6 +656,41 @@ export class JsonDocument {
    * and the first of them is its first member.
    */
   duplicateKeys(base: i32, n: i32): i32 {
+    let firstRepeat: i32 = -1
+    if (n <= JSON_VALUE_PAIRWISE) {
+      for (let i: i32 = base + 1; i < base + n; i += 1) {
+        for (let j: i32 = base; j < i; j += 1) {
+          if (jsonValueGet(this.pendingValue, j) >= 0 && this.samePendingKey(i, j)) {
+            firstRepeat = this.repeat(j, i, firstRepeat)
+            break
+          }
+        }
+      }
+    } else {
+      const order: i32[] = this.sortPending(base, n)
+      let i: i32 = 0
+      while (i < n) {
+        const head: i32 = jsonValueGet(order, i)
+        let j: i32 = i + 1
+        while (j < n && this.samePendingKey(head, jsonValueGet(order, j))) {
+          firstRepeat = this.repeat(head, jsonValueGet(order, j), firstRepeat)
+          j += 1
+        }
+        i = j
+      }
+    }
+    if (firstRepeat >= 0 && this.duplicates !== JSON_VALUE_DUPLICATE_LAST) {
+      this.errorAt = firstRepeat
+      return JSON_VALUE_ERR_DUPLICATE
+    }
+    return 0
+  }
+
+  /**
+   * Internal: `duplicateKeys` for `closeRanged`, the same check. A copy, so that
+   * `duplicateKeys` keeps the one caller that lets it inline into `parse`.
+   */
+  duplicateKeysRanged(base: i32, n: i32): i32 {
     let firstRepeat: i32 = -1
     if (n <= JSON_VALUE_PAIRWISE) {
       for (let i: i32 = base + 1; i < base + n; i += 1) {
@@ -773,6 +808,26 @@ export class JsonDocument {
 
   /** Internal: The tokenizer's current token as written, a number's text, onto the end of `bytes`; answers its length. */
   storeSource(tok: JsonTokenizer): i32 {
+    const src: u8[] = tok.src
+    const start: i32 = tok.tokStart
+    const n: i32 = tok.tokEnd - start
+    const at: i32 = this.byteTop
+    const buf: u8[] = jsonValueRoom(this.bytes, at + n)
+    this.bytes = buf
+    for (let i: i32 = 0; i < n && start + i < toI32(src.length) && at + i < toI32(buf.length); i += 1) {
+      if (start + i >= 0 && at + i >= 0) {
+        buf[at + i] = src[start + i]
+      }
+    }
+    this.byteTop = at + n
+    return n
+  }
+
+  /**
+   * Internal: `storeSource` for `parseRanged`, the same copy. A copy, so that
+   * `storeSource` keeps the one caller that lets it inline into `parse`.
+   */
+  storeSourceRanged(tok: JsonTokenizer): i32 {
     const src: u8[] = tok.src
     const start: i32 = tok.tokStart
     const n: i32 = tok.tokEnd - start
