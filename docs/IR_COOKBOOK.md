@@ -9613,12 +9613,14 @@ declare noundef i32 @nish.JsonDocument.parseFailed(%struct.JsonDocument* noundef
 declare noundef i32 @nish.JsonDocument.close(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.closeRanged(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.duplicateKeys(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish.JsonDocument.duplicateKeysRanged(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.repeat(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef, i32 noundef) #1
 declare noundef zeroext i1 @nish.JsonDocument.samePendingKey(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
 declare noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.JsonDocument.sortPending(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.comparePending(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.storeString(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, %struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
 declare noundef i32 @nish.JsonDocument.storeSource(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, %struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
+declare noundef i32 @nish.JsonDocument.storeSourceRanged(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, %struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
 declare noundef i32 @nish.JsonDocument.newNode(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.index(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(280) nocapture, i32 noundef) #2
 declare noundef i32 @nish.JsonDocument.handle(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(280) nocapture, i32 noundef) #2
@@ -9668,6 +9670,7 @@ declare noundef i32 @nish.JsonDocument.set(%struct.JsonDocument* noundef nonnull
 declare noundef i32 @nish.JsonDocument.adoptable(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #3
 declare void @nish.JsonDocument.append(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.newStored(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i8* noundef nonnull noalias readonly align 8) #0
+declare noundef i32 @nish.JsonDocument.moveSlots(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef) #0
 declare void @nish.JsonDocument.moveKeyRanges(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i32 noundef, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish.JsonDocument.storeText(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(280) nocapture, i8* noundef nonnull noalias readonly align 8 nocapture) #0
 declare void @nish.JsonDocument.write(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(280) nocapture, i32 noundef, %struct.JsonWriter* noundef nonnull align 8 dereferenceable(48) nocapture) #0
