@@ -26,10 +26,12 @@
 # simd-arm64: runtime/runtime-simd.c's, runtime/runtime-bytes.c's and
 #       runtime/runtime-aes.c's agreement tests on an AArch64 runner, where
 #       their native runs are the NEON and the ARMv8 AES and PMULL paths no x86-64 job can run, and the `aes
-#       kernel` section, std/crypto/aes.ts lowered onto those AES kernels.
+#       kernel` section, std/crypto/aes.ts lowered onto those AES kernels, and
+#       runtime/runtime-sha256.c's, with the `sha256 kernel` section.
 # runtime-net: runtime/runtime-net.c's Darwin branch (kqueue, SO_NOSIGPIPE,
 #       errno translated to Linux's numbers) on a macOS runner: the runtime
-#       unit tests, plain and with -DNISH_THREADS, and every `net_` section.
+#       unit tests, plain and with -DNISH_THREADS, and every `net_` section;
+#       and runtime/runtime-sha256.c's Apple detection, on its ARMv8 kernel.
 # lint: package-lock.json against package.json with no registry involved,
 #       `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
@@ -433,6 +435,34 @@ jobs:
         if: matrix.shard == 1
         run: |
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/test.log"
+
+      # The SHA-256 kernel, likewise: the `simd` section passes with the reference
+      # alone on a CPU without SHA-NI, and the `sha256 kernel` section takes its
+      # other arm there. These runners have it, so the driver must name the
+      # SHA-NI path and the lowered programs must have called the kernel.
+      - name: The SHA-NI path ran
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          build/test/simd/sha256 | grep -E '^sha256: [0-9]+ cases agree across sha-ni;'
+          grep -E '^PASS  sha256 kernel: sha256_hw_vectors with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs' "$RUNNER_TEMP/test.log"
+          grep -E '^PASS  sha256 kernel: sha256_hw_agree with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs' "$RUNNER_TEMP/test.log"
+
+      - name: SHA-256 throughput on each path
+        if: matrix.shard == 1
+        run: |
+          calls=build/test/simd/sha256-calls.speed
+          # bench/sha256/run.mjs is another stage's; until it lands this says so
+          # rather than fail. Each path is named by the resolver's own answer.
+          if [ ! -f bench/sha256/run.mjs ]; then
+            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
+            exit 0
+          fi
+          for pin in unset soft; do
+            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
+            echo "NISH_SHA256 $pin: $($run "$calls" | head -n 1)"
+            $run node bench/sha256/run.mjs
+          done
 
       # #619: `par_map_vector` links its modules with `llvm-link` and runs `opt
       # -O3`, and skips without either tool. The line that says the map's loop
@@ -1097,6 +1127,7 @@ jobs:
           grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base \(plain: scalar base\);' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: sha256 native arm64: [0-9]+ cases agree across armv8-sha2;' "$RUNNER_TEMP/simd.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
       # PMULL kernels, run end to end against the bitsliced walker, the 8- and
@@ -1106,6 +1137,30 @@ jobs:
           set -o pipefail
           node tests/run.js "aes kernel" | tee "$RUNNER_TEMP/aes-kernel.log"
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/aes-kernel.log"
+
+      # The SHA-256 lowering on AArch64: std/crypto/sha256.ts's block function on
+      # the ARMv8 SHA-256 instructions, with NISH_SHA256 unset and set to soft.
+      - name: The lowered SHA-256 programs, natively on AArch64
+        run: |
+          set -o pipefail
+          node tests/run.js "sha256 kernel" | tee "$RUNNER_TEMP/sha256-kernel.log"
+          grep -E '^PASS  sha256 kernel: sha256_hw_vectors with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs' "$RUNNER_TEMP/sha256-kernel.log"
+          grep -E '^PASS  sha256 kernel: sha256_hw_agree with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs' "$RUNNER_TEMP/sha256-kernel.log"
+
+      - name: SHA-256 throughput on each path
+        run: |
+          calls=build/test/simd/sha256-calls.speed
+          # bench/sha256/run.mjs is another stage's; until it lands this says so
+          # rather than fail. Each path is named by the resolver's own answer.
+          if [ ! -f bench/sha256/run.mjs ]; then
+            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
+            exit 0
+          fi
+          for pin in unset soft; do
+            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
+            echo "NISH_SHA256 $pin: $($run "$calls" | head -n 1)"
+            $run node bench/sha256/run.mjs
+          done
 
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on
@@ -1188,6 +1243,40 @@ jobs:
           node tests/run.js runtime_test | tee "$RUNNER_TEMP/runtime-test.log"
           grep -E '^PASS  runtime\.c, runtime-os\.c, .* pass the runtime unit test$' "$RUNNER_TEMP/runtime-test.log"
           grep -E '^PASS  runtime\.c -DNISH_THREADS: ' "$RUNNER_TEMP/runtime-test.log"
+
+      # The SHA-256 kernel on Apple silicon, whose CPU is found by sysctl rather
+      # than getauxval: the agreement driver must name the ARMv8 path, and the
+      # SHA-256 link programs must print their expected output under both pins
+      # (the `sha256 kernel` section's call counts need GNU ld, so not here).
+      - name: SHA-256 on the ARMv8 instructions, natively on Darwin
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          clang -std=c11 -Wall -Wextra -Werror -O2 tests/simd/sha256.c -o "$RUNNER_TEMP/sha256"
+          "$RUNNER_TEMP/sha256" | grep -E '^sha256: [0-9]+ cases agree across armv8-sha2;'
+          for pin in unset soft; do
+            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
+            $run node tests/run.js sha256_hw | tee "$RUNNER_TEMP/sha256-$pin.log"
+            grep -E '^[1-9][0-9]* passed, 0 failed\.$' "$RUNNER_TEMP/sha256-$pin.log"
+            if grep -E '^SKIP  ' "$RUNNER_TEMP/sha256-$pin.log"; then exit 1; fi
+          done
+
+      - name: SHA-256 throughput on each path
+        if: matrix.shard == 1
+        run: |
+          calls="$RUNNER_TEMP/sha256-calls"
+          clang -std=c11 -O2 tests/simd/sha256-calls.c runtime/runtime-sha256.c -o "$calls"
+          # bench/sha256/run.mjs is another stage's; until it lands this says so
+          # rather than fail. Each path is named by the resolver's own answer.
+          if [ ! -f bench/sha256/run.mjs ]; then
+            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
+            exit 0
+          fi
+          for pin in unset soft; do
+            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
+            echo "NISH_SHA256 $pin: $($run "$calls" | head -n 1)"
+            $run node bench/sha256/run.mjs
+          done
 
       # Every net_ section runs on a mac, so the step needs checks that passed
       # and no SKIP line: a filter that matches nothing, or a section skipped
