@@ -247,11 +247,16 @@ export class JsonDocument {
    * While `ranged`: per value, its first byte in the parsed bytes and one past
    * its last; per member slot, its key's, quotes included. `-1` where nothing
    * was recorded. They stay empty in a document that never keeps ranges.
+   * Only the first `rangeTop` values and `slotRangeTop` slots are current:
+   * past them is an earlier document's, and reads as `-1`, so that a value or
+   * member a builder adds writes nothing here.
    */
   valueStart: i32[]
   valueEnd: i32[]
   slotKeyStart: i32[]
   slotKeyEnd: i32[]
+  rangeTop: i32 = 0
+  slotRangeTop: i32 = 0
   /**
    * The parse's own stacks: the open containers, where each one's members
    * start in the pending arrays and the key it is the value of, if any; and
@@ -358,6 +363,8 @@ export class JsonDocument {
     this.failed = 0
     this.errorAt = -1
     this.ranged = this.keepRanges
+    this.rangeTop = 0
+    this.slotRangeTop = 0
   }
 
   // ---- Parsing ----------------------------------------------------------------
@@ -372,14 +379,98 @@ export class JsonDocument {
     this.clear()
     const tok: JsonTokenizer = this.tok
     tok.reset(src, off, len)
+    if (this.ranged) {
+      return this.parseRanged()
+    }
+    let depth: i32 = 0
+    let root: i32 = -1
+    let keyAt: i32 = 0
+    let keyLength: i32 = 0
+    let keySource: i32 = 0
+    let k: i32 = tok.next()
+    while (k > 0) {
+      let v: i32 = -1
+      if (k === JSON_TOK_KEY) {
+        keySource = tok.tokStart
+        keyAt = this.byteTop
+        keyLength = this.storeString(tok)
+      } else if (k === JSON_TOK_OBJECT_BEGIN || k === JSON_TOK_ARRAY_BEGIN) {
+        const c: i32 = this.newNode(
+          k === JSON_TOK_OBJECT_BEGIN ? JSON_VALUE_OBJECT : JSON_VALUE_ARRAY,
+          JSON_VALUE_NO_WORD,
+          JSON_VALUE_NO_WORD
+        )
+        if (c < 0) {
+          return this.parseFailed(c, tok.tokStart)
+        }
+        jsonValuePut(this.openValue, depth, c)
+        jsonValuePut(this.openBase, depth, this.pendingTop)
+        jsonValuePut(this.openKeyAt, depth, keyAt)
+        jsonValuePut(this.openKeyLength, depth, keyLength)
+        jsonValuePut(this.openKeySource, depth, keySource)
+        depth += 1
+      } else if (k === JSON_TOK_OBJECT_END || k === JSON_TOK_ARRAY_END) {
+        depth -= 1
+        const c: i32 = jsonValueGet(this.openValue, depth)
+        const code: i32 = this.close(c, jsonValueGet(this.openBase, depth))
+        if (code < 0) {
+          return this.parseFailed(code, this.errorAt)
+        }
+        // The container's own key, read before its members' keys overwrote the three locals.
+        keyAt = jsonValueGet(this.openKeyAt, depth)
+        keyLength = jsonValueGet(this.openKeyLength, depth)
+        keySource = jsonValueGet(this.openKeySource, depth)
+        v = c
+      } else if (k === JSON_TOK_STRING) {
+        v = this.newNode(JSON_VALUE_STRING, this.byteTop, this.storeString(tok))
+      } else if (k === JSON_TOK_NUMBER) {
+        v = this.newNode(JSON_VALUE_NUMBER, this.byteTop, this.storeSource(tok))
+      } else if (k === JSON_TOK_NULL) {
+        v = this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
+      } else {
+        v = this.newNode(
+          JSON_VALUE_BOOLEAN,
+          k === JSON_TOK_TRUE ? JSON_VALUE_TRUE_WORD : JSON_VALUE_NO_WORD,
+          JSON_VALUE_NO_WORD
+        )
+      }
+      // `-1` is a key or an opener, which place no value yet; below it, the value was refused.
+      if (v < -1) {
+        return this.parseFailed(v, tok.tokStart)
+      }
+      if (v >= 0) {
+        if (depth === 0) {
+          root = v
+        } else {
+          const p: i32 = this.pendingTop
+          jsonValuePut(this.pendingValue, p, v)
+          jsonValuePut(this.pendingKeyAt, p, keyAt)
+          jsonValuePut(this.pendingKeyLength, p, keyLength)
+          jsonValuePut(this.pendingSource, p, keySource)
+          this.pendingTop = p + 1
+        }
+      }
+      k = tok.next()
+    }
+    if (k < 0 || root < 0) {
+      return this.parseFailed(k < 0 ? k : JSON_VALUE_ERR_HANDLE, tok.errorAt)
+    }
+    return this.handle(root)
+  }
+
+  /**
+   * Internal: `parse` once the tokenizer is reset, for a document that keeps
+   * ranges. A loop of its own, so that `parse` without them runs the loop it
+   * ran before ranges existed and pays nothing for them.
+   */
+  parseRanged(): JsonValue {
+    const tok: JsonTokenizer = this.tok
     let depth: i32 = 0
     let root: i32 = -1
     let keyAt: i32 = 0
     let keyLength: i32 = 0
     let keySource: i32 = 0
     let keyEnd: i32 = 0
-    // Read once: every range write below is behind this, so a parse without ranges stores nothing more.
-    const ranged: boolean = this.ranged
     let k: i32 = tok.next()
     while (k > 0) {
       let v: i32 = -1
@@ -402,28 +493,27 @@ export class JsonDocument {
         jsonValuePut(this.openKeyAt, depth, keyAt)
         jsonValuePut(this.openKeyLength, depth, keyLength)
         jsonValuePut(this.openKeySource, depth, keySource)
-        if (ranged) {
-          // The end is a placeholder until the closer, so that both arrays grow in step with the values.
-          jsonValuePut(this.valueStart, c, tok.tokStart)
-          jsonValuePut(this.valueEnd, c, -1)
-          jsonValuePut(this.openKeyEnd, depth, keyEnd)
-        }
+        // The end is a placeholder until the closer, so that both arrays grow in step with the values.
+        jsonValuePut(this.valueStart, c, tok.tokStart)
+        jsonValuePut(this.valueEnd, c, -1)
+        jsonValuePut(this.openKeyEnd, depth, keyEnd)
         depth += 1
       } else if (k === JSON_TOK_OBJECT_END || k === JSON_TOK_ARRAY_END) {
         depth -= 1
         const c: i32 = jsonValueGet(this.openValue, depth)
-        const code: i32 = this.close(c, jsonValueGet(this.openBase, depth))
+        const base: i32 = jsonValueGet(this.openBase, depth)
+        const end: i32 = this.pendingTop
+        const code: i32 = this.close(c, base)
         if (code < 0) {
           return this.parseFailed(code, this.errorAt)
         }
+        this.closeRanges(jsonValueGet(this.first, c), base, end)
         // The container's own key, read before its members' keys overwrote the three locals.
         keyAt = jsonValueGet(this.openKeyAt, depth)
         keyLength = jsonValueGet(this.openKeyLength, depth)
         keySource = jsonValueGet(this.openKeySource, depth)
-        if (ranged) {
-          jsonValuePut(this.valueEnd, c, tok.tokEnd)
-          keyEnd = jsonValueGet(this.openKeyEnd, depth)
-        }
+        jsonValuePut(this.valueEnd, c, tok.tokEnd)
+        keyEnd = jsonValueGet(this.openKeyEnd, depth)
         v = c
       } else if (k === JSON_TOK_STRING) {
         v = this.newNode(JSON_VALUE_STRING, this.byteTop, this.storeString(tok))
@@ -443,7 +533,7 @@ export class JsonDocument {
         return this.parseFailed(v, tok.tokStart)
       }
       if (v >= 0) {
-        if (ranged && k !== JSON_TOK_OBJECT_END && k !== JSON_TOK_ARRAY_END) {
+        if (k !== JSON_TOK_OBJECT_END && k !== JSON_TOK_ARRAY_END) {
           jsonValuePut(this.valueStart, v, tok.tokStart)
           jsonValuePut(this.valueEnd, v, tok.tokEnd)
         }
@@ -455,9 +545,7 @@ export class JsonDocument {
           jsonValuePut(this.pendingKeyAt, p, keyAt)
           jsonValuePut(this.pendingKeyLength, p, keyLength)
           jsonValuePut(this.pendingSource, p, keySource)
-          if (ranged) {
-            jsonValuePut(this.pendingKeyEnd, p, keyEnd)
-          }
+          jsonValuePut(this.pendingKeyEnd, p, keyEnd)
           this.pendingTop = p + 1
         }
       }
@@ -466,6 +554,8 @@ export class JsonDocument {
     if (k < 0 || root < 0) {
       return this.parseFailed(k < 0 ? k : JSON_VALUE_ERR_HANDLE, tok.errorAt)
     }
+    this.rangeTop = this.top
+    this.slotRangeTop = this.slotTop
     return this.handle(root)
   }
 
@@ -503,7 +593,6 @@ export class JsonDocument {
       }
     }
     const start: i32 = this.slotTop
-    const ranged: boolean = this.ranged
     let kept: i32 = 0
     for (let p: i32 = base; p < base + n; p += 1) {
       const v: i32 = jsonValueGet(this.pendingValue, p)
@@ -514,10 +603,6 @@ export class JsonDocument {
       jsonValuePut(this.slotValue, s, v)
       jsonValuePut(this.slotKeyAt, s, jsonValueGet(this.pendingKeyAt, p))
       jsonValuePut(this.slotKeyLength, s, jsonValueGet(this.pendingKeyLength, p))
-      if (ranged) {
-        jsonValuePut(this.slotKeyStart, s, jsonValueGet(this.pendingSource, p))
-        jsonValuePut(this.slotKeyEnd, s, jsonValueGet(this.pendingKeyEnd, p))
-      }
       jsonValuePut(this.parent, v, c)
       kept += 1
     }
@@ -528,6 +613,22 @@ export class JsonDocument {
     jsonValuePut(this.room, c, n)
     this.pendingTop = base
     return 0
+  }
+
+  /**
+   * Internal: After `close` placed the members pending in `[base, end)` from slot `s`,
+   * records their keys' ranges in the same order. The pending entries are
+   * still there, as `close` only lowered `pendingTop`.
+   */
+  closeRanges(s: i32, base: i32, end: i32): void {
+    let at: i32 = s
+    for (let p: i32 = base; p < end; p += 1) {
+      if (jsonValueGet(this.pendingValue, p) >= 0) {
+        jsonValuePut(this.slotKeyStart, at, jsonValueGet(this.pendingSource, p))
+        jsonValuePut(this.slotKeyEnd, at, jsonValueGet(this.pendingKeyEnd, p))
+        at += 1
+      }
+    }
   }
 
   /**
@@ -942,22 +1043,32 @@ export class JsonDocument {
 
   /** The offset of `v`'s first byte in the bytes the document parsed. */
   start(v: JsonValue): i32 {
-    return this.ranged ? jsonValueGet(this.valueStart, this.index(v)) : -1
+    return this.valueRange(this.valueStart, this.index(v))
   }
 
   /** One past the offset of `v`'s last byte: `v` is `src[start(v), end(v))`. */
   end(v: JsonValue): i32 {
-    return this.ranged ? jsonValueGet(this.valueEnd, this.index(v)) : -1
+    return this.valueRange(this.valueEnd, this.index(v))
   }
 
   /** The offset of the first byte of the key of member `i` of object `o`, its opening quote. */
   keyStart(o: JsonValue, i: i32): i32 {
-    return this.ranged ? jsonValueGet(this.slotKeyStart, this.keySlot(this.index(o), i)) : -1
+    return this.slotRange(this.slotKeyStart, this.keySlot(this.index(o), i))
   }
 
   /** One past the offset of the last byte of the key of member `i` of object `o`, its closing quote. */
   keyEnd(o: JsonValue, i: i32): i32 {
-    return this.ranged ? jsonValueGet(this.slotKeyEnd, this.keySlot(this.index(o), i)) : -1
+    return this.slotRange(this.slotKeyEnd, this.keySlot(this.index(o), i))
+  }
+
+  /** Internal: `a[x]`, or `-1` past `rangeTop`, where `a` is a value range array. */
+  valueRange(a: i32[], x: i32): i32 {
+    return x >= 0 && x < this.rangeTop ? jsonValueGet(a, x) : -1
+  }
+
+  /** Internal: `a[s]`, or `-1` past `slotRangeTop`, where `a` is a key range array. */
+  slotRange(a: i32[], s: i32): i32 {
+    return s >= 0 && s < this.slotRangeTop ? jsonValueGet(a, s) : -1
   }
 
   /**
@@ -975,8 +1086,16 @@ export class JsonDocument {
     if (!this.ranged || start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
+    // Values between the last current one and `x` have no range yet.
+    for (let y: i32 = this.rangeTop; y < x; y += 1) {
+      jsonValuePut(this.valueStart, y, -1)
+      jsonValuePut(this.valueEnd, y, -1)
+    }
     jsonValuePut(this.valueStart, x, start)
     jsonValuePut(this.valueEnd, x, end)
+    if (x >= this.rangeTop) {
+      this.rangeTop = x + 1
+    }
     return JSON_VALUE_OK
   }
 
@@ -993,8 +1112,15 @@ export class JsonDocument {
     if (!this.ranged || start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
+    for (let t: i32 = this.slotRangeTop; t < s; t += 1) {
+      jsonValuePut(this.slotKeyStart, t, -1)
+      jsonValuePut(this.slotKeyEnd, t, -1)
+    }
     jsonValuePut(this.slotKeyStart, s, start)
     jsonValuePut(this.slotKeyEnd, s, end)
+    if (s >= this.slotRangeTop) {
+      this.slotRangeTop = s + 1
+    }
     return JSON_VALUE_OK
   }
 
@@ -1008,11 +1134,11 @@ export class JsonDocument {
   // already holds `maxValues`.
 
   newNull(): JsonValue {
-    return this.built(this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD))
+    return this.handle(this.newNode(JSON_VALUE_NULL, JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD))
   }
 
   newBoolean(b: boolean): JsonValue {
-    return this.built(
+    return this.handle(
       this.newNode(JSON_VALUE_BOOLEAN, b ? JSON_VALUE_TRUE_WORD : JSON_VALUE_NO_WORD, JSON_VALUE_NO_WORD)
     )
   }
@@ -1063,15 +1189,15 @@ export class JsonDocument {
       this.byteTop = at
       return JSON_VALUE_ERR_NUMBER
     }
-    return this.built(this.newNode(JSON_VALUE_NUMBER, at, n))
+    return this.handle(this.newNode(JSON_VALUE_NUMBER, at, n))
   }
 
   newArray(): JsonValue {
-    return this.built(this.newNode(JSON_VALUE_ARRAY, this.slotTop, JSON_VALUE_NO_WORD))
+    return this.handle(this.newNode(JSON_VALUE_ARRAY, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
   newObject(): JsonValue {
-    return this.built(this.newNode(JSON_VALUE_OBJECT, this.slotTop, JSON_VALUE_NO_WORD))
+    return this.handle(this.newNode(JSON_VALUE_OBJECT, this.slotTop, JSON_VALUE_NO_WORD))
   }
 
   /** Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. */
@@ -1159,10 +1285,9 @@ export class JsonDocument {
           jsonValuePut(this.slotValue, moved + i, jsonValueGet(this.slotValue, start + i))
           jsonValuePut(this.slotKeyAt, moved + i, jsonValueGet(this.slotKeyAt, start + i))
           jsonValuePut(this.slotKeyLength, moved + i, jsonValueGet(this.slotKeyLength, start + i))
-          if (this.ranged) {
-            jsonValuePut(this.slotKeyStart, moved + i, jsonValueGet(this.slotKeyStart, start + i))
-            jsonValuePut(this.slotKeyEnd, moved + i, jsonValueGet(this.slotKeyEnd, start + i))
-          }
+        }
+        if (start < this.slotRangeTop) {
+          this.moveKeyRanges(start, moved, n)
         }
         start = moved
         jsonValuePut(this.first, c, start)
@@ -1171,38 +1296,35 @@ export class JsonDocument {
       this.slotValue = jsonValueRoomI32(this.slotValue, this.slotTop)
       this.slotKeyAt = jsonValueRoomI32(this.slotKeyAt, this.slotTop)
       this.slotKeyLength = jsonValueRoomI32(this.slotKeyLength, this.slotTop)
-      if (this.ranged) {
-        this.slotKeyStart = jsonValueRoomI32(this.slotKeyStart, this.slotTop)
-        this.slotKeyEnd = jsonValueRoomI32(this.slotKeyEnd, this.slotTop)
-      }
       jsonValuePut(this.room, c, grown)
     }
     jsonValuePut(this.slotValue, start + n, v)
     jsonValuePut(this.slotKeyAt, start + n, keyAt)
     jsonValuePut(this.slotKeyLength, start + n, keyLength)
-    if (this.ranged) {
-      jsonValuePut(this.slotKeyStart, start + n, -1)
-      jsonValuePut(this.slotKeyEnd, start + n, -1)
-    }
     jsonValuePut(this.count, c, n + 1)
     jsonValuePut(this.parent, v, c)
   }
 
   /** Internal: a new value of `kind` holding `s`'s bytes, as a handle. */
   newStored(kind: i32, s: string): JsonValue {
-    return this.built(this.newNode(kind, this.byteTop, this.storeText(s)))
+    return this.handle(this.newNode(kind, this.byteTop, this.storeText(s)))
   }
 
   /**
-   * Internal: the handle of index `x`, which a builder just made, with no
-   * range while the document keeps them; a negative `x` is answered as it is.
+   * Internal: `append` moving the `n` slots from `from`, some of them below
+   * `slotRangeTop`, to `to`, the end of the slots: their key ranges move with
+   * them, and the slots between keep none.
    */
-  built(x: i32): JsonValue {
-    if (x >= 0 && this.ranged) {
-      jsonValuePut(this.valueStart, x, -1)
-      jsonValuePut(this.valueEnd, x, -1)
+  moveKeyRanges(from: i32, to: i32, n: i32): void {
+    for (let t: i32 = this.slotRangeTop; t < to; t += 1) {
+      jsonValuePut(this.slotKeyStart, t, -1)
+      jsonValuePut(this.slotKeyEnd, t, -1)
     }
-    return this.handle(x)
+    for (let i: i32 = 0; i < n; i += 1) {
+      jsonValuePut(this.slotKeyStart, to + i, this.slotRange(this.slotKeyStart, from + i))
+      jsonValuePut(this.slotKeyEnd, to + i, this.slotRange(this.slotKeyEnd, from + i))
+    }
+    this.slotRangeTop = to + n
   }
 
   /** Internal: `s`'s bytes onto the end of `bytes`; answers how many. */
