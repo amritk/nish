@@ -36,10 +36,11 @@
  * one, kept to their members above ASCII: the ASCII letters fold by their own
  * table and nothing crosses into it, so ſ (U+017F) and the Kelvin sign
  * (U+212A) do not match `s` or `k`. An orbit left with fewer than two members
- * is dropped. It is, per member by code point, the gap since
- * the last member and the zigzag-coded step to the next member of its orbit,
- * the last member stepping back to the first. **The fold runs**
- * `REGEX_FOLD_SPANS` are the same code points as maximal runs, at a fixed
+ * is dropped. It is, per member by code point, the gap since the last
+ * member and the zigzag-coded step to the next member of its orbit, the last
+ * member stepping back to the first; the step is doubled, plus one in an
+ * orbit of two, whose walk then ends without reading the table again.
+ * **The fold runs** `REGEX_FOLD_SPANS` are the same code points as maximal runs, at a fixed
  * width so `regexCompile` can binary-search them without reading the fold
  * table: a class with no folding code point, or none in its gaps, such as
  * `\S` under `i`, then never decodes it. **The fold index** `REGEX_FOLD_INDEX`
@@ -454,18 +455,18 @@ const tables = (db) => {
     index += `${n.key}=${value}|`
   }
   const members = db.orbits
-    .flatMap((o) => o.map((c, i) => [c, o[(i + 1) % o.length]]))
+    .flatMap((o) => o.map((c, i) => [c, o[(i + 1) % o.length], o.length === 2 ? 1 : 0]))
     .sort((a, b) => a[0] - b[0])
   let fold = ""
   let prev = 0
   // Per block of `FOLD_BLOCK` members, the first member and where its step starts.
   const blocks = []
-  members.forEach(([c, next], i) => {
+  members.forEach(([c, next, pair], i) => {
     fold += varint(c - prev)
     if (i % FOLD_BLOCK === 0) {
       blocks.push([c, fold.length])
     }
-    fold += varint(zigzag(next - c))
+    fold += varint(zigzag(next - c) * 2 + pair)
     prev = c
   })
   // The folding code points as maximal runs, each end four base-32 digits.
@@ -502,7 +503,7 @@ const region = (t) =>
     "/** The range lists `REGEX_PROPERTY_NAMES` points into, in base-32 digits from `0`. */",
     "const REGEX_PROPERTY_DATA: string =",
     `  ${literal(t.data)}`,
-    "/** Simple case folding above ASCII: per member of an orbit, its gap and the zigzag step to the next member. */",
+    "/** Simple case folding above ASCII: per member of an orbit, its gap and the zigzag step to the next member, doubled, plus one in a pair. */",
     "const REGEX_FOLD_DATA: string =",
     `  ${literal(t.fold)}`,
     "/** The code points `REGEX_FOLD_DATA` folds, as runs: per run its first and last, four base-32 digits each. */",
