@@ -648,7 +648,7 @@ case "$profile" in
       wanted=0
       for i in ${inputs[@]+"${inputs[@]}"}; do
         case "$i" in
-          */runtime-$kernel.c|runtime-$kernel.c) named=1 ;;
+          */runtime-"$kernel".c|runtime-"$kernel".c) named=1 ;;
           *.ll) if grep -q "@nish_${kernel}_hw(" "$i"; then wanted=1; fi ;;
         esac
       done
