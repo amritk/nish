@@ -27,8 +27,15 @@
  * Nothing here branches or indexes on the message: the only branches are on
  * lengths and loop counters, which a hash does not keep secret.
  *
+ * The one `nish:unsafe` use is `uncheckedGet` in `sha256LoadWord`, whose
+ * every caller is `sha256Compress` after its guard has proved the whole block
+ * lies in the buffer; there the unchecked reads are what let the four byte
+ * loads of a word become one load and a byte swap.
+ *
  * Written from the specification, not ported from another implementation.
  */
+
+import { uncheckedGet } from "nish:unsafe"
 
 /** The length of a digest in bytes (FIPS 180-4 §1, "Message Digest Size"). */
 export const SHA256_SIZE: i32 = 32
@@ -36,160 +43,52 @@ export const SHA256_SIZE: i32 = 32
 /** The length of a message block in bytes (FIPS 180-4 §1, "Block Size"). */
 export const SHA256_BLOCK: i32 = 64
 
-/**
- * The round constant K_t of FIPS 180-4 §4.2.2: the first 32 bits of the
- * fractional parts of the cube roots of the first sixty-four primes.
- *
- * A function over a `switch` rather than a table, because a module constant
- * cannot be an array ([LANGUAGE.md](../../docs/LANGUAGE.md#module-constants))
- * and building one per hasher would be sixty-four stores for every `new`. LLVM's
- * code generator turns a `switch` whose every arm returns a constant into a
- * read-only lookup table, so in the binary this is one load. `t` is the round
- * number, never message data.
- */
-const sha256RoundConstant = (t: i32): u32 => {
-  switch (t) {
-    case 0:
-      return 0x428a2f98
-    case 1:
-      return 0x71374491
-    case 2:
-      return 0xb5c0fbcf
-    case 3:
-      return 0xe9b5dba5
-    case 4:
-      return 0x3956c25b
-    case 5:
-      return 0x59f111f1
-    case 6:
-      return 0x923f82a4
-    case 7:
-      return 0xab1c5ed5
-    case 8:
-      return 0xd807aa98
-    case 9:
-      return 0x12835b01
-    case 10:
-      return 0x243185be
-    case 11:
-      return 0x550c7dc3
-    case 12:
-      return 0x72be5d74
-    case 13:
-      return 0x80deb1fe
-    case 14:
-      return 0x9bdc06a7
-    case 15:
-      return 0xc19bf174
-    case 16:
-      return 0xe49b69c1
-    case 17:
-      return 0xefbe4786
-    case 18:
-      return 0x0fc19dc6
-    case 19:
-      return 0x240ca1cc
-    case 20:
-      return 0x2de92c6f
-    case 21:
-      return 0x4a7484aa
-    case 22:
-      return 0x5cb0a9dc
-    case 23:
-      return 0x76f988da
-    case 24:
-      return 0x983e5152
-    case 25:
-      return 0xa831c66d
-    case 26:
-      return 0xb00327c8
-    case 27:
-      return 0xbf597fc7
-    case 28:
-      return 0xc6e00bf3
-    case 29:
-      return 0xd5a79147
-    case 30:
-      return 0x06ca6351
-    case 31:
-      return 0x14292967
-    case 32:
-      return 0x27b70a85
-    case 33:
-      return 0x2e1b2138
-    case 34:
-      return 0x4d2c6dfc
-    case 35:
-      return 0x53380d13
-    case 36:
-      return 0x650a7354
-    case 37:
-      return 0x766a0abb
-    case 38:
-      return 0x81c2c92e
-    case 39:
-      return 0x92722c85
-    case 40:
-      return 0xa2bfe8a1
-    case 41:
-      return 0xa81a664b
-    case 42:
-      return 0xc24b8b70
-    case 43:
-      return 0xc76c51a3
-    case 44:
-      return 0xd192e819
-    case 45:
-      return 0xd6990624
-    case 46:
-      return 0xf40e3585
-    case 47:
-      return 0x106aa070
-    case 48:
-      return 0x19a4c116
-    case 49:
-      return 0x1e376c08
-    case 50:
-      return 0x2748774c
-    case 51:
-      return 0x34b0bcb5
-    case 52:
-      return 0x391c0cb3
-    case 53:
-      return 0x4ed8aa4a
-    case 54:
-      return 0x5b9cca4f
-    case 55:
-      return 0x682e6ff3
-    case 56:
-      return 0x748f82ee
-    case 57:
-      return 0x78a5636f
-    case 58:
-      return 0x84c87814
-    case 59:
-      return 0x8cc70208
-    case 60:
-      return 0x90befffa
-    case 61:
-      return 0xa4506ceb
-    case 62:
-      return 0xbef9a3f7
-    case 63:
-      return 0xc67178f2
-    // Unreachable: `t` is a round number, 0 to 63. A `default` of its own
-    // keeps K_63 inside the table, so the lookup needs no range test first.
-    default:
-      return 0
-  }
-}
-
 /** ROTR^n(x) of FIPS 180-4 §3.2: a right rotation of a 32-bit word, `0 < n < 32`. */
 const sha256Rotr = (x: u32, n: u32): u32 => (x >>> n) | (x << (32 - n))
 
-/** The big-endian word at `buf[at .. at + 4)`, as FIPS 180-4 §3.1 orders bytes in a word. */
-const sha256LoadWord = (buf: u8[], at: i32): u32 =>
-  (toU32(buf[at]) << 24) | (toU32(buf[at + 1]) << 16) | (toU32(buf[at + 2]) << 8) | toU32(buf[at + 3])
+/** Σ0 of FIPS 180-4 §4.1.2, (4.4). */
+const sha256BigSigma0 = (x: u32): u32 => sha256Rotr(x, 2) ^ sha256Rotr(x, 13) ^ sha256Rotr(x, 22)
+
+/** Σ1 of FIPS 180-4 §4.1.2, (4.5). */
+const sha256BigSigma1 = (x: u32): u32 => sha256Rotr(x, 6) ^ sha256Rotr(x, 11) ^ sha256Rotr(x, 25)
+
+/** σ0 of FIPS 180-4 §4.1.2, (4.6). */
+const sha256SmallSigma0 = (x: u32): u32 => sha256Rotr(x, 7) ^ sha256Rotr(x, 18) ^ (x >>> 3)
+
+/** σ1 of FIPS 180-4 §4.1.2, (4.7). */
+const sha256SmallSigma1 = (x: u32): u32 => sha256Rotr(x, 17) ^ sha256Rotr(x, 19) ^ (x >>> 10)
+
+/**
+ * Ch of FIPS 180-4 §4.1.2, (4.2). `(x & y) ^ (~x & z)` picks each bit of `y`
+ * where `x` has a one and of `z` where it has a zero, which is what
+ * `z ^ (x & (y ^ z))` computes in three operations instead of four.
+ */
+const sha256Choose = (x: u32, y: u32, z: u32): u32 => z ^ (x & (y ^ z))
+
+/**
+ * Maj of FIPS 180-4 §4.1.2, (4.3). `(x & y) ^ (x & z) ^ (y & z)` is each
+ * bit's majority vote, which is `x & y` unless `x` and `y` differ, and then
+ * `z`'s bit: `(x & y) ^ (z & (x ^ y))`.
+ */
+const sha256Majority = (x: u32, y: u32, z: u32): u32 => (x & y) ^ (z & (x ^ y))
+
+/**
+ * The big-endian word at `buf[p .. p + 4)`, as FIPS 180-4 §3.1 orders bytes in
+ * a word, which `sha256Compress` has checked lies in `buf`. The four reads are
+ * `uncheckedGet` and `p`'s range makes each `p + k` an `add nsw`, so with no
+ * bounds check or overflow test between them LLVM joins them into one 32-bit
+ * load and a byte swap.
+ *
+ * The low byte is the innermost `|` on purpose. σ1 shifts a word right by 10,
+ * and when the low byte is the outermost operand LLVM's instcombine answers
+ * that shift from the inner three bytes alone, which gives the half-built word
+ * a second use and leaves words 14 and 15 as four byte loads each.
+ */
+const sha256LoadWord = (buf: u8[], p: integer<0, 2147483643>): u32 =>
+  toU32(uncheckedGet(buf, p + 3)) |
+  (toU32(uncheckedGet(buf, p + 2)) << 8) |
+  (toU32(uncheckedGet(buf, p + 1)) << 16) |
+  (toU32(uncheckedGet(buf, p)) << 24)
 
 /**
  * Copies `from[fromAt .. fromAt + n)` to `to[toAt .. toAt + n)`. Every caller
@@ -208,28 +107,34 @@ const sha256CopyBytes = (from: u8[], fromAt: i32, to: u8[], toAt: i32, n: i32): 
  * 64-word message schedule, passed in so that it is allocated once per hasher.
  *
  * A function over the arrays rather than a method, so that each array is a
- * plain local whose length the guard below proves once for every loop.
+ * plain local whose length the guard below proves once for every access.
+ *
+ * The sixty-four rounds are written out rather than looped. Unrolled, each
+ * round constant K_t of §4.2.2 (the first 32 bits of the fractional parts of
+ * the cube roots of the first sixty-four primes) is an immediate operand, and
+ * the eight working variables never move: instead of `h = g`, `g = f` and so
+ * on, each round renames them, so round t + 1 reads as its `a` the variable
+ * round t wrote as its `h`, and after eight rounds the names are back where
+ * they started. Only `d` and `h` of a round are written: `d + T1` is the next
+ * `e`, and `T1 + T2` the next `a`. The message schedule of step 1 is computed
+ * one word ahead of the round that reads it, rather than all at once first.
  */
 const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
-  // The test is written as the condition the body runs under, not as an
-  // early exit, because that is the shape that proves the plain `w[t]` and
-  // `h[i]` indices in range and drops their bounds checks. The computed ones —
-  // the byte reads in `sha256LoadWord` and `w[t - 2]` and its kin — keep a
-  // check each; measured, removing every check moved the 1 MiB time by less
-  // than the run-to-run noise.
-  if (toI32(h.length) >= 8 && toI32(w.length) >= 64 && at >= 0 && at <= toI32(src.length) - SHA256_BLOCK) {
-    // Step 1: the message schedule.
-    for (let t: i32 = 0; t < 16; t += 1) {
-      w[t] = sha256LoadWord(src, at + 4 * t)
-    }
-    for (let t: i32 = 16; t < 64; t += 1) {
-      const w2: u32 = w[t - 2]
-      const w15: u32 = w[t - 15]
-      // σ1 and σ0 of §4.1.2, (4.7) and (4.6).
-      const sigma1: u32 = sha256Rotr(w2, 17) ^ sha256Rotr(w2, 19) ^ (w2 >>> 10)
-      const sigma0: u32 = sha256Rotr(w15, 7) ^ sha256Rotr(w15, 18) ^ (w15 >>> 3)
-      w[t] = sigma1 + w[t - 7] + sigma0 + w[t - 16]
-    }
+  // The test is written as the condition the body runs under, not as an early
+  // exit, because that is the shape that proves the constant `w[t]` and `h[i]`
+  // indices in range and drops their bounds checks. It also proves the 64
+  // bytes at `at` lie in `src`, which is what makes `sha256LoadWord`'s
+  // unchecked reads sound, and its last clause, which the one before implies
+  // for any array an `i32` can index, is what puts `at` in `base`'s range with
+  // no check.
+  if (
+    toI32(h.length) >= 8 &&
+    toI32(w.length) >= 64 &&
+    at >= 0 &&
+    at <= toI32(src.length) - SHA256_BLOCK &&
+    at <= 2147483583
+  ) {
+    const base: integer<0, 2147483583> = at
     // Step 2: the working variables start from the previous hash value.
     let a: u32 = h[0]
     let b: u32 = h[1]
@@ -239,24 +144,266 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
     let f: u32 = h[5]
     let g: u32 = h[6]
     let hh: u32 = h[7]
-    // Step 3: sixty-four rounds.
-    for (let t: i32 = 0; t < 64; t += 1) {
-      // Σ1 (4.5), Ch (4.2), Σ0 (4.4) and Maj (4.3) of §4.1.2.
-      const bigSigma1: u32 = sha256Rotr(e, 6) ^ sha256Rotr(e, 11) ^ sha256Rotr(e, 25)
-      const choose: u32 = (e & f) ^ (~e & g)
-      const t1: u32 = hh + bigSigma1 + choose + sha256RoundConstant(t) + w[t]
-      const bigSigma0: u32 = sha256Rotr(a, 2) ^ sha256Rotr(a, 13) ^ sha256Rotr(a, 22)
-      const majority: u32 = (a & b) ^ (a & c) ^ (b & c)
-      const t2: u32 = bigSigma0 + majority
-      hh = g
-      g = f
-      f = e
-      e = d + t1
-      d = c
-      c = b
-      b = a
-      a = t1 + t2
-    }
+    // T1 of step 3; T2 is added where it is computed.
+    let t1: u32 = 0
+    // Steps 1 and 3: rounds 0 to 15 read the block's sixteen words.
+    w[0] = sha256LoadWord(src, base)
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0x428a2f98 + w[0]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[1] = sha256LoadWord(src, base + 4)
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0x71374491 + w[1]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[2] = sha256LoadWord(src, base + 8)
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0xb5c0fbcf + w[2]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[3] = sha256LoadWord(src, base + 12)
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0xe9b5dba5 + w[3]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[4] = sha256LoadWord(src, base + 16)
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0x3956c25b + w[4]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[5] = sha256LoadWord(src, base + 20)
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0x59f111f1 + w[5]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[6] = sha256LoadWord(src, base + 24)
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0x923f82a4 + w[6]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[7] = sha256LoadWord(src, base + 28)
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0xab1c5ed5 + w[7]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
+    w[8] = sha256LoadWord(src, base + 32)
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0xd807aa98 + w[8]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[9] = sha256LoadWord(src, base + 36)
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0x12835b01 + w[9]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[10] = sha256LoadWord(src, base + 40)
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0x243185be + w[10]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[11] = sha256LoadWord(src, base + 44)
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0x550c7dc3 + w[11]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[12] = sha256LoadWord(src, base + 48)
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0x72be5d74 + w[12]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[13] = sha256LoadWord(src, base + 52)
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0x80deb1fe + w[13]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[14] = sha256LoadWord(src, base + 56)
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0x9bdc06a7 + w[14]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[15] = sha256LoadWord(src, base + 60)
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0xc19bf174 + w[15]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
+    // Rounds 16 to 63 extend the schedule one word ahead of the round that reads it.
+    w[16] = sha256SmallSigma1(w[14]) + w[9] + sha256SmallSigma0(w[1]) + w[0]
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0xe49b69c1 + w[16]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[17] = sha256SmallSigma1(w[15]) + w[10] + sha256SmallSigma0(w[2]) + w[1]
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0xefbe4786 + w[17]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[18] = sha256SmallSigma1(w[16]) + w[11] + sha256SmallSigma0(w[3]) + w[2]
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0x0fc19dc6 + w[18]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[19] = sha256SmallSigma1(w[17]) + w[12] + sha256SmallSigma0(w[4]) + w[3]
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0x240ca1cc + w[19]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[20] = sha256SmallSigma1(w[18]) + w[13] + sha256SmallSigma0(w[5]) + w[4]
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0x2de92c6f + w[20]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[21] = sha256SmallSigma1(w[19]) + w[14] + sha256SmallSigma0(w[6]) + w[5]
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0x4a7484aa + w[21]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[22] = sha256SmallSigma1(w[20]) + w[15] + sha256SmallSigma0(w[7]) + w[6]
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0x5cb0a9dc + w[22]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[23] = sha256SmallSigma1(w[21]) + w[16] + sha256SmallSigma0(w[8]) + w[7]
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0x76f988da + w[23]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
+    w[24] = sha256SmallSigma1(w[22]) + w[17] + sha256SmallSigma0(w[9]) + w[8]
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0x983e5152 + w[24]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[25] = sha256SmallSigma1(w[23]) + w[18] + sha256SmallSigma0(w[10]) + w[9]
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0xa831c66d + w[25]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[26] = sha256SmallSigma1(w[24]) + w[19] + sha256SmallSigma0(w[11]) + w[10]
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0xb00327c8 + w[26]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[27] = sha256SmallSigma1(w[25]) + w[20] + sha256SmallSigma0(w[12]) + w[11]
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0xbf597fc7 + w[27]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[28] = sha256SmallSigma1(w[26]) + w[21] + sha256SmallSigma0(w[13]) + w[12]
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0xc6e00bf3 + w[28]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[29] = sha256SmallSigma1(w[27]) + w[22] + sha256SmallSigma0(w[14]) + w[13]
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0xd5a79147 + w[29]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[30] = sha256SmallSigma1(w[28]) + w[23] + sha256SmallSigma0(w[15]) + w[14]
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0x06ca6351 + w[30]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[31] = sha256SmallSigma1(w[29]) + w[24] + sha256SmallSigma0(w[16]) + w[15]
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0x14292967 + w[31]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
+    w[32] = sha256SmallSigma1(w[30]) + w[25] + sha256SmallSigma0(w[17]) + w[16]
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0x27b70a85 + w[32]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[33] = sha256SmallSigma1(w[31]) + w[26] + sha256SmallSigma0(w[18]) + w[17]
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0x2e1b2138 + w[33]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[34] = sha256SmallSigma1(w[32]) + w[27] + sha256SmallSigma0(w[19]) + w[18]
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0x4d2c6dfc + w[34]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[35] = sha256SmallSigma1(w[33]) + w[28] + sha256SmallSigma0(w[20]) + w[19]
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0x53380d13 + w[35]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[36] = sha256SmallSigma1(w[34]) + w[29] + sha256SmallSigma0(w[21]) + w[20]
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0x650a7354 + w[36]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[37] = sha256SmallSigma1(w[35]) + w[30] + sha256SmallSigma0(w[22]) + w[21]
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0x766a0abb + w[37]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[38] = sha256SmallSigma1(w[36]) + w[31] + sha256SmallSigma0(w[23]) + w[22]
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0x81c2c92e + w[38]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[39] = sha256SmallSigma1(w[37]) + w[32] + sha256SmallSigma0(w[24]) + w[23]
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0x92722c85 + w[39]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
+    w[40] = sha256SmallSigma1(w[38]) + w[33] + sha256SmallSigma0(w[25]) + w[24]
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0xa2bfe8a1 + w[40]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[41] = sha256SmallSigma1(w[39]) + w[34] + sha256SmallSigma0(w[26]) + w[25]
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0xa81a664b + w[41]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[42] = sha256SmallSigma1(w[40]) + w[35] + sha256SmallSigma0(w[27]) + w[26]
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0xc24b8b70 + w[42]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[43] = sha256SmallSigma1(w[41]) + w[36] + sha256SmallSigma0(w[28]) + w[27]
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0xc76c51a3 + w[43]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[44] = sha256SmallSigma1(w[42]) + w[37] + sha256SmallSigma0(w[29]) + w[28]
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0xd192e819 + w[44]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[45] = sha256SmallSigma1(w[43]) + w[38] + sha256SmallSigma0(w[30]) + w[29]
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0xd6990624 + w[45]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[46] = sha256SmallSigma1(w[44]) + w[39] + sha256SmallSigma0(w[31]) + w[30]
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0xf40e3585 + w[46]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[47] = sha256SmallSigma1(w[45]) + w[40] + sha256SmallSigma0(w[32]) + w[31]
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0x106aa070 + w[47]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
+    w[48] = sha256SmallSigma1(w[46]) + w[41] + sha256SmallSigma0(w[33]) + w[32]
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0x19a4c116 + w[48]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[49] = sha256SmallSigma1(w[47]) + w[42] + sha256SmallSigma0(w[34]) + w[33]
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0x1e376c08 + w[49]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[50] = sha256SmallSigma1(w[48]) + w[43] + sha256SmallSigma0(w[35]) + w[34]
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0x2748774c + w[50]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[51] = sha256SmallSigma1(w[49]) + w[44] + sha256SmallSigma0(w[36]) + w[35]
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0x34b0bcb5 + w[51]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[52] = sha256SmallSigma1(w[50]) + w[45] + sha256SmallSigma0(w[37]) + w[36]
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0x391c0cb3 + w[52]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[53] = sha256SmallSigma1(w[51]) + w[46] + sha256SmallSigma0(w[38]) + w[37]
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0x4ed8aa4a + w[53]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[54] = sha256SmallSigma1(w[52]) + w[47] + sha256SmallSigma0(w[39]) + w[38]
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0x5b9cca4f + w[54]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[55] = sha256SmallSigma1(w[53]) + w[48] + sha256SmallSigma0(w[40]) + w[39]
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0x682e6ff3 + w[55]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
+    w[56] = sha256SmallSigma1(w[54]) + w[49] + sha256SmallSigma0(w[41]) + w[40]
+    t1 = hh + sha256BigSigma1(e) + sha256Choose(e, f, g) + 0x748f82ee + w[56]
+    d += t1
+    hh = t1 + sha256BigSigma0(a) + sha256Majority(a, b, c)
+    w[57] = sha256SmallSigma1(w[55]) + w[50] + sha256SmallSigma0(w[42]) + w[41]
+    t1 = g + sha256BigSigma1(d) + sha256Choose(d, e, f) + 0x78a5636f + w[57]
+    c += t1
+    g = t1 + sha256BigSigma0(hh) + sha256Majority(hh, a, b)
+    w[58] = sha256SmallSigma1(w[56]) + w[51] + sha256SmallSigma0(w[43]) + w[42]
+    t1 = f + sha256BigSigma1(c) + sha256Choose(c, d, e) + 0x84c87814 + w[58]
+    b += t1
+    f = t1 + sha256BigSigma0(g) + sha256Majority(g, hh, a)
+    w[59] = sha256SmallSigma1(w[57]) + w[52] + sha256SmallSigma0(w[44]) + w[43]
+    t1 = e + sha256BigSigma1(b) + sha256Choose(b, c, d) + 0x8cc70208 + w[59]
+    a += t1
+    e = t1 + sha256BigSigma0(f) + sha256Majority(f, g, hh)
+    w[60] = sha256SmallSigma1(w[58]) + w[53] + sha256SmallSigma0(w[45]) + w[44]
+    t1 = d + sha256BigSigma1(a) + sha256Choose(a, b, c) + 0x90befffa + w[60]
+    hh += t1
+    d = t1 + sha256BigSigma0(e) + sha256Majority(e, f, g)
+    w[61] = sha256SmallSigma1(w[59]) + w[54] + sha256SmallSigma0(w[46]) + w[45]
+    t1 = c + sha256BigSigma1(hh) + sha256Choose(hh, a, b) + 0xa4506ceb + w[61]
+    g += t1
+    c = t1 + sha256BigSigma0(d) + sha256Majority(d, e, f)
+    w[62] = sha256SmallSigma1(w[60]) + w[55] + sha256SmallSigma0(w[47]) + w[46]
+    t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0xbef9a3f7 + w[62]
+    f += t1
+    b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
+    w[63] = sha256SmallSigma1(w[61]) + w[56] + sha256SmallSigma0(w[48]) + w[47]
+    t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0xc67178f2 + w[63]
+    e += t1
+    a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
     // Step 4: the next intermediate hash value.
     h[0] += a
     h[1] += b
