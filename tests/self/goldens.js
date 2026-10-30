@@ -40,7 +40,10 @@
  *     written once rather than under each of the programs that load it. A
  *     corpus program's own file opens with its `entry` line, the modules it
  *     loaded in load order, or its `reject` line, the wording it was refused
- *     with. Nothing is measured out: the check still runs every program and
+ *     with. Under its `entry` line it also carries the `[package …]` module
+ *     blocks it loaded (`std/` imported as `nish/...`): those dump with the
+ *     program's own instantiations, so they are compared per program rather
+ *     than deduplicated across programs. Nothing is measured out: the check still runs every program and
  *     compares every byte it prints, and a module whose dump differs between
  *     two programs is a hard error rather than a silent pick. See
  *     `produceChecked` for why the layout is this one.
@@ -182,6 +185,12 @@ const relativeLines = (lines) => {
  * same text under every program that loads it, whatever its `--number-mode`
  * (1,175 programs over 1,198 distinct modules when this was written), and the
  * generator checks that on every run rather than picking one.
+ *
+ * A module loaded from a package is the exception, and is not deduplicated: it
+ * dumps with each program's instantiations (`std/collections.ts` reads
+ * differently under two programs that use it at different types), so its
+ * `[package …]` block stays in the program's own golden, under its entry
+ * line, and is compared per program.
  */
 const produceChecked = (seed) => {
   const dumper = link(seed, path.join("src", "dump-checked.ts"), "dump_checked")
