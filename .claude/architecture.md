@@ -54,6 +54,17 @@ Compilation                                                            src/compi
   `src/runtime.ts` and `runtime/runtime.c` / `runtime/nish.h`;
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
+- **A new type kind is checked at every depth.** Before review, put it
+  everywhere a value can sit: a field, an array element, an inline array, a
+  `Result` arm, a generic argument, a `Map` value, a parallel or task capture.
+  At each of those depths, check every place a type is laid out, aligned,
+  zeroed or described. That means the layout in `src/structs.ts` and
+  `src/inline-arrays.ts`, the slot accesses in `src/emit-parallel.ts`,
+  `src/result.ts`, the Node defaults (`fillZero` in `src/emit-ts-records.ts`
+  and `runtime/core/arrays.mjs`), and the bridges: `cType`, `cFieldType` and
+  `tsKeyword` in `src/interop-abi.ts`, and `wasmSkipReason`. #1068's
+  `nish:simd` vectors failed five times this way, one nesting at a time:
+  a heap overflow, unaligned payloads, a header `void *`, a hole under Node.
 - **The runtime has a budget per translation unit.** Every `.text*` section of
   `clang -Oz -c <file>`, summed, for each of the runtime's translation units
   (`tests/runtime-budgets.js` holds every one; these are the main ones):

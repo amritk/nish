@@ -68,11 +68,28 @@
 // its range before its one call, so a kernel is handed only the
 // `0 <= from <= to <= length` its contract in `runtime/nish.h` asks for, and
 // the copy only ranges that lie inside their arrays.
+//
+// WP38 CRC: `nish/compress/checksum`'s `Crc32.update` hands its loop to one
+// private walker, `crc32Walk`, lowered S5's way — a branch on `nish_crc32_hw`,
+// `nish_crc32_update` (`runtime/runtime-checksum.c`) on one arm and the
+// original call on the other — with one difference: the walker answers the new
+// CRC, so the two arms meet at a `phi`. A machine without PCLMULQDQ or the
+// ARMv8 CRC32 instructions, a process run with `NISH_CRC32=soft`, and a wasm32
+// build run the slicing-by-8 tables as written. The kernel reads the bytes the
+// walker reads and nothing else; it ignores the walker's tables, which hold
+// the one polynomial it computes.
 
 import { CheckedProgram, FunctionSig } from "./program"
 import { CLI } from "./branding"
-import { isBytesModule, isCryptoAesModule, isRegexModule, isTextModule, stdModuleName } from "./std-modules"
-import { T_VOID } from "./types"
+import {
+  isBytesModule,
+  isCompressChecksumModule,
+  isCryptoAesModule,
+  isRegexModule,
+  isTextModule,
+  stdModuleName,
+} from "./std-modules"
+import { T_U32, T_VOID } from "./types"
 
 /** The runtime symbol the walker's call becomes. */
 export const INDEX_OF_ANY_KERNEL: string = "nish_str_index_of_any"
@@ -182,6 +199,25 @@ export const isSha256Seam = (program: CheckedProgram, sig: FunctionSig): boolean
   sig.sourceName === "sha256Compress" &&
   program.packageName === CLI &&
   program.source.path === stdModuleName("nish/crypto/sha256")
+
+/** The runtime's answer to whether this process runs the CRC-32 kernel. */
+export const CRC32_HW: string = "nish_crc32_hw"
+
+/** The runtime kernel `crc32Walk`'s call becomes on the hardware arm. */
+export const CRC32_KERNEL: string = "nish_crc32_update"
+
+/**
+ * Whether a call in `program` to `sig` is `crc32Walk(table, braid, crc, buf,
+ * off, len)`, `Crc32.update`'s loop, tested as `isAesSeam` tests its seams.
+ * The emitter's join is an `i32` `phi`, so a walker that came to answer
+ * another type would be emitted as written rather than lowered.
+ */
+export const isCrc32Seam = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.sourceName === "crc32Walk" &&
+  sig.returnType === T_U32 &&
+  isCompressChecksumModule(program.packageName, program.source.path)
 
 /** A call that is none of `nish/bytes`'s walks. */
 export const BYTES_WALK_NONE: i32 = 0

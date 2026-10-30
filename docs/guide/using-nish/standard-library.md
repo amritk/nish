@@ -105,7 +105,7 @@ numbers are the platform's errno values (Linux's shown).
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
-| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML; `YamlJsonLoader` in `nish/yaml-json` to load a document into a `JsonDocument` with its ranges |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
@@ -119,7 +119,7 @@ numbers are the platform's errno values (Linux's shown).
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, trust anchors, base64url, bcrypt |
-| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
+| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket (both sides of its handshake), an HTTP router, a PostgreSQL client |
 | [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing; `urlParse`, `urlResolve` and `urlOrigin` for a whole URL |
 | [`nish/net/dns-message`](#nishnetdns-message) | `dnsBuildQuery` and `dnsParseReply`: one DNS question as bytes, and the A or AAAA addresses a reply gives it, following its CNAME chain, with every count and pointer bounded |
@@ -251,18 +251,52 @@ A `Regex` has `test`, `exec` (into a `RegexMatch` you reuse), `find`,
 `findAll`, `count`, `replace`, `replaceAll` and `split`. A replacement
 template reads `$&`, `$1` to `$99`, `$<name>`, `` $` ``, `$'` and `$$`, as
 in JavaScript. `regexEscape(text)` makes a pattern that matches `text`
-exactly. The flags are `i` (ASCII letters), `m` and `s`; there is no `g`,
-since `findAll` and `replaceAll` are the global forms.
+exactly. The flags are `i`, `m`, `s` and `u`, which changes nothing, as
+every pattern is read the `u` way; there is no `g`, since `findAll` and
+`replaceAll` are the global forms.
+
+`\p{…}` matches a Unicode property, and `\P{…}` everything outside it, with
+JavaScript's names from Unicode 16.0: a General_Category value (`\p{L}`,
+`\p{Lu}`, `\p{Uppercase_Letter}`, `\p{gc=Nd}`), a script (`\p{Script=Greek}`,
+`\p{sc=Grek}`, or `\p{scx=Deva}` for Script_Extensions), or a binary property
+(`\p{Alphabetic}`, `\p{Emoji}`, `\p{White_Space}`, `\p{Any}`,
+`\p{Assigned}`). They work inside classes too, as in `[\p{L}\p{Nd}_]+`. A
+name JavaScript does not know is refused: `regex: invalid property name at
+byte 0`, or `invalid property value` for `\p{sc=Lu}`. A property escape
+cannot end a range in a class: `[\p{L}-z]` is refused (`regex: invalid class
+range at byte 1`), as it is in JavaScript.
+
+The property and folding tables add about 80 KB to every program that
+imports `nish/regex`, whether or not it uses `\p{…}` or `i`: a pattern is
+read at run time, so the tables cannot be left out. Compiling a pattern
+whose `i` class or character folds a letter outside ASCII looks each such
+letter up in the folding table where it lies, through an index of every
+sixteenth entry, so nothing is decoded ahead of time: a single `é` adds about
+0.2 µs to the compile. Other patterns never read the table.
 
 Matching never backtracks, so a pattern cannot make one search slow:
 `(a+)+$` against a long run of `a`s takes as long as `a+$`. The price is
 that backreferences (`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused
 when the pattern is compiled. So is a pattern past the engine's limits: a
 repeat count over 1,000, more than 1,024 capturing groups, more than 10,000
-ranges in one class, or more than 100,000 instructions once its repeats are
-written out. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
-`\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
-letters, where JavaScript's folds every letter: `é` does not match `É`.
+ranges in one class, more than 100,000 instructions once its repeats are
+written out, or property escapes and case folding that add more than 100,000
+ranges to its classes. Offsets are UTF-8 bytes, as `s.length` is, and `\w`,
+`\d` and `\b` are ASCII, as they are in JavaScript. The `i` flag folds every
+letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
+`Σ` and `ς`. One difference from JavaScript: no letter outside ASCII folds to
+one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`,
+nor `[a-z]`, `\p{Lu}` or `\p{Ll}`. That keeps an ASCII pattern under `i`
+ASCII: it folds `A`–`Z` to `a`–`z` with no table, and its search, its
+vectorised prefix scan included, never has to look for those two letters'
+three-byte and two-byte forms.
+Under `i` both still count as word characters to `\w`, `\W`, `\b` and `\B`,
+as they do in JavaScript with `iu`.
+Under `i`, `\P{Lu}` and `[^\p{Lu}]` differ, as they do in JavaScript:
+`\P{Lu}` is everything outside `\p{Lu}`, closed under folding, so it
+matches `A` through `a`, while `[^\p{Lu}]` negates the folded class
+`[\p{Lu}]`, which holds every cased letter, so it matches neither `A` nor
+`a`.
 
 Finding every match is one search per match, so `findAll`, `count`,
 `replaceAll` and `split` are quadratic when a long branch is preferred to a
@@ -733,7 +767,7 @@ and the byte in `doc.errorAt`. Nothing in the input can make it panic. The
 nesting depth is capped at 64, the writer's own limit, so every document a
 parse accepts can be written back. A document holds at most `doc.maxValues`
 values, 262,144 unless you raise it; one more is `JSON_VALUE_ERR_VALUES`. Each
-value costs the document about 46 bytes, kept for as long as the document is,
+value costs the document about 46 bytes (66 with ranges, below), kept for as long as the document is,
 so that cap, with the input's own size limit for the text the document
 copies, is what bounds a long-lived server's memory.
 
@@ -753,6 +787,49 @@ server that keeps one document and parses each request into it stops
 allocating once it has seen its largest request. `clear()` empties it for
 building from scratch.
 
+**Where a value came from.** `parseRanged(bytes, off, len)` and
+`parseTextRanged(text)` parse as `parse` and `parseText` do, and also record
+where each value and each key was in the input, so an error
+about a value can point at its line and column. `start(v)` and `end(v)` are
+the byte offsets of the value's first byte and one past its last, and
+`keyStart(o, i)` and `keyEnd(o, i)` the same for the key of member `i` of
+object `o`; a string's and a key's range includes its quotes. The offsets are
+into the array you gave `parseRanged`, or into the string `parseTextRanged`
+read. Under Node, where `parseTextRanged` reads one byte per UTF-16 code unit, its offsets
+count code units, so past the first non-ASCII character they differ from a
+native build's, which count UTF-8 bytes.
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  const text = `{"port": "eighty"}`;
+  const root = doc.parseTextRanged(text);
+  const port = doc.get(root, "port");
+  console.log(`${doc.start(port)} ${doc.end(port)}`); // 9 17
+  console.log(text.substring(doc.keyStart(root, 0), doc.keyEnd(root, 0))); // "port"
+  return 0;
+};
+```
+
+Ranges cost each value about 20 bytes more, so `parse` and `parseText` keep
+none, and after them all four answer `-1`. A value you build with
+the `new*` methods, and a key `set` adds, has no range either until you give
+it one with `setRange(v, start, end)` or `setKeyRange(o, i, start, end)`, which
+is how a loader for another format that builds the tree itself can point back
+into its own text. `set` over an existing key keeps the key's range. Every parse and `clear()`
+drops the ranges the document held.
+
+The two entry points are separate loops so that a program calling only
+`parse` runs the loop it always did. A program that links both, though, can
+see `parse` itself run slower, up to 16% on a number-heavy document, because
+the second loop changes how the first is laid out. A validator that wants
+ranges for its error messages calls `parseRanged` and nothing else, and one
+that does not calls `parse`; it should not mix the two to save the ranges'
+cost on the documents that turn out valid.
+
 Objects keep their members in order, and `get` looks a key up by scanning
 them, so walk a large object once with `keyAt` and `at` rather than calling
 `get` for each of many keys. Under Node, where a string is UTF-16,
@@ -760,6 +837,186 @@ them, so walk a large object once with `keyAt` and `at` rather than calling
 differs from the native build there; `parse` over bytes reads the same both
 ways. Its security record is
 [docs/security/json.md](../../security/json.md).
+
+## `nish/json-number`
+
+A JSON number is text, and some texts say more than a double holds:
+`9007199254740993` and `9007199254740992` are one `f64`, and so are `0.1` and
+`0.10000000000000001`. JSON Schema's `minimum`, `maximum` and `multipleOf`
+compare values, not doubles, and `0.3` is a multiple of `0.1` though
+`0.3 / 0.1` is `2.9999999999999996`. This module reads the decimal digits
+themselves and never makes an `f64`.
+
+```ts nish:ok
+import { JSON_NUMBER_ERR_GAP, jsonNumberCanonical, jsonNumberCompare, jsonNumberMultipleOf } from "nish/json-number";
+
+export const main = (): i32 => {
+  console.log(`${jsonNumberCompare("9007199254740993", "9007199254740992")}`); // 1
+  console.log(`${jsonNumberCompare("1.0", "1e0")}`); // 0
+  console.log(`${jsonNumberMultipleOf("0.3", "0.1")}`); // 1
+  console.log(`${jsonNumberMultipleOf("4.5", "2")}`); // 0
+  console.log(jsonNumberCanonical("0.0150e3")); // 15e0
+  console.log(jsonNumberCanonical("1.50")); // 15e-1
+  console.log(`${jsonNumberMultipleOf("1e1000000000", "7") === JSON_NUMBER_ERR_GAP}`); // true
+  return 0;
+};
+```
+
+`jsonNumberCompare(a, b)` answers `-1`, `0` or `1`, and
+`jsonNumberMultipleOf(value, divisor)` answers `1` or `0` (signs do not
+matter, and zero is a multiple of anything). `jsonNumberCanonical(text)` is
+the shortest spelling of the value, digits without trailing zeros and an
+exponent (`15e-1` for `1.50`, `15e0` for `0.0150e3`, `0` for `-0`), so two texts are equal values
+exactly when their canonical texts are the same string.
+
+Each of them refuses rather than guessing, `jsonNumberCompare` and
+`jsonNumberMultipleOf` with a negative code and `jsonNumberCanonical` with
+`""`, and the first argument's refusal comes first:
+
+- `JSON_NUMBER_ERR_SYNTAX`: the text is not one JSON number (`01`, `1.`, `+1`,
+  a blank around it).
+- `JSON_NUMBER_ERR_EXPONENT`: the exponent is past `JSON_NUMBER_MAX_EXPONENT`,
+  10^15 either way, and a digit is not zero (`0e9999999999999999` is zero).
+- `JSON_NUMBER_ERR_DIVISOR`: `multipleOf` by zero.
+- `JSON_NUMBER_ERR_GAP`: `multipleOf` would take more than
+  `JSON_NUMBER_MAX_STEPS` (2^20) digit steps. `1e1000000000` is twelve bytes
+  of input and a billion digits of dividend, so the bound is what keeps a
+  hostile schema or document from costing a billion steps.
+
+A comparison costs the digits of the two texts; `multipleOf` costs the
+value's digits from its first to the divisor's last place, times the
+divisor's digits past eighteen, and never more than the bound.
+
+## `nish/json-equal`
+
+JSON Schema's `const`, `enum` and `uniqueItems` ask whether two JSON values
+are equal, and its rule is not JavaScript's: numbers are equal by value, so
+`1` and `1.0` are, objects are equal whatever the order of their members, and
+`true` is not `1`.
+
+```ts nish:ok
+import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+
+export const main = (): i32 => {
+  const da = new JsonDocument(new JsonLimits());
+  const db = new JsonDocument(new JsonLimits());
+  const a = da.parseText(`{"id":1,"tags":["x"]}`);
+  const b = db.parseText(`{"tags":["x"],"id":1.0}`);
+  console.log(`${jsonEqual(da, a, db, b)}`); // true
+  console.log(jsonEqualCanonical(da, a)); // o2:2:idn1e0;4:tagsa1:s1:x
+  const list = da.parseText(`[1, true, "1", 1e0]`);
+  console.log(`${jsonEqualFirstDuplicate(da, list)}`); // 3
+  return 0;
+};
+```
+
+`jsonEqual(da, a, db, b)` compares a value of one document with a value of
+another, or of the same one (a document's handles last until it parses again, so two parsed texts take two documents); a handle that names no value is equal to
+nothing. `jsonEqualFirstDuplicate(doc, array)` is the position of the first
+element equal to an earlier one, `-1` when there is none, so `uniqueItems`
+holds exactly when it is `-1`.
+
+`jsonEqualCanonical` is a text that is the same for exactly the values
+`jsonEqual` calls equal, which makes it a key for a `Map` or `Set` of JSON
+values; it is not JSON. `jsonEqualHash` is a 64-bit FNV-1a hash of it. The
+hash is not keyed, so anyone can make values that collide: use the canonical
+text, not the hash, as a table's key when the values come from someone else.
+
+A number past the exponent bound of `nish/json-number` is equal only to the
+same text. None of the functions recurses, so a document as deep as its
+limits allow compares. `jsonEqual` costs the values' sizes, plus sorting each
+pair of objects' keys; the canonical text and the first duplicate cost the
+canonical text's length.
+
+## `nish/json-pointer`
+
+A JSON Pointer (RFC 6901) names one value inside a document: `/tags/0` is the
+first element of the member `tags`. A token is a member's key, with `~1` for a
+`/` in it and `~0` for a `~`, or an array index written without a leading
+zero.
+
+```ts nish:ok
+import { JSON_POINTER_NONE, isRelativeJsonPointer, jsonPointerEscape, jsonPointerParse, jsonPointerResolve } from "nish/json-pointer";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  const root = doc.parseText(`{"a/b":[10,20],"tags":["tea"]}`);
+  console.log(`${doc.i64(jsonPointerResolve(doc, root, "/a~1b/1"))}`); // 20
+  console.log(`${jsonPointerResolve(doc, root, "/tags/1") === JSON_POINTER_NONE}`); // true
+  console.log(`/${jsonPointerEscape("a/b")}/0`); // /a~1b/0
+  const tokens = jsonPointerParse("/a~1b//~0");
+  console.log(tokens === null ? "refused" : tokens.join("|")); // a/b||~
+  console.log(`${isRelativeJsonPointer("1/tags")}`); // true
+  return 0;
+};
+```
+
+`jsonPointerResolve(doc, root, pointer)` answers the value, `root` itself for
+the empty pointer, `JSON_POINTER_NONE` when the pointer names nothing there
+(a missing key, an index past the end, `-`, a token on a number) and
+`JSON_POINTER_ERR_SYNTAX` when the text is not a pointer. `jsonPointerParse`
+answers the decoded tokens, or `null`; `jsonPointerEscape` writes one token.
+The pointer is the plain string, not a URI fragment: `#/a` is not one.
+
+`isJsonPointer` and `isRelativeJsonPointer` check the form JSON Schema's
+`json-pointer` and `relative-json-pointer` formats name, reading the text once
+and allocating nothing. A relative pointer (`0#`, `1/tags`) is checked but not
+resolved: what it is relative to is the validator's to know. A resolve costs
+the pointer's length, and each member step the size of the object it looks
+in.
+
+## `nish/json-format`
+
+A JSON Schema names a string's shape with `format`: `"date-time"`, `"email"`,
+`"ipv6"`, `"uri"`. `nish/json-format` checks the formats of draft 2020-12, one
+predicate each, and a dispatcher for a format named in a schema.
+
+```ts nish:ok
+import { JSON_FORMAT_UNKNOWN, JSON_FORMAT_VALID, isEmail, isIpv6, jsonFormatCheck, jsonFormatId, jsonFormatValidate } from "nish/json-format";
+
+export const main = (): i32 => {
+  console.log(`${isEmail("joe.bloggs@example.com")} ${isIpv6("::ffff:192.168.0.1")}`); // true true
+
+  const id = jsonFormatId("date-time"); // once, when the schema is read
+  console.log(`${jsonFormatCheck(id, "1963-06-19T08:30:06Z") === JSON_FORMAT_VALID}`); // true
+  console.log(`${jsonFormatCheck(id, "1963-06-19 08:30:06Z")}`); // 0, invalid
+  console.log(`${jsonFormatValidate("idn-email", "x@y") === JSON_FORMAT_UNKNOWN}`); // true
+  return 0;
+};
+```
+
+The predicates are `isDateTime`, `isDate`, `isTime`, `isDuration`, `isEmail`,
+`isHostname`, `isIpv4`, `isIpv6`, `isUuid`, `isUri`, `isUriReference`, `isIri`,
+`isIriReference`, `isUriTemplate` and `isRegex`. Each is the grammar of the RFC
+the specification names, applied to the whole string, and each but `isRegex`
+reads the string once or twice and allocates nothing.
+
+The dispatcher answers `JSON_FORMAT_VALID` (1), `JSON_FORMAT_INVALID` (0) or
+`JSON_FORMAT_UNKNOWN` (-1). Unknown is the answer for `idn-email`,
+`idn-hostname`, `json-pointer`, `relative-json-pointer` and any other name, and
+a validator accepts what it cannot check. `jsonFormatId` compares the name with
+each format in turn, so resolve it once per schema and call `jsonFormatCheck`
+per instance; `jsonFormatValidate(name, value)` does both at once.
+
+Some answers are stricter than you may expect:
+
+- `duration` follows RFC 3339's Appendix A grammar as written, so its units
+  come in order and none is skipped: `P1Y2M` and `PT1H2M` are valid, and
+  `P1Y1D` and `PT1H1S` are not.
+- `hostname` does not decode an `xn--` label's Punycode.
+- `regex` is a pattern `nish/regex` compiles. It refuses lookaround and
+  backreferences, and a lone `{` or `]`, all of which ECMA-262 accepts, so
+  `isRegex("(?=a)a")` is false.
+
+`uri` and its relatives are checked against RFC 3986 and RFC 3987 here rather
+than by `nish/net/url`, which refuses valid URIs that could mislead a client,
+such as a percent-encoded host. Every case of JSON-Schema-Test-Suite's
+`optional/format` for these formats gives the suite's answer
+(`tests/link/std_json_format`).
 
 ## `nish/yaml`
 
@@ -889,6 +1146,61 @@ and followed by paths; on by default), `keepComments` (keep every comment's
 range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
 `MULTIPLE_DOCUMENTS` and stop after the first). Tabs are never indentation, as
 YAML says.
+
+### Loading YAML into a JsonDocument
+
+`new YamlJsonLoader()` from `nish/yaml-json` loads one document of a
+`YamlStream` into a `nish/json-value` `JsonDocument`, so a program that reads
+JSON reads YAML with the same code. `load(stream, d, doc)` clears `doc` and
+answers the root, with every value's range (`start`, `end`) and every key's
+(`keyStart`, `keyEnd`) set to the YAML node's bytes. A scalar is typed by the
+core schema: `0x1F` and `0o17` load as the exact decimal numbers `31` and
+`15`, and `.inf`, `-.inf` and `.nan`, which JSON cannot hold, are refused. An
+alias loads as a copy of its anchor's value, a `<<` merge key adds the merged
+maps' keys the map does not have itself, and a key that is not a string loads
+as its source text (`1`, `[ a, b ]`).
+
+Because the ranges are byte offsets into the text either way, one
+`YamlLineIndex` turns them into `line:column` whether the document came from
+JSON or from YAML:
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+import { parseYaml } from "nish/yaml";
+import { YamlJsonLoader } from "nish/yaml-json";
+import { YamlLineIndex } from "nish/yaml-lines";
+
+const place = (text: string, doc: JsonDocument, root: i32): string => {
+  const lines = new YamlLineIndex(text);
+  const at = doc.start(doc.get(root, "port"));
+  return `${lines.line(at)}:${lines.column(at)}`;
+};
+
+export const main = (): i32 => {
+  const json = `{\n  "name": "api",\n  "port": 8080\n}`;
+  const yaml = "name: api\nport: 8080\n";
+  const fromJson = new JsonDocument(new JsonLimits());
+  const fromYaml = new JsonDocument(new JsonLimits());
+  const loader = new YamlJsonLoader();
+  const a = fromJson.parseTextRanged(json);
+  const b = loader.load(parseYaml(yaml), 0, fromYaml);
+  console.log(`json ${place(json, fromJson, a)}, yaml ${place(yaml, fromYaml, b)}`);
+  return b < 0 ? 1 : 0;
+};
+```
+
+It prints `json 3:11, yaml 2:7`.
+
+**A load fails whole.** A negative answer is a code, also in `failed`, with
+the range it is about in `errorStart` and `errorEnd`, and the document is left
+empty; `yamlJsonErrorName` names it. A document with a YAML error is
+`YAML_JSON_ERR_YAML`, a non-finite number `YAML_JSON_ERR_NOT_FINITE`, and
+nesting past `maxDepth` (64) `YAML_JSON_ERR_DEPTH`. **An alias bomb is refused
+before anything is built**: the values the aliases expand to are counted
+first, and past the document's `maxValues` the load is
+`YAML_JSON_ERR_EXPANSION` at the alias; copies whose text passes the
+document's `JsonLimits.maxTotalBytes` are refused the same way.
 
 ### Writing YAML
 
@@ -2066,7 +2378,8 @@ a record written with their code); the records are in
 The protocol stack written on `nish/crypto`: TLS 1.3 (`nish/net/tls`), QUIC
 (`nish/net/quic` and its parts), HPACK and QPACK, HTTP/1.1
 (`nish/net/http1`, `nish/net/http1-server`), HTTP/2 (`nish/net/http2`),
-HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`) and WebTransport.
+HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`, the server's and
+the client's side of its handshake) and WebTransport.
 Most of these modules are *sans-IO*: they take bytes and answer bytes, and
 never read a socket or a clock themselves, so you drive them from your own
 loop over [`nish:net`](networking.md). The ones
@@ -2107,6 +2420,13 @@ them (`tlsClientAuthenticate`), and `nish/net/tls-tcp`'s `TlsTcpClient` and
 blocking `tlsConnect` put the client on a TCP socket and check the server
 themselves, against the system's roots or ones you name.
 [TLS client](tls-client.md) shows them.
+
+`nish/net/websocket` is both sides of a WebSocket's opening handshake: a
+server accepts with `Http1Connection.acceptWebSocket`, and a client makes its
+key with `websocketClientKey` from 16 random bytes, writes the request with
+`websocketUpgradeRequest`, and checks the server's 101 with
+`websocketCheckResponse`, which answers a `WS_HS_*` code and the chosen
+subprotocol. [WebSocket](websocket.md) shows both.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)

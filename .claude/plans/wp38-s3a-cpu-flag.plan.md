@@ -6,69 +6,85 @@ stages:
     title: S7's missing negative golden
     goal: Pin that a guard on one array's length does not prove an offset access into another, the one negative case of S7's row that #561 left without a golden
     verification: node tests/run.js <case> runs the new case natively and under Node with its expected panic; every CI test shard green and undegraded; the differential and checked goldens regenerated and read
-    status: pending
+    status: completed
     todos:
       - id: s7-golden-case
         content: Add tests/cases/arr_bounds_offset_other.ts and its .ll, and a row in each of tests/run.js's two offset-index tables — see S7, The missing golden
-        status: pending
+        status: completed
       - id: s7-register-goldens
         content: Register the case with node tests/differential/goldens.js --update and regenerate tests/self/goldens with node tests/self/goldens.js --update — see Verification
-        status: pending
+        status: completed
   - id: s3a-measure
     title: S3a — S3's bar kernels, measured without a surface
     goal: Record in docs/wp38-simd.md §2.3 whether a portable 128-bit vector kernel beats a fair scalar Nish kernel by 1.5x, on a numeric kernel and on a byte scan
     verification: node bench/simd-s3a.mjs --self --runs 15 prints every column with one checksum per kernel; npm run lint and node docs/check-links.mjs pass; every CI test shard green and undegraded, which compiles the new bench/*.ts
-    status: pending
+    status: completed
     todos:
       - id: s3a-numeric-kernels
         content: Write the spectral mat-vec kernel four ways in bench/simd-s3a/ (C portable-vector, C scalar, Nish scalar with checked indexing, Nish scalar with uncheckedGet) — see S3a, The kernels
-        status: pending
+        status: completed
       - id: s3a-byte-kernels
         content: Write bench/scan.ts's depth count the same four ways in bench/simd-s3a/ — see S3a, The kernels
-        status: pending
+        status: completed
       - id: s3a-portability-check
         content: Show the C vector kernels' optimised IR holds no llvm.x86 or llvm.aarch64 intrinsic, the only IR nish:simd could emit — see S3a, Staying portable
-        status: pending
+        status: completed
       - id: s3a-harness
         content: Add bench/simd-s3a.mjs on bench/simd-s0.mjs's pattern (interleaved rounds, a byte-identical copy column, min and median, checksums) — see S3a, The harness
-        status: pending
+        status: completed
       - id: s3a-record
         content: Write the S3a record into docs/wp38-simd.md §2.3 and its §7 row, with the reading the bar gives — see S3a, The record
-        status: pending
+        status: completed
   - id: s2-cpu-flag
     title: S2 — the --cpu x86-64-v3 flag
     goal: Ship `--cpu x86-64-v3` for the module and the runtime alike, every other value refused, with tests/ct-asm.js and tests/ct-asm-runtime.js reading x86-64 at that level
     verification: npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green locally; every CI test shard green and undegraded; the ct_asm checks pass at the baseline and at x86-64-v3; the checked goldens regenerated and read
-    status: pending
+    status: completed
     todos:
       - id: s2-parse-flag
         content: Parse --cpu in src/compile.ts, accepting x86-64-v3 alone and refusing every other value with exit 2 — see S2, The flag
-        status: pending
+        status: completed
       - id: s2-forward-build
         content: Forward the level through pushRecipeFlags to a new --cpu case in scripts/build.sh that adds -march=x86-64-v3 and -ffp-contract=off for every unit — see S2, The link
-        status: pending
+        status: completed
       - id: s2-refuse-targets
         content: Refuse --cpu under the wasi and wasm profiles and for a --target that is not x86-64 — see S2, The flag
-        status: pending
+        status: completed
       - id: s2-cache-keys
         content: Add the level to runtimeCacheKey and runCacheKey in src/run-cache.ts — see S2, The caches
-        status: pending
+        status: completed
       - id: s2-capability-report
         content: Record the level in the capability report in src/capability-report.ts and update tests/nish/cli.ts's expected report — see S2, Where a deployer reads it
-        status: pending
+        status: completed
       - id: s2-ct-asm-levels
         content: Run both ct_asm sections of tests/run.js and tests/ct-asm-runtime.js at the baseline and at x86-64-v3 on x86-64 — see S2, The constant-time checks
-        status: pending
+        status: completed
       - id: s2-tests
         content: Add driver tests that a --cpu build links and runs, and that an unknown level, native and a wasm profile are each refused — see Tests
-        status: pending
+        status: completed
       - id: s2-docs
         content: Update LANGUAGE.md, docs/guide/using-nish/cli.md, CT-16 in docs/security/ct-verification.md and the S2 row of docs/wp38-simd.md — see S2, Docs
-        status: pending
+        status: completed
       - id: s2-goldens
         content: Regenerate tests/self/goldens with node tests/self/goldens.js --update and read the diff — see Verification
-        status: pending
+        status: completed
 ---
+
+## Sign-off
+
+All three stages merged: S7's golden as #659, S3a as #658 and S2 as #660. The
+acceptance pass (#662) found six of eight criteria met and put two to the
+owner, who accepted both as shipped on 2026-10-30:
+
+- **Criterion 1, `arr_bounds_offset_other` panics "natively and under Node".**
+  It holds natively only. `runtime/nish.mjs` does not check indexing, by
+  design, so under Node the case prints `NaN` and exits 0, and nothing compares
+  it with Node. The criterion's words were wrong, not the code.
+- **Criterion 4, the capability report says `"baseline"` without `--cpu`.** The
+  shipped form stands: a baseline report has no `cpu` key, and
+  `--emit-capabilities --cpu x86-64-v3` writes `"cpu": "x86-64-v3"`.
+  `docs/LANGUAGE.md` ("The CPU level") says so. An always-present key would
+  move the caps goldens and the IR cookbook.
 
 ## Context
 

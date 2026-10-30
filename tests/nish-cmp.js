@@ -3748,13 +3748,16 @@ const compare = (pair, work, file, options = {}) => {
   const stem = path.basename(file, ".ts")
   const referenceDir = fresh(path.join(work, "reference"))
   const candidateDir = fresh(path.join(work, "candidate"))
+  // `--sandbox` refuses `--emit-napi`, so a sandboxed program
+  // (`tests/cases/sandbox_hello`) is compared on its IR alone.
+  const sandboxed = flags.some((flag) => flag === "--sandbox" || flag.startsWith("--sandbox="))
   const argv = (dir) => [
     named,
     "-o",
     `${dir}${path.sep}`,
     ...flags,
     ...(options.extraFlags ?? []),
-    ...(options.sidecars === false ? [] : sidecarFlags(dir, stem)),
+    ...(options.sidecars === false || sandboxed ? [] : sidecarFlags(dir, stem)),
   ]
 
   const reference = compile(pair.reference, argv(referenceDir))

@@ -1,7 +1,8 @@
 // The server programs of the TCP carriers, as a relay would write them: each
 // answers the events its carrier names and holds what the carrier could not
 // take yet, in buffers made once per slot, so that nothing here allocates per
-// request, per message or per byte. That is what lets a loopback check
+// request, per message or per byte (a WebSocket upgrade, which reads the
+// client's offered subprotocols into a list, aside). That is what lets a loopback check
 // measure a whole server wake — carrier and program — and expect nothing.
 import { HTTP1_CHUNKED } from "nish/net/http1";
 import {
@@ -14,7 +15,7 @@ import {
   H1_WS_MESSAGE,
   Http1Connection,
 } from "nish/net/http1-server";
-import { WS_OP_CONTINUATION } from "nish/net/websocket";
+import { WS_OP_CONTINUATION, websocketOfferedProtocols } from "nish/net/websocket";
 import { TLS_RECORD_DONE } from "nish/net/tls/record-server";
 import { TlsTcpServer } from "nish/net/tls-tcp";
 import { httpFieldBytes, httpFieldIs } from "nish/net/http-fields";
@@ -94,7 +95,8 @@ const H1_MODE_WS: i32 = 2;
 /**
  * HTTP/1.1's program. `GET /hello` answers a short body with its length;
  * `POST /echo` streams the request body back chunked as it arrives; `/ws`
- * accepts a WebSocket and echoes every message in fragments of at most
+ * accepts a WebSocket, choosing "superchat" when the client offers it (the
+ * one subprotocol this server speaks) and none otherwise, and echoes every message in fragments of at most
  * `WS_FRAGMENT` bytes, so a message larger than the connection's output goes
  * back whole. A write the connection holds back is resumed on `H1_WRITE`:
  * the connection reads nothing until then, so the window it was writing from
@@ -188,7 +190,16 @@ export class H1App {
     this.ended[slot] = false;
     const p = conn.parser;
     if (p.targetIs("/ws")) {
-      if (conn.acceptWebSocket("") === 0) {
+      const offered: string[] | null = websocketOfferedProtocols(p);
+      let chosen: string = "";
+      if (offered !== null) {
+        for (const name of offered) {
+          if (name === "superchat") {
+            chosen = name;
+          }
+        }
+      }
+      if (offered !== null && conn.acceptWebSocket(chosen) === 0) {
         this.mode[slot] = H1_MODE_WS;
       } else {
         this.refusals = this.refusals + 1;

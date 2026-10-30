@@ -1,0 +1,117 @@
+PASS  dispatch: date-time is id 0
+PASS  dispatch: regex is id 14
+PASS  dispatch: a name is matched exactly
+PASS  dispatch: idn-email is unknown
+PASS  dispatch: idn-hostname is unknown
+PASS  dispatch: json-pointer is unknown
+PASS  dispatch: relative-json-pointer is unknown
+PASS  dispatch: an empty name is unknown
+PASS  dispatch: id -1 is unknown
+PASS  dispatch: id 15 is unknown
+PASS  dispatch: a valid value
+PASS  dispatch: an invalid value
+PASS  date: 29 February of 2000
+PASS  date: 29 February of 1900
+PASS  date: 31 April
+PASS  date: a trailing character
+PASS  date-time: lower-case t and z
+PASS  date-time: a space for T
+PASS  time: a leap second east of UTC
+PASS  time: a leap second west of UTC
+PASS  time: 23:59:60 local west of UTC is not one
+PASS  time: a fraction with no digit
+PASS  time: an offset of 24 hours
+PASS  time: no offset
+PASS  duration: years and months
+PASS  duration: a skipped month is the ABNF's refusal
+PASS  duration: a skipped minute
+PASS  duration: days and a time
+PASS  duration: a T with nothing after it
+PASS  duration: two Ts
+PASS  duration: a week after a day
+PASS  duration: a number with no unit
+PASS  email: a quoted local part with a space
+PASS  email: a quoted pair
+PASS  email: an IPv6 literal
+PASS  email: a general literal
+PASS  email: an unclosed literal
+PASS  email: a local part of 65 octets
+PASS  email: a local part of 64 octets
+PASS  email: no domain
+PASS  hostname: a label of 63
+PASS  hostname: a label of 64
+PASS  hostname: an empty label
+PASS  hostname: a trailing dot
+PASS  hostname: empty
+PASS  ipv4: 255
+PASS  ipv4: 256
+PASS  ipv4: a fifth part
+PASS  ipv6: the unspecified address
+PASS  ipv6: a trailing ::
+PASS  ipv6: an IPv4 tail
+PASS  ipv6: an IPv4 tail in the middle
+PASS  ipv6: a lone trailing colon
+PASS  ipv6: a zone
+PASS  ipv6: two ::
+PASS  ipv6: nine groups
+PASS  uuid: upper case
+PASS  uuid: a dash moved
+PASS  uri: a percent-encoded reg-name
+PASS  uri: a numeric reg-name
+PASS  uri: a userinfo and port
+PASS  uri: a URN
+PASS  uri: IPvFuture
+PASS  uri: an empty IPvFuture body
+PASS  uri: a bad percent escape
+PASS  uri: a space
+PASS  uri: a non-digit port
+PASS  uri: a second # in the fragment
+PASS  uri: a non-ASCII character
+PASS  uri: no scheme
+PASS  uri-reference: a network-path reference
+PASS  uri-reference: the empty reference
+PASS  uri-reference: a colon after the first segment
+PASS  uri-reference: a colon in the first segment
+PASS  iri: a ucschar in the path
+PASS  iri: a character past the BMP
+PASS  iri: iprivate in the query
+PASS  iri: iprivate in the path
+PASS  iri: a non-character
+PASS  iri: a C1 control
+PASS  iri-reference: a relative IRI
+PASS  uri-template: a prefix modifier
+PASS  uri-template: a prefix of 10000
+PASS  uri-template: a prefix of 0
+PASS  uri-template: an explode list
+PASS  uri-template: a dotted name
+PASS  uri-template: a trailing dot
+PASS  uri-template: an empty expression
+PASS  uri-template: an unclosed expression
+PASS  uri-template: a space
+PASS  regex: a class and a quantifier
+PASS  regex: an unclosed group
+PASS  regex: lookahead is a known false negative
+PASS  regex: a backreference is a known false negative
+PASS  regex: a named backreference is a known false negative
+PASS  regex: negative lookahead is a known false negative
+PASS  regex: lookbehind is a known false negative
+PASS  regex: a lone { is a known false negative
+PASS  regex: a lone ] is a known false negative
+PASS  suite: cases.txt holds all 478 cases
+PASS  suite: date-time 19/19
+PASS  suite: date 41/41
+PASS  suite: time 39/39
+PASS  suite: duration 19/19
+PASS  suite: email 16/16
+PASS  suite: hostname 17/17
+PASS  suite: ipv4 10/10
+PASS  suite: ipv6 34/34
+PASS  suite: uuid 15/15
+PASS  suite: uri 20/20
+PASS  suite: uri-reference 7/7
+PASS  suite: iri 9/9
+PASS  suite: iri-reference 7/7
+PASS  suite: uri-template 4/4
+PASS  suite: regex 2/2
+PASS  suite: the unchecked formats are unknown in 129 cases
+std/json-format: 116 passed, 0 failed, 0 skipped

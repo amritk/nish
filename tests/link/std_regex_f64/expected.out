@@ -136,7 +136,7 @@ PASS  /\u{110000}/
 PASS  /\01/
 PASS  /a/g
 PASS  /a/ii
-PASS  /a/u
+PASS  /a/uu
 PASS  findAll
 PASS  count
 PASS  findAll: empty matches step past a character
@@ -187,8 +187,74 @@ PASS  /x(?:^|y)+/
 PASS  /^*/
 PASS  /a/g
 PASS  /a/ii
-PASS  /a/u
 PASS  /A/ims
+PASS  /a/u
+PASS  /\p{L}+/
+PASS  /\P{L}+/
+PASS  /\p{Lu}+/
+PASS  /\p{gc=Lu}+/
+PASS  /\p{General_Category=Decimal_Number}+/
+PASS  /\p{Letter}\p{Nd}/
+PASS  /\p{Script=Greek}+/
+PASS  /\p{sc=Grek}+/
+PASS  /\p{sc=Deva}/
+PASS  /\p{scx=Deva}/
+PASS  /\p{Script_Extensions=Devanagari}+/
+PASS  /\p{Alphabetic}+/
+PASS  /\p{Alpha}+/
+PASS  /\p{Assigned}+/
+PASS  /\P{Assigned}/
+PASS  /\p{ASCII}+/
+PASS  /\p{Any}+/
+PASS  /\p{Emoji_Presentation}/
+PASS  /\p{LC}+/
+PASS  /[\p{N}x]+/
+PASS  /[^\p{L}\s]+/
+PASS  /[\P{L}]+/
+PASS  /\p{L}+/u
+PASS  /[\p{L}\p{N}\p{P}]+/
+PASS  /\P{Any}/
+PASS  /\p/
+PASS  /\pL/
+PASS  /\p{/
+PASS  /\p{}/
+PASS  /a\p{L/
+PASS  /\p{Foo}/
+PASS  /\p{L!}/
+PASS  /\p{Script}/
+PASS  /\p{Foo=Lu}/
+PASS  /\p{gc=L=x}/
+PASS  /\p{gc=Foo}/
+PASS  /\p{sc=Lu}/
+PASS  /[x\P{gc=Greek}]/
+PASS  /[\p{L}-z]/
+PASS  /[a-\p{L}]/
+PASS  /σ/i
+PASS  /ς+/i
+PASS  /é/i
+PASS  /Ǆ+/i
+PASS  /ß/i
+PASS  /\u{10400}/i
+PASS  /[α-ω]+/i
+PASS  /[^α]/i
+PASS  /[^α]/i
+PASS  /\p{Lu}+/i
+PASS  /\P{Ll}/i
+PASS  /[\p{Lu}é]+/i
+PASS  /\p{Script=Greek}+/iu
+PASS  /(?:é|ü)+/i
+PASS  /Straße/i
+PASS  /日+/i
+PASS  /\u{212a}/i
+PASS  /s/i
+PASS  /\p{Lu}/iu
+PASS  /\p{Ll}/iu
+PASS  /[a-z]/iu
+PASS  /[a-z]/iu
+PASS  /(\b\w)/i
+PASS  /(\B\w)/i
+PASS  /(\B\w)/
+PASS  /\w/i
 PASS  /é+日/
 PASS  /[^a]+z/
 PASS  /\s+x/
@@ -248,7 +314,10 @@ PASS  an empty body repeated 1000^4 times compiles
 PASS  a{0} repeated 1000^3 times compiles
 PASS  a class of 10001 ranges
 PASS  a class of 10000 ranges compiles
+PASS  property escapes past 100000 ranges
+PASS  property escapes just under 100000 ranges compile
+PASS  case folding past 100000 ranges
 PASS  1025 groups
 PASS  500 groups compile
 PASS  a backtrack stack past the slot table
-regex: 253 passed, 0 failed, 0 skipped
+regex: 322 passed, 0 failed, 0 skipped

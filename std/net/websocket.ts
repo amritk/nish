@@ -1,14 +1,25 @@
 /**
- * `nish/net/websocket` — RFC 6455 WebSocket framing and the opening
- * handshake's accept key, sans-IO: bytes in, events and bytes out.
+ * `nish/net/websocket` — RFC 6455 WebSocket framing and both sides of the
+ * opening handshake, sans-IO: bytes in, events and bytes out.
  *
- * **The handshake.** `nish/net/http1` reads the client's request;
+ * **The server's handshake.** `nish/net/http1` reads the client's request;
  * `websocketRequestKey(parser)` answers its `Sec-WebSocket-Key` when the head
- * is a valid opening handshake (§4.2.1), and `websocketUpgradeResponse(key,
- * protocol)` writes the 101 that accepts it, with `Sec-WebSocket-Accept` from
+ * is a valid opening handshake (§4.2.1), `websocketOfferedProtocols(parser)`
+ * the subprotocols it offers, and `websocketUpgradeResponse(key, protocol)`
+ * writes the 101 that accepts it, with `Sec-WebSocket-Accept` from
  * `websocketAcceptKey` (§4.2.2): the base64 of the SHA-1 of the key and a
  * fixed GUID. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
  * input for the decoder.
+ *
+ * **The client's handshake** (§4.1). `websocketClientKey(nonce)` spells 16
+ * random bytes as the key, `websocketUpgradeRequest(host, target, key,
+ * protocols)` writes the GET that asks to upgrade, and
+ * `websocketCheckResponse(parser, key, offered)` reads the server's answer,
+ * parsed by `nish/net/http1-client` after `expectUpgrade()`: it answers the
+ * negotiated subprotocol, or which rule of §4.1 the response broke. What
+ * `HTTP1_UPGRADE`'s `tunnelBytes()` answers is the first input for
+ * `WsDecoder(false, …)`. This module draws no randomness: the nonce and every
+ * frame's mask key are the caller's, from `crypto.getRandomValues`.
  *
  * **The decoder** is a push-pull machine like `Http1Parser`: `feed` any slice,
  * then call `next()` until it answers `WS_NEED_MORE`.
@@ -56,9 +67,18 @@
  *
  * Written from RFC 6455, not ported from another implementation.
  */
-import { base64urlDecode, base64urlEncode } from "nish/crypto/base64url"
+import { base64StdPadEncode, base64urlDecode } from "nish/crypto/base64url"
 import { sha1 } from "nish/crypto/sha1"
-import { HTTP1_NO_BODY, Http1Parser, http1ResponseHead } from "nish/net/http1"
+import {
+  HTTP1_NO_BODY,
+  Http1Parser,
+  http1IsOws,
+  http1IsToken,
+  http1ResponseHead,
+  http1SameWord,
+  http1Text,
+} from "nish/net/http1"
+import { Http1ResponseParser, http1UpgradeRequestHead } from "nish/net/http1-client"
 
 /** The GUID RFC 6455 §1.3 appends to the client's key before hashing it. */
 export const WS_GUID: string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -753,14 +773,9 @@ const websocketSwapBytes = (text: string, from1: i32, to1: i32, from2: i32, to2:
 /**
  * `Sec-WebSocket-Accept` for the client's `Sec-WebSocket-Key` (§4.2.2 item
  * 5.4): the SHA-1 of the key and `WS_GUID`, in padded standard base64.
- * `nish/crypto/base64url` writes the base64; the URL alphabet's two last
- * characters are swapped for the standard ones, and a 20-byte digest takes one
- * `=` of padding.
  */
-export const websocketAcceptKey = (key: string): string => {
-  const digest: u8[] = sha1(websocketBytesOf(`${key}${WS_GUID}`))
-  return `${websocketSwapBytes(base64urlEncode(digest), 45, 43, 95, 47)}=`
-}
+export const websocketAcceptKey = (key: string): string =>
+  base64StdPadEncode(sha1(websocketBytesOf(`${key}${WS_GUID}`)))
 
 /**
  * Whether `key` is a valid `Sec-WebSocket-Key` (§4.2.1 item 5): padded
@@ -820,4 +835,270 @@ export const websocketUpgradeResponse = (key: string, protocol: string): u8[] | 
   }
   const switching: i32 = 101
   return http1ResponseHead(switching, "Switching Protocols", names, values, HTTP1_NO_BODY)
+}
+
+/**
+ * The subprotocols the opening handshake `p` has just read offers, in the
+ * order offered (§4.2.1 item 8, §11.3.4): every `Sec-WebSocket-Protocol`
+ * field's comma-separated list, joined, each element trimmed of OWS and the
+ * empty ones dropped (RFC 9110 §5.6.1). Answers `[]` when there is no such
+ * field, and `null` when an element is not a token: a server picks one of
+ * these, or none, for `websocketUpgradeResponse`.
+ */
+export const websocketOfferedProtocols = (p: Http1Parser): string[] | null => {
+  const out: string[] = []
+  const head: u8[] = p.head
+  const spans: i32[] = p.spans
+  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
+    if (websocketSpanIs(head, spans[4 * i], spans[4 * i + 1], "sec-websocket-protocol")) {
+      websocketListInto(head, spans[4 * i + 2], spans[4 * i + 3], out)
+    }
+  }
+  for (let k: i32 = 0; k < toI32(out.length); k += 1) {
+    if (!http1IsToken(out[k])) {
+      return null
+    }
+  }
+  return out
+}
+
+/** Whether `bytes[a .. b)` is `word`, which is lower case, in any ASCII case. Allocates nothing. */
+const websocketSpanIs = (bytes: u8[], a: i32, b: i32, word: string): boolean => {
+  const n: i32 = toI32(word.length)
+  if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
+    return false
+  }
+  for (let k: i32 = 0; k < n; k += 1) {
+    const at: i32 = a + k
+    if (at < 0 || at >= toI32(bytes.length) || k >= toI32(word.length)) {
+      return false
+    }
+    let c: i32 = toI32(bytes[at])
+    if (c >= 65 && c <= 90) {
+      c += 32
+    }
+    if (c !== toI32(word.charCodeAt(k))) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Appends the elements of the comma-separated list in `bytes[from .. to)`
+ * (RFC 9110 §5.6.1) to `out`, each trimmed of OWS, the empty ones dropped.
+ */
+const websocketListInto = (bytes: u8[], from: i32, to: i32, out: string[]): void => {
+  if (from < 0 || to > toI32(bytes.length)) {
+    return
+  }
+  let start: i32 = from
+  for (let k: i32 = from; k <= to; k += 1) {
+    if (k === to || (k >= 0 && k < toI32(bytes.length) && toI32(bytes[k]) === 44)) {
+      let a: i32 = start
+      let b: i32 = k
+      while (a < b && a >= 0 && a < toI32(bytes.length) && http1IsOws(toI32(bytes[a]))) {
+        a += 1
+      }
+      while (b > a && b - 1 >= 0 && b - 1 < toI32(bytes.length) && http1IsOws(toI32(bytes[b - 1]))) {
+        b -= 1
+      }
+      if (b > a) {
+        out.push(http1Text(bytes, a, b, false))
+      }
+      start = k + 1
+    }
+  }
+}
+
+/** Whether the comma-separated list `value` (RFC 9110 §5.6.1) has an element that is `word`, which is lower case, in any ASCII case. */
+const websocketListHas = (value: string, word: string): boolean => {
+  const n: i32 = toI32(value.length)
+  let start: i32 = 0
+  for (let k: i32 = 0; k <= n; k += 1) {
+    if (k === n || (k >= 0 && k < n && toI32(value.charCodeAt(k)) === 44)) {
+      let a: i32 = start
+      let b: i32 = k
+      while (a < b && a >= 0 && a < n && http1IsOws(toI32(value.charCodeAt(a)))) {
+        a += 1
+      }
+      while (b > a && b - 1 >= 0 && b - 1 < n && http1IsOws(toI32(value.charCodeAt(b - 1)))) {
+        b -= 1
+      }
+      if (http1SameWord(value, a, b, word)) {
+        return true
+      }
+      start = k + 1
+    }
+  }
+  return false
+}
+
+/**
+ * The `Sec-WebSocket-Key` for a client's opening handshake (§4.1 item 7): the
+ * 16-byte `nonce` in padded standard base64, 24 characters. Answers `null` for
+ * a nonce of any other length. The nonce is the caller's, drawn from
+ * `crypto.getRandomValues` and fresh for every connection: a key that repeats
+ * or can be guessed lets a cache or an intermediary replay an old handshake's
+ * answer. This module draws no randomness itself.
+ */
+export const websocketClientKey = (nonce: u8[]): string | null => {
+  if (toI32(nonce.length) !== 16) {
+    return null
+  }
+  return base64StdPadEncode(nonce)
+}
+
+/**
+ * A client's opening handshake (§4.1 items 1 to 10): `GET target HTTP/1.1`
+ * with `Host`, `Sec-WebSocket-Key`, `Sec-WebSocket-Version: 13`, the offered
+ * `protocols` in one `Sec-WebSocket-Protocol` field when there are any, and
+ * `Upgrade: websocket` and `Connection: Upgrade`, written by
+ * `nish/net/http1-client`'s `http1UpgradeRequestHead`. Answers `null` for a
+ * key `websocketKeyIsValid` refuses, a protocol that is not a token (an empty
+ * one, or one holding a comma, a space, CR or LF), a protocol offered twice, an
+ * empty host, and everything the request writer refuses (CR, LF or another
+ * control byte in `host`, a `target` that is not a request target).
+ */
+export const websocketUpgradeRequest = (
+  host: string,
+  target: string,
+  key: string,
+  protocols: string[]
+): u8[] | null => {
+  if (toI32(host.length) === 0 || !websocketKeyIsValid(key)) {
+    return null
+  }
+  const count: i32 = toI32(protocols.length)
+  for (let i: i32 = 0; i < count; i += 1) {
+    if (!http1IsToken(protocols[i])) {
+      return null
+    }
+    for (let j: i32 = 0; j < i; j += 1) {
+      if (protocols[j] === protocols[i]) {
+        return null
+      }
+    }
+  }
+  const names: string[] = ["Host", "Sec-WebSocket-Key", "Sec-WebSocket-Version"]
+  const values: string[] = [host, key, "13"]
+  if (count > 0) {
+    names.push("Sec-WebSocket-Protocol")
+    values.push(protocols.join(", "))
+  }
+  return http1UpgradeRequestHead("GET", target, names, values, "websocket")
+}
+
+// What `websocketCheckResponse` found (`WsHandshake.error`): the handshake
+// succeeded, or the first rule of §4.1 the server's response broke.
+/** The server accepted the handshake; `protocol` is the subprotocol it chose. */
+export const WS_HS_OK: i32 = 0
+/** The status is not 101; the parser's `status` says what it is. No redirect is followed. */
+export const WS_HS_STATUS: i32 = 1
+/** The response is not HTTP/1.1. */
+export const WS_HS_VERSION: i32 = 2
+/** `Upgrade` is absent, repeated, or not `websocket` in any case. */
+export const WS_HS_UPGRADE: i32 = 3
+/** No `Connection` field lists `upgrade`. */
+export const WS_HS_CONNECTION: i32 = 4
+/** `Sec-WebSocket-Accept` is absent, repeated, or not the key's accept value. */
+export const WS_HS_ACCEPT: i32 = 5
+/** A `Sec-WebSocket-Extensions` field, when the client offered none. */
+export const WS_HS_EXTENSION: i32 = 6
+/** A `Sec-WebSocket-Protocol` that is repeated, a list, or not one the client offered. */
+export const WS_HS_PROTOCOL: i32 = 7
+
+/** `websocketCheckResponse`'s answer: `error` is a `WS_HS_*` code; `protocol` is set when it is `WS_HS_OK`. */
+export class WsHandshake {
+  /** The subprotocol the server chose, or `""` when it chose none. */
+  protocol: string = ""
+  error: i32 = 0
+
+  constructor(error: i32, protocol: string) {
+    this.error = error
+    this.protocol = protocol
+  }
+}
+
+/**
+ * Reads the server's answer to `websocketUpgradeRequest(…, key, offered)`
+ * (§4.1, the client's checks of the response): call it at the parser's
+ * `HTTP1_HEAD`. It fails closed, and the connection is closed on any failure:
+ * a status other than 101 (`WS_HS_STATUS`; a redirect is not followed), a
+ * version other than HTTP/1.1, `Upgrade` absent, repeated or not `websocket`,
+ * no `Connection` listing `upgrade`, `Sec-WebSocket-Accept` absent, repeated
+ * or not `websocketAcceptKey(key)` (a forged or replayed answer), any
+ * `Sec-WebSocket-Extensions` (this client offers none, so none may be in use),
+ * and a `Sec-WebSocket-Protocol` that is present when nothing was offered,
+ * repeated, a list, or not one of `offered`. On `WS_HS_OK` the parser's next
+ * events are `HTTP1_END` and `HTTP1_UPGRADE`; its `tunnelBytes()` go to
+ * `WsDecoder(false, …)`, and every frame the client sends is masked with a
+ * fresh mask key from `crypto.getRandomValues` (§5.3).
+ */
+export const websocketCheckResponse = (
+  response: Http1ResponseParser,
+  key: string,
+  offered: string[]
+): WsHandshake => {
+  if (response.status !== 101) {
+    return new WsHandshake(WS_HS_STATUS, "")
+  }
+  if (response.minor !== 1) {
+    return new WsHandshake(WS_HS_VERSION, "")
+  }
+  const expected: string = websocketKeyIsValid(key) ? websocketAcceptKey(key) : ""
+  let upgrades: i32 = 0
+  let upgradeOk: boolean = false
+  let connection: boolean = false
+  let accepts: i32 = 0
+  let acceptOk: boolean = false
+  let extensions: boolean = false
+  let protocols: i32 = 0
+  let protocol: string = ""
+  const names: string[] = response.names
+  const values: string[] = response.values
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
+    const name: string = names[i]
+    const value: string = values[i]
+    if (name === "upgrade") {
+      upgrades += 1
+      upgradeOk = http1SameWord(value, 0, toI32(value.length), "websocket")
+    } else if (name === "connection") {
+      if (websocketListHas(value, "upgrade")) {
+        connection = true
+      }
+    } else if (name === "sec-websocket-accept") {
+      accepts += 1
+      acceptOk = toI32(expected.length) > 0 && value === expected
+    } else if (name === "sec-websocket-extensions") {
+      extensions = true
+    } else if (name === "sec-websocket-protocol") {
+      protocols += 1
+      protocol = value
+    }
+  }
+  if (upgrades !== 1 || !upgradeOk) {
+    return new WsHandshake(WS_HS_UPGRADE, "")
+  }
+  if (!connection) {
+    return new WsHandshake(WS_HS_CONNECTION, "")
+  }
+  if (accepts !== 1 || !acceptOk) {
+    return new WsHandshake(WS_HS_ACCEPT, "")
+  }
+  if (extensions) {
+    return new WsHandshake(WS_HS_EXTENSION, "")
+  }
+  if (protocols === 0) {
+    return new WsHandshake(WS_HS_OK, "")
+  }
+  if (protocols > 1 || !http1IsToken(protocol)) {
+    return new WsHandshake(WS_HS_PROTOCOL, "")
+  }
+  for (let i: i32 = 0; i < toI32(offered.length); i += 1) {
+    if (offered[i] === protocol) {
+      return new WsHandshake(WS_HS_OK, protocol)
+    }
+  }
+  return new WsHandshake(WS_HS_PROTOCOL, "")
 }

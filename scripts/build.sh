@@ -14,8 +14,10 @@
 # the SSE4.1 rounding of `Math.floor` and its kin,
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
 # <dir>/runtime-sha256.c, SHA-256 on the CPU's SHA instructions,
-# <dir>/runtime-term.c, stdin and the terminal of `nish:term`, and
-# <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`. Each of those
+# <dir>/runtime-checksum.c, CRC-32 on its carry-less multiply or CRC instructions,
+# <dir>/runtime-term.c, stdin and the terminal of `nish:term`,
+# <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`, and
+# <dir>/runtime-sandbox.c, the confinement `--sandbox` applies. Each of those
 # files says why they are compiled and measured apart.
 #
 # Profiles:
@@ -170,6 +172,15 @@ case "$profile" in
           if grep -E '^define [^@]*@memory\(' "$i" | grep -Evq '^define (internal|private) '; then
             echo "error: $i defines a function named \`memory\`, the name the $profile profile's module exports its linear memory under; rename the function" >&2
             exit 2
+          fi
+          # `--sandbox` IR compiled for the host confines through Linux system
+          # calls a wasm module has none of; the compiler emits no call for a
+          # wasm target, so only IR that never told it reaches this. The match
+          # is the call instruction, not the name: the compiler's own IR holds
+          # the name as string data.
+          if grep -Eq '^[[:space:]]+call void @nish_sandbox\(' "$i"; then
+            echo "error: $i was compiled with --sandbox, and a $profile module has no sandbox; compile it with --target wasm32 and without --sandbox" >&2
+            exit 2
           fi ;;
       esac
     done ;;
@@ -199,13 +210,14 @@ fi
 # The runtime is eleven translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
-# <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-term.c and <dir>/runtime-bytes.c
-# compiled beside it, on every profile,
+# <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,
+# <dir>/runtime-bytes.c and <dir>/runtime-sandbox.c compiled beside it, on every profile,
 # wasi included: runtime-simd.c and runtime-bytes.c take their scalar paths there
 # unless the build adds -msimd128,
-# runtime-aes.c and runtime-sha256.c compile to an answer of 0 and stubs that
-# nothing calls, because the compiler emits no call to their kernels for wasm32, and
-# runtime-term.c reads stdin and answers "not a terminal". They were one file until the
+# runtime-aes.c, runtime-sha256.c and runtime-checksum.c compile to an answer of 0 and
+# stubs that nothing calls, because the compiler emits no call to their kernels for wasm32, and
+# runtime-term.c reads stdin and answers "not a terminal", and runtime-sandbox.c
+# compiles to two functions that refuse to run, which no wasm build calls. They were one file until the
 # operating-system half was split out for its own size budget, and the parallel
 # half followed for the same reason (each file's header comment says why), and
 # a link line is where those splits
@@ -215,7 +227,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-term.c runtime-bytes.c"
+halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -637,23 +649,27 @@ case "$profile" in
       exit 2
     fi
     # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
-    # AES kernels behind `nish_aes_hw`, and std/crypto/sha256.ts's block function
-    # behind `nish_sha256_hw` (src/kernels.ts). runtime-aes.c's and runtime-sha256.c's
-    # wasm32 builds answer 0 there, so the Nish code runs, and each is added only for
-    # such IR: every other module links the bytes it always did.
+    # AES kernels behind `nish_aes_hw`, std/crypto/sha256.ts's block function behind
+    # `nish_sha256_hw` and std/compress/checksum.ts's CRC-32 kernel behind
+    # `nish_crc32_hw` (src/kernels.ts). runtime-aes.c's, runtime-sha256.c's and
+    # runtime-checksum.c's wasm32 builds answer 0 there, so the Nish code runs, and
+    # each is added only for such IR: every other module links the bytes it always did.
+    # Each pair is a unit and the kernel its probe names.
     # A caller that names the unit itself is left alone, as `halves` leaves it:
     # one object named twice is a duplicate-symbol error.
-    for kernel in aes sha256; do
+    for pair in aes:aes sha256:sha256 checksum:crc32; do
+      unit=${pair%%:*}
+      kernel=${pair#*:}
       named=0
       wanted=0
       for i in ${inputs[@]+"${inputs[@]}"}; do
         case "$i" in
-          */runtime-"$kernel".c|runtime-"$kernel".c) named=1 ;;
+          */runtime-"$unit".c|runtime-"$unit".c) named=1 ;;
           *.ll) if grep -q "@nish_${kernel}_hw(" "$i"; then wanted=1; fi ;;
         esac
       done
       if [ "$wanted" = 1 ] && [ "$named" = 0 ]; then
-        inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-$kernel.c")
+        inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-$unit.c")
       fi
     done
     # IR of either kind that imports std/json or calls nish/bytes's byte-class runs

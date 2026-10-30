@@ -255,7 +255,7 @@ routes are
   clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
     runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-term.c \
-    runtime/runtime-bytes.c -lm -o app
+    runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -391,7 +391,7 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — eleven translation units, the wasm subset and their
+`runtime/` (the C runtime — thirteen translation units, the wasm subset and their
 header — and `runtime/sqlite/`, SQLite's vendored source),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
 `docs/AI.md` (the rules card). The
@@ -404,13 +404,13 @@ working directory — and the binary runs from inside its own platform package
 for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is eleven files:
+on the `clang` line, and it is thirteen files:
 
 ```bash
 clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
   runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
   runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-term.c \
-  runtime/runtime-bytes.c -lm -o app
+  runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c -lm -o app
 ```
 
 `runtime.c` is the part every program touches — the arena, strings, arrays,
@@ -425,9 +425,10 @@ entropy, file times and signals, `runtime-net.c` the sockets of `nish:net`,
 `runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM,
 `runtime-sha256.c` the SHA-256 block kernel `nish/crypto/sha256` hands its
 blocks to on a CPU with the SHA instructions (`NISH_SHA256=soft` keeps the
-portable path), `runtime-term.c` the stdin reads and terminal calls of `nish:term`, and
+portable path), `runtime-term.c` the stdin reads and terminal calls of `nish:term`,
 `runtime-bytes.c` the byte-class runs of `nish/bytes`, which `nish/json` steps
-over.
+over, `runtime-checksum.c` the CRC-32 kernels of `nish/compress/checksum`,
+and `runtime-sandbox.c` the confinement a `--sandbox` build applies.
 They are separate so that each carries its own measured size ceiling
 ([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
 others, so a line that names only `runtime.c` and `runtime-os.c` still links a

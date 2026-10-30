@@ -10,7 +10,7 @@ the tree.
 
 ## What the npm package ships
 
-Nine of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
+Ten of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
 formatter is adapted from Ryu. The package carries `runtime/LICENSE-ryu` beside
 it, because `package.json`'s `files` names the whole `runtime/` directory, and
 the release tarball and the platform packages copy that directory too. Ryu is
@@ -76,6 +76,15 @@ crypt_blowfish is placed in the public domain, with a fallback licence that
 permits redistribution and use with or without modification and asks for
 nothing, so neither the source nor a program built with `nish/crypto/bcrypt`
 owes a notice; the file keeps it anyway, as upstream asks for credit.
+
+The tenth is `std/regex.ts`, whose property and case-folding tables (the
+region `scripts/gen-regex-unicode.mjs` writes) are derived from the Unicode
+Character Database 16.0.0. The licence text is in the file itself, above the
+tables, so it ships wherever the tables do. The Unicode License v3 asks that its notice appear
+with all copies of the data or in their associated documentation, and makes
+no exception for object code: a program built with `nish/regex` holds the
+tables, so when distributed it carries the Unicode notice with it, as one
+built with `nish/crypto/aes` carries BearSSL's.
 
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
@@ -341,6 +350,39 @@ package: `tests/link/std_yaml_conformance` reads it.
 Test cases from the yaml-test-suite (https://github.com/yaml/yaml-test-suite). Copyright (c) 2016-2020 Ingy döt Net. Used under the MIT licence; see tests/yaml-suite/LICENSE-yaml-test-suite.
 ```
 
+### `tests/json-schema-suite/LICENSE-json-schema-test-suite`
+
+The [JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite),
+Copyright (c) 2012 Julian Berman, under the MIT licence. The licence text is
+upstream's `LICENSE`, verbatim. Twelve files of its `tests/draft2020-12/` at
+commit `89e83a7` (each pinned by sha256) are packed into one file, one test
+group per line, by
+[`tests/json-schema-suite/pack.js`](tests/json-schema-suite/pack.js), which
+drops the whitespace between tokens and changes nothing else. The pack ships
+in no package: `tests/link/std_json_equal`, `tests/link/std_json_number` and
+`tests/link/std_json_pointer` read it.
+
+```notice
+Test cases from the JSON-Schema-Test-Suite (https://github.com/json-schema-org/JSON-Schema-Test-Suite). Copyright (c) 2012 Julian Berman. Used under the MIT licence; see tests/json-schema-suite/LICENSE-json-schema-test-suite.
+```
+
+### `tests/json-schema-suite-format/LICENSE-json-schema-test-suite`
+
+The [JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite),
+Copyright (c) 2012 Julian Berman, under the MIT licence. The licence text is
+upstream's `LICENSE`, verbatim. The 478 cases of the 20 files of
+`tests/draft2020-12/optional/format/` at the tag `23.2.0` (each pinned by its
+sha256) are packed, instances and descriptions unchanged, into one file, one
+line per case, by
+[`tests/json-schema-suite-format/pack.js`](tests/json-schema-suite-format/pack.js),
+so that a Nish test reads them without a JSON parser; the schemas, which are
+each `{"format": "<name>"}`, are not kept. The pack ships in no package:
+`tests/link/std_json_format` reads it.
+
+```notice
+Test cases from JSON-Schema-Test-Suite (https://github.com/json-schema-org/JSON-Schema-Test-Suite). Copyright (c) 2012 Julian Berman. Used under the MIT licence; see tests/json-schema-suite-format/LICENSE-json-schema-test-suite.
+```
+
 ### `tests/json-conformance/LICENSE-test262`
 
 [test262](https://github.com/tc39/test262), the ECMAScript conformance suite,
@@ -384,6 +426,23 @@ licence: its schema, and the article-list query the live PostgreSQL suite runs.
 Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see tests/postgres/live/LICENSE.md.
 ```
 
+### `std/regex.ts`
+
+The [Unicode Character Database](https://www.unicode.org/ucd/), Copyright ©
+1991-2026 Unicode, Inc., under the Unicode License v3. The tables read
+`CaseFolding.txt`, `DerivedCoreProperties.txt`,
+`DerivedNormalizationProps.txt`, `PropList.txt`, `PropertyAliases.txt`,
+`PropertyValueAliases.txt`, `ScriptExtensions.txt`, `Scripts.txt`,
+`emoji/emoji-data.txt`, `extracted/DerivedBinaryProperties.txt` and
+`extracted/DerivedGeneralCategory.txt` of version 16.0.0, each pinned by its
+sha256 in the generator. The licence text is
+`https://www.unicode.org/license.txt`, verbatim, in a comment above the
+tables in `std/regex.ts`, the one file that holds them.
+
+```notice
+Derived from the Unicode Character Database 16.0.0 (https://www.unicode.org/Public/16.0.0/ucd/), the files scripts/gen-regex-unicode.mjs names. Copyright © 1991-2026 Unicode, Inc. Used under the Unicode License v3, whose text follows.
+```
+
 ## Files
 
 | File | Derived from | Licence | Licence text |
@@ -421,6 +480,7 @@ Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see 
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256Divsteps30`, `p256UpdateDe30` and `p256UpdateFg30`, for the assembly check | MIT | `std/crypto/LICENSE-libsecp256k1` |
 | `std/crypto/p384.ts` | fiat-crypto, `fiat-c/src/p384_32.c` (`mul`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p384_scalar_32.c` (`mul`, `set_one`), as the `p384Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto-p384` |
 | `std/json-tokenizer.ts` | fast_float `include/fast_float/decimal_to_binary.h` (`compute_float` and `compute_product_approximation` for binary64), as `jsonTokEiselLemire`, and `power_of_five_128`, as `jsonTokPowerOfFive`; the table is regenerated by `scripts/gen-json-pow5.mjs` | BSL-1.0 | `std/LICENSE-fast-float` |
+| `std/regex.ts` | the Unicode Character Database 16.0.0: the General_Category, Script, Script_Extensions and binary-property range lists, their names and aliases, and the simple case folding (CaseFolding.txt, statuses C and S), as `REGEX_PROPERTY_NAMES`, `REGEX_PROPERTY_DATA` and `REGEX_FOLD_DATA`; the tables are regenerated by `scripts/gen-regex-unicode.mjs` | Unicode-3.0 | `std/regex.ts` |
 | `scripts/gen-json-pow5.mjs` | fast_float `script/table_generation.py`, written again with BigInt | BSL-1.0 | `std/LICENSE-fast-float` |
 | `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdh_secp256r1.ts` | Wycheproof `testvectors_v1/ecdh_secp256r1_ecpoint_test.json` at `3fa63dd`: all 355 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
@@ -440,6 +500,8 @@ Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see 
 | `tests/link/crypto_pki_limbo/certs.ts` | x509-limbo `limbo.json` at `1080e565`: every certificate those cases name, once each, as base64 DER | Apache-2.0 | `tests/link/crypto_pki_limbo/LICENSE-x509-limbo` |
 | `tests/json-suite/test-parsing.txt` | JSONTestSuite `test_parsing/` at `1ef36fa`: all 318 files (95 `y_`, 188 `n_`, 35 `i_`), packed one per line by `tests/json-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/json-suite/LICENSE-jsontestsuite` |
 | `tests/yaml-suite/cases.txt` | yaml-test-suite (npm `yaml-test-suite@0.1.0`): all 402 cases (350 files), packed one per line by `tests/yaml-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/yaml-suite/LICENSE-yaml-test-suite` |
+| `tests/json-schema-suite/cases.txt` | JSON-Schema-Test-Suite `tests/draft2020-12/` at `89e83a7`: all 60 groups (290 tests) of `const`, `enum`, `uniqueItems`, `multipleOf`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `optional/bignum`, `optional/float-overflow` and `optional/format/json-pointer` and `relative-json-pointer`, packed one group per line by `tests/json-schema-suite/pack.js` with the whitespace between tokens dropped | MIT | `tests/json-schema-suite/LICENSE-json-schema-test-suite` |
+| `tests/json-schema-suite-format/cases.txt` | JSON-Schema-Test-Suite (tag `23.2.0`): all 478 cases of `tests/draft2020-12/optional/format/` (20 files), packed one per line by `tests/json-schema-suite-format/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/json-schema-suite-format/LICENSE-json-schema-test-suite` |
 | `tests/json-conformance/test262.txt` | test262 `test/built-ins/JSON/parse` and `test/built-ins/JSON/stringify` at `2e0a567`: the 772 `JSON.parse` and `JSON.stringify` calls of 64 files that are about JSON text, each with the answer the file's assertions require, extracted by `tests/json-conformance/extract.js` | BSD-3-Clause | `tests/json-conformance/LICENSE-test262` |
 | `tests/json-conformance/v8.txt` | V8 `test/mjsunit/json*.js` at `a74948b`: the 684 `JSON.parse` and `JSON.stringify` calls of 9 files that are about JSON text, extracted the same way; the 65,536 of `json.js`'s loop over every UTF-16 code unit are generated by `tests/run.js` instead | BSD-3-Clause | `tests/json-conformance/LICENSE-v8` |
 

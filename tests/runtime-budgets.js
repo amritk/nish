@@ -293,6 +293,15 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * `availableParallelism` calls in every build, and `nish_cpu_count` here keeps only its
  * cache and the call. The ceiling comes down with it, to the next 256-byte boundary
  * above the measurement, so the room the move freed is not left for something else.
+ * WP37's `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to took it to
+ * **2,558 bytes** on 2026-10-24, 2 under the ceiling.
+ *
+ * WP37's `nish_cpu_prime` measured **2,558 bytes** on 2026-10-24 with clang 18.1.3 on
+ * linux-x64, 39 more than the 2,519 the file measured before it: the call `--sandbox`
+ * makes to read the CPU count before Landlock closes /sys/fs/cgroup, kept as a ceiling
+ * that the first region's fresh read (which sees `NISH_NUM_THREADS`, unset while
+ * `.preinit_array` runs) may lower. The fallback above measured 608, 1 more, inside its
+ * ceiling.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2560
 /**
@@ -468,6 +477,21 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  */
 const RUNTIME_SHA256_TEXT_BUDGET = 512
 /**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-checksum.c`
+ * -- CRC-32 on the CPU's carry-less multiply (WP38 CRC): `nish_crc32_hw`, its CPUID
+ * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel.
+ *
+ * Measured **718 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the folding kernel with its Barrett reduction 514, the nibble-table tail
+ * 58, the resolver 121 and the entry point 25. A translation unit of its own rather
+ * than more of `runtime-aes.c`, which shares only the instruction: apart, a program
+ * that checks a gzip trailer carries no AES and one that speaks TLS no CRC. The
+ * AArch64 build is the CRC32 instructions and is smaller; the ceiling is measured
+ * where the gate runs. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_CHECKSUM_TEXT_BUDGET = 768
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
  * `terminalSize`, `setRawMode` and `setTerminalRestore`, with the restore that the
@@ -518,6 +542,21 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
  * 256-byte boundary above the measurement, as every ceiling here was set.
  */
 const RUNTIME_BYTES_TEXT_BUDGET = 1536
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sandbox.c`
+ * -- the confinement `--sandbox` applies (WP37, docs/security/sandbox.md):
+ * `nish_sandbox`, which a sandboxed program's `.preinit_array` calls, and
+ * `nish_sandbox_check`, which its `main` calls first, with the capability drop, the
+ * Landlock ruleset and the seccomp filter they build.
+ *
+ * Measured **2,264 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64. An eleventh
+ * translation unit rather than more of `runtime-os.c`, so a program built without
+ * `--sandbox` links none of it: the linker drops the object nothing references. The
+ * budget is the next 256-byte boundary above the measurement, as every ceiling here was
+ * set.
+ */
+const RUNTIME_SANDBOX_TEXT_BUDGET = 2304
+
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
  * -- the adapter `nish/sqlite` calls: the thread-local connection and statement tables
@@ -666,8 +705,10 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
   ["runtime/runtime-sha256.c", RUNTIME_SHA256_TEXT_BUDGET, "RUNTIME_SHA256_TEXT_BUDGET", []],
+  ["runtime/runtime-checksum.c", RUNTIME_CHECKSUM_TEXT_BUDGET, "RUNTIME_CHECKSUM_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
+  ["runtime/runtime-sandbox.c", RUNTIME_SANDBOX_TEXT_BUDGET, "RUNTIME_SANDBOX_TEXT_BUDGET", []],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 

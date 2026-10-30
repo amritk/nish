@@ -144,7 +144,10 @@ import {
   aesKernelOf,
   BYTES_WALK_NONE,
   bytesWalkOf,
+  CRC32_HW,
+  CRC32_KERNEL,
   isAesSeam,
+  isCrc32Seam,
   isIndexOfAnyWalk,
   isRegexScanWalk,
   isSha256Seam,
@@ -813,6 +816,12 @@ export class Emitter {
     if (debug !== null) {
       debug.beginFunction(fn, userMain, true, "main", false)
     }
+    // WP37: the check comes first, before anything the program runs, so a C
+    // library that skipped `.preinit_array` never runs the program unconfined.
+    if (this.sandboxed()) {
+      this.emitSandboxApply()
+      fn.emit(`call void ${this.useRuntime("nish_sandbox_check")}()`)
+    }
     const freeArena = this.useRuntime("nish_free_arena")
     if (this.program.usesArgv) {
       fn.emit(`call void ${this.useRuntime("nish_argv_init")}(i32 %argc, i8** %argv)`)
@@ -826,6 +835,34 @@ export class Emitter {
     fn.emit(`call void ${freeArena}()`)
     fn.emit(`ret i32 ${code}`)
     return fn
+  }
+
+  /** Whether `--sandbox` asks for a wrapper call: never on wasm, which has no kernel to confine it. */
+  sandboxed(): boolean {
+    return this.opts.sandbox !== 0 && !isWasmBuild(this.opts)
+  }
+
+  /**
+   * WP37 §3: `nish_sandbox` runs from `.preinit_array`, ahead of every
+   * constructor a linked C object brings, so foreign start-up code is confined
+   * too. `@llvm.used` keeps the entry from being dropped, since nothing calls
+   * it by name.
+   */
+  emitSandboxApply(): void {
+    const sandbox = this.useRuntime("nish_sandbox")
+    this.module.addGlobal(
+      `@.sandbox.preinit = internal constant void ()* @.sandbox.apply, section ".preinit_array", align 8`
+    )
+    this.module.addGlobal(
+      `@llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"`
+    )
+    const apply = new IRFunction(".sandbox.apply", [], "void")
+    apply.linkage = "internal"
+    apply.emit(
+      `call void ${sandbox}(i32 ${this.opts.sandboxCapabilities}, i32 ${this.opts.sandbox}, i8* null, i8* null)`
+    )
+    apply.emit("ret void")
+    this.module.addFunction(apply)
   }
 
   // ---- Imports ------------------------------------------------------------
@@ -1690,6 +1727,13 @@ export class Emitter {
         kernelJoin = this.emitKernelArm(SHA256_HW, SHA256_KERNEL, "sha256", operands, true)
       }
     }
+    // WP38 CRC: `nish/compress/checksum`'s walk, the same branch, whose arms
+    // meet at a `phi` because the walker answers the CRC.
+    const noCrcKernel: string[] = []
+    const crcKernel =
+      !isWasmBuild(this.opts) && isCrc32Seam(this.program, sig)
+        ? this.emitCrc32KernelArm(operands)
+        : noCrcKernel
     // Elsewhere, WP9: the mark goes after the arguments, so only the
     // callee's own bumps are inside the bracket (`beginReclaim`).
     const reclaim = keepSize >= 0 ? "" : this.beginReclaim(sig)
@@ -1713,6 +1757,9 @@ export class Emitter {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
     let answer = this.fn.emitValue(call)
+    if (crcKernel.length > 0) {
+      answer = this.joinCrc32Arms(crcKernel, answer)
+    }
     // WP27 S3.2: C answers the bytes, and the program keeps a copy
     // (`emitForeignStringResult`).
     if (sig.foreign() && this.table.stripNull(sig.returnType) === T_STRING) {
@@ -1752,6 +1799,36 @@ export class Emitter {
     }
     this.fn.placeBlock(walker)
     return join
+  }
+
+  /**
+   * WP38 CRC: the branch in front of `crc32Walk`'s call, and its kernel arm,
+   * which takes the walker's last four operands (`crc, buf, off, len`; the
+   * tables are the walker's alone). Leaves the walker's arm as the insertion
+   * point, as `emitKernelArm` does, and answers what `joinCrc32Arms`
+   * needs: the kernel's value, the join's label and the kernel arm's.
+   */
+  emitCrc32KernelArm(operands: string[]): string[] {
+    const hw = this.fn.emitValue(`call i32 ${this.useRuntime(CRC32_HW)}()`)
+    const taken = this.fn.emitValue(`icmp ne i32 ${hw}, 0`)
+    const kernel = this.fn.newBlock("crc32.kernel")
+    const walker = this.fn.newBlock("crc32.walker")
+    const join = this.fn.newBlock("crc32.join")
+    this.fn.emit(`br i1 ${taken}, label %${kernel.label}, label %${walker.label}`)
+    this.fn.placeBlock(kernel)
+    const args = `${operands[2]}, ${operands[3]}, ${operands[4]}, ${operands[5]}`
+    const value = this.fn.emitValue(`call i32 ${this.useRuntime(CRC32_KERNEL)}(${args})`)
+    this.fn.emit(`br label %${join.label}`)
+    this.fn.placeBlock(walker)
+    return [value, join.label, kernel.label]
+  }
+
+  /** The join after the walker's call: the CRC from whichever arm ran. */
+  joinCrc32Arms(parts: string[], walked: string): string {
+    const walkerLabel = this.fn.currentBlock().label
+    this.fn.emit(`br label %${parts[1]}`)
+    this.fn.placeBlock(new IRBlock(parts[1]))
+    return this.fn.emitValue(`phi i32 [ ${parts[0]}, %${parts[2]} ], [ ${walked}, %${walkerLabel} ]`)
   }
 
   // ---- Context helpers ----------------------------------------------------

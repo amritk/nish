@@ -216,7 +216,7 @@ terminal I/O and styling, with pixel graphics in `std/term-pixels`).
 ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, bcrypt and X.509,
 with secret material held as a wiped `Secret<T>`. `nish/net/*` holds the
 protocols built on them: TLS 1.3, QUIC, HTTP/1.1, HTTP/2 (HPACK), HTTP/3
-(QPACK), WebSocket, WebTransport, a URL parser, an HTTP router, a prefork
+(QPACK), WebSocket (server and client), WebTransport, a URL parser, an HTTP router, a prefork
 server and a sans-IO PostgreSQL client. The [standard
 library](docs/guide/using-nish/standard-library.md) guide page walks through
 them, and the [`std/` README](std/README.md) lists every module.
@@ -435,10 +435,10 @@ JavaScript-exact number formatting, string parsing, `Math.random`,
 that wrap a system call (exit, files, directories, subprocesses, the
 environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
 `runtime-host.c`, `runtime-net.c`, `runtime-simd.c`, `runtime-aes.c`,
-`runtime-term.c` and `runtime-bytes.c` hold threads, the copies that cross between
+`runtime-term.c`, `runtime-bytes.c`, `runtime-checksum.c` and `runtime-sandbox.c` hold threads, the copies that cross between
 their arenas, the host calls (wall clock, entropy, signals), `nish:net`'s sockets,
-the vector text search, AES-GCM, `nish:term`'s stdin and terminal and the
-byte-class runs JSON steps over — see
+the vector text search, AES-GCM, `nish:term`'s stdin and terminal, the
+byte-class runs JSON steps over, the CRC-32 kernels and `--sandbox`'s confinement — see
 [docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for the
 budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
 stay `readnone`.

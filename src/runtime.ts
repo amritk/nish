@@ -223,6 +223,9 @@ export class RuntimeTable {
     this.addWrites(WRITES_ALLOC, grow)
     this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE))
     this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE))
+    // WP37: the sandbox the `--sandbox` wrapper installs (runtime/runtime-sandbox.c).
+    this.add(plain("nish_sandbox", "declare void @nish_sandbox(i32, i32, i8*, i8*)", EFFECT_WRITE))
+    this.add(plain("nish_sandbox_check", "declare void @nish_sandbox_check()", EFFECT_WRITE))
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
     // `EFFECT_WRITE` so nothing is reordered across it, but it only reads the bump position.
     this.addWrites(
@@ -1307,6 +1310,27 @@ export class RuntimeTable {
         `declare noundef i32 @nish_sha256_compress(${AES_ARRAY}, ${AES_ARRAY}, ${AES_ARRAY}, i32 noundef)`,
         attrs2("nounwind", "willreturn"),
         EFFECT_WRITE
+      )
+    )
+    // WP38 CRC: CRC-32 on PCLMULQDQ or the ARMv8 CRC32 instructions,
+    // runtime-checksum.c (`src/kernels.ts`). `nish_crc32_hw` is
+    // `nish_aes_hw`'s kind of resolver, and the kernel only reads the one
+    // array it is handed, behind its header as for the AES kernels, and keeps
+    // nothing of it.
+    this.add(
+      new RuntimeFunction(
+        "nish_crc32_hw",
+        "declare i32 @nish_crc32_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_crc32_update",
+        `declare i32 @nish_crc32_update(i32 noundef, ${AES_ARRAY} readonly, i32 noundef, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_READ
       )
     )
     this.buildIntrinsics()
