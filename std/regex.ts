@@ -3963,15 +3963,17 @@ export class Regex {
         kind = CTX_LINE
       } else if (isRegexWordByte(b)) {
         kind = CTX_WORD
-      } else if (
-        (b === 0xa8 || b === 0xa9) &&
-        p >= 3 &&
-        toI32(text.charCodeAt(p - 2)) === 0x80 &&
-        toI32(text.charCodeAt(p - 3)) === 0xe2
-      ) {
-        kind = CTX_LINE
-      } else if (this.dMaskF[CTX_KINDS] !== 0 && regexFoldWordBefore(text, p)) {
-        kind = CTX_WORD
+      } else if (b >= 0x80) {
+        if (
+          (b === 0xa8 || b === 0xa9) &&
+          p >= 3 &&
+          toI32(text.charCodeAt(p - 2)) === 0x80 &&
+          toI32(text.charCodeAt(p - 3)) === 0xe2
+        ) {
+          kind = CTX_LINE
+        } else if (this.dMaskF[CTX_KINDS] !== 0 && regexFoldWordBefore(text, p)) {
+          kind = CTX_WORD
+        }
       }
     }
     return this.dMaskF[kind]
@@ -3995,7 +3997,7 @@ export class Regex {
           kind = CTX_LINE
         }
       }
-      if (kind === CTX_OTHER && this.dMaskR[CTX_KINDS] !== 0 && regexFoldWordAt(text, p, len)) {
+      if (kind === CTX_OTHER && b >= 0x80 && this.dMaskR[CTX_KINDS] !== 0 && regexFoldWordAt(text, p, len)) {
         kind = CTX_WORD
       }
     }
