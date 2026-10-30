@@ -1045,7 +1045,10 @@ cost in TCP work.
 
 **The split for `http1-server.ts`, this box.** `node bench/http.mjs --syscalls`
 counted 2.07 syscalls a request on plaintext keep-alive at c=256 and 2.08 on
-json (one `recvfrom` and one `sendto`, the rest accept and epoll at 0.02 each).
+json: `recvfrom` 1.00 and `sendto` 1.00 on plaintext, then `accept4`,
+`epoll_ctl`, `getsockopt` and `epoll_wait` at 0.02 each; strace's counts are
+rounded one by one, so they sum to 2.08. A re-run gave 2.09 (1.01, 1.01 and
+the same four at 0.02).
 A five-round `node bench/http.mjs --rounds 5` run against a byte-identical
 copy (`h1-copy`) gave the server's system CPU per request, from
 `/proc/<pid>/stat`. (a) is syscalls a request × 106.0 ns, and (b) is the

@@ -9,7 +9,7 @@
 # bare metal, the kernel's mitigations), then runs it pinned to one CPU and
 # prints its table in ns per call. --quick is 3 rounds of 10^5 calls, for CI;
 # the default is 7 rounds of 10^6. --split divides a server's system CPU per
-# request into syscall entry and exit, (a), and the rest, (b), the TCP work;
+# request into syscall entry and exit, (a), and the system time less (a), (b);
 # without it the split is given for the reported workload's mix only.
 set -euo pipefail
 
@@ -19,14 +19,22 @@ rounds=7
 calls=1000000
 cpu=0
 split=""
+usage() {
+  echo "usage: bash bench/syscall-cost/run.sh [--quick] [--rounds n] [--calls n] [--cpu n] [--split <syscalls/request> <sys µs/request>]" >&2
+  exit 2
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --quick) rounds=3; calls=100000 ;;
-    --rounds) rounds="$2"; shift ;;
-    --calls) calls="$2"; shift ;;
-    --cpu) cpu="$2"; shift ;;
-    --split) split="$2 $3"; shift 2 ;;
+    --rounds) [ $# -ge 2 ] || usage; rounds="$2"; shift ;;
+    --calls) [ $# -ge 2 ] || usage; calls="$2"; shift ;;
+    --cpu) [ $# -ge 2 ] || usage; cpu="$2"; shift ;;
+    --split)
+      [ $# -ge 3 ] || usage
+      # A zero or non-numeric sys µs would divide by zero in the split.
+      awk -v s="$3" 'BEGIN { exit !(s + 0 > 0) }' || { echo "run.sh: --split needs a sys µs/request above 0" >&2; exit 2; }
+      split="$2 $3"; shift 2 ;;
     -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "run.sh: unknown argument $1" >&2; exit 2 ;;
   esac
