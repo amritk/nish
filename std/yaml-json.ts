@@ -216,8 +216,9 @@ export class YamlJsonLoader {
     this.copying = -1
     this.byteCap = doc.tok.maxTotalBytes
     doc.clear()
+    const origin: i32 = 0
     if (d < 0 || d >= stream.documentCount()) {
-      return this.fail(YAML_JSON_ERR_DOCUMENT, 0, 0)
+      return this.fail(YAML_JSON_ERR_DOCUMENT, origin, origin)
     }
     for (let i: i32 = 0; i < stream.diagnosticCount(); i += 1) {
       if (stream.diagnosticDocument(i) === d && !stream.diagnosticIsWarning(i)) {
@@ -236,7 +237,7 @@ export class YamlJsonLoader {
       }
       return this.fail(JSON_VALUE_ERR_VALUES, stream.start(root), stream.end(root))
     }
-    return this.build(root, 0)
+    return this.build(root, origin)
   }
 
   /** Internal: records a failed load, clearing the document, and answers `code`. */
@@ -278,7 +279,7 @@ export class YamlJsonLoader {
     while (toI32(sizes.length) < nodes) {
       sizes.push(0)
     }
-    for (let i: i32 = 0; i < nodes; i += 1) {
+    for (let i: i32 = 0; i < nodes && i < toI32(sizes.length); i += 1) {
       sizes[i] = 0
     }
     this.cap = cap
@@ -289,15 +290,18 @@ export class YamlJsonLoader {
     top = this.pushNode(top, root)
     while (top > 0) {
       const n: i32 = pending[top - 1]
-      const have: i32 = sizes[n]
-      if (have > 0) {
+      // A pushed node is in range; the test proves it to the bounds check.
+      if (n < 0 || n >= toI32(sizes.length) || sizes[n] > 0) {
         top -= 1
-      } else if (have === 0) {
+      } else if (sizes[n] === 0) {
         // First visit: count the nodes it is made of first.
         sizes[n] = -1
         top = this.pushParts(top, n)
       } else {
-        sizes[n] = this.sizeOf(n)
+        const size: i32 = this.sizeOf(n)
+        if (n < toI32(sizes.length)) {
+          sizes[n] = size
+        }
         top -= 1
       }
     }
@@ -495,7 +499,8 @@ export class YamlJsonLoader {
         return this.failed
       }
     }
-    if (this.mergeInto(base, at, 0) < 0) {
+    const outer: i32 = 0
+    if (this.mergeInto(base, at, outer) < 0) {
       return this.failed
     }
     const top: i32 = this.entryTop
@@ -710,11 +715,10 @@ const yamlJsonRadix = (text: string, from: i32, base: i32): string => {
       limbs.push(carry)
     }
   }
-  let top: i32 = toI32(limbs.length) - 1
+  const top: i32 = toI32(limbs.length) - 1
   const parts: string[] = [`${limbs[top]}`]
-  while (top > 0) {
-    top -= 1
-    const limb: string = `${limbs[top]}`
+  for (let l: i32 = top - 1; l >= 0 && l < toI32(limbs.length); l -= 1) {
+    const limb: string = `${limbs[l]}`
     parts.push(`${"000".substring(0, 4 - toI32(limb.length))}${limb}`)
   }
   return parts.join("")
