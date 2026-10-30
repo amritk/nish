@@ -2230,8 +2230,10 @@ unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM.
 `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF` and `NET_SO_RCVBUF`, `i32` ids exported
 beside it; any other id is `-22`. Linux drops quick-ACK mode on its own, so set
 it again after each response. The ids are not module constants: pass them
-directly. None
-exists on a wasm target, and under Node each throws.
+directly. `netMss(fd)` answers a connected TCP socket's send MSS, the payload
+bytes one segment carries, and `-1` for anything else (never an errno), so size
+writes by it with a fallback. None but `netMss` exists on a wasm target (there
+it is always `-1`), and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write
