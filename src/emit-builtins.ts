@@ -1159,8 +1159,25 @@ export const identifierBuiltinCalleesNamed = (
   name: string
 ): string[] => {
   const out: string[] = []
+  if (name === "store") {
+    // A store's out-of-range panic.
+    out.push("nish_panic_index")
+    return out
+  }
+  if (
+    name === "extract" ||
+    name === "replace" ||
+    name === "u8x16" ||
+    name === "u16x8" ||
+    name === "i32x4" ||
+    name === "u32x4" ||
+    name === "f32x4" ||
+    name === "f64x2"
+  ) {
+    return out
+  }
   if (isSimdExport(name)) {
-    // A load's or a store's out-of-range panic, and nothing for the rest.
+    // A load's out-of-range panic, and nothing for a splat.
     return isSimdAccess(name) ? ["nish_panic_index"] : out
   }
   if (!isBuiltinFunction(name)) {
