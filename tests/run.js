@@ -1482,7 +1482,9 @@ if (!only || "os_host".includes(only)) {
 
   // setNice and setIdlePriority under the prelude. Node has `os.setPriority`
   // but no SCHED_IDLE, so both throw, naming themselves, before printing.
-  const loudNice = runCaseUnderPrelude("os_nice", [])
+  const nicer = path.join(osDir, "nicer.ts")
+  fs.writeFileSync(nicer, "export const main = (): number => {\n  console.log(setNice(1));\n  return 0;\n};\n")
+  const loudNice = runUnderPrelude(nicer, [])
   check(
     "os_nice: under the prelude setNice fails loudly rather than answering",
     loudNice.status !== 0 && loudNice.stdout === "" && loudNice.stderr.includes("`setNice` has no reading under Node"),
