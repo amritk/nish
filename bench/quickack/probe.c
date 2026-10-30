@@ -120,7 +120,7 @@ static void calls(void) {
 enum { REQUESTS = 200, REQ = 64, RESP = 128 };
 
 static void set_quickack(int fd, int value) {
-  setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK, &value, sizeof value);
+  if (setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK, &value, sizeof value) < 0) die("TCP_QUICKACK");
 }
 
 static void exactly(int fd, char *buf, int n, int reading) {
@@ -151,9 +151,9 @@ static void exchange(const char *mode, const char *pattern) {
   int quick_seen = 0;
   for (int k = 1; k <= REQUESTS; k++) {
     if (strcmp(pattern, "idle") == 0 && k % 10 == 0) usleep(1500 * 1000);
-    int v;
+    int v = 0;
     socklen_t n = sizeof v;
-    getsockopt(server, IPPROTO_TCP, TCP_QUICKACK, &v, &n);
+    if (getsockopt(server, IPPROTO_TCP, TCP_QUICKACK, &v, &n) < 0) die("TCP_QUICKACK");
     quick_seen += v;
     exactly(client, req, REQ, 0);
     exactly(server, req, REQ, 1);

@@ -74,12 +74,13 @@ build/nish bench/http1-server.ts --link build/bench/h1 --profile speed >/dev/nul
 cp build/bench/h1 "$out/h1-copy"
 cmp build/bench/h1 "$out/h1-copy"
 here=$(pwd)
+# %q quotes the path, so a checkout under a directory with spaces still runs.
 wrap() {
   local name="$1" bin="$2" mode="$3"
   if [ "$mode" = none ]; then
-    printf '#!/bin/sh\nexec env -u BENCH_QUICKACK %s "$@"\n' "$here/$bin" >"$out/$name"
+    printf '#!/bin/sh\nexec env -u BENCH_QUICKACK %q "$@"\n' "$here/$bin" >"$out/$name"
   else
-    printf '#!/bin/sh\nexec env BENCH_QUICKACK=%s %s "$@"\n' "$mode" "$here/$bin" >"$out/$name"
+    printf '#!/bin/sh\nexec env BENCH_QUICKACK=%s %q "$@"\n' "$mode" "$here/$bin" >"$out/$name"
   fi
   chmod +x "$out/$name"
 }

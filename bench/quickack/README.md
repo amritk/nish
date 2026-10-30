@@ -56,7 +56,9 @@ Every figure here is from one box:
   `spec_store_bypass` (prctl), `spectre_v1` (usercopy/swapgs barriers),
   `spectre_v2` (Enhanced IBRS, IBPB conditional, BHI vulnerable)
 - `net.ipv4.tcp_pingpong_thresh = 1`, `tcp_ecn = 2`, `tcp_timestamps = 1`
-- the server on CPU 0, `wrk -t3` on CPUs 1 to 3, over loopback
+- the server on CPU 0, `wrk -t3` on CPUs 1 to 3, over loopback: `run.sh`
+  pins nothing itself; this is `bench/http.mjs`'s default layout (`taskset`
+  on a 4-CPU box), which `probe.c` does not use
 
 The box that reported the cost of a per-response setsockopt was a Xeon Platinum
 8260 VM on Linux 6.8. These figures are **not** from it: that box was not
@@ -68,8 +70,8 @@ nanoseconds will not.
 
 `probe.c calls`: the median of 7 runs of 200,000 calls on an established
 loopback socket (min and max in brackets). The repository's general syscall
-table is `bench/syscall-cost/`, which had not merged when these were taken,
-so they are timed here, on the same box as the rest.
+table is `bench/README.md#syscall-cost`; these are timed here so they come
+from the same box as the rest.
 
 | call | ns/call |
 | --- | ---: |

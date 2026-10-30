@@ -38923,10 +38923,10 @@ function Bench.serve(this: Bench, slot: i32, events: i32): void -> @Bench.serve 
   callee +15:15 Http1Server.next -> @nish.Http1Server.next
   callee +17:13 Http1Server.flush -> @nish.Http1Server.flush
   callee +19:7 Http1Server.close -> @nish.Http1Server.close
-  callee +26:22 Http1Server.fd -> @nish.Http1Server.fd
-  callee +28:22 Http1Server.fd -> @nish.Http1Server.fd
-  callee +31:9 Http1Server.rearm -> @nish.Http1Server.rearm
-  callee +32:29 Http1Server.fd -> @nish.Http1Server.fd
+  callee +29:22 Http1Server.fd -> @nish.Http1Server.fd
+  callee +31:22 Http1Server.fd -> @nish.Http1Server.fd
+  callee +34:9 Http1Server.rearm -> @nish.Http1Server.rearm
+  callee +35:29 Http1Server.fd -> @nish.Http1Server.fd
 function Bench.run(this: Bench): void -> @Bench.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22

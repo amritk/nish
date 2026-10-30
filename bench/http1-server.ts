@@ -741,7 +741,10 @@ class Bench {
       return
     }
     // One call per wakeup that answered something: a pipelined batch is one
-    // flush, and so one response as far as the peer's ACKs go.
+    // flush, and so one response as far as the peer's ACKs go. It is made even
+    // when the flush left bytes for a later writable wakeup: TCP_QUICKACK
+    // governs how the socket ACKs what it receives next, not what it sends, and
+    // the bench's responses fit one write, so a partial flush is rare here.
     if (this.requests !== answered) {
       if (this.quickack === QUICKACK_RESET0) {
         netSetOption(this.server.fd(slot), NET_TCP_QUICKACK, 0)

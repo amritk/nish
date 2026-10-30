@@ -47,7 +47,9 @@
 //
 // --acks adds two columns from the kernel's TCP counters (/proc/net/snmp and
 // /proc/net/netstat, Linux only), read just before and after each timed run
-// and divided by its requests: segments sent, and delayed-ACK timer firings.
+// and divided by its requests: segments sent (Tcp OutSegs), and ACKs sent by
+// the delayed-ACK timer (TcpExt DelayedACKs). The window takes in wrk's
+// connection setup and teardown, and OutSegs counts retransmits too.
 // The counters cover the whole network namespace, wrk's side included, so a
 // keep-alive exchange that piggybacks every ACK reads 2 segments per request
 // (the request and the response) and anything above 2 is a pure ACK. Read a
@@ -342,21 +344,41 @@ const parseLatency = (text) => {
   return Number(m[1]) * scale
 }
 
-/** The `names` fields of the `prefix` table in a /proc/net/snmp-style file. */
+/**
+ * The `names` fields of the `prefix` table in a /proc/net/snmp-style file;
+ * exits with one line when the file or a field is missing.
+ */
 const procTable = (file, prefix, names) => {
-  const lines = readFileSync(file, "utf8")
-    .split("\n")
-    .filter((l) => l.startsWith(`${prefix}:`))
-  const keys = lines[0].split(/\s+/)
-  const values = lines[1].split(/\s+/).map(Number)
-  return names.map((name) => values[keys.indexOf(name)])
+  let text
+  try {
+    text = readFileSync(file, "utf8")
+  } catch (e) {
+    console.error(`--acks: cannot read ${file} (${e.code}); it needs Linux`)
+    process.exit(2)
+  }
+  const lines = text.split("\n").filter((l) => l.startsWith(`${prefix}:`))
+  const keys = lines.length === 2 ? lines[0].split(/\s+/) : []
+  const values = lines.length === 2 ? lines[1].split(/\s+/).map(Number) : []
+  return names.map((name) => {
+    const at = keys.indexOf(name)
+    if (at < 1 || !Number.isFinite(values[at])) {
+      console.error(`--acks: ${file} has no ${prefix} ${name} counter`)
+      process.exit(2)
+    }
+    return values[at]
+  })
 }
 
-/** The TCP counters `--acks` reads: segments sent and delayed-ACK timer firings. */
+/** The TCP counters `--acks` reads: segments sent, and ACKs sent by the delayed-ACK timer. */
 const tcpCounters = () => {
   const [segs] = procTable("/proc/net/snmp", "Tcp", ["OutSegs"])
   const [delayed] = procTable("/proc/net/netstat", "TcpExt", ["DelayedACKs"])
   return { segs, delayed }
+}
+
+if (acks) {
+  // Fails here, before any server starts, if the counters are not there.
+  tcpCounters()
 }
 
 /** One wrk run against `port`: requests per second, p99 in ms, and socket errors. */
@@ -674,7 +696,7 @@ const runLayout = async (lay) => {
       }
     }
     console.log(`\n## ${scenario.name}${cores ? `, ${cores}` : ""}`)
-    const ackHead = acks ? " segs/req | delayed ACKs/req |" : ""
+    const ackHead = acks ? " segs/req | ACKs sent by the delayed-ACK timer (TcpExtDelayedACKs)/req |" : ""
     const ackRule = acks ? " ---: | ---: |" : ""
     const ackNa = acks ? " n/a | n/a |" : ""
     console.log(
