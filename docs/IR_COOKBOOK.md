@@ -24154,10 +24154,13 @@ to it in `.preinit_array` (kept by `@llvm.used`, so neither the optimizer nor
 the linker drops it), and a call of `@nish_sandbox_check` as `@main`'s first
 instruction. The first operand is the capability bitmask — bit 5 is `fs.read`,
 so `32` here — and the second is `1` for `--sandbox`, `2` for
-`--sandbox=best-effort`; the last two are `null`. The loader runs
-`.preinit_array` before any constructor, so the sandbox holds C code linked
-beside the program as much as Nish code; the check exits 126 when a C library
-skipped it. Without the flag the listing is this one less those lines, byte for
+`--sandbox=best-effort`; the last two are the `fs.read` and `fs.write`
+directory scopes, `null` here. `--allow fs.read=/srv/data` gives the third a
+private `@.sandbox.read` constant, each directory's real path NUL-ended and
+the list ended by one more NUL (`c"/srv/data\00\00"`), and Landlock grants
+reads beneath those directories only. The loader runs `.preinit_array` before
+any constructor, so the sandbox holds C code linked beside the program as much
+as Nish code; the check exits 126 when a C library skipped it. Without the flag the listing is this one less those lines, byte for
 byte, which `tests/run.js` holds for a program of its own.
 
 <!-- cookbook:begin sandbox -->

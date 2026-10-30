@@ -2682,7 +2682,7 @@ or `PG_LOST` to `fail(run)` (on a spent handle these do nothing and count in
 `stray`), and after each call `next(run)` until
 `PG_BATCH_NONE`: `PG_BATCH_ROW` (the connection's row answers request `tag`),
 then one of `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED` per
-request. It reads no clock: when to take is the loop's choice. (No block;
+request. It reads no clock: when to take is the loop's choice, or a `PgBatchClock`'s (`PgBatchClockConfig`: `minCount`, `factor` × the moving average of batch sizes, `maxWaitUs`, the idle bypass `lightCount`; defaults are a fixed window), which `takeDue(conn, clock, nowUs, pool.inFlight())` consults after `clock.arrived(nowUs)` per add; `PgBatchTurns` wakes one collecting connection only when its batch is due. (No block;
 `tests/postgres/live`'s `batch` scenario runs it against a server, and the user
 guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
@@ -2847,7 +2847,13 @@ like a missing permission; a refused process or socket call ends the program
 with `SIGSYS` (status 159); a kernel that cannot apply it exits 126 before
 `main` unless built with `--sandbox=best-effort`. A darwin target, a library
 with no `main` and `--emit-napi` refuse the flag
-([LANGUAGE.md](LANGUAGE.md#the-sandbox)).
+([LANGUAGE.md](LANGUAGE.md#the-sandbox)). Only under `--sandbox` may an
+`--allow` list scope `fs.read` or `fs.write` to a directory
+(`--allow fs.read=/srv/data`): the directory must exist at build time, and
+the kernel grants the capability beneath it alone — except that a `main`
+reaching `process.spawn` can still read every file beneath `/`, so that
+`exec` can load a program. Any other scope, a scope
+in `--deny` and a scope without `--sandbox` are usage errors, exit 2.
 
 ## Before you say it compiles
 

@@ -912,9 +912,9 @@ const checkCapabilityPolicy = (t: Suite, cli: Cli, env: boolean): void => {
 /**
  * WP37, `--sandbox` (docs/wp37-os-sandbox.md §2): a mode other than the two is
  * a usage error, and so is the flag on a line that writes no program to
- * confine; a directory scope stays refused, word for word, until the stage
- * that enforces it. What the flag emits and what the binary does are checked
- * in `tests/run.js`'s `sandbox` section.
+ * confine; the directory scopes it accepts are `checkSandboxScopes`'s. What
+ * the flag emits and what the binary does are checked in `tests/run.js`'s
+ * `sandbox` section.
  */
 const checkSandboxUsage = (t: Suite, cli: Cli): void => {
   const source = "tests/cases/sandbox_hello.ts";
@@ -966,13 +966,52 @@ const checkSandboxUsage = (t: Suite, cli: Cli): void => {
   const noMain = cli.plain("sandbox_no_main", [`${WORK}/sandbox_no_main.ts`, "--sandbox", "-o", `${WORK}/sandbox_no_main.ll`]);
   t.eqI32("`--sandbox` on an entry with no `main` is a usage error, exit 2", noMain.status, 2);
   t.contains("and says there is no `main` to confine from", noMain.stderr, "confines a program from its `main`");
-  const scoped = cli.plain("sandbox_scope", [source, "--allow", "fs.read=/tmp", "--sandbox"]);
-  t.eqI32("a directory scope beside `--sandbox` is still a usage error, exit 2", scoped.status, 2);
+  checkSandboxScopes(t, cli, source);
+};
+
+/**
+ * WP37 stage 2: `--allow fs.read=<dir>` and `--allow fs.write=<dir>` are
+ * accepted beside `--sandbox`, wherever it stands on the command line, and the
+ * runtime enforces them. Without it the refusal is the one it always was; any
+ * other scope, and a directory that does not exist, is still a usage error.
+ */
+const checkSandboxScopes = (t: Suite, cli: Cli, source: string): void => {
+  const dir = realpathSync(WORK);
+  if (dir === null) {
+    t.fail("sandbox scopes", `cannot resolve ${WORK}`);
+    return;
+  }
+  const out = `${WORK}/sandbox_scope.ll`;
+  const scoped = cli.plain("sandbox_scope", [source, "--allow", `fs.read=${dir},fs.write=${dir}`, "--sandbox", "-o", out]);
+  t.eqI32("a directory scope beside `--sandbox` is accepted, exit 0", scoped.status, 0);
+  const plain = cli.plain("sandbox_scope_plain", [source, "--allow", `fs.read=${dir}`]);
+  t.eqI32("without `--sandbox` it is a usage error, exit 2", plain.status, 2);
   t.contains(
-    "with the refusal it has without the flag, word for word",
-    scoped.stderr,
-    "`--allow fs.read=/tmp` scopes a capability to a directory, which the compiler cannot prove and nothing enforces: grant `fs.read` whole, or leave it out"
+    "with the refusal it always had, word for word",
+    plain.stderr,
+    `\`--allow fs.read=${dir}\` scopes a capability to a directory, which the compiler cannot prove and nothing enforces: grant \`fs.read\` whole, or leave it out`
   );
+  const refusals: string[] = [
+    "--deny",
+    `fs.read=${dir}`,
+    `\`--deny fs.read=${dir}\` scopes a capability to a directory, which \`--sandbox\` does only for \`--allow fs.read\` and \`--allow fs.write\`: grant \`fs.read\` whole, or leave it out`,
+    "--allow",
+    `net=${dir}`,
+    `\`--allow net=${dir}\` scopes a capability to a directory, which \`--sandbox\` does only for \`--allow fs.read\` and \`--allow fs.write\`: grant \`net\` whole, or leave it out`,
+    "--allow",
+    `fs.write=${dir}/no-such-dir`,
+    `\`--allow fs.write=${dir}/no-such-dir\` names no directory; a scope is a directory that exists when the program is built`,
+    "--allow",
+    `fs.read=${source}`,
+    `\`--allow fs.read=${source}\` names no directory; a scope is a directory that exists when the program is built`,
+  ];
+  let k = 0;
+  while (k + 2 < refusals.length) {
+    const refused = cli.plain("sandbox_scope_refused", [source, "--sandbox", refusals[k], refusals[k + 1], "-o", out]);
+    t.eqI32(`\`--sandbox ${refusals[k]} ${refusals[k + 1]}\` is a usage error, exit 2`, refused.status, 2);
+    t.contains("and says why on stderr", refused.stderr, refusals[k + 2]);
+    k = k + 3;
+  }
 };
 
 /** The first line of a captured stream, without its newline. */

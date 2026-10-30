@@ -482,7 +482,8 @@ leaves the IR unchanged.
 - **`--sandbox`** goes one step further on Linux: the built program asks the
   kernel, before `main` runs, to refuse the files, processes and sockets its
   `main` does not reach — C code it links included. It adds a few lines to the
-  IR. See [The sandbox](sandbox.md).
+  IR. With it, `--allow fs.read=<dir>` and `--allow fs.write=<dir>` grant a
+  capability beneath one directory. See [The sandbox](sandbox.md).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](../../LANGUAGE.md#the-no-panic-scope)).

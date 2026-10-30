@@ -222,6 +222,14 @@ export class Options {
    */
   sandboxCapabilities: i32
   /**
+   * WP37: the directories `--allow fs.read=<dir>` and `--allow fs.write=<dir>`
+   * scope those capabilities to under `--sandbox`, each resolved to its
+   * absolute, symlink-free path. Empty when the capability is granted whole
+   * or not scoped; the wrapper passes them to `nish_sandbox` as Landlock rules.
+   */
+  sandboxRead: string[]
+  sandboxWrite: string[]
+  /**
    * WP40: `--update-capability-lock` computes the capability lockfile instead
    * of holding the build to it (`Compilation.checkCapabilityLock`).
    */
@@ -259,6 +267,8 @@ export class Options {
     this.denyCapabilities = 0
     this.sandbox = 0
     this.sandboxCapabilities = 0
+    this.sandboxRead = []
+    this.sandboxWrite = []
     this.updateCapabilityLock = false
   }
 

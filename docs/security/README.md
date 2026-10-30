@@ -68,7 +68,7 @@ the record that found it. The notes below the table name each such finding.
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
-| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper in `src/emit.ts`; the flag and its refusals in `src/compile.ts`, `src/options.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
 | PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
@@ -249,7 +249,11 @@ the record that found it. The notes below the table name each such finding.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
-    does. BCRYPT-5 is a property checked and found to hold, not a finding.
+    does. BCRYPT-10 (Low), the calibrated width following a clock, is
+    accepted too: the width changes only the speed, never a hash. BCRYPT-8
+    (Low), accepted when found, is superseded, since the kernel is now as
+    wide as the lanes given; BCRYPT-9 was a limitation of the language, since
+    lifted. BCRYPT-5 is a property checked and found to hold, not a finding.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
