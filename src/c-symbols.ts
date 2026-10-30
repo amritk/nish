@@ -439,6 +439,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "getpayloadf" ||
   name === "getpayloadl" ||
   name === "getpid" ||
+  // `setNice` reads the current nice value before it may lower it (runtime-os.c).
+  name === "getpriority" ||
   name === "getpwnam" ||
   name === "getrandom" ||
   name === "gets" ||
