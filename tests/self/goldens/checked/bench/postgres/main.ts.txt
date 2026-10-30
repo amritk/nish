@@ -196,6 +196,17 @@ const PG_BATCH_MAX_QUEUE: i32 = 1048576
 const PG_BATCH_MAX_RUNS: i32 = 1024
 const PG_BATCH_USES: i32 = 1048576
 const PG_BATCH_MIN_BYTES: i32 = 22
+const PG_CLOCK_WAIT: i32 = 0 [exported]
+const PG_CLOCK_COUNT: i32 = 1 [exported]
+const PG_CLOCK_AVERAGE: i32 = 2 [exported]
+const PG_CLOCK_TIMER: i32 = 3 [exported]
+const PG_CLOCK_IDLE: i32 = 4 [exported]
+const PG_CLOCK_MAX_COUNT: i32 = 1048576
+const PG_CLOCK_MAX_LIGHT: i32 = 1024
+const PG_CLOCK_MAX_WAIT: i64 = 60000000
+const PG_CLOCK_MAX_FACTOR: f64 = 64
+const PG_TURNS_NONE: i32 = -1 [exported]
+const PG_TURNS_FULL: i32 = -2 [exported]
 struct PgConfig (class) size=64 align=8 exported
   field user: string index=0 offset=0 initialized
   field database: string index=1 offset=8 initialized
@@ -420,6 +431,7 @@ struct PgPool (class) size=88 align=8 exported
   method register -> @nish.PgPool.register
   method request -> @nish.PgPool.request
   method waiting -> @nish.PgPool.waiting
+  method inFlight -> @nish.PgPool.inFlight
   method dispatch -> @nish.PgPool.dispatch
   method send -> @nish.PgPool.send
   method wanted -> @nish.PgPool.wanted
@@ -488,6 +500,7 @@ struct PgBatcher (class) size=160 align=8 exported
   method slotToAdd -> @nish.PgBatcher.slotToAdd
   method added -> @nish.PgBatcher.added
   method sameKey -> @nish.PgBatcher.sameKey
+  method takeDue -> @nish.PgBatcher.takeDue
   method take -> @nish.PgBatcher.take
   method bindKey -> @nish.PgBatcher.bindKey
   method run -> @nish.PgBatcher.run
@@ -497,6 +510,60 @@ struct PgBatcher (class) size=160 align=8 exported
   method fail -> @nish.PgBatcher.fail
   method emit -> @nish.PgBatcher.emit
   method next -> @nish.PgBatcher.next
+struct PgBatchClockConfig (class) size=48 align=8 exported
+  field factor: f64 index=0 offset=0 initialized
+  field weight: f64 index=1 offset=8 initialized
+  field maxWaitUs: i64 index=2 offset=16 initialized
+  field lightWindowUs: i64 index=3 offset=24 initialized
+  field maxCount: i32 index=4 offset=32 initialized
+  field minCount: i32 index=5 offset=36 initialized
+  field lightCount: i32 index=6 offset=40 initialized
+  field queueSize: i32 index=7 offset=44 initialized
+struct PgBatchClock (class) size=120 align=8 exported
+  field average: f64 index=0 offset=0 initialized
+  field lastSize: i32 index=1 offset=8 initialized
+  field lastReason: i32 index=2 offset=12 initialized
+  field lastWaitUs: i64 index=3 offset=16 initialized
+  field maxCount: i32 index=4 offset=24 readonly
+  field minCount: i32 index=5 offset=28 readonly
+  field factor: f64 index=6 offset=32 readonly
+  field weight: f64 index=7 offset=40 readonly
+  field maxWaitUs: i64 index=8 offset=48 readonly
+  field lightWindowUs: i64 index=9 offset=56 readonly
+  field times: i64[] index=10 offset=64 readonly
+  field light: i64[] index=11 offset=72 readonly
+  field starts: i64[] index=12 offset=80 readonly
+  field head: i32 index=13 offset=88 initialized
+  field count: i32 index=14 offset=92 initialized
+  field lightAt: i32 index=15 offset=96 initialized
+  field lightSeen: i32 index=16 offset=100 initialized
+  field last: i64 index=17 offset=104 initialized
+  field due: i32 index=18 offset=112 initialized
+  constructor -> @nish.PgBatchClock.constructor
+  method waiting -> @nish.PgBatchClock.waiting
+  method arrived -> @nish.PgBatchClock.arrived
+  method target -> @nish.PgBatchClock.target
+  method check -> @nish.PgBatchClock.check
+  method deadline -> @nish.PgBatchClock.deadline
+  method started -> @nish.PgBatchClock.started
+  method startsFor -> @nish.PgBatchClock.startsFor
+  method quiet -> @nish.PgBatchClock.quiet
+struct PgBatchTurns (class) size=32 align=8 exported
+  field clock: PgBatchClock index=0 offset=0 readonly
+  field size: i32 index=1 offset=8 readonly
+  field busy: boolean[] index=2 offset=16 readonly
+  field running: i32 index=3 offset=24 initialized
+  field woken: i32 index=4 offset=28 initialized
+  constructor -> @nish.PgBatchTurns.constructor
+  method collector -> @nish.PgBatchTurns.collector
+  method inFlight -> @nish.PgBatchTurns.inFlight
+  method deadline -> @nish.PgBatchTurns.deadline
+  method push -> @nish.PgBatchTurns.push
+  method poll -> @nish.PgBatchTurns.poll
+  method started -> @nish.PgBatchTurns.started
+  method finished -> @nish.PgBatchTurns.finished
+  method release -> @nish.PgBatchTurns.release
+  method free -> @nish.PgBatchTurns.free
 function PgError.constructor(this: PgError, severity: string, code: string, message: string, detail: string, hint: string, constraint: string, position: string): void -> @nish.PgError.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: code constraint detail hint message position severity
@@ -1860,6 +1927,13 @@ function PgPool.waiting(this: PgPool): i32 -> @nish.PgPool.waiting [exported met
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function PgPool.inFlight(this: PgPool): i32 -> @nish.PgPool.inFlight [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (let)
+  local +1:16 slot: PgPoolSlot (const)
 function PgPool.dispatch(this: PgPool): i32 -> @nish.PgPool.dispatch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -2049,6 +2123,21 @@ function PgBatcher.sameKey(this: PgBatcher, a: i32, b: i32): boolean -> @nish.Pg
   local +4:11 x: i32 (const)
   local +5:11 y: i32 (const)
   local +6:14 i: i32 (let)
+function PgBatcher.takeDue(this: PgBatcher, conn: PgConnection, clock: PgBatchClock, nowUs: i64, inFlight: i32): i32 -> @nish.PgBatcher.takeDue [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.PgBatchClock.check
+  escaping: inFlight nowUs
+  calls: nish.PgBatchClock.check nish.PgBatchClock.started nish.PgBatchClock.waiting nish.PgBatcher.take nish_panic nish_panic_overflow
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.take#0
+  pointer conn: size=192 writesThrough=true captured=false passedTo=nish.PgBatcher.take#1
+  pointer clock: size=120 writesThrough=true captured=false passedTo=nish.PgBatchClock.waiting#0 nish.PgBatchClock.check#0 nish.PgBatchClock.started#0
+  stackSites=0 stackLocals=0
+  callee +0:9 PgBatchClock.waiting -> @nish.PgBatchClock.waiting
+  callee +3:9 PgBatchClock.check -> @nish.PgBatchClock.check
+  local +6:11 before: i32 (const)
+  local +7:11 r: i32 (const)
+  callee +7:20 PgBatcher.take -> @nish.PgBatcher.take
+  callee +9:7 PgBatchClock.started -> @nish.PgBatchClock.started
 function PgBatcher.take(this: PgBatcher, conn: PgConnection): i32 -> @nish.PgBatcher.take [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -2167,6 +2256,145 @@ function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [e
   local +6:9 limit: i32 (let)
   callee +13:11 PgBatcher.emit -> @nish.PgBatcher.emit
   callee +25:11 PgBatcher.emit -> @nish.PgBatcher.emit
+function PgBatchClock.constructor(this: PgBatchClock, config: PgBatchClockConfig): void -> @nish.PgBatchClock.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish_panic
+  pointer this: size=120 writesThrough=true captured=false
+  pointer config: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 factor: f64 (const)
+  local +1:11 weight: f64 (const)
+function PgBatchClock.waiting(this: PgBatchClock): i32 -> @nish.PgBatchClock.waiting [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function PgBatchClock.arrived(this: PgBatchClock, nowUs: i64): boolean -> @nish.PgBatchClock.arrived [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: nowUs
+  calls: nish_panic_div nish_panic_index nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:11 ring: i32 (const)
+  local -1:11 now: i64 (const)
+  local +3:11 lights: i32 (const)
+function PgBatchClock.target(this: PgBatchClock): i32 -> @nish.PgBatchClock.target [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish_ceil
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 scaled: f64 (const)
+  local +1:9 target: i32 (let)
+function PgBatchClock.check(this: PgBatchClock, nowUs: i64, inFlight: i32): i32 -> @nish.PgBatchClock.check [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: nowUs
+  calls: nish.PgBatchClock.quiet nish.PgBatchClock.target nish_panic_index nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.PgBatchClock.target#0 nish.PgBatchClock.quiet#0
+  stackSites=0 stackLocals=0
+  local -11:9 reason: i32 (let)
+  local -9:13 target: i32 (const)
+  callee -9:27 PgBatchClock.target -> @nish.PgBatchClock.target
+  callee -4:35 PgBatchClock.quiet -> @nish.PgBatchClock.quiet
+function PgBatchClock.deadline(this: PgBatchClock): i64 -> @nish.PgBatchClock.deadline [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function PgBatchClock.started(this: PgBatchClock, size: i32, nowUs: i64): void -> @nish.PgBatchClock.started [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: size
+  calls: nish_panic nish_panic_div nish_panic_index nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +6:11 n: f64 (const)
+function PgBatchClock.startsFor(this: PgBatchClock, reason: i32): i64 -> @nish.PgBatchClock.startsFor [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: reason
+  calls: nish_panic nish_panic_index
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function PgBatchClock.quiet(this: PgBatchClock, nowUs: i64): boolean -> @nish.PgBatchClock.quiet [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 lights: i32 (const)
+function PgBatchTurns.constructor(this: PgBatchTurns, clock: PgBatchClock, size: i32): void -> @nish.PgBatchTurns.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: clock size
+  calls: nish_panic
+  pointer this: size=32 writesThrough=true captured=false
+  pointer clock: size=120 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function PgBatchTurns.collector(this: PgBatchTurns): i32 -> @nish.PgBatchTurns.collector [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 i: i32 (let)
+function PgBatchTurns.inFlight(this: PgBatchTurns): i32 -> @nish.PgBatchTurns.inFlight [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function PgBatchTurns.deadline(this: PgBatchTurns): i64 -> @nish.PgBatchTurns.deadline [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.PgBatchClock.deadline
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:12 PgBatchClock.deadline -> @nish.PgBatchClock.deadline
+function PgBatchTurns.push(this: PgBatchTurns, nowUs: i64): i32 -> @nish.PgBatchTurns.push [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.PgBatchClock.arrived
+  escaping: nowUs
+  calls: nish.PgBatchClock.arrived nish.PgBatchTurns.poll
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.poll#0
+  stackSites=0 stackLocals=0
+  callee +0:10 PgBatchClock.arrived -> @nish.PgBatchClock.arrived
+  callee +3:12 PgBatchTurns.poll -> @nish.PgBatchTurns.poll
+function PgBatchTurns.poll(this: PgBatchTurns, nowUs: i64): i32 -> @nish.PgBatchTurns.poll [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: nowUs
+  calls: nish.PgBatchClock.check nish.PgBatchTurns.collector
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.collector#0
+  stackSites=0 stackLocals=0
+  local -4:11 slot: i32 (const)
+  callee -4:23 PgBatchTurns.collector -> @nish.PgBatchTurns.collector
+  callee -3:21 PgBatchClock.check -> @nish.PgBatchClock.check
+function PgBatchTurns.started(this: PgBatchTurns, slot: i32, size: i32, nowUs: i64): i32 -> @nish.PgBatchTurns.started [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: nowUs size slot
+  calls: nish.PgBatchClock.started nish.PgBatchTurns.free nish.PgBatchTurns.poll nish_panic_index nish_panic_overflow
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.free#0 nish.PgBatchTurns.poll#0
+  stackSites=0 stackLocals=0
+  callee -2:5 PgBatchTurns.free -> @nish.PgBatchTurns.free
+  callee -1:5 PgBatchClock.started -> @nish.PgBatchClock.started
+  callee +5:12 PgBatchTurns.poll -> @nish.PgBatchTurns.poll
+function PgBatchTurns.finished(this: PgBatchTurns, slot: i32, nowUs: i64): i32 -> @nish.PgBatchTurns.finished [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: nowUs slot
+  calls: nish.PgBatchTurns.poll nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.poll#0
+  stackSites=0 stackLocals=0
+  callee +2:12 PgBatchTurns.poll -> @nish.PgBatchTurns.poll
+function PgBatchTurns.release(this: PgBatchTurns, slot: i32): void -> @nish.PgBatchTurns.release [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: slot
+  calls: nish.PgBatchTurns.free
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.PgBatchTurns.free#0
+  stackSites=0 stackLocals=0
+  callee -2:5 PgBatchTurns.free -> @nish.PgBatchTurns.free
+function PgBatchTurns.free(this: PgBatchTurns, slot: i32): void -> @nish.PgBatchTurns.free [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: slot
+  calls: nish_panic nish_panic_index
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 module std/bytes.ts [package nish]
 const BYTES_SPACE: i32 = 32
 const BYTES_TAB: i32 = 9

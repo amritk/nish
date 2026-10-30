@@ -565,6 +565,74 @@ if (due && !asked && pool.request() >= 0) {
 [`tests/postgres/live/live.ts`](../../../tests/postgres/live/live.ts)'s
 `batch` scenario drives three batchers through a pool against a live server.
 
+### When to take: `PgBatchClock`
+
+A fixed window costs latency when traffic is quiet and buys nothing when it
+is heavy. A `PgBatchClock` decides for you, from the time you pass it in
+microseconds; it reads no clock and allocates only when it is made. A batch is
+due when either
+
+- at least max(`minCount`, the moving average of recent batch sizes ×
+  `factor`) items wait, or
+- the oldest has waited `maxWaitUs`;
+
+and, with the idle bypass on, at once when nothing is in flight and fewer than
+`lightCount` items arrived in the last `lightWindowUs`. Under a backlog the
+count is already there, so nothing waits on the timer, and a batch started by
+count is never smaller than the average, so batches do not shrink while the
+backlog lasts.
+
+```ts
+const timing = new PgBatchClockConfig();
+// The defaults are the fixed window: 32 items or 10 ms, whatever the load.
+timing.maxCount = config.maxRequests; // the batcher's own cap
+timing.queueSize = config.queueSize;
+timing.minCount = 16;
+timing.factor = 1.1;
+timing.lightCount = 8;
+const clock = new PgBatchClock(timing);
+
+// Per request, beside addText: the clock mirrors the batcher's queue.
+if (articles.addText(body, slugStart, slugLength, requestId)) {
+  clock.arrived(nowUs());
+}
+
+// When the loop has a connection: takeDue takes only when the clock says so.
+runs[pool.ticket % RING] = articles.takeDue(pool.connection(slot), clock, nowUs(), pool.inFlight());
+
+// And wake the loop for the timer: deadline() is -1 when nothing waits.
+const deadline = clock.deadline();
+```
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `maxCount` | 32 | The most items one batch takes; set it to the batcher's `maxRequests`. |
+| `minCount` | 32 | The fewest that start a batch by count. |
+| `factor` | 0 | The share of the recent average that must wait; 0 leaves it out. Above 1, batches grow until the timer bounds them. |
+| `weight` | 0.25 | How far each batch moves the average, over 0 up to 1. |
+| `maxWaitUs` | 10000 | The longest the oldest item waits, in µs. |
+| `lightCount`, `lightWindowUs` | 0, 10000 | The idle bypass; 0 turns it off. |
+| `queueSize` | 1024 | The most items waiting; the batcher's `queueSize`. |
+
+A setting out of range panics in the constructor. After each start,
+`average`, `lastSize`, `lastWaitUs` and `lastReason` — `PG_CLOCK_COUNT`,
+`PG_CLOCK_AVERAGE`, `PG_CLOCK_TIMER` or `PG_CLOCK_IDLE` — are there for your
+metrics, and `startsFor(reason)` counts the starts for each. `takeDue` panics
+when the clock does not mirror the batcher: its waiting count is not
+`waiting()`, or its `maxCount` is below `maxRequests`.
+
+With several connections, `PgBatchTurns` lets one free connection collect
+while the others execute: `push(now)` records an item and answers the slot to
+wake only when its batch is due (`PG_TURNS_NONE` otherwise, `PG_TURNS_FULL`
+when the queue is), `poll(now)` does the same at `deadline()`, and the woken
+slot calls `started(slot, size, now)` or `release(slot)`, then
+`finished(slot, now)` when its batch is done.
+
+The fixed window stays the default until measurements against a live server
+say otherwise. [`bench/pg-batch-clock.ts`](../../../bench/pg-batch-clock.ts)
+models a pool at three loads; there, the adaptive settings above match the
+better of a 10 ms and a 30 ms window at each.
+
 ## What it does not do
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
