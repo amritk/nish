@@ -685,3 +685,33 @@ Run 1 put everything together 1.48 µs under main on `list`, outside that run's 
 
 `readRow` was not changed: it is 2.2 % of `list` out of line, about 1.2 µs a query for 20 rows, and already reads each column's length without a call. Halving it would save less than the run-to-run spread above.
 <!-- postgres-profile:end -->
+
+<!-- regex:begin -->
+## Regular expressions
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/regex/measure.mjs --before <nish> --size` times `nish/regex` over a 64 KB corpus of mixed ASCII and non-ASCII lines, against a byte-identical copy of the binary for the noise band and against the same program built with another compiler's `std/` ([bench/README.md](../bench/README.md#regular-expressions) describes it). 2026-10-30: this branch against `main` at 384371b, before property escapes and non-ASCII folding, 16 interleaved rounds, four cores, x86-64.
+
+The seven cases without the Unicode features. The ratio is main's time over this branch's, so above 1 means this branch is faster. Every ratio is inside the larger of the two noise bands:
+
+| Case | Pattern | Median, main | Median, branch | Ratio (median) | Noise band (median, main / branch) |
+| --- | --- | ---: | ---: | ---: | --- |
+| `literal` | `needle` | 8.3 µs | 8.3 µs | 1.006x | 2.9% / 2.4% |
+| `class` | `[0-9]+` | 30.7 µs | 31.3 µs | 0.983x | 0.9% / 1.0% |
+| `alternation` | `fox\|dog\|needle\|World` | 62.1 µs | 61.2 µs | 1.016x | 4.7% / 5.3% |
+| `group` | `(?:[a-z]+ ){2}[a-z]+` | 273.5 µs | 259.6 µs | 1.054x | 5.8% / 1.9% |
+| `anchored` | `^[A-Z][a-z]+` (`m`) | 21.3 µs | 21.8 µs | 0.979x | 3.2% / 2.8% |
+| `icase-ascii` | `hello world\|quick` (`i`) | 23.8 µs | 24.0 µs | 0.992x | 0.7% / 1.0% |
+| `exec` | `(\w+)@(\w+)\.(com\|org)` | 598.2 µs | 509.2 µs | 1.175x | 17.8% / 1.8% |
+
+`class` is 1.7% slower at the median, but 1.1% faster at the minimum (0.989x), and main's own copy spread 9.4% at the minimum. `exec`'s main build drew a noisy machine: its byte-identical copy ran at 507.9 µs.
+
+The three cases with the Unicode features. Main refuses `\p{…}` and folds no non-ASCII letter, so these time this branch alone:
+
+| Case | Pattern | Median | Noise band (median) |
+| --- | --- | ---: | --- |
+| `property` | `\p{L}+` | 596.0 µs | 1.6% |
+| `script` | `\p{Script=Greek}+` | 347.2 µs | 0.7% |
+| `icase-unicode` | `σοφία\|école\|straße\|über` (`i`) | 360.2 µs | 2.7% |
+
+Linked size of `bench/regex/size.ts`, which imports `nish/regex` and compiles `[0-9]+`: 92,824 bytes from main and 171,000 from this branch. The 78,176 bytes are the Unicode tables, about 70 KB of packed strings. `regexCompile`'s parser reaches them, so they are linked whether or not a pattern names a property.
+<!-- regex:end -->
