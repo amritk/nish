@@ -60,32 +60,33 @@ const JOB_SLOTS: i32 = 64
 const JOB_BYTES: i32 = 16 // [client i32][seq i32][counter i32][amount i32]
 const ANSWER_BYTES: i32 = 12 // [seq i32][value i64]
 const ANSWER_RING: i32 = 1024
+const WAIT_MS: i32 = 1000 // how long a worker waits on an empty ring
 const answersAt = (worker: i32): i32 =>
   JOBS_AT + mpscRingBytes(JOB_SLOTS, JOB_BYTES) + (worker - 1) * spscRingBytes(ANSWER_RING)
 const regionBytes = (): i32 => answersAt(CLIENTS + 1)
 
 /** The next record, sleeping on the doorbell when there is none; polling off Linux. */
 const takeJob = (ring: MpscRing, buf: u8[]): i32 => {
-  const n: i32 = ring.popWait(buf, 0, 1000)
-  return n === SHM_UNSUPPORTED ? ring.tryPop(buf, 0) : n
+  const n: i32 = ring.popWait(buf, toI32(0), WAIT_MS)
+  return n === SHM_UNSUPPORTED ? ring.tryPop(buf, toI32(0)) : n
 }
 
 const takeAnswer = (ring: SpscRing, buf: u8[]): i32 => {
-  const n: i32 = ring.popWait(buf, 0, 1000)
-  return n === SHM_UNSUPPORTED ? ring.tryPop(buf, 0) : n
+  const n: i32 = ring.popWait(buf, toI32(0), WAIT_MS)
+  return n === SHM_UNSUPPORTED ? ring.tryPop(buf, toI32(0)) : n
 }
 
 /** Worker 0: answers jobs until every client says it is done, or a second passes with none. */
 const owner = (region: SharedRegion): void => {
   const jobs = attachMpscRing(region, JOBS_AT).expect("the job ring")
   const answers: SpscRing[] = []
-  for (let c = 1; c <= CLIENTS; c++) {
+  for (let c: i32 = 1; c <= CLIENTS; c++) {
     answers.push(attachSpscRing(region, answersAt(c)).expect("an answer ring"))
   }
   const counters: i64[] = new Array<i64>(COUNTERS)
   const job: u8[] = new Array<u8>(JOB_BYTES)
   const answer: u8[] = new Array<u8>(ANSWER_BYTES)
-  let done = 0
+  let done: i32 = 0
   let answered: i64 = toI64(0)
   while (done < CLIENTS && takeJob(jobs, job) !== RING_EMPTY) {
     const client: i32 = getI32LE(job, 0)
@@ -94,14 +95,14 @@ const owner = (region: SharedRegion): void => {
       done = done + 1
       continue
     }
-    if (client < 1 || client > CLIENTS || counter >= counters.length) {
+    if (client < 1 || client > CLIENTS || counter >= toI32(counters.length)) {
       continue
     }
     counters[counter] = counters[counter] + toI64(getI32LE(job, 12))
     setI32LE(answer, 0, getI32LE(job, 4))
     setI64LE(answer, 4, counters[counter])
     // The client never has more in flight than its ring holds.
-    answers[client - 1].tryPush(answer, 0, ANSWER_BYTES)
+    answers[client - 1].tryPush(answer, toI32(0), ANSWER_BYTES)
     answered = answered + 1
   }
   let total: i64 = toI64(0)
@@ -119,16 +120,16 @@ const client = (region: SharedRegion, me: i32): void => {
   const job: u8[] = new Array<u8>(JOB_BYTES)
   const answer: u8[] = new Array<u8>(ANSWER_BYTES)
   setI32LE(job, 0, me)
-  let sent = 1
-  let got = 0
-  let wrong = 0
+  let sent: i32 = 1
+  let got: i32 = 0
+  let wrong: i32 = 0
   let since: i64 = monotonicNanos()
   while (got < JOBS) {
     while (sent <= JOBS && sent - 1 - got < WINDOW) {
       setI32LE(job, 4, sent)
       setI32LE(job, 8, sent % COUNTERS)
       setI32LE(job, 12, sent)
-      if (!jobs.tryPush(job, 0, JOB_BYTES)) {
+      if (!jobs.tryPush(job, toI32(0), JOB_BYTES)) {
         break
       }
       sent = sent + 1
@@ -151,7 +152,7 @@ const client = (region: SharedRegion, me: i32): void => {
     }
   }
   setI32LE(job, 8, -1)
-  for (let k = 0; k < 1000000 && !jobs.tryPush(job, 0, JOB_BYTES); k++) {
+  for (let k: i32 = 0; k < 1000000 && !jobs.tryPush(job, toI32(0), JOB_BYTES); k++) {
     // full: the owner is behind, so spin a while
   }
   region.addI32(FAILURES_AT, wrong + (JOBS - got), SEQ_CST)
@@ -165,7 +166,7 @@ const supervise = (name: string): i32 => {
   }
   const region = createRegion(name, regionBytes()).expect("the region")
   initMpscRing(region, JOBS_AT, JOB_SLOTS, JOB_BYTES, true)
-  for (let c = 1; c <= CLIENTS; c++) {
+  for (let c: i32 = 1; c <= CLIENTS; c++) {
     initSpscRing(region, answersAt(c), ANSWER_RING, true)
   }
   const config = new PreforkConfig()

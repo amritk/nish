@@ -81,8 +81,14 @@ const RING_MPSC_MAGIC: i32 = 0x6e726d31 // "nrm1"
 const RING_SPINS: i32 = 2048
 // An MPSC slot: [seq i64][len i32][4 unused][payload].
 const RING_SLOT_HEAD: i32 = 16
+// The consumer's sleep flag at RING_SLEEP_AT.
+const RING_AWAKE: i32 = 0
+const RING_ASLEEP: i32 = 1
 
 const ringIsPowerOfTwo = (n: i32): boolean => n > 0 && (n & (n - 1)) === 0
+
+/** The bytes an SPSC record of `len` takes: its length word and the payload, rounded up to 4. */
+const ringRecordBytes = (len: i32): i32 => ((len + 3) & ~3) + 4
 
 /** A ring's header is 64-aligned and the ring fits its region from `base`. */
 const ringCheckPlace = (region: SharedRegion, base: i32, bytes: i64, what: string): void => {
@@ -109,8 +115,8 @@ export const mpscRingBytes = (slots: i32, slotBytes: i32): i32 =>
  */
 const ringRing = (region: SharedRegion, base: i32): void => {
   const at: i32 = base + RING_SLEEP_AT
-  if (region.loadI32(at, SEQ_CST) !== 0 && region.exchangeI32(at, 0, SEQ_CST) !== 0) {
-    region.wake(at, 1)
+  if (region.loadI32(at, SEQ_CST) !== RING_AWAKE && region.exchangeI32(at, RING_AWAKE, SEQ_CST) !== RING_AWAKE) {
+    region.wake(at, toI32(1))
   }
 }
 
@@ -135,11 +141,11 @@ const ringLeftMs = (deadline: i64): i32 => {
 const ringSleep = (region: SharedRegion, base: i32, ready: boolean, waitMs: i32): boolean => {
   const at: i32 = base + RING_SLEEP_AT
   if (ready) {
-    region.storeI32(at, 0, RELAXED)
+    region.storeI32(at, RING_AWAKE, RELAXED)
     return true
   }
-  const rc: i32 = region.waitI32(at, 1, waitMs)
-  region.storeI32(at, 0, RELAXED)
+  const rc: i32 = region.waitI32(at, RING_ASLEEP, waitMs)
+  region.storeI32(at, RING_AWAKE, RELAXED)
   return rc !== SHM_UNSUPPORTED
 }
 
@@ -183,7 +189,7 @@ export class SpscRing {
    * room for it now. A record longer than the ring could ever hold panics.
    */
   tryPush(src: readonly u8[], off: i32, len: i32): boolean {
-    const need: i32 = 4 + ((len + 3) & ~3)
+    const need: i32 = ringRecordBytes(len)
     if (len < 0 || need > this.capacity) {
       panic(`nish/sync/ring: a record of ${len} bytes does not fit a ring of ${this.capacity}`)
     }
@@ -229,7 +235,7 @@ export class SpscRing {
     const len: i32 = this.region.loadI32(this.base + RING_DATA_AT + toI32(pos & toI64(mask)), RELAXED)
     // The capacity first: a length a broken producer wrote near 2^31 would
     // overflow the rounding below and panic with the wrong reason.
-    if (len < 0 || len > this.capacity - 4 || toI64(4 + ((len + 3) & ~3)) > avail) {
+    if (len < 0 || len > this.capacity - 4 || toI64(ringRecordBytes(len)) > avail) {
       panic(`nish/sync/ring: a record of length ${len} at position ${pos}: the ring is corrupt`)
     }
     return len
@@ -257,11 +263,11 @@ export class SpscRing {
       return RING_EMPTY
     }
     const len: i32 = this.lengthAt(this.head, this.seenTail - this.head)
-    if (len > dst.length - off) {
+    if (len > toI32(dst.length) - off) {
       return RING_TOO_SMALL
     }
     this.copyOut(this.head, len, dst, off)
-    this.head = this.head + toI64(4 + ((len + 3) & ~3))
+    this.head = this.head + toI64(ringRecordBytes(len))
     this.region.storeI64(this.base + RING_HEAD_AT, this.head, RELEASE)
     return len
   }
@@ -276,21 +282,21 @@ export class SpscRing {
     // Always the producer's position now, not the cache: a cache that still
     // holds a record would hide every one pushed since it was loaded.
     this.seenTail = this.region.loadI64(this.base + RING_TAIL_AT, ACQUIRE)
-    let count = 0
-    let used = 0
+    let count: i32 = 0
+    let used: i32 = 0
     let pos: i64 = this.head
-    while (count < lens.length && pos !== this.seenTail) {
+    while (count < toI32(lens.length) && pos !== this.seenTail) {
       const len: i32 = this.lengthAt(pos, this.seenTail - pos)
-      if (len > dst.length - used) {
+      if (len > toI32(dst.length) - used) {
         break
       }
       this.copyOut(pos, len, dst, used)
-      if (count >= 0 && count < lens.length) {
+      if (count >= 0 && count < toI32(lens.length)) {
         lens[count] = len
       }
       count = count + 1
       used = used + len
-      pos = pos + toI64(4 + ((len + 3) & ~3))
+      pos = pos + toI64(ringRecordBytes(len))
     }
     if (count > 0) {
       this.head = pos
@@ -308,7 +314,7 @@ export class SpscRing {
   popWait(dst: u8[], off: i32, timeoutMs: i32): i32 {
     const deadline: i64 = ringDeadline(timeoutMs)
     while (true) {
-      for (let i = 0; i < RING_SPINS; i++) {
+      for (let i: i32 = 0; i < RING_SPINS; i++) {
         const n: i32 = this.tryPop(dst, off)
         if (n !== RING_EMPTY) {
           return n
@@ -321,7 +327,7 @@ export class SpscRing {
       if (waitMs === 0) {
         return RING_EMPTY
       }
-      this.region.storeI32(this.base + RING_SLEEP_AT, 1, SEQ_CST)
+      this.region.storeI32(this.base + RING_SLEEP_AT, RING_ASLEEP, SEQ_CST)
       if (!ringSleep(this.region, this.base, this.ready(SEQ_CST), waitMs)) {
         return SHM_UNSUPPORTED
       }
@@ -340,10 +346,10 @@ export const initSpscRing = (region: SharedRegion, base: i32, capacity: i32, doo
   }
   ringCheckPlace(region, base, toI64(spscRingBytes(capacity)), "an SPSC ring")
   region.storeI32(base + RING_SIZE_AT, capacity, RELAXED)
-  region.storeI32(base + RING_BELL_AT, doorbell ? 1 : 0, RELAXED)
+  region.storeI32(base + RING_BELL_AT, doorbell ? toI32(1) : toI32(0), RELAXED)
   region.storeI64(base + RING_TAIL_AT, toI64(0), RELAXED)
   region.storeI64(base + RING_HEAD_AT, toI64(0), RELAXED)
-  region.storeI32(base + RING_SLEEP_AT, 0, RELAXED)
+  region.storeI32(base + RING_SLEEP_AT, RING_AWAKE, RELAXED)
   region.storeI32(base + RING_MAGIC_AT, RING_SPSC_MAGIC, RELEASE)
   return new SpscRing(region, base)
 }
@@ -463,7 +469,7 @@ export class MpscRing {
     }
     const slot: i32 = this.slotAt(this.head)
     const len: i32 = this.lengthAt(slot)
-    if (len > dst.length - off) {
+    if (len > toI32(dst.length) - off) {
       return RING_TOO_SMALL
     }
     this.region.read(slot + RING_SLOT_HEAD, dst, off, len)
@@ -476,17 +482,17 @@ export class MpscRing {
    * they fit, and sets `lens[i]` to each one's length: how many it moved.
    */
   popBatch(dst: u8[], lens: i32[]): i32 {
-    let count = 0
-    let used = 0
-    while (count < lens.length && this.ready(ACQUIRE)) {
+    let count: i32 = 0
+    let used: i32 = 0
+    while (count < toI32(lens.length) && this.ready(ACQUIRE)) {
       const slot: i32 = this.slotAt(this.head)
       const len: i32 = this.lengthAt(slot)
-      if (len > dst.length - used) {
+      if (len > toI32(dst.length) - used) {
         break
       }
       this.region.read(slot + RING_SLOT_HEAD, dst, used, len)
       this.release(slot)
-      if (count >= 0 && count < lens.length) {
+      if (count >= 0 && count < toI32(lens.length)) {
         lens[count] = len
       }
       count = count + 1
@@ -499,7 +505,7 @@ export class MpscRing {
   popWait(dst: u8[], off: i32, timeoutMs: i32): i32 {
     const deadline: i64 = ringDeadline(timeoutMs)
     while (true) {
-      for (let i = 0; i < RING_SPINS; i++) {
+      for (let i: i32 = 0; i < RING_SPINS; i++) {
         const n: i32 = this.tryPop(dst, off)
         if (n !== RING_EMPTY) {
           return n
@@ -512,7 +518,7 @@ export class MpscRing {
       if (waitMs === 0) {
         return RING_EMPTY
       }
-      this.region.storeI32(this.base + RING_SLEEP_AT, 1, SEQ_CST)
+      this.region.storeI32(this.base + RING_SLEEP_AT, RING_ASLEEP, SEQ_CST)
       if (!ringSleep(this.region, this.base, this.ready(SEQ_CST), waitMs)) {
         return SHM_UNSUPPORTED
       }
@@ -545,12 +551,12 @@ export const initMpscRing = (
   )
   region.storeI32(base + RING_SIZE_AT, slots, RELAXED)
   region.storeI32(base + RING_SLOT_AT, slotBytes, RELAXED)
-  region.storeI32(base + RING_BELL_AT, doorbell ? 1 : 0, RELAXED)
+  region.storeI32(base + RING_BELL_AT, doorbell ? toI32(1) : toI32(0), RELAXED)
   region.storeI64(base + RING_TAIL_AT, toI64(0), RELAXED)
   region.storeI64(base + RING_HEAD_AT, toI64(0), RELAXED)
-  region.storeI32(base + RING_SLEEP_AT, 0, RELAXED)
+  region.storeI32(base + RING_SLEEP_AT, RING_AWAKE, RELAXED)
   const stride: i32 = RING_SLOT_HEAD + slotBytes
-  for (let i = 0; i < slots; i++) {
+  for (let i: i32 = 0; i < slots; i++) {
     region.storeI64(base + RING_DATA_AT + i * stride, toI64(i), RELAXED)
   }
   region.storeI32(base + RING_MAGIC_AT, RING_MPSC_MAGIC, RELEASE)
