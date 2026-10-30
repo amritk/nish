@@ -7852,6 +7852,7 @@ const YAML_JSON_ERR_NOT_FINITE: i32 = -42 [exported]
 const YAML_JSON_ERR_EXPANSION: i32 = -43 [exported]
 const YAML_JSON_ERR_DEPTH: i32 = -44 [exported]
 const YAML_JSON_ERR_NUMBER: i32 = -45 [exported]
+const YAML_JSON_ERR_MERGE: i32 = -46 [exported]
 const YAML_JSON_MAX_RADIX_DIGITS: i32 = 256 [exported]
 const YAML_JSON_SCAN_KEYS: i32 = 16 [exported]
 const YAML_JSON_MERGE_HOPS: i32 = 100
@@ -7861,7 +7862,7 @@ const YAML_JSON_DASH: i32 = 45
 const YAML_JSON_DOT: i32 = 46
 const YAML_JSON_ZERO: i32 = 48
 const YAML_JSON_LT: i32 = 60
-struct YamlJsonLoader (class) size=104 align=8 exported
+struct YamlJsonLoader (class) size=120 align=8 exported
   field maxDepth: i32 index=0 offset=0 initialized
   field failed: i32 index=1 offset=4 initialized
   field errorStart: i32 index=2 offset=8 initialized
@@ -7880,6 +7881,9 @@ struct YamlJsonLoader (class) size=104 align=8 exported
   field entryPairs: i32[] index=15 offset=80
   field entryValues: i32[] index=16 offset=88
   field seen: Map<string, i32> index=17 offset=96
+  field mergeMarks: i32[] index=18 offset=104
+  field mergeStamp: i32 index=19 offset=112 initialized
+  field mergeBudget: i32 index=20 offset=116 initialized
   constructor -> @nish.YamlJsonLoader.constructor
   method load -> @nish.YamlJsonLoader.load
   method fail -> @nish.YamlJsonLoader.fail
@@ -7898,6 +7902,8 @@ struct YamlJsonLoader (class) size=104 align=8 exported
   method buildMap -> @nish.YamlJsonLoader.buildMap
   method mergeInto -> @nish.YamlJsonLoader.mergeInto
   method mergeMap -> @nish.YamlJsonLoader.mergeMap
+  method newMergeStamp -> @nish.YamlJsonLoader.newMergeStamp
+  method markMerged -> @nish.YamlJsonLoader.markMerged
   method addEntry -> @nish.YamlJsonLoader.addEntry
   method findEntry -> @nish.YamlJsonLoader.findEntry
   method isMergeKey -> @nish.YamlJsonLoader.isMergeKey
@@ -7911,7 +7917,7 @@ function YamlJsonLoader.constructor(this: YamlJsonLoader): void -> @nish.YamlJso
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.parseYaml
   calls: nish.JsonDocument.constructor nish.JsonLimits.constructor nish.Map$str$i32.constructor nish.parseYaml nish_alloc_struct
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   stackSites=1 stackLocals=0
   callee +0:19 parseYaml -> @nish.parseYaml
   callee +1:16 new JsonDocument -> @nish.JsonDocument.constructor
@@ -7921,8 +7927,8 @@ function YamlJsonLoader.load(this: YamlJsonLoader, stream: YamlStream, d: i32, d
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: d doc stream
-  calls: nish.JsonDocument.clear nish.YamlJsonLoader.build nish.YamlJsonLoader.count nish.YamlJsonLoader.fail nish.YamlJsonLoader.nullAt nish.YamlStream.diagnosticCount nish.YamlStream.diagnosticDocument nish.YamlStream.diagnosticEnd nish.YamlStream.diagnosticIsWarning nish.YamlStream.diagnosticStart nish.YamlStream.documentCount nish.YamlStream.documentRoot nish.YamlStream.documentStart nish.YamlStream.end nish.YamlStream.start
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.count#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.build#0
+  calls: nish.JsonDocument.clear nish.YamlJsonLoader.build nish.YamlJsonLoader.count nish.YamlJsonLoader.fail nish.YamlJsonLoader.nullAt nish.YamlStream.diagnosticCount nish.YamlStream.diagnosticDocument nish.YamlStream.diagnosticEnd nish.YamlStream.diagnosticIsWarning nish.YamlStream.diagnosticStart nish.YamlStream.documentCount nish.YamlStream.documentRoot nish.YamlStream.documentStart nish.YamlStream.end nish.YamlStream.start nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.count#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.build#0
   pointer stream: size=280 writesThrough=true captured=true passedTo=nish.YamlStream.documentCount#0 nish.YamlStream.diagnosticCount#0 nish.YamlStream.diagnosticDocument#0 nish.YamlStream.diagnosticIsWarning#0 nish.YamlStream.diagnosticStart#0 nish.YamlStream.diagnosticEnd#0 nish.YamlStream.documentRoot#0 nish.YamlStream.documentStart#0 nish.YamlStream.documentStart#0 nish.YamlStream.start#0 nish.YamlStream.end#0 nish.YamlStream.start#0 nish.YamlStream.end#0
   pointer doc: size=248 writesThrough=true captured=true passedTo=nish.JsonDocument.clear#0
   stackSites=0 stackLocals=0
@@ -7951,13 +7957,13 @@ function YamlJsonLoader.load(this: YamlJsonLoader, stream: YamlStream, d: i32, d
   callee +28:14 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
   callee +28:47 YamlStream.start -> @nish.YamlStream.start
   callee +28:67 YamlStream.end -> @nish.YamlStream.end
-  callee +30:12 YamlJsonLoader.build -> @nish.YamlJsonLoader.build
+  callee +31:12 YamlJsonLoader.build -> @nish.YamlJsonLoader.build
 function YamlJsonLoader.fail(this: YamlJsonLoader, code: i32, start: i32, end: i32): i32 -> @nish.YamlJsonLoader.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: code end start
   calls: nish.JsonDocument.clear
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=120 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +4:5 JsonDocument.clear -> @nish.JsonDocument.clear
 function YamlJsonLoader.ranged(this: YamlJsonLoader, v: i32, start: i32, end: i32): i32 -> @nish.YamlJsonLoader.ranged [exported method]
@@ -7965,7 +7971,7 @@ function YamlJsonLoader.ranged(this: YamlJsonLoader, v: i32, start: i32, end: i3
   sharedWrite: via nish.YamlJsonLoader.fail
   escaping: end start v
   calls: nish.JsonDocument.setRange nish.YamlJsonLoader.fail
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   callee +0:14 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
   local +2:11 code: i32 (const)
@@ -7976,7 +7982,7 @@ function YamlJsonLoader.nullAt(this: YamlJsonLoader, at: i32): i32 -> @nish.Yaml
   sharedWrite: via nish.YamlJsonLoader.ranged
   escaping: at
   calls: nish.JsonDocument.newNull nish.YamlJsonLoader.ranged
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.ranged#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.ranged#0
   stackSites=0 stackLocals=0
   callee +0:12 YamlJsonLoader.ranged -> @nish.YamlJsonLoader.ranged
   callee +0:24 JsonDocument.newNull -> @nish.JsonDocument.newNull
@@ -7985,7 +7991,7 @@ function YamlJsonLoader.count(this: YamlJsonLoader, root: i32, cap: i32): i32 ->
   sharedWrite: +0:7
   escaping: cap root
   calls: nish.YamlJsonLoader.pushNode nish.YamlJsonLoader.pushParts nish.YamlJsonLoader.sizeOf nish_array_grow nish_panic_index
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushParts#0 nish.YamlJsonLoader.sizeOf#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushParts#0 nish.YamlJsonLoader.sizeOf#0
   stackSites=0 stackLocals=0
   local -4:11 stream: YamlStream (const)
   local -3:11 nodes: i32 (const)
@@ -8003,14 +8009,14 @@ function YamlJsonLoader.pushNode(this: YamlJsonLoader, top: i32, n: i32): i32 ->
   sharedWrite: +0:7
   escaping: n top
   calls: nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function YamlJsonLoader.pushParts(this: YamlJsonLoader, top: i32, n: i32): i32 -> @nish.YamlJsonLoader.pushParts [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.YamlJsonLoader.pushNode
   escaping: n top
   calls: nish.YamlJsonLoader.pushNode nish.YamlStream.child nish.YamlStream.count nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.value
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0
+  pointer this: size=120 writesThrough=false captured=false passedTo=nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0 nish.YamlJsonLoader.pushNode#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 kind: i32 (const)
@@ -8032,7 +8038,7 @@ function YamlJsonLoader.sizeOf(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJ
   sharedWrite: +0:9
   escaping: n
   calls: nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.partSize nish.YamlJsonLoader.plus nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.value nish_panic_overflow
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.plus#0 nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.plus#0 nish.YamlJsonLoader.partSize#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.plus#0 nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.partSize#0 nish.YamlJsonLoader.plus#0
   stackSites=0 stackLocals=0
   local -5:11 stream: YamlStream (const)
   local -4:11 kind: i32 (const)
@@ -8055,23 +8061,25 @@ function YamlJsonLoader.sizeOf(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJ
   local +15:15 merged: boolean (const)
   callee +15:33 YamlJsonLoader.isMergeKey -> @nish.YamlJsonLoader.isMergeKey
   callee +15:49 YamlStream.key -> @nish.YamlStream.key
-  callee +16:17 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
-  callee +16:34 YamlJsonLoader.partSize -> @nish.YamlJsonLoader.partSize
-  callee +17:23 YamlStream.kind -> @nish.YamlStream.kind
-  callee +17:35 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +19:20 YamlStream.count -> @nish.YamlStream.count
-  callee +19:33 YamlStream.resolved -> @nish.YamlStream.resolved
+  local +16:15 part: i32 (const)
+  callee +16:27 YamlJsonLoader.partSize -> @nish.YamlJsonLoader.partSize
+  local +17:13 less: i32 (let)
+  callee +18:23 YamlStream.kind -> @nish.YamlStream.kind
+  callee +18:35 YamlStream.resolved -> @nish.YamlStream.resolved
+  callee +20:19 YamlStream.count -> @nish.YamlStream.count
+  callee +20:32 YamlStream.resolved -> @nish.YamlStream.resolved
+  callee +24:50 YamlJsonLoader.plus -> @nish.YamlJsonLoader.plus
 function YamlJsonLoader.partSize(this: YamlJsonLoader, n: i32): i32 -> @nish.YamlJsonLoader.partSize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 size: i32 (const)
 function YamlJsonLoader.plus(this: YamlJsonLoader, a: i32, b: i32): i32 -> @nish.YamlJsonLoader.plus [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 sum: i32 (const)
 function YamlJsonLoader.build(this: YamlJsonLoader, n: i32, depth: i32): i32 -> @nish.YamlJsonLoader.build [exported method]
@@ -8079,7 +8087,7 @@ function YamlJsonLoader.build(this: YamlJsonLoader, n: i32, depth: i32): i32 -> 
   sharedWrite: +0:7
   escaping: n
   calls: nish.YamlJsonLoader.buildMap nish.YamlJsonLoader.buildScalar nish.YamlJsonLoader.buildSeq nish.YamlJsonLoader.fail nish.YamlJsonLoader.ranged nish.YamlJsonLoader.tooMuchText nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.buildMap#0 nish.YamlJsonLoader.buildSeq#0 nish.YamlJsonLoader.buildScalar#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.ranged#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.buildMap#0 nish.YamlJsonLoader.buildSeq#0 nish.YamlJsonLoader.buildScalar#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.ranged#0
   stackSites=0 stackLocals=0
   local -6:11 stream: YamlStream (const)
   local -5:11 at: i32 (const)
@@ -8107,7 +8115,7 @@ function YamlJsonLoader.tooMuchText(this: YamlJsonLoader, n: i32): i32 -> @nish.
   sharedWrite: via nish.YamlJsonLoader.fail
   escaping: n
   calls: nish.YamlJsonLoader.fail nish.YamlStream.end nish.YamlStream.start
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 a: i32 (const)
@@ -8122,7 +8130,7 @@ function YamlJsonLoader.buildScalar(this: YamlJsonLoader, at: i32): i32 -> @nish
   sharedWrite: via nish.YamlStream.type
   escaping: at
   calls: nish.JsonDocument.newBoolean nish.JsonDocument.newNull nish.JsonDocument.newNumber nish.JsonDocument.newString nish.YamlJsonLoader.fail nish.YamlStream.boolValue nish.YamlStream.end nish.YamlStream.start nish.YamlStream.text nish.YamlStream.type nish.yamlJsonNumber nish_str_eq
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 doc: JsonDocument (const)
@@ -8148,7 +8156,7 @@ function YamlJsonLoader.buildSeq(this: YamlJsonLoader, at: i32, depth: i32): i32
   sharedWrite: via nish.JsonDocument.newArray
   escaping: at depth
   calls: nish.JsonDocument.newArray nish.JsonDocument.push nish.YamlJsonLoader.build nish.YamlJsonLoader.fail nish.YamlJsonLoader.nullAt nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.start
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:11 doc: JsonDocument (const)
@@ -8174,21 +8182,23 @@ function YamlJsonLoader.buildMap(this: YamlJsonLoader, at: i32, depth: i32): i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at depth
-  calls: nish.JsonDocument.append nish.JsonDocument.index nish.JsonDocument.newObject nish.JsonDocument.setKeyRange nish.JsonDocument.storeText nish.Map$str$i32.clear nish.YamlJsonLoader.addEntry nish.YamlJsonLoader.build nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeInto nish.YamlJsonLoader.nullAt nish.YamlJsonLoader.tooMuchText nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.start nish_panic_index nish_panic_overflow
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.mergeInto#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0
+  calls: nish.JsonDocument.append nish.JsonDocument.index nish.JsonDocument.newObject nish.JsonDocument.setKeyRange nish.JsonDocument.storeText nish.Map$str$i32.clear nish.YamlJsonLoader.addEntry nish.YamlJsonLoader.build nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.markMerged nish.YamlJsonLoader.mergeInto nish.YamlJsonLoader.newMergeStamp nish.YamlJsonLoader.nullAt nish.YamlJsonLoader.tooMuchText nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.start nish_panic_index nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.newMergeStamp#0 nish.YamlJsonLoader.markMerged#0 nish.YamlJsonLoader.mergeInto#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
-  local -44:11 stream: YamlStream (const)
-  local -43:11 doc: JsonDocument (const)
-  local -42:11 base: i32 (const)
-  callee -39:7 Map<string, i32>.clear -> @nish.Map$str$i32.clear
-  local -37:14 i: i32 (let)
-  callee -37:30 YamlStream.count -> @nish.YamlStream.count
-  local -36:13 pair: i32 (const)
-  callee -36:25 YamlStream.child -> @nish.YamlStream.child
-  callee -35:12 YamlJsonLoader.isMergeKey -> @nish.YamlJsonLoader.isMergeKey
-  callee -35:28 YamlStream.key -> @nish.YamlStream.key
-  callee -35:49 YamlJsonLoader.addEntry -> @nish.YamlJsonLoader.addEntry
-  local -31:11 outer: i32 (const)
+  local -46:11 stream: YamlStream (const)
+  local -45:11 doc: JsonDocument (const)
+  local -44:11 base: i32 (const)
+  callee -41:7 Map<string, i32>.clear -> @nish.Map$str$i32.clear
+  local -39:14 i: i32 (let)
+  callee -39:30 YamlStream.count -> @nish.YamlStream.count
+  local -38:13 pair: i32 (const)
+  callee -38:25 YamlStream.child -> @nish.YamlStream.child
+  callee -37:12 YamlJsonLoader.isMergeKey -> @nish.YamlJsonLoader.isMergeKey
+  callee -37:28 YamlStream.key -> @nish.YamlStream.key
+  callee -37:49 YamlJsonLoader.addEntry -> @nish.YamlJsonLoader.addEntry
+  local -33:11 outer: i32 (const)
+  callee -32:5 YamlJsonLoader.newMergeStamp -> @nish.YamlJsonLoader.newMergeStamp
+  callee -31:5 YamlJsonLoader.markMerged -> @nish.YamlJsonLoader.markMerged
   callee -30:9 YamlJsonLoader.mergeInto -> @nish.YamlJsonLoader.mergeInto
   local -27:11 top: i32 (const)
   local -26:11 o: i32 (const)
@@ -8226,7 +8236,7 @@ function YamlJsonLoader.mergeInto(this: YamlJsonLoader, base: i32, at: i32, hops
   sharedWrite: via nish.YamlJsonLoader.fail
   escaping: at base
   calls: nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeMap nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.kind nish.YamlStream.resolved nish.YamlStream.start nish.YamlStream.value
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.mergeMap#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.mergeMap#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   local +1:14 i: i32 (let)
@@ -8238,41 +8248,72 @@ function YamlJsonLoader.mergeInto(this: YamlJsonLoader, base: i32, at: i32, hops
   callee +5:18 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
   callee +5:49 YamlStream.start -> @nish.YamlStream.start
   callee +5:69 YamlStream.end -> @nish.YamlStream.end
-  local +7:15 source: i32 (const)
-  callee +7:29 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +7:45 YamlStream.value -> @nish.YamlStream.value
-  callee +8:13 YamlStream.kind -> @nish.YamlStream.kind
-  callee +9:15 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
-  callee +12:20 YamlStream.kind -> @nish.YamlStream.kind
-  local +13:20 j: i32 (let)
-  callee +13:36 YamlStream.count -> @nish.YamlStream.count
-  local +14:19 m: i32 (const)
-  callee +14:28 YamlStream.resolved -> @nish.YamlStream.resolved
-  callee +14:44 YamlStream.child -> @nish.YamlStream.child
-  callee +15:17 YamlStream.kind -> @nish.YamlStream.kind
-  callee +15:48 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
-function YamlJsonLoader.mergeMap(this: YamlJsonLoader, base: i32, m: i32, hops: i32): i32 -> @nish.YamlJsonLoader.mergeMap [exported method]
+  local +7:15 value: i32 (const)
+  callee +7:28 YamlStream.value -> @nish.YamlStream.value
+  local +8:15 source: i32 (const)
+  callee +8:29 YamlStream.resolved -> @nish.YamlStream.resolved
+  callee +9:28 YamlStream.kind -> @nish.YamlStream.kind
+  callee +10:15 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
+  callee +13:35 YamlStream.kind -> @nish.YamlStream.kind
+  local +14:20 j: i32 (let)
+  callee +14:36 YamlStream.count -> @nish.YamlStream.count
+  local +15:19 item: i32 (const)
+  callee +15:31 YamlStream.child -> @nish.YamlStream.child
+  local +16:19 m: i32 (const)
+  callee +16:28 YamlStream.resolved -> @nish.YamlStream.resolved
+  callee +17:26 YamlStream.kind -> @nish.YamlStream.kind
+  local +18:21 bad: i32 (const)
+  callee +19:22 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
+  callee +19:53 YamlStream.start -> @nish.YamlStream.start
+  callee +19:72 YamlStream.end -> @nish.YamlStream.end
+  callee +21:17 YamlJsonLoader.mergeMap -> @nish.YamlJsonLoader.mergeMap
+  local +26:17 bad: i32 (const)
+  callee +27:18 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
+  callee +27:49 YamlStream.start -> @nish.YamlStream.start
+  callee +27:68 YamlStream.end -> @nish.YamlStream.end
+function YamlJsonLoader.mergeMap(this: YamlJsonLoader, base: i32, pair: i32, m: i32, hops: i32): i32 -> @nish.YamlJsonLoader.mergeMap [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.YamlJsonLoader.addEntry
-  escaping: base hops m
-  calls: nish.YamlJsonLoader.addEntry nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeInto nish.YamlStream.child nish.YamlStream.count nish.YamlStream.key
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.mergeInto#0
+  sharedWrite: +0:5
+  escaping: base hops m pair
+  calls: nish.YamlJsonLoader.addEntry nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.markMerged nish.YamlJsonLoader.mergeInto nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.start nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.markMerged#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.mergeInto#0
   stackSites=0 stackLocals=0
-  local +0:11 stream: YamlStream (const)
-  local +1:14 i: i32 (let)
-  callee +1:30 YamlStream.count -> @nish.YamlStream.count
-  local +2:13 pair: i32 (const)
-  callee +2:25 YamlStream.child -> @nish.YamlStream.child
-  callee +3:12 YamlJsonLoader.isMergeKey -> @nish.YamlJsonLoader.isMergeKey
-  callee +3:28 YamlStream.key -> @nish.YamlStream.key
-  callee +3:49 YamlJsonLoader.addEntry -> @nish.YamlJsonLoader.addEntry
-  callee +7:12 YamlJsonLoader.mergeInto -> @nish.YamlJsonLoader.mergeInto
+  local -4:11 stream: YamlStream (const)
+  callee -3:10 YamlJsonLoader.markMerged -> @nish.YamlJsonLoader.markMerged
+  callee +0:25 YamlStream.count -> @nish.YamlStream.count
+  callee +2:14 YamlJsonLoader.fail -> @nish.YamlJsonLoader.fail
+  callee +2:49 YamlStream.start -> @nish.YamlStream.start
+  callee +2:69 YamlStream.end -> @nish.YamlStream.end
+  local +4:14 i: i32 (let)
+  callee +4:30 YamlStream.count -> @nish.YamlStream.count
+  local +5:13 own: i32 (const)
+  callee +5:24 YamlStream.child -> @nish.YamlStream.child
+  callee +6:12 YamlJsonLoader.isMergeKey -> @nish.YamlJsonLoader.isMergeKey
+  callee +6:28 YamlStream.key -> @nish.YamlStream.key
+  callee +6:48 YamlJsonLoader.addEntry -> @nish.YamlJsonLoader.addEntry
+  callee +10:12 YamlJsonLoader.mergeInto -> @nish.YamlJsonLoader.mergeInto
+function YamlJsonLoader.newMergeStamp(this: YamlJsonLoader): void -> @nish.YamlJsonLoader.newMergeStamp [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish_array_grow nish_panic_overflow
+  pointer this: size=120 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -3:11 nodes: i32 (const)
+  local -2:11 marks: i32[] (const)
+  local +5:16 i: i32 (let)
+function YamlJsonLoader.markMerged(this: YamlJsonLoader, n: i32): boolean -> @nish.YamlJsonLoader.markMerged [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: n
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -4:11 marks: i32[] (const)
 function YamlJsonLoader.addEntry(this: YamlJsonLoader, base: i32, pair: i32, own: boolean): i32 -> @nish.YamlJsonLoader.addEntry [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: base pair
   calls: nish.Map$str$i32.set nish.YamlJsonLoader.fail nish.YamlJsonLoader.findEntry nish.YamlStream.end nish.YamlStream.key nish.YamlStream.start nish.YamlStream.value nish.keyText nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.fail#0
+  pointer this: size=120 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.findEntry#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
   local -12:11 stream: YamlStream (const)
   local -11:11 keyNode: i32 (const)
@@ -8295,7 +8336,7 @@ function YamlJsonLoader.findEntry(this: YamlJsonLoader, base: i32, key: string):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: base key
   calls: nish.Map$str$i32.probe nish.Map$str$i32.valueAt nish_panic_index nish_panic_overflow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 top: i32 (const)
   local +1:11 scanned: i32 (const)
@@ -8306,7 +8347,7 @@ function YamlJsonLoader.isMergeKey(this: YamlJsonLoader, key: i32): boolean -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: nish.YamlStream.end nish.YamlStream.kind nish.YamlStream.start nish.YamlStream.style nish.YamlStream.tag nish_panic_index nish_panic_overflow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 stream: YamlStream (const)
   callee +1:37 YamlStream.kind -> @nish.YamlStream.kind
