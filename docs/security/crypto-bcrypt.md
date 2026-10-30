@@ -364,71 +364,74 @@ over 8w; every row prints the same hash):
 
 | Implementation | ms per hash |
 | --- | ---: |
-| Nish `bcryptHash` | 62.8 (61.6–63.9) |
-| Nish `bcryptHash4`, four lanes | 22.8 (21.7–25.9) |
-| Nish `bcryptHashN`, one lane | 63.5 (61.3–66.1) |
-| Nish `bcryptHashN`, 2 lanes | 33.9 (33.0–35.1) |
-| Nish `bcryptHashN`, 3 lanes | 28.1 (26.4–30.0) |
-| Nish `bcryptHashN`, 4 lanes | 24.9 (22.3–26.2) |
-| Nish `bcryptHashN`, 5 lanes | 21.6 (21.2–22.6) |
-| Nish `bcryptHashN`, 6 lanes | 22.0 (21.6–26.9) |
-| libxcrypt `crypt_r`, `$2b$` | 59.3 (58.6–60.0) |
-| OpenBSD `bcrypt.c`, `gcc -O2` | 62.0 (60.9–63.5) |
-| OpenBSD `bcrypt.c`, `clang -O2` | 69.0 (67.6–70.9) |
-| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 61.0 (60.5–65.5) |
-| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 33.5 (31.7–37.8) |
-| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 62.5 (61.3–63.9) |
-| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 24.9 (23.2–27.7) |
+| Nish `bcryptHash` | 57.6 (56.4–59.0) |
+| Nish `bcryptHash4`, four lanes | 23.1 (22.0–26.4) |
+| Nish `bcryptHashN`, one lane | 57.4 (56.9–58.6) |
+| Nish `bcryptHashN`, 2 lanes | 34.3 (32.8–37.2) |
+| Nish `bcryptHashN`, 3 lanes | 27.1 (26.5–28.6) |
+| Nish `bcryptHashN`, 4 lanes | 22.2 (21.9–25.2) |
+| Nish `bcryptHashN`, 5 lanes | 22.4 (21.2–24.6) |
+| Nish `bcryptHashN`, 6 lanes | 24.5 (22.5–27.5) |
+| libxcrypt `crypt_r`, `$2b$` | 59.0 (58.0–60.1) |
+| OpenBSD `bcrypt.c`, `gcc -O2` | 61.8 (61.3–64.0) |
+| OpenBSD `bcrypt.c`, `clang -O2` | 69.6 (68.1–71.8) |
+| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 61.3 (60.3–62.9) |
+| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 33.6 (31.1–37.0) |
+| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 62.0 (61.6–68.1) |
+| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 24.6 (23.0–27.0) |
 
-**The targets.** The single path is 1.06 times `crypt_r`'s time, inside the
-1.2 aimed at; it is level with OpenBSD's gcc build and tigokraft's one-lane
-builds inside the noise, and 9% ahead of OpenBSD's clang build. The best
-width, five lanes, hashes 2.75 times as fast per password as `crypt_r` on one
-core, past the 1.5 aimed at; six lanes are level with five inside the noise,
-and four 2.4 times. `bcryptHash4` and `bcryptHashN` at four lanes run the same
+**The targets.** The single path, with the half-round's order pinned
+([below](#the-half-rounds-critical-path)), takes 0.98 times `crypt_r`'s time,
+inside the 1.2 aimed at and level with it inside the noise; it is 6% ahead of
+OpenBSD's gcc build and tigokraft's one-lane gcc build, outside their spreads,
+and 17% ahead of OpenBSD's clang build. The best width, four lanes, hashes
+2.66 times as fast per password as `crypt_r` on one core, past the 1.5 aimed
+at; five lanes are level with four, and six level inside the noise with a
+median 10% higher. `bcryptHash4` and `bcryptHashN` at four lanes run the same
 computation and overlap. Neither AMD nor AArch64 was measured: the best width
 there is what `bcryptCalibrate` answers, which is why it measures.
 
 **Cycles.** A cost-10 hash encrypts 2^10 × 1042 + 713 = 1,067,721 Blowfish
 blocks (each of the 1 + 2 × 1024 key expansions encrypts 521, the magic string
-192), so cycles per block = clock × time / 1,067,721. The bench prints 165 for
-the single path at cpuinfo's 2.80 GHz; at the measured 3.2 GHz it is 188, 11.8
-cycles per half-round, against the chain of 11 to 12 cycles one half-round
-waits on ([below](#the-half-rounds-critical-path)): the single path is latency-bound. Per lane, the widths take
-102 (2), 84 (3), 75 (4), 65 (5) and 66 (6) cycles per block, and `crypt_r`
-178.
+192), so cycles per block = clock × time / 1,067,721. The bench prints 151 for
+the single path at cpuinfo's 2.80 GHz; at the measured 3.2 GHz it is 173, 10.8
+cycles per half-round, against the 11-cycle chain one half-round waits on
+([below](#the-half-rounds-critical-path)): the single path is latency-bound.
+Per lane, the widths take 103 (2), 81 (3), 67 (4), 67 (5) and 73 (6) cycles
+per block, and `crypt_r` 177.
 
 **The four-lane kernel, read.** The loop of `bcryptBody4` after `opt -O3` and
 `llc`, from its `objdump`, is one round (two half-rounds) of all four lanes
 in 124 instructions: 45 loads (each lane's 4 S-box words and `P` word per
 half-round, 40, and 5 reloads of spilled values), 5 stores, all spills to
 the stack, and one compare and backward branch, the only branch; it runs 8
-times per block, not unrolled further. Checked against the suspects: no bounds check (each S-box
-index is masked to 0–255 and the state's length is checked once, before the
-loop) and no overflow check (the arithmetic is `u32`, which wraps); no
-`Secret` or wipe work inside the loop, which calls nothing; the lanes
-interleave, each lane's loads issued between the others'. The state's slots
-are 1042 words, 4168 bytes, apart, not a multiple of 4096, so the lanes' S-box
-words at one index fall in different L1 sets, and the six-lane state, 25.5 KB,
-fits the 32 KB L1. The spills are five registers' worth per round: 16
-general-purpose registers do not hold four lanes' two halves, base, counter
-and temporaries.
+times per block, not unrolled further. Checked against the suspects: no
+bounds check (each S-box index is masked to 0–255 and the state's length is
+checked once, before the loop) and no overflow check (the arithmetic is
+`u32`, which wraps); no `Secret` or wipe work inside the loop, which calls
+nothing; the lanes interleave, each lane's loads issued between the others'.
+The state's slots are 1042 words, 4168 bytes, apart, not a multiple of 4096,
+so the lanes' S-box words at one index fall in different L1 sets, and the
+six-lane state, 25.5 KB, fits the 32 KB L1. The spills are five registers'
+worth per round: 16 general-purpose registers do not hold four lanes' two
+halves, base, counter and temporaries.
 
-**The bounds.** Per lane half-round: the latency floor is the 11-to-12-cycle
-chain over the w lanes (about 3 cycles at four, 2.3 at five), the load-port
-bound is 5 loads over the core's 2 load ports (2.5 cycles, 2.8 with the
-reloads), and issue is 15.5 instructions at 4 a cycle (3.9 cycles). The
-measured 4.7 (4 lanes) and 4.0 (5) and 4.1 (6) cycles sit on the issue bound:
-past four lanes there are enough chains to hide the latency, and a wider
-kernel still issues the same instructions per lane, so six gain nothing on
-five.
+**The bounds.** Per lane half-round: the latency floor is the 11-cycle chain
+over the w lanes (about 2.8 cycles at four, 2.2 at five), the load-port bound
+is 5 loads over the core's 2 load ports (2.5 cycles, 2.8 with the reloads),
+and issue is 15.5 instructions at 4 a cycle (3.9 cycles). The measured 4.2
+(4 and 5 lanes) and 4.6 (6) cycles sit on the issue bound: from four lanes
+there are enough chains to hide the latency, and a wider kernel still issues
+the same instructions per lane, so five and six gain nothing on four.
 
 **Why the kernel is Nish and not C.** A C kernel was the alternative, and it
 would be C in `runtime/` holding the secret state outside the checker's
 `Secret` rules. The C to beat is the four-lane `bc_hash_n` of tigokraft:
-33.5 ms per hash built by gcc and 24.9 by clang, against 22.8 for
-`bcryptHash4` and 21.6 for `bcryptHashN` at five lanes, outside both spreads.
-The portable Nish is faster than the C, so no C prototype was built.
+33.6 ms per hash built by gcc and 24.6 (23.0–27.0) by clang, against 22.2
+(21.9–25.2) for `bcryptHashN` at four lanes and 23.1 (22.0–26.4) for
+`bcryptHash4`. The Nish is ahead of gcc's build outside both spreads and of
+clang's by its median, inside the spreads; no C row beats it, so no C
+prototype was built.
 
 **Machine B**, the run that pinned the half-round's order (`--rounds 9`, before
 the widths; a nominal 2.1 GHz), for comparison:
@@ -502,8 +505,9 @@ changes.
 The batch kernels, `bcryptBody2` to `bcryptBody6`, keep the plain
 `x ^= P[n] ^ F(y)`. Their chains are independent, so a core has other
 work while one chain waits, and one extra XOR on a chain's path costs little
-there. Writing the four-lane kernel's 16 half-rounds with the barrier was measured as a loss: in
-two runs interleaved with the plain form in one session, `bcryptHash4` took
+there. Writing the four-lane kernel's 16 half-rounds with the barrier was
+measured as a loss: in two runs interleaved with the plain form in one
+session, `bcryptHash4` took
 27.6 (21.4–31.8) and 24.8 (21.0–34.2) ms against 24.2 (22.5–28.3) and 22.9
 (22.3–31.8) ms. Both medians were slower, inside the batch's wide spread, and
 nothing was gained to set against the extra `and` per half-round.

@@ -190,17 +190,21 @@ before anything is hashed. `bcryptHash4` and `bcryptVerify4` are the same for
 up to four passwords, with 64 bytes of salts.
 
 How many lanes are fastest per hash depends on the core. On the Xeon the
-module was measured on, five lanes took 21.6 ms a hash at cost 10 against
-62.8 ms for one, and six were no faster than five. `bcryptCalibrate()` times
+module was measured on, four lanes took 22.2 ms a hash at cost 10 against
+57.6 ms for one, and five or six were no faster than four. `bcryptCalibrate()` times
 each width from one to six on throwaway passwords and returns the fastest. It
 takes a few tens of milliseconds and keeps nothing, so call it once, at
 startup, and keep the answer:
 
 ```ts nish:ok
-import { bcryptCalibrate } from "nish/crypto/bcrypt"
+import { bcryptCalibrate } from "nish/crypto/bcrypt";
 
-const width: i32 = bcryptCalibrate()
-console.log(width >= 1 && width <= 6 ? "calibrated" : "out of range")
+export const main = (): i32 => {
+  // Once, at startup: the batch width this core hashes fastest at.
+  const width: i32 = bcryptCalibrate();
+  console.log(`hashing logins ${width} at a time`);
+  return 0;
+};
 ```
 
 Then give each batch up to `width` of the logins that arrive together.

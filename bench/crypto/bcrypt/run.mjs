@@ -456,7 +456,8 @@ if (ghz > 0) {
   const single = median(samples[0]) / 1000
   console.log(
     `\nThe single path: ${((ghz * 1e9 * single) / blocks).toFixed(0)} cycles per Blowfish block ` +
-      `(${ghz.toFixed(2)} GHz${given ? "" : " from /proc/cpuinfo, pass --ghz for a measured clock"} × ${(single * 1000).toFixed(1)} ms / ${blocks} blocks)`
+      `(${ghz.toFixed(2)} GHz × ${(single * 1000).toFixed(1)} ms / ${blocks} blocks)` +
+      `${given ? "" : "; the clock is /proc/cpuinfo's, pass --ghz for a measured one"}`
   )
 } else {
   notes.push("cycles per block left out: no clock in /proc/cpuinfo; pass --ghz")
