@@ -18,9 +18,37 @@ import { Regex, RegexMatch, regexCompile } from "nish/regex"
 
 /** The words the corpus is built from. */
 const words = (): string[] => [
-  "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "needle", "Hello", "World",
-  "σοφία", "Ἀθῆναι", "λόγος", "ΑΛΦΑ", "école", "ÉCOLE", "café", "Straße", "STRASSE", "Ärger",
-  "日本語", "東京", "数据", "über", "naïve", "1234", "56", "2026", "ada@example.com", "bob@site.org",
+  "the",
+  "quick",
+  "brown",
+  "fox",
+  "jumps",
+  "over",
+  "lazy",
+  "dog",
+  "needle",
+  "Hello",
+  "World",
+  "σοφία",
+  "Ἀθῆναι",
+  "λόγος",
+  "ΑΛΦΑ",
+  "école",
+  "ÉCOLE",
+  "café",
+  "Straße",
+  "STRASSE",
+  "Ärger",
+  "日本語",
+  "東京",
+  "数据",
+  "über",
+  "naïve",
+  "1234",
+  "56",
+  "2026",
+  "ada@example.com",
+  "bob@site.org",
 ]
 
 /** One line of `n` words, picked by an LCG from `seed`, and the seed after it. */
@@ -61,22 +89,46 @@ const corpora = (): string[] => {
 
 /** The pattern and flags of `name`, as `pattern flags`, or "" for no such case. */
 const benchCase = (name: string): string => {
-  if (name === "literal") { return "needle" }
-  if (name === "class") { return "[0-9]+" }
-  if (name === "alternation") { return "fox|dog|needle|World" }
-  if (name === "group") { return "(?:[a-z]+ ){2}[a-z]+" }
-  if (name === "anchored") { return "^[A-Z][a-z]+" }
-  if (name === "icase-ascii") { return "hello world|quick" }
-  if (name === "exec") { return "(\\w+)@(\\w+)\\.(com|org)" }
-  if (name === "property") { return "\\p{L}+" }
-  if (name === "script") { return "\\p{Script=Greek}+" }
-  if (name === "icase-unicode") { return "σοφία|école|straße|über" }
+  if (name === "literal") {
+    return "needle"
+  }
+  if (name === "class") {
+    return "[0-9]+"
+  }
+  if (name === "alternation") {
+    return "fox|dog|needle|World"
+  }
+  if (name === "group") {
+    return "(?:[a-z]+ ){2}[a-z]+"
+  }
+  if (name === "anchored") {
+    return "^[A-Z][a-z]+"
+  }
+  if (name === "icase-ascii") {
+    return "hello world|quick"
+  }
+  if (name === "exec") {
+    return "(\\w+)@(\\w+)\\.(com|org)"
+  }
+  if (name === "property") {
+    return "\\p{L}+"
+  }
+  if (name === "script") {
+    return "\\p{Script=Greek}+"
+  }
+  if (name === "icase-unicode") {
+    return "σοφία|école|straße|über"
+  }
   return ""
 }
 
 const benchFlags = (name: string): string => {
-  if (name === "anchored") { return "m" }
-  if (name === "icase-ascii" || name === "icase-unicode") { return "i" }
+  if (name === "anchored") {
+    return "m"
+  }
+  if (name === "icase-ascii" || name === "icase-unicode") {
+    return "i"
+  }
   return ""
 }
 

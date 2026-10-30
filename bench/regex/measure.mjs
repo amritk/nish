@@ -66,15 +66,15 @@ const build = (compiler, program, name) => {
   return { app, copy }
 }
 
-const program = "bench/regex/main.ts"
-const a = build(after, program, "after")
+const benchProgram = "bench/regex/main.ts"
+const a = build(after, benchProgram, "after")
 const impls = [
   { label: "after", exe: a.app },
   { label: "after-copy", exe: a.copy },
 ]
 const beforeCompiler = before === null ? null : compilerFrom(["--compiler", before])
 if (beforeCompiler !== null) {
-  const b = build(beforeCompiler, program, "before")
+  const b = build(beforeCompiler, benchProgram, "before")
   impls.push({ label: "before", exe: b.app }, { label: "before-copy", exe: b.copy })
 }
 
@@ -105,7 +105,9 @@ const median = (xs) => {
 const min = (xs) => Math.min(...xs)
 const pct = (x, y) => `${((Math.abs(x - y) / y) * 100).toFixed(1)}%`
 const us = (ns) => (ns / 1000).toFixed(1)
-const out = [`${rounds} interleaved rounds of ${impls.length} binaries, ${iterations} passes over 64 KB per run`]
+const out = [
+  `${rounds} interleaved rounds of ${impls.length} binaries, ${iterations} passes over 64 KB per run`,
+]
 cases.forEach((name, k) => {
   const t = times[k]
   out.push("", `${name}: checksum ${[...sums[k]].join(", ")}`)
@@ -113,7 +115,7 @@ cases.forEach((name, k) => {
     process.exitCode = 1
     out.push("  checksums disagree")
   }
-  for (const [label, xs] of [...t].filter(([, xs]) => xs.length > 0)) {
+  for (const [label, xs] of [...t].filter(([, ran]) => ran.length > 0)) {
     out.push(`  ${label.padEnd(11)} min ${us(min(xs))} µs/pass, median ${us(median(xs))} µs/pass`)
   }
   const band = (label) =>

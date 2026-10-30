@@ -596,7 +596,6 @@ const checkNode = (db) => {
       `gen-regex-unicode: this Node has Unicode ${process.versions.unicode}, not ${UNICODE_VERSION}`
     )
   }
-  const inSet = (ranges, c) => ranges.some(([lo, hi]) => c >= lo && c <= hi)
   const bad = []
   const compare = (src, ranges, negate) => {
     let re = null
@@ -635,7 +634,11 @@ const checkNode = (db) => {
     ["gc", "g"],
     ["sc", "s"],
   ]) {
-    const ours = new Set(names(db).filter((n) => n.key[0] === ns).map((n) => n.key.slice(1)))
+    const ours = new Set(
+      names(db)
+        .filter((n) => n.key[0] === ns)
+        .map((n) => n.key.slice(1))
+    )
     for (const alias of db.valueAliases.get(prop).flat()) {
       let accepted = true
       try {
@@ -674,19 +677,19 @@ const checkNode = (db) => {
 
 // ---- Main -----------------------------------------------------------------------
 
-const db = await load()
-const t = tables(db)
+const ucd = await load()
+const built = tables(ucd)
 const source = fs.readFileSync(target, "utf8")
 const begin = source.indexOf(BEGIN)
-const end = source.indexOf(END)
-if (begin < 0 || end < begin) {
+const regionEnd = source.indexOf(END)
+if (begin < 0 || regionEnd < begin) {
   throw new Error(`gen-regex-unicode: no ${BEGIN} … ${END} region in std/regex.ts`)
 }
-const next = source.slice(0, begin) + region(t) + source.slice(end + END.length)
-const nextOracle = oracle(db, sample())
+const next = source.slice(0, begin) + region(built) + source.slice(regionEnd + END.length)
+const nextOracle = oracle(ucd, sample())
 
 if (process.argv.includes("--check")) {
-  const bad = checkNode(db)
+  const bad = checkNode(ucd)
   if (next !== source) {
     bad.push("std/regex.ts: the tables differ from the generator's; run node scripts/gen-regex-unicode.mjs")
   }
@@ -700,13 +703,13 @@ if (process.argv.includes("--check")) {
     process.exit(1)
   }
   console.log(
-    `gen-regex-unicode: the tables match Unicode ${UNICODE_VERSION} and this Node's RegExp (${t.index.length + t.data.length + t.fold.length} bytes)`
+    `gen-regex-unicode: the tables match Unicode ${UNICODE_VERSION} and this Node's RegExp (${built.index.length + built.data.length + built.fold.length} bytes)`
   )
 } else {
   fs.writeFileSync(target, next)
   fs.mkdirSync(path.dirname(oracleFile), { recursive: true })
   fs.writeFileSync(oracleFile, nextOracle)
   console.log(
-    `gen-regex-unicode: names ${t.index.length} bytes, ranges ${t.data.length}, folds ${t.fold.length}; wrote std/regex.ts and ${path.relative(root, oracleFile)}`
+    `gen-regex-unicode: names ${built.index.length} bytes, ranges ${built.data.length}, folds ${built.fold.length}; wrote std/regex.ts and ${path.relative(root, oracleFile)}`
   )
 }

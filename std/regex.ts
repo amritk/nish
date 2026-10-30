@@ -1188,7 +1188,10 @@ class RegexParser {
       entry += 1
     }
     let offset: i32 = 0
-    while (toI32(REGEX_PROPERTY_NAMES.charCodeAt(entry)) >= 48 && toI32(REGEX_PROPERTY_NAMES.charCodeAt(entry)) <= 57) {
+    while (
+      toI32(REGEX_PROPERTY_NAMES.charCodeAt(entry)) >= 48 &&
+      toI32(REGEX_PROPERTY_NAMES.charCodeAt(entry)) <= 57
+    ) {
       offset = offset * 10 + toI32(REGEX_PROPERTY_NAMES.charCodeAt(entry)) - 48
       entry += 1
     }
