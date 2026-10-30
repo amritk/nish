@@ -983,10 +983,10 @@ function emitVectorAccess(emitter: Emitter, expr: Node, store: boolean): string 
   local +27:9 ptr: string (const)
   callee +27:15 IRFunction.emitValue -> @IRFunction.emitValue
   callee +27:39 slotType -> @slotType
-  local +28:9 align: string (const)
-  callee +28:62 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +30:5 IRFunction.emit -> @IRFunction.emit
-  callee +33:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local +29:9 align: string (const)
+  callee +29:28 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +31:5 IRFunction.emit -> @IRFunction.emit
+  callee +34:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitElementAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf

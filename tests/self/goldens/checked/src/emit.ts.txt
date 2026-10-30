@@ -1332,11 +1332,12 @@ function Emitter.llvmAbi(this: Emitter, type: i32, isPrivate: boolean): string -
 function Emitter.align(this: Emitter, type: i32): i32 -> @Emitter.align [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.alignOf accessAlign
+  calls: TypeTable.alignOf TypeTable.isVector accessAlign
   pointer this: size=280 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:43 accessAlign -> @accessAlign
-  callee +0:55 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +0:41 TypeTable.isVector -> @TypeTable.isVector
+  callee +1:14 accessAlign -> @accessAlign
+  callee +1:26 TypeTable.alignOf -> @TypeTable.alignOf
 function Emitter.alignSuffix(this: Emitter, type: i32): string -> @Emitter.alignSuffix [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
