@@ -16,8 +16,10 @@
  *
  * `caps` is `main`'s capability mask (src/capabilities.ts numbers the bits),
  * `mode` is 1 for `--sandbox` and 2 for `--sandbox=best-effort`. The two
- * directory lists are the scoped `fs.read=<dir>` and `fs.write=<dir>` of a
- * later stage; this one always passes null and reads neither.
+ * directory lists are the `--allow fs.read=<dir>` and `--allow fs.write=<dir>`
+ * scopes, each a run of NUL-terminated absolute paths ended by an empty one,
+ * or null when the capability is granted whole or not at all; a list moves
+ * its capability's rights from the rule on `/` to one rule per directory.
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -28,7 +30,8 @@
  *      an `exec` from gaining a capability back;
  *   3. drop every capability, and read each set back;
  *   4. Landlock: handle every filesystem right the running ABI knows, then
- *      grant back beneath `/` exactly what the mask grants;
+ *      grant back beneath `/` exactly what the mask grants whole, and beneath
+ *      each scope directory what its capability grants;
  *   5. the seccomp filter of the note's section 4, a denylist;
  *   6. set the flag `nish_sandbox_check` reads at the top of `main`, so a C
  *      library that never ran `.preinit_array` (musl) refuses to run rather
@@ -198,17 +201,20 @@ static void nish_sb_say(const char *a, const char *b, const char *c) {
   (void)!write(2, "\n", 1);
 }
 
-/* The one way out on a failure, in both modes. */
-static void nish_sb_fail(const char *what) {
+/* The one way out on a failure, in both modes; `path`, when not null, is
+ * named after `what`. */
+static void nish_sb_fail_at(const char *what, const char *path) {
   char buf[24];
   char tail[40] = " (";
   const char *name = nish_sb_errno_name(errno, buf);
   size_t len = strlen(name);
   memcpy(tail + 2, name, len);
   memcpy(tail + 2 + len, ")", 2);
-  nish_sb_say(what, tail, 0);
+  nish_sb_say(what, path, tail);
   _exit(126);
 }
+
+static void nish_sb_fail(const char *what) { nish_sb_fail_at(what, 0); }
 
 /* Step 3. `capset` with every set empty needs no privilege; the bounding set
  * needs CAP_SETPCAP to drop, and need not be dropped without it, because with
@@ -273,11 +279,35 @@ static size_t nish_sb_name(char *line, size_t at, const char *name) {
   return at + len;
 }
 
+/* One path_beneath rule granting `rights` beneath `path`. A rule granting
+ * nothing is refused (ENOMSG), and nothing is what it would add, so it is
+ * left out. A scope directory gone since the build refuses strict; under
+ * best-effort it is named and its rule left out, which withholds the right
+ * there too, so the program loses the directory rather than gaining more. */
+static void nish_sb_rule(int ruleset, const char *path, uint64_t rights, int32_t mode) {
+  struct nish_ll_path_beneath rule = {rights, -1};
+  if (!rights) return;
+  rule.parent_fd = open(path, O_PATH | O_CLOEXEC | O_DIRECTORY);
+  if (rule.parent_fd < 0) {
+    if (mode != 2) nish_sb_fail_at("cannot open the directory ", path);
+    nish_sb_say("the scope directory ", path, " cannot be opened, so the program gets no access beneath it");
+    return;
+  }
+  if (syscall(LL_ADD_RULE, ruleset, LL_RULE_PATH_BENEATH, &rule, 0) != 0) nish_sb_fail("cannot add the Landlock rule");
+  close(rule.parent_fd);
+}
+
+/* One rule per directory of a scope list, each granting `rights`. */
+static void nish_sb_scope(int ruleset, const char *dirs, uint64_t rights, int32_t mode) {
+  for (; dirs && *dirs; dirs += strlen(dirs) + 1) nish_sb_rule(ruleset, dirs, rights, mode);
+}
+
 /* Step 4. Every right the ABI knows is handled, and one path_beneath rule on
- * `/` grants back what the mask grants, so a right is withheld everywhere or
- * nowhere. Returns with nothing done when there is no Landlock and the mode
- * is best-effort. */
-static void nish_sb_landlock(int32_t caps, int32_t mode) {
+ * `/` grants back what the mask grants whole, so an unscoped right is withheld
+ * everywhere or nowhere; a scoped capability's rights are granted beneath its
+ * directories alone. Returns with nothing done when there is no Landlock and
+ * the mode is best-effort. */
+static void nish_sb_landlock(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs) {
   int abi = nish_sb_landlock_abi();
   if (abi < 0) {
     /* EPERM is a container runtime's own seccomp profile refusing the call;
@@ -294,7 +324,13 @@ static void nish_sb_landlock(int32_t caps, int32_t mode) {
   if (abi >= 2) known |= LL_REFER;
   if (abi >= 3) known |= LL_TRUNCATE;
   if (abi >= 5) known |= LL_IOCTL_DEV;
-  uint64_t granted = nish_sb_granted(caps);
+  /* A scoped capability grants nothing beneath `/`, so a scoped fs.write
+   * below ABI 3 loses TRUNCATE everywhere and refuses strict like any other
+   * build that cannot withhold it. */
+  int32_t whole = caps;
+  if (read_dirs) whole &= ~CAP_BIT_FS_READ;
+  if (write_dirs) whole &= ~CAP_BIT_FS_WRITE;
+  uint64_t granted = nish_sb_granted(whole);
   uint64_t lost = ~granted & ~known & (LL_TRUNCATE | LL_IOCTL_DEV);
   int unscoped = abi < 6;
   /* Strict runs without IOCTL_DEV and without the ABI 6 scopes: a terminal
@@ -316,15 +352,9 @@ static void nish_sb_landlock(int32_t caps, int32_t mode) {
   struct nish_ll_ruleset attr = {known, 0, abi >= 6 ? LL_SCOPE_ALL : 0};
   int ruleset = (int)syscall(LL_CREATE, &attr, sizeof attr, 0);
   if (ruleset < 0) nish_sb_fail("cannot create the Landlock ruleset");
-  struct nish_ll_path_beneath rule = {granted & known, -1};
-  /* A rule granting nothing is refused (ENOMSG), and nothing is what it
-   * would add, so it is left out. */
-  if (rule.allowed_access) {
-    rule.parent_fd = open("/", O_PATH | O_CLOEXEC);
-    if (rule.parent_fd < 0) nish_sb_fail("cannot open /");
-    if (syscall(LL_ADD_RULE, ruleset, LL_RULE_PATH_BENEATH, &rule, 0) != 0) nish_sb_fail("cannot add the Landlock rule");
-    close(rule.parent_fd);
-  }
+  nish_sb_rule(ruleset, "/", granted & known, 1);
+  if (read_dirs && (caps & CAP_BIT_FS_READ)) nish_sb_scope(ruleset, read_dirs, nish_sb_granted(CAP_BIT_FS_READ) & known, mode);
+  if (write_dirs && (caps & CAP_BIT_FS_WRITE)) nish_sb_scope(ruleset, write_dirs, nish_sb_granted(CAP_BIT_FS_WRITE) & known, mode);
   if (syscall(LL_RESTRICT, ruleset, 0) != 0) nish_sb_fail("cannot apply the Landlock ruleset");
   close(ruleset);
 }
@@ -399,13 +429,13 @@ static void nish_sb_seccomp(int32_t caps) {
 }
 
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs) {
-  (void)read_dirs;
-  (void)write_dirs;
   nish_cpu_prime();
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) nish_sb_fail("cannot set no_new_privs");
   nish_sb_drop_capabilities();
-  nish_sb_landlock(caps, mode);
-  nish_sb_seccomp(caps);
+  nish_sb_landlock(caps, mode, read_dirs, write_dirs);
+  /* Metadata writes stay EPERM inside a scoped write directory (open
+   * question 1): Landlock has no right for chmod, chown or xattrs. */
+  nish_sb_seccomp(write_dirs ? caps & ~CAP_BIT_FS_WRITE : caps);
   __atomic_store_n(&nish_sb_applied, 1, __ATOMIC_RELEASE);
 }
 

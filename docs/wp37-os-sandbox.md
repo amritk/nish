@@ -1,9 +1,11 @@
 # WP37: The OS sandbox — holding a running process to its capabilities
 
-**Status: stage 1 built** — `--sandbox` and `--sandbox=best-effort`, the
-wrapper calls and `runtime/runtime-sandbox.c`, recorded in
-[`security/sandbox.md`](security/sandbox.md); the directory scopes and open
-question 13 are stage 2. Every `file:line` anchor, figure
+**Status: stages 1 and 2 built** — `--sandbox` and `--sandbox=best-effort`,
+the wrapper calls and `runtime/runtime-sandbox.c` (stage 1), and the
+`fs.read=<dir>` and `fs.write=<dir>` scopes with open question 13's widening
+of an `ffi` main (stage 2, answers 1(a) and 13(a)), recorded in
+[`security/sandbox.md`](security/sandbox.md); scopes in the manifest are
+not built. Every `file:line` anchor, figure
 and code number in this note is true of `main` at `c8a00d6`; a later edit that
 moves an anchor names the commit its own anchors are at.
 

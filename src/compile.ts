@@ -404,11 +404,11 @@ const COMMA: i32 = 44
  * (`src/capabilities.ts`), or -1 once it has printed why the line is refused,
  * which is exit 2 like every usage error (docs/wp36-capability-policy.md §2).
  * A name is exactly one `--emit-capabilities` prints. A directory scope is
- * refused rather than read as the whole capability: the compiler cannot prove
- * which path a program opens, and nothing at run time holds it to one, so a
- * scope it accepted would be a promise nobody keeps.
+ * kept in `scopes` as written, `<flag> <name>=<dir>`, and grants no bit here:
+ * only `--sandbox` holds a program to a directory, and it may come later on
+ * the line, so `capabilityScopes` decides once the whole line is read.
  */
-const capabilityListMask = (flag: string, list: string): i32 => {
+const capabilityListMask = (flag: string, list: string, scopes: string[]): i32 => {
   let mask = 0
   for (const name of splitByte(list, COMMA)) {
     const scope = name.indexOf("=")
@@ -421,10 +421,7 @@ const capabilityListMask = (flag: string, list: string): i32 => {
       return -1
     }
     if (scope >= 0) {
-      console.error(
-        `compile: \`${flag} ${name}\` scopes a capability to a directory, which the compiler cannot prove and nothing enforces: grant \`${whole}\` whole, or leave it out`
-      )
-      return -1
+      continue
     }
     if ((optInCapabilities() & (1 << index)) !== 0 && flag === "--allow") {
       console.error(
@@ -433,6 +430,66 @@ const capabilityListMask = (flag: string, list: string): i32 => {
       return -1
     }
     mask = mask | (1 << index)
+  }
+  // Kept in a loop of its own: a store in the one above would hold every
+  // pass's memory, the refusals' included, to the caller's.
+  for (const name of splitByte(list, COMMA)) {
+    if (name.indexOf("=") >= 0) {
+      scopes.push(`${flag} ${name}`)
+    }
+  }
+  return mask
+}
+
+/**
+ * WP37 §2: the directory scopes `capabilityListMask` kept, judged once the
+ * line is read. Without `--sandbox` the first is refused as it always was:
+ * the compiler cannot prove which path a program opens, and nothing at run
+ * time would hold it to one. With it, `--allow fs.read=<dir>` and
+ * `--allow fs.write=<dir>` grant the capability and become Landlock rules
+ * beneath the directory, which is resolved here to the absolute, symlink-free
+ * path the rule is written for, and must exist. A capability `--allow` also
+ * grants whole keeps no scope, since the whole grant is wider. Answers the
+ * bits the scopes grant, or -1 after the refusal.
+ */
+const capabilityScopes = (scopes: string[], whole: i32, opts: Options): i32 => {
+  let mask = 0
+  for (const entry of scopes) {
+    const space = entry.indexOf(" ")
+    const flag = entry.slice(0, space)
+    const name = entry.slice(space + 1)
+    const equals = name.indexOf("=")
+    const capability = name.slice(0, equals)
+    const dir = name.slice(equals + 1)
+    const scopable = flag === "--allow" && (capability === "fs.read" || capability === "fs.write")
+    if (opts.sandbox === 0) {
+      console.error(
+        `compile: \`${entry}\` scopes a capability to a directory, which the compiler cannot prove and nothing enforces: grant \`${capability}\` whole, or leave it out`
+      )
+      return -1
+    }
+    if (!scopable) {
+      console.error(
+        `compile: \`${entry}\` scopes a capability to a directory, which \`--sandbox\` does only for \`--allow fs.read\` and \`--allow fs.write\`: grant \`${capability}\` whole, or leave it out`
+      )
+      return -1
+    }
+    const real: string | null = dir.length === 0 ? null : realpathSync(dir)
+    if (real === null || !isDirectorySync(real)) {
+      console.error(
+        `compile: \`${entry}\` names no directory; a scope is a directory that exists when the program is built`
+      )
+      return -1
+    }
+    const bit = 1 << capabilityIndex(capability)
+    mask = mask | bit
+    if ((whole & bit) === 0) {
+      if (capability === "fs.read") {
+        opts.sandboxRead.push(real)
+      } else {
+        opts.sandboxWrite.push(real)
+      }
+    }
   }
   return mask
 }
@@ -502,6 +559,8 @@ export const main = (): number => {
   // the `--allow`s granted between them (an allowlist is their union).
   let policyFlag = ""
   let allowed = 0
+  // WP37: the directory scopes, as written, for `capabilityScopes`.
+  const scopes: string[] = []
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true
@@ -662,7 +721,7 @@ export const main = (): number => {
         console.error(`compile: ${value} needs a list of capabilities, such as fs.read,exit`)
         return 2
       }
-      const mask = capabilityListMask(value, process.argv[arg])
+      const mask = capabilityListMask(value, process.argv[arg], scopes)
       if (mask < 0) {
         return 2
       }
@@ -931,6 +990,14 @@ export const main = (): number => {
       `compile: \`${policyFlag}\` cannot be used with --fix, which answers before the program is analysed; fix first, then compile`
     )
     return 2
+  }
+  if (scopes.length > 0) {
+    const scoped = capabilityScopes(scopes, allowed, opts)
+    if (scoped < 0) {
+      return 2
+    }
+    allowed = allowed | scoped
+    opts.allowCapabilities = allowed
   }
   // A capability both granted and refused is a line that contradicts itself,
   // and either reading of it would be a guess.

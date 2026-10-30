@@ -171,6 +171,8 @@ int sb_probe(const char *op, const char *path) {
     say("setxattr", setxattr(path, "user.nish", "1", 1, 0));
   } else if (strcmp(op, "open") == 0) {
     say(op, open(path, O_RDONLY | O_CLOEXEC));
+  } else if (strcmp(op, "create") == 0) {
+    say(op, open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644));
   } else if (strcmp(op, "ioctl") == 0) {
     int fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
     struct termios t;

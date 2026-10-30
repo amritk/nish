@@ -10911,6 +10911,109 @@ if (!only || "sandbox".includes(only)) {
         said(to)
       )
 
+      // The scopes: `--allow fs.read=<dir>` grants reading beneath the
+      // directory and nothing beside it. A main that reaches ffi alone is
+      // widened by the policy's grant (open question 13), so the probe's own
+      // open is held to the scope too.
+      const scopeDir = (name, file) => {
+        const d = path.join(W, name)
+        fs.mkdirSync(d, { recursive: true })
+        if (file) fs.writeFileSync(path.join(d, file), "x")
+        return d
+      }
+      const inside = scopeDir("scope-read", "in.txt")
+      const insideFile = path.join(inside, "in.txt")
+      const outsideFile = path.join(W, "out.txt")
+      fs.writeFileSync(outsideFile, "x")
+      const readScoped = build("read-scoped", "read", ["--sandbox", "--allow", `ffi,fs.read=${inside}`])
+      const rIn = run(readScoped, ["open", insideFile])
+      const rOut = run(readScoped, ["open", outsideFile])
+      const rEtc = run(readScoped, ["open", "/etc/passwd"])
+      check(
+        "sandbox: fs.read=<dir> reads inside and not outside",
+        rIn !== null &&
+          rIn.status === 0 &&
+          rIn.stdout === "open: ok\n" &&
+          rOut !== null &&
+          rOut.stdout === "open: EACCES\n" &&
+          rEtc !== null &&
+          rEtc.stdout === "open: EACCES\n",
+        `${said(rIn)}\n--- outside\n${said(rOut)}\n--- /etc/passwd\n${said(rEtc)}`
+      )
+      const ffiScoped = build("none-scoped", "none", ["--sandbox", "--allow", `ffi,fs.read=${inside}`])
+      const fIn = run(ffiScoped, ["open", insideFile])
+      const fOut = run(ffiScoped, ["open", outsideFile])
+      check(
+        "sandbox: an ffi main is widened by the policy's fs.read=<dir>, and held to it",
+        fIn !== null && fIn.stdout === "open: ok\n" && fOut !== null && fOut.stdout === "open: EACCES\n",
+        `${said(fIn)}\n--- outside\n${said(fOut)}`
+      )
+
+      // A scope directory gone between the build and the run: strict refuses
+      // naming it, best-effort names it once and grants nothing beneath it.
+      const gone = scopeDir("scope-gone")
+      const goneStrict = build("read-gone", "read", ["--sandbox", "--allow", `ffi,fs.read=${gone}`])
+      const goneLenient = build("read-gone-be", "read", [
+        "--sandbox=best-effort",
+        "--allow",
+        `ffi,fs.read=${gone}`,
+      ])
+      fs.rmSync(gone, { recursive: true, force: true })
+      const gs = run(goneStrict, ["open", insideFile])
+      check(
+        "sandbox: a missing scope directory refuses strict, naming it",
+        gs !== null &&
+          gs.status === 126 &&
+          gs.stdout === "" &&
+          gs.stderr === `nish: --sandbox: cannot open the directory ${gone} (ENOENT)\n`,
+        said(gs)
+      )
+      const gl = run(goneLenient, ["open", insideFile])
+      const goneLine =
+        `nish: --sandbox: the scope directory ${gone} cannot be opened, ` +
+        "so the program gets no access beneath it\n"
+      check(
+        "sandbox: best-effort names a missing scope directory once and reads nothing",
+        gl !== null &&
+          gl.status === 0 &&
+          gl.stdout === "open: EACCES\n" &&
+          gl.stderr.split(goneLine).length === 2,
+        said(gl)
+      )
+
+      // `--allow fs.write=<dir>`: a file is created inside and not beside it,
+      // and the metadata calls stay EPERM inside it (open question 1). Strict
+      // needs TRUNCATE, which a scope cannot grant beneath `/` below ABI 3.
+      if (abi < 3) {
+        skip(`sandbox: this kernel's Landlock is ABI ${abi} (<3); the fs.write=<dir> checks did not run`)
+      } else {
+        const out = scopeDir("scope-write", "meta.txt")
+        const writeScoped = build("write-scoped", "write", ["--sandbox", "--allow", `ffi,fs.write=${out}`])
+        const made = path.join(out, "made.txt")
+        const beside = path.join(W, "beside.txt")
+        const wIn = run(writeScoped, ["create", made])
+        const wOut = run(writeScoped, ["create", beside])
+        check(
+          "sandbox: fs.write=<dir> creates inside and not outside",
+          wIn !== null &&
+            wIn.status === 0 &&
+            wIn.stdout === "create: ok\n" &&
+            fs.existsSync(made) &&
+            wOut !== null &&
+            wOut.stdout === "create: EACCES\n" &&
+            !fs.existsSync(beside),
+          `${said(wIn)}\n--- outside\n${said(wOut)}`
+        )
+        const metaIn = run(writeScoped, ["meta", path.join(out, "meta.txt")])
+        check(
+          "sandbox: chmod, utimensat and setxattr inside an fs.write=<dir> scope still fail EPERM",
+          metaIn !== null &&
+            metaIn.status === 0 &&
+            metaIn.stdout === "chmod: EPERM\nutimensat: EPERM\nsetxattr: EPERM\n",
+          said(metaIn)
+        )
+      }
+
       // What main is granted runs the same: a file written and read back, a
       // child and the CPU count, with and without the sandbox and the pool.
       const grantedDir = (name) => {
@@ -10990,6 +11093,20 @@ if (!only || "sandbox".includes(only)) {
         "sandbox: strict runs below ABI 3 with fs.write, which grants TRUNCATE anyway (ABI 2)",
         writeAbi2 !== null && writeAbi2.status === 0 && writeAbi2.stderr === "",
         said(writeAbi2)
+      )
+      const scopedAbi2 = run(
+        build("write-scoped-abi2", "write", ["--sandbox", "--allow", `ffi,fs.write=${W}`], {
+          defines: ["-DNISH_SANDBOX_SIMULATE_ABI=2"],
+        }),
+        ["ctor"]
+      )
+      check(
+        "sandbox: strict refuses below ABI 3 with fs.write=<dir>, which grants nothing beneath / (ABI 2)",
+        scopedAbi2 !== null &&
+          scopedAbi2.status === 126 &&
+          scopedAbi2.stdout === "" &&
+          scopedAbi2.stderr === noTruncate,
+        said(scopedAbi2)
       )
     }
 
@@ -11206,6 +11323,53 @@ if (!only || "sandbox".includes(only)) {
     refused.status === 2 &&
       refused.stderr.includes("was compiled with --sandbox, and a wasm module has no sandbox"),
     shown(refused)
+  )
+  // The scopes in the IR: each list is the resolved directories, each ended
+  // by a NUL, and one NUL more; a capability granted whole passes null. The
+  // directory's name has a quote and a backslash, which the constant escapes.
+  // The probe's main reaches ffi, so the policy widens its set by fs.read and
+  // fs.write (open question 13): 16 | 32 | 64.
+  const odd = path.join(dir, 'scope "q\\')
+  fs.mkdirSync(odd, { recursive: true })
+  const oddReal = fs.realpathSync(odd)
+  const scopedLl = path.join(dir, "hello-scoped.ll")
+  const sc = spawnSync(
+    NISH,
+    [
+      path.join(linkDir, "sandbox_fixtures", "read.ts"),
+      "--sandbox",
+      "--allow",
+      `ffi,fs.read=${oddReal},fs.write=${oddReal}`,
+      "--allow",
+      "fs.write",
+      "-o",
+      scopedLl,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const scopedText = sc.status === 0 ? fs.readFileSync(scopedLl, "utf8") : ""
+  const escaped = oddReal.replace(/\\/g, "\\5C").replace(/"/g, "\\22")
+  const bytes = Buffer.byteLength(oddReal) + 2
+  const as =
+    HAS_LLVM_AS && sc.status === 0
+      ? spawnSync("llvm-as", [scopedLl, "-o", "/dev/null"], { encoding: "utf8" })
+      : null
+  const operand = `getelementptr inbounds ([${bytes} x i8], [${bytes} x i8]* @.sandbox.read, i64 0, i64 0)`
+  check(
+    "sandbox: a scope is a NUL-ended list constant passed to nish_sandbox, and llvm-as accepts it",
+    sc.status === 0 &&
+      scopedText.includes(
+        `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
+      ) &&
+      !scopedText.includes("@.sandbox.write") &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null)`) &&
+      (as === null || as.status === 0),
+    sc.status === 0
+      ? `${scopedText
+          .split("\n")
+          .filter((l) => l.includes("sandbox"))
+          .join("\n")}\n${as === null ? "" : shown(as)}`
+      : shown(sc)
   )
   const plainHello = path.join(dir, "hello-plain.ll")
   const ph = spawnSync(NISH, [hello, "-o", plainHello], {

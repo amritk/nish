@@ -436,6 +436,18 @@ jobs:
         run: |
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/test.log"
 
+      # WP37 stage 2: the `sandbox` section's directory-scope checks skip on a
+      # kernel without Landlock, or below ABI 3 for fs.write=<dir>, and the
+      # section stays green. These runners' kernels have Landlock ABI 3 or
+      # later, so the lines that say a scope held are required here.
+      - name: The Landlock directory scopes ran
+        if: matrix.shard == 1
+        run: |
+          uname -r
+          grep -E '^SKIP  sandbox: .*Landlock' "$RUNNER_TEMP/test.log" || true
+          grep -E '^PASS  sandbox: fs.read=<dir> reads inside and not outside' "$RUNNER_TEMP/test.log"
+          grep -E '^PASS  sandbox: fs.write=<dir> creates inside and not outside' "$RUNNER_TEMP/test.log"
+
       # WP38's CRC-32: runtime/runtime-checksum.c's `simd` driver passes with
       # the byte tail alone on a CPU without PCLMULQDQ and SSE4.1, and the `crc32
       # kernel` section passes on its soft arm where /proc/cpuinfo names neither.
