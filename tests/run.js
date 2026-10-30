@@ -14076,7 +14076,11 @@ if (!only || ["bcrypt barrier", "crypto_bcrypt"].some((name) => name.includes(on
 // tests/link/crypto_bcrypt_batch and the widths one to six of
 // tests/link/crypto_bcrypt_width, as `--profile wasi` modules under Node's
 // WASI: all three build for wasm32 and answer every case there as natively.
-for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch", "crypto_bcrypt_width"]) {
+for (const [program, what] of [
+  ["crypto_bcrypt", "the bcrypt vectors"],
+  ["crypto_bcrypt_batch", "the bcrypt batch"],
+  ["crypto_bcrypt_width", "the bcrypt widths"],
+]) {
   if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
     continue
   }
@@ -14100,7 +14104,7 @@ for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch", "crypto_bcrypt_wi
     )
   } else {
     skip(
-      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${{ crypto_bcrypt: "the bcrypt vectors", crypto_bcrypt_batch: "the bcrypt batch", crypto_bcrypt_width: "the bcrypt widths" }[program]} is not run`
+      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${what} is not run`
     )
   }
 }

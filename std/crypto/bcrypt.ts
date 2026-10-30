@@ -934,7 +934,7 @@ interface BcryptBatch {
 
 /** The six states set to π and each slot's safety word stored, for `exposeWith` on the fresh batch state. */
 const bcryptInitN = (st: u32[], batch: BcryptBatch): i32 => {
-  if (st.length < 6366) {
+  if (toI32(st.length) < BCRYPT_BATCH_WORDS) {
     return 0
   }
   const safety: u32[] = batch.safety
@@ -967,7 +967,7 @@ const bcryptKeyWord = (password: u8[], arg: i32): u32 => {
  * function is exposing and a `Secret` cannot be handed into it otherwise.
  */
 const bcryptLoadLane = (st: u32[], password: Secret<u8[]>, slot: i32): i32 => {
-  if (st.length < 6366) {
+  if (toI32(st.length) < BCRYPT_BATCH_WORDS) {
     return 0
   }
   if (slot < 0 || slot >= BCRYPT_BATCH_LANES) {
@@ -1489,7 +1489,7 @@ const bcryptEncryptAt = (st: u32[], at: i32, lr: u32[]): void => {
 
 /** Each running slot's P XORed with its kept expanded key, as `bcryptXorKey`. */
 const bcryptXorKeyN = (st: u32[], width: i32): void => {
-  if (st.length < 6366) {
+  if (toI32(st.length) < BCRYPT_BATCH_WORDS) {
     return
   }
   for (let k: i32 = 0; k < width && k < BCRYPT_BATCH_LANES; k++) {
@@ -1561,7 +1561,7 @@ const bcryptMagicAt = (st: u32[], at: i32, lr: u32[], dst: u8[], to: i32, l: u32
  * caller made and wipes. The block and digest copies are wiped here.
  */
 const bcryptEksN = (st: u32[], salts: u32[], cost: i32, width: i32, digests: u8[]): void => {
-  if (st.length < 6366 || salts.length < 24 || width < 2 || width > BCRYPT_BATCH_LANES) {
+  if (toI32(st.length) < BCRYPT_BATCH_WORDS || salts.length < 24 || width < 2 || width > BCRYPT_BATCH_LANES) {
     return
   }
   const lr: u32[] = new Array<u32>(2)
@@ -1732,8 +1732,7 @@ export const bcryptHashN = (
   if (cost < BCRYPT_MIN_COST || cost > BCRYPT_MAX_COST) {
     return Err("bcrypt: the cost is outside 4 to 31")
   }
-  const mask: i32 = bcryptMaskOf(p1, p2, p3, p4, p5)
-  const lanes: i32[] = bcryptSlotsOf(mask)
+  const lanes: i32[] = bcryptSlotsOf(bcryptMaskOf(p1, p2, p3, p4, p5))
   if (lanes.length === 1) {
     const one: Result<string, string> = bcryptHash(p0, bcryptSaltOf(salts, 0), cost)
     if (one.isErr()) {
@@ -1759,16 +1758,10 @@ export const bcryptHashN = (
   bcryptLoadN(state, p0, p1, p2, p3, p4, p5, lanes, batch)
   const all: u8[] = exposeWith(state, batch, bcryptHashNExposed)
   wipe(state)
-  // Slot s ran the s-th lane given, so the given lanes take the slots in order.
-  const out: string[] = []
-  let s: i32 = 0
-  for (let k: i32 = 0; k < BCRYPT_BATCH_LANES; k++) {
-    if ((mask & (1 << k)) !== 0) {
-      out.push(bcryptLaneString(all, s))
-      s++
-    } else {
-      out.push("")
-    }
+  // Slot s ran lane lanes[s]; a lane not given stays "".
+  const out: string[] = ["", "", "", "", "", ""]
+  for (let s: i32 = 0; s < toI32(lanes.length); s++) {
+    out[lanes[s]] = bcryptLaneString(all, s)
   }
   return Ok(out)
 }
