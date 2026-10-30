@@ -2,7 +2,8 @@
 // value kind and every key read back as the exact bytes it was parsed from,
 // through nesting, a window that does not start at 0, both duplicate-key
 // policies, a reparse through either entry point, a `parse` that keeps none,
-// and a tree built with `new*` and given its ranges by the setters.
+// the generation's wrap, and a tree built with `new*` and given its ranges by
+// the setters.
 import { JSON_TOK_ERR_TRUNCATED, JsonLimits } from "nish/json-tokenizer";
 import {
   JSON_VALUE_DUPLICATE_LAST,
@@ -139,6 +140,18 @@ const jrDuplicates = (t: Suite): void => {
   t.eqI32("duplicates: refused, the parse fails", doc.parseTextRanged(wide), JSON_VALUE_ERR_DUPLICATE);
   t.eqI32("duplicates: errorAt is the repeated key", doc.errorAt, 57);
   t.eqI32("duplicates: a value built on the old root's index has no range", doc.start(doc.newObject()), -1);
+  // Refused but with no repeat, a wide object takes the sorted check and keeps every key's range.
+  const distinct = '{"k0":0,"k1":1,"k2":2,"k3":3,"k4":4,"k5":5,"k6":6,"k7":7,"k8":8}';
+  const d = doc.parseTextRanged(distinct);
+  if (!t.ok("duplicates: refused, a wide object without a repeat parses", d >= 0 && doc.length(d) === 9)) {
+    return;
+  }
+  let keys: string = "";
+  for (let i: i32 = 0; i < 9; i += 1) {
+    keys = `${keys}${jrKey(doc, distinct, d, i)}`;
+  }
+  t.eqStr("duplicates: refused, every key keeps its range", keys, '"k0""k1""k2""k3""k4""k5""k6""k7""k8"');
+  t.eqStr("duplicates: refused, and every value", jrValue(doc, distinct, doc.at(d, 8)), "8");
 };
 
 const jrOff = (t: Suite): void => {
@@ -174,6 +187,12 @@ const jrOff = (t: Suite): void => {
   const plain = doc.parseText(text);
   t.ok("off: and parse after that keeps none", doc.start(plain) === -1 && doc.end(doc.get(plain, "a")) === -1);
   t.ok("off: nor any key", doc.keyStart(plain, 0) === -1 && doc.keyEnd(doc.get(plain, "b"), 0) === -1);
+  // The parse moved the generation and left the ranged parse's tops: a setter starts again from none.
+  t.eqI32("off: setRange after that", doc.setRange(doc.get(plain, "b"), 22, 32), JSON_VALUE_OK);
+  t.eqStr("off: reads it back", jrValue(doc, text, doc.get(plain, "b")), '{"c":true}');
+  t.ok("off: and not the ranged parse's ranges below it", doc.start(plain) === -1 && doc.end(doc.get(plain, "a")) === -1);
+  t.eqI32("off: setKeyRange after that", doc.setKeyRange(plain, 1, 18, 21), JSON_VALUE_OK);
+  t.ok("off: nor its key ranges", doc.keyStart(plain, 0) === -1 && doc.keyEnd(doc.get(plain, "b"), 0) === -1);
 };
 
 const jrReparse = (t: Suite): void => {
@@ -200,12 +219,37 @@ const jrReparse = (t: Suite): void => {
   const r4 = doc.parseTextRanged(first);
   t.eqStr("reparse: ranged again, the ranges are back", jrKey(doc, first, doc.at(r4, 2), 0), '"a"');
   // The failed parse ranges index 0 and closes `{"b":1}` into slot 0, and the one before it ranged both: the
-  // values and slots a build takes next read -1 only because the failure dropped every range.
+  // values and slots a build takes next read -1 because a failed parse never marks its generation as ranged.
+  const g: i32 = doc.generation;
   t.eqI32("reparse: a failed parse fails", doc.parseTextRanged('{"a":{"b":1},"c":'), JSON_TOK_ERR_TRUNCATED);
+  // The entry clear moves the generation once; the failure's own clear moves it again and drops what it built.
+  t.ok("reparse: and clears what it built", doc.generation === g + 2 && doc.top === 0 && doc.slotTop === 0);
   const after = doc.newObject();
   t.ok("reparse: and leaves no value range behind", after >= 0 && doc.start(after) === -1 && doc.end(after) === -1);
   t.eqI32("reparse: a member set after it", doc.set(after, "k", doc.newNull()), JSON_VALUE_OK);
   t.ok("reparse: nor a key range", doc.keyStart(after, 0) === -1 && doc.keyEnd(after, 0) === -1);
+};
+
+const jrWrap = (t: Suite): void => {
+  // Ranges are valid for the generation that wrote them, and the generation comes round again after 511
+  // clears: the wrap forgets them, or a plain parse that lands on that generation would read them.
+  const doc = jrDoc();
+  const text = '{"a":[1,2],"b":"c"}';
+  const r1 = doc.parseTextRanged(text);
+  t.eqStr("wrap: the ranged parse", jrKey(doc, text, r1, 1), '"b"');
+  const ranged: i32 = doc.generation;
+  doc.generation = 511;
+  doc.clear();
+  t.eqI32("wrap: the generation wraps to 1", doc.generation, 1);
+  while (doc.generation < ranged - 1) {
+    doc.clear();
+  }
+  const r2 = doc.parseText(text);
+  if (!t.ok("wrap: a plain parse lands on the ranged parse's generation", r2 >= 0 && doc.generation === ranged)) {
+    return;
+  }
+  t.ok("wrap: its values have no range", doc.start(r2) === -1 && doc.end(doc.get(r2, "a")) === -1);
+  t.ok("wrap: nor its keys", doc.keyStart(r2, 0) === -1 && doc.keyEnd(r2, 1) === -1);
 };
 
 const jrBuilders = (t: Suite): void => {
@@ -392,6 +436,7 @@ export const main = (): number => {
   jrDuplicates(t);
   jrOff(t);
   jrReparse(t);
+  jrWrap(t);
   jrBuilders(t);
   jrGrowth(t);
   jrParsedEdits(t);

@@ -788,6 +788,14 @@ is how a loader for another format that builds the tree itself can point back
 into its own text. `set` over an existing key keeps the key's range. Every parse and `clear()`
 drops the ranges the document held.
 
+The two entry points are separate loops so that a program calling only
+`parse` runs the loop it always did. A program that links both, though, can
+see `parse` itself run slower, up to 16% on a number-heavy document, because
+the second loop changes how the first is laid out. A validator that wants
+ranges for its error messages calls `parseRanged` and nothing else, and one
+that does not calls `parse`; it should not mix the two to save the ranges'
+cost on the documents that turn out valid.
+
 Objects keep their members in order, and `get` looks a key up by scanning
 them, so walk a large object once with `keyAt` and `at` rather than calling
 `get` for each of many keys. Under Node, where a string is UTF-16,

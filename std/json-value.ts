@@ -250,9 +250,11 @@ export class JsonDocument {
    * Per value, its first byte in the parsed bytes and one past its last; per
    * member slot, its key's, quotes included. `-1` where nothing was recorded.
    * They stay empty in a document that never keeps ranges.
-   * Only the first `rangeTop` values and `slotRangeTop` slots are current:
-   * past them is an earlier document's, and reads as `-1`, so that a value or
-   * member a builder adds writes nothing here.
+   * They are current only while `rangeGeneration` is `generation`, and then
+   * only for the first `rangeTop` values and `slotRangeTop` slots: past them
+   * is an earlier document's, and reads as `-1`, so that a value or member a
+   * builder adds writes nothing here. Validity rides on the generation, which
+   * `clear` moves anyway, so that a plain `parse` writes nothing for ranges.
    */
   valueStart: i32[]
   valueEnd: i32[]
@@ -260,6 +262,8 @@ export class JsonDocument {
   slotKeyEnd: i32[]
   rangeTop: i32 = 0
   slotRangeTop: i32 = 0
+  /** The generation the ranges were written in; `0`, never a generation, when none were. */
+  rangeGeneration: i32 = 0
   /**
    * The parse's own stacks: the open containers, where each one's members
    * start in the pending arrays and the key it is the value of, if any; and
@@ -354,15 +358,20 @@ export class JsonDocument {
 
   /** Forgets every value, keeping the memory for the next parse or build. Every handle is invalid afterwards. */
   clear(): void {
-    this.generation = this.generation >= JSON_VALUE_LAST_GENERATION ? 1 : this.generation + 1
+    if (this.generation >= JSON_VALUE_LAST_GENERATION) {
+      // Every return to a generation already used passes here, so ranges
+      // stamped with one are forgotten before it comes round again.
+      this.generation = 1
+      this.rangeGeneration = 0
+    } else {
+      this.generation += 1
+    }
     this.top = 0
     this.slotTop = 0
     this.byteTop = 0
     this.pendingTop = 0
     this.failed = 0
     this.errorAt = -1
-    this.rangeTop = 0
-    this.slotRangeTop = 0
   }
 
   // ---- Parsing ----------------------------------------------------------------
@@ -462,9 +471,10 @@ export class JsonDocument {
    * code and `errorAt` as `parse` on the same bytes.
    *
    * A loop of its own rather than a flag `parse` tests, so that `parse` runs
-   * the loop it ran before ranges existed and pays nothing for them: one
-   * dispatch inside `parse` lets this loop inline there and costs the plain
-   * loop up to 0.3% (`docs/BENCHMARKS.md`). Keep in step with `parse`.
+   * the loop it ran before ranges existed: a dispatch inside `parse` let this
+   * loop inline there and cost the plain loop more instructions. A program
+   * that links both can still see the plain loop's code laid out differently
+   * (`docs/BENCHMARKS.md`). Keep in step with `parse`.
    */
   parseRanged(src: u8[], off: i32, len: i32): JsonValue {
     this.clear()
@@ -558,10 +568,11 @@ export class JsonDocument {
     }
     this.rangeTop = this.top
     this.slotRangeTop = this.slotTop
+    this.rangeGeneration = this.generation
     return this.handle(root)
   }
 
-  /** `parse` over the bytes of `s`, copied into an array the document reuses; `errorAt` is a byte offset in `s`. */
+  /** `parse` over the bytes of `s`, copied into an array the document reuses; `errorAt` is a byte offset in `s`. Keep in step with `parseTextRanged`. */
   parseText(s: string): JsonValue {
     const n: i32 = toI32(s.length)
     const buf: u8[] = jsonValueRoom(this.textBytes, n)
@@ -1197,14 +1208,23 @@ export class JsonDocument {
     return this.slotRange(this.slotKeyEnd, this.keySlot(this.index(o), i))
   }
 
-  /** Internal: `a[x]`, or `-1` past `rangeTop`, where `a` is a value range array. */
+  /** Internal: `a[x]`, or `-1` past `rangeTop` or for ranges of an earlier generation, where `a` is a value range array. */
   valueRange(a: i32[], x: i32): i32 {
-    return x >= 0 && x < this.rangeTop ? jsonValueGet(a, x) : -1
+    return x >= 0 && x < this.rangeTop && this.rangeGeneration === this.generation ? jsonValueGet(a, x) : -1
   }
 
-  /** Internal: `a[s]`, or `-1` past `slotRangeTop`, where `a` is a key range array. */
+  /** Internal: `a[s]`, or `-1` past `slotRangeTop` or for ranges of an earlier generation, where `a` is a key range array. */
   slotRange(a: i32[], s: i32): i32 {
-    return s >= 0 && s < this.slotRangeTop ? jsonValueGet(a, s) : -1
+    return s >= 0 && s < this.slotRangeTop && this.rangeGeneration === this.generation ? jsonValueGet(a, s) : -1
+  }
+
+  /** Internal: before a setter writes a range, forgets an earlier generation's, so that none of them reads as this one's. */
+  ownRanges(): void {
+    if (this.rangeGeneration !== this.generation) {
+      this.rangeTop = 0
+      this.slotRangeTop = 0
+      this.rangeGeneration = this.generation
+    }
   }
 
   /**
@@ -1221,6 +1241,7 @@ export class JsonDocument {
     if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
+    this.ownRanges()
     // Values between the last current one and `x` have no range yet.
     for (let y: i32 = this.rangeTop; y < x; y += 1) {
       jsonValuePut(this.valueStart, y, -1)
@@ -1247,6 +1268,7 @@ export class JsonDocument {
     if (start < 0 || end < start) {
       return JSON_VALUE_ERR_RANGE
     }
+    this.ownRanges()
     for (let t: i32 = this.slotRangeTop; t < s; t += 1) {
       jsonValuePut(this.slotKeyStart, t, -1)
       jsonValuePut(this.slotKeyEnd, t, -1)
@@ -1449,6 +1471,7 @@ export class JsonDocument {
       jsonValuePut(this.slotKeyAt, moved + i, jsonValueGet(this.slotKeyAt, start + i))
       jsonValuePut(this.slotKeyLength, moved + i, jsonValueGet(this.slotKeyLength, start + i))
     }
+    this.ownRanges()
     if (start < this.slotRangeTop) {
       this.moveKeyRanges(start, moved, n)
     }
