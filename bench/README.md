@@ -42,16 +42,16 @@ Build products go to `build/bench/`.
 
 ## The programs
 
-| Name | What it measures | Nish flags | Size (`bench:n`) | Checksum |
-| --- | --- | --- | --- | --- |
-| `fib` | recursive calls, integer add | | fib(40) | `102334155` |
-| `nbody` | a class with seven `f64` fields in an array, `Math.sqrt`, field read/write in a nested loop | `--number-mode f64` | 2e7 steps | energy before and after |
-| `spectral` | `number[]` reads and writes, `f64` divide, `i32` index arithmetic | `--number-mode f64` | n = 3000 | `1.2742241526449527` |
-| `sieve` | `boolean[]` strided stores with bounds checks, 20 passes over one 10 MB array | | n = 1e7 | `13291580` |
-| `strbuild` | template literals with a number hole, `+` on immutable strings, the arena allocator | | 131072 pieces | `806394` (final length) |
-| `vec3` | a `Vec3` class with methods called in a tight loop, no allocation in the loop | `--number-mode f64` | 5e7 iterations | position and energy |
-| `result` | a fallible function returning `Result<number, number>` and one taking it, both by value in a register (WP17); the accumulator feeds the next input, so the loop carries a dependency | | 2e8 calls | `15873` |
-| `math` | ten kernels, each its own row (`math/<kernel>`, the kernel named on the command line): `Math.atan2`, `tan` and `hypot` (Nish's from `std/math.ts`, a port of fdlibm; libm in C and Rust, Go's own `math` package in the Go column), `Math.sign` on `i32` and `f64`, `Math.imul`, and float `Math.round`, `min` and `max` with JavaScript's -0 and NaN, and `f32ToBits`; inputs walk a 4096-entry table seeded with NaN, ±0, ±Infinity and the round-half edges, and every result is folded through its f32 bits | `--number-mode f64` | 2e7 libm calls, 1.6e8 for the rest | one line per kernel |
+| Name       | What it measures                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Nish flags          | Size (`bench:n`)                   | Checksum                |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------- | ----------------------- |
+| `fib`      | recursive calls, integer add                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |                     | fib(40)                            | `102334155`             |
+| `nbody`    | a class with seven `f64` fields in an array, `Math.sqrt`, field read/write in a nested loop                                                                                                                                                                                                                                                                                                                                                                                                                     | `--number-mode f64` | 2e7 steps                          | energy before and after |
+| `spectral` | `number[]` reads and writes, `f64` divide, `i32` index arithmetic                                                                                                                                                                                                                                                                                                                                                                                                                                               | `--number-mode f64` | n = 3000                           | `1.2742241526449527`    |
+| `sieve`    | `boolean[]` strided stores with bounds checks, 20 passes over one 10 MB array                                                                                                                                                                                                                                                                                                                                                                                                                                   |                     | n = 1e7                            | `13291580`              |
+| `strbuild` | template literals with a number hole, `+` on immutable strings, the arena allocator                                                                                                                                                                                                                                                                                                                                                                                                                             |                     | 131072 pieces                      | `806394` (final length) |
+| `vec3`     | a `Vec3` class with methods called in a tight loop, no allocation in the loop                                                                                                                                                                                                                                                                                                                                                                                                                                   | `--number-mode f64` | 5e7 iterations                     | position and energy     |
+| `result`   | a fallible function returning `Result<number, number>` and one taking it, both by value in a register (WP17); the accumulator feeds the next input, so the loop carries a dependency                                                                                                                                                                                                                                                                                                                            |                     | 2e8 calls                          | `15873`                 |
+| `math`     | ten kernels, each its own row (`math/<kernel>`, the kernel named on the command line): `Math.atan2`, `tan` and `hypot` (Nish's from `std/math.ts`, a port of fdlibm; libm in C and Rust, Go's own `math` package in the Go column), `Math.sign` on `i32` and `f64`, `Math.imul`, and float `Math.round`, `min` and `max` with JavaScript's -0 and NaN, and `f32ToBits`; inputs walk a 4096-entry table seeded with NaN, ±0, ±Infinity and the round-half edges, and every result is folded through its f32 bits | `--number-mode f64` | 2e7 libm calls, 1.6e8 for the rest | one line per kernel     |
 
 Every size is chosen so the C version runs for at least a quarter of a second
 on the reference machine (a 2.1 GHz Xeon virtual machine): fib(35) and a
@@ -67,7 +67,7 @@ ABI returns and passes it in registers, exactly as Go's own `(value, ok)` pair
 of results would be. All four are returned and passed in registers, so the four
 columns should be the same code; an Nish column well behind them means a
 `Result` went back to being a pointer into the arena. The gap this program
-used to show, the respelling that did *not* close it and the private per-arm
+used to show, the respelling that did _not_ close it and the private per-arm
 ABI that did, are in
 [docs/wp17-result-abi.md](../docs/wp17-result-abi.md) §4.
 
@@ -90,15 +90,15 @@ form when it is `par`, and the two runs must print the same checksum. The
 first table in `docs/BENCHMARKS.md` gives the loop's time, the parallel time on
 every core the machine has, the ratio and the peak memory of both.
 
-| Name | What it measures | Size (`bench:n`) |
-| --- | --- | --- |
-| `par-compute` | 64 dependent square roots per element, nothing shared and nothing allocated: the cores are the only limit | 2^21 elements |
-| `par-alloc` | a string formatted and its bytes summed per element: the body allocates, the compiler says so (NL9012) and each element gives its bytes back | 2^22 elements |
-| `par-nbody` | 1024 bodies under gravity, one map per step over 3n probes (one per body and axis), each summing over every other body | 1024 bodies, 16 steps |
-| `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
-| `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
-| `par-histogram` | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds |
-| `par-histogram-atomic` | the same four streams into an `AtomicI32` per bin, one `add` per value: the same contention on sixteen bins, no lock | 16 rounds |
+| Name                   | What it measures                                                                                                                                                                          | Size (`bench:n`)      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| `par-compute`          | 64 dependent square roots per element, nothing shared and nothing allocated: the cores are the only limit                                                                                 | 2^21 elements         |
+| `par-alloc`            | a string formatted and its bytes summed per element: the body allocates, the compiler says so (NL9012) and each element gives its bytes back                                              | 2^22 elements         |
+| `par-nbody`            | 1024 bodies under gravity, one map per step over 3n probes (one per body and axis), each summing over every other body                                                                    | 1024 bodies, 16 steps |
+| `par-short`            | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide                                                               | 2^20 calls            |
+| `par-regions`          | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs                                                                                           | 1,000 calls           |
+| `par-histogram`        | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds             |
+| `par-histogram-atomic` | the same four streams into an `AtomicI32` per bin, one `add` per value: the same contention on sixteen bins, no lock                                                                      | 16 rounds             |
 
 ```bash
 node bench/run.mjs --only par            # all of them and their twins; `--only par-nbody` names one
@@ -112,11 +112,11 @@ node bench/run.mjs --validate --only par # both runs of each and every twin, che
 the second table in `docs/BENCHMARKS.md` compares the Nish `par` run with the
 same program in Rust and in Go:
 
-| File | Threads |
-| --- | --- |
-| `par-<kernel>.rs` | `std::thread::scope`, built by `rustc` with the flags of the main table |
+| File                    | Threads                                                                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `par-<kernel>.rs`       | `std::thread::scope`, built by `rustc` with the flags of the main table                                                                            |
 | `par-<kernel>-rayon.rs` | Rayon's global pool (`par_iter_mut`, `rayon::scope` for the histogram), built by cargo as one package in `build/bench/rayon` with the same profile |
-| `par-<kernel>.go` | goroutines and a `sync.WaitGroup`, built by `go build` |
+| `par-<kernel>.go`       | goroutines and a `sync.WaitGroup`, built by `go build`                                                                                             |
 
 Each twin does the same work at the same size (its `bench:n` line follows
 `--n`) and must print the checksum the Nish `par` run prints, or the run fails.
@@ -146,8 +146,8 @@ cgroup quota): `bench/run.mjs` sets `NISH_NUM_THREADS`, `RAYON_NUM_THREADS`,
 `GOMAXPROCS` and `PAR_THREADS` (which the scope twins read) to it, and the
 table records it. The comparison runs whole `--twin-runs` times, three by
 default, minutes apart. Each run is eleven interleaved rounds unless `--runs`
-says otherwise, after `--warmup`: in each round every binary *and a
-byte-identical copy of it* runs once, in an order that rotates by one each
+says otherwise, after `--warmup`: in each round every binary _and a
+byte-identical copy of it_ runs once, in an order that rotates by one each
 round. In each run, separately for the minimum and the median, Nish is divided
 by the fastest other column on that statistic, and the row's band is the
 larger of Nish's gap to its copy and that column's gap to its copy. A ratio
@@ -250,12 +250,12 @@ Four more programs are the WP32 layout prototypes
 layout. None of them uses `Map`, which did not exist when they were written, so
 they compile on any compiler that builds this tree.
 
-| Name | Layout |
-| --- | --- |
-| `map-proto-ordered` | insertion-ordered, a bucket per entry index: the shape `StringMap` (`src/map.ts`) had before WP32 S6 |
-| `map-proto-ordered-fp` | insertion-ordered, an `i64` bucket holding the full hash above the entry index |
+| Name                     | Layout                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `map-proto-ordered`      | insertion-ordered, a bucket per entry index: the shape `StringMap` (`src/map.ts`) had before WP32 S6               |
+| `map-proto-ordered-fp`   | insertion-ordered, an `i64` bucket holding the full hash above the entry index                                     |
 | `map-proto-ordered-fp32` | insertion-ordered, a `u32` bucket holding eight fingerprint bits above a 24-bit entry index, the layout WP32 chose |
-| `map-proto-unordered` | unordered: hash, key and value in the bucket |
+| `map-proto-unordered`    | unordered: hash, key and value in the bucket                                                                       |
 
 Each runs five workloads over string keys and then over integer keys: insert,
 hit, miss, word count and delete churn. An LCG in the program drives them, with
@@ -273,11 +273,11 @@ ten `map-node.mjs` prints, and the unordered prototype's row is the same work.
 Each runs two variants, and checks in the program that both reach the same
 checksum:
 
-| Name | Variants | Comparison | Node twin |
-| --- | --- | --- | --- |
-| `map-wordcount` | `fused`: `counts.set(w, (counts.get(w) ?? 0) + 1)`, one probe a word; `double`: a `get` into a `const`, then the `set`, which §9.1 leaves unfused, two probes a word | (b), on §2's `count` | `map-wordcount.mjs` |
-| `map-presize` | `grow`, and `reserve`: `reserve(m, n)` from `nish/map` before the first insert | (c), on §2's `insert` | `map-presize.mjs`, where `reserve` is `nish/map`'s own body and does nothing |
-| `map-vs-stringmap` | `map`: all ten workloads on `Map`; `stringmap`: `insert`, `hit`, `miss` and `count` on `StringMap`, which is `string -> i32` and has no `delete` | (d) | `map-node.mjs` |
+| Name               | Variants                                                                                                                                                             | Comparison            | Node twin                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
+| `map-wordcount`    | `fused`: `counts.set(w, (counts.get(w) ?? 0) + 1)`, one probe a word; `double`: a `get` into a `const`, then the `set`, which §9.1 leaves unfused, two probes a word | (b), on §2's `count`  | `map-wordcount.mjs`                                                          |
+| `map-presize`      | `grow`, and `reserve`: `reserve(m, n)` from `nish/map` before the first insert                                                                                       | (c), on §2's `insert` | `map-presize.mjs`, where `reserve` is `nish/map`'s own body and does nothing |
+| `map-vs-stringmap` | `map`: all ten workloads on `Map`; `stringmap`: `insert`, `hit`, `miss` and `count` on `StringMap`, which is `string -> i32` and has no `delete`                     | (d)                   | `map-node.mjs`                                                               |
 
 `StringMap` is compiler-internal, so `map-vs-stringmap.ts` carries a copy of
 it, lines 28 to 204 of `src/map.ts` between two marked rules, and the `bench`
@@ -360,15 +360,15 @@ hash-table code the gate holds, so a codegen regression in a probe loop, or in
 
 ## Columns
 
-| Column | Build |
-| --- | --- |
-| Nish | `nish <src> [--number-mode f64] --link <exe> --profile speed` |
-| Nish (size profile) | `--profile size`, size table only |
-| C `-O3` | `clang -O3 -s <src> -lm` |
-| C `-O3` naive | `strbuild-naive.c` only |
-| Go | `go build -trimpath -ldflags=-s -w` |
-| Rust `-O3` | `rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols` |
-| Rust native | as above plus `-C target-cpu=native` |
+| Column              | Build                                                                     |
+| ------------------- | ------------------------------------------------------------------------- |
+| Nish                | `nish <src> [--number-mode f64] --link <exe> --profile speed`             |
+| Nish (size profile) | `--profile size`, size table only                                         |
+| C `-O3`             | `clang -O3 -s <src> -lm`                                                  |
+| C `-O3` naive       | `strbuild-naive.c` only                                                   |
+| Go                  | `go build -trimpath -ldflags=-s -w`                                       |
+| Rust `-O3`          | `rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols` |
+| Rust native         | as above plus `-C target-cpu=native`                                      |
 
 The `Nish / Go` and `Nish / Rust` columns divide the Nish
 minimum by that language's minimum. The WP9 target is 1.10x or better for loop
@@ -638,10 +638,10 @@ the first accept into it, the way Go does, and its start-up is the read
 scratch and the slot bookkeeping. Five rounds, 20 starts a build, on a shared
 four-vCPU VM, the base being `std/net/http1-server.ts` before that change:
 
-| slots | base | base's copy | lazy slots | its copy |
-| ---: | ---: | ---: | ---: | ---: |
+|  slots |             base |      base's copy |     lazy slots |       its copy |
+| -----: | ---------------: | ---------------: | -------------: | -------------: |
 | 16,384 | 36.2 ms, 65.3 MB | 36.2 ms, 65.3 MB | 4.7 ms, 2.6 MB | 4.6 ms, 2.6 MB |
-| 1,024 | 6.2 ms, 5.8 MB | | 5.3 ms, 1.8 MB | 5.0 ms, 1.8 MB |
+|  1,024 |   6.2 ms, 5.8 MB |                  | 5.3 ms, 1.8 MB | 5.0 ms, 1.8 MB |
 
 Under load, the peak RSS at 500 keep-alive connections fell from 65 MB to
 4 MB on `ping` and `query` and from 67 MB to 7 MB on `body`: the slots the
@@ -654,21 +654,21 @@ Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3, wrk 4.1.0, `-t3`.
 The base is `std/net/http1-server.ts` before that commit; the copy is the base
 binary, byte for byte, and its row is the noise band. Five rounds:
 
-| scenario | base req/s | copy (noise) | this commit | user µs/req | sys µs/req |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| keep-alive, c=256, `/plaintext` | 153,329 | −2.7% | 175,303 (**+14.3%**) | 1.17 → 1.16 | 5.18 → 4.44 |
-| keep-alive, c=256, `/json` | 153,822 | +3.3% | 169,507 (**+10.2%**) | 1.35 → 1.21 | 5.25 → 4.40 |
-| keep-alive, c=4096 | 86,269 | +0.4% | 93,088 (+7.9%) | 2.07 → 2.11 | 9.01 → 8.25 |
-| close, c=64 | 63,710 | +3.9% | 66,967 (+5.1%) | 1.97 → 1.76 | 13.02 → 12.84 |
-| close, c=64, 8,000 idle | 51,003 | +0.2% | 64,763 (**+27.0%**) | 7.23 → 1.82 | 11.88 → 13.18 |
+| scenario                        | base req/s | copy (noise) |          this commit | user µs/req |    sys µs/req |
+| ------------------------------- | ---------: | -----------: | -------------------: | ----------: | ------------: |
+| keep-alive, c=256, `/plaintext` |    153,329 |        −2.7% | 175,303 (**+14.3%**) | 1.17 → 1.16 |   5.18 → 4.44 |
+| keep-alive, c=256, `/json`      |    153,822 |        +3.3% | 169,507 (**+10.2%**) | 1.35 → 1.21 |   5.25 → 4.40 |
+| keep-alive, c=4096              |     86,269 |        +0.4% |       93,088 (+7.9%) | 2.07 → 2.11 |   9.01 → 8.25 |
+| close, c=64                     |     63,710 |        +3.9% |       66,967 (+5.1%) | 1.97 → 1.76 | 13.02 → 12.84 |
+| close, c=64, 8,000 idle         |     51,003 |        +0.2% |  64,763 (**+27.0%**) | 7.23 → 1.82 | 11.88 → 13.18 |
 
 The kernel is four fifths of what a request costs, so the change is fewer
 system calls (`--syscalls`, the same run):
 
-| scenario | base | this commit |
-| --- | --- | --- |
-| keep-alive | 4.10 a request: `recvfrom` 2, `epoll_ctl` 1, `sendto` 1 | 2.06: `recvfrom` 1, `sendto` 1 |
-| close | 6.10: `recvfrom` 2, `accept4`, `epoll_ctl`, `sendto`, `close` | 5.10: `recvfrom` 1 and the rest |
+| scenario   | base                                                          | this commit                     |
+| ---------- | ------------------------------------------------------------- | ------------------------------- |
+| keep-alive | 4.10 a request: `recvfrom` 2, `epoll_ctl` 1, `sendto` 1       | 2.06: `recvfrom` 1, `sendto` 1  |
+| close      | 6.10: `recvfrom` 2, `accept4`, `epoll_ctl`, `sendto`, `close` | 5.10: `recvfrom` 1 and the rest |
 
 The second `recvfrom` was `readable` reading until the socket answered -11;
 it now stops at a short read, since level-triggered readiness wakes the loop
@@ -700,11 +700,11 @@ socket has taken everything, so the output memory follows the connections
 the socket is holding back. Resident size after start-up, default
 `Http1Config`:
 
-| slots | each slot's own output | borrowed from the pool |
-| ---: | ---: | ---: |
-| 1,024 | 75 MB | 5.5 MB |
-| 16,384 | 1,178 MB | 64 MB |
-| 65,536 | 4,708 MB | 251 MB |
+|  slots | each slot's own output | borrowed from the pool |
+| -----: | ---------------------: | ---------------------: |
+|  1,024 |                  75 MB |                 5.5 MB |
+| 16,384 |               1,178 MB |                  64 MB |
+| 65,536 |               4,708 MB |                 251 MB |
 
 Under load, with 9,000 slots, peak RSS went from 633 MB to 35 MB in every
 scenario. Throughput is unchanged at 256 connections (−0.5% and +1.8% over
@@ -730,32 +730,32 @@ server runs on CPU 0 and wrk on CPUs 1–3 with `-t3`. The run was
 `run.sh --rounds 5 --duration 5`: five rounds, each a one-second warm-up and a
 five-second timed run, a fresh server per round, 16,384 slots. The versions:
 
-| server | versions |
-| --- | --- |
-| `nish`, `nish-copy` | nish 0.18.0 (`build/nish` at `aa75cec`), `--profile speed`, 134,512 bytes |
-| `node-http` | Node 26.12.0 |
-| `uws` | uWebSockets.js v20.71.0 (`9ec36de7`), Node 26.12.0 |
-| `bun` | Bun 1.4.3 |
-| `go-nethttp` | Go 1.27.2, `GOMAXPROCS=1` |
-| `go-fasthttp` | Go 1.27.2, fasthttp v1.75.0, `GOMAXPROCS=1` |
-| `rust-hyper` | Rust 1.99.1, hyper 1.12.0, hyper-util 0.1.21, tokio 1.53.3, serde_json 1.0.154 |
-| `rust-actix` | Rust 1.99.1, actix-web 4.17.0, serde_json 1.0.154 |
-| `nginx` | nginx 1.30.6, `worker_processes 1`, `master_process off` |
+| server              | versions                                                                       |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `nish`, `nish-copy` | nish 0.18.0 (`build/nish` at `aa75cec`), `--profile speed`, 134,512 bytes      |
+| `node-http`         | Node 26.12.0                                                                   |
+| `uws`               | uWebSockets.js v20.71.0 (`9ec36de7`), Node 26.12.0                             |
+| `bun`               | Bun 1.4.3                                                                      |
+| `go-nethttp`        | Go 1.27.2, `GOMAXPROCS=1`                                                      |
+| `go-fasthttp`       | Go 1.27.2, fasthttp v1.75.0, `GOMAXPROCS=1`                                    |
+| `rust-hyper`        | Rust 1.99.1, hyper 1.12.0, hyper-util 0.1.21, tokio 1.53.3, serde_json 1.0.154 |
+| `rust-actix`        | Rust 1.99.1, actix-web 4.17.0, serde_json 1.0.154                              |
+| `nginx`             | nginx 1.30.6, `worker_processes 1`, `master_process off`                       |
 
 Each cell is the median req/s, with the five rounds' min–max beneath it. The
 last column is the noise band, `nish-copy`'s median against `nish`'s:
 
-| scenario | nish | nish-copy | node-http | uws | bun | go-nethttp | go-fasthttp | rust-hyper | rust-actix | nginx | band |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| plaintext keep-alive c=256 | 112,078<br>105,705–131,314 | 118,246<br>56,686–132,872 | 21,919<br>20,608–23,718 | 97,945<br>92,922–107,106 | 56,614<br>50,558–65,313 | 27,003<br>25,948–29,333 | 58,683<br>57,284–61,311 | 66,305<br>62,796–73,910 | 64,754<br>64,112–70,603 | 65,997<br>62,134–67,095 | +5.5% |
-| json keep-alive c=256 | 118,907<br>110,330–123,977 | 116,483<br>107,903–138,722 | 22,788<br>19,633–23,745 | 97,946<br>68,642–104,229 | 56,535<br>54,253–64,274 | 25,381<br>25,014–26,717 | 49,569<br>45,211–57,689 | 68,586<br>59,691–69,231 | 66,363<br>61,008–69,475 | 65,451<br>63,830–67,832 | −2.0% |
-| post-json keep-alive c=256 | 38,888<br>33,874–45,603 | 37,888<br>33,579–41,356 | 12,585<br>12,373–13,953 | 24,813<br>23,323–27,029 | 25,101<br>23,901–25,832 | 15,978<br>15,122–16,708 | 22,467<br>21,088–23,862 | 36,522<br>31,404–39,801 | 31,836<br>30,757–41,411 | n/a¹ | −2.6% |
-| post-json-doc keep-alive c=256 | 37,645<br>31,359–42,837 | 35,043<br>34,374–41,057 | n/a² | n/a² | n/a² | n/a² | n/a² | n/a² | n/a² | n/a² | −6.9% |
-| plaintext keep-alive c=4096 | 69,743<br>55,592–74,015 | 68,545<br>44,565–78,226 | 18,395<br>17,778–20,838³ | 67,799<br>55,544–69,557 | 46,896<br>42,485–69,437 | 22,929<br>21,927–26,335 | 48,807<br>46,889–50,412 | 58,351<br>52,269–58,909 | 60,417<br>46,076–61,889 | 59,970<br>54,861–63,156³ | −1.7% |
-| plaintext close c=64 | 47,813<br>46,052–50,230 | 44,595<br>43,104–47,525 | 10,532<br>8,404–11,134 | 39,701<br>35,178–40,819⁴ | 31,091<br>29,301–32,155⁴ | 18,198<br>16,310–18,806 | 31,122<br>28,587–32,254 | 34,702<br>34,343–39,217 | 19,493<br>16,664–21,374 | 33,323<br>29,049–33,877 | −6.7% |
-| plaintext close c=64 + 8000 idle | 47,981<br>42,154–49,365 | 46,480<br>42,932–47,336 | 9,874<br>8,907–11,067 | 38,016<br>33,941–41,022⁴ | 30,270<br>28,806–31,401⁴ | 17,174<br>15,641–18,962 | 29,755<br>28,953–31,281 | 35,021<br>30,351–38,460 | 20,160<br>18,120–21,653 | 30,670<br>29,176–33,819 | −3.1% |
-| peak RSS, keep-alive c=256 | 65 MB | 65 MB | 90 MB | 56 MB | 33 MB | 17 MB | 12 MB | 6 MB | 7 MB | 10 MB | |
-| peak RSS, + 8000 idle | 65 MB | 65 MB | 233 MB | 59 MB | 45 MB | 158 MB | 115 MB | 84 MB | 81 MB | 14 MB | |
+| scenario                         |                       nish |                  nish-copy |                node-http |                      uws |                      bun |              go-nethttp |             go-fasthttp |              rust-hyper |              rust-actix |                    nginx |  band |
+| -------------------------------- | -------------------------: | -------------------------: | -----------------------: | -----------------------: | -----------------------: | ----------------------: | ----------------------: | ----------------------: | ----------------------: | -----------------------: | ----: |
+| plaintext keep-alive c=256       | 112,078<br>105,705–131,314 |  118,246<br>56,686–132,872 |  21,919<br>20,608–23,718 | 97,945<br>92,922–107,106 |  56,614<br>50,558–65,313 | 27,003<br>25,948–29,333 | 58,683<br>57,284–61,311 | 66,305<br>62,796–73,910 | 64,754<br>64,112–70,603 |  65,997<br>62,134–67,095 | +5.5% |
+| json keep-alive c=256            | 118,907<br>110,330–123,977 | 116,483<br>107,903–138,722 |  22,788<br>19,633–23,745 | 97,946<br>68,642–104,229 |  56,535<br>54,253–64,274 | 25,381<br>25,014–26,717 | 49,569<br>45,211–57,689 | 68,586<br>59,691–69,231 | 66,363<br>61,008–69,475 |  65,451<br>63,830–67,832 | −2.0% |
+| post-json keep-alive c=256       |    38,888<br>33,874–45,603 |    37,888<br>33,579–41,356 |  12,585<br>12,373–13,953 |  24,813<br>23,323–27,029 |  25,101<br>23,901–25,832 | 15,978<br>15,122–16,708 | 22,467<br>21,088–23,862 | 36,522<br>31,404–39,801 | 31,836<br>30,757–41,411 |                     n/a¹ | −2.6% |
+| post-json-doc keep-alive c=256   |    37,645<br>31,359–42,837 |    35,043<br>34,374–41,057 |                     n/a² |                     n/a² |                     n/a² |                    n/a² |                    n/a² |                    n/a² |                    n/a² |                     n/a² | −6.9% |
+| plaintext keep-alive c=4096      |    69,743<br>55,592–74,015 |    68,545<br>44,565–78,226 | 18,395<br>17,778–20,838³ |  67,799<br>55,544–69,557 |  46,896<br>42,485–69,437 | 22,929<br>21,927–26,335 | 48,807<br>46,889–50,412 | 58,351<br>52,269–58,909 | 60,417<br>46,076–61,889 | 59,970<br>54,861–63,156³ | −1.7% |
+| plaintext close c=64             |    47,813<br>46,052–50,230 |    44,595<br>43,104–47,525 |   10,532<br>8,404–11,134 | 39,701<br>35,178–40,819⁴ | 31,091<br>29,301–32,155⁴ | 18,198<br>16,310–18,806 | 31,122<br>28,587–32,254 | 34,702<br>34,343–39,217 | 19,493<br>16,664–21,374 |  33,323<br>29,049–33,877 | −6.7% |
+| plaintext close c=64 + 8000 idle |    47,981<br>42,154–49,365 |    46,480<br>42,932–47,336 |    9,874<br>8,907–11,067 | 38,016<br>33,941–41,022⁴ | 30,270<br>28,806–31,401⁴ | 17,174<br>15,641–18,962 | 29,755<br>28,953–31,281 | 35,021<br>30,351–38,460 | 20,160<br>18,120–21,653 |  30,670<br>29,176–33,819 | −3.1% |
+| peak RSS, keep-alive c=256       |                      65 MB |                      65 MB |                    90 MB |                    56 MB |                    33 MB |                   17 MB |                   12 MB |                    6 MB |                    7 MB |                    10 MB |       |
+| peak RSS, + 8000 idle            |                      65 MB |                      65 MB |                   233 MB |                    59 MB |                    45 MB |                  158 MB |                  115 MB |                   84 MB |                   81 MB |                    14 MB |       |
 
 1. nginx answers `/json-echo` with 404: `return` cannot read a request body,
    so nginx has no echo, and the pre-check marks the cell n/a.
@@ -830,12 +830,12 @@ with `http.mjs --rounds 10 --duration 5` on 2026-10-20. The machine was the
 same kind of shared four-vCPU KVM VM, this time an Intel Xeon @ 2.10 GHz. The
 band is `nish-copy`'s median against `nish`'s:
 
-| scenario | old | nish | nish-copy | band |
-| --- | ---: | ---: | ---: | ---: |
-| plaintext keep-alive c=256 | 152,503<br>129,487–160,160 | 138,960<br>125,688–163,109 | 151,752<br>142,624–160,480 | +9.2% |
-| json keep-alive c=256 | 151,313<br>112,094–161,204 | 151,972<br>127,956–169,453 | 139,871<br>127,577–150,452 | −8.0% |
-| post-json keep-alive c=256 | 50,527<br>41,938–55,854 | 49,527<br>45,653–55,062 | 50,051<br>46,853–56,613 | +1.1% |
-| deep-route keep-alive c=256 | n/a | 140,405<br>110,905–157,388 | 128,958<br>93,781–152,177 | −8.2% |
+| scenario                    |                        old |                       nish |                  nish-copy |  band |
+| --------------------------- | -------------------------: | -------------------------: | -------------------------: | ----: |
+| plaintext keep-alive c=256  | 152,503<br>129,487–160,160 | 138,960<br>125,688–163,109 | 151,752<br>142,624–160,480 | +9.2% |
+| json keep-alive c=256       | 151,313<br>112,094–161,204 | 151,972<br>127,956–169,453 | 139,871<br>127,577–150,452 | −8.0% |
+| post-json keep-alive c=256  |    50,527<br>41,938–55,854 |    49,527<br>45,653–55,062 |    50,051<br>46,853–56,613 | +1.1% |
+| deep-route keep-alive c=256 |                        n/a | 140,405<br>110,905–157,388 |  128,958<br>93,781–152,177 | −8.2% |
 
 `nish` against `old` is −8.9% on plaintext and +0.4% on json, both inside
 those rows' bands of 9.2% and 8.0%: this run finds neither faster nor slower.
@@ -874,21 +874,21 @@ the server has CPUs 0 to N−1 and wrk the rest, with as many threads; at 4
 cores wrk has none of its own and shares the server's. Each cell is `nish`'s
 median, its spread under it, and the band is `nish-copy`'s median against it:
 
-| scenario | 1 core | 2 cores | 4 cores, client shares | band (1 / 2 / 4) |
-| --- | ---: | ---: | ---: | ---: |
-| plaintext keep-alive c=256 | 103,768<br>56,901–108,755 | 224,012<br>180,794–246,398 | 196,398<br>183,526–210,002 | +3.4% / −8.4% / −4.2% |
-| post-json keep-alive c=256 | 30,584<br>28,919–34,032 | 82,443<br>76,709–93,989 | 112,420<br>110,874–119,031 | +9.4% / +5.0% / −1.6% |
-| plaintext close c=64 | 39,361<br>38,041–45,491 | 31,514<br>28,290–33,238 | 42,201<br>39,155–46,854 | +2.0% / −2.4% / −1.9% |
-| plaintext close c=64 + 8000 idle | 43,734<br>39,238–46,940 | 30,514<br>27,356–33,548 | 42,309<br>37,554–42,974 | −3.1% / −1.8% / −2.2% |
+| scenario                         |                    1 core |                    2 cores |     4 cores, client shares |      band (1 / 2 / 4) |
+| -------------------------------- | ------------------------: | -------------------------: | -------------------------: | --------------------: |
+| plaintext keep-alive c=256       | 103,768<br>56,901–108,755 | 224,012<br>180,794–246,398 | 196,398<br>183,526–210,002 | +3.4% / −8.4% / −4.2% |
+| post-json keep-alive c=256       |   30,584<br>28,919–34,032 |    82,443<br>76,709–93,989 | 112,420<br>110,874–119,031 | +9.4% / +5.0% / −1.6% |
+| plaintext close c=64             |   39,361<br>38,041–45,491 |    31,514<br>28,290–33,238 |    42,201<br>39,155–46,854 | +2.0% / −2.4% / −1.9% |
+| plaintext close c=64 + 8000 idle |   43,734<br>39,238–46,940 |    30,514<br>27,356–33,548 |    42,309<br>37,554–42,974 | −3.1% / −1.8% / −2.2% |
 
 The same runs' system CPU per request and peak RSS (summed over the workers),
 for `nish`, at 1 / 2 / 4 cores:
 
-| scenario | sys µs/req | peak RSS MB |
-| --- | ---: | ---: |
-| plaintext keep-alive c=256 | 7.42 / 6.17 / 7.43 | 4 / 8 / 13 |
-| post-json keep-alive c=256 | 18.34 / 11.51 / 10.25 | 5 / 9 / 14 |
-| plaintext close c=64 | 20.42 / 27.60 / 30.45 | 3 / 7 / 13 |
+| scenario                         |            sys µs/req |  peak RSS MB |
+| -------------------------------- | --------------------: | -----------: |
+| plaintext keep-alive c=256       |    7.42 / 6.17 / 7.43 |   4 / 8 / 13 |
+| post-json keep-alive c=256       | 18.34 / 11.51 / 10.25 |   5 / 9 / 14 |
+| plaintext close c=64             | 20.42 / 27.60 / 30.45 |   3 / 7 / 13 |
 | plaintext close c=64 + 8000 idle | 18.59 / 28.36 / 30.87 | 33 / 38 / 44 |
 
 Keep-alive scales with the server's cores while wrk keeps cores of its own:
@@ -959,7 +959,7 @@ node bench/crypto/bcrypt/run.mjs                    # 8 hashes a round, 5 rounds
 node bench/crypto/bcrypt/run.mjs --rounds 9 --cost 12
 ```
 
-Each program hashes "U*U" under an all-zero salt and prints its last hash; the
+Each program hashes "U\*U" under an all-zero salt and prints its last hash; the
 runner fails unless every program prints the same one. The programs run in
 interleaved rounds, a round's figure is the child's user CPU time over its
 hashes, and each row is the median of the rounds with their spread, the noise
@@ -1059,12 +1059,12 @@ Measured with `build/interop` built from this branch on top of `main` at
 `249cbe9`, on 4 CPUs and 16 GB with no swap, 3 runs a count. Each figure is
 the median, with the runs' spread (min–max) as its noise band.
 
-| slots | VmRSS MB | VmHWM MB | listening ms | load generator |
-| ---: | ---: | ---: | ---: | --- |
-| 16 | 204.2 (204.2–204.2) | 204.2 (204.2–204.2) | 172 (158–174) | `pool-rss.mjs` |
-| 64 | 808.6 (808.6–808.6) | 808.6 (808.6–808.6) | 607 (576–629) | `pool-rss.mjs` |
-| 256 | 3,226.5 (3,226.5–3,226.5) | 3,226.5 (3,226.5–3,226.5) | 4,595 (3,666–13,185) | `pool-rss.mjs` |
-| 1024 | timeout at 30 s, 6,701 MB resident; with `--timeout 120`, out of memory past the 11,590 MB cap | | | `pool-rss.mjs` |
+| slots |                                                                                       VmRSS MB |                  VmHWM MB |         listening ms | load generator |
+| ----: | ---------------------------------------------------------------------------------------------: | ------------------------: | -------------------: | -------------- |
+|    16 |                                                                            204.2 (204.2–204.2) |       204.2 (204.2–204.2) |        172 (158–174) | `pool-rss.mjs` |
+|    64 |                                                                            808.6 (808.6–808.6) |       808.6 (808.6–808.6) |        607 (576–629) | `pool-rss.mjs` |
+|   256 |                                                                      3,226.5 (3,226.5–3,226.5) | 3,226.5 (3,226.5–3,226.5) | 4,595 (3,666–13,185) | `pool-rss.mjs` |
+|  1024 | timeout at 30 s, 6,701 MB resident; with `--timeout 120`, out of memory past the 11,590 MB cap |                           |                      | `pool-rss.mjs` |
 
 256 slots fit; 1024 do not on this machine. At 12,460 kB a slot, the QUIC
 pool alone wants about 12,460 MB, more than three quarters of 16 GB, and the
@@ -1074,12 +1074,12 @@ wide time spread is one run of the three, which took 13 s.
 Per pool, `--per-pool` at 64 and 256 slots against the all-one-slot server
 (15.1 MB, 15.1–15.1; listening in 22 ms, 20–32):
 
-| pool | VmRSS MB at 64 | VmRSS MB at 256 | per slot | listening ms at 256 |
-| --- | ---: | ---: | ---: | ---: |
+| pool          |      VmRSS MB at 64 |           VmRSS MB at 256 |  per slot | listening ms at 256 |
+| ------------- | ------------------: | ------------------------: | --------: | ------------------: |
 | QUIC (HTTP/3) | 781.8 (781.7–781.8) | 3,118.0 (3,118.0–3,118.0) | 12,460 kB | 2,241 (2,190–3,005) |
-| HTTP/2 | 32.3 (32.3–32.3) | 84.4 (84.4–84.4) | 278 kB | 74 (72–114) |
-| HTTPS/1.1 | 25.2 (25.2–25.2) | 54.9 (54.9–54.9) | 160 kB | 56 (55–59) |
-| HTTP/1.1 | 15.4 (15.4–15.4) | 16.1 (16.1–16.1) | 4 kB | 19 (19–19) |
+| HTTP/2        |    32.3 (32.3–32.3) |          84.4 (84.4–84.4) |    278 kB |         74 (72–114) |
+| HTTPS/1.1     |    25.2 (25.2–25.2) |          54.9 (54.9–54.9) |    160 kB |          56 (55–59) |
+| HTTP/1.1      |    15.4 (15.4–15.4) |          16.1 (16.1–16.1) |      4 kB |          19 (19–19) |
 
 The QUIC pool is 97% of the 64-slot server's memory. The per-slot figures
 agree between 64 and 256 to within 3%, HTTPS/1.1 the widest (164 kB a slot
@@ -1089,11 +1089,11 @@ at 64, 160 kB at 256), and the runs' RSS spread is under
 Throughput, `h2load.mjs` with the build against itself at 64 slots, 5 rounds.
 The b / a spread is the noise band for a comparison between two builds:
 
-| scenario | load generator | a req/s | b req/s | b / a (min–max) |
-| --- | --- | ---: | ---: | ---: |
-| HTTPS/1.1, c=16 | h2load `--h1` | 47,354 | 45,476 | 0.960 (0.916–1.085) |
-| HTTP/2, c=16, m=8 | h2load | 74,411 | 76,258 | 1.025 (0.797–1.182) |
-| HTTP/3, one connection, 2,000 requests | `main h3-load` (in process) | 13,245 | 13,423 | 1.034 (0.886–1.081) |
+| scenario                               | load generator              | a req/s | b req/s |     b / a (min–max) |
+| -------------------------------------- | --------------------------- | ------: | ------: | ------------------: |
+| HTTPS/1.1, c=16                        | h2load `--h1`               |  47,354 |  45,476 | 0.960 (0.916–1.085) |
+| HTTP/2, c=16, m=8                      | h2load                      |  74,411 |  76,258 | 1.025 (0.797–1.182) |
+| HTTP/3, one connection, 2,000 requests | `main h3-load` (in process) |  13,245 |  13,423 | 1.034 (0.886–1.081) |
 
 A difference between two builds counts only outside that band: about ±10% for
 HTTPS/1.1 and HTTP/3 and ±20% for HTTP/2 on this machine. HTTP/3 runs 2,000
@@ -1111,25 +1111,25 @@ that rotates each round. The machine has 4 CPUs and 16 GB with no swap. Each
 figure is the median VmRSS in MB; the plain and TLS HTTP/1.1 pools stop at
 500 slots (`TLS_SLOTS`), so their 1024 row is 500.
 
-| pool | slots | base | main | copy |
-| --- | ---: | ---: | ---: | ---: |
-| all | 16 | 10.1 | 5.9 | 5.9 |
-| all | 64 | 28.0 | 10.6 | 10.6 |
-| all | 256 | 99.8 | 29.4 | 29.4 |
-| all | 1024 | 358.7 | 104.3 | 104.3 |
-| QUIC (HTTP/3) | 16 | 8.2 | 5.8 | 5.8 |
-| QUIC (HTTP/3) | 64 | 20.1 | 10.2 | 10.2 |
-| QUIC (HTTP/3) | 256 | 67.8 | 27.5 | 27.5 |
-| QUIC (HTTP/3) | 1024 | 258.3 | 97.0 | 97.0 |
-| HTTP/2 | 16 | 5.6 | 4.6 | 4.6 |
-| HTTP/2 | 64 | 9.0 | 4.9 | 4.9 |
-| HTTP/2 | 256 | 22.9 | 6.3 | 6.3 |
-| HTTP/2 | 1024 | 78.3 | 11.7 | 11.7 |
-| HTTPS/1.1 | 16 | 5.4 | 4.5 | 4.5 |
-| HTTPS/1.1 | 64 | 7.9 | 4.5 | 4.5 |
-| HTTPS/1.1 | 256 | 18.1 | 4.5 | 4.5 |
-| HTTPS/1.1 | 1024 (500) | 31.2 | 4.6 | 4.6 |
-| HTTP/1.1 | 16 to 1024 (500) | 4.5 | 4.5 | 4.5 |
+| pool          |            slots |  base |  main |  copy |
+| ------------- | ---------------: | ----: | ----: | ----: |
+| all           |               16 |  10.1 |   5.9 |   5.9 |
+| all           |               64 |  28.0 |  10.6 |  10.6 |
+| all           |              256 |  99.8 |  29.4 |  29.4 |
+| all           |             1024 | 358.7 | 104.3 | 104.3 |
+| QUIC (HTTP/3) |               16 |   8.2 |   5.8 |   5.8 |
+| QUIC (HTTP/3) |               64 |  20.1 |  10.2 |  10.2 |
+| QUIC (HTTP/3) |              256 |  67.8 |  27.5 |  27.5 |
+| QUIC (HTTP/3) |             1024 | 258.3 |  97.0 |  97.0 |
+| HTTP/2        |               16 |   5.6 |   4.6 |   4.6 |
+| HTTP/2        |               64 |   9.0 |   4.9 |   4.9 |
+| HTTP/2        |              256 |  22.9 |   6.3 |   6.3 |
+| HTTP/2        |             1024 |  78.3 |  11.7 |  11.7 |
+| HTTPS/1.1     |               16 |   5.4 |   4.5 |   4.5 |
+| HTTPS/1.1     |               64 |   7.9 |   4.5 |   4.5 |
+| HTTPS/1.1     |              256 |  18.1 |   4.5 |   4.5 |
+| HTTPS/1.1     |       1024 (500) |  31.2 |   4.6 |   4.6 |
+| HTTP/1.1      | 16 to 1024 (500) |   4.5 |   4.5 |   4.5 |
 
 The all-one-slot server is 4.5 MB in all three builds. Every count fits on
 this machine at base too, so none is dropped: base `c8a00d6` already sat far
@@ -1137,8 +1137,7 @@ below the `249cbe9` figures above. The copy's median equals `main`'s in every
 row and every round's spread is at most 0.1 MB, so the noise band is 0.1 MB and
 every base-to-`main` difference but plain HTTP/1.1's, already lazy at base,
 lies outside it. What `main` still takes grows
-with the slots: QUIC's tables sized from `--slots` (about 93 kB a slot at
-1024) and HTTP/2's (about 7 kB), not slots built before the first connection.
+with the slots: QUIC's tables sized from `--slots` (about 93 kB a slot at 1024) and HTTP/2's (about 7 kB), not slots built before the first connection.
 Time to listen with every pool at 1024 slots is 56 ms (52–58) on `main`
 against 214 ms (209–216) at base; the copy's 54 ms (53–64) puts that noise band
 at about 10 ms.
@@ -1217,12 +1216,12 @@ change. Nothing is downloaded.
 statement prepared once. Text is copied into one reused buffer, with
 `columnInto` on the Nish side and `memcpy` on the C side.
 
-| Workload | Calls in a timed run | What one call does |
-| --- | --- | --- |
-| `lookup` | 200,000 | Reads one post by a random id, with its author and its like count. |
-| `feed` | 10,000 | Reads the 20 newest posts: 20 rows of five columns. |
-| `insert` | 20,000 | Runs `INSERT … RETURNING id, created_at` in autocommit. |
-| `insert-txn` | 100,000 | Makes the same calls inside one transaction, which separates the cost of a call from the cost of its commit. |
+| Workload     | Calls in a timed run | What one call does                                                                                           |
+| ------------ | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `lookup`     | 200,000              | Reads one post by a random id, with its author and its like count.                                           |
+| `feed`       | 10,000               | Reads the 20 newest posts: 20 rows of five columns.                                                          |
+| `insert`     | 20,000               | Runs `INSERT … RETURNING id, created_at` in autocommit.                                                      |
+| `insert-txn` | 100,000              | Makes the same calls inside one transaction, which separates the cost of a call from the cost of its commit. |
 
 The inserts run with `synchronous=NORMAL`. Every value read is folded into a
 checksum inside the timed loop on both sides, so the optimiser cannot drop a
@@ -1269,12 +1268,12 @@ database with the same flags and PRAGMAs.
 reports 2.10 GHz, with Ubuntu clang 18.1.3 and SQLite 3.54.1. All figures are
 ns per call.
 
-| Workload | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR) | Nish − C, min / median | Noise band, min / median |
-| --- | --- | --- | --- | --- | --- |
-| `lookup` | 4,783 / 5,117 (148) | 4,798 / 5,002 (174) | 4,739 / 4,957 (242) | +44 / +160 (3.2 %) | 16 / 115 |
-| `feed` | 15,002 / 15,391 (283) | 15,088 / 15,247 (388) | 14,520 / 14,800 (232) | +481 / +591 (4.0 %) | 87 / 144 |
-| `insert` | 13,866 / 14,213 (831) | 13,863 / 14,172 (583) | 13,588 / 14,078 (588) | +278 / +136 (1.0 %) | 4 / 41 |
-| `insert-txn` | 4,134 / 4,196 (66) | 4,204 / 4,350 (383) | 4,027 / 4,294 (284) | +107 / −98 (−2.3 %) | 69 / 154 |
+| Workload     | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR)  | Nish − C, min / median | Noise band, min / median |
+| ------------ | ----------------------- | ----------------------- | --------------------- | ---------------------- | ------------------------ |
+| `lookup`     | 4,783 / 5,117 (148)     | 4,798 / 5,002 (174)     | 4,739 / 4,957 (242)   | +44 / +160 (3.2 %)     | 16 / 115                 |
+| `feed`       | 15,002 / 15,391 (283)   | 15,088 / 15,247 (388)   | 14,520 / 14,800 (232) | +481 / +591 (4.0 %)    | 87 / 144                 |
+| `insert`     | 13,866 / 14,213 (831)   | 13,863 / 14,172 (583)   | 13,588 / 14,078 (588) | +278 / +136 (1.0 %)    | 4 / 41                   |
+| `insert-txn` | 4,134 / 4,196 (66)      | 4,204 / 4,350 (383)     | 4,027 / 4,294 (284)   | +107 / −98 (−2.3 %)    | 69 / 154                 |
 
 **What the figures say.**
 
@@ -1361,17 +1360,17 @@ short seed cannot time empty answers. Every column of every row is read as text 
 into a checksum in place, from the receive buffer on the Nish side and from
 `PQgetvalue` on the C side, so no string is made on either.
 
-| Workload | Queries in a timed run | In flight | What one query answers |
-| --- | --- | --- | --- |
-| `pk` | 50,000 | 16 | A user by primary key: one row of five columns. |
-| `list` | 3,000 | 16 | The article list, 20 a page: 20 rows of 13 columns. The two timestamps are decoded to ISO 8601 and the tag array is walked to its elements. |
-| `insert` | 5,000 | 1 | An `INSERT … ON CONFLICT DO NOTHING` of a follow; each waits for the one before to finish. The rows its tag counts are folded. |
+| Workload | Queries in a timed run | In flight | What one query answers                                                                                                                      |
+| -------- | ---------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pk`     | 50,000                 | 16        | A user by primary key: one row of five columns.                                                                                             |
+| `list`   | 3,000                  | 16        | The article list, 20 a page: 20 rows of 13 columns. The two timestamps are decoded to ISO 8601 and the tag array is walked to its elements. |
+| `insert` | 5,000                  | 1         | An `INSERT … ON CONFLICT DO NOTHING` of a follow; each waits for the one before to finish. The rows its tag counts are folded.              |
 
 The messages of one query, on each side:
 
-| Side | Sends | Receives |
-| --- | --- | --- |
-| Nish | Bind, Execute, Sync | BindComplete, DataRow × rows, CommandComplete, ReadyForQuery |
+| Side  | Sends                                    | Receives                                                                                               |
+| ----- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Nish  | Bind, Execute, Sync                      | BindComplete, DataRow × rows, CommandComplete, ReadyForQuery                                           |
 | libpq | Bind, **Describe Portal**, Execute, Sync | BindComplete, **RowDescription** (NoData for `insert`), DataRow × rows, CommandComplete, ReadyForQuery |
 
 `PQsendQueryPrepared` always describes the portal, so every libpq query also
@@ -1474,11 +1473,11 @@ reports itself as an Intel Xeon of family 6, model 173 (Granite Rapids), at
 Ubuntu clang 18.1.3 and PostgreSQL and libpq 18.6, the server on the same
 machine. CPU is µs per query of the client; qps is the median.
 
-| Workload | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR) | Nish − C, median, build / copy | Noise band, median | System, median, Nish / C | qps Nish / C |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `pk` | 6.52 / 7.09 (0.44) | 6.61 / 6.94 (0.19) | 7.82 / 8.35 (0.24) | −1.26 / −1.42 (−15.1 % / −17.0 %) | 0.15 | 6.30 / 5.83 | 44,460 / 43,508 |
-| `list` | 30.61 / 34.12 (2.47) | 29.22 / 34.24 (3.53) | 40.03 / 43.51 (1.92) | −9.39 / −9.28 (−21.6 % / −21.3 %) | 0.12 | 17.87 / 20.33 | 595 / 599 |
-| `insert` | 15.76 / 16.11 (0.54) | 15.38 / 15.92 (0.34) | 15.74 / 17.37 (1.67) | −1.26 / −1.45 (−7.2 % / −8.3 %) | 0.19 | 14.96 / 16.37 | 5,060 / 4,942 |
+| Workload | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR) | Nish − C, median, build / copy    | Noise band, median | System, median, Nish / C | qps Nish / C    |
+| -------- | ----------------------- | ----------------------- | -------------------- | --------------------------------- | ------------------ | ------------------------ | --------------- |
+| `pk`     | 6.52 / 7.09 (0.44)      | 6.61 / 6.94 (0.19)      | 7.82 / 8.35 (0.24)   | −1.26 / −1.42 (−15.1 % / −17.0 %) | 0.15               | 6.30 / 5.83              | 44,460 / 43,508 |
+| `list`   | 30.61 / 34.12 (2.47)    | 29.22 / 34.24 (3.53)    | 40.03 / 43.51 (1.92) | −9.39 / −9.28 (−21.6 % / −21.3 %) | 0.12               | 17.87 / 20.33            | 595 / 599       |
+| `insert` | 15.76 / 16.11 (0.54)    | 15.38 / 15.92 (0.34)    | 15.74 / 17.37 (1.67) | −1.26 / −1.45 (−7.2 % / −8.3 %)   | 0.19               | 14.96 / 16.37            | 5,060 / 4,942   |
 
 **System calls.** `strace -f -c` over one run of each side, against the same
 server, counts the calls each makes; `strace -f -e
@@ -1486,11 +1485,11 @@ trace=read,recvfrom,sendto,write,epoll_wait,poll` over another gives the bytes.
 Both slow the client, so how many answers one wakeup finds moves with them;
 the counts are for comparing the sides, not for timing.
 
-| Workload, queries | Nish: `sendto` / `recvfrom` / `epoll_wait` | C: `sendto` / `recvfrom` / `poll` | Bytes per `recvfrom`, Nish / C |
-| --- | --- | --- | --- |
-| `pk`, 10,000 | 826 / 828 / 829 (728 / 729 / 730 in the second run) | 744 / 745 / 747 (710 / 710 / 712) | 2,906 / 4,747 |
-| `list`, 1,000 | 990 / 1,926 / 1,927 | 991 / 1,022 / 1,024 | 4,541 / 8,887 |
-| `insert`, 2,000 | 2,007 / 2,006 / 2,007 | 2,008 / 2,007 / 2,009 | 27 / 32 |
+| Workload, queries | Nish: `sendto` / `recvfrom` / `epoll_wait`          | C: `sendto` / `recvfrom` / `poll` | Bytes per `recvfrom`, Nish / C |
+| ----------------- | --------------------------------------------------- | --------------------------------- | ------------------------------ |
+| `pk`, 10,000      | 826 / 828 / 829 (728 / 729 / 730 in the second run) | 744 / 745 / 747 (710 / 710 / 712) | 2,906 / 4,747                  |
+| `list`, 1,000     | 990 / 1,926 / 1,927                                 | 991 / 1,022 / 1,024               | 4,541 / 8,887                  |
+| `insert`, 2,000   | 2,007 / 2,006 / 2,007                               | 2,008 / 2,007 / 2,009             | 27 / 32                        |
 
 The two sides do not make the same system calls. Each writes a refill's
 queries with one send, but a refill is whatever the last wakeup's answers
@@ -1543,8 +1542,8 @@ below are each part's own median, so they do not add up to the total's.
   one of 1,016, against the same server, so the connect, SCRAM and the
   prepares cancel: per query = (instructions at 1,016 − instructions at 16) /
   1,000, from the `totals:` line of `valgrind --tool=callgrind
-  --callgrind-out-file=<file> <binary> <workload> <port> conduit conduit
-  conduit_dev <count>`, with valgrind's defaults otherwise. The count is every
+--callgrind-out-file=<file> <binary> <workload> <port> conduit conduit
+conduit_dev <count>`, with valgrind's defaults otherwise. The count is every
   instruction of the client process, its shared libraries included: libpq,
   libcrypto and libc for the twin, libc for Nish. The RowDescription figures
   are the same subtraction over the lines of `getRowDescriptions` in libpq
@@ -1625,138 +1624,140 @@ fixture's checksums agree between the two parsers. The recorded section below
 names the commit, the machine and the toolchains.
 
 <!-- yaml-compare:begin -->
-| | |
-| --- | --- |
-| Date | 2026-10-23 |
-| nish | nish 0.20.0 (commit 35ca64a0) |
-| CPU | Intel(R) Xeon(R) Processor, 4 logical cores |
-| OS | linux 6.18.44-fc-v153 (x64) |
-| Toolchains | Nish: nish 0.20.0; Node v22.22.0; Bun 1.4.4 |
-| Command | `npm run build && node bench/yaml-compare/run.mjs --rounds 15 --mb 32 --record` |
-| Runs | 16 interleaved rounds, 32 MB of input per run; ms per stream, min and median over the rounds |
 
-| Fixture | Workload | Nish median | Node median | Bun median | Node / Nish | Bun / Nish | Noise band |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| openapi.yaml | parse | 70.1 ms | 179.0 ms | 105.2 ms | 2.55x | 1.50x | 0.6% |
-| openapi.yaml | walk | 87.1 ms | 190.4 ms | 122.8 ms | 2.19x | 1.41x | 1.0% |
-| cert-manager.yaml | parse | 3.525 ms | 5.369 ms | 5.401 ms | 1.52x | 1.53x | 0.8% |
-| cert-manager.yaml | walk | 4.923 ms | 5.989 ms | 5.917 ms | 1.22x | 1.20x | 0.2% |
-| citm_catalog.json | parse | 7.892 ms | 20.3 ms | 12.3 ms | 2.57x | 1.55x | 0.5% |
-| citm_catalog.json | walk | 9.062 ms | 22.0 ms | 13.4 ms | 2.43x | 1.48x | 0.0% |
-| deno-ci.yml | parse | 1.673 ms | 2.948 ms | 3.038 ms | 1.76x | 1.82x | 1.6% |
-| deno-ci.yml | walk | 2.581 ms | 3.301 ms | 3.337 ms | 1.28x | 1.29x | 1.6% |
-| airflow-compose.yaml | parse | 0.059 ms | 0.078 ms | 0.109 ms | 1.32x | 1.85x | 2.5% |
-| airflow-compose.yaml | walk | 0.074 ms | 0.082 ms | 0.112 ms | 1.11x | 1.52x | 0.1% |
+|            |                                                                                              |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| Date       | 2026-10-23                                                                                   |
+| nish       | nish 0.20.0 (commit 35ca64a0)                                                                |
+| CPU        | Intel(R) Xeon(R) Processor, 4 logical cores                                                  |
+| OS         | linux 6.18.44-fc-v153 (x64)                                                                  |
+| Toolchains | Nish: nish 0.20.0; Node v22.22.0; Bun 1.4.4                                                  |
+| Command    | `npm run build && node bench/yaml-compare/run.mjs --rounds 15 --mb 32 --record`              |
+| Runs       | 16 interleaved rounds, 32 MB of input per run; ms per stream, min and median over the rounds |
+
+| Fixture              | Workload | Nish median | Node median | Bun median | Node / Nish | Bun / Nish | Noise band |
+| -------------------- | -------- | ----------: | ----------: | ---------: | ----------: | ---------: | ---------: |
+| openapi.yaml         | parse    |     70.1 ms |    179.0 ms |   105.2 ms |       2.55x |      1.50x |       0.6% |
+| openapi.yaml         | walk     |     87.1 ms |    190.4 ms |   122.8 ms |       2.19x |      1.41x |       1.0% |
+| cert-manager.yaml    | parse    |    3.525 ms |    5.369 ms |   5.401 ms |       1.52x |      1.53x |       0.8% |
+| cert-manager.yaml    | walk     |    4.923 ms |    5.989 ms |   5.917 ms |       1.22x |      1.20x |       0.2% |
+| citm_catalog.json    | parse    |    7.892 ms |     20.3 ms |    12.3 ms |       2.57x |      1.55x |       0.5% |
+| citm_catalog.json    | walk     |    9.062 ms |     22.0 ms |    13.4 ms |       2.43x |      1.48x |       0.0% |
+| deno-ci.yml          | parse    |    1.673 ms |    2.948 ms |   3.038 ms |       1.76x |      1.82x |       1.6% |
+| deno-ci.yml          | walk     |    2.581 ms |    3.301 ms |   3.337 ms |       1.28x |      1.29x |       1.6% |
+| airflow-compose.yaml | parse    |    0.059 ms |    0.078 ms |   0.109 ms |       1.32x |      1.85x |       2.5% |
+| airflow-compose.yaml | walk     |    0.074 ms |    0.082 ms |   0.112 ms |       1.11x |      1.52x |       0.1% |
 
 ### parse, openapi.yaml (10,309,289 bytes, 3 per run)
 
 Checksum `parse 1 395136 80793 11553 0 223204 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 66.8 | 70.1 | 147 |
-| Nish (byte-identical copy) | 67.6 | 70.5 | 146 |
-| @amritk/yaml 0.8.0, Node | 164.0 | 179.0 | 58 |
-| @amritk/yaml 0.8.0, Bun | 97.9 | 105.2 | 98 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |   66.8 |      70.1 |           147 |
+| Nish (byte-identical copy) |   67.6 |      70.5 |           146 |
+| @amritk/yaml 0.8.0, Node   |  164.0 |     179.0 |            58 |
+| @amritk/yaml 0.8.0, Bun    |   97.9 |     105.2 |            98 |
 
 ### walk, openapi.yaml (10,309,289 bytes, 3 per run)
 
 Checksum `walk 1 395136 80793 11553 0 223204 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 84.5 | 87.1 | 118 |
-| Nish (byte-identical copy) | 84.1 | 86.2 | 120 |
-| @amritk/yaml 0.8.0, Node | 177.7 | 190.4 | 54 |
-| @amritk/yaml 0.8.0, Bun | 115.0 | 122.8 | 84 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |   84.5 |      87.1 |           118 |
+| Nish (byte-identical copy) |   84.1 |      86.2 |           120 |
+| @amritk/yaml 0.8.0, Node   |  177.7 |     190.4 |            54 |
+| @amritk/yaml 0.8.0, Bun    |  115.0 |     122.8 |            84 |
 
 ### parse, cert-manager.yaml (986,843 bytes, 34 per run)
 
 Checksum `parse 55 13380 2694 576 0 7773 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 3.311 | 3.525 | 280 |
-| Nish (byte-identical copy) | 3.339 | 3.553 | 278 |
-| @amritk/yaml 0.8.0, Node | 5.186 | 5.369 | 184 |
-| @amritk/yaml 0.8.0, Bun | 5.062 | 5.401 | 183 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  3.311 |     3.525 |           280 |
+| Nish (byte-identical copy) |  3.339 |     3.553 |           278 |
+| @amritk/yaml 0.8.0, Node   |  5.186 |     5.369 |           184 |
+| @amritk/yaml 0.8.0, Bun    |  5.062 |     5.401 |           183 |
 
 ### walk, cert-manager.yaml (986,843 bytes, 34 per run)
 
 Checksum `walk 55 13380 2694 576 0 7773 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 4.662 | 4.923 | 200 |
-| Nish (byte-identical copy) | 4.710 | 4.934 | 200 |
-| @amritk/yaml 0.8.0, Node | 5.762 | 5.989 | 165 |
-| @amritk/yaml 0.8.0, Bun | 5.480 | 5.917 | 167 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  4.662 |     4.923 |           200 |
+| Nish (byte-identical copy) |  4.710 |     4.934 |           200 |
+| @amritk/yaml 0.8.0, Node   |  5.762 |     5.989 |           165 |
+| @amritk/yaml 0.8.0, Bun    |  5.480 |     5.917 |           167 |
 
 ### parse, citm_catalog.json (1,727,204 bytes, 19 per run)
 
 Checksum `parse 1 42259 10937 10451 0 25869 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 7.638 | 7.892 | 219 |
-| Nish (byte-identical copy) | 7.605 | 7.929 | 218 |
-| @amritk/yaml 0.8.0, Node | 19.1 | 20.3 | 85 |
-| @amritk/yaml 0.8.0, Bun | 11.5 | 12.3 | 141 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  7.638 |     7.892 |           219 |
+| Nish (byte-identical copy) |  7.605 |     7.929 |           218 |
+| @amritk/yaml 0.8.0, Node   |   19.1 |      20.3 |            85 |
+| @amritk/yaml 0.8.0, Bun    |   11.5 |      12.3 |           141 |
 
 ### walk, citm_catalog.json (1,727,204 bytes, 19 per run)
 
 Checksum `walk 1 42259 10937 10451 0 25869 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 8.642 | 9.062 | 191 |
-| Nish (byte-identical copy) | 8.674 | 9.065 | 191 |
-| @amritk/yaml 0.8.0, Node | 20.4 | 22.0 | 79 |
-| @amritk/yaml 0.8.0, Bun | 12.6 | 13.4 | 129 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  8.642 |     9.062 |           191 |
+| Nish (byte-identical copy) |  8.674 |     9.065 |           191 |
+| @amritk/yaml 0.8.0, Node   |   20.4 |      22.0 |            79 |
+| @amritk/yaml 0.8.0, Bun    |   12.6 |      13.4 |           129 |
 
 ### parse, deno-ci.yml (424,426 bytes, 79 per run)
 
 Checksum `parse 1 8326 1421 87 0 4460 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 1.591 | 1.673 | 254 |
-| Nish (byte-identical copy) | 1.573 | 1.646 | 258 |
-| @amritk/yaml 0.8.0, Node | 2.760 | 2.948 | 144 |
-| @amritk/yaml 0.8.0, Bun | 2.901 | 3.038 | 140 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  1.591 |     1.673 |           254 |
+| Nish (byte-identical copy) |  1.573 |     1.646 |           258 |
+| @amritk/yaml 0.8.0, Node   |  2.760 |     2.948 |           144 |
+| @amritk/yaml 0.8.0, Bun    |  2.901 |     3.038 |           140 |
 
 ### walk, deno-ci.yml (424,426 bytes, 79 per run)
 
 Checksum `walk 1 8326 1421 87 0 4460 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 2.496 | 2.581 | 164 |
-| Nish (byte-identical copy) | 2.507 | 2.622 | 162 |
-| @amritk/yaml 0.8.0, Node | 3.136 | 3.301 | 129 |
-| @amritk/yaml 0.8.0, Bun | 3.022 | 3.337 | 127 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  2.496 |     2.581 |           164 |
+| Nish (byte-identical copy) |  2.507 |     2.622 |           162 |
+| @amritk/yaml 0.8.0, Node   |  3.136 |     3.301 |           129 |
+| @amritk/yaml 0.8.0, Bun    |  3.022 |     3.337 |           127 |
 
 ### parse, airflow-compose.yaml (13,045 bytes, 2572 per run)
 
 Checksum `parse 1 287 44 18 18 164 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 0.057 | 0.059 | 221 |
-| Nish (byte-identical copy) | 0.056 | 0.057 | 227 |
-| @amritk/yaml 0.8.0, Node | 0.074 | 0.078 | 168 |
-| @amritk/yaml 0.8.0, Bun | 0.097 | 0.109 | 120 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  0.057 |     0.059 |           221 |
+| Nish (byte-identical copy) |  0.056 |     0.057 |           227 |
+| @amritk/yaml 0.8.0, Node   |  0.074 |     0.078 |           168 |
+| @amritk/yaml 0.8.0, Bun    |  0.097 |     0.109 |           120 |
 
 ### walk, airflow-compose.yaml (13,045 bytes, 2572 per run)
 
 Checksum `walk 1 287 44 18 18 164 0`, the same from every implementation.
 
-| Implementation | ms min | ms median | MB/s (median) |
-| --- | ---: | ---: | ---: |
-| Nish (nish/yaml) | 0.072 | 0.074 | 176 |
-| Nish (byte-identical copy) | 0.073 | 0.074 | 176 |
-| @amritk/yaml 0.8.0, Node | 0.079 | 0.082 | 159 |
-| @amritk/yaml 0.8.0, Bun | 0.103 | 0.112 | 116 |
+| Implementation             | ms min | ms median | MB/s (median) |
+| -------------------------- | -----: | --------: | ------------: |
+| Nish (nish/yaml)           |  0.072 |     0.074 |           176 |
+| Nish (byte-identical copy) |  0.073 |     0.074 |           176 |
+| @amritk/yaml 0.8.0, Node   |  0.079 |     0.082 |           159 |
+| @amritk/yaml 0.8.0, Bun    |  0.103 |     0.112 |           116 |
+
 <!-- yaml-compare:end -->
 
 Which of the parser's run scans already lower to `nish_str_index_of_any` in
@@ -1799,13 +1800,23 @@ interleaved on its own:
 
 The rounds are json-compare's `rounds.mjs`: asked-for rounds go up to a multiple
 of twice the binaries. The bench is run by hand and is not in `tests/run.js`;
-its results are in [docs/BENCHMARKS.md](../docs/BENCHMARKS.md), *JsonDocument's
-source ranges*.
+its results are in [docs/BENCHMARKS.md](../docs/BENCHMARKS.md), _JsonDocument's
+source ranges_.
+
+`--instructions` counts retired instructions under cachegrind instead of
+timing, once per binary and its copy, in `run.mjs`'s pinned environment (fixed
+libc tunables, `NISH_SIMD=base`, `fixed-key.so`). It defaults to `--mb 16` and
+`--builds 500`, and adds an **http** case: `bench/http1-server.ts` serving
+`--requests` keep-alive POSTs of `http-payload.json` to `/json-echo-doc`, the
+server's instructions counted. The counts repeat to within 0.002%, so a gap of
+a tenth of a percent is real; a timing band on a shared machine is rarely under
+2%.
 
 ```bash
 npm run build
 node bench/json-value/measure.mjs                          # off against on
 node bench/json-value/measure.mjs --before ../main/build/nish --rounds 40
+node bench/json-value/measure.mjs --before ../main/build/nish --instructions
 ```
 
 ## Math accuracy
@@ -1828,18 +1839,18 @@ python3 bench/math-ulp/ulp.py build/math-ulp.out
 `operands.ts` prints each operand and the shipped answer as 64-bit patterns:
 every special value paired every way, then log-uniform operands over every
 exponent and draws aimed at each reduction branch (`tan` beside multiples of
-pi/2, through Cody-Waite and past 2^20 * pi/2 into Payne-Hanek, Kahan's hard
+pi/2, through Cody-Waite and past 2^20 \* pi/2 into Payne-Hanek, Kahan's hard
 case; `atan2` with close and far-apart exponents; `hypot` where the squares
 overflow or underflow). `ulp.py` measures every finite nonzero answer against
 mpmath at 200 bits and more, and holds every special answer (a NaN, zero or
 infinite operand or result) to Node's `Math` bit for bit through
 `bench/math-ulp/ref.mjs`. It exits 1 on any special mismatch.
 
-| function | max error | special mismatches |
-| --- | ---: | ---: |
-| `tan` | 0.8253 ulp | 0 |
-| `atan2` | 0.8367 ulp | 0 |
-| `hypot` | 0.9270 ulp | 0 |
+| function |  max error | special mismatches |
+| -------- | ---------: | -----------------: |
+| `tan`    | 0.8253 ulp |                  0 |
+| `atan2`  | 0.8367 ulp |                  0 |
+| `hypot`  | 0.9270 ulp |                  0 |
 
 Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
 1.4.1, about 40 s on four cores.
@@ -1853,11 +1864,11 @@ Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
 - `substr.ts`: what proving a `substring` bound is worth (WP15 §8 `NL9009`),
   not part of this suite either. It times both shapes against each other inside
   one process and prints the two figures, so `nish bench/substr.ts --link x &&
-  ./x` is the whole protocol: no baseline compiler and no second build.
+./x` is the whole protocol: no baseline compiler and no second build.
 - `hoist-field.ts`: what hoisting an array header out of a loop is worth
   (WP15 §2c candidate 2), not part of this suite either. Three scans do the same
   arithmetic over the same 8192 doubles and differ only in where the source
-  array is *kept* — a parameter, a class field, and a class field read once into
+  array is _kept_ — a parameter, a class field, and a class field read once into
   a `const` before the loop — timed against each other in alternating rounds
   inside one process, so there is no baseline compiler and no second build:
 
@@ -1884,11 +1895,11 @@ Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
   taken again as the minimum over five runs of the binary, each pinned with
   `taskset -c 2`:
 
-  | scan | where the array is kept | min | |
-  | --- | --- | ---: | --- |
-  | `param` | a parameter | 242 ms | one trip count, and it vectorises |
-  | `field` | a class field | 576 ms | **2.38x behind**, and it does not |
-  | `hoisted` | a class field, read into a `const` first | 240 ms | vectorises |
+  | scan      | where the array is kept                  |    min |                                   |
+  | --------- | ---------------------------------------- | -----: | --------------------------------- |
+  | `param`   | a parameter                              | 242 ms | one trip count, and it vectorises |
+  | `field`   | a class field                            | 576 ms | **2.38x behind**, and it does not |
+  | `hoisted` | a class field, read into a `const` first | 240 ms | vectorises                        |
 
   §2c measured the same pair at 756 ms against 305 ms — **2.48x** — on a
   four-core box carrying several test suites at once, which is why it reported
@@ -1897,4 +1908,5 @@ Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
   reports wall time and leans on the alternation instead: all three scans share
   every round, so a machine drifting under the run drifts under all three. On a
   busy box, pin it and read the ratio rather than the milliseconds.
+
 - `rss.c`: the peak-RSS helper the runner compiles into `build/bench/rss`.
