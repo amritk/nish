@@ -1606,7 +1606,7 @@ const selects = (...words) => !only || words.some((word) => word.includes(only))
  * `dealtHere`.
  */
 const DEALT_SECTIONS = {
-  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io") },
+  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io", "break") },
   emitTs: { name: "the --emit-ts section", selected: selects("emit-ts") },
   selfHosting: {
     name: "the WP14 self-hosting section",
@@ -2351,7 +2351,56 @@ if (dealtHere("termIo")) {
           `${said(r)}\nrss ${JSON.stringify(r.rss)}`
         )
       })
+      // `TerminalOptions.graphics` picks the backend as NISH_TERM_GRAPHICS
+      // does, and the variable, when it is set, wins over it.
+      const [optioned, overruled] = await Promise.all([
+        relay(loopExe, "graphics-halfblock", { dir: at("graphics-option") }),
+        relay(loopExe, "graphics-halfblock", { dir: at("graphics-env"), env: { NISH_TERM_GRAPHICS: "ascii" } }),
+      ])
+      check(
+        "term-io: TerminalOptions.graphics \"halfblock\" draws in half-blocks on a kitty terminal",
+        optioned.status === 0 && optioned.out.includes("backend 1"),
+        said(optioned)
+      )
+      check(
+        "term-io: NISH_TERM_GRAPHICS=ascii wins over TerminalOptions.graphics",
+        overruled.status === 0 && overruled.out.includes("backend 0"),
+        said(overruled)
+      )
     }
+    // `nish break` on a terminal: Enter leaves the title, Space serves, F3 the
+    // stats, p and q pause and leave the level, q quits, each with the screen
+    // restored and the termios as it was. F4 and F6 close the terminal and open
+    // it again with the new rate and graphics: kitty images before, and after,
+    // since the relay answers the probe only once, the half-blocks a terminal
+    // that did not answer for kitty gets.
+    const wallKeys = (...keys) => keys.map(([afterFrames, bytes]) => ({ afterFrames, bytes }))
+    const [played, reopened] = await Promise.all([
+      relay(NISH, "break", {
+        dir: at("wall-play"),
+        keys: wallKeys([3, "\r"], [100, " "], [105, "\x1bOR"], [110, "p"], [115, "q"], [130, "q"]),
+        timeoutMs: 30000,
+      }),
+      relay(NISH, "break", {
+        dir: at("wall-reopen"),
+        keys: wallKeys([3, "\x1b[17~"], [10, "\x1bOS"], [30, "q"]),
+        timeoutMs: 30000,
+      }),
+    ])
+    const restored = (r) => r.status === 0 && r.sameStty && r.out.endsWith("\x1b[?1049l") && r.err === ""
+    check(
+      "nish break on a terminal: draws kitty images, plays, and q quits with the screen restored, exit 0",
+      restored(played) && played.out.includes("\x1b_Ga=T"),
+      said(played)
+    )
+    const lastOpen = reopened.out.lastIndexOf("\x1b[?1049h")
+    const afterReopen = reopened.out.slice(lastOpen)
+    check(
+      "nish break on a terminal: F6 keeps it open, F4 opens it again, in half-blocks once kitty goes unanswered, exit 0",
+      restored(reopened) && reopened.out.split("\x1b[?1049h").length === 3 && reopened.out.slice(0, lastOpen).includes("\x1b_Ga=T") &&
+        !afterReopen.includes("\x1b_Ga=T") && afterReopen.includes("\xe2\x96\x80"),
+      said(reopened)
+    )
   }
 }
 
@@ -20922,8 +20971,8 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   const secret = inSecret(["break"])
   check(
-    "nish break, with no such file: the placeholder, exit 0",
-    secret.status === 0 && secret.stdout.startsWith("you found the wall.") && secret.stderr === "",
+    "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
+    secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")

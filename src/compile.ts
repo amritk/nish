@@ -59,6 +59,7 @@
 // this one's) because there is nothing between them to be an oracle.
 
 import { astText } from "./ast-text"
+import { playBreak } from "./break"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
 import { agentDriven, styleFor } from "../std/cli"
@@ -448,12 +449,11 @@ export const main = (): number => {
   }
   // `nish break` is left out of the help, the guide and `llms.txt` on
   // purpose. Its only pointers are the wall under the help's title and the
-  // riddle the near-miss words get. The brick breaker it will play is not in
-  // yet, so it answers with a placeholder. A file named `break` in the working
-  // directory wins, as any other file would.
+  // riddle the near-miss words get. It plays the brick breaker in
+  // `src/break*.ts`, and refuses a pipe with exit 1. A file named `break` in
+  // the working directory wins, as any other file would.
   if (process.argv.length === 2 && process.argv[1] === "break" && realpathSync("break") === null) {
-    console.log("you found the wall. the ball is still being made; come back soon.")
-    return 0
+    return playBreak()
   }
   if (process.argv.length === 2 && nearMiss(process.argv[1]) && realpathSync(process.argv[1]) === null) {
     console.error(`no file named ${process.argv[1]}. every loop needs one, though.`)

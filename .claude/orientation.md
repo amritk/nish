@@ -64,7 +64,8 @@ src/               the compiler, in Nish — see .claude/selfhost.md
   compile.ts        CLI: flags, output planning, exit codes, `nish run`
   cli-style.ts      `--help`: its text and the agent's section (colour: std/cli.ts)
                     `nish break` is undocumented on purpose: keep it out of
-                    docs/guide, llms.txt and docs/AI.md (compile.ts, `main`)
+                    docs/guide, llms.txt and docs/AI.md (compile.ts, `main`;
+                    the director is break.ts, its scenes break-*.ts)
   run-cache.ts      `nish run`'s cache: entry location, key, hash
   compilation.ts    one program: load, check, emit, sidecars
   lexer.ts parser.ts nodes.ts validator.ts types.ts diagnostics.ts codes.ts

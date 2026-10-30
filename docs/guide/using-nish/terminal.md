@@ -195,6 +195,7 @@ there, fix the rate or the backend with the overrides below.
 | `options.fixedFps` | a fixed frame rate; the measuring stops choosing |
 | `options.minFps`, `options.maxFps`, `options.allow120` | the range the rate is chosen in (10 to 60; 120 only when allowed) |
 | `options.prefer` | `RATE_FIRST` (cut detail below `minFps`) or `DETAIL_FIRST` (cut the rate first), from `nish/term-rate` |
+| `options.graphics` | `"kitty"`, `"sixel"`, `"halfblock"` or `"ascii"`, as `NISH_TERM_GRAPHICS` names them, for a program that lets its user pick; `""` (the default) detects, and the variable, when set, wins |
 | `options.mouse`, `paste`, `focus`, `kittyKeyboard`, `quitOnCtrlC` | what is turned on: mouse `1000` clicks, `1002` drags, `1003` all motion, `0` none |
 | `NO_COLOR` set to anything | no true colour: text in the 256-colour palette, ASCII shading in 16 colours; nothing else changed |
 | `NISH_TERM_GRAPHICS` | `kitty`, `sixel`, `halfblock` or `ascii` instead of what was detected; a pixel backend the terminal did not answer for is refused under a multiplexer, on the Linux console, or when nothing answered |
