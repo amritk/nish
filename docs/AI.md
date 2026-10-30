@@ -2181,8 +2181,9 @@ also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
 a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
 `totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
 the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
-`setNice(n)` sets the nice value (clamped to -20..19; lowering it unprivileged
-is `-13`) and `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
+`setNice(n)` sets the nice value, and it is lower-only even as root: `n` takes
+0..19 (`-22` outside it) and a value below the current one is `-13`, with no
+system call either way. `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
 (`-95` on Darwin); each answers 0 or a negative errno. Call them at the top of
 `main`, never in a task. An unprivileged process can never leave `SCHED_IDLE`
 and an idle one can starve on a saturated machine, so keep a normal-priority
@@ -2658,7 +2659,7 @@ a `PgBatcher` built from a `PgBatchConfig` (`name`, `select` reading the key as
 queue is full, or for a text key too long for `maxBytes`, with no room left in
 `queueBytes`, with a NUL or not UTF-8 — and `take(conn)`
 binds the waiting ones, each key once, as one execution of its `sql` over
-`unnest($1) with ordinality`, answering a run handle or -1. Hand that
+`unnest($1) with ordinality`, answering a run handle or -1. Set `binary` in the `PgBatchConfig` and each batch comes in binary: `take` opens its bind with `bindStartBinary`, and `row` reads the routing ordinal with `binaryInt` (`binary.failed` is saved and restored, so the caller's own decoding is untouched). Hand that
 execution's `PG_ROW` to `row(run, conn)`, `PG_COMPLETE` to `end(run)`, an error
 or `PG_LOST` to `fail(run)` (on a spent handle these do nothing and count in
 `stray`), and after each call `next(run)` until

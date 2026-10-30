@@ -7494,7 +7494,7 @@ being a global.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `setNice(n: i32): i32` | set the **nice value** to `n` with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. The kernel clamps `n` to -20..19, so no value is out of range; lowering the value below the current one needs the privilege to, and is -13 (EACCES) without it on Linux and Darwin. Children started afterwards inherit the value | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
+| `setNice(n: i32): i32` | set the **nice value** to `n` with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. `n` is **lower-only**, even as root: it takes 0..19, and any other value is `-22` (EINVAL) with no system call; a value below the current nice value is `-13` (EACCES) with no `setpriority` call, so the priority never rises. Children started afterwards inherit the value | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
 | `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)`, which runs it only when nothing else wants the CPU, and answer 0 or a negative errno. **Linux only**: Darwin has no such policy and the answer there is -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback (`setNice(19)`, or a deadline) for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
 
 **Per thread.** Linux keeps both the nice value and the policy per thread: a
