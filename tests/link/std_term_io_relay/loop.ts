@@ -20,6 +20,8 @@
 //              waits for `q`
 //   rss-leak   the same keeping 0.27 MB more each frame, the leak the RSS
 //              bound must catch
+//   graphics-<name>  `openTerminal` with `TerminalOptions.graphics` set to
+//              <name>, one frame, and the backend it drew with
 import { ACTION_PRESS, EVENT_KEY, EVENT_REPLY, KEY_CHAR, TermEvent } from "nish/term";
 import { monotonicNanos } from "nish:process";
 import { Frame, TermInput, Terminal, defaultTerminalOptions, openTerminal, runTerminal } from "nish/term-io";
@@ -193,8 +195,32 @@ const rss = (leaks: boolean): number => {
   return 0;
 };
 
+const graphics = (name: string): number => {
+  const options = defaultTerminalOptions();
+  options.graphics = name;
+  options.framebufferWidth = 64;
+  options.framebufferHeight = 36;
+  const opened = openTerminal(options);
+  if (opened.isErr()) {
+    writeError(`${opened.error}\n`);
+    return 1;
+  }
+  const term = opened.value;
+  term.framebuffer.fill(0x203040);
+  term.present();
+  const events: TermEvent[] = [];
+  settle(term, events);
+  const backend = term.stats().backend;
+  term.close();
+  console.log(`backend ${backend}`);
+  return 0;
+};
+
 export const main = (): number => {
   const mode = process.argv.length > 1 ? process.argv[1] : "";
+  if (mode.startsWith("graphics-")) {
+    return graphics(mode.slice(9));
+  }
   if (mode === "throttle" || mode === "panic" || mode === "panic-mouse") {
     return runLoop(mode !== "throttle", mode === "panic-mouse");
   }

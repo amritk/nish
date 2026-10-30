@@ -148,6 +148,13 @@ export class TerminalOptions {
   framebufferHeight: i32
   /** The corner (`CORNER_*` from `nish/term-rate`) to draw the stats overlay in, or -1 for none (-1). */
   overlay: i32
+  /**
+   * The backend to use, as `NISH_TERM_GRAPHICS` names one ("kitty", "sixel",
+   * "halfblock" or "ascii"), or "" to take the best the terminal has (""). The
+   * variable, when it is set, wins; the probe refuses a backend the terminal
+   * did not answer for, as it does the variable's.
+   */
+  graphics: string
 
   constructor() {
     this.stepsPerSecond = 60
@@ -165,6 +172,7 @@ export class TerminalOptions {
     this.framebufferWidth = 0
     this.framebufferHeight = 0
     this.overlay = -1
+    this.graphics = ""
   }
 }
 
@@ -180,8 +188,8 @@ const termIoGetenv = (name: string): string => {
   return v === null ? "" : v
 }
 
-/** The variables `nish/term-probe` reads. */
-const termIoEnv = (): TermEnv => {
+/** The variables `nish/term-probe` reads, with `graphics` standing for `NISH_TERM_GRAPHICS` when it is unset. */
+const termIoEnv = (graphics: string): TermEnv => {
   const env: TermEnv = new TermEnv()
   env.term = termIoGetenv("TERM")
   env.colorterm = termIoGetenv("COLORTERM")
@@ -192,7 +200,8 @@ const termIoEnv = (): TermEnv => {
   env.sshClient = termIoGetenv("SSH_CLIENT")
   env.sshTty = termIoGetenv("SSH_TTY")
   env.noColor = termIoGetenv("NO_COLOR")
-  env.nishTermGraphics = termIoGetenv("NISH_TERM_GRAPHICS")
+  const forced: string = termIoGetenv("NISH_TERM_GRAPHICS")
+  env.nishTermGraphics = forced === "" ? graphics : forced
   env.nishTermFps = termIoGetenv("NISH_TERM_FPS")
   return env
 }
@@ -279,10 +288,12 @@ export class Terminal {
   workNs: f64
   /** When the last frame's write began, on the monotonic clock. */
   sendStartNs: i64
-  /** The cells `rect` was fitted to. */
+  /** The cells, backend and framebuffer size `rect` was fitted to. */
   rectCols: i32
   rectRows: i32
   rectBackend: i32
+  rectWidth: i32
+  rectHeight: i32
   /** The best backend the terminal has, a `GRAPHICS_*`. */
   graphics: i32
   /** The backend the last frame used. */
@@ -304,6 +315,8 @@ export class Terminal {
   focusOn: boolean
   /** Whether a kitty image may be on the screen, so closing deletes it. */
   kittyImage: boolean
+  /** Whether the last frame sent pixels, so a framebuffer emptied since takes them off the screen. */
+  pixelsShown: boolean
   /** Whether `screen` was drawn in 256 colours last frame. */
   palette256: boolean
 
@@ -350,6 +363,9 @@ export class Terminal {
     this.rectCols = -1
     this.rectRows = -1
     this.rectBackend = -1
+    this.rectWidth = -1
+    this.rectHeight = -1
+    this.pixelsShown = false
     this.graphics = termIoGraphics(caps.graphics)
     this.backend = this.graphics
     this.cellWidthPx = termIoCellPx(caps.cellWidthPx)
@@ -676,19 +692,23 @@ export class Terminal {
     return !ended
   }
 
-  /** Fit the framebuffer to the screen for `backend`, unless the size and backend are those of the last fit. */
+  /** Fit the framebuffer to the screen for `backend`, unless the sizes and backend are those of the last fit. */
   fit(backend: i32): void {
+    const fb: Framebuffer = this.framebuffer
     if (
       this.rectCols === this.screen.width &&
       this.rectRows === this.screen.height &&
-      this.rectBackend === backend
+      this.rectBackend === backend &&
+      this.rectWidth === fb.width &&
+      this.rectHeight === fb.height
     ) {
       return
     }
     this.rectCols = this.screen.width
     this.rectRows = this.screen.height
     this.rectBackend = backend
-    const fb: Framebuffer = this.framebuffer
+    this.rectWidth = fb.width
+    this.rectHeight = fb.height
     this.rect = fitFramebuffer(
       fb.width,
       fb.height,
@@ -768,7 +788,14 @@ export class Terminal {
       } else {
         drawAscii(src, this.screen, this.rect, this.caps.colors)
       }
+    } else if (this.pixelsShown) {
+      // The framebuffer was emptied: take the last image off, which the screen's cells do not cover.
+      if (backend === GRAPHICS_KITTY && this.kittyImage) {
+        write(kittyDelete(TERM_IO_IMAGE_ID))
+      }
+      this.screen.invalidate()
     }
+    this.pixelsShown = withPixels
     if (this.options.overlay >= 0) {
       drawStatsOverlay(this.screen, this.stats(), this.options.overlay)
     }
@@ -803,7 +830,7 @@ export const openTerminal = (options: TerminalOptions): Result<Terminal, string>
   if (setRawMode(true) !== 0) {
     return Err("the terminal refused raw mode")
   }
-  const env: TermEnv = termIoEnv()
+  const env: TermEnv = termIoEnv(options.graphics)
   const size: i32[] = terminalSize()
   const sized: boolean = toI32(size.length) >= 2 && size[0] > 0 && size[1] > 0
   const cols: i32 = sized ? size[0] : TERM_IO_COLS

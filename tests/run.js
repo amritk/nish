@@ -1610,7 +1610,7 @@ const selects = (...words) => !only || words.some((word) => word.includes(only))
  * `dealtHere`.
  */
 const DEALT_SECTIONS = {
-  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io") },
+  termIo: { name: "the nish/term-io section", selected: selects("term", "term-io", "break") },
   emitTs: { name: "the --emit-ts section", selected: selects("emit-ts") },
   selfHosting: {
     name: "the WP14 self-hosting section",
@@ -2355,7 +2355,106 @@ if (dealtHere("termIo")) {
           `${said(r)}\nrss ${JSON.stringify(r.rss)}`
         )
       })
+      // `TerminalOptions.graphics` picks the backend as NISH_TERM_GRAPHICS
+      // does, and the variable, when it is set, wins over it.
+      const [optioned, overruled] = await Promise.all([
+        relay(loopExe, "graphics-halfblock", { dir: at("graphics-option") }),
+        relay(loopExe, "graphics-halfblock", { dir: at("graphics-env"), env: { NISH_TERM_GRAPHICS: "ascii" } }),
+      ])
+      check(
+        "term-io: TerminalOptions.graphics \"halfblock\" draws in half-blocks on a kitty terminal",
+        optioned.status === 0 && optioned.out.includes("backend 1"),
+        said(optioned)
+      )
+      check(
+        "term-io: NISH_TERM_GRAPHICS=ascii wins over TerminalOptions.graphics",
+        overruled.status === 0 && overruled.out.includes("backend 0"),
+        said(overruled)
+      )
     }
+    // `nish break` on a terminal: Enter leaves the title, Space serves, F3 the
+    // stats, p and q pause and leave the level, q quits, each with the screen
+    // restored and the termios as it was. F6 changes the graphics setting and
+    // keeps the terminal open; F4 closes it and opens it again with the new rate,
+    // on whichever scene was showing.
+    const wallKeys = (...keys) => keys.map(([afterFrames, bytes]) => ({ afterFrames, bytes }))
+    // The cells `out` leaves on the screen by its `n`th frame (`CSI 5 n`): plays
+    // cursor moves, SGR and text, starts afresh at each `?1049h`, skips the rest.
+    const wallCells = (out, n) => {
+      const cells = new Map()
+      let [row, col, sgr, seen] = [1, 1, "", 0]
+      for (const m of out.matchAll(/\x1b\[([0-9;?>$]*)([A-Za-z@])|\x1b[P_\]][^\x1b]*\x1b\\|\x1b.|([^\x1b]+)/gs)) {
+        if (m[3] !== undefined) {
+          for (const ch of m[3].replaceAll("\n", "")) cells.set(`${row};${col++}`, sgr + ch)
+        } else if (m[2] === "H") {
+          const [r, c] = (m[1] || "1;1").split(";")
+          ;[row, col] = [Number(r) || 1, Number(c) || 1]
+        } else if (m[2] === "m") {
+          sgr = m[1] === "0" ? "" : m[1]
+        } else if (m[2] === "h" && m[1] === "?1049") {
+          cells.clear()
+        } else if (m[2] === "n" && m[1] === "5" && ++seen === n) {
+          break
+        }
+      }
+      return cells
+    }
+    // The share of `a`'s cells in its top `rows` rows that `b` has the same,
+    // above the toast and the reopening's note at the bottom.
+    const wallSame = (a, b, rows) => {
+      const top = [...a].filter(([k]) => Number(k.split(";")[0]) <= rows)
+      return top.filter(([k, v]) => b.get(k) === v).length / Math.max(top.length, 1)
+    }
+    // The relay keeps only the last megabyte, a fraction of one kitty frame at this
+    // size: the play run looks for the image's deletion at close, and the reopen runs
+    // draw in ascii, whose frames are small enough to keep both openings. The stage
+    // run pauses before F4 so the reopened stage can be held to the one it left;
+    // 120 frames is past the title's outro at any rate the relay draws.
+    const [played, reopened, staged] = await Promise.all([
+      relay(NISH, "break", {
+        dir: at("wall-play"),
+        keys: wallKeys([3, "\r"], [120, " "], [125, "\x1bOR"], [130, "p"], [135, "q"], [150, "q"]),
+        timeoutMs: 30000,
+      }),
+      relay(NISH, "break", {
+        dir: at("wall-reopen"),
+        env: { NISH_TERM_GRAPHICS: "ascii" },
+        keys: wallKeys([3, "\x1b[17~"], [10, "\x1bOS"], [30, "q"]),
+        timeoutMs: 30000,
+      }),
+      relay(NISH, "break", {
+        dir: at("wall-stage"),
+        env: { NISH_TERM_GRAPHICS: "ascii" },
+        keys: wallKeys([3, "\r"], [120, " "], [130, "p"], [140, "\x1bOS"], [170, "q"], [180, "q"], [190, "q"]),
+        timeoutMs: 30000,
+      }),
+    ])
+    const restored = (r) => r.status === 0 && r.sameStty && r.out.endsWith("\x1b[?1049l") && r.err === ""
+    check(
+      "nish break on a terminal: draws kitty images, and q quits with the screen restored, exit 0",
+      restored(played) && played.out.includes("\x1b_Ga=d,d=I,i=1"),
+      said(played)
+    )
+    check(
+      "nish break on a terminal: F6 keeps it open and F4 opens it again, exit 0",
+      restored(reopened) && reopened.out.split("\x1b[?1049h").length === 3,
+      said(reopened)
+    )
+    const opened = staged.out.lastIndexOf("\x1b[?1049h")
+    const leftAt = staged.out.slice(0, opened).split("\x1b[5n").length - 1
+    const [title, paused, back] = [2, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
+    const [asTitle, asPaused] = [wallSame(paused, title, 40), wallSame(paused, back, 40)]
+    const seen = `${said(staged)}\nthe paused screen matches the title in ${asTitle.toFixed(3)}, the reopened in ${asPaused.toFixed(3)}`
+    check(
+      "nish break on a terminal: Enter leaves the title card for the stage",
+      restored(staged) && staged.out.split("\x1b[?1049h").length === 3 && paused.size > 0 && asTitle < 0.5,
+      seen
+    )
+    check(
+      "nish break on a terminal: F4 on the stage opens it again on the same stage, as it was",
+      restored(staged) && staged.out.split("\x1b[?1049h").length === 3 && asPaused > 0.9,
+      seen
+    )
   }
 }
 
@@ -22279,8 +22378,8 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   const secret = inSecret(["break"])
   check(
-    "nish break, with no such file: the placeholder, exit 0",
-    secret.status === 0 && secret.stdout.startsWith("you found the wall.") && secret.stderr === "",
+    "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
+    secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
