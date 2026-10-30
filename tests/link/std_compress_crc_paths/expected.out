@@ -1,0 +1,8 @@
+check: 3421780262
+empty: 0 3735928559
+gzip empty: crc 0 isize 0
+gzip check: crc 3421780262 isize 9
+gzip 4 KiB: crc 1684516404 isize 4096
+gzip 1 MiB: crc 908540874 isize 1048576
+whole: 1966423732
+pieces: 22 splits

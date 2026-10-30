@@ -43,6 +43,7 @@ import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import zlib from "node:zlib"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
@@ -18393,6 +18394,298 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
   } else {
     skip(
       "aes kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of crypto_aes_agree is not checked for kernel references"
+    )
+  }
+}
+
+// ---- WP38: the CRC-32 kernel against the Nish walk, end to end ------------------------
+// The compiler lowers `Crc32.update`'s call of std/compress/checksum.ts's `crc32Walk` to
+// a branch on `nish_crc32_hw`: runtime-checksum.c's `nish_crc32_update` (PCLMULQDQ
+// folding on x86-64, the ARMv8 CRC32 instructions on AArch64) on one arm, the walk on
+// the other (src/kernels.ts). `tests/link/std_compress_crc_paths` holds the checksum to
+// its check value, empty input, gzip trailers and streamed pieces;
+// `tests/link/std_compress_crc_diff` folds 65,552 window CRCs and twelve large ones into
+// its stdout. Each is linked with the kernel wrapped (`-Wl,--wrap`) by a counter that
+// reports its calls on exit, then run with `NISH_CRC32` unset and with
+// `NISH_CRC32=soft`: the two stdouts must be each other's and `expected.out`, the soft
+// run must call no kernel, and where /proc/cpuinfo names the instructions the unset run
+// must call it. The debug profile links them, for the reason the AES section above gives.
+//
+// A wasm32 build has no kernel, so the lowering is skipped there: a `--profile wasi`
+// build names no `nish_crc32_` symbol in its IR or its link, against the native IR
+// linked the same way as the trace's control. IR compiled for the host and linked
+// freestanding (`--profile wasm`) gets runtime-checksum.c from build.sh, whose wasm32
+// build answers 0, and its CRCs must be Node's.
+if (!only || "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff".includes(only)) {
+  const crcDir = path.join(buildDir, "crc32-kernel")
+  fs.rmSync(crcDir, { recursive: true, force: true })
+  fs.mkdirSync(crcDir, { recursive: true })
+  const crcFeatures = new Set(
+    ((fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : "").match(
+      /^(flags|Features)\s*:(.*)$/m
+    )?.[2] ?? "")
+      .trim()
+      .split(/\s+/)
+  )
+  const cpuHasCrc =
+    (process.arch === "x64" && crcFeatures.has("pclmulqdq") && crcFeatures.has("sse4_1")) ||
+    (process.arch === "arm64" && crcFeatures.has("crc32"))
+  /** The modules of tests/link/<program> compiled into a directory of their own, or none and the reason. */
+  const compileCrc = (program, dir, flags) => {
+    const r = spawnSync(
+      NISH,
+      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
+      }
+    )
+    const lls =
+      r.status === 0
+        ? fs
+            .readdirSync(dir)
+            .filter((f) => f.endsWith(".ll"))
+            .sort()
+            .map((f) => path.join(dir, f))
+        : []
+    return { lls, why: r.status === 0 ? "" : r.stderr }
+  }
+  const crcPrograms = ["std_compress_crc_paths", "std_compress_crc_diff"]
+
+  if (!HAS_CLANG) {
+    skip("crc32 kernel: no clang to link the CRC-32 programs against runtime-checksum.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `crc32 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    const counter = path.join(crcDir, "count.c")
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        "struct nish_array;",
+        "static unsigned long nish_crc32_calls;",
+        "uint32_t __real_nish_crc32_update(uint32_t crc, const struct nish_array *buf, int32_t off, int32_t len);",
+        "uint32_t __wrap_nish_crc32_update(uint32_t crc, const struct nish_array *buf, int32_t off, int32_t len) {",
+        "  nish_crc32_calls++;",
+        "  return __real_nish_crc32_update(crc, buf, off, len);",
+        "}",
+        "__attribute__((destructor)) static void nish_crc32_report(void) {",
+        '  fprintf(stderr, "crc32 kernel calls: %lu\\n", nish_crc32_calls);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_CRC32
+    for (const program of crcPrograms) {
+      const compiled = compileCrc(program, path.join(crcDir, program), [])
+      const exe = path.join(crcDir, `${program}.counted`)
+      const linked =
+        compiled.lls.length > 0
+          ? spawnSync(
+              "bash",
+              [
+                "scripts/build.sh",
+                ...compiled.lls,
+                "runtime/runtime.c",
+                counter,
+                "-Wl,--wrap=nish_crc32_update",
+                "-o",
+                exe,
+                "--profile",
+                "debug",
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : null
+      if (linked === null || linked.status !== 0) {
+        check(
+          `crc32 kernel: ${program} links with the kernel counted`,
+          false,
+          linked === null ? compiled.why : linked.stderr
+        )
+        continue
+      }
+      const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+      const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_CRC32: "soft" } })
+      /** The count the wrapper printed, or null. */
+      const calls = (r) => {
+        const m = /^crc32 kernel calls: (\d+)$/m.exec(r.stderr)
+        return m === null ? null : Number(m[1])
+      }
+      check(
+        `crc32 kernel: ${program} prints the same bytes with NISH_CRC32 unset and with NISH_CRC32=soft, and they are its expected.out`,
+        hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_CRC32 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_CRC32=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      check(`crc32 kernel: ${program} under NISH_CRC32=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+      if (cpuHasCrc) {
+        check(
+          `crc32 kernel: ${program} with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+          calls(hw) > 0,
+          hw.stderr
+        )
+      } else {
+        check(
+          `crc32 kernel: ${program} with NISH_CRC32 unset calls no kernel on a CPU /proc/cpuinfo names no CRC instructions for`,
+          calls(hw) === 0,
+          hw.stderr
+        )
+      }
+    }
+  }
+
+  // The freestanding `wasm` profile: IR compiled for the host calls the kernel behind
+  // `nish_crc32_hw`, and build.sh adds runtime-checksum.c for it, once, whose wasm32
+  // build answers 0, so the walk runs; held to Node's zlib.crc32. `--trace-symbol`
+  // says which objects define `nish_crc32_hw`. checksum.ts's panic message joins
+  // strings with `nish_str_concat`, which runtime-wasm.c does not define, so it is
+  // left an import that throws: no window here panics.
+  if (has("wasm-ld")) {
+    const freeDir = path.join(crcDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "crc.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { crc32 } from "nish/compress/checksum"',
+        "",
+        "export const crcOf = (n: i32, seed: i32): i64 => {",
+        "  const b: u8[] = new Array<u8>(n)",
+        "  for (let i: i32 = 0; i < n; i += 1) {",
+        "    if (i < toI32(b.length)) {",
+        "      b[i] = toU8(i * seed + (i >> 3))",
+        "    }",
+        "  }",
+        "  return toI64(crc32(b, 0, n))",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const built = spawnSync(NISH, [source, "-o", `${path.join(freeDir, "ir")}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const lls =
+      built.status === 0
+        ? fs
+            .readdirSync(path.join(freeDir, "ir"))
+            .filter((f) => f.endsWith(".ll"))
+            .map((f) => path.join(freeDir, "ir", f))
+        : []
+    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_crc32_hw("))
+    const wasm = path.join(freeDir, "crc.wasm")
+    const linked =
+      lls.length > 0
+        ? spawnSync(
+            "bash",
+            [
+              "scripts/build.sh",
+              ...lls,
+              "runtime/runtime-wasm.c",
+              "-Wl,--trace-symbol=nish_crc32_hw,--allow-undefined",
+              "-o",
+              wasm,
+              "--profile",
+              "wasm",
+            ],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    const definitions =
+      linked === null
+        ? 0
+        : `${linked.stdout}${linked.stderr}`.split("\n").filter((l) => /definition of nish_crc32_hw/.test(l))
+            .length
+    const cases = [
+      [0, 3],
+      [9, 7],
+      [100, 11],
+      [5000, 13],
+    ]
+    const want = cases.map(([n, seed]) =>
+      zlib.crc32(Buffer.from(Array.from({ length: n }, (_, i) => (i * seed + (i >> 3)) & 255)))
+    )
+    let got = []
+    let trapped = ""
+    if (linked !== null && linked.status === 0) {
+      try {
+        const env = {
+          nish_str_concat: () => {
+            throw new Error("a window panicked")
+          },
+        }
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env })
+        got = cases.map(([n, seed]) => Number(instance.exports.crcOf(n, seed)))
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
+    }
+    check(
+      "crc32 kernel: the freestanding --profile wasm link of a CRC-32 module compiled for the host links runtime-checksum.c once, and its CRCs are Node's",
+      lowered && linked.status === 0 && definitions === 1 && trapped === "" && got.join(",") === want.join(","),
+      `${built.stderr}IR calls nish_crc32_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.stderr}objects defining nish_crc32_hw: ${definitions}\n`}${trapped}got  ${got.join(",")}\nwant ${want.join(",")}`
+    )
+  } else {
+    skip("crc32 kernel: no wasm-ld, so the freestanding wasm link of a CRC-32 module is not checked")
+  }
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const program = "std_compress_crc_paths"
+    const wasi = compileCrc(program, path.join(crcDir, "wasi"), ["--profile", "wasi"])
+    const native = compileCrc(program, path.join(crcDir, "native"), [])
+    const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_crc32_"))
+    /** The modules linked for wasm32-wasi with the CRC-32 symbols traced. */
+    const traced = (lls, out) =>
+      spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...lls,
+          "runtime/runtime.c",
+          "-Wl,--trace-symbol=nish_crc32_hw,--trace-symbol=nish_crc32_update",
+          "-o",
+          out,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+    const wasm = path.join(crcDir, `${program}.wasm`)
+    const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+    const control = native.lls.length > 0 ? traced(native.lls, path.join(crcDir, "native.wasm")) : null
+    const refs = (r) =>
+      r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_crc32_/.test(l))
+    const ran =
+      linked !== null && linked.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : null
+    const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+    check(
+      `crc32 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_crc32_ symbol, and it prints its expected.out`,
+      wasi.lls.length > 0 &&
+        named.length === 0 &&
+        linked.status === 0 &&
+        refs(linked).length === 0 &&
+        control !== null &&
+        control.status === 0 &&
+        refs(control).length > 0 &&
+        ran !== null &&
+        ran.status === 0 &&
+        ran.stdout === want,
+      `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+        `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+        `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+        `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+    )
+  } else {
+    skip(
+      "crc32 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of std_compress_crc_paths is not checked for kernel references"
     )
   }
 }
