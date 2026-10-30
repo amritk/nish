@@ -550,14 +550,14 @@ const RUNTIME_SANDBOX_TEXT_BUDGET = 2304
  * their bounds, alignment and ordering checks, the byte copies, the futex wait and
  * wake, and the panic text they build.
  *
- * Measured **2,488 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64 (2,525 with
+ * Measured **2,539 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64 (2,576 with
  * `-DNISH_THREADS=1`, where the table is thread-local; the ceiling holds both). A
  * thirteenth translation unit rather than more of `runtime-os.c`, so a program that
  * imports neither module links none of it: the linker drops the object nothing
  * references. The budget is the next 256-byte boundary above the measurement, as
  * every ceiling here was set.
  */
-const RUNTIME_SHM_TEXT_BUDGET = 2560
+const RUNTIME_SHM_TEXT_BUDGET = 2816
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
