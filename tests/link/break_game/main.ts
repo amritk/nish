@@ -766,11 +766,15 @@ const testDraw = (t: Suite): void => {
   t.ok("low effects drop the glow", differing(fb, low) > 0)
   const gx: i32 = toI32(drawnBallX(game, 0, 0.5)) + 5
   const gy: i32 = toI32(drawnBallY(game, 0, 0.5))
+  // With no trail behind the ball, only the glow can light beside it.
+  game.balls[0].trail.clear()
+  const glowing = new Framebuffer(320, 180)
+  drawBreakGame(game, glowing, 0.5)
   const bare = new Framebuffer(320, 180)
   game.balls[0].live = false
   drawBreakGame(game, bare, 0.5)
   game.balls[0].live = true
-  t.ok("high effects light the ball's surroundings", fb.get(gx, gy) !== bare.get(gx, gy))
+  t.ok("high effects light the ball's surroundings", glowing.get(gx, gy) !== bare.get(gx, gy))
   t.eqI32("low effects leave the ball's surroundings bare", low.get(gx, gy), bare.get(gx, gy))
   t.ok("low effects still draw the ball", low.get(toI32(drawnBallX(game, 0, 0.5)), toI32(drawnBallY(game, 0, 0.5))) !== low.get(30, 120))
 
