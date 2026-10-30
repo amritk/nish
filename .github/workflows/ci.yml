@@ -30,8 +30,10 @@
 #       runtime/runtime-sha256.c's, with the `sha256 kernel` section.
 # runtime-net: runtime/runtime-net.c's Darwin branch (kqueue, SO_NOSIGPIPE,
 #       errno translated to Linux's numbers) on a macOS runner: the runtime
-#       unit tests, plain and with -DNISH_THREADS, and every `net_` section;
-#       and runtime/runtime-sha256.c's Apple detection, on its ARMv8 kernel.
+#       unit tests, plain and with -DNISH_THREADS, and every `net_` section.
+#       Disabled (`if: false`).
+# sha256-macos: runtime/runtime-sha256.c's Apple detection, on its ARMv8
+#       kernel, natively on a macOS runner, under both NISH_SHA256 pins.
 # lint: package-lock.json against package.json with no registry involved,
 #       `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
@@ -460,7 +462,9 @@ jobs:
           fi
           for pin in unset soft; do
             if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
-            echo "NISH_SHA256 $pin: $($run "$calls" | head -n 1)"
+            said="$($run "$calls")"
+            if [ -z "$said" ]; then echo "::error::$calls printed nothing under NISH_SHA256 $pin"; exit 1; fi
+            echo "NISH_SHA256 $pin: ${said%%$'\n'*}"
             $run node bench/sha256/run.mjs
           done
 
@@ -1158,7 +1162,9 @@ jobs:
           fi
           for pin in unset soft; do
             if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
-            echo "NISH_SHA256 $pin: $($run "$calls" | head -n 1)"
+            said="$($run "$calls")"
+            if [ -z "$said" ]; then echo "::error::$calls printed nothing under NISH_SHA256 $pin"; exit 1; fi
+            echo "NISH_SHA256 $pin: ${said%%$'\n'*}"
             $run node bench/sha256/run.mjs
           done
 
@@ -1244,43 +1250,6 @@ jobs:
           grep -E '^PASS  runtime\.c, runtime-os\.c, .* pass the runtime unit test$' "$RUNNER_TEMP/runtime-test.log"
           grep -E '^PASS  runtime\.c -DNISH_THREADS: ' "$RUNNER_TEMP/runtime-test.log"
 
-      # The SHA-256 kernel on Apple silicon, whose CPU is found by sysctl rather
-      # than getauxval: the agreement driver must name the ARMv8 path, and the
-      # SHA-256 link programs must print their expected output under both pins.
-      # The `sha256 kernel` section counts calls with GNU ld's --wrap and skips
-      # on Darwin, so its SKIP lines are the one kind allowed here.
-      - name: SHA-256 on the ARMv8 instructions, natively on Darwin
-        if: matrix.shard == 1
-        run: |
-          set -o pipefail
-          clang -std=c11 -Wall -Wextra -Werror -O2 tests/simd/sha256.c -o "$RUNNER_TEMP/sha256"
-          "$RUNNER_TEMP/sha256" | grep -E '^sha256: [0-9]+ cases agree across armv8-sha2;'
-          for pin in unset soft; do
-            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
-            $run node tests/run.js sha256_hw | tee "$RUNNER_TEMP/sha256-$pin.log"
-            grep -E '^[1-9][0-9]* passed, 0 failed\.$' "$RUNNER_TEMP/sha256-$pin.log"
-            grep -E '^PASS  link/sha256_hw_vectors: exits with 0 and stdout matches expected\.out$' "$RUNNER_TEMP/sha256-$pin.log"
-            grep -E '^PASS  link/sha256_hw_agree: exits with 0 and stdout matches expected\.out$' "$RUNNER_TEMP/sha256-$pin.log"
-            if grep -E '^SKIP  ' "$RUNNER_TEMP/sha256-$pin.log" | grep -vE '^SKIP  sha256 kernel: '; then exit 1; fi
-          done
-
-      - name: SHA-256 throughput on each path
-        if: matrix.shard == 1
-        run: |
-          calls="$RUNNER_TEMP/sha256-calls"
-          clang -std=c11 -O2 tests/simd/sha256-calls.c runtime/runtime-sha256.c -o "$calls"
-          # bench/sha256/run.mjs is another stage's; until it lands this says so
-          # rather than fail. Each path is named by the resolver's own answer.
-          if [ ! -f bench/sha256/run.mjs ]; then
-            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
-            exit 0
-          fi
-          for pin in unset soft; do
-            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
-            echo "NISH_SHA256 $pin: $($run "$calls" | head -n 1)"
-            $run node bench/sha256/run.mjs
-          done
-
       # Every net_ section runs on a mac, so the step needs checks that passed
       # and no SKIP line: a filter that matches nothing, or a section skipped
       # for a missing tool, fails it rather than leaving it green. What a shard
@@ -1320,6 +1289,81 @@ jobs:
               grep '^FAIL  ' "$f" | sed 's/^FAIL  /- FAIL: /' || true
               echo
             } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # runtime/runtime-sha256.c on Apple silicon, where the resolver asks sysctlbyname
+  # rather than getauxval. Its own job, and not a step of `runtime-net`, which is
+  # disabled with the rest of macOS CI: this needs no sockets and no loopback
+  # aliases, only clang, the seed and the two SHA-256 link programs, so it runs
+  # in a few minutes. The darwin compile of the file is tests/run.js's
+  # `runtime-sha256 darwin` check, which the `test` job makes on Linux.
+  sha256-macos:
+    name: SHA-256 on Apple silicon (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # The `test` job's macOS install step, word for word.
+      - name: Install LLVM 18 + lld (macOS)
+        timeout-minutes: 10
+        run: |
+          brew install llvm@18
+          prefix="$(brew --prefix llvm@18)"
+          # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
+          # drops it, fall back to the standalone formula.
+          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      # tests/run.js links its stage1 with the seed before any section runs.
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      # The SHA-256 kernel on Apple silicon, whose CPU is found by sysctl rather
+      # than getauxval: the agreement driver must name the ARMv8 path, and the
+      # SHA-256 link programs must print their expected output under both pins.
+      # The `sha256 kernel` section counts calls with GNU ld's --wrap and skips
+      # on Darwin, so its SKIP lines are the one kind allowed here.
+      - name: SHA-256 on the ARMv8 instructions, natively on Darwin
+        run: |
+          set -o pipefail
+          clang -std=c11 -Wall -Wextra -Werror -O2 tests/simd/sha256.c -o "$RUNNER_TEMP/sha256"
+          "$RUNNER_TEMP/sha256" | grep -E '^sha256: [0-9]+ cases agree across armv8-sha2;'
+          for pin in unset soft; do
+            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
+            $run node tests/run.js sha256_hw | tee "$RUNNER_TEMP/sha256-$pin.log"
+            grep -E '^[1-9][0-9]* passed, 0 failed\.$' "$RUNNER_TEMP/sha256-$pin.log"
+            grep -E '^PASS  link/sha256_hw_vectors: exits with 0 and stdout matches expected\.out$' "$RUNNER_TEMP/sha256-$pin.log"
+            grep -E '^PASS  link/sha256_hw_agree: exits with 0 and stdout matches expected\.out$' "$RUNNER_TEMP/sha256-$pin.log"
+            if grep -E '^SKIP  ' "$RUNNER_TEMP/sha256-$pin.log" | grep -vE '^SKIP  sha256 kernel: '; then exit 1; fi
+          done
+
+      - name: SHA-256 throughput on each path
+        run: |
+          calls="$RUNNER_TEMP/sha256-calls"
+          clang -std=c11 -O2 tests/simd/sha256-calls.c runtime/runtime-sha256.c -o "$calls"
+          # bench/sha256/run.mjs is another stage's; until it lands this says so
+          # rather than fail. Each path is named by the resolver's own answer.
+          if [ ! -f bench/sha256/run.mjs ]; then
+            echo "::notice::bench/sha256/run.mjs is not in this checkout, so SHA-256 throughput is not measured here"
+            exit 0
+          fi
+          for pin in unset soft; do
+            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
+            said="$($run "$calls")"
+            if [ -z "$said" ]; then echo "::error::$calls printed nothing under NISH_SHA256 $pin"; exit 1; fi
+            echo "NISH_SHA256 $pin: ${said%%$'\n'*}"
+            $run node bench/sha256/run.mjs
           done
 
   # Every fuzz target in tests/fuzz/targets/ built under

@@ -18066,6 +18066,55 @@ if (!only || "ct_asm constant time assembly runtime-aes runtime-sha256".includes
   }
 }
 
+// runtime/runtime-sha256.c for both Darwin targets, compiled here because no macOS
+// job runs the whole suite. The file declares `getenv` and `sysctlbyname` itself and
+// includes only stddef.h, stdint.h and the intrinsics headers, all of which clang
+// ships, so `-ffreestanding` (clang's stdint.h rather than this host's glibc one)
+// compiles it without an SDK. The aarch64 build must hold the kernel's SHA-256
+// rounds and ask sysctlbyname, never getauxval, which Darwin lacks; the x86-64 build
+// must hold SHA-NI rounds and CPUID. A clang without the target is a skip, any other
+// error a failure.
+if (!only || "runtime-sha256 darwin sha256 cross".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("runtime-sha256 darwin: no clang to compile runtime-sha256.c for x86_64-apple-darwin and aarch64-apple-darwin")
+  } else {
+    for (const [target, rounds, resolver, why] of [
+      ["x86_64-apple-darwin", /\bsha256rnds2\b/, (asm) => /\bcpuid\b/.test(asm), "a CPUID resolver"],
+      [
+        "aarch64-apple-darwin",
+        /\bsha256h2?\b/,
+        (asm) => /\b_sysctlbyname\b/.test(asm) && !/getauxval/.test(asm),
+        "a sysctlbyname resolver",
+      ],
+    ]) {
+      const built = spawnSync(
+        "clang",
+        [`--target=${target}`, "-ffreestanding", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-S", "-o", "-", "runtime/runtime-sha256.c"],
+        { cwd: root, encoding: "utf8" }
+      )
+      if (built.status !== 0 && /unknown target|no available targets|unable to create target/i.test(built.stderr)) {
+        skip(`runtime-sha256 darwin: this clang cannot target ${target} (${built.stderr.trim().split("\n")[0]})`)
+        continue
+      }
+      const asm = built.status === 0 ? built.stdout : ""
+      check(
+        `runtime-sha256 darwin: runtime-sha256.c compiles warning-free for ${target}, with _nish_sha256_compress, its SHA-256 rounds and ${why}`,
+        built.status === 0 &&
+          /^_nish_sha256_compress:/m.test(asm) &&
+          /^_nish_sha256_hw:/m.test(asm) &&
+          rounds.test(asm) &&
+          resolver(asm),
+        built.status !== 0
+          ? built.stderr
+          : asm
+              .split("\n")
+              .filter((l) => /sha256|sysctl|getauxval|cpuid/.test(l))
+              .join("\n")
+      )
+    }
+  }
+}
+
 // ---- WP38 S5: the AES kernels against the bitsliced walkers, end to end ---------------
 // The compiler lowers each seam of std/crypto/aes.ts to a branch on `nish_aes_hw`: the
 // runtime kernel on one arm, the walker it replaces on the other (src/kernels.ts). Two

@@ -5,7 +5,7 @@ checked in `runtime/runtime-sha256.c`, the C kernel that runs SHA-256's block
 function on the CPU's own SHA-256 instructions, and in the branch the compiler
 puts in front of `std/crypto/sha256.ts`'s `sha256Compress` to reach it. It
 says how it was checked, what was found, and which test pins each property.
-Anchors are at `db877e8` unless a row names another commit.
+Anchors are at #1055, the change that adds the kernel, unless a row names another commit.
 
 ## Scope
 
@@ -78,9 +78,9 @@ array in other code) is in the model, which is what a wipe is for.
 
 ## Findings
 
-| Id | Severity | Where (base `50893fc`) | Description | Disposition |
+| Id | Severity | Where (before the fix) | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| SHA256HW-1 | Low | `runtime/runtime-sha256.c:163` (at `50893fc`: `at < 0 \|\| src->len < 64 \|\| (uint64_t)at > src->len - 64`) | The kernel's guard read the source's length as it is, where `sha256Compress`'s reads it through `toI32`, which saturates at 2^31 - 1. On a source longer than that, an `at` past 2^31 - 65 was refused by the Nish guard and run by the kernel: the two paths disagreed, which the seam's contract forbids, and a driver that handed such an `at` with a shorter backing read past it (the edge case segfaulted, exit 139). No caller in `std/` reaches it: `Sha256.update` steps `at` by 64 from 0 over a length it has already narrowed with `toI32`. | **Fixed** (`db877e8`): the guard refuses `at > INT32_MAX - 64` as well, the Nish guard's bound for every length past 2^31 - 1. Pinned by `tests/simd/sha256.c`'s "a source past 2^31 - 1 bytes, one past the last offset toI32 of its length allows", which faulted on the base. |
+| SHA256HW-1 | Low | `runtime/runtime-sha256.c:163` (before the fix: `at < 0 \|\| src->len < 64 \|\| (uint64_t)at > src->len - 64`) | The kernel's guard read the source's length as it is, where `sha256Compress`'s reads it through `toI32`, which saturates at 2^31 - 1. On a source longer than that, an `at` past 2^31 - 65 was refused by the Nish guard and run by the kernel: the two paths disagreed, which the seam's contract forbids, and a driver that handed such an `at` with a shorter backing read past it (the edge case segfaulted, exit 139). No caller in `std/` reaches it: `Sha256.update` steps `at` by 64 from 0 over a length it has already narrowed with `toI32`. | **Fixed** (#1055): the guard refuses `at > INT32_MAX - 64` as well, the Nish guard's bound for every length past 2^31 - 1. Pinned by `tests/simd/sha256.c`'s "a source past 2^31 - 1 bytes, one past the last offset toI32 of its length allows", which faulted before the fix. |
 | SHA256HW-2 | Low | `runtime/runtime-sha256.c` (`nish_sha256_compress`, the inlined block) | **What the kernel cannot wipe.** On the kernel path the eight state words, the sixteen message words and every round's intermediate pass through XMM or NEON registers, and on x86-64 `clang -O2` spills seven of them to the stack. When the kernel returns they stay there until later code overwrites them, and a later memory disclosure could read them; for HMAC that is a block derived from the key. No store from C or the language reaches a register or a spill slot the compiler chose. The kernel keeps no buffer of its own and never writes `w`, the schedule the Nish path leaves in the caller's array; what it does write, the state in `h`, HMAC's hashers wipe as on the Nish path (K1-7). | Open, recorded: neither the language nor C has a way to reach it, as for AEAD-4 ([crypto-aead.md](crypto-aead.md)). |
 
 The constant-time checker's own gap, found reading this kernel (aarch64's
@@ -145,5 +145,5 @@ never written. The resolver holds no secret.
 | Unset, the kernel runs where the CPU has it | `sha256 kernel: ${program} with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs` |
 | A program that never hashes links none of the unit; one that does keeps it | `simd: --profile ${profile} links hello with runtime-sha256.c to the same bytes as without it, and a program that calls the kernel runs it` |
 | A wasm32 build references no kernel and runs the Nish path | `sha256 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_sha256_ symbol, and it prints its expected.out`; `simd: --profile wasi links runtime-sha256.c, and nish_sha256_hw answers 0 there`; `sha256 kernel: the freestanding --profile wasm link of a SHA-256 module compiled for the host adds runtime-sha256.c once, and hashes as Node does` |
-| The unit stays small | `${label}: .text* at -Oz fits the ${budget} byte budget` with label `runtime-sha256.c` (495 of 512 bytes at `db877e8`) |
-| aarch64's SHA-256 instructions keep their destination's taint (CT-20) | `AUDIT_CORNERS` in `tests/ct-asm.js` |
+| The unit stays small | `${label}: .text* at -Oz fits the ${budget} byte budget` with label `runtime-sha256.c` (495 of 512 bytes at #1055) |
+| The SHA-256 instructions keep their destination's taint, on aarch64 (CT-20) and x86-64 | `AUDIT_CORNERS` in `tests/ct-asm.js` |
