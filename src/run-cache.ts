@@ -83,6 +83,7 @@ export const runtimeUnits = (): string[] => [
   "runtime-checksum.c",
   "runtime-term.c",
   "runtime-bytes.c",
+  "runtime-sandbox.c",
 ]
 
 /**

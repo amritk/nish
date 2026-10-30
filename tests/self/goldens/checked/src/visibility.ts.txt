@@ -16,18 +16,18 @@ function BuildMode.constructor(this: BuildMode, closedWorld: boolean, everySymbo
 function isWasmBuild(opts: Options): boolean -> @isWasmBuild [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_at nish_str_eq
-  pointer opts: size=152 writesThrough=false captured=false
+  pointer opts: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function isFreestandingWasmBuild(opts: Options): boolean -> @isFreestandingWasmBuild [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isWasmBuild nish_str_eq nish_str_index_of nish_str_index_of_from
-  pointer opts: size=152 writesThrough=false captured=false passedTo=isWasmBuild#0
+  pointer opts: size=160 writesThrough=false captured=false passedTo=isWasmBuild#0
   stackSites=0 stackLocals=0
   callee +0:3 isWasmBuild -> @isWasmBuild
 function buildsWasmModule(opts: Options): boolean -> @buildsWasmModule [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isWasmBuild
-  pointer opts: size=152 writesThrough=false captured=false passedTo=isWasmBuild#0
+  pointer opts: size=160 writesThrough=false captured=false passedTo=isWasmBuild#0
   stackSites=0 stackLocals=0
   callee +0:61 isWasmBuild -> @isWasmBuild
 function declaresForeign(programs: CheckedProgram[]): boolean -> @declaresForeign
@@ -41,7 +41,7 @@ function declaresForeign(programs: CheckedProgram[]): boolean -> @declaresForeig
 function buildModeOf(opts: Options, programs: CheckedProgram[]): BuildMode -> @buildModeOf [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=3
   calls: BuildMode.constructor declaresForeign isWasmBuild nish_alloc_struct
-  pointer opts: size=152 writesThrough=false captured=false passedTo=isWasmBuild#0
+  pointer opts: size=160 writesThrough=false captured=false passedTo=isWasmBuild#0
   pointer programs: size=0 writesThrough=false captured=false passedTo=declaresForeign#0
   stackSites=0 stackLocals=0
   local +0:9 sidecar: boolean (const)

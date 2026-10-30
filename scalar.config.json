@@ -98,6 +98,7 @@
           },
           "/tls-client": { "type": "page", "title": "TLS client", "filepath": "docs/guide/using-nish/tls-client.md" },
           "/terminal": { "type": "page", "title": "Terminal programs", "filepath": "docs/guide/using-nish/terminal.md" },
+          "/sandbox": { "type": "page", "title": "The sandbox", "filepath": "docs/guide/using-nish/sandbox.md" },
           "/password-hashing": {
             "type": "page",
             "title": "Password hashing",

@@ -51,6 +51,7 @@ on:
       - "runtime/runtime-aes.c"
       - "runtime/runtime-checksum.c"
       - "runtime/runtime-bytes.c"
+      - "runtime/runtime-sandbox.c"
       - "tests/interop/**"
       - "tests/link/net_interop_server*/**"
       - ".github/workflows/interop.yml"
