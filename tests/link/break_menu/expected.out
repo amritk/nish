@@ -138,8 +138,9 @@ PASS  a row past the last changes nothing
 PASS  Play starts the outro
 PASS  the outro is on
 PASS  the outro lasts OUTRO_STEPS after the pick
-PASS  it is a second
+PASS  it is a second of steps
 PASS  it answers the level
+PASS  and answers it once
 PASS  the outro's last frame is wiped clean
 PASS  and the next step answers
 PASS  the first brick has fallen
@@ -165,4 +166,15 @@ PASS  Settings at 160x90, compact
 PASS  the outro at 640x360
 PASS  the logo dropping in at 640x360
 PASS  the title at 80x45, as text
-break-menu: 167 passed, 0 failed, 0 skipped
+PASS  the ball has a trail to draw
+PASS  high effects draws the trail
+PASS  low effects draws no trail
+PASS  high effects lights the ball's surroundings
+PASS  low effects draws no glow
+PASS  high effects bursts 8 sparks a knock
+PASS  low effects bursts 2 sparks a knock
+PASS  high effects puffs 3 sparks a loosened brick
+PASS  low effects puffs 1 spark a loosened brick
+PASS  a key skips the outro to the level
+PASS  and the next step does not answer it again
+break-menu: 179 passed, 0 failed, 0 skipped

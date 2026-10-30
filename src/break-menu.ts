@@ -346,6 +346,8 @@ export class BreakMenu {
   outroTick: i32
   /** The xorshift state the attract scene's dice read; never 0, where xorshift would stick. */
   rngState: i32
+  /** Whether the outro has answered the level, so later steps do not answer it again. */
+  outroAnswered: boolean
 
   /** A menu on the title screen; `newBreakMenu` is the way to make one. */
   constructor(level: i32, seed: i32, settings: BreakSettings) {
@@ -360,6 +362,7 @@ export class BreakMenu {
     this.entryFps = settings.fps
     this.entryGraphics = settings.graphics
     this.outroTick = 0
+    this.outroAnswered = false
     const bricks: i32 = logoBrickCount()
     this.homeXs = new Array<f64>(bricks)
     this.homeXs.fill(0.0)
@@ -802,6 +805,7 @@ const stepBall = (menu: BreakMenu): void => {
 const startOutro = (menu: BreakMenu): void => {
   menu.screen = SCREEN_OUTRO
   menu.outroTick = 0
+  menu.outroAnswered = false
   const time: f64 = toF64(menu.tick - 1)
   const n: i32 = logoSlots(menu)
   for (let i: i32 = 0; i < n; i++) {
@@ -830,12 +834,17 @@ const logoSlots = (menu: BreakMenu): i32 => {
 
 /**
  * One outro step: bricks whose time has come jump loose and fall, the rest
- * wait. Any key press skips to the end; the last step answers the level.
+ * wait. Any key press skips to the end; the last step answers the level,
+ * once: the director may step the menu again before it takes the answer.
  */
 const stepOutro = (menu: BreakMenu, input: TermInput): i32 => {
+  if (menu.outroAnswered) {
+    return MENU_STAY
+  }
   menu.outroTick = menu.outroTick + 1
   for (const e of input.events) {
     if (e.type === EVENT_KEY && e.action === ACTION_PRESS) {
+      menu.outroAnswered = true
       return menu.level
     }
   }
@@ -853,7 +862,11 @@ const stepOutro = (menu: BreakMenu, input: TermInput): i32 => {
       menu.ys[i] = menu.ys[i] + menu.vys[i] * dt
     }
   }
-  return menu.outroTick >= OUTRO_STEPS ? menu.level : MENU_STAY
+  if (menu.outroTick < OUTRO_STEPS) {
+    return MENU_STAY
+  }
+  menu.outroAnswered = true
+  return menu.level
 }
 
 /** Kick logo brick `i` up and away from the centre, with a puff of sparks where it was. */

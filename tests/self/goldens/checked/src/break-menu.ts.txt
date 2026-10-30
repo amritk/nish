@@ -3160,6 +3160,7 @@ struct BreakMenu (class) size=232 align=8 exported
   field entryGraphics: i32 index=30 offset=216
   field outroTick: i32 index=31 offset=220
   field rngState: i32 index=32 offset=224
+  field outroAnswered: boolean index=33 offset=228
   constructor -> @BreakMenu.constructor
 function fpsChoice(index: i32): i32 -> @fpsChoice [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -3438,11 +3439,11 @@ function startOutro(menu: BreakMenu): void -> @startOutro
   calls: logoSlots nish_panic_index nish_panic_overflow titleLogoY
   pointer menu: size=232 writesThrough=true captured=false passedTo=logoSlots#0 titleLogoY#0
   stackSites=0 stackLocals=0
-  local +2:9 time: f64 (const)
-  local +3:9 n: i32 (const)
-  callee +3:18 logoSlots -> @logoSlots
-  local +4:12 i: i32 (let)
-  callee +6:18 titleLogoY -> @titleLogoY
+  local +3:9 time: f64 (const)
+  local +4:9 n: i32 (const)
+  callee +4:18 logoSlots -> @logoSlots
+  local +5:12 i: i32 (let)
+  callee +7:18 titleLogoY -> @titleLogoY
 function logoSlots(menu: BreakMenu): i32 -> @logoSlots
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.smin.i32
@@ -3459,11 +3460,11 @@ function stepOutro(menu: BreakMenu, input: TermInput): i32 -> @stepOutro
   pointer input: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +1:14 e: TermEvent (const)
-  local +6:9 dt: f64 (const)
-  local +7:9 n: i32 (const)
-  callee +7:18 logoSlots -> @logoSlots
-  local +8:12 i: i32 (let)
-  callee +12:7 loosen -> @loosen
+  local +7:9 dt: f64 (const)
+  local +8:9 n: i32 (const)
+  callee +8:18 logoSlots -> @logoSlots
+  local +9:12 i: i32 (let)
+  callee +13:7 loosen -> @loosen
 function loosen(menu: BreakMenu, i: i32): void -> @loosen
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

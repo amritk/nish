@@ -48,7 +48,7 @@ import {
   rowValue,
   stepBreakMenu,
 } from "../../../src/break-menu"
-import { View, pixelX, pixelY, textWidth, viewFor } from "../../../src/break-gfx"
+import { STEPS_PER_SECOND, View, pixelX, pixelY, textWidth, viewFor } from "../../../src/break-gfx"
 
 /** The arrow and letter codes the menu reads. */
 const CH_J: i32 = 106
@@ -145,6 +145,170 @@ const centroid = (fb: Framebuffer, colour: i32, axis: i32): f64 => {
 /** `t.nearF64`, as a function so its literal arguments are typed `f64` by the parameters. */
 const nearF = (t: Suite, name: string, actual: f64, expected: f64, tolerance: f64): boolean =>
   t.nearF64(name, actual, expected, tolerance)
+
+/** How many pixels differ between `a` and `b`, two frames of one size. */
+const diffCount = (a: Framebuffer, b: Framebuffer): i32 => {
+  let n: i32 = 0
+  for (let i: i32 = 0; i < toI32(a.pixels.length); i++) {
+    if (a.pixels[i] !== b.pixels[i]) {
+      n++
+    }
+  }
+  return n
+}
+
+/** How many pixels differ between `a` and `b` between `inner` and `outer` pixels from (`cx`, `cy`). */
+const diffInRing = (a: Framebuffer, b: Framebuffer, cx: f64, cy: f64, inner: f64, outer: f64): i32 => {
+  let n: i32 = 0
+  for (let y: i32 = 0; y < a.height; y++) {
+    for (let x: i32 = 0; x < a.width; x++) {
+      const dx: f64 = toF64(x) + 0.5 - cx
+      const dy: f64 = toF64(y) + 0.5 - cy
+      const d: f64 = Math.sqrt(dx * dx + dy * dy)
+      if (d > inner && d < outer && a.get(x, y) !== b.get(x, y)) {
+        n++
+      }
+    }
+  }
+  return n
+}
+
+/** Puts the attract ball at rest at (`x`, `y`), so every alpha draws it there. */
+const placeBall = (menu: BreakMenu, x: f64, y: f64): void => {
+  menu.ballX = x
+  menu.ballY = y
+  menu.prevBallX = x
+  menu.prevBallY = y
+}
+
+/** Wall bricks out now that were in at the last `snapshot`. */
+const newlyKnocked = (menu: BreakMenu, before: i32[]): i32 => {
+  let n: i32 = 0
+  for (let i: i32 = 0; i < toI32(before.length); i++) {
+    if (before[i] === 0 && menu.wallAway[i] > 0) {
+      n++
+    }
+  }
+  return n
+}
+
+/** Copies the wall's state into `into`, for `newlyKnocked` after the next step. */
+const snapshot = (menu: BreakMenu, into: i32[]): void => {
+  for (let i: i32 = 0; i < toI32(into.length); i++) {
+    into[i] = menu.wallAway[i]
+  }
+}
+
+/**
+ * Steps a fresh menu at `effects` for 2000 steps with its sparks cleared
+ * before each one, and answers the knocks seen, or -1 if a knock left other
+ * than `perKnock` sparks.
+ */
+const knocksWith = (effects: i32, perKnock: i32): i32 => {
+  const m = newBreakMenu(1, toI64(20251030))
+  m.settings.effects = effects
+  const before = new Array<i32>(toI32(m.wallAway.length))
+  const none = quiet()
+  let knocks: i32 = 0
+  for (let s: i32 = 0; s < 2000; s++) {
+    m.sparks.clear()
+    snapshot(m, before)
+    stepBreakMenu(m, none)
+    const k: i32 = newlyKnocked(m, before)
+    if (m.sparks.live() !== k * perKnock) {
+      return -1
+    }
+    knocks = knocks + k
+  }
+  return knocks
+}
+
+/**
+ * Runs an outro at `effects` with its sparks cleared before each step, and
+ * answers the logo bricks loosened, or -1 if a step left other than
+ * `perKnock` sparks a wall knock and `perLoosen` a loosened brick.
+ */
+const loosenedWith = (effects: i32, perKnock: i32, perLoosen: i32): i32 => {
+  const m = settled(1)
+  m.settings.effects = effects
+  press(m, KEY_ENTER)
+  const before = new Array<i32>(toI32(m.wallAway.length))
+  const none = quiet()
+  let loosened: i32 = 0
+  for (let s: i32 = 1; s < OUTRO_STEPS; s++) {
+    m.sparks.clear()
+    snapshot(m, before)
+    stepBreakMenu(m, none)
+    let l: i32 = 0
+    for (const r of m.releases) {
+      if (r === m.outroTick) {
+        l++
+      }
+    }
+    if (m.sparks.live() !== newlyKnocked(m, before) * perKnock + l * perLoosen) {
+      return -1
+    }
+    loosened = loosened + l
+  }
+  return loosened
+}
+
+const testLowEffects = (t: Suite): void => {
+  // Twin menus from one seed are the same frame for frame, so a difference between them is the one made here.
+  const a = settled(1)
+  const b = settled(1)
+  const fa = new Framebuffer(640, 360)
+  const fb = new Framebuffer(640, 360)
+  const view = new View()
+  viewFor(view, fa, 0.0, 0.0)
+
+  // The trail: one twin keeps its points, the other drops them.
+  t.ok("the ball has a trail to draw", a.trail.count > 1)
+  b.trail.clear()
+  a.settings.effects = 1
+  b.settings.effects = 1
+  drawBreakMenu(a, fa, 1.0)
+  drawBreakMenu(b, fb, 1.0)
+  t.ok("high effects draws the trail", diffCount(fa, fb) > 0)
+  a.settings.effects = 0
+  b.settings.effects = 0
+  drawBreakMenu(a, fa, 1.0)
+  drawBreakMenu(b, fb, 1.0)
+  t.eqI32("low effects draws no trail", diffCount(fa, fb), 0)
+
+  // The glow reaches 12 world units; the ball itself, 2.5, is drawn at every effects level.
+  // The ball sits in one twin's spot and far off in the other's, so the
+  // ring around the spot, outside the ball itself, differs only by what lights it.
+  a.trail.clear()
+  placeBall(a, 60.0, 150.0)
+  placeBall(b, 260.0, 150.0)
+  const cx: f64 = pixelX(view, 60.0)
+  const cy: f64 = pixelY(view, 150.0)
+  const inner: f64 = view.scale * 3.5
+  const outer: f64 = view.scale * 12.0
+  a.settings.effects = 1
+  b.settings.effects = 1
+  drawBreakMenu(a, fa, 1.0)
+  drawBreakMenu(b, fb, 1.0)
+  t.ok("high effects lights the ball's surroundings", diffInRing(fa, fb, cx, cy, inner, outer) > 0)
+  a.settings.effects = 0
+  b.settings.effects = 0
+  drawBreakMenu(a, fa, 1.0)
+  drawBreakMenu(b, fb, 1.0)
+  t.eqI32("low effects draws no glow", diffInRing(fa, fb, cx, cy, inner, outer), 0)
+
+  // Sparks: low effects sheds fewer of them from each knocked wall brick and loosened logo brick.
+  t.ok("high effects bursts 8 sparks a knock", knocksWith(1, 8) > 0)
+  t.ok("low effects bursts 2 sparks a knock", knocksWith(0, 2) > 0)
+  t.ok("high effects puffs 3 sparks a loosened brick", loosenedWith(1, 8, 3) > 0)
+  t.ok("low effects puffs 1 spark a loosened brick", loosenedWith(0, 2, 1) > 0)
+
+  // The level is answered once, a skip included.
+  const s = settled(3)
+  press(s, KEY_ENTER)
+  t.eqI32("a key skips the outro to the level", press(s, KEY_ENTER), 3)
+  t.eqI32("and the next step does not answer it again", idle(s, 1), MENU_STAY)
+}
 
 const testInterface = (t: Suite): void => {
   t.eqI32("MENU_STAY", MENU_STAY, 0)
@@ -484,8 +648,9 @@ const testOutro = (t: Suite): void => {
     steps++
   }
   t.eqI32("the outro lasts OUTRO_STEPS after the pick", steps, OUTRO_STEPS)
-  t.eqI32("it is a second", OUTRO_STEPS, 120)
+  t.eqI32("it is a second of steps", OUTRO_STEPS, STEPS_PER_SECOND)
   t.eqI32("it answers the level", answer, 4)
+  t.eqI32("and answers it once", idle(m, 3), MENU_STAY)
 
   // The frame drawn after the last step but one, at alpha 1, is the wipe alone.
   const w = settled(2)
@@ -498,8 +663,9 @@ const testOutro = (t: Suite): void => {
 
   // Halfway, the logo bricks are falling and the wipe has started.
   const mid = settled(1)
-  const before: f64 = mid.ys[0]
   press(mid, KEY_ENTER)
+  // Read after the pick, which puts the logo bricks where the outro starts them.
+  const before: f64 = mid.ys[0]
   idle(mid, 90)
   t.ok("the first brick has fallen", mid.ys[0] > before + 20.0)
   // The outro's first step is 1: a brick released on step 0 would fall without its kick.
@@ -618,5 +784,6 @@ export const main = (): number => {
   testOutro(t)
   testWall(t)
   testDraw(t)
+  testLowEffects(t)
   return t.done()
 }
