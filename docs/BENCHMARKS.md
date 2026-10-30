@@ -538,9 +538,27 @@ Noise band, Nish against its byte-identical copy: 1.4% on the minimums (14.1% on
 <!-- json-writer-bytes:end -->
 
 <!-- json-value-ranges:begin -->
+
 ### JsonDocument's source ranges
 
-PENDING
+`JsonDocument.parseRanged` and `parseTextRanged` record each value's and each member key's byte range (about 20 bytes more a value); `parse` and `parseText` record none. Retired instructions under cachegrind, from one run of `node bench/json-value/measure.mjs --instructions --before <main's nish>` against main at `1391cf8`, in `bench/run.mjs`'s pinned environment (fixed libc tunables, `NISH_SIMD=base`, a fixed hash key), 16 MB of input a case. `head` is this tree's plain `parse` loop, `before` main's build of the same program, `on` the same loop calling `parseRanged`, and `both` one `parseRanged` followed by the plain `parse` loop in one binary. Every binary is also counted as a byte-identical copy; the band is the gap between the two counts.
+
+| Row                                        |        before |          head | head − before | head / before | on / head | both / head |   band |
+| ------------------------------------------ | ------------: | ------------: | ------------: | ------------: | --------: | ----------: | -----: |
+| parse twitter.json (27 parses)             |   753,801,566 |   753,801,652 |           +86 |       +0.000% |   +3.855% |     +3.745% | 0.000% |
+| parse citm_catalog.json (10 parses)        |   411,471,288 |   411,471,348 |           +60 |       +0.000% |   +8.967% |    +10.900% | 0.000% |
+| parse canada.json (7 parses)               | 1,015,203,067 | 1,015,203,119 |           +52 |       +0.000% |   +9.986% |    +16.134% | 0.000% |
+| parse sample.json, 1,427 bytes (11,757)    | 1,091,940,938 | 1,091,952,740 |       +11,802 |       +0.001% |   +7.186% |     −0.146% | 0.000% |
+| builders (500 documents of 1,100 values)   |   882,996,248 |   882,912,325 |       −83,923 |       −0.010% |           |             | 0.000% |
+| json-compare tokenize twitter.json         |   353,787,664 |   353,787,664 |             0 |       +0.000% |           |             | 0.000% |
+| json-compare tokenize citm_catalog.json    |   297,763,836 |   297,763,822 |           −14 |       −0.000% |           |             | 0.000% |
+| json-compare tokenize canada.json          |   993,834,293 |   993,834,293 |             0 |       +0.000% |           |             | 0.000% |
+| json-compare typed                         |   306,561,355 |   306,561,383 |           +28 |       +0.000% |           |             | 0.000% |
+| json-compare typed-reuse                   |   303,863,883 |   303,863,883 |             0 |       +0.000% |           |             | 0.000% |
+| http1-server `/json-echo-doc`, 2,000 POSTs |   161,803,094 |   161,805,460 |        +2,366 |       +0.001% |           |             | 0.000% |
+
+A plain `parse` retires one instruction more than main's: sample.json, the row with enough parses to show it, is +11,802 over 11,757 parses, and http1-server +2,366 over 2,000 requests. That instruction is the store in `clear` that resets the two range counts, so that after a `parse` every range reader answers `-1`; without it a `parse` that follows a `parseRanged` would leave the readers answering with the old text's ranges, which is wrong data no caller could detect, so it stays. On the three large documents the same store runs only 7 to 27 times, and their rows differ from main's by 52 to 86 instructions in all. The tokenize and typed binaries do not reach `nish/json-value`. `parseRanged` costs 3.9% to 10.0% more than `parse` on the four documents. A binary that links both entry points (`both`) pays for the second in its plain `parse` loop, 3.7% to 16.1% on the large documents and −0.15% on sample.json, from layout and inlining rather than noise: every band is 0.000%. `parseRanged` keeps its own copies of `storeSource`, `duplicateKeys` and `sortPending`, so that a second caller does not keep them from inlining into `parse`, and `append` moves a full container's slots in `moveSlots`, out of line. No timings are recorded: unpinned wall-clock bands on this machine ran 2% to 8%, wider than every gap above.
+
 <!-- json-value-ranges:end -->
 
 <!-- techempower:begin -->
