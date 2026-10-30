@@ -5,7 +5,7 @@
 // styles, and every refusal answers its code and range: `.inf` and `.nan`, an
 // alias bomb, too deep a document, a repeated key. Numbers keep exact JSON
 // text, hex and octal included, and merge keys let the map's own keys win.
-import { JsonLimits } from "nish/json-tokenizer";
+import { JSON_TOK_ERR_TOTAL_LIMIT, JsonLimits } from "nish/json-tokenizer";
 import {
   JSON_VALUE_ARRAY,
   JSON_VALUE_BOOLEAN,
@@ -228,6 +228,25 @@ const yjBomb = (t: Suite): void => {
   t.eqI32("bomb: no alias, too many values", yjLoad(loader, small, "[1, 2, 3, 4, 5, 6, 7, 8]"), JSON_VALUE_ERR_VALUES);
 };
 
+const yjTextBomb = (t: Suite): void => {
+  const limits = new JsonLimits();
+  limits.maxTotalBytes = 64;
+  const doc = new JsonDocument(limits);
+  const loader = new YamlJsonLoader();
+  const long = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+  // 30 bytes, its key, and one copy fit in 64; the second copy does not.
+  const text = `a: &a ${long}\nb: [*a, *a, *a]\n`;
+  const code = yjLoad(loader, doc, text);
+  t.eqI32("text bomb: copies of a long string past maxTotalBytes are refused", code, YAML_JSON_ERR_EXPANSION);
+  t.eqI32("text bomb: at the copy that does not fit", loader.errorStart, toI32(text.indexOf("*a, *a]")));
+  t.eqI32("text bomb: nothing is kept", doc.top, 0);
+  const one = yjLoad(loader, doc, `a: &a ${long}\nb: [*a]\n`);
+  t.ok("text bomb: one copy fits", one >= 0);
+  const plain = yjLoad(loader, doc, `a: ${long}${long}${long}\n`);
+  t.eqI32("text bomb: no alias, too much text", plain, JSON_TOK_ERR_TOTAL_LIMIT);
+  t.eqI32("text bomb: at the string", loader.errorStart, 3);
+};
+
 const yjKeys = (t: Suite): void => {
   const text = "1: one\ntrue: yes\n~: nothing\n[a, b]: list\n0x10: hex\n";
   const doc = yjDoc();
@@ -300,6 +319,7 @@ export const main = (): number => {
   yjNumbers(t);
   yjNotFinite(t);
   yjBomb(t);
+  yjTextBomb(t);
   yjKeys(t);
   yjMerge(t);
   yjRefusals(t);

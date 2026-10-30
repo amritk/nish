@@ -37,6 +37,12 @@ PASS  bomb: the copy's root has the alias's range
 PASS  bomb: inside it, the anchored text's
 PASS  bomb: one past maxValues is refused
 PASS  bomb: no alias, too many values
+PASS  text bomb: copies of a long string past maxTotalBytes are refused
+PASS  text bomb: at the copy that does not fit
+PASS  text bomb: nothing is kept
+PASS  text bomb: one copy fits
+PASS  text bomb: no alias, too much text
+PASS  text bomb: at the string
 PASS  keys: non-string keys are their source text
 PASS  keys: with their ranges
 PASS  keys: the stream reports 1 and '1' as one key
@@ -60,4 +66,4 @@ PASS  depth: 64 deep loads
 PASS  document: the first loads
 PASS  document: an empty one is null
 PASS  names: an unknown code
-std/yaml-json: 62 passed, 0 failed, 0 skipped
+std/yaml-json: 68 passed, 0 failed, 0 skipped

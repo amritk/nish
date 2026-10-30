@@ -51,6 +51,10 @@
  * `JSON_VALUE_ERR_VALUES` when the document has no alias. A merged map counts
  * all its keys, also those the merging map overrides, so a document within a
  * few values of the limit can be refused for merges that would have fit.
+ * The text the copies store is bounded too, while they are built: past the
+ * document's `JsonLimits.maxTotalBytes` of string, key and number text, the
+ * load is `YAML_JSON_ERR_EXPANSION` at the outermost alias being copied, or
+ * `JSON_TOK_ERR_TOTAL_LIMIT` at the node when no alias is.
  *
  * **Nesting** is held to `maxDepth`, `JSON_WRITER_MAX_DEPTH` (64) by default,
  * counting copies, so that every loaded document can be written back as JSON;
@@ -77,7 +81,7 @@
  */
 
 import { JSON_WRITER_MAX_DEPTH } from "nish/json"
-import { JsonLimits } from "nish/json-tokenizer"
+import { JSON_TOK_ERR_TOTAL_LIMIT, JsonLimits } from "nish/json-tokenizer"
 import {
   JSON_VALUE_DUPLICATE_LAST,
   JSON_VALUE_ERR_DUPLICATE,
@@ -170,6 +174,11 @@ export class YamlJsonLoader {
   /** Internal: the alias with the largest copy, and its size. */
   bigAlias: i32 = -1
   bigSize: i32 = 0
+  /** Internal: the outermost alias being copied (`-1` for none), and the text the document may store. */
+  copying: i32 = -1
+  byteCap: i32 = 0
+  /** Internal: where the next map member goes in the `entry` arrays. */
+  entryTop: i32 = 0
   /**
    * Internal: the members of the maps being built, one map's after another's:
    * each one's key text and pair, and the value node it holds (`-1` for none).
@@ -177,7 +186,6 @@ export class YamlJsonLoader {
   entryKeys: string[]
   entryPairs: i32[]
   entryValues: i32[]
-  entryTop: i32 = 0
   /** Internal: a large map's key texts, to their entry. */
   seen: Map<string, i32>
 
@@ -205,6 +213,8 @@ export class YamlJsonLoader {
     this.errorStart = -1
     this.errorEnd = -1
     this.entryTop = 0
+    this.copying = -1
+    this.byteCap = doc.tok.maxTotalBytes
     doc.clear()
     if (d < 0 || d >= stream.documentCount()) {
       return this.fail(YAML_JSON_ERR_DOCUMENT, 0, 0)
@@ -386,6 +396,10 @@ export class YamlJsonLoader {
     const at: i32 = stream.resolved(n)
     const kind: i32 = stream.kind(at)
     let v: JsonValue = 0
+    const outer: boolean = this.copying < 0 && stream.kind(n) === YAML_ALIAS
+    if (outer) {
+      this.copying = n
+    }
     if (kind === YAML_MAP || kind === YAML_SEQ) {
       if (depth >= this.maxDepth) {
         return this.fail(YAML_JSON_ERR_DEPTH, stream.start(n), stream.end(n))
@@ -393,12 +407,28 @@ export class YamlJsonLoader {
       v = kind === YAML_MAP ? this.buildMap(at, depth + 1) : this.buildSeq(at, depth + 1)
     } else {
       v = this.buildScalar(at)
+      if (v >= 0 && this.doc.byteTop > this.byteCap) {
+        return this.tooMuchText(n)
+      }
+    }
+    if (outer) {
+      this.copying = -1
     }
     if (v < 0) {
       // The failure is recorded already, with its own range.
       return this.failed < 0 ? v : this.fail(v, stream.start(n), stream.end(n))
     }
     return this.ranged(v, stream.start(n), stream.end(n))
+  }
+
+  /** Internal: the failure for text past `byteCap`, stored for node `n`. */
+  tooMuchText(n: i32): i32 {
+    const stream: YamlStream = this.stream
+    const a: i32 = this.copying
+    if (a >= 0) {
+      return this.fail(YAML_JSON_ERR_EXPANSION, stream.start(a), stream.end(a))
+    }
+    return this.fail(JSON_TOK_ERR_TOTAL_LIMIT, stream.start(n), stream.end(n))
   }
 
   /** Internal: a scalar's value, by its core-schema type. */
@@ -482,6 +512,9 @@ export class YamlJsonLoader {
       const keyAt: i32 = doc.byteTop
       doc.append(ox, doc.index(v), keyAt, doc.storeText(key))
       const keyNode: i32 = stream.key(pair)
+      if (doc.byteTop > this.byteCap) {
+        return this.tooMuchText(keyNode < 0 ? pair : keyNode)
+      }
       const keyStart: i32 = keyNode < 0 ? stream.start(pair) : stream.start(keyNode)
       const keyEnd: i32 = keyNode < 0 ? keyStart : stream.end(keyNode)
       const code: i32 = doc.setKeyRange(o, e - base, keyStart, keyEnd)
@@ -675,13 +708,13 @@ const yamlJsonRadix = (text: string, from: i32, base: i32): string => {
     }
   }
   let top: i32 = toI32(limbs.length) - 1
-  let out: string = `${limbs[top]}`
+  const parts: string[] = [`${limbs[top]}`]
   while (top > 0) {
     top -= 1
     const limb: string = `${limbs[top]}`
-    out = `${out}${"000".substring(0, 4 - toI32(limb.length))}${limb}`
+    parts.push(`${"000".substring(0, 4 - toI32(limb.length))}${limb}`)
   }
-  return out
+  return parts.join("")
 }
 
 const yamlJsonByte = (text: string, i: i32): i32 =>
