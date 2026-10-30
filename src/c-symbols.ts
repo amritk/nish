@@ -699,6 +699,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sinpil" ||
   name === "snprintf" ||
   name === "socket" ||
+  name === "socketpair" ||
   name === "sprintf" ||
   name === "sqrt" ||
   name === "sqrtf" ||
