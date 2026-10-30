@@ -660,10 +660,6 @@ at 2.10 GHz, at 9046339. The AArch64 run is CI's `simd-arm64` job on
 | adler-64k | 22,719 | 22,691 | 3,199 | 20,806 | 21,699 | 21,691 | 2,878 | 33,096 |
 | adler-1m | 375,586 | 368,880 | 53,562 | 343,377 | 347,110 | 347,366 | 48,164 | 530,742 |
 
-The AArch64 run is CI's `simd-arm64` job on
-`ubuntu-24.04-arm` at 9046339, `--runs 12`. The reading is in
-[docs/wp38-simd.md §3.1](../docs/wp38-simd.md)._GAIN
-
 ## HTTP
 
 `http1-server.ts` is a program built on `nish/net/http1-server` the way the

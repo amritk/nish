@@ -6,6 +6,11 @@
 // the intrinsics, there is no kernel and `time` says so. Both defer the modulo
 // as adler32Update does: one reduction per NMAX bytes.
 //
+// Written from RFC 1950 §9 and the Intel and Arm intrinsic references; no
+// upstream code was copied. The blocking (32-byte blocks, taps 32..1, the
+// earlier blocks' s1 added to s2 once per block) is the standard technique,
+// which zlib-ng and Chromium also use.
+//
 //   kernel verify          every length 0..4096 at offsets 0..15, then large
 //                          inputs, kernel against the scalar reference; exit 0 when equal
 //   kernel time [scale]    the kernel on the workloads bench/adler32.ts times
@@ -114,7 +119,7 @@ __attribute__((target("ssse3"))) static uint32_t adler_ssse3(uint32_t adler, con
 #if ADLER_NEON
 /**
  * The same blocking on NEON: s1 by pairwise widening adds, the bytes' columns
- * summed in 16 bits (at most 173 blocks of 255 fit), weighted 32..1 once a
+ * summed in 16 bits (255 * 257 fits; NMAX caps a stretch at 173 blocks), weighted 32..1 once a
  * stretch by widening multiply-adds.
  */
 static uint32_t adler_neon(uint32_t adler, const uint8_t *buf, size_t len) {
@@ -241,7 +246,7 @@ static int verify(adler_fn f, const char *name) {
         cases++;
       }
     }
-    static const size_t large[] = {NMAX - 1, NMAX, NMAX + 1, 2 * NMAX, 1048576, BIG - 16};
+    static const size_t large[] = {NMAX - 1, NMAX, NMAX + 1, 2 * NMAX, 5535, 5536, 5537, 11072, 1048576, BIG - 16};
     for (size_t k = 0; k < sizeof large / sizeof *large; k++) {
       for (uint32_t seed = 1; seed != 0; seed = seed == 1 ? (65520u << 16) | 65520u : 0) {
         if (f(seed, data + 3, large[k]) != adler_scalar(seed, data + 3, large[k])) {

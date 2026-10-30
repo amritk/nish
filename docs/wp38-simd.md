@@ -1032,7 +1032,9 @@ gap is the vectors, not the compiler.
 On AArch64, CI's `simd-arm64` job runs `--check` and then `--runs 12` on each
 push and prints the table in its step log. These figures are from `9046339`
 (the merge ref `c916a3f`), on the GitHub `ubuntu-24.04-arm` runner, with the
-NEON kernel. It agreed with the scalar reference on the same 131,128 cases:
+NEON kernel. It agreed with the scalar reference on all 131,128 cases `verify`
+ran then. It now runs 131,144, adding the lengths either side of the kernel's
+5,536-byte stretch:
 
 | Size | `adler32Update` min / median | copy min / median | NEON min / median | scalar C median | Gain at the median | Band |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
