@@ -53,11 +53,10 @@ import { GAME_PLAYING, BreakGame, drawBreakGame, newBreakGame, stepBreakGame } f
 import {
   BreakMenu,
   BreakSettings,
-  FPS_CHOICE_COUNT,
   MENU_APPLY,
   MENU_QUIT,
   MENU_STAY,
-  RESOLUTION_CHOICE_COUNT,
+  cycleSetting,
   drawBreakMenu,
   fpsChoice,
   newBreakMenuWith,
@@ -144,14 +143,6 @@ const wallGraphicsLabel = (graphics: i32): string => {
   return graphics === GRAPHICS_ASCII ? "ascii" : "auto"
 }
 
-/** The graphics setting after `graphics` on F6: auto, then the best backend down to ascii, then auto again. */
-const wallNextGraphics = (graphics: i32): i32 => {
-  if (graphics < 0) {
-    return GRAPHICS_KITTY
-  }
-  return graphics === GRAPHICS_ASCII ? -1 : graphics - 1
-}
-
 /**
  * What a change of the graphics setting says. The terminal takes a backend as
  * `TerminalOptions.graphics`, but the seed that builds `src/` is older than that
@@ -170,27 +161,26 @@ const wallGetenv = (name: string): string => {
 /** Whether `e` is a press of one of the director's keys, F3 to F8. */
 const wallHotkey = (e: TermEvent): boolean => e.type === EVENT_KEY && e.key >= KEY_F3 && e.key <= KEY_F8
 
-/** Apply the director's key `key`: change its setting, say so, and ask for a reopening where it needs one. */
+/**
+ * Apply the director's key `key`: step its setting as Settings does, say so,
+ * and ask for a reopening where it needs one. F4 to F8 are Settings' first
+ * five rows in order; F3 is its stats row.
+ */
 const wallApplyKey = (run: WallRun, key: i32): void => {
   const s: BreakSettings = run.settings
+  cycleSetting(s, key === KEY_F3 ? 5 : key - KEY_F4, 1)
   if (key === KEY_F3) {
-    s.stats = !s.stats
     wallToast(run, s.stats ? "stats on" : "stats off")
   } else if (key === KEY_F4) {
-    s.fps = (s.fps + 1) % FPS_CHOICE_COUNT
     run.reopen = true
   } else if (key === KEY_F5) {
-    s.resolution = (s.resolution + 1) % RESOLUTION_CHOICE_COUNT
     wallToast(run, `resolution: ${resolutionChoice(s.resolution)} lines at most`)
   } else if (key === KEY_F6) {
-    s.graphics = wallNextGraphics(s.graphics)
     run.openGraphics = s.graphics
     wallToast(run, wallGraphicsToast(s.graphics))
   } else if (key === KEY_F7) {
-    s.smoothing = !s.smoothing
     wallToast(run, s.smoothing ? "smoothing on" : "smoothing off")
   } else if (key === KEY_F8) {
-    s.effects = s.effects === 0 ? 1 : 0
     wallToast(run, s.effects === 0 ? "effects low" : "effects high")
   }
 }
