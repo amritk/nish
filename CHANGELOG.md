@@ -26,6 +26,17 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-30
+
+### Fixed
+
+- cli: Install the main package with its pins stamped, as release.yml publishes it ([#1070](https://github.com/amritk/nish/pull/1070))
+
+### Tests
+
+- self: Keep package modules in the program's own golden ([#1060](https://github.com/amritk/nish/pull/1060))
+
+
 ## [0.27.0] - 2026-10-30
 
 ### Added
@@ -1357,3 +1368,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.25.0]: https://github.com/amritk/nish/releases/tag/v0.25.0
 [0.26.0]: https://github.com/amritk/nish/releases/tag/v0.26.0
 [0.27.0]: https://github.com/amritk/nish/releases/tag/v0.27.0
+[0.27.1]: https://github.com/amritk/nish/releases/tag/v0.27.1
