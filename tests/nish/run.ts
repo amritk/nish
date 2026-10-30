@@ -18,9 +18,10 @@ over one list, so `n` CI jobs share the corpus between them.
  * when its position is `i - 1` modulo `n`, which is the set `--shard i/n` names
  * alone, so `--jobs` changes how long a slice takes and never what it checks.
  * Each child keeps its work under `build/nish-runner-jobs/<slice>-of-<total>/`
- * (`--work <dir>`, the child's own flag, refused beside `--jobs` above 1), its output is printed whole in slice order once it and
- * every slice before it are done, and the last line is the summary summed
- * over them, so a `tail -n 1` reads it as one run's.
+ * (`--work <dir>`, the child's own flag, refused beside `--jobs` above 1),
+ * its output is printed whole in slice order once it and every slice before
+ * it are done, and the last line is the summary summed over them, so a
+ * `tail -n 1` reads it as one run's.
  *
  * `tests/run.js` is the suite of record and this is not a replacement for it: it
  * covers section A, the golden cases in `tests/cases/`, and the `tests/link/`
