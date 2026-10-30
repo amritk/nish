@@ -128,6 +128,12 @@ const DEFLATE_STORED_MAX: i32 = 65535
 /** Huffman's multiplier for the hash (Knuth's 2^32 / phi). */
 const DEFLATE_HASH_MUL: i64 = 2654435761
 
+/** `FixedDeflater`'s farthest match back: its inputs are short. */
+const FIXED_WINDOW: i32 = 16384
+
+/** `FixedDeflater`'s largest hash table, 2^14 entries; a call clears only as much as its input needs. */
+const FIXED_HASH_BITS: i32 = 14
+
 /** Decoder table entry kinds, in bits 8 to 10 of an entry. */
 const INF_LITERAL: i32 = 0
 const INF_LENGTH: i32 = 1
@@ -1650,6 +1656,224 @@ export class Deflater {
     this.bitBuf = bb
     this.bitCount = bc
     return this.putBits(out, o, lc[256], ll[256])
+  }
+}
+
+/**
+ * The most bytes `FixedDeflater.compress` writes for `n` bytes of input: nine
+ * bits a byte, the block's header and end code, and the eight bytes of slack
+ * its word-wide bit writer stores past the last whole byte. A negative `n`
+ * answers the bound of 0.
+ */
+export const fixedDeflateBound = (n: i32): i32 => {
+  if (n < 0) {
+    return 16
+  }
+  return n + (n >> 3) + 16
+}
+
+/**
+ * A one-block DEFLATE compressor in the fixed Huffman code (BTYPE=01, §3.2.6)
+ * for short inputs such as an HTTP response body: one hash probe per position,
+ * matches at most `FIXED_WINDOW` back, no code to build or send. It carries
+ * nothing from one call to the next: the hash table, sized to the input, is
+ * cleared at the start of every call, so the output is a function of the
+ * input alone. About 70 KB of tables; reuse one per thread.
+ */
+export class FixedDeflater {
+  /** `head[h]`: one past the last position, from the input's start, whose four bytes hash to `h`; 0 for none. */
+  readonly head: i32[]
+  /** Per byte: its fixed code, bit-reversed, below bit 16, and the code's length above. */
+  readonly literal: i32[]
+  /** Per length - 3: the length symbol's code and then its extra bits, below bit 16, and how many bits above. */
+  readonly length: i32[]
+  /** Distance to distance symbol, as `Deflater.distSymbol` maps it. */
+  readonly distSymbol: i32[]
+  /** Per distance symbol: its five-bit code, bit-reversed; its base distance; its extra bits. */
+  readonly distCode: i32[]
+  readonly distBase: i32[]
+  readonly distExtra: i32[]
+
+  /** The tables, once. */
+  constructor() {
+    this.head = new Array<i32>(1 << FIXED_HASH_BITS)
+    this.literal = new Array<i32>(256)
+    this.length = new Array<i32>(256)
+    this.distSymbol = new Array<i32>(512)
+    this.distCode = new Array<i32>(30)
+    this.distBase = new Array<i32>(30)
+    this.distExtra = new Array<i32>(30)
+    const lens: i32[] = new Array<i32>(288)
+    const codes: i32[] = new Array<i32>(288)
+    const count: i32[] = new Array<i32>(16)
+    const next: i32[] = new Array<i32>(16)
+    for (let s: i32 = 0; s < 288; s += 1) {
+      lens[s] = deflateFixedLitLength(s)
+    }
+    deflateCanonical(lens, 288, codes, count, next)
+    for (let b: i32 = 0; b < 256; b += 1) {
+      this.literal[b] = codes[b] | (lens[b] << 16)
+    }
+    for (let s: i32 = 0; s < 29; s += 1) {
+      const base: i32 = deflateLengthBase(s)
+      const extra: i32 = deflateLengthExtra(s)
+      // Symbol 27 stops short of 258, which has symbol 28 to itself.
+      const top: i32 = s === 28 ? 259 : deflateLengthBase(s + 1)
+      for (let l: i32 = base; l < top && l >= 3 && l <= 258; l += 1) {
+        const n: i32 = lens[257 + s]
+        this.length[l - 3] = codes[257 + s] | ((l - base) << n) | ((n + extra) << 16)
+      }
+    }
+    for (let d: i32 = 0; d < 30; d += 1) {
+      this.distCode[d] = deflateReverse(d, 5)
+      this.distBase[d] = deflateDistBase(d)
+      this.distExtra[d] = deflateDistExtra(d)
+    }
+    // Distances 1 to 256 directly; above, by (distance - 1) >> 7 from 256 on.
+    for (let d: i32 = 0; d < 30; d += 1) {
+      const lo: i32 = this.distBase[d]
+      const hi: i32 = d === 29 ? 32769 : this.distBase[d + 1]
+      for (let dist: i32 = lo; dist < hi; dist += 1) {
+        if (dist <= 256) {
+          this.distSymbol[dist - 1] = d
+        } else {
+          const at: i32 = ((dist - 1) >> 7) + 256
+          if (at < 512) {
+            this.distSymbol[at] = d
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Compresses `src[off .. off + len)` as one final fixed-Huffman block into
+   * `out[at .. at + room)`, and answers where it ends, or `DEFLATE_NO_ROOM` as
+   * soon as it would need more than `room` bytes: a caller that only wants
+   * the output when it is smaller passes the most it will take, and an input
+   * that does not compress is abandoned part way. `fixedDeflateBound(len)`
+   * always fits. A window outside its array panics. Allocates nothing.
+   */
+  compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32 {
+    deflateWindow("FixedDeflater.compress", src, off, len)
+    deflateWindow("FixedDeflater.compress", out, at, room)
+    const head: i32[] = this.head
+    const literal: i32[] = this.literal
+    const length: i32[] = this.length
+    const dsym: i32[] = this.distSymbol
+    const dcode: i32[] = this.distCode
+    const dbase: i32[] = this.distBase
+    const dextra: i32[] = this.distExtra
+    if (
+      toI32(head.length) !== 1 << FIXED_HASH_BITS ||
+      toI32(literal.length) !== 256 ||
+      toI32(length.length) !== 256 ||
+      toI32(dsym.length) !== 512 ||
+      toI32(dcode.length) !== 30 ||
+      toI32(dbase.length) !== 30 ||
+      toI32(dextra.length) !== 30
+    ) {
+      panic("FixedDeflater.compress: a table is not its size")
+    }
+    // A table about the input's size: clearing it is most of a short call's
+    // fixed cost, and a larger one finds no more matches.
+    let bits: i32 = 8
+    while (bits < FIXED_HASH_BITS && 1 << bits < len) {
+      bits += 1
+    }
+    head.fill(0, 0, 1 << bits)
+    const shift: u32 = toU32(32 - bits)
+    const end: i32 = off + len
+    // Matches start where eight bytes can be read; the last few are literals.
+    const last: i32 = end - 8
+    // A flush writes four bytes of the final output, so one that would pass
+    // the room's end means the whole cannot fit.
+    const oe: i32 = at + room - 4
+    // BFINAL = 1, BTYPE = 01.
+    let bb: u64 = toU64(3)
+    let bc: i32 = 3
+    let o: i32 = at
+    let p: i32 = off
+    while (p < end) {
+      let matched: i32 = 0
+      let dist: i32 = 0
+      if (p >= 0 && p <= last && p <= 2147483639) {
+        const pi: integer<0, 2147483639> = p
+        const w: u64 = deflateLoad64(src, pi)
+        const h: i32 = toI32((toU32(w) * toU32(DEFLATE_HASH_MUL)) >>> shift)
+        const c: i32 = uncheckedGet(head, h) - 1 + off
+        uncheckedSet(head, h, p - off + 1)
+        dist = p - c
+        if (c >= off && c >= 0 && c <= 2147483639 && dist <= FIXED_WINDOW) {
+          const ci: integer<0, 2147483639> = c
+          const x: u64 = deflateLoad64(src, ci) ^ w
+          if (toU32(x) === toU32(0)) {
+            const max: i32 = end - p < DEFLATE_MAX_MATCH ? end - p : DEFLATE_MAX_MATCH
+            matched =
+              x !== toU64(0)
+                ? deflateCtz64(x) >> 3
+                : toI32(8) + deflateMatchLength(src, c + 8, p + 8, max - 8)
+          }
+        }
+      }
+      if (matched === 0) {
+        const lc: i32 = uncheckedGet(literal, toI32(uncheckedGet(src, p)))
+        bb = bb | (toU64(toU32(lc & 0xffff)) << toU64(bc))
+        bc += lc >> 16
+        p += 1
+      } else {
+        const lc: i32 = uncheckedGet(length, matched - 3)
+        bb = bb | (toU64(toU32(lc & 0xffff)) << toU64(bc))
+        bc += lc >> 16
+        if (bc >= 32) {
+          if (o > oe) {
+            return DEFLATE_NO_ROOM
+          }
+          uncheckedSet(out, o, toU8(bb))
+          uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+          uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+          uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+          bb = bb >> toU64(32)
+          bc -= 32
+          o += 4
+        }
+        const d: i32 =
+          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
+        bb = bb | (toU64(toU32(uncheckedGet(dcode, d) | ((dist - uncheckedGet(dbase, d)) << 5))) << toU64(bc))
+        bc += 5 + uncheckedGet(dextra, d)
+        // One position near the match's end goes into the table, for the
+        // next repeat of what follows it; the rest are skipped.
+        const q: i32 = p + matched - 2
+        if (q >= 0 && q <= last && q <= 2147483639) {
+          const qi: integer<0, 2147483639> = q
+          const hq: i32 = toI32((deflateLoad32(src, qi) * toU32(DEFLATE_HASH_MUL)) >>> shift)
+          uncheckedSet(head, hq, q - off + 1)
+        }
+        p += matched
+      }
+      if (bc >= 32) {
+        if (o > oe) {
+          return DEFLATE_NO_ROOM
+        }
+        uncheckedSet(out, o, toU8(bb))
+        uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+        uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+        uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
+        bb = bb >> toU64(32)
+        bc -= 32
+        o += 4
+      }
+    }
+    // The end-of-block code, 256: seven zero bits.
+    bc += 7
+    const bytes: i32 = (bc + 7) >> 3
+    if (o > at + room - bytes) {
+      return DEFLATE_NO_ROOM
+    }
+    for (let i: i32 = 0; i < bytes; i += 1) {
+      uncheckedSet(out, o + i, toU8(bb >> toU64(8 * i)))
+    }
+    return o + bytes
   }
 }
 

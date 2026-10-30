@@ -155,3 +155,38 @@ Python; zlib-rs and Bun's native gzip are faster but write 37 % more bytes
 (2,595 against 1,890), a different trade, so at the same size only libdeflate
 is faster. At level 6, libdeflate, klauspost/compress and zlib-rs are faster,
 taking 74 %, 84 % and 94 % of Nish's time.
+
+## Small bodies: the fixed-Huffman encoder
+
+`small.mjs` times `GzipFixedCompressor`, the encoder `HttpCompressor` picks
+for bodies under `fixedLimit` (16 KB), against `GzipCompressor` at
+`DEFLATE_FAST` on feed JSON of about 0.5, 2, 4, 8 and 16 KB (`small.ts`, both
+reused, into a reused buffer):
+
+```bash
+npm run build && node bench/gzip/small.mjs --rounds 9 --calls 20000
+```
+
+Same machine, 9 rounds of 20,000 calls, the median; the size column is the
+gzip stream and its share of the body, and zlib -1's size is for scale.
+
+| body | DEFLATE_FAST µs | size | fixed µs | size | fixed time | fixed size | zlib -1 size |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 560 | 5.93 | 396 (70.7%) | 1.33 | 527 (94.1%) | 0.22x | 1.331x | 396 |
+| 1968 | 10.16 | 863 (43.9%) | 3.42 | 1191 (60.5%) | 0.34x | 1.380x | 873 |
+| 3829 | 16.32 | 1464 (38.2%) | 6.17 | 2018 (52.7%) | 0.38x | 1.378x | 1478 |
+| 8045 | 28.31 | 2761 (34.3%) | 12.37 | 3786 (47.1%) | 0.44x | 1.371x | 2797 |
+| 15961 | 69.67 | 5153 (32.3%) | 26.99 | 6963 (43.6%) | 0.39x | 1.351x | 5215 |
+
+The fixed encoder takes 0.22 to 0.44 times `DEFLATE_FAST`'s time and writes
+about 1.35 times its bytes. It skips what makes a dynamic block: no symbol
+counts, no Huffman construction, no code-length header (which, at 560 bytes,
+is most of `DEFLATE_FAST`'s time). One hash probe per position in a 16 KB
+window, a 14-bit table cleared per call, codes from two constant tables, and
+four-byte flushes; nothing is carried from one call to the next.
+
+A public C/Zig server reports about 3 µs for a 5 KB JSON list on its
+small-body path, on its own hardware. Here the fixed encoder takes about 8 µs
+at that size (between the 3,829 and 8,045 rows) and libdeflate -1 takes 12.37
+µs (the first table above), so this machine is slow for this work; the two
+figures cannot be compared without running both on one machine.
