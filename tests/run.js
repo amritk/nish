@@ -17540,6 +17540,32 @@ if (!only || "simd".includes(only)) {
     )
   }
 
+  // runtime/runtime-sha256.c runs SHA-256's block on SHA-NI or the ARMv8 SHA-256
+  // instructions, in place of std/crypto/sha256.ts's `sha256Compress`, by what the CPU
+  // has. tests/simd/sha256.c includes the file and holds the kernel to FIPS 180-4's
+  // block function written out word by word -- NIST's digests first, then 20,000
+  // seeded blocks at random offsets and the guard's every edge -- and checks
+  // `nish_sha256_hw` under each `NISH_SHA256`. As with AES, /proc/cpuinfo's word
+  // decides whether the line must name the path.
+  const shaSaid = agree(`sha256 native ${process.arch}`, [], path.join(simdDir, "sha256"), native, "tests/simd/sha256.c")
+  let wantSha = null
+  if (process.arch === "x64" && features.has("sha_ni") && features.has("sse4_1") && features.has("ssse3")) {
+    wantSha = "sha-ni"
+  } else if (process.arch === "arm64" && features.has("sha2")) {
+    wantSha = "armv8-sha2"
+  }
+  if (wantSha === null) {
+    skip(
+      `simd: sha256: /proc/cpuinfo names no SHA-256 instructions for ${process.platform}-${process.arch}, so no kernel path is required to run`
+    )
+  } else {
+    check(
+      `simd: sha256 ran the ${wantSha} path, which /proc/cpuinfo says this CPU has`,
+      new RegExp(`cases agree across ${wantSha};`).test(shaSaid),
+      shaSaid
+    )
+  }
+
   if (WASI_SYSROOT && has("wasm-ld")) {
     for (const [label, flags, source, name] of [
       ["wasm32-wasi, the scalar base path", [], driver, "index-of-any"],
@@ -17586,9 +17612,10 @@ if (!only || "simd".includes(only)) {
         `simd: an empty program does not link statically for aarch64-linux-gnu here (${why}): the NEON path is not run`
       )
     } else {
-      // The NEON path of the byte search, and the ARMv8 AES and PMULL path of
-      // runtime-aes.c. qemu-user takes its CPU from QEMU_CPU, and `max` has AES and
-      // PMULL, so the AES driver's line must name that path: a soft-only run that
+      // The NEON path of the byte search, the ARMv8 AES and PMULL path of
+      // runtime-aes.c and the ARMv8 SHA-256 path of runtime-sha256.c. qemu-user takes
+      // its CPU from QEMU_CPU, and `max` has AES, PMULL and SHA2, so those drivers'
+      // lines must name their paths: a soft-only run that
       // agreed would otherwise pass as the hardware one.
       for (const [label, source, out, what, wantLine] of [
         ["aarch64 through binfmt, the NEON path", driver, a64, "the NEON path", null],
@@ -17613,6 +17640,13 @@ if (!only || "simd".includes(only)) {
           "the ARMv8 AES path",
           /cases agree across armv8-aes-pmull;/,
         ],
+        [
+          "sha256 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 SHA-256 path",
+          "tests/simd/sha256.c",
+          path.join(simdDir, "sha256.aarch64"),
+          "the ARMv8 SHA-256 path",
+          /cases agree across armv8-sha2;/,
+        ],
       ]) {
         const linked = build(cross, out, source)
         const r =
@@ -17623,7 +17657,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -17673,7 +17707,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
@@ -17687,6 +17721,19 @@ if (!only || "simd".includes(only)) {
     for (const file of fs.readdirSync(path.join(root, "runtime"))) {
       if (/\.(c|h)$/.test(file) && file !== "runtime-aes.c") {
         fs.copyFileSync(path.join(root, "runtime", file), path.join(noAesDir, file))
+      }
+    }
+    const shaControl =
+      wantSha === null
+        ? null
+        : "nish_sha256_hw: 1\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n"
+    // And the runtime as it was before build.sh paired runtime-sha256.c.
+    const noShaDir = path.join(simdDir, "runtime-without-sha256")
+    fs.rmSync(noShaDir, { recursive: true, force: true })
+    fs.mkdirSync(noShaDir, { recursive: true })
+    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+      if (/\.(c|h)$/.test(file) && file !== "runtime-sha256.c") {
+        fs.copyFileSync(path.join(root, "runtime", file), path.join(noShaDir, file))
       }
     }
     for (const profile of ["speed", "size"]) {
@@ -17741,6 +17788,34 @@ if (!only || "simd".includes(only)) {
           `hello without: ${withoutAes.bytes?.length ?? "(not linked)"} bytes ${withoutAes.why}\n` +
           `the control keeps: ${aesCtrl.names.join(" ") || "(none)"} ${aesCtrl.why}\nthe control printed: ${printed || "(not run)"}`
       )
+
+      const withoutSha =
+        compiled.status === 0
+          ? kept(
+              [helloLl],
+              path.join(simdDir, `hello-no-sha256.${profile}`),
+              profile,
+              path.join(noShaDir, "runtime.c")
+            )
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      const shaExe = path.join(simdDir, `sha256-calls.${profile}`)
+      const shaCtrl = kept(["tests/simd/sha256-calls.c"], shaExe, profile)
+      const shaRan = shaCtrl.ok ? spawnSync(shaExe, [], { encoding: "utf8" }) : null
+      const shaPrinted = shaRan === null ? "" : String(shaRan.stdout)
+      check(
+        `simd: --profile ${profile} links hello with runtime-sha256.c to the same bytes as without it, and a program that calls the kernel runs it`,
+        withoutSha.ok &&
+          quiet.ok &&
+          withoutSha.bytes.equals(quiet.bytes) &&
+          shaCtrl.ok &&
+          shaCtrl.names.includes("nish_sha256_compress") &&
+          !shaCtrl.names.includes("__cpu_model") &&
+          shaRan.status === 0 &&
+          (shaControl === null ? /^nish_sha256_hw: [01]\n/.test(shaPrinted) : shaPrinted === shaControl),
+        `hello with runtime-sha256.c: ${quiet.bytes?.length ?? "(not linked)"} bytes ${quiet.why}\n` +
+          `hello without: ${withoutSha.bytes?.length ?? "(not linked)"} bytes ${withoutSha.why}\n` +
+          `the control keeps: ${shaCtrl.names.join(" ") || "(none)"} ${shaCtrl.why}\nthe control printed: ${shaPrinted || "(not run)"}`
+      )
     }
   }
 
@@ -17765,8 +17840,23 @@ if (!only || "simd".includes(only)) {
       ran !== null && ran.status === 0 && ran.stdout === "nish_aes_hw: 0\n",
       b.status !== 0 ? b.stderr : `${ran.stdout}${ran.stderr}`
     )
+    const shaWasm = path.join(simdDir, "sha256-calls.wasm")
+    const shaB = spawnSync(
+      "bash",
+      ["scripts/build.sh", "tests/simd/sha256-calls.c", "runtime/runtime.c", "-o", shaWasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+    )
+    const shaRan =
+      shaB.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", shaWasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      "simd: --profile wasi links runtime-sha256.c, and nish_sha256_hw answers 0 there",
+      shaRan !== null && shaRan.status === 0 && shaRan.stdout === "nish_sha256_hw: 0\n",
+      shaB.status !== 0 ? shaB.stderr : `${shaRan.stdout}${shaRan.stderr}`
+    )
   } else {
-    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's wasm32 build is not linked")
+    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's and runtime-sha256.c's wasm32 builds are not linked")
   }
 
   // The freestanding `wasm` profile links runtime-wasm.c, not runtime.c, so nothing
