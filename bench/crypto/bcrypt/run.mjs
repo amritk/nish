@@ -5,7 +5,11 @@
  * and four hashes at once, `bcryptHash4` against tigokraft's interleaved
  * `bc_hash_n` (`src/bcrypt.c` of the multicore-server-challenge submission,
  * MIT), built with `gcc` and `clang -O2 -march=native` from a copy fetched at a
- * pinned commit, run with one lane and with four.
+ * pinned commit, run with one lane and with four; and `bcryptHashN` at each
+ * width from one to six, so the widths are measured on this core rather than
+ * guessed. The single path's row is also given in cycles per Blowfish block:
+ * the clock (`--ghz`, else the first `cpu MHz` of /proc/cpuinfo) times its
+ * time per hash over the 2^cost × 1042 + 713 blocks a hash encrypts.
  *
  * Each program hashes "U*U" under an all-zero salt `--hashes` times (a
  * four-lane program `--hashes` batches of four) and prints the last hash, a
@@ -16,7 +20,7 @@
  * the median of `--rounds` rounds and their spread, which is the noise band;
  * one more round runs first as a warm-up and is not counted.
  *
- * Usage: node bench/crypto/bcrypt/run.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N]
+ * Usage: node bench/crypto/bcrypt/run.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N] [--ghz F]
  * A missing C compiler, libxcrypt or network leaves its rows out with a note.
  * Build products and the fetched C files go to build/bench/bcrypt/; nothing
  * fetched is copied into the repository.
@@ -45,6 +49,14 @@ for (const [name, value, lo, hi] of [
     console.error(`${name} must be an integer from ${lo} to ${hi}`)
     process.exit(1)
   }
+}
+const blocks = 2 ** cost * 1042 + 713
+const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
+const mhz = cpuinfo.match(/^cpu MHz\s*:\s*([0-9.]+)/m)
+const ghz = Number(argValue("--ghz", mhz ? String(Number(mhz[1]) / 1000) : "0"))
+if (!Number.isFinite(ghz) || ghz < 0) {
+  console.error("--ghz must be a clock in GHz")
+  process.exit(1)
 }
 const setting = `$2b$${String(cost).padStart(2, "0")}$${".".repeat(22)}`
 
@@ -140,6 +152,59 @@ export const main = (): i32 => {
 }
 `
 
+/** `bcryptHashN` with lanes 0 to `width` - 1 given, printing each given lane's last hash. */
+const NISH_LOOPN = (width) => `import { bcryptHashN } from "nish/crypto/bcrypt"
+import { Secret, secret, wipe } from "nish:secret"
+
+const given = (k: i32): Secret<u8[]> | null => {
+  if (k >= ${width}) {
+    return null
+  }
+  const raw: u8[] = [85, 42, 85]
+  return secret(raw)
+}
+
+export const main = (): i32 => {
+  const r0: u8[] = [85, 42, 85]
+  const p0: Secret<u8[]> = secret(r0)
+  const p1: Secret<u8[]> | null = given(1)
+  const p2: Secret<u8[]> | null = given(2)
+  const p3: Secret<u8[]> | null = given(3)
+  const p4: Secret<u8[]> | null = given(4)
+  const p5: Secret<u8[]> | null = given(5)
+  const salts: u8[] = new Array<u8>(96)
+  let last: string[] = []
+  for (let i: i32 = 0; i < ${hashes}; i++) {
+    const h: Result<string[], string> = bcryptHashN(p0, p1, p2, p3, p4, p5, salts, ${cost})
+    if (h.isOk()) {
+      last = h.value
+    }
+  }
+  wipe(p0)
+  if (p1 !== null) {
+    wipe(p1)
+  }
+  if (p2 !== null) {
+    wipe(p2)
+  }
+  if (p3 !== null) {
+    wipe(p3)
+  }
+  if (p4 !== null) {
+    wipe(p4)
+  }
+  if (p5 !== null) {
+    wipe(p5)
+  }
+  for (const hash of last) {
+    if (hash !== "") {
+      console.log(hash)
+    }
+  }
+  return 0
+}
+`
+
 const NISH_LOOP4 = `import { bcryptHash4 } from "nish/crypto/bcrypt"
 import { Secret, secret, wipe } from "nish:secret"
 
@@ -181,6 +246,12 @@ const programs = []
 for (const [name, source, exe, per] of [
   ["Nish (`nish/crypto/bcrypt`)", NISH_LOOP, "nish", 1],
   ["Nish `bcryptHash4`, four lanes", NISH_LOOP4, "nish4", 4],
+  ...[1, 2, 3, 4, 5, 6].map((w) => [
+    `Nish \`bcryptHashN\`, ${w === 1 ? "one lane" : `${w} lanes`}`,
+    NISH_LOOPN(w),
+    `nishn${w}`,
+    w,
+  ]),
 ]) {
   fs.writeFileSync(path.join(dir, `${exe}.ts`), source)
   const nish = run(
@@ -367,7 +438,7 @@ const median = (xs) => {
   return s[Math.floor(s.length / 2)]
 }
 console.log(
-  `CPU ms per cost-${cost} hash (${hashes} hashes or batches of four a round, median and spread of ${rounds} rounds)`
+  `CPU ms per cost-${cost} hash (${hashes} hashes or batches a round, median and spread of ${rounds} rounds)`
 )
 console.log(`hash: ${[...outputs][0]}\n`)
 console.log("| Implementation | ms per hash |")
@@ -378,6 +449,15 @@ programs.forEach((p, i) => {
   const hi = Math.max(...xs).toFixed(1)
   console.log(`| ${p.name} | ${median(xs).toFixed(1)} (${lo}–${hi}) |`)
 })
+if (ghz > 0) {
+  const single = median(samples[0]) / 1000
+  console.log(
+    `\nThe single path: ${((ghz * 1e9 * single) / blocks).toFixed(0)} cycles per Blowfish block ` +
+      `(${ghz.toFixed(2)} GHz × ${(single * 1000).toFixed(1)} ms / ${blocks} blocks)`
+  )
+} else {
+  notes.push("cycles per block left out: no clock in /proc/cpuinfo; pass --ghz")
+}
 for (const note of notes) {
   console.log(`\nnote: ${note}`)
 }
