@@ -1,0 +1,63 @@
+PASS  twins: both load
+PASS  twins: equal trees
+PASS  twins: line:column of every JSON value and key
+PASS  twins: line:column of every YAML value and key
+PASS  ranges: loads
+PASS  ranges: every value and key slices to its node
+PASS  ranges: decoded strings
+PASS  ranges: an empty value is null
+PASS  numbers: load
+PASS  numbers: exact JSON text
+PASS  numbers: a hex integer past 256 digits
+PASS  numbers: at it
+PASS  not finite: .inf is refused
+PASS  not finite: .inf at its node
+PASS  not finite: .inf leaves the document empty
+PASS  not finite: -.inf is refused
+PASS  not finite: -.inf at its node
+PASS  not finite: -.inf leaves the document empty
+PASS  not finite: +.INF is refused
+PASS  not finite: +.INF at its node
+PASS  not finite: +.INF leaves the document empty
+PASS  not finite: .nan is refused
+PASS  not finite: .nan at its node
+PASS  not finite: .nan leaves the document empty
+PASS  not finite: .NaN is refused
+PASS  not finite: .NaN at its node
+PASS  not finite: .NaN leaves the document empty
+PASS  not finite: named
+PASS  not finite: a quoted or tagged one is a string
+PASS  bomb: a billion laughs is refused
+PASS  bomb: at the first alias whose copy is past the limit
+PASS  bomb: nothing was built
+PASS  bomb: named
+PASS  bomb: an expansion within maxValues loads
+PASS  bomb: as copies
+PASS  bomb: the copy's root has the alias's range
+PASS  bomb: inside it, the anchored text's
+PASS  bomb: one past maxValues is refused
+PASS  bomb: no alias, too many values
+PASS  keys: non-string keys are their source text
+PASS  keys: with their ranges
+PASS  keys: the stream reports 1 and '1' as one key
+PASS  keys: 1 and '1' are one JSON key
+PASS  keys: refused at the second
+PASS  keys: or the last value, in the first one's place
+PASS  keys: with the first key's range
+PASS  keys: a wide map loads
+PASS  keys: a repeat past the scan is found
+PASS  merge: loads
+PASS  merge: a merge in a merged map
+PASS  merge: own keys win, then the first map listed
+PASS  merge: a merged key keeps its source range
+PASS  merge: from the anchored map
+PASS  document: past the last
+PASS  yaml: a document with an error
+PASS  yaml: at its diagnostic
+PASS  depth: 65 deep is refused
+PASS  depth: at the one too deep
+PASS  depth: 64 deep loads
+PASS  document: the first loads
+PASS  document: an empty one is null
+PASS  names: an unknown code
+std/yaml-json: 62 passed, 0 failed, 0 skipped
