@@ -257,6 +257,9 @@ const regexSpanAt = (at: i32): i32 => {
 
 /** Whether some code point in `[lo, hi]` folds under `i`; a range it misses needs no fold table. */
 const regexFoldsIn = (lo: i32, hi: i32): boolean => {
+  if (hi < regexSpanAt(0)) {
+    return false
+  }
   // The first run ending at or after `lo`, by binary search.
   let a: i32 = 0
   let b: i32 = toI32(REGEX_FOLD_SPANS.length) >> 3
@@ -434,9 +437,12 @@ class RegexParser {
   /** The class being parsed: its ranges, unsorted, `tmpCount` of them. */
   tmpLo: i32[]
   tmpHi: i32[]
-  /** Simple case folding above ASCII, read from `REGEX_FOLD_DATA` on first use: each member of an orbit, by code point, and the next member. */
-  foldCp: i32[]
-  foldNext: i32[]
+  /**
+   * Simple case folding above ASCII, read from `REGEX_FOLD_DATA` on first
+   * use: each member of an orbit, by code point, then the next member, in
+   * pairs. Null until then, so a parser that never folds allocates nothing.
+   */
+  folds: i32[] | null
 
   len: i32
   pos: i32
@@ -490,8 +496,7 @@ class RegexParser {
     this.tmpCount = 0
     this.qMin = 0
     this.qMax = 0
-    this.foldCp = []
-    this.foldNext = []
+    this.folds = null
     this.tablePos = 0
     this.propertyRanges = 0
   }
@@ -540,8 +545,8 @@ class RegexParser {
     if (f < 0) {
       return this.node(NODE_CHAR, cp, cp)
     }
-    const next: i32 = this.foldNext[f]
-    const after: i32 = this.foldNext[this.foldIndex(next)]
+    const next: i32 = this.foldNext(f)
+    const after: i32 = this.foldNext(this.foldIndex(next))
     if (after === cp) {
       return this.node(NODE_CHAR, cp, next)
     }
@@ -550,7 +555,7 @@ class RegexParser {
     let c: i32 = next
     while (c !== cp) {
       this.addRange(c, c)
-      c = this.foldNext[this.foldIndex(c)]
+      c = this.foldNext(this.foldIndex(c))
     }
     return this.finishClass(false)
   }
@@ -568,11 +573,13 @@ class RegexParser {
     return v * 32 + d
   }
 
-  /** Read `REGEX_FOLD_DATA` into `foldCp` / `foldNext`, the first time only. */
-  loadFolds(): void {
-    if (toI32(this.foldCp.length) > 0) {
-      return
+  /** `folds`, read from `REGEX_FOLD_DATA` the first time. */
+  foldTable(): i32[] {
+    const have: i32[] | null = this.folds
+    if (have !== null) {
+      return have
     }
+    const table: i32[] = []
     this.tablePos = 0
     const n: i32 = this.tableNumber(REGEX_FOLD_DATA)
     let c: i32 = 0
@@ -580,29 +587,36 @@ class RegexParser {
     while (i < n) {
       c += this.tableNumber(REGEX_FOLD_DATA)
       const step: i32 = this.tableNumber(REGEX_FOLD_DATA)
-      this.foldCp.push(c)
-      this.foldNext.push((step & 1) === 1 ? c - (step >> 1) - 1 : c + (step >> 1))
+      table.push(c)
+      table.push((step & 1) === 1 ? c - (step >> 1) - 1 : c + (step >> 1))
       i += 1
     }
+    this.folds = table
+    return table
   }
 
-  /** The index of `cp` in `foldCp`, or -1 if it folds to nothing. */
+  /** The pair index of `cp` in `folds`, or -1 if it folds to nothing. */
   foldIndex(cp: i32): i32 {
-    this.loadFolds()
+    const table: i32[] = this.foldTable()
     let lo: i32 = 0
-    let hi: i32 = toI32(this.foldCp.length)
+    let hi: i32 = toI32(table.length) >> 1
     while (lo < hi) {
       const mid: i32 = (lo + hi) >> 1
-      if (this.foldCp[mid] < cp) {
+      if (table[2 * mid] < cp) {
         lo = mid + 1
       } else {
         hi = mid
       }
     }
-    if (lo < toI32(this.foldCp.length) && this.foldCp[lo] === cp) {
+    if (lo < toI32(table.length) >> 1 && table[2 * lo] === cp) {
       return lo
     }
     return -1
+  }
+
+  /** The member after the one at pair index `f` in its orbit. */
+  foldNext(f: i32): i32 {
+    return this.foldTable()[2 * f + 1]
   }
 
   /** `alternative ('|' alternative)*`. */
@@ -1549,8 +1563,8 @@ class RegexParser {
     if (!touches || covers) {
       return false
     }
-    this.loadFolds()
-    const nf: i32 = toI32(this.foldCp.length)
+    const table: i32[] = this.foldTable()
+    const nf: i32 = toI32(table.length) >> 1
     let added: i32 = 0
     let r: i32 = from
     while (r < out) {
@@ -1559,15 +1573,15 @@ class RegexParser {
       let top: i32 = nf
       while (f < top) {
         const mid: i32 = (f + top) >> 1
-        if (this.foldCp[mid] < this.clsLo[r]) {
+        if (table[2 * mid] < this.clsLo[r]) {
           f = mid + 1
         } else {
           top = mid
         }
       }
-      while (f < nf && this.foldCp[f] <= this.clsHi[r]) {
-        let c: i32 = this.foldNext[f]
-        while (c !== this.foldCp[f]) {
+      while (f < nf && table[2 * f] <= this.clsHi[r]) {
+        let c: i32 = table[2 * f + 1]
+        while (c !== table[2 * f]) {
           if (!this.rangesHave(from, out, c)) {
             if (added === 0) {
               this.tmpCount = 0
@@ -1575,7 +1589,7 @@ class RegexParser {
             this.addRange(c, c)
             added += 1
           }
-          c = this.foldNext[this.foldIndex(c)]
+          c = this.foldNext(this.foldIndex(c))
         }
         f += 1
       }
