@@ -67,9 +67,12 @@
  * `start(v)` and `end(v)` bound a value, `keyStart(o, i)` and `keyEnd(o, i)`
  * the key of member `i`, its quotes included. They are offsets into the bytes
  * `parse` was given, or `parseText`'s string, so a line index over that text
- * (`YamlLineIndex` is one) turns them into a line and a column. That costs
- * 20 bytes per value more, two offsets for the value, two for its key and one
- * on the parse's stack. With it off, the default, the range arrays stay empty
+ * (`YamlLineIndex` is one) turns them into a line and a column. Under Node,
+ * where `parseText` takes one byte per UTF-16 code unit (below), its offsets
+ * count code units, so past the first non-ASCII character they differ from a
+ * native build's, which count UTF-8 bytes. That costs 20 bytes per value
+ * more, two offsets for the value, two for its key and one on the parse's
+ * stack. With it off, the default, the range arrays stay empty
  * and every reader answers `-1`. `keepRanges` takes effect at the next
  * `parse` or `clear`, so a loader that builds a document from another text
  * sets it, `clear`s, and gives each value it makes its range with `setRange`

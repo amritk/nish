@@ -279,6 +279,43 @@ const jrGrowth = (t: Suite): void => {
   t.eqI32("growth: and takes one", doc.setRange(v, 0, 3), JSON_VALUE_OK);
 };
 
+const jrParsedEdits = (t: Suite): void => {
+  // `set` over a parsed member replaces its value in place: the key keeps its parsed range, the value is the new one's.
+  const doc = jrRanged();
+  const text = '{"a":1,"b":[true]}';
+  const root = doc.parseText(text);
+  if (!t.ok("parsed edits: the document parses", root >= 0)) {
+    return;
+  }
+  const old = doc.get(root, "a");
+  t.eqI32("parsed edits: set over a parsed key", doc.set(root, "a", doc.newString("z")), JSON_VALUE_OK);
+  t.eqStr("parsed edits: the key keeps its parsed range", jrKey(doc, text, root, 0), '"a"');
+  t.eqI32("parsed edits: the new value has none", doc.start(doc.get(root, "a")), -1);
+  t.eqStr("parsed edits: the replaced value keeps its own", jrValue(doc, text, old), "1");
+  const given = doc.newI64(toI64(9));
+  doc.setRange(given, 30, 31);
+  t.eqI32("parsed edits: set again, with a value that has a range", doc.set(root, "a", given), JSON_VALUE_OK);
+  t.ok("parsed edits: the member reads that range", doc.start(doc.get(root, "a")) === 30 && doc.end(doc.get(root, "a")) === 31);
+  t.eqStr("parsed edits: and still its parsed key", jrKey(doc, text, root, 0), '"a"');
+  // A push onto a parsed array goes through `append`, which moves the full parsed slots.
+  const b = doc.get(root, "b");
+  t.eqI32("parsed edits: a push onto a parsed array", doc.push(b, doc.newNull()), JSON_VALUE_OK);
+  t.eqStr("parsed edits: the parsed element keeps its range", jrValue(doc, text, doc.at(b, 0)), "true");
+  t.eqI32("parsed edits: the pushed one has none", doc.start(doc.at(b, 1)), -1);
+  // Across documents: the next parse reuses the indices and slots the first one ranged, and a build writes -1 over them.
+  const longer = '{"p":[1,2,3,4,5,6,7,8],"q":{"r":"s","t":"u"}}';
+  const first = doc.parseText(longer);
+  t.ok("parsed edits: a longer document parses", first >= 0);
+  const second = doc.parseText('{"k":0}');
+  t.ok("parsed edits: then a shorter one", second >= 0);
+  const fresh = doc.newArray();
+  t.ok("parsed edits: a value built on an index the longer one ranged has none", doc.start(fresh) === -1 && doc.end(fresh) === -1);
+  t.eqI32("parsed edits: a set of a new key", doc.set(second, "n", fresh), JSON_VALUE_OK);
+  t.ok("parsed edits: on a slot the longer one ranged has none", doc.keyStart(second, 1) === -1 && doc.keyEnd(second, 1) === -1);
+  t.eqI32("parsed edits: a handle from the longer document is not adopted", doc.set(second, "m", doc.get(first, "q")), JSON_VALUE_ERR_HANDLE);
+  t.eqI32("parsed edits: and adds no member", doc.length(second), 2);
+};
+
 export const main = (): number => {
   const t = new Suite("std/json-value ranges");
   jrKinds(t);
@@ -289,5 +326,6 @@ export const main = (): number => {
   jrReparse(t);
   jrBuilders(t);
   jrGrowth(t);
+  jrParsedEdits(t);
   return t.done();
 };

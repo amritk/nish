@@ -109,4 +109,22 @@ PASS  growth: reads back after it
 PASS  growth: a parsed value keeps its range
 PASS  growth: after clear, a new value has no range
 PASS  growth: and takes one
-std/json-value ranges: 111 passed, 0 failed, 0 skipped
+PASS  parsed edits: the document parses
+PASS  parsed edits: set over a parsed key
+PASS  parsed edits: the key keeps its parsed range
+PASS  parsed edits: the new value has none
+PASS  parsed edits: the replaced value keeps its own
+PASS  parsed edits: set again, with a value that has a range
+PASS  parsed edits: the member reads that range
+PASS  parsed edits: and still its parsed key
+PASS  parsed edits: a push onto a parsed array
+PASS  parsed edits: the parsed element keeps its range
+PASS  parsed edits: the pushed one has none
+PASS  parsed edits: a longer document parses
+PASS  parsed edits: then a shorter one
+PASS  parsed edits: a value built on an index the longer one ranged has none
+PASS  parsed edits: a set of a new key
+PASS  parsed edits: on a slot the longer one ranged has none
+PASS  parsed edits: a handle from the longer document is not adopted
+PASS  parsed edits: and adds no member
+std/json-value ranges: 129 passed, 0 failed, 0 skipped

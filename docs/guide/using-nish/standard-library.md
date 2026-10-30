@@ -758,7 +758,10 @@ about a value can point at its line and column. `start(v)` and `end(v)` are
 the byte offsets of the value's first byte and one past its last, and
 `keyStart(o, i)` and `keyEnd(o, i)` the same for the key of member `i` of
 object `o`; a string's and a key's range includes its quotes. The offsets are
-into the array you gave `parse`, or into the string `parseText` read.
+into the array you gave `parse`, or into the string `parseText` read. Under
+Node, where `parseText` reads one byte per UTF-16 code unit, its offsets
+count code units, so past the first non-ASCII character they differ from a
+native build's, which count UTF-8 bytes.
 
 ```ts nish:ok
 import { JsonLimits } from "nish/json-tokenizer";
