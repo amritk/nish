@@ -3531,12 +3531,6 @@ function pbkdf2HmacSha256(password: Secret<u8[]>, salt: u8[], iterations: i32, l
   callee +1:27 exposeWith<u8[], Pbkdf2Request, u8[] | null, pbkdf2HmacSha256Exposed> -> @nish.exposeWith$arr.u8$$Pbkdf2Request$opt.arr.u8$fn.28.nish.pbkdf2HmacSha256Exposed
   callee +5:10 secret<u8[]> -> @nish.secret$arr.u8
 module std/crypto/sha256.ts [package nish]
-import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
-unsafe import 38:10 uncheckedGet from "nish:unsafe"
-unsafe call 88:9 uncheckedGet (node 229)
-unsafe call 89:10 uncheckedGet (node 240)
-unsafe call 90:10 uncheckedGet (node 254)
-unsafe call 91:10 uncheckedGet (node 268)
 const SHA256_SIZE: i32 = 32 [exported]
 const SHA256_BLOCK: i32 = 64 [exported]
 struct Sha256 (class) size=40 align=8 exported
@@ -3590,7 +3584,9 @@ function sha256Majority(x: u32, y: u32, z: u32): u32 -> @nish.sha256Majority
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sha256LoadWord(buf: u8[], p: integer<0, 2147483643>): u32 -> @nish.sha256LoadWord
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: p
+  calls: nish_panic_index
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function sha256CopyBytes(from: u8[], fromAt: i32, to: u8[], toAt: i32, n: i32): void -> @nish.sha256CopyBytes
@@ -3610,130 +3606,112 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   pointer w: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0 nish.sha256LoadWord#0
   stackSites=0 stackLocals=0
-  local -13:11 base: integer<0, 2147483583> (const)
-  local -11:9 a: u32 (let)
-  local -10:9 b: u32 (let)
-  local -9:9 c: u32 (let)
-  local -8:9 d: u32 (let)
-  local -7:9 e: u32 (let)
-  local -6:9 f: u32 (let)
-  local -5:9 g: u32 (let)
-  local -4:9 hh: u32 (let)
-  local -2:9 t1: u32 (let)
-  callee +0:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +1:15 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +1:36 sha256Choose -> @nish.sha256Choose
-  callee +3:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +3:36 sha256Majority -> @nish.sha256Majority
-  callee +4:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +5:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +5:35 sha256Choose -> @nish.sha256Choose
-  callee +7:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +7:36 sha256Majority -> @nish.sha256Majority
-  callee +8:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +9:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +9:35 sha256Choose -> @nish.sha256Choose
-  callee +11:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +11:35 sha256Majority -> @nish.sha256Majority
-  callee +12:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +13:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +13:35 sha256Choose -> @nish.sha256Choose
-  callee +15:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +15:35 sha256Majority -> @nish.sha256Majority
-  callee +16:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +17:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +17:35 sha256Choose -> @nish.sha256Choose
-  callee +19:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +19:35 sha256Majority -> @nish.sha256Majority
-  callee +20:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +21:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +21:36 sha256Choose -> @nish.sha256Choose
-  callee +23:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +23:35 sha256Majority -> @nish.sha256Majority
-  callee +24:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +25:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +25:35 sha256Choose -> @nish.sha256Choose
-  callee +27:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +27:35 sha256Majority -> @nish.sha256Majority
-  callee +28:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +29:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +29:35 sha256Choose -> @nish.sha256Choose
-  callee +31:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +31:35 sha256Majority -> @nish.sha256Majority
-  callee +32:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +33:15 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +33:36 sha256Choose -> @nish.sha256Choose
-  callee +35:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +35:36 sha256Majority -> @nish.sha256Majority
-  callee +36:12 sha256LoadWord -> @nish.sha256LoadWord
-  callee +37:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +37:35 sha256Choose -> @nish.sha256Choose
-  callee +39:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +39:36 sha256Majority -> @nish.sha256Majority
-  callee +40:13 sha256LoadWord -> @nish.sha256LoadWord
-  callee +41:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +41:35 sha256Choose -> @nish.sha256Choose
-  callee +43:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +43:35 sha256Majority -> @nish.sha256Majority
-  callee +44:13 sha256LoadWord -> @nish.sha256LoadWord
-  callee +45:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +45:35 sha256Choose -> @nish.sha256Choose
-  callee +47:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +47:35 sha256Majority -> @nish.sha256Majority
-  callee +48:13 sha256LoadWord -> @nish.sha256LoadWord
-  callee +49:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +49:35 sha256Choose -> @nish.sha256Choose
-  callee +51:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +51:35 sha256Majority -> @nish.sha256Majority
-  callee +52:13 sha256LoadWord -> @nish.sha256LoadWord
-  callee +53:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +53:36 sha256Choose -> @nish.sha256Choose
-  callee +55:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +55:35 sha256Majority -> @nish.sha256Majority
-  callee +56:13 sha256LoadWord -> @nish.sha256LoadWord
-  callee +57:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +57:35 sha256Choose -> @nish.sha256Choose
-  callee +59:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +59:35 sha256Majority -> @nish.sha256Majority
-  callee +60:13 sha256LoadWord -> @nish.sha256LoadWord
-  callee +61:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +61:35 sha256Choose -> @nish.sha256Choose
-  callee +63:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +63:35 sha256Majority -> @nish.sha256Majority
-  callee +65:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
-  callee +65:47 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +66:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  local -7:11 base: integer<0, 2147483583> (const)
+  callee +0:13 sha256LoadWord -> @nish.sha256LoadWord
+  local +2:9 a: u32 (let)
+  local +3:9 b: u32 (let)
+  local +4:9 c: u32 (let)
+  local +5:9 d: u32 (let)
+  local +6:9 e: u32 (let)
+  local +7:9 f: u32 (let)
+  local +8:9 g: u32 (let)
+  local +9:9 hh: u32 (let)
+  local +11:9 t1: u32 (let)
+  callee +13:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +14:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +14:36 sha256Choose -> @nish.sha256Choose
+  callee +16:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +16:36 sha256Majority -> @nish.sha256Majority
+  callee +17:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +18:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +18:35 sha256Choose -> @nish.sha256Choose
+  callee +20:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +20:36 sha256Majority -> @nish.sha256Majority
+  callee +21:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +22:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +22:35 sha256Choose -> @nish.sha256Choose
+  callee +24:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +24:35 sha256Majority -> @nish.sha256Majority
+  callee +25:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +26:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +26:35 sha256Choose -> @nish.sha256Choose
+  callee +28:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +28:35 sha256Majority -> @nish.sha256Majority
+  callee +29:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +30:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +30:35 sha256Choose -> @nish.sha256Choose
+  callee +32:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +32:35 sha256Majority -> @nish.sha256Majority
+  callee +33:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +34:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +34:36 sha256Choose -> @nish.sha256Choose
+  callee +36:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +36:35 sha256Majority -> @nish.sha256Majority
+  callee +37:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +38:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +38:35 sha256Choose -> @nish.sha256Choose
+  callee +40:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +40:35 sha256Majority -> @nish.sha256Majority
+  callee +41:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +42:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +42:35 sha256Choose -> @nish.sha256Choose
+  callee +44:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +44:35 sha256Majority -> @nish.sha256Majority
+  callee +45:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +46:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +46:36 sha256Choose -> @nish.sha256Choose
+  callee +48:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +48:36 sha256Majority -> @nish.sha256Majority
+  callee +49:12 sha256LoadWord -> @nish.sha256LoadWord
+  callee +50:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +50:35 sha256Choose -> @nish.sha256Choose
+  callee +52:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +52:36 sha256Majority -> @nish.sha256Majority
+  callee +53:13 sha256LoadWord -> @nish.sha256LoadWord
+  callee +54:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +54:35 sha256Choose -> @nish.sha256Choose
+  callee +56:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +56:35 sha256Majority -> @nish.sha256Majority
+  callee +57:13 sha256LoadWord -> @nish.sha256LoadWord
+  callee +58:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +58:35 sha256Choose -> @nish.sha256Choose
+  callee +60:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +60:35 sha256Majority -> @nish.sha256Majority
+  callee +61:13 sha256LoadWord -> @nish.sha256LoadWord
+  callee +62:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +62:35 sha256Choose -> @nish.sha256Choose
+  callee +64:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +64:35 sha256Majority -> @nish.sha256Majority
+  callee +65:13 sha256LoadWord -> @nish.sha256LoadWord
+  callee +66:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +66:36 sha256Choose -> @nish.sha256Choose
-  callee +68:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +68:36 sha256Majority -> @nish.sha256Majority
-  callee +69:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
-  callee +69:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
+  callee +68:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +68:35 sha256Majority -> @nish.sha256Majority
+  callee +69:13 sha256LoadWord -> @nish.sha256LoadWord
   callee +70:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +70:35 sha256Choose -> @nish.sha256Choose
   callee +72:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +72:36 sha256Majority -> @nish.sha256Majority
-  callee +73:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
-  callee +73:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +74:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +74:35 sha256Choose -> @nish.sha256Choose
-  callee +76:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +76:35 sha256Majority -> @nish.sha256Majority
+  callee +72:35 sha256Majority -> @nish.sha256Majority
+  callee +73:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +73:35 sha256Choose -> @nish.sha256Choose
+  callee +75:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +75:35 sha256Majority -> @nish.sha256Majority
   callee +77:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
-  callee +77:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +78:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +78:35 sha256Choose -> @nish.sha256Choose
-  callee +80:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +80:35 sha256Majority -> @nish.sha256Majority
+  callee +77:47 sha256SmallSigma0 -> @nish.sha256SmallSigma0
+  callee +78:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +78:36 sha256Choose -> @nish.sha256Choose
+  callee +80:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +80:36 sha256Majority -> @nish.sha256Majority
   callee +81:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +81:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +82:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +82:35 sha256Choose -> @nish.sha256Choose
   callee +84:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +84:35 sha256Majority -> @nish.sha256Majority
+  callee +84:36 sha256Majority -> @nish.sha256Majority
   callee +85:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +85:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +86:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +86:36 sha256Choose -> @nish.sha256Choose
+  callee +86:35 sha256Choose -> @nish.sha256Choose
   callee +88:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +88:35 sha256Majority -> @nish.sha256Majority
   callee +89:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
@@ -3750,16 +3728,16 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +96:35 sha256Majority -> @nish.sha256Majority
   callee +97:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +97:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +98:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +98:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +98:36 sha256Choose -> @nish.sha256Choose
-  callee +100:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +100:36 sha256Majority -> @nish.sha256Majority
+  callee +100:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +100:35 sha256Majority -> @nish.sha256Majority
   callee +101:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +101:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +102:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +102:35 sha256Choose -> @nish.sha256Choose
   callee +104:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +104:36 sha256Majority -> @nish.sha256Majority
+  callee +104:35 sha256Majority -> @nish.sha256Majority
   callee +105:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +105:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +106:14 sha256BigSigma1 -> @nish.sha256BigSigma1
@@ -3768,20 +3746,20 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +108:35 sha256Majority -> @nish.sha256Majority
   callee +109:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +109:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +110:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +110:35 sha256Choose -> @nish.sha256Choose
-  callee +112:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +112:35 sha256Majority -> @nish.sha256Majority
+  callee +110:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +110:36 sha256Choose -> @nish.sha256Choose
+  callee +112:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +112:36 sha256Majority -> @nish.sha256Majority
   callee +113:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +113:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +114:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +114:35 sha256Choose -> @nish.sha256Choose
   callee +116:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +116:35 sha256Majority -> @nish.sha256Majority
+  callee +116:36 sha256Majority -> @nish.sha256Majority
   callee +117:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +117:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +118:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +118:36 sha256Choose -> @nish.sha256Choose
+  callee +118:35 sha256Choose -> @nish.sha256Choose
   callee +120:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +120:35 sha256Majority -> @nish.sha256Majority
   callee +121:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
@@ -3798,16 +3776,16 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +128:35 sha256Majority -> @nish.sha256Majority
   callee +129:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +129:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +130:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +130:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +130:36 sha256Choose -> @nish.sha256Choose
-  callee +132:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +132:36 sha256Majority -> @nish.sha256Majority
+  callee +132:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +132:35 sha256Majority -> @nish.sha256Majority
   callee +133:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +133:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +134:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +134:35 sha256Choose -> @nish.sha256Choose
   callee +136:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +136:36 sha256Majority -> @nish.sha256Majority
+  callee +136:35 sha256Majority -> @nish.sha256Majority
   callee +137:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +137:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +138:14 sha256BigSigma1 -> @nish.sha256BigSigma1
@@ -3816,20 +3794,20 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +140:35 sha256Majority -> @nish.sha256Majority
   callee +141:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +141:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +142:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +142:35 sha256Choose -> @nish.sha256Choose
-  callee +144:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +144:35 sha256Majority -> @nish.sha256Majority
+  callee +142:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +142:36 sha256Choose -> @nish.sha256Choose
+  callee +144:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +144:36 sha256Majority -> @nish.sha256Majority
   callee +145:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +145:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +146:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +146:35 sha256Choose -> @nish.sha256Choose
   callee +148:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +148:35 sha256Majority -> @nish.sha256Majority
+  callee +148:36 sha256Majority -> @nish.sha256Majority
   callee +149:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +149:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +150:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +150:36 sha256Choose -> @nish.sha256Choose
+  callee +150:35 sha256Choose -> @nish.sha256Choose
   callee +152:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +152:35 sha256Majority -> @nish.sha256Majority
   callee +153:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
@@ -3846,16 +3824,16 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +160:35 sha256Majority -> @nish.sha256Majority
   callee +161:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +161:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +162:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +162:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +162:36 sha256Choose -> @nish.sha256Choose
-  callee +164:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +164:36 sha256Majority -> @nish.sha256Majority
+  callee +164:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +164:35 sha256Majority -> @nish.sha256Majority
   callee +165:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +165:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +166:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +166:35 sha256Choose -> @nish.sha256Choose
   callee +168:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +168:36 sha256Majority -> @nish.sha256Majority
+  callee +168:35 sha256Majority -> @nish.sha256Majority
   callee +169:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +169:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +170:14 sha256BigSigma1 -> @nish.sha256BigSigma1
@@ -3864,20 +3842,20 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +172:35 sha256Majority -> @nish.sha256Majority
   callee +173:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +173:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +174:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +174:35 sha256Choose -> @nish.sha256Choose
-  callee +176:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +176:35 sha256Majority -> @nish.sha256Majority
+  callee +174:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +174:36 sha256Choose -> @nish.sha256Choose
+  callee +176:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +176:36 sha256Majority -> @nish.sha256Majority
   callee +177:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +177:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +178:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +178:35 sha256Choose -> @nish.sha256Choose
   callee +180:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +180:35 sha256Majority -> @nish.sha256Majority
+  callee +180:36 sha256Majority -> @nish.sha256Majority
   callee +181:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +181:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +182:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +182:36 sha256Choose -> @nish.sha256Choose
+  callee +182:35 sha256Choose -> @nish.sha256Choose
   callee +184:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +184:35 sha256Majority -> @nish.sha256Majority
   callee +185:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
@@ -3894,16 +3872,16 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +192:35 sha256Majority -> @nish.sha256Majority
   callee +193:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +193:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +194:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +194:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +194:36 sha256Choose -> @nish.sha256Choose
-  callee +196:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +196:36 sha256Majority -> @nish.sha256Majority
+  callee +196:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +196:35 sha256Majority -> @nish.sha256Majority
   callee +197:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +197:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +198:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +198:35 sha256Choose -> @nish.sha256Choose
   callee +200:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +200:36 sha256Majority -> @nish.sha256Majority
+  callee +200:35 sha256Majority -> @nish.sha256Majority
   callee +201:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +201:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +202:14 sha256BigSigma1 -> @nish.sha256BigSigma1
@@ -3912,20 +3890,20 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +204:35 sha256Majority -> @nish.sha256Majority
   callee +205:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +205:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +206:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +206:35 sha256Choose -> @nish.sha256Choose
-  callee +208:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +208:35 sha256Majority -> @nish.sha256Majority
+  callee +206:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +206:36 sha256Choose -> @nish.sha256Choose
+  callee +208:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +208:36 sha256Majority -> @nish.sha256Majority
   callee +209:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +209:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +210:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +210:35 sha256Choose -> @nish.sha256Choose
   callee +212:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +212:35 sha256Majority -> @nish.sha256Majority
+  callee +212:36 sha256Majority -> @nish.sha256Majority
   callee +213:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +213:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +214:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +214:36 sha256Choose -> @nish.sha256Choose
+  callee +214:35 sha256Choose -> @nish.sha256Choose
   callee +216:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +216:35 sha256Majority -> @nish.sha256Majority
   callee +217:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
@@ -3942,16 +3920,16 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +224:35 sha256Majority -> @nish.sha256Majority
   callee +225:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +225:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +226:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +226:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +226:36 sha256Choose -> @nish.sha256Choose
-  callee +228:15 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +228:36 sha256Majority -> @nish.sha256Majority
+  callee +228:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +228:35 sha256Majority -> @nish.sha256Majority
   callee +229:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +229:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +230:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +230:35 sha256Choose -> @nish.sha256Choose
   callee +232:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +232:36 sha256Majority -> @nish.sha256Majority
+  callee +232:35 sha256Majority -> @nish.sha256Majority
   callee +233:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +233:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +234:14 sha256BigSigma1 -> @nish.sha256BigSigma1
@@ -3960,20 +3938,20 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +236:35 sha256Majority -> @nish.sha256Majority
   callee +237:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +237:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
-  callee +238:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +238:35 sha256Choose -> @nish.sha256Choose
-  callee +240:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +240:35 sha256Majority -> @nish.sha256Majority
+  callee +238:15 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +238:36 sha256Choose -> @nish.sha256Choose
+  callee +240:15 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +240:36 sha256Majority -> @nish.sha256Majority
   callee +241:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +241:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +242:14 sha256BigSigma1 -> @nish.sha256BigSigma1
   callee +242:35 sha256Choose -> @nish.sha256Choose
   callee +244:14 sha256BigSigma0 -> @nish.sha256BigSigma0
-  callee +244:35 sha256Majority -> @nish.sha256Majority
+  callee +244:36 sha256Majority -> @nish.sha256Majority
   callee +245:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
   callee +245:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
   callee +246:14 sha256BigSigma1 -> @nish.sha256BigSigma1
-  callee +246:36 sha256Choose -> @nish.sha256Choose
+  callee +246:35 sha256Choose -> @nish.sha256Choose
   callee +248:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +248:35 sha256Majority -> @nish.sha256Majority
   callee +249:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
@@ -3988,6 +3966,24 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +254:35 sha256Choose -> @nish.sha256Choose
   callee +256:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +256:35 sha256Majority -> @nish.sha256Majority
+  callee +257:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
+  callee +257:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
+  callee +258:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +258:36 sha256Choose -> @nish.sha256Choose
+  callee +260:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +260:35 sha256Majority -> @nish.sha256Majority
+  callee +261:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
+  callee +261:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
+  callee +262:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +262:35 sha256Choose -> @nish.sha256Choose
+  callee +264:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +264:35 sha256Majority -> @nish.sha256Majority
+  callee +265:13 sha256SmallSigma1 -> @nish.sha256SmallSigma1
+  callee +265:48 sha256SmallSigma0 -> @nish.sha256SmallSigma0
+  callee +266:14 sha256BigSigma1 -> @nish.sha256BigSigma1
+  callee +266:35 sha256Choose -> @nish.sha256Choose
+  callee +268:14 sha256BigSigma0 -> @nish.sha256BigSigma0
+  callee +268:35 sha256Majority -> @nish.sha256Majority
 function Sha256.constructor(this: Sha256): void -> @nish.Sha256.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish_panic

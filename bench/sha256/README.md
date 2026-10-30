@@ -17,17 +17,18 @@ stop the run rather than being compared.
 
 ## Last measured
 
-The portable path tuned (rounds unrolled with each K_t an immediate, each word
-one load and a byte swap) against the same program built from the `main` it
-left, 12 rounds of three columns, on a 4-core Intel Xeon @ 2.10GHz cloud
-session. Medians in ns/op; the band is the copy's distance from the build.
+The portable path tuned (rounds unrolled with each K_t an immediate, one
+bounds check a block, and words 0 to 14 each one load and a byte swap) against
+the same program built from the `main` it left, 12 rounds of three columns, on
+a 4-core Intel Xeon @ 2.10GHz cloud session. Medians in ns/op; the band is the
+copy's distance from the build.
 
 | case | tuned | `main` | speed-up | band |
 | --- | ---: | ---: | ---: | ---: |
-| sha256 64 B | 692 | 903 | 1.31x | ±4.3% |
-| sha256 1 KiB | 4,133 | 5,680 | 1.37x | ±1.4% |
-| sha256 1 MiB | 3,770,571 | 5,309,080 | 1.41x | ±1.5% |
-| HS256 sign+verify | 5,927 | 6,948 | 1.17x | ±4.7% |
+| sha256 64 B | 778 | 880 | 1.13x | ±2.3% |
+| sha256 1 KiB | 4,272 | 5,533 | 1.30x | ±2.4% |
+| sha256 1 MiB | 3,778,149 | 5,170,001 | 1.37x | ±4.2% |
+| HS256 sign+verify | 6,106 | 7,439 | 1.22x | ±0.2% |
 
 HS256 gains least because a token is two short HMACs (four compressions each)
 around base64url, string building and the allocations they make, which the

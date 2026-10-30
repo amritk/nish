@@ -27,15 +27,13 @@
  * Nothing here branches or indexes on the message: the only branches are on
  * lengths and loop counters, which a hash does not keep secret.
  *
- * The one `nish:unsafe` use is `uncheckedGet` in `sha256LoadWord`, whose
- * every caller is `sha256Compress` after its guard has proved the whole block
- * lies in the buffer; there the unchecked reads are what let the four byte
- * loads of a word become one load and a byte swap.
+ * Every read is checked: nothing here imports `nish:unsafe`, so hashing never
+ * makes a caller reach `unsafe`, which `--deny unsafe` refuses (the SCRAM in
+ * `std/net/postgres.ts` is one such caller). `sha256Compress` instead orders
+ * its reads so that one bounds check covers a whole block.
  *
  * Written from the specification, not ported from another implementation.
  */
-
-import { uncheckedGet } from "nish:unsafe"
 
 /** The length of a digest in bytes (FIPS 180-4 §1, "Message Digest Size"). */
 export const SHA256_SIZE: i32 = 32
@@ -74,21 +72,19 @@ const sha256Majority = (x: u32, y: u32, z: u32): u32 => (x & y) ^ (z & (x ^ y))
 
 /**
  * The big-endian word at `buf[p .. p + 4)`, as FIPS 180-4 §3.1 orders bytes in
- * a word, which `sha256Compress` has checked lies in `buf`. The four reads are
- * `uncheckedGet` and `p`'s range makes each `p + k` an `add nsw`, so with no
- * bounds check or overflow test between them LLVM joins them into one 32-bit
- * load and a byte swap.
+ * a word. `p`'s range makes each `p + k` an `add nsw`, with no overflow test.
+ * The low byte, `buf[p + 3]`, is read first, so its bounds check also covers
+ * the three reads after it and LLVM drops theirs; once a check further on in
+ * the buffer covers that one too, nothing lies between the four reads and
+ * LLVM joins them into one 32-bit load and a byte swap.
  *
- * The low byte is the innermost `|` on purpose. σ1 shifts a word right by 10,
+ * The low byte is also the innermost `|` because σ1 shifts a word right by 10,
  * and when the low byte is the outermost operand LLVM's instcombine answers
  * that shift from the inner three bytes alone, which gives the half-built word
  * a second use and leaves words 14 and 15 as four byte loads each.
  */
 const sha256LoadWord = (buf: u8[], p: integer<0, 2147483643>): u32 =>
-  toU32(uncheckedGet(buf, p + 3)) |
-  (toU32(uncheckedGet(buf, p + 2)) << 8) |
-  (toU32(uncheckedGet(buf, p + 1)) << 16) |
-  (toU32(uncheckedGet(buf, p)) << 24)
+  toU32(buf[p + 3]) | (toU32(buf[p + 2]) << 8) | (toU32(buf[p + 1]) << 16) | (toU32(buf[p]) << 24)
 
 /**
  * Copies `from[fromAt .. fromAt + n)` to `to[toAt .. toAt + n)`. Every caller
@@ -122,11 +118,9 @@ const sha256CopyBytes = (from: u8[], fromAt: i32, to: u8[], toAt: i32, n: i32): 
 const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
   // The test is written as the condition the body runs under, not as an early
   // exit, because that is the shape that proves the constant `w[t]` and `h[i]`
-  // indices in range and drops their bounds checks. It also proves the 64
-  // bytes at `at` lie in `src`, which is what makes `sha256LoadWord`'s
-  // unchecked reads sound, and its last clause, which the one before implies
-  // for any array an `i32` can index, is what puts `at` in `base`'s range with
-  // no check.
+  // indices in range and drops their bounds checks. Its last clause, which
+  // the one before implies for any array an `i32` can index, is what puts
+  // `at` in `base`'s range with no check.
   if (
     toI32(h.length) >= 8 &&
     toI32(w.length) >= 64 &&
@@ -135,6 +129,13 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
     at <= 2147483583
   ) {
     const base: integer<0, 2147483583> = at
+    // Word 15 is loaded first. Its first read, the block's last byte, is the
+    // one bounds check of the block: the checker cannot prove `base + k` in
+    // range from the guard, but LLVM sees that every other read of the block
+    // lies below it and drops their checks, so words 0 to 14 are each one
+    // load and a byte swap. Word 15 stays four byte loads, because its last
+    // byte's index is the check's.
+    w[15] = sha256LoadWord(src, base + 60)
     // Step 2: the working variables start from the previous hash value.
     let a: u32 = h[0]
     let b: u32 = h[1]
@@ -207,7 +208,6 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
     t1 = b + sha256BigSigma1(g) + sha256Choose(g, hh, a) + 0x9bdc06a7 + w[14]
     f += t1
     b = t1 + sha256BigSigma0(c) + sha256Majority(c, d, e)
-    w[15] = sha256LoadWord(src, base + 60)
     t1 = a + sha256BigSigma1(f) + sha256Choose(f, g, hh) + 0xc19bf174 + w[15]
     e += t1
     a = t1 + sha256BigSigma0(b) + sha256Majority(b, c, d)
