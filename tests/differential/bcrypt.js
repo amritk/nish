@@ -10,6 +10,10 @@
  * wrong password against them; and the harness finally checks each Nish hash
  * with `crypt_r`. So a case passes when Nish makes the hash `crypt_r` makes,
  * `crypt_r` accepts the hash Nish makes, and Nish answers every verify as
+ * `crypt_r` does. The cases of one cost are then batched, two to six at a
+ * time, through `bcryptHashN` and `bcryptVerifyN`: every lane must be the
+ * `$2b$` hash `crypt_r` made, and the verify (the `$2a$`, `$2b$` and `$2y$`
+ * hashes across the lanes, the last lane a wrong password) must answer as
  * `crypt_r` does. `crypt_r` reads the key as a C string, so a password with a
  * NUL in it is the reference's answer for the bytes before it, which is the
  * rule the module follows. It assumes a libxcrypt built with its `$2a$`,
@@ -154,8 +158,61 @@ const oracle = (exe, lines) => {
   return r.stdout.trimEnd().split("\n")
 }
 
-/** The Nish program: for each case its `$2b$` hash, then its answers to the four verifies. */
-const program = (drawn) => {
+/**
+ * The batches: the cases of each cost in order, cut into runs of two to six
+ * (the width cycling down from six), a lone leftover joining no batch. Each is a list of case
+ * indices.
+ */
+const batchesOf = (drawn) => {
+  const out = []
+  for (const cost of [...new Set(drawn.map((c) => c.cost))].sort((x, y) => x - y)) {
+    const same = drawn.map((c, i) => (c.cost === cost ? i : -1)).filter((i) => i >= 0)
+    let at = 0
+    while (same.length - at >= 2) {
+      const width = Math.min(6 - (out.length % 5), same.length - at)
+      out.push(same.slice(at, at + width))
+      at += width
+    }
+  }
+  return out
+}
+
+/** The hash lane `k` of `batch` gives to `bcryptVerifyN`: the three prefixes in turn, the last lane `$2b$`. */
+const batchHash = (drawn, batch, k) =>
+  k === batch.length - 1 ? drawn[batch[k]].ref.b : drawn[batch[k]].ref["aby"[k % 3]]
+
+/**
+ * The Nish program: for each case its `$2b$` hash, then its answers to the four
+ * verifies; then for each batch the six `bcryptHashN` lanes (`-` for a null
+ * one) and the `bcryptVerifyN` answers.
+ */
+const program = (drawn, batches) => {
+  const six = (list, fill) => [...list, ...Array(6 - list.length).fill(fill)]
+  const batchRows = batches
+    .map((b) => {
+      const pw = six(
+        b.map((i) => JSON.stringify(hex(drawn[i].password))),
+        '""'
+      )
+      const wrongs = six(
+        b.map((i, k) => JSON.stringify(hex(k === b.length - 1 ? drawn[i].wrong : drawn[i].password))),
+        '""'
+      )
+      const salts = JSON.stringify(
+        hex(
+          six(
+            b.map((i) => drawn[i].salt),
+            Array(16).fill(0)
+          ).flat()
+        )
+      )
+      const hashes = six(
+        b.map((_, k) => JSON.stringify(batchHash(drawn, b, k))),
+        '""'
+      )
+      return `  runN([${pw.join(", ")}], ${salts}, ${drawn[b[0]].cost}, ${b.length}, [${wrongs.join(", ")}], [${hashes.join(", ")}]);`
+    })
+    .join("\n")
   const rows = drawn
     .map(
       (c) =>
@@ -165,7 +222,7 @@ const program = (drawn) => {
     )
     .join("\n")
   return `import { Secret, secret, wipe } from "nish:secret";
-import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt";
+import { bcryptHash, bcryptHashN, bcryptVerify, bcryptVerifyN } from "nish/crypto/bcrypt";
 
 const nibble = (c: i32): i32 => (c <= 57 ? c - 48 : c - 87);
 
@@ -196,8 +253,68 @@ const run = (password: string, salt: string, cost: i32, a: string, b: string, y:
   console.log(\`\${hash} \${verified(password, a)}\${verified(password, b)}\${verified(password, y)}\${verified(other, b)}\`);
 };
 
+/** A held copy of \`password\`'s bytes, or null past the batch's \`width\`. */
+const lane = (password: string, k: i32, width: i32): Secret<u8[]> | null => {
+  if (k >= width) {
+    return null;
+  }
+  return secret(fromHex(password));
+};
+
+/** \`bcryptHashN\` of the first \`width\` of \`pw\`, or \`bcryptVerifyN\` of \`given\` against \`hashes\`. */
+const batch = (pw: string[], salts: string, cost: i32, width: i32, hashes: string[]): string => {
+  const h0: Secret<u8[]> = secret(fromHex(pw[0]));
+  const h1: Secret<u8[]> | null = lane(pw[1], 1, width);
+  const h2: Secret<u8[]> | null = lane(pw[2], 2, width);
+  const h3: Secret<u8[]> | null = lane(pw[3], 3, width);
+  const h4: Secret<u8[]> | null = lane(pw[4], 4, width);
+  const h5: Secret<u8[]> | null = lane(pw[5], 5, width);
+  const out: string[] = [];
+  if (hashes.length === 0) {
+    const made: Result<string[], string> = bcryptHashN(h0, h1, h2, h3, h4, h5, fromHex(salts), cost);
+    if (made.isOk()) {
+      for (const h of made.value) {
+        out.push(h === "" ? "-" : h);
+      }
+    } else {
+      out.push("*");
+    }
+  } else {
+    const answer: Result<boolean[], string> = bcryptVerifyN(h0, h1, h2, h3, h4, h5, hashes);
+    if (answer.isOk()) {
+      for (let k: i32 = 0; k < width && k < toI32(answer.value.length); k++) {
+        out.push(answer.value[k] ? "1" : "0");
+      }
+    } else {
+      out.push("E");
+    }
+  }
+  wipe(h0);
+  if (h1 !== null) {
+    wipe(h1);
+  }
+  if (h2 !== null) {
+    wipe(h2);
+  }
+  if (h3 !== null) {
+    wipe(h3);
+  }
+  if (h4 !== null) {
+    wipe(h4);
+  }
+  if (h5 !== null) {
+    wipe(h5);
+  }
+  return out.join(hashes.length === 0 ? " " : "");
+};
+
+const runN = (pw: string[], salts: string, cost: i32, width: i32, given: string[], hashes: string[]): void => {
+  console.log(\`\${batch(pw, salts, cost, width, [])} \${batch(given, salts, cost, width, hashes)}\`);
+};
+
 export const main = (): i32 => {
 ${rows}
+${batchRows}
   return 0;
 };
 `
@@ -256,7 +373,8 @@ const expected = oracle(
   all.map((c) => `V ${c.ref.b} ${hex(c.wrong)}`)
 )
 
-fs.writeFileSync(path.join(buildDir, "main.ts"), program(all))
+const allBatches = batchesOf(all)
+fs.writeFileSync(path.join(buildDir, "main.ts"), program(all, allBatches))
 const app = path.join(buildDir, "app")
 const compiled = spawnSync(compiler, [path.join(buildDir, "main.ts"), "-o", `${buildDir}/`, "--link", app], {
   cwd: root,
@@ -274,7 +392,7 @@ if (ran.status !== 0) {
 const answers = ran.stdout.trimEnd().split("\n")
 const back = oracle(
   harness,
-  answers.map((line, i) => `V ${line.split(" ")[0]} ${hex(all[i].password)}`)
+  answers.slice(0, cases).map((line, i) => `V ${line.split(" ")[0]} ${hex(all[i].password)}`)
 )
 
 const failures = []
@@ -296,6 +414,27 @@ all.forEach((c, i) => {
     failures.push(`Nish verified $2a$/$2b$/$2y$/wrong as ${verifies}, crypt_r as ${want} (${what})`)
   }
 })
+const batchFailures = []
+allBatches.forEach((b, j) => {
+  const fields = (answers[cases + j] ?? "").split(" ")
+  const hashes = fields.slice(0, 6)
+  const want = [...b.map((i) => all[i].ref.b), ...Array(6 - b.length).fill("-")]
+  const verifies = fields[6]
+  const wantVerifies = `${"1".repeat(b.length - 1)}${expected[b.at(-1)]}`
+  const what = `width ${b.length}, cost ${all[b[0]].cost}, cases ${b.join(" ")}`
+  if (hashes.join(" ") !== want.join(" ")) {
+    batchFailures.push(`bcryptHashN made ${hashes.join(" ")}, crypt_r ${want.join(" ")} (${what})`)
+  }
+  if (verifies !== wantVerifies) {
+    batchFailures.push(`bcryptVerifyN answered ${verifies}, crypt_r ${wantVerifies} (${what})`)
+  }
+})
+const widths = new Set(allBatches.map((b) => b.length))
+const missing = [2, 3, 4, 5, 6].filter((w) => !widths.has(w))
+if (missing.length > 0) {
+  failures.push(`no batch of width ${missing.join(", ")} was run (widths ${[...widths].sort().join(", ")})`)
+}
+failures.push(...batchFailures)
 for (const f of failures) {
   console.log(`FAIL  bcrypt differential: ${f}`)
 }
@@ -307,6 +446,8 @@ const cost10 = all.filter((c) => c.cost === 10).length
 console.log(
   `bcrypt differential: ${cases - failed.size} of ${cases} cases agree ` +
     `(${withNul} with a NUL, ${highBit} with an 8-bit byte, ${long} past 72 bytes, ${veryLong} past 255, ` +
-    `${cost10} at cost 10; seed ${argValue("--seed", "873")})`
+    `${cost10} at cost 10; seed ${argValue("--seed", "873")}); ` +
+    `${allBatches.length - new Set(batchFailures.map((f) => f.slice(f.lastIndexOf("(")))).size} of ${allBatches.length} ` +
+    `batches agree (widths ${[...widths].sort().join(", ")})`
 )
 process.exit(failures.length === 0 ? 0 : 1)

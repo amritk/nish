@@ -244,7 +244,11 @@ the record that found it. The notes below the table name each such finding.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
-    does. BCRYPT-5 is a property checked and found to hold, not a finding.
+    does. BCRYPT-10 (Low), the calibrated width following a clock, is
+    accepted too: the width changes only the speed, never a hash. BCRYPT-8
+    (Low), accepted when found, is superseded, since the kernel is now as
+    wide as the lanes given; BCRYPT-9 was a limitation of the language, since
+    lifted. BCRYPT-5 is a property checked and found to hold, not a finding.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,

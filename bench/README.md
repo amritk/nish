@@ -1119,9 +1119,13 @@ the OpenBSD tree into `build/bench/bcrypt/` and builds with `gcc -O2` and
 `clang -O2` behind a small shim for what OpenBSD's libc adds. It also times
 `bcryptHash4` with four lanes against the four-lane C of the tigokraft
 submission (`bc_hash_n`, pinned to one commit, MIT), fetched the same way and
-built with `gcc` and `clang` at `-O2 -march=native`, one lane and four; a
-four-lane row is per hash, a batch's time over four. Every lane of a
-four-lane program must print the single hash's output, not lane 0 alone. The
+built with `gcc` and `clang` at `-O2 -march=native`, one lane and four, and
+`bcryptHashN` at every width from one lane to six. A row of w lanes is per
+hash, a batch's time over w, and every lane of a batch program must print the
+single hash's output, not lane 0 alone. It closes with the single path's
+cycles per Blowfish block (2^cost × 1042 + 713 blocks a hash), at the clock
+`/proc/cpuinfo` names unless `--ghz` gives a measured one; on a VM cpuinfo
+often names the nominal clock rather than the one the core runs at. The
 Nish programs are built for baseline x86-64, without `-march=native`. It is not a
 `crypto/` family (it has no `family.json`) and is not in this suite's tables;
 [docs/security/crypto-bcrypt.md](../docs/security/crypto-bcrypt.md#speed)
@@ -1131,6 +1135,7 @@ carries its figures.
 npm run build
 node bench/crypto/bcrypt/run.mjs                    # 8 hashes a round, 5 rounds, cost 10
 node bench/crypto/bcrypt/run.mjs --rounds 9 --cost 12
+node bench/crypto/bcrypt/run.mjs --rounds 9 --ghz 3.2   # cycles at a measured clock
 ```
 
 Each program hashes "U*U" under an all-zero salt and prints its last hash; the
