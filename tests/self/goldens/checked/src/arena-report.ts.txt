@@ -66,7 +66,7 @@ function ArenaWalk.constructor(this: ArenaWalk, program: CheckedProgram, facts: 
   pointer this: size=72 writesThrough=true captured=false
   pointer program: size=656 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true passedTo=reclaimsReturnedString#1
-  pointer sig: size=136 writesThrough=true captured=true passedTo=reclaimsReturnedString#0
+  pointer sig: size=144 writesThrough=true captured=true passedTo=reclaimsReturnedString#0
   pointer f: size=408 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:11 count: i32 (const)

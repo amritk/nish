@@ -433,7 +433,7 @@ function emitForeignString(emitter: Emitter, arg: Node, value: string, callee: F
   calls: Emitter.stringConstant Emitter.typeOf Emitter.useRuntime IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitPanicTail foreignStringIsNulFree nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_new unwrapBoundsParens
   pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.stringConstant#0 Emitter.useRuntime#0 emitPanicTail#0 Emitter.stringConstant#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0 foreignStringIsNulFree#0 Emitter.typeOf#1
-  pointer callee: size=136 writesThrough=false captured=false
+  pointer callee: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   callee +1:7 unwrapBoundsParens -> @unwrapBoundsParens
@@ -480,7 +480,7 @@ function emitForeignBuffers(emitter: Emitter, call: Node, callee: FunctionSig, o
   calls: Emitter.stringConstant IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitPanicTail foreignBufferCount foreignBufferCountProven isForeignBuffer loadData loadLength nish_panic_index nish_str_concat nish_str_from_i32
   pointer emitter: size=280 writesThrough=false captured=false passedTo=loadLength#0 emitPanicTail#0 Emitter.stringConstant#0 loadData#0
   pointer call: size=40 writesThrough=false captured=false passedTo=foreignBufferCountProven#2
-  pointer callee: size=136 writesThrough=false captured=false passedTo=foreignBufferCount#1
+  pointer callee: size=144 writesThrough=false captured=false passedTo=foreignBufferCount#1
   pointer operands: size=0 writesThrough=true captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -537,7 +537,7 @@ function emitForeignStringResult(emitter: Emitter, callee: FunctionSig, value: s
   escaping: value
   calls: Emitter.stringConstant IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitCStringCopy emitPanicTail nish_str_concat
   pointer emitter: size=280 writesThrough=false captured=false passedTo=emitPanicTail#0 Emitter.stringConstant#0 emitCStringCopy#0 emitCStringCopy#0
-  pointer callee: size=136 writesThrough=false captured=false
+  pointer callee: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 nullable: boolean (const)

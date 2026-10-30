@@ -51,7 +51,7 @@ function PortabilityWalk.constructor(this: PortabilityWalk, program: CheckedProg
   pointer table: size=96 writesThrough=true captured=true
   pointer opts: size=160 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
-  pointer sig: size=136 writesThrough=true captured=true
+  pointer sig: size=144 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PortabilityWalk.textOf(this: PortabilityWalk, node: Node): string -> @PortabilityWalk.textOf [exported method]

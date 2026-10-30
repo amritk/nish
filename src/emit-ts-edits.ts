@@ -46,9 +46,9 @@
 //   `this.pos + this.read().orReturn()` reads `this.pos` first, and
 //   `a / b + f().orReturn()` may stop at the division first, so neither is
 //   hoisted. A read of a local blocks the hoist only when the node itself
-//   writes something (`n + g(n++).orReturn()`): an arrow captures nothing, so
-//   no call can reach a local, and an assignment to it before the node is an
-//   effect already.
+//   writes something (`n + g(n++).orReturn()`): an arrow is handed what it
+//   captures as an argument and may not assign to it, so no call can write a
+//   local, and an assignment to it before the node is an effect already.
 //
 // A hook that cannot hoist writes the node some other way; the control row
 // has one for every node it hoists.

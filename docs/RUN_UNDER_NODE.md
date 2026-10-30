@@ -153,6 +153,14 @@ clocks. The command lines above stay as they are.
 A program that declares its own function of one of these names keeps it, the
 way a user function shadows a builtin in the compiler.
 
+An arrow argument that reads a `const` of the function it is written in needs
+nothing from the prelude: under Node it is the JavaScript closure it reads as,
+and natively each name it reads is one more argument of a direct call. The two
+agree because the arrow runs during the call, on the same thread, and the
+checker refuses a capture that could change before it runs (a `let`) or that
+the arrow assigns ([LANGUAGE.md](LANGUAGE.md#function-parameters);
+`tests/cases/fnarg_capture_local` runs on both).
+
 ## What stays divergent
 
 Each of these lives below the globals, in an operator or in the object model, so

@@ -10,6 +10,13 @@ live differential (#853, #859, #864, #866, #867, and the oracle that holds
 it). Next: R5's `review` tier and R6. §9 has each stage's state.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). Such an arrow is the JavaScript closure it reads as, and runs
+during the call, so the round trip prints the same (`docs/RUN_UNDER_NODE.md`).
+
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
    an agent can do most of that move by driving the compiler, with the
    project's own test suite still answering "is it the same program?" at every

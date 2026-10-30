@@ -386,7 +386,7 @@ function Emitter.factsFor(this: Emitter, sig: FunctionSig): FunctionFacts -> @Em
   sharedWrite: via nish_exit
   calls: FactsTable.get internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer this: size=280 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 facts: FunctionFacts | null (const)
   callee +0:19 FactsTable.get -> @FactsTable.get
@@ -396,7 +396,7 @@ function Emitter.declareSignatureTypes(this: Emitter, sig: FunctionSig): void ->
   sharedWrite: via IRModule.addTypeDecl
   calls: IRModule.addTypeDecl TypeTable.isArray declareResultTypes
   pointer this: size=280 writesThrough=false captured=false passedTo=declareResultTypes#0 declareResultTypes#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:9 TypeTable.isArray -> @TypeTable.isArray
   callee +1:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
@@ -411,7 +411,7 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   escaping: sig
   calls: DebugInfo.beginFunction Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue captureParamName emitAtomicBody emitChannelSendBody emitConstructorPrologue emitLockBody emitParamRangeChecks emitWipeBody functionAttributes isAtomicMethod isChannelSend isLockMethod nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat paramAttributes paramValue privateAbi returnAttributes secretRoleOf unpackReturnedResult
   pointer this: size=280 writesThrough=true captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0 Emitter.isLibraryCopy#0 emitParamRangeChecks#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 emitWipeBody#0 emitLockBody#0 emitChannelSendBody#0 emitAtomicBody#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 Emitter.emitScopeExit#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitParamRangeChecks#1 emitConstructorPrologue#1 secretRoleOf#0 emitWipeBody#1 isLockMethod#0 emitLockBody#1 isChannelSend#0 emitChannelSendBody#1 isAtomicMethod#0 emitAtomicBody#1
+  pointer sig: size=144 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitParamRangeChecks#1 emitConstructorPrologue#1 secretRoleOf#0 emitWipeBody#1 isLockMethod#0 emitLockBody#1 isChannelSend#0 emitChannelSendBody#1 isAtomicMethod#0 emitAtomicBody#1
   stackSites=0 stackLocals=0
   local -36:11 facts: FunctionFacts (const)
   callee -36:19 Emitter.factsFor -> @Emitter.factsFor
@@ -481,7 +481,7 @@ function Emitter.beginReclaim(this: Emitter, callee: FunctionSig): string -> @Em
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat reclaimsReturnedString
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
-  pointer callee: size=136 writesThrough=false captured=false passedTo=reclaimsReturnedString#0
+  pointer callee: size=144 writesThrough=false captured=false passedTo=reclaimsReturnedString#0
   stackSites=0 stackLocals=0
   callee +0:10 reclaimsReturnedString -> @reclaimsReturnedString
   callee +3:12 IRFunction.emitValue -> @IRFunction.emitValue
@@ -549,7 +549,7 @@ function Emitter.emitEntryWrapper(this: Emitter, userMain: FunctionSig): IRFunct
   sharedWrite: +0:7
   calls: DebugInfo.beginFunction Emitter.emitSandboxApply Emitter.sandboxed Emitter.useRuntime IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow nish_str_concat
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.sandboxed#0 Emitter.emitSandboxApply#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
-  pointer userMain: size=136 writesThrough=false captured=false passedTo=DebugInfo.beginFunction#2
+  pointer userMain: size=144 writesThrough=false captured=false passedTo=DebugInfo.beginFunction#2
   stackSites=1 stackLocals=1
   local -3:11 optimize: boolean (const)
   local -2:11 attrs: string[] (const)
@@ -621,7 +621,7 @@ function Emitter.isLibraryCopy(this: Emitter, sig: FunctionSig): boolean -> @Emi
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn
   pointer this: size=280 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   local +0:16 library: CheckedProgram (const)
   callee +1:11 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -645,7 +645,7 @@ function Emitter.foreignDeclarationFor(this: Emitter, sig: FunctionSig): string 
   sharedWrite: via Emitter.llvmAbi
   calls: Emitter.llvmAbi isForeignBuffer nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 Emitter.llvmAbi#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 params: string[] (const)
   local +1:9 i: i32 (let)
@@ -657,7 +657,7 @@ function Emitter.declarationFor(this: Emitter, sig: FunctionSig): string -> @Emi
   sharedWrite: via Emitter.factsFor
   calls: Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.factsFor Emitter.llvmAbi FunctionSig.isCompileTime IRModule.attrGroupFor functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes returnAttributes
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1
+  pointer sig: size=144 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1
   stackSites=3 stackLocals=3
   local +0:11 facts: FunctionFacts (const)
   callee +0:19 Emitter.factsFor -> @Emitter.factsFor
@@ -963,7 +963,7 @@ function Emitter.emitArgument(this: Emitter, expr: Node, callee: FunctionSig, in
   calls: Emitter.emitEntering checksArgumentRange
   pointer this: size=280 writesThrough=true captured=false passedTo=Emitter.emitEntering#0 checksArgumentRange#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=Emitter.emitEntering#1
-  pointer callee: size=136 writesThrough=false captured=false passedTo=checksArgumentRange#1
+  pointer callee: size=144 writesThrough=false captured=false passedTo=checksArgumentRange#1
   stackSites=0 stackLocals=0
   callee +0:12 Emitter.emitEntering -> @Emitter.emitEntering
   callee +0:36 checksArgumentRange -> @checksArgumentRange
@@ -1357,7 +1357,7 @@ function Emitter.captureOperands(this: Emitter, sig: FunctionSig, isPrivate: boo
   escaping: isPrivate
   calls: Emitter.captureParamTypes Emitter.captureValue capturesOf nish_array_grow nish_str_concat
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.captureParamTypes#0 Emitter.captureValue#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=Emitter.captureParamTypes#1 capturesOf#0
+  pointer sig: size=144 writesThrough=true captured=true passedTo=Emitter.captureParamTypes#1 capturesOf#0
   stackSites=0 stackLocals=0
   local +0:11 types: string[] (const)
   callee +0:19 Emitter.captureParamTypes -> @Emitter.captureParamTypes
@@ -1372,7 +1372,7 @@ function Emitter.captureParamTypes(this: Emitter, sig: FunctionSig, isPrivate: b
   escaping: isPrivate
   calls: CaptureSlot.type Emitter.llvmAbi capturesOf nish_array_grow
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=capturesOf#0
+  pointer sig: size=144 writesThrough=true captured=true passedTo=capturesOf#0
   stackSites=0 stackLocals=0
   local +0:11 out: string[] (const)
   local +4:16 slot: CaptureSlot (const)

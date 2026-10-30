@@ -136,7 +136,18 @@ import { StringBuilder } from "./strings"
 import { ParentTable } from "./parents"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { openedHandle } from "./handles"
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_BOOL, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
+import {
+  K_ARRAY,
+  K_NULLABLE,
+  K_RESULT,
+  K_STRUCT,
+  T_BOOL,
+  T_CPTR,
+  T_I32,
+  T_STRING,
+  T_VOID,
+  TypeTable,
+} from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
 const THREAD_SCOPE: string = "ThreadScope"
@@ -1117,15 +1128,26 @@ export const reduceMessage = (
 
 // ---- Captures ----------------------------------------------------------------------------
 //
-// An arrow passed to one of the four forms may read the `const` locals and the
-// parameters of the function it is written in (docs/LANGUAGE.md, "Data
-// parallelism"). The checker appends each one it reads to the arrow's
-// parameters (`captureOuter` in `src/generics.ts`), so inside the arrow a
-// capture is a parameter like any other, and the rules above hold of it as
-// they hold of the element: a store through it is a shared write, which
-// `sharedWriteMessage` refuses. The value travels from the call to the body as
-// a parameter of every instance between them, which the emitter adds
-// (`capturesOf`), and through the region's context with the other arguments.
+// An arrow passed to a function-typed parameter of a top-level function may
+// read the `const` locals and the parameters of the function it is written in
+// (docs/LANGUAGE.md, "Function parameters"; "Data parallelism" for the four
+// forms). The checker appends each one it reads to the arrow's parameters
+// (`captureOuter` in `src/generics.ts`), so inside the arrow a capture is a
+// parameter like any other, and the rules above hold of it as they hold of the
+// element: in a data-parallel body or a task a store through it is a shared
+// write, which `sharedWriteMessage` refuses. The value travels from the call
+// to the body as a parameter of every instance between them, which the
+// emitter adds (`capturesOf`), and through the region's context with the
+// other arguments.
+
+/** What an arrow argument may capture, by the parameter it is given for: nothing (`expose`, `exposeWith`). */
+export const CAPTURE_NONE: i32 = 0
+/** Any other function's parameter: the call runs the arrow, if at all, before it returns. */
+export const CAPTURE_CALL: i32 = 1
+/** One of the four data-parallel forms: every thread reads the captures at once. */
+export const CAPTURE_PARALLEL: i32 = 2
+/** A scope's task: the captures are handed over at the `spawn` and read at the join. */
+export const CAPTURE_TASK: i32 = 3
 
 /** One value an instance carries for an arrow it was handed: capture `index` of `arrow`. */
 export class CaptureSlot {
@@ -1181,8 +1203,9 @@ export const letCaptureMessage = (name: string): string =>
 /** The refusal for a name an arrow inside an arrow reads from outside both. */
 export const nestedCaptureMessage = (name: string): string =>
   `The arrow reads \`${name}\` from outside the arrow it is written in: only an arrow written directly in a ` +
-  "function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read " +
-  "that function's `const` locals, and an arrow inside another arrow captures nothing"
+  "function's body may read that function's `const` locals and parameters, and an arrow inside another arrow " +
+  "reads only its own parameters and the module's top-level names; move the inner call into a top-level " +
+  "function that takes the value as a parameter"
 
 /** The refusal for `this` in an arrow passed to a data-parallel form. */
 export const thisCaptureMessage = (): string =>
@@ -1214,6 +1237,33 @@ export const taskCaptureWriteMessage = (name: string): string =>
 export const captureWriteMessage = (name: string, remedy: string): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a data-parallel body ` +
   `reads a captured value and never writes it, because every thread reads the same one; ${remedy}`
+
+/** The refusal for `this` in an arrow given to an ordinary function's parameter. */
+export const callThisCaptureMessage = (): string =>
+  "The arrow reads `this`: an arrow argument may read the `const` locals and the parameters of the function it " +
+  "is written in, and `this` is neither; bind it, or what the arrow needs of it, to a `const` before the call " +
+  "(`const self = this`, `const k = this.k`)"
+
+/** The refusal for a `let` an arrow given to an ordinary function's parameter reads. */
+export const callLetCaptureMessage = (name: string): string =>
+  `The arrow reads \`${name}\`, a \`let\` of the function it is written in: an arrow argument is handed what it ` +
+  "captures as an argument when the call is made, so it may read only a `const` or a parameter of that " +
+  "function, whose value is the one the arrow is handed; bind the value to a `const` before the call, " +
+  `\`const ${name}Now = ${name}\`, and read \`${name}Now\` in the arrow`
+
+/** The refusal for an assignment to a name an arrow given to an ordinary function's parameter captures. */
+export const callCaptureWriteMessage = (name: string): string =>
+  `The arrow assigns to \`${name}\`, which belongs to the function it is written in: an arrow argument is handed ` +
+  "what it captures as an argument when the call is made, so an assignment would change only its own copy; " +
+  "make the arrow answer the value and assign it after the call, or write through an object the function " +
+  "holds (`box.n = v`, `list.push(v)`)"
+
+/** The refusal for a function parameter of the function around an arrow, which the arrow calls or names. */
+export const functionParamCaptureMessage = (name: string): string =>
+  `The arrow names \`${name}\`, a function parameter of the function it is written in: a function parameter ` +
+  "is bound when that function is instantiated, not handed over as a value, so an arrow lifted into a function " +
+  `of its own cannot reach it; pass \`${name}\` itself where the arrow stands when it fits the parameter, or ` +
+  "give the callee a function parameter of its own for it"
 
 /**
  * The code NL2503 shows for `target`, a captured name the arrow writes: the
@@ -1331,14 +1381,24 @@ const isThreadsLayout = (info: StructInfo): boolean => {
  * recursive class. A scope's `task` may capture a `Mutex`, as it may be handed
  * one as its argument, and R7 and R8 hold of it as of an argument; a guard, a
  * channel and a scope it may not, since each is shared only by its own rules.
+ * An arrow given to an ordinary function's parameter may capture none of them,
+ * since its callee may hand it on to a parallel form or a `spawn`, nor a
+ * foreign handle or its pointer, whose every name the handle rules keep inside
+ * the `using` block that opens it (WP40 §4). The parallel forms and `spawn`
+ * meet a handle by the handle rules' own refusal, as before.
  */
 const captureObstacle = (
   program: CheckedProgram,
   table: TypeTable,
   type: i32,
   seen: StringSet,
-  task: boolean
+  mode: i32
 ): string => {
+  const task = mode === CAPTURE_TASK
+  const call = mode === CAPTURE_CALL
+  if (call && table.stripNull(type) === T_CPTR) {
+    return "a foreign pointer is named only where the handle rules can follow it, never in an arrow"
+  }
   if (table.isMaybe(type)) {
     return "a value that may be absent is read through the test that found it, which the body cannot repeat"
   }
@@ -1350,7 +1410,7 @@ const captureObstacle = (
     return "a `Result` is read through the test that narrowed it; bind the value it holds to a `const` instead"
   }
   if (kind === K_NULLABLE || kind === K_ARRAY) {
-    return captureObstacle(program, table, table.refOf(type), seen, task)
+    return captureObstacle(program, table, table.refOf(type), seen, mode)
   }
   if (kind !== K_STRUCT) {
     return ""
@@ -1363,6 +1423,9 @@ const captureObstacle = (
   const info = program.struct(name)
   if (info === null) {
     return "its layout is not known here"
+  }
+  if (call && info.handle) {
+    return "a handle lives in the `using` block that opens it and is only lent to a parameter of its type"
   }
   if (task && isThreadsClass(info, MUTEX)) {
     return "" // the lock's data is reached only through its guard, by the task that takes it
@@ -1377,7 +1440,7 @@ const captureObstacle = (
     return "a scope, a lock, a guard or a channel is shared only by the rules of its own block"
   }
   for (const field of info.fields) {
-    const inner = captureObstacle(program, table, field.type, seen, task)
+    const inner = captureObstacle(program, table, field.type, seen, mode)
     if (inner.length > 0) {
       return inner
     }
@@ -1391,14 +1454,20 @@ export const captureTypeMessage = (
   table: TypeTable,
   name: string,
   type: i32,
-  task: boolean
+  mode: i32
 ): string => {
-  const why = captureObstacle(program, table, type, new StringSet(), task)
+  const why = captureObstacle(program, table, type, new StringSet(), mode)
   if (why.length === 0) {
     return ""
   }
-  if (task) {
+  if (mode === CAPTURE_TASK) {
     return `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and a task cannot capture it: ${why}`
+  }
+  if (mode !== CAPTURE_PARALLEL) {
+    return (
+      `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and an arrow argument cannot capture ` +
+      `it: ${why}`
+    )
   }
   return (
     `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and a data-parallel body cannot capture it: ` +
