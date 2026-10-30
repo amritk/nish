@@ -317,7 +317,9 @@ const regexFoldWordBefore = (text: string, p: i32): boolean => {
   if (b === 0xbf) {
     return toI32(text.charCodeAt(p - 2)) === 0xc5
   }
-  return b === 0xaa && p >= 3 && toI32(text.charCodeAt(p - 2)) === 0x84 && toI32(text.charCodeAt(p - 3)) === 0xe2
+  return (
+    b === 0xaa && p >= 3 && toI32(text.charCodeAt(p - 2)) === 0x84 && toI32(text.charCodeAt(p - 3)) === 0xe2
+  )
 }
 
 /** Whether U+017F or U+212A starts at byte `p` of `text`, `len` bytes long. */
@@ -329,7 +331,12 @@ const regexFoldWordAt = (text: string, p: i32, len: i32): boolean => {
   if (b === 0xc5) {
     return toI32(text.charCodeAt(p + 1)) === 0xbf
   }
-  return b === 0xe2 && p + 2 < len && toI32(text.charCodeAt(p + 1)) === 0x84 && toI32(text.charCodeAt(p + 2)) === 0xaa
+  return (
+    b === 0xe2 &&
+    p + 2 < len &&
+    toI32(text.charCodeAt(p + 1)) === 0x84 &&
+    toI32(text.charCodeAt(p + 2)) === 0xaa
+  )
 }
 
 /** Where the value of `key` starts in `REGEX_PROPERTY_NAMES`, or -1 if it has none. */
@@ -3419,7 +3426,8 @@ export class Regex {
       u = 0
       while (u < toI32(hit.length) && u < toI32(rep.length)) {
         const r: i32 = rep[u]
-        const word: boolean = (r >= 0 && r < 128 && isRegexWordByte(r)) || (wordFold && (r === 0x17f || r === 0x212a))
+        const word: boolean =
+          (r >= 0 && r < 128 && isRegexWordByte(r)) || (wordFold && (r === 0x17f || r === 0x212a))
         if (u < toI32(hit.length)) {
           hit[u] = toU8(word ? 1 : 0)
         }

@@ -461,12 +461,12 @@ const tables = (db) => {
   let prev = 0
   // Per block of `FOLD_BLOCK` members, the first member and where its step starts.
   const blocks = []
-  members.forEach(([c, next, pair], i) => {
+  members.forEach(([c, to, pair], k) => {
     fold += varint(c - prev)
-    if (i % FOLD_BLOCK === 0) {
+    if (k % FOLD_BLOCK === 0) {
       blocks.push([c, fold.length])
     }
-    fold += varint(zigzag(next - c) * 2 + pair)
+    fold += varint(zigzag(to - c) * 2 + pair)
     prev = c
   })
   // The folding code points as maximal runs, each end four base-32 digits.
@@ -485,7 +485,7 @@ const tables = (db) => {
     return String.fromCharCode(...[15, 10, 5, 0].map((b) => DIGIT0 + ((v >>> b) & 31)))
   }
   const spans = runs.map(([lo, hi]) => fixed(lo) + fixed(hi)).join("")
-  const foldIndex = blocks.map(([c, at]) => fixed(c) + fixed(at)).join("")
+  const foldIndex = blocks.map(([first, stepAt]) => fixed(first) + fixed(stepAt)).join("")
   return { index, data, fold, spans, foldIndex }
 }
 
@@ -534,7 +534,19 @@ const EDGES = new Set([
 // `\w`, `\b` and `\B` under `i` around ſ and the Kelvin sign, which are word
 // characters there, and a shorthand before a folded atom above ASCII.
 const WORD_TEXT = "aſ ſa \u212a k\u212ab s_ſ é É aÉ ſ\u212a -ſ- x"
-const WORD_PATTERNS = ["\\w+", "\\W+", "[\\w]+", "[^\\w]+", "\\b.", ".\\b", "\\B.", ".\\B", "\\b\\w+\\b", "\\wé", "\\Wé"]
+const WORD_PATTERNS = [
+  "\\w+",
+  "\\W+",
+  "[\\w]+",
+  "[^\\w]+",
+  "\\b.",
+  ".\\b",
+  "\\B.",
+  ".\\B",
+  "\\b\\w+\\b",
+  "\\wé",
+  "\\Wé",
+]
 const sample = () => {
   const out = []
   for (let c = 0; c <= MAX_CP; c++) {
