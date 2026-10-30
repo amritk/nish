@@ -44,6 +44,10 @@ const CASES = [
   "icase-unicode",
 ]
 const cases = only === null ? CASES : only.split(",")
+// The cases a build from before the Unicode features cannot run: it refuses
+// `\p{…}` and folds no non-ASCII letter, so they time `after` alone.
+const UNICODE = new Set(["property", "script", "icase-unicode"])
+const runs = (impl, name) => !(UNICODE.has(name) && impl.label.startsWith("before"))
 
 const outDir = path.join(root, "build", "bench-regex")
 fs.rmSync(outDir, { recursive: true, force: true })
@@ -86,7 +90,7 @@ const sums = cases.map(() => new Set())
 for (let r = 0; r < rounds; r++) {
   process.stderr.write(`round ${r + 1} of ${rounds}\n`)
   cases.forEach((name, k) => {
-    for (const impl of roundOrder(impls, r)) {
+    for (const impl of roundOrder(impls, r).filter((i) => runs(i, name))) {
       const got = run(impl.exe, name)
       sums[k].add(got.checksum)
       times[k].get(impl.label).push(got.ns)
@@ -109,13 +113,13 @@ cases.forEach((name, k) => {
     process.exitCode = 1
     out.push("  checksums disagree")
   }
-  for (const [label, xs] of t) {
+  for (const [label, xs] of [...t].filter(([, xs]) => xs.length > 0)) {
     out.push(`  ${label.padEnd(11)} min ${us(min(xs))} µs/pass, median ${us(median(xs))} µs/pass`)
   }
   const band = (label) =>
     `${label} against its byte-identical copy: min ${pct(min(t.get(label)), min(t.get(`${label}-copy`)))}, median ${pct(median(t.get(label)), median(t.get(`${label}-copy`)))}`
   out.push(`  noise band, ${band("after")}`)
-  if (beforeCompiler !== null) {
+  if (beforeCompiler !== null && t.get("before").length > 0) {
     out.push(`  noise band, ${band("before")}`)
     const ratio = (f) => (f(t.get("before")) / f(t.get("after"))).toFixed(3)
     out.push(`  before / after: min ${ratio(min)}x, median ${ratio(median)}x`)

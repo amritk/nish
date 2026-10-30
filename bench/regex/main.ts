@@ -16,19 +16,20 @@
 // another compiler's build with `--before`.
 import { Regex, RegexMatch, regexCompile } from "nish/regex"
 
-const WORDS: string[] = [
+/** The words the corpus is built from. */
+const words = (): string[] => [
   "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "needle", "Hello", "World",
   "σοφία", "Ἀθῆναι", "λόγος", "ΑΛΦΑ", "école", "ÉCOLE", "café", "Straße", "STRASSE", "Ärger",
   "日本語", "東京", "数据", "über", "naïve", "1234", "56", "2026", "ada@example.com", "bob@site.org",
 ]
 
 /** One line of `n` words, picked by an LCG from `seed`, and the seed after it. */
-const line = (seed: i32, n: i32, out: string[]): i32 => {
+const line = (vocabulary: string[], seed: i32, n: i32, out: string[]): i32 => {
   let s: i32 = seed
   let k: i32 = 0
   while (k < n) {
     s = (s * 1103 + 12345) & 1048575
-    out.push(WORDS[s % toI32(WORDS.length)])
+    out.push(vocabulary[s % toI32(vocabulary.length)])
     out.push(k + 1 === n ? "\n" : " ")
     k += 1
   }
@@ -37,12 +38,13 @@ const line = (seed: i32, n: i32, out: string[]): i32 => {
 
 /** The eight copies of the corpus: `copy` ASCII letters, then the same 64 KB of lines. */
 const corpora = (): string[] => {
+  const vocabulary: string[] = words()
   const body: string[] = []
   let seed: i32 = 7
   let size: i32 = 0
   while (size < 65536) {
     const parts: string[] = []
-    seed = line(seed, 8 + (seed & 7), parts)
+    seed = line(vocabulary, seed, 8 + (seed & 7), parts)
     const text: string = parts.join("")
     body.push(text)
     size += toI32(text.length)
@@ -109,7 +111,8 @@ export const main = (): number => {
   const started: i64 = monotonicNanos()
   let r: i32 = 0
   while (r < iterations) {
-    const text: string = texts[r & 7]
+    const slot: i32 = r % 8
+    const text: string = texts[slot]
     const got: i32 = name === "exec" ? execAll(re, text, m) : re.count(text)
     checksum = (checksum * 31 + got) & 1048575
     r += 1
