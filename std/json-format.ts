@@ -611,7 +611,7 @@ const jfUcsWidth = (s: string, i: i32, privateOk: boolean): i32 => {
       return 0
     }
     width = 2
-    cp = 0x10000 + ((lead - 0xd800) << 10) + (trail - 0xdc00)
+    cp = ((lead - 0xd800) << 10) + (trail - 0xdc00) + 0x10000
   } else if (lead >= 0xdc00 && lead <= 0xdfff) {
     return 0
   } else {
