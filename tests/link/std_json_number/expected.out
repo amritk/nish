@@ -18,6 +18,9 @@ PASS  exponent: one past 10^15 is refused
 PASS  exponent: one past -10^15 is refused
 PASS  exponent: a forty-digit exponent is refused, not wrapped
 PASS  exponent: canonical refuses one past the bound
+PASS  exponent: zero past the bound is still zero
+PASS  exponent: so is -0.000 past the negative bound
+PASS  exponent: canonical writes zero past the bound
 PASS  order: a's refusal is answered first
 PASS  order: then b's
 PASS  canonical: 1.50
@@ -68,4 +71,4 @@ PASS  optional/bignum: every test agrees with upstream
 PASS  optional/bignum: the suite holds 9 tests
 PASS  optional/float-overflow: every test agrees with upstream
 PASS  optional/float-overflow: the suite holds 1 tests
-std/json-number: 70 passed, 0 failed, 0 skipped
+std/json-number: 73 passed, 0 failed, 0 skipped

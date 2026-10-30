@@ -8,6 +8,8 @@ PASS  parse: ~2 is refused
 PASS  escape: / and ~
 PASS  escape: nothing to escape
 PASS  escape: round trips through parse
+PASS  escape: text past U+00FF is copied whole
+PASS  parse: text past U+00FF is copied whole
 PASS  resolve: the empty pointer is the root
 PASS  resolve: /foo/0
 PASS  resolve: RFC 6901's examples
@@ -30,4 +32,4 @@ PASS  optional/format/json-pointer: every test agrees with upstream
 PASS  optional/format/json-pointer: the suite holds 40 tests
 PASS  optional/format/relative-json-pointer: every test agrees with upstream
 PASS  optional/format/relative-json-pointer: the suite holds 26 tests
-std/json-pointer: 32 passed, 0 failed, 0 skipped
+std/json-pointer: 34 passed, 0 failed, 0 skipped

@@ -34,7 +34,8 @@
  *
  * **The bounds are stated.** An exponent is at most `JSON_NUMBER_MAX_EXPONENT`
  * in size, which keeps every exponent sum exact (under Node, too), and past
- * it a text is `JSON_NUMBER_ERR_EXPONENT`. A division that would take more
+ * it a text is `JSON_NUMBER_ERR_EXPONENT`, unless every digit is zero:
+ * `0e9999999999999999` is zero. A division that would take more
  * than `JSON_NUMBER_MAX_STEPS` steps is `JSON_NUMBER_ERR_GAP` before it
  * starts: `1e1000000000` is 12 bytes, and whether it is a multiple of `3`
  * would otherwise be a billion steps, the cheap input and expensive answer an
@@ -163,6 +164,9 @@ class JsonNumberParts {
       }
     }
     let exponent: i64 = 0
+    // An exponent past the bound is refused only once the digits are known
+    // not all to be zero: `0e9999999999` is zero, as any other zero is.
+    let big: boolean = false
     const e: i32 = jsonNumberByte(s, i)
     if (e === JSON_NUMBER_LOWER_E || e === JSON_NUMBER_UPPER_E) {
       i += 1
@@ -175,7 +179,6 @@ class JsonNumberParts {
       if (!jsonNumberIsDigit(jsonNumberByte(s, i))) {
         return JSON_NUMBER_ERR_SYNTAX
       }
-      let big: boolean = false
       while (jsonNumberIsDigit(jsonNumberByte(s, i))) {
         // Adding stops past the bound, so a thousand-digit exponent neither
         // overflows nor is mistaken for a small one.
@@ -184,9 +187,6 @@ class JsonNumberParts {
           big = exponent > JSON_NUMBER_MAX_EXPONENT
         }
         i += 1
-      }
-      if (big) {
-        return JSON_NUMBER_ERR_EXPONENT
       }
       if (minus) {
         exponent = -exponent
@@ -202,6 +202,9 @@ class JsonNumberParts {
     }
     if (first === places) {
       return 0
+    }
+    if (big) {
+      return JSON_NUMBER_ERR_EXPONENT
     }
     let last: i32 = places - 1
     while (this.placeDigit(last) === 0) {

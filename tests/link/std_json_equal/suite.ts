@@ -161,7 +161,12 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
   return JSS_UNREAD;
 };
 
-/** The verdict of every keyword of `schema` on `data`: the first that is not valid, else valid. `true` and `false` decide at once; any other schema that is not an object is unread. */
+/**
+ * The verdict of every keyword of `schema` on `data`: unread when any keyword
+ * is unread, so a test is never judged by a schema read only in part; else
+ * the first that is not valid, else valid. `true` and `false` decide at once;
+ * any other schema that is not an object is unread.
+ */
 const jssSchema = (doc: JsonDocument, schema: JsonValue, data: JsonValue): i32 => {
   if (doc.kind(schema) === JSON_VALUE_BOOLEAN) {
     return doc.boolean(schema) ? JSS_VALID : JSS_INVALID;
@@ -169,13 +174,17 @@ const jssSchema = (doc: JsonDocument, schema: JsonValue, data: JsonValue): i32 =
   if (doc.kind(schema) !== JSON_VALUE_OBJECT) {
     return JSS_UNREAD;
   }
+  let first: i32 = JSS_VALID;
   for (let i: i32 = 0; i < doc.length(schema); i++) {
     const verdict: i32 = jssKeyword(doc, schema, doc.keyAt(schema, i), doc.at(schema, i), data);
-    if (verdict !== JSS_VALID) {
-      return verdict;
+    if (verdict === JSS_UNREAD) {
+      return JSS_UNREAD;
+    }
+    if (first === JSS_VALID) {
+      first = verdict;
     }
   }
-  return JSS_VALID;
+  return first;
 };
 
 /**

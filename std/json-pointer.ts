@@ -21,11 +21,13 @@
  * does an index past the end, a token on a scalar, and a key not there. The
  * pointer is the decoded string, not a URI fragment: `#/a` is not one.
  *
- * A relative JSON Pointer (draft-handrews-relative-json-pointer-01, which
+ * A relative JSON Pointer (draft-bhutton-relative-json-pointer-00, which
  * JSON Schema 2020-12's `relative-json-pointer` format names) is a
- * non-negative integer written without a leading zero, then either `#` or a
- * JSON Pointer. Only its form is checked here: resolving one needs the
- * place it is relative to, which a validator walking an instance holds.
+ * non-negative integer written without a leading zero, then either `#`, or
+ * an optional index manipulation (`+` or `-` and another such integer) and
+ * a JSON Pointer: `0#`, `1/a`, `0+1/a`, `2-1`, not `0+1#`. Only its form is
+ * checked here: resolving one needs the place it is relative to, which a
+ * validator walking an instance holds.
  *
  * **What a call costs.** `isJsonPointer` and `isRelativeJsonPointer` read
  * the text once and allocate nothing. `jsonPointerParse` allocates each
@@ -49,6 +51,8 @@ export const JSON_POINTER_NONE: i32 = -1
 export const JSON_POINTER_ERR_SYNTAX: i32 = -2
 
 const JSON_POINTER_HASH: i32 = 35
+const JSON_POINTER_PLUS: i32 = 43
+const JSON_POINTER_MINUS: i32 = 45
 const JSON_POINTER_SLASH: i32 = 47
 const JSON_POINTER_DIGIT_0: i32 = 48
 const JSON_POINTER_DIGIT_1: i32 = 49
@@ -83,44 +87,68 @@ const jsonPointerWellFormed = (s: string, from: i32): boolean => {
 export const isJsonPointer = (s: string): boolean => jsonPointerWellFormed(s, 0)
 
 /**
- * Whether `s` is a relative JSON Pointer: a non-negative integer with no
- * leading zero (`0`, `12`, not `01`, `+1` or `-1`), then nothing, `#`, or a
- * JSON Pointer that is not empty. Allocates nothing.
+ * Where the non-negative integer that starts at `from` of `s` ends: past
+ * `0`, or past a digit run led by `1`-`9`. `-1` when no digit is there.
  */
-export const isRelativeJsonPointer = (s: string): boolean => {
-  const first: i32 = jsonPointerByte(s, 0)
+const jsonPointerIntegerEnd = (s: string, from: i32): i32 => {
+  const first: i32 = jsonPointerByte(s, from)
   if (first < JSON_POINTER_DIGIT_0 || first > JSON_POINTER_DIGIT_9) {
-    return false
+    return -1
   }
-  let i: i32 = 1
+  let i: i32 = from + 1
   if (first !== JSON_POINTER_DIGIT_0) {
     while (jsonPointerByte(s, i) >= JSON_POINTER_DIGIT_0 && jsonPointerByte(s, i) <= JSON_POINTER_DIGIT_9) {
       i += 1
     }
   }
-  if (jsonPointerByte(s, i) === JSON_POINTER_HASH) {
+  return i
+}
+
+/**
+ * Whether `s` is a relative JSON Pointer: a non-negative integer with no
+ * leading zero (`0`, `12`, not `01`, `+1` or `-1`), then `#`, or an optional
+ * `+` or `-` and another such integer and then a JSON Pointer, which may be
+ * empty. Allocates nothing.
+ */
+export const isRelativeJsonPointer = (s: string): boolean => {
+  let i: i32 = jsonPointerIntegerEnd(s, 0)
+  if (i < 0) {
+    return false
+  }
+  const next: i32 = jsonPointerByte(s, i)
+  if (next === JSON_POINTER_HASH) {
     return i + 1 === toI32(s.length)
+  }
+  if (next === JSON_POINTER_PLUS || next === JSON_POINTER_MINUS) {
+    i = jsonPointerIntegerEnd(s, i + 1)
+    if (i < 0) {
+      return false
+    }
   }
   return jsonPointerWellFormed(s, i)
 }
 
-/** The token of well-formed pointer `p` that starts at `from` and ends before `end`, with `~1` and `~0` decoded. */
+/**
+ * The token of well-formed pointer `p` that starts at `from` and ends before
+ * `end`, with `~1` and `~0` decoded. The runs between escapes are copied
+ * whole, so no byte (no code unit under Node) is narrowed.
+ */
 const jsonPointerToken = (p: string, from: i32, end: i32): string => {
-  const bytes: u8[] = []
+  const parts: string[] = []
+  let run: i32 = from
   let i: i32 = from
   while (i < end) {
-    const c: i32 = jsonPointerByte(p, i)
-    if (c === JSON_POINTER_TILDE) {
-      bytes.push(
-        toU8(jsonPointerByte(p, i + 1) === JSON_POINTER_DIGIT_1 ? JSON_POINTER_SLASH : JSON_POINTER_TILDE)
-      )
+    if (jsonPointerByte(p, i) === JSON_POINTER_TILDE) {
+      parts.push(p.substring(run, i))
+      parts.push(jsonPointerByte(p, i + 1) === JSON_POINTER_DIGIT_1 ? "/" : "~")
       i += 2
+      run = i
     } else {
-      bytes.push(toU8(c))
       i += 1
     }
   }
-  return String.fromBytes(bytes, 0, toI32(bytes.length))
+  parts.push(p.substring(run, end))
+  return parts.join("")
 }
 
 /** Where the token that starts at `from` of pointer `p` ends: the next `/`, or the end. */
@@ -150,19 +178,23 @@ export const jsonPointerParse = (p: string): string[] | null => {
   return tokens
 }
 
-/** `token` written as one token of a JSON Pointer: `~` as `~0` and `/` as `~1`, so `"a/b"` is `a~1b`. */
+/**
+ * `token` written as one token of a JSON Pointer: `~` as `~0` and `/` as
+ * `~1`, so `"a/b"` is `a~1b`. Everything else is copied whole.
+ */
 export const jsonPointerEscape = (token: string): string => {
-  const bytes: u8[] = []
+  const parts: string[] = []
+  let run: i32 = 0
   for (let i: i32 = 0; i < toI32(token.length); i++) {
-    const c: i32 = toI32(token.charCodeAt(i))
+    const c: i32 = jsonPointerByte(token, i)
     if (c === JSON_POINTER_TILDE || c === JSON_POINTER_SLASH) {
-      bytes.push(toU8(JSON_POINTER_TILDE))
-      bytes.push(toU8(c === JSON_POINTER_TILDE ? JSON_POINTER_DIGIT_0 : JSON_POINTER_DIGIT_1))
-    } else {
-      bytes.push(toU8(c))
+      parts.push(token.substring(run, i))
+      parts.push(c === JSON_POINTER_TILDE ? "~0" : "~1")
+      run = i + 1
     }
   }
-  return String.fromBytes(bytes, 0, toI32(bytes.length))
+  parts.push(token.substring(run))
+  return parts.join("")
 }
 
 /**

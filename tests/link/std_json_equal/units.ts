@@ -109,6 +109,8 @@ const jeDuplicates = (t: Suite): void => {
   t.eqI32("duplicate: 1.0 repeats 1", jeDuplicateOf("[1,2,1.0]"), 2);
   t.eqI32("duplicate: the first repeat is named", jeDuplicateOf("[0,5,5,0]"), 2);
   t.eqI32("duplicate: objects in another key order", jeDuplicateOf('[{"a":1,"b":2},{"b":2,"a":1}]'), 1);
+  t.eqI32("duplicate: strings past U+00FF stay apart", jeDuplicateOf('["Ā","\\u0000","ā","\\u0001"]'), -1);
+  t.eqI32("duplicate: 0e9999999999999999 repeats 0", jeDuplicateOf("[0,0e9999999999999999]"), 1);
 };
 
 /** An array nested `depth` deep, built from the inside out: `[[[...[1]...]]]`. */

@@ -15,6 +15,8 @@ PASS  duplicate: none
 PASS  duplicate: 1.0 repeats 1
 PASS  duplicate: the first repeat is named
 PASS  duplicate: objects in another key order
+PASS  duplicate: strings past U+00FF stay apart
+PASS  duplicate: 0e9999999999999999 repeats 0
 PASS  depth: 100000 levels compare without recursion
 PASS  depth: and differ by one level
 PASS  depth: the canonical text has every level
@@ -25,4 +27,4 @@ PASS  enum: every test agrees with upstream
 PASS  enum: the suite holds 53 tests
 PASS  uniqueItems: every test agrees with upstream
 PASS  uniqueItems: the suite holds 69 tests
-std/json-equal: 27 passed, 0 failed, 0 skipped
+std/json-equal: 29 passed, 0 failed, 0 skipped

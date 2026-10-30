@@ -55,6 +55,9 @@ const jnRefusals = (t: Suite): void => {
     JSON_NUMBER_ERR_EXPONENT
   );
   t.eqStr("exponent: canonical refuses one past the bound", jsonNumberCanonical("5e1000000000000001"), "");
+  t.eqI32("exponent: zero past the bound is still zero", jsonNumberCompare("0e9999999999999999", "0"), 0);
+  t.eqI32("exponent: so is -0.000 past the negative bound", jsonNumberCompare("-0.000e-9999999999999999", "0"), 0);
+  t.eqStr("exponent: canonical writes zero past the bound", jsonNumberCanonical("0.0E+99999999999999999999"), jsonNumberCanonical("0"));
   t.eqI32("order: a's refusal is answered first", jsonNumberCompare("1e1000000000000001", "x"), JSON_NUMBER_ERR_EXPONENT);
   t.eqI32("order: then b's", jsonNumberCompare("1", "x"), JSON_NUMBER_ERR_SYNTAX);
 };

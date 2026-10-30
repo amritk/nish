@@ -198,15 +198,13 @@ export const jsonEqual = (da: JsonDocument, a: JsonValue, db: JsonDocument, b: J
   return true
 }
 
-/** Appends `s`'s bytes to `out`. */
-const jsonEqualPut = (out: u8[], s: string): void => {
-  for (let i: i32 = 0; i < toI32(s.length); i++) {
-    out.push(toU8(s.charCodeAt(i)))
-  }
+/** Appends `s` to `out` whole, so every byte (every code unit under Node) is kept. */
+const jsonEqualPut = (out: string[], s: string): void => {
+  out.push(s)
 }
 
 /** Appends `s` as the canonical form writes a string or a key: its length, `:`, its bytes. */
-const jsonEqualPutText = (out: u8[], s: string): void => {
+const jsonEqualPutText = (out: string[], s: string): void => {
   jsonEqualPut(out, `${toI32(s.length)}:`)
   jsonEqualPut(out, s)
 }
@@ -217,17 +215,17 @@ const jsonEqualPutText = (out: u8[], s: string): void => {
  * `jsonEqual`'s fallback too. A function of its own so that the texts it makes
  * are released when it returns rather than at the end of the walk.
  */
-const jsonEqualPutNumber = (out: u8[], doc: JsonDocument, x: JsonValue): void => {
+const jsonEqualPutNumber = (out: string[], doc: JsonDocument, x: JsonValue): void => {
   const text: string = doc.numberText(x)
   const canonical: string = jsonNumberCanonical(text)
   jsonEqualPut(out, canonical === "" ? `x${text};` : `n${canonical};`)
 }
 
-/** The canonical bytes of value `v` (`jsonEqualCanonical`), or none for a handle that names no value. */
-const jsonEqualCanonicalBytes = (doc: JsonDocument, v: JsonValue): u8[] => {
-  const out: u8[] = []
+/** The canonical text of value `v` (`jsonEqualCanonical`), or `""` for a handle that names no value. */
+const jsonEqualCanonicalText = (doc: JsonDocument, v: JsonValue): string => {
+  const out: string[] = []
   if (doc.kind(v) === JSON_VALUE_NONE) {
-    return out
+    return ""
   }
   const tasks: JsonValue[] = [v]
   const keyStack: string[] = []
@@ -269,7 +267,7 @@ const jsonEqualCanonicalBytes = (doc: JsonDocument, v: JsonValue): u8[] => {
       }
     }
   }
-  return out
+  return out.join("")
 }
 
 /**
@@ -282,19 +280,17 @@ const jsonEqualCanonicalBytes = (doc: JsonDocument, v: JsonValue): u8[] => {
  * object's members in key-byte order, each key a length, `:` and its bytes.
  * `""` for a handle that names no value.
  */
-export const jsonEqualCanonical = (doc: JsonDocument, v: JsonValue): string => {
-  const bytes: u8[] = jsonEqualCanonicalBytes(doc, v)
-  return String.fromBytes(bytes, 0, toI32(bytes.length))
-}
+export const jsonEqualCanonical = (doc: JsonDocument, v: JsonValue): string => jsonEqualCanonicalText(doc, v)
 
 /**
  * A 64-bit hash of value `v` that agrees with `jsonEqual`: equal values hash
- * the same. FNV-1a of the canonical bytes, unkeyed (the module header says
+ * the same. FNV-1a of the canonical text's bytes (its code units under
+ * Node, so a string past U+00FF hashes differently there), unkeyed (the module header says
  * what that means for a table). The offset basis for a handle that names no
  * value.
  */
 export const jsonEqualHash = (doc: JsonDocument, v: JsonValue): u64 => {
-  const bytes: u8[] = jsonEqualCanonicalBytes(doc, v)
+  const text: string = jsonEqualCanonicalText(doc, v)
   // FNV-1a's 64-bit prime and offset basis (0xcbf29ce484222325, past what a
   // literal writes exactly), public domain. A module constant cannot be a
   // `u64`, so they are made here.
@@ -302,8 +298,8 @@ export const jsonEqualHash = (doc: JsonDocument, v: JsonValue): u64 => {
   const high: u64 = 3421674724
   const low: u64 = 2216829733
   let h: u64 = (high << 32) | low
-  for (let i: i32 = 0; i < toI32(bytes.length); i++) {
-    h = (h ^ toU64(bytes[i])) * prime
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    h = (h ^ toU64(toI32(text.charCodeAt(i)))) * prime
   }
   return h
 }

@@ -33,6 +33,8 @@ const jpEscape = (t: Suite): void => {
   t.eqStr("escape: / and ~", jsonPointerEscape("a/b~c"), "a~1b~0c");
   t.eqStr("escape: nothing to escape", jsonPointerEscape("plain"), "plain");
   t.eqStr("escape: round trips through parse", jpTokens(`/${jsonPointerEscape("~/~1")}`), "1:~/~1");
+  t.eqStr("escape: text past U+00FF is copied whole", jsonPointerEscape("é/€~Ā"), "é~1€~0Ā");
+  t.eqStr("parse: text past U+00FF is copied whole", jpTokens("/€~1Ā/é~0"), "2:€/Ā|é~");
 };
 
 const jpResolve = (t: Suite): void => {
@@ -73,8 +75,8 @@ const jpResolve = (t: Suite): void => {
 const jpForms = (t: Suite): void => {
   const pointers: string[] = ["", "/", "/a", "//", "/~0~1", "/a b/%25"];
   const notPointers: string[] = ["a", "#", "#/a", "/~", "/~2", "/a~", "~0", " /"];
-  const relative: string[] = ["0", "1", "10", "0#", "1#", "0/", "2/a~1b", "120/0/1", "0/~0"];
-  const notRelative: string[] = ["", "#", "/a", "01", "-1", "+1", "0##", "1#/a", "0~0", "1 ", "0/~", "a"];
+  const relative: string[] = ["0", "1", "10", "0#", "1#", "0/", "2/a~1b", "120/0/1", "0/~0", "0+1", "1-1/a", "2+0", "0-0", "0+10/a", "3-2/"];
+  const notRelative: string[] = ["", "#", "/a", "01", "-1", "+1", "0##", "1#/a", "0~0", "1 ", "0/~", "a", "0+1#", "1-1#", "0+01", "0+", "0-", "0+1+1", "0+-1", "0++1", "+0", "0+a", "0-1~"];
   const wrong: string[] = [];
   for (const s of pointers) {
     if (!isJsonPointer(s)) {

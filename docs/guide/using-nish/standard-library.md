@@ -791,13 +791,14 @@ the shortest spelling of the value, digits without trailing zeros and an
 exponent (`15e-1` for `1.50`, `15e0` for `0.0150e3`, `0` for `-0`), so two texts are equal values
 exactly when their canonical texts are the same string.
 
-Each of them refuses with a negative code rather than guessing, and the code
-of the first argument comes first:
+Each of them refuses rather than guessing, `jsonNumberCompare` and
+`jsonNumberMultipleOf` with a negative code and `jsonNumberCanonical` with
+`""`, and the first argument's refusal comes first:
 
 - `JSON_NUMBER_ERR_SYNTAX`: the text is not one JSON number (`01`, `1.`, `+1`,
   a blank around it).
 - `JSON_NUMBER_ERR_EXPONENT`: the exponent is past `JSON_NUMBER_MAX_EXPONENT`,
-  10^15 either way.
+  10^15 either way, and a digit is not zero (`0e9999999999999999` is zero).
 - `JSON_NUMBER_ERR_DIVISOR`: `multipleOf` by zero.
 - `JSON_NUMBER_ERR_GAP`: `multipleOf` would take more than
   `JSON_NUMBER_MAX_STEPS` (2^20) digit steps. `1e1000000000` is twelve bytes
