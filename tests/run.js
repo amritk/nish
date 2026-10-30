@@ -17486,7 +17486,7 @@ if (!only || "simd".includes(only)) {
   }
 
   // WP38 §3.1: runtime/runtime-checksum.c runs CRC-32 on PCLMULQDQ folding, or on the
-  // ARMv8 CRC32 instructions with PMULL folding in front where the CPU has both, and
+  // ARMv8 CRC32 instructions, and
   // Crc32.update takes that path or std/compress/checksum.ts's tables. tests/simd/crc32.c
   // includes the file, computes its fold constants again from the polynomial, and
   // holds every path this machine has to a bit-at-a-time reference: the check value,
@@ -17500,7 +17500,7 @@ if (!only || "simd".includes(only)) {
   if (process.arch === "x64" && features.has("pclmulqdq") && features.has("sse4_1")) {
     crcPath = "pclmul;"
   } else if (process.arch === "arm64" && features.has("crc32")) {
-    crcPath = features.has("pmull") ? "armv8-crc32 and armv8-pmull;" : "armv8-crc32 ("
+    crcPath = "armv8-crc32;"
   }
   if (crcPath === null) {
     skip(
@@ -17589,11 +17589,11 @@ if (!only || "simd".includes(only)) {
           /cases agree across armv8-aes-pmull;/,
         ],
         [
-          "crc32 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 CRC32 and PMULL paths",
+          "crc32 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 CRC32 path",
           "tests/simd/crc32.c",
           path.join(simdDir, "crc32.aarch64"),
           "the ARMv8 CRC32 path",
-          /cases agree across armv8-crc32 and armv8-pmull;/,
+          /cases agree across armv8-crc32;/,
         ],
       ]) {
         const linked = build(cross, out, source)

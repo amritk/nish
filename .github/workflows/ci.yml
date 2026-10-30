@@ -1144,9 +1144,8 @@ jobs:
             grep -F "PASS  crc32 kernel: $program with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/crc32-kernel.log"
           done
 
-      # The figures, not a gate: the C kernels timed against each other (the
-      # CRC32 loop against PMULL folding, which runtime/runtime-checksum.c takes
-      # only where it measures faster), then bench/crc32.mjs's checksums on both
+      # The figures, not a gate: the C kernel timed against the table
+      # reference, then bench/crc32.mjs's checksums on both
       # paths and a short timed run, built with the stage1 the section above
       # linked into build/nish-test.
       - name: CRC-32 throughput on AArch64

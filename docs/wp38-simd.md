@@ -949,7 +949,10 @@ slicing-by-8 tables stay the fallback and the answer at the edges stays the
 `std` file's. The kernels are `runtime/runtime-checksum.c`, a unit of its own
 with its own ceiling: PCLMULQDQ folding then a Barrett reduction on x86-64
 (never SSE4.2's `crc32`, which is CRC-32C), and the ARMv8 CRC32 instructions on
-AArch64, found through `AT_HWCAP` or `sysctl`. Each is compiled with
+AArch64, found through `AT_HWCAP` or `sysctl`. A PMULL fold in front of the
+CRC32 instructions was built and measured on CI's AArch64 runner, then
+dropped: 20.6 GB/s at 1 MiB and 21.0 GB/s at 64 KiB, against the instructions'
+24.9 and 27.0 GB/s. Each is compiled with
 `target(...)` alone. The path is chosen once per process; `NISH_CRC32=soft`
 pins the tables. `tests/simd/crc32.c` holds every path to a bit-at-a-time
 reference, and `bench/crc32.mjs` measures 64 B to 1 MiB and a gzip round trip

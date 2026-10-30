@@ -18,8 +18,8 @@
 //
 // The path a column ran is read the way runtime/runtime-checksum.c reads it,
 // from the CPU flags in /proc/cpuinfo, since the program cannot ask: pclmul
-// (x86-64 PCLMULQDQ and SSE4.1), pmull (AArch64 with the CRC32 instructions and
-// PMULL), crc32 (AArch64 without PMULL), or tables. What is timed is each
+// (x86-64 PCLMULQDQ and SSE4.1), crc32 (AArch64 with the CRC32 instructions), or
+// tables. What is timed is each
 // workload's own loop, not the process. MB/s is 10^6 bytes a second.
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -92,7 +92,7 @@ const machinePath = (() => {
     return "pclmul"
   }
   if (process.arch === "arm64" && flags.has("crc32")) {
-    return flags.has("pmull") ? "pmull" : "crc32"
+    return "crc32"
   }
   return "tables"
 })()

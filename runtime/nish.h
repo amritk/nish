@@ -351,13 +351,13 @@ void nish_aes_ghash(nish_array *y, uint64_t hHi, uint64_t hLo, const nish_array 
                     int32_t length);
 /* ---- CRC-32 on the CPU's carry-less multiply or CRC instructions ---------
  * runtime/runtime-checksum.c: PCLMULQDQ folding on x86-64, the ARMv8 CRC32
- * instructions (and PMULL folding) on AArch64. The compiler calls the kernel in
+ * instructions on AArch64. The compiler calls the kernel in
  * place of std/compress/checksum.ts's private `crc32Walk`, behind
  * `nish_crc32_hw`, and calls the Nish walker itself when that answers 0. */
 /* 1 when this process runs the kernel, 0 when it runs the Nish tables.
    Resolved on the first call and fixed from then on: `NISH_CRC32=soft` pins 0;
    unset or any other value is the best this machine has, read on that call
-   from CPUID leaf 1 (PCLMULQDQ, SSE4.1), AArch64's AT_HWCAP (CRC32, PMULL) or
+   from CPUID leaf 1 (PCLMULQDQ, SSE4.1), AArch64's AT_HWCAP (CRC32) or
    Darwin's hw.optional sysctls. Always 0 on other targets, wasm32 among them. */
 int32_t nish_crc32_hw(void);
 /* The CRC-32 (ISO 3309, RFC 1952) `crc` extended over buf[off..off+len)

@@ -587,7 +587,7 @@ ns/op. It is the measure of WP38's CRC-32 kernel
 tables, and it has no twins. `crc32.mjs` builds it and runs it twice a round:
 once with `NISH_CRC32` unset, so the kernel this CPU has runs, and once under
 `NISH_CRC32=soft`, the Nish tables. Each row names the path its column ran
-(`pclmul`, `pmull`, `crc32` or `tables`), as read from the CPU flags the
+(`pclmul`, `crc32` or `tables`), as read from the CPU flags the
 runtime reads:
 
 ```bash
@@ -603,8 +603,8 @@ input is a 16-letter alphabet, which compresses about 2:1 as text does; random
 bytes would make stored blocks, and CRC-32 nearly all the work. Both paths
 must print the same checksum, or the run stops. `--check` runs at a 64th of the
 size and fails if either path's checksum differs from the one pinned in the
-driver. `tests/simd/crc32 bench` times the C kernels directly, PMULL beside
-the CRC32 instructions on AArch64.
+driver. `tests/simd/crc32 bench` times the C kernels directly, beside the
+table reference.
 
 ## HTTP
 

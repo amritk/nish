@@ -1,6 +1,6 @@
 /* The agreement test for runtime/runtime-checksum.c (WP38 §3.1): every CRC-32
  * path the file has for this machine -- PCLMULQDQ folding on x86-64; the ARMv8
- * CRC32 instructions, and PMULL folding in front of them, on AArch64 -- answers
+ * CRC32 instructions on AArch64 -- answers
  * exactly as a textbook reference does, and `nish_crc32_hw` answers what
  * `NISH_CRC32` and the CPU say it should.
  *
@@ -329,11 +329,9 @@ int main(int argc, char **argv) {
   summary = cpu == NISH_CRC32_KERNEL ? "pclmul"
                                      : "the byte tail alone (pclmul SKIPPED: this CPU has no PCLMULQDQ and SSE4.1)";
 #elif defined(NISH_CRC32_ARM)
-  if (cpu != NISH_CRC32_SOFT) paths[npaths++] = (path){"armv8-crc32", nish_crc32_arm};
-  if (cpu == NISH_CRC32_PMULL) paths[npaths++] = (path){"armv8-pmull", nish_crc32_pmull};
-  summary = cpu == NISH_CRC32_PMULL ? "armv8-crc32 and armv8-pmull"
-            : cpu == NISH_CRC32_KERNEL
-                ? "armv8-crc32 (armv8-pmull SKIPPED: this CPU reports no PMULL)"
+  if (cpu == NISH_CRC32_KERNEL) paths[npaths++] = (path){"armv8-crc32", nish_crc32_arm};
+  summary = cpu == NISH_CRC32_KERNEL
+                ? "armv8-crc32"
                 : "the reference alone (armv8-crc32 SKIPPED: this CPU reports no CRC32 instructions)";
 #else
   summary = "the reference alone (this target has no kernel)";
