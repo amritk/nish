@@ -2019,6 +2019,16 @@ $ nish run digest.ts
 ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0
 ```
 
+A native program uses the CPU's own instructions for two of these where the
+CPU has them, and gives the same bytes either way: `nish/crypto/sha256`
+compresses each block with SHA-NI on x86-64 or the ARMv8 SHA-256
+instructions on AArch64, and `nish/crypto/aes` runs AES-NI or the ARMv8 AES
+instructions. The program checks the CPU once, when it first hashes or
+encrypts. Setting `NISH_SHA256=soft` or `NISH_AES=soft` in the environment the
+program starts in keeps that primitive on its portable Nish code, which is
+how to compare the two paths or rule one out; any other value is ignored. A
+WebAssembly build always takes the portable code.
+
 A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
 the program wipes both:
 
