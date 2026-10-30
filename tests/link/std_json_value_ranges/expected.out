@@ -48,7 +48,8 @@ PASS  duplicates: at the first key's offset
 PASS  duplicates: sorted, the last value with its range
 PASS  duplicates: sorted, the last member keeps its key
 PASS  duplicates: refused, the parse fails
-PASS  duplicates: and the old root has no range left
+PASS  duplicates: errorAt is the repeated key
+PASS  duplicates: a value built on the old root's index has no range
 PASS  off: the document parses
 PASS  off: keepRanges is off by default
 PASS  off: start answers -1
@@ -66,6 +67,7 @@ PASS  reparse: the second document's root
 PASS  reparse: its key
 PASS  reparse: its value
 PASS  reparse: a handle from the first document has no range
+PASS  reparse: a value built past the second document has no range
 PASS  reparse: ranges off, the document parses
 PASS  reparse: ranges off, a reparse answers -1
 PASS  reparse: ranges off, for keys too
@@ -127,4 +129,17 @@ PASS  parsed edits: a set of a new key
 PASS  parsed edits: on a slot the longer one ranged has none
 PASS  parsed edits: a handle from the longer document is not adopted
 PASS  parsed edits: and adds no member
-std/json-value ranges: 129 passed, 0 failed, 0 skipped
+PASS  limits: ranges off
+PASS  limits: ranges on answers the same
+PASS  moves: a wide document parses
+PASS  moves: the document parses
+PASS  moves: set of a new key on the first container
+PASS  moves: and on the second
+PASS  moves: the first container's parsed key keeps its range
+PASS  moves: its added key has none
+PASS  moves: the second container's parsed key keeps its range
+PASS  moves: its added key has none
+PASS  moves: a third key on the first container, in the room it had
+PASS  moves: has no range, though the wide document ranged that slot
+PASS  moves: and the root's keys keep theirs
+std/json-value ranges: 144 passed, 0 failed, 0 skipped

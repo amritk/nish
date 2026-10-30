@@ -539,7 +539,7 @@ duplicate policy, and what it builds.
 | JSON-9 | Low | `std/json-value.ts:1292` (`append`) | A built container that outgrows its slots moves them to the end of the slot arrays and leaves the old ones unused until `clear` or the next `parse`, so building alternately into many containers holds up to about twice the slots it uses. Parsing does not do this: each container's members are placed once, at its close. | **Accepted.** What a program builds is the program's; the waste is bounded by a constant factor and released by `clear`. |
 
 The tree closes JSON-3 for its callers: a repeated key is
-`JSON_VALUE_ERR_DUPLICATE` at `std/json-value.ts:683`, with `errorAt` at
+`JSON_VALUE_ERR_DUPLICATE` at `std/json-value.ts:684`, with `errorAt` at
 the first key that repeats an earlier one, unless the program sets
 `duplicates` to `JSON_VALUE_DUPLICATE_LAST`, which is `JSON.parse`'s reading.
 

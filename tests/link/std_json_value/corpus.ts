@@ -80,6 +80,84 @@ export const jvCorpusChecks = (t: Suite): void => {
     jvBytesAgainstStrings(corpus),
     jvNone()
   );
+  const fuzz = jvLoadFuzzCorpus();
+  t.ok("corpus: tests/fuzz/corpus/json-value holds files", fuzz.length > 0);
+  t.eqLines(
+    "ranges: every file of JSONTestSuite and the fuzz corpus parses with keepRanges on to the verdict, errorAt and tree it parses to with it off",
+    jvRangesAgainstNone(corpus, fuzz),
+    jvNone()
+  );
+};
+
+/**
+ * Every file of tests/fuzz/corpus/json-value, its first byte dropped: the
+ * mode tests/fuzz/targets/json-value.ts reads from it, which
+ * `jvRangesAgainstNone` runs every file under anyway.
+ */
+const jvLoadFuzzCorpus = (): JvCase[] => {
+  const cases: JvCase[] = [];
+  const dir = "tests/fuzz/corpus/json-value";
+  const names = readdirSync(dir);
+  if (names === null) {
+    return cases;
+  }
+  for (const name of names) {
+    const bytes = readFileBytesSync(`${dir}/${name}`);
+    if (bytes !== null && bytes.length > 0) {
+      const text: u8[] = [];
+      for (let i: i32 = 1; i < toI32(bytes.length); i += 1) {
+        text.push(bytes[i]);
+      }
+      cases.push(new JvCase(`fuzz/${name}`, text));
+    }
+  }
+  return cases;
+};
+
+/** What a parse of `c` by `doc` gives: the tree it writes, or its code and `errorAt`. */
+const jvVerdict = (doc: JsonDocument, c: JvCase): string => {
+  const r = doc.parse(c.bytes, 0, toI32(c.bytes.length));
+  return r >= 0 ? doc.stringify(r) : `error ${r}@${doc.errorAt}`;
+};
+
+/**
+ * Every file of `corpus` and `fuzz` parsed by a document that keeps ranges
+ * and one that does not, under both duplicate policies, with and without a
+ * cap of 16 values and of depth 4, and each document reused across files:
+ * the files where the two differ. `parse` and `parseRanged` are two loops,
+ * and `close` and `closeRanged` two closers, so this holds each pair to one
+ * another.
+ */
+const jvRangesAgainstNone = (corpus: JvCase[], fuzz: JvCase[]): string[] => {
+  const differ: string[] = [];
+  for (let mode: i32 = 0; mode < 8; mode += 1) {
+    const limits = new JsonLimits();
+    if ((mode & 4) !== 0) {
+      limits.maxDepth = 4;
+    }
+    const off = new JsonDocument(limits);
+    const on = new JsonDocument(limits);
+    on.keepRanges = true;
+    on.clear();
+    if ((mode & 1) !== 0) {
+      off.duplicates = JSON_VALUE_DUPLICATE_LAST;
+      on.duplicates = JSON_VALUE_DUPLICATE_LAST;
+    }
+    if ((mode & 2) !== 0) {
+      off.maxValues = 16;
+      on.maxValues = 16;
+    }
+    for (const files of [corpus, fuzz]) {
+      for (const c of files) {
+        const a = jvVerdict(off, c);
+        const b = jvVerdict(on, c);
+        if (a !== b) {
+          differ.push(`${c.name}, mode ${mode}: off ${a}, on ${b}`);
+        }
+      }
+    }
+  }
+  return differ;
 };
 
 /**
