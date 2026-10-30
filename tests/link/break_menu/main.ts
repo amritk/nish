@@ -307,7 +307,8 @@ const testLowEffects = (t: Suite): void => {
   const s = settled(3)
   press(s, KEY_ENTER)
   t.eqI32("a key skips the outro to the level", press(s, KEY_ENTER), 3)
-  t.eqI32("and the next step does not answer it again", idle(s, 1), MENU_STAY)
+  // A second key would skip again without the latch, where a plain step would not.
+  t.eqI32("and a second key does not answer it again", press(s, KEY_ENTER), MENU_STAY)
 }
 
 const testInterface = (t: Suite): void => {

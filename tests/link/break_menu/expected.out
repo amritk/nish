@@ -176,5 +176,5 @@ PASS  low effects bursts 2 sparks a knock
 PASS  high effects puffs 3 sparks a loosened brick
 PASS  low effects puffs 1 spark a loosened brick
 PASS  a key skips the outro to the level
-PASS  and the next step does not answer it again
+PASS  and a second key does not answer it again
 break-menu: 179 passed, 0 failed, 0 skipped
