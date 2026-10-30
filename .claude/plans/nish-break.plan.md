@@ -439,7 +439,7 @@ pixel gets at least 2 framebuffer pixels, a plain `drawText` title below that.
 
 ## break-play
 
-**Owns:** `src/break.ts`, `src/compile.ts`, `tests/run.js`, `.claude/orientation.md`, `tests/link/break_play*/**`, `std/term-io.ts`, `tests/link/std_term_io*/**`, `docs/guide/using-nish/terminal.md`, `tests/self/goldens/**/term-io*`, `tests/self/goldens/**/std_term_io*`, `tests/self/goldens/**/break.ts*`, `tests/self/goldens/**/break_play*`, `tests/self/goldens/checked/src/compile.ts.txt`, `tests/perf-baseline.json`
+**Owns:** `src/break.ts`, `src/compile.ts`, `tests/run.js`, `knip.json`, `.claude/orientation.md`, `tests/link/break_play*/**`, `std/term-io.ts`, `tests/link/std_term_io*/**`, `docs/guide/using-nish/terminal.md`, `tests/self/goldens/**/term-io*`, `tests/self/goldens/**/std_term_io*`, `tests/self/goldens/**/break.ts*`, `tests/self/goldens/**/break_play*`, `tests/self/goldens/checked/src/compile.ts.txt`, `tests/perf-baseline.json`
 
 Depends on `break-game` and `break-menu`.
 
@@ -511,6 +511,7 @@ ships with a check in `tests/link/std_term_io*` and a line in
 - A screen under 40×16 cells shows a centred `make me bigger` until resized.
 - Ctrl-C, a panic or a signal leave the terminal as it was (`runTerminal` sets
   the restore string; the pty test checks it).
+- `knip.json` drops the `src/break-*.ts` entry break-gfx added (approved at its merge) once `compile.ts` imports the scenes.
 - The comment above the call in `compile.ts` and the `nish break` line in
   `.claude/orientation.md` drop "the ball is still being made" and say where
   the game lives.
