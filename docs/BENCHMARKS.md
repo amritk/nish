@@ -537,6 +537,21 @@ Noise band, Nish against its byte-identical copy: 1.4% on the minimums (14.1% on
 `JsonWriter.keyBytes` and `stringBytes` copy runs of plain bytes with the `skipJsonPlain` kernel (`nish/bytes`) from 16 bytes up. `jsonEncode` writes `string`s through `jsonWriterPutString`, which did not change, so the serialize table above does not measure this: in an A/B against the base, `804120e`, serialize on citm ran 0.988x at the minimum, 0.9 points past that run's 0.3% band (the branch against its byte-identical copy). Re-run against `3dca351` with the class kernels' loops restored to main's instructions, it ran 0.988x again, inside that run's 1.4% band. In the same run (12 rounds, minimums, each band the branch against its byte-identical copy), tokenize ran 1.025x on twitter (band 0.7%), 0.994x on citm (0.5%) and 1.048x on canada (0.3%), typed decode on citm 1.003x (0.9%) and typed-reuse 0.955x (4.2%), and `bench/json-tokenizer`'s 242-byte body ran 0.99x, inside its 0.6% band. Two rows are past their bands: tokenize on citm by 0.1 points and typed-reuse by 0.3 points. Both run machine code identical to main's — the class paths' instructions are main's, and neither workload writes — and in typed-reuse the branch's byte-identical copy ran within 0.3% of the base, so the copy band is the evidence for reading both as noise; none of these gaps, faster or slower, is claimed. `JsonDocument.write`, the in-tree caller of the byte writers, ran **1.49x** faster on twitter.json and 1.03x to 1.07x on citm_catalog.json at the minimum (12 and 10 interleaved rounds; bands against a byte-identical copy 0.4% and 2.7%). canada.json also ran faster, but a build with the kernel switched off did as well, so that gain is code shape, not the kernel. On citm, the escape scan does not make serialize faster outside its band: most strings are shorter than 16 bytes, and its ceiling at the 16-byte guard, 1.0139x, is inside the 1.4% band by 0.01 points. The profile, the guard and the full A/B are in [wp38-simd.md](wp38-simd.md), *JsonWriter's byte writers*.
 <!-- json-writer-bytes:end -->
 
+<!-- json-value-ranges:begin -->
+### JsonDocument's source ranges
+
+`JsonDocument.keepRanges` makes a parse record each value's and each member key's byte range (20 bytes a value, 66 in all). Measured by `node bench/json-value/measure.mjs --before <main's nish>` (24 interleaved rounds of six binaries, minimums; each band a binary against its byte-identical copy). `off` parses with ranges off, `on` with them on, `before` is main's `JsonDocument` at `384371b`.
+
+| Document | off / before | band (off, before) | on / off | band (on) |
+| --- | --- | --- | --- | --- |
+| twitter.json | 1.005x | 1.0%, 0.6% | 1.049x | 0.3% |
+| citm_catalog.json | 0.994x | 0.3%, 0.5% | 1.119x | 1.1% |
+| canada.json | 1.022x | 0.4%, 0.4% | 1.075x | 1.1% |
+| sample.json (1,427 bytes) | 1.006x | 1.2%, 0.6% | 1.051x | 1.0% |
+
+canada's 1.022x is past its band, and its median ran 0.983x; re-run alone over 36 rounds it ran 0.996x at the minimum (bands 0.2% and 1.0%), so ranges off is read as costing what main costs. The ranged loop is the same loop as the unranged one, behind a `ranged` latch hoisted out of it. `bench/json-tokenizer`'s rows, whose code did not change, ran 0.99x to 1.01x against main, each inside its band.
+<!-- json-value-ranges:end -->
+
 <!-- techempower:begin -->
 ## TechEmpower json and plaintext
 

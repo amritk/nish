@@ -1777,6 +1777,27 @@ These scans still step one byte at a time:
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
 
+## JsonDocument source ranges
+
+`json-value/measure.mjs` times `JsonDocument.parse` with `keepRanges` off
+(`json-value/main.ts`) and on (`json-value/ranged.ts`), and with `--before`
+the same `main.ts` built by another compiler, normally main's. Every binary is
+built twice and `cmp` must find the pair byte-identical: the gap between them is
+the noise band each ratio is read against. The documents are twitter.json,
+citm_catalog.json and canada.json from json-compare's corpus (fetched into
+its cache on first use), `--mb` megabytes of input a run, and json-compare's
+1,427-byte `sample.json`; each iteration rewrites one digit so no parse can be
+hoisted. The rounds are json-compare's `rounds.mjs`: asked-for rounds go up to
+a multiple of twice the binaries, so 15 rounds of six binaries run 24. The bench is run by hand and is not in `tests/run.js`;
+its results are in [docs/BENCHMARKS.md](../docs/BENCHMARKS.md), *JsonDocument's
+source ranges*.
+
+```bash
+npm run build
+node bench/json-value/measure.mjs                          # off against on
+node bench/json-value/measure.mjs --before ../main/build/nish --rounds 24
+```
+
 ## Math accuracy
 
 How far `Math.tan`, `Math.atan2` and `Math.hypot` (fdlibm ports in
