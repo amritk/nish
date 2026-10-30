@@ -115,7 +115,10 @@ export const mpscRingBytes = (slots: i32, slotBytes: i32): i32 =>
  */
 const ringRing = (region: SharedRegion, base: i32): void => {
   const at: i32 = base + RING_SLEEP_AT
-  if (region.loadI32(at, SEQ_CST) !== RING_AWAKE && region.exchangeI32(at, RING_AWAKE, SEQ_CST) !== RING_AWAKE) {
+  if (
+    region.loadI32(at, SEQ_CST) !== RING_AWAKE &&
+    region.exchangeI32(at, RING_AWAKE, SEQ_CST) !== RING_AWAKE
+  ) {
     region.wake(at, toI32(1))
   }
 }
