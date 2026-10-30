@@ -143,8 +143,12 @@ const bitsOf = (type: i32): i32 => {
  * range (WP31): each is an `i32`, and `bitsOf` knows none of them, because each is a
  * kind of the table rather than a scalar id.
  */
-const bitsOfIn = (table: TypeTable, type: i32): i32 =>
-  table.enumBase(type) >= 0 || table.isRanged(type) ? 32 : bitsOf(type)
+const bitsOfIn = (table: TypeTable, type: i32): i32 => {
+  if (table.isVector(type)) {
+    return 128
+  }
+  return table.enumBase(type) >= 0 || table.isRanged(type) ? 32 : bitsOf(type)
+}
 
 /**
  * A metadata string literal: backslash and double quote escaped, as stage0's `src/`
@@ -317,6 +321,14 @@ export class DebugInfo {
       ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
     } else if (this.table.isUnion(type)) {
       ref = this.pointerTo(this.unionComposite(type))
+    } else if (this.table.isVector(type)) {
+      // A `nish:simd` vector is a value, so DWARF's vector type: an array of
+      // its lanes flagged `DIFlagVector`, which a debugger prints as `{1, 2, 3, 4}`.
+      const range = this.module.addMetadata(`!DISubrange(count: ${this.table.laneCount(type)})`)
+      const elements = this.module.addMetadata(`!{${range}}`)
+      ref = this.module.addMetadata(
+        `!DICompositeType(tag: DW_TAG_array_type, baseType: ${this.typeRef(this.table.refOf(type))}, size: 128, flags: DIFlagVector, elements: ${elements})`
+      )
     } else {
       ref = this.module.addMetadata(basicType(type, this.table.json))
     }

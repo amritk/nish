@@ -1,0 +1,1 @@
+`i32x4` cannot be the key type of `Map<i32x4, i32>`: a key is hashed and compared by value, or by identity for a class instance, so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`

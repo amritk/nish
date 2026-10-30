@@ -27,6 +27,7 @@ const K_MAYBE: i32 = 18
 const K_RANGED: i32 = 19
 const K_ENUM_MEMBER: i32 = 20
 const K_UNION: i32 = 21
+const K_VECTOR: i32 = 22
 const R_UNKNOWN: i32 = 0 [exported]
 const R_OK: i32 = 1 [exported]
 const R_ERR: i32 = 2 [exported]
@@ -84,6 +85,9 @@ struct TypeTable (class) size=96 align=8 exported
   method stripNull -> @TypeTable.stripNull
   method maybeOf -> @TypeTable.maybeOf
   method isMaybe -> @TypeTable.isMaybe
+  method vectorOf -> @TypeTable.vectorOf
+  method isVector -> @TypeTable.isVector
+  method laneCount -> @TypeTable.laneCount
   method rangedOf -> @TypeTable.rangedOf
   method isRanged -> @TypeTable.isRanged
   method rangeLo -> @TypeTable.rangeLo
@@ -168,6 +172,10 @@ function DeclaredRange.constructor(this: DeclaredRange, lo: i64, hi: i64): void 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: hi lo
   pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function accessAlign(align: i32): i32 -> @accessAlign [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: align
   stackSites=0 stackLocals=0
 function TypeTable.constructor(this: TypeTable): void -> @TypeTable.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -431,6 +439,27 @@ function TypeTable.isMaybe(this: TypeTable, type: i32): boolean -> @TypeTable.is
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function TypeTable.vectorOf(this: TypeTable, lane: i32): i32 -> @TypeTable.vectorOf [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via TypeTable.intern
+  escaping: lane
+  calls: TypeTable.intern
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
+  stackSites=0 stackLocals=0
+  callee +0:12 TypeTable.intern -> @TypeTable.intern
+function TypeTable.isVector(this: TypeTable, type: i32): boolean -> @TypeTable.isVector [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: nish_panic_index
+  pointer this: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function TypeTable.laneCount(this: TypeTable, type: i32): i32 -> @TypeTable.laneCount [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: TypeTable.alignOf nish_panic_div nish_panic_index
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.alignOf#0
+  stackSites=0 stackLocals=0
+  callee +0:17 TypeTable.alignOf -> @TypeTable.alignOf
 function TypeTable.rangedOf(this: TypeTable, lo: i32, hi: i32): i32 -> @TypeTable.rangedOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.internAll
@@ -531,7 +560,7 @@ function TypeTable.mangle(this: TypeTable, type: i32): string -> @TypeTable.mang
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.mangle TypeTable.scalarName TypeTable.unionMangle nish_panic_index nish_str_concat signedBound
-  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.unionMangle#0 TypeTable.scalarName#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.unionMangle#0 TypeTable.scalarName#0 TypeTable.scalarName#0
   stackSites=0 stackLocals=0
   callee +0:22 TypeTable.mangle -> @TypeTable.mangle
   callee +1:20 TypeTable.mangle -> @TypeTable.mangle
@@ -543,7 +572,8 @@ function TypeTable.mangle(this: TypeTable, type: i32): string -> @TypeTable.mang
   callee +22:23 signedBound -> @signedBound
   callee +22:55 signedBound -> @signedBound
   callee +26:16 TypeTable.unionMangle -> @TypeTable.unionMangle
-  callee +28:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee +28:23 TypeTable.scalarName -> @TypeTable.scalarName
+  callee +30:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.unionMangle(this: TypeTable, type: i32): string -> @TypeTable.unionMangle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -696,13 +726,15 @@ function TypeTable.llvmType(this: TypeTable, type: i32): string -> @TypeTable.ll
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.llvmType
   escaping: type
-  calls: TypeTable.llvmType TypeTable.resultStructName internalErrorFor nish_exit nish_panic_index nish_str_concat nish_str_from_i32
-  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.llvmType#0 TypeTable.llvmType#0 TypeTable.resultStructName#0
+  calls: TypeTable.laneCount TypeTable.llvmType TypeTable.resultStructName internalErrorFor nish_exit nish_panic_index nish_str_concat nish_str_from_i32
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.llvmType#0 TypeTable.llvmType#0 TypeTable.resultStructName#0 TypeTable.laneCount#0 TypeTable.llvmType#0
   stackSites=0 stackLocals=0
   callee +0:16 TypeTable.llvmType -> @TypeTable.llvmType
   callee +2:16 TypeTable.llvmType -> @TypeTable.llvmType
   callee +4:27 TypeTable.resultStructName -> @TypeTable.resultStructName
-  callee +8:22 internalErrorFor -> @internalErrorFor
+  callee +8:20 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +8:46 TypeTable.llvmType -> @TypeTable.llvmType
+  callee +10:22 internalErrorFor -> @internalErrorFor
 function TypeTable.alignOf(this: TypeTable, type: i32): i32 -> @TypeTable.alignOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -712,8 +744,8 @@ function TypeTable.alignOf(this: TypeTable, type: i32): i32 -> @TypeTable.alignO
 function TypeTable.typeName(this: TypeTable, type: i32): string -> @TypeTable.typeName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.elementName TypeTable.scalarName TypeTable.typeName TypeTable.unionName nish_panic_index nish_str_concat nish_str_from_i32
-  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.elementName#0 TypeTable.elementName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.unionName#0 TypeTable.scalarName#0
+  calls: TypeTable.elementName TypeTable.laneCount TypeTable.scalarName TypeTable.typeName TypeTable.unionName nish_panic_index nish_str_concat nish_str_from_i32
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.elementName#0 TypeTable.elementName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.unionName#0 TypeTable.scalarName#0 TypeTable.laneCount#0 TypeTable.scalarName#0
   stackSites=0 stackLocals=0
   callee +0:25 TypeTable.elementName -> @TypeTable.elementName
   callee +1:16 TypeTable.elementName -> @TypeTable.elementName
@@ -723,7 +755,9 @@ function TypeTable.typeName(this: TypeTable, type: i32): string -> @TypeTable.ty
   callee +17:26 TypeTable.typeName -> @TypeTable.typeName
   callee +17:61 TypeTable.typeName -> @TypeTable.typeName
   callee +19:16 TypeTable.unionName -> @TypeTable.unionName
-  callee +21:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee +21:19 TypeTable.scalarName -> @TypeTable.scalarName
+  callee +21:55 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +23:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.scalarName(this: TypeTable, type: i32): string -> @TypeTable.scalarName [exported method]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

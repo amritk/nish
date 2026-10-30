@@ -67,6 +67,7 @@ import {
 import { ParentTable } from "./parents"
 import { channelCapacityMessage, isChannelClass, isThreadsStruct, spawnFormFor } from "./parallel"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
+import { simdCompareMessage } from "./simd"
 import { Scope } from "./symbols"
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
 
@@ -354,6 +355,14 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     return checkResultMethod(ctx, expr, access, args, receiver, scope) // WP16
   }
   if (ctx.table.isArray(receiver)) {
+    // `indexOf` compares each element with `===`, which a vector does not have.
+    if (access.text === "indexOf" && ctx.table.isVector(ctx.table.refOf(receiver))) {
+      ctx.errorAtProperty(
+        access,
+        simdCompareMessage("indexOf", ctx.table.typeName(ctx.table.refOf(receiver)))
+      )
+      return T_ERROR
+    }
     return checkArrayMethod(ctx, expr, access, args, receiver, scope)
   }
   if (!ctx.table.isStruct(receiver)) {

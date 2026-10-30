@@ -128,6 +128,11 @@ clocks. The command lines above stay as they are.
   — as globals and as the `nish:unsafe` import, which the prelude resolves to
   them: a plain read and write, and `| 0`, `Math.imul` or `BigInt.asIntN(64, …)`
   for the wrap
+- `nish:simd` — resolved to `runtime/core.mjs`, where a vector is a fresh
+  typed array of its lanes (`Uint8Array`, `Int32Array`, `Float32Array`, …), so
+  a lane wraps or rounds as its type does; `replace` copies, and a load or a
+  store checks the whole vector and panics with the native words
+  ([`nish:simd`](LANGUAGE.md#nishsimd-sixteen-byte-vectors))
 - `nish:secret` — resolved to `runtime/shim.mjs`, where a `Secret` is a plain
   wrapper and `wipe` zero-fills what it holds; the checker's rules about a
   `Secret` are not enforced under Node, and a zero-fill there promises nothing
@@ -189,7 +194,10 @@ no prelude can reach it. They are language decisions
   under Node.
 - **`new Array<T>(n)` has holes here.** Natively it zero-fills, and under Node
   every slot is `undefined` until written, so `a[1] + 1.0` is `1` natively and
-  `NaN` here.
+  `NaN` here. A slot of a `nish:simd` vector array is the zero vector
+  natively and `undefined` here, so `extract(a[1], 0)` is `0` natively and
+  `replace(a[1], 0, x)` throws here. `--emit-ts` writes each of these as a
+  zero-filled `newArray`, each vector slot its own zero typed array.
 - **The typed-array names are plain arrays natively, without `push` and
   `pop`.** `Float64Array` is `f64[]` in the language, and under Node it is
   JavaScript's fixed-length typed array. A receiver spelled with the name
