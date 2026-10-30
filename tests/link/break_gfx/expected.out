@@ -21,12 +21,12 @@ PASS  0x0: drew nothing
 PASS  1x1: a disc far under a pixel fades out
 PASS  1x1: text is placed on whole pixels
 PASS  1x1: the whole world is its one pixel
-PASS  rgb
-PASS  rgb clamps each channel
-PASS  mix at 0
-PASS  mix at 1
-PASS  mix halfway
-PASS  mix clamps t
+PASS  gfxRgb
+PASS  gfxRgb clamps each channel
+PASS  gfxMix at 0
+PASS  gfxMix at 1
+PASS  gfxMix halfway
+PASS  gfxMix clamps t
 PASS  add
 PASS  add saturates
 PASS  dim
@@ -129,4 +129,8 @@ PASS  the oldest points are forgotten
 PASS  the newest point is the brightest
 PASS  a cleared trail draws nothing
 PASS  a trail of capacity 0 is clamped to 1
-break-gfx: 131 passed, 0 failed, 0 skipped
+PASS  the terminal loop prefers rate first
+PASS  the default colour is -1
+PASS  the probe waits a positive time
+PASS  a seeded rng repeats itself
+break-gfx: 135 passed, 0 failed, 0 skipped
