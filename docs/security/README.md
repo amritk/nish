@@ -297,7 +297,7 @@ building the runtime for the harness, not by a target.
 | [regex.md](regex.md) | `regex` |
 | [tls.md](tls.md) | `tls-client-hello`, `tls-record`, `tls-server-flight` |
 | [quic.md](quic.md) | `quic-header`, `quic-frame` |
-| [http1.md](http1.md) | `http1`, `websocket` |
+| [http1.md](http1.md) | `http1`, `websocket`, `websocket-client` |
 | [http1-client.md](http1-client.md) | `http1-client` |
 | [http2.md](http2.md) | `hpack` |
 | [crypto-x509.md](crypto-x509.md) | `x509-der`, `x509-pem` |

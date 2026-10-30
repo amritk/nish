@@ -2098,6 +2098,13 @@ blocking `tlsConnect` put the client on a TCP socket and check the server
 themselves, against the system's roots or ones you name.
 [TLS client](tls-client.md) shows them.
 
+`nish/net/websocket` is both sides of a WebSocket's opening handshake: a
+server accepts with `Http1Connection.acceptWebSocket`, and a client makes its
+key with `websocketClientKey` from 16 random bytes, writes the request with
+`websocketUpgradeRequest`, and checks the server's 101 with
+`websocketCheckResponse`, which answers a `WS_HS_*` code and the chosen
+subprotocol. [WebSocket](websocket.md) shows both.
+
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
 shows it.
