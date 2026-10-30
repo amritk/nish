@@ -2659,7 +2659,7 @@ a `PgBatcher` built from a `PgBatchConfig` (`name`, `select` reading the key as
 queue is full, or for a text key too long for `maxBytes`, with no room left in
 `queueBytes`, with a NUL or not UTF-8 — and `take(conn)`
 binds the waiting ones, each key once, as one execution of its `sql` over
-`unnest($1) with ordinality`, answering a run handle or -1. Hand that
+`unnest($1) with ordinality`, answering a run handle or -1. Set `binary` in the `PgBatchConfig` and each batch comes in binary: `take` opens its bind with `bindStartBinary`, and `row` reads the routing ordinal with `binaryInt` (`binary.failed` is saved and restored, so the caller's own decoding is untouched). Hand that
 execution's `PG_ROW` to `row(run, conn)`, `PG_COMPLETE` to `end(run)`, an error
 or `PG_LOST` to `fail(run)` (on a spent handle these do nothing and count in
 `stray`), and after each call `next(run)` until
