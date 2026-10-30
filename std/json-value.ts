@@ -1215,7 +1215,9 @@ export class JsonDocument {
 
   /** Internal: `a[s]`, or `-1` past `slotRangeTop` or for ranges of an earlier generation, where `a` is a key range array. */
   slotRange(a: i32[], s: i32): i32 {
-    return s >= 0 && s < this.slotRangeTop && this.rangeGeneration === this.generation ? jsonValueGet(a, s) : -1
+    return s >= 0 && s < this.slotRangeTop && this.rangeGeneration === this.generation
+      ? jsonValueGet(a, s)
+      : -1
   }
 
   /** Internal: before a setter writes a range, forgets an earlier generation's, so that none of them reads as this one's. */
