@@ -1777,6 +1777,38 @@ These scans still step one byte at a time:
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
 
+## Loading YAML into a JsonDocument
+
+`yaml-json/run.mjs` times `nish/yaml`'s parse alone (**parse**) against the
+parse plus `YamlJsonLoader.load` into a `JsonDocument` with its source ranges
+(**load**), both from `yaml-json/main.ts`. The input is an OpenAPI document
+the script generates into `build/yaml-json/openapi.yaml` from a fixed pattern:
+`--paths` paths (default 1000, about 1.1 MB), with an anchored parameter every
+path aliases and a merge key into each response map, so aliases and merges
+are on the measured path. The binary is built twice with
+`--link --profile speed` and `cmp` must find the pair byte-identical; the gap
+between them is the noise band. Rounds are interleaved, rotated and every
+other one reversed (`--rounds`, default 15), each run `--mb` megabytes of
+input (default 32). It is run by hand and is not in `tests/run.js`.
+
+On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
+
+| Workload | Median | Copy | Band | MB/s |
+| --- | ---: | ---: | ---: | ---: |
+| parse | 18.693 ms | 19.561 ms | 4.6% | 56.5 |
+| load | 36.268 ms | 38.393 ms | 5.9% | 29.1 |
+
+The load costs 1.94x the parse alone, 17.6 ms a document more, for 75,025
+values from 276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`
+the load step is about 169M instructions a document against the parse's
+136M, 1.24x; the wall-clock ratio is wider than the instruction ratio because
+the load writes a second tree.
+
+```bash
+node bench/yaml-json/run.mjs
+node bench/yaml-json/run.mjs --compiler build/nish-test --paths 4000 --rounds 31
+```
+
 ## JsonDocument source ranges
 
 `json-value/measure.mjs` times `JsonDocument`'s `parse` and `parseRanged`, and
