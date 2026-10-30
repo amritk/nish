@@ -1823,6 +1823,50 @@ These scans still step one byte at a time:
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
 
+## JsonDocument source ranges
+
+`json-value/measure.mjs` times `JsonDocument`'s `parse` and `parseRanged`, and
+with `--before` the same programs built by another compiler, normally main's.
+Every binary is built twice and `cmp` must find the pair byte-identical: the gap
+between them is the noise band each ratio is read against. Its cases, each
+interleaved on its own:
+
+- **parse**: `json-value/main.ts` (`parse`), `json-value/ranged.ts`
+  (`parseRanged`) and `json-value/both.ts` (`parse` in a program that also
+  calls `parseRanged` once, so both loops are in the binary) over
+  twitter.json, citm_catalog.json and canada.json from json-compare's corpus
+  (fetched into its cache on first use), `--mb` megabytes of input a run, and
+  json-compare's 1,427-byte `sample.json`. Each iteration rewrites one digit
+  so no parse can be hoisted.
+- **builders**: `json-value/builders.ts`, `--builds` documents a run, each an
+  object of 100 arrays of 10 numbers built with `new*`, `push` and `set`, then
+  every key set again.
+- **tokenize, typed, typed-reuse**: json-compare's workloads, which reach
+  `nish/json-tokenizer` and `nish/json-typed` but not `nish/json-value`, as a
+  check that the change moves nothing around it.
+
+The rounds are json-compare's `rounds.mjs`: asked-for rounds go up to a multiple
+of twice the binaries. The bench is run by hand and is not in `tests/run.js`;
+its results are in [docs/BENCHMARKS.md](../docs/BENCHMARKS.md), _JsonDocument's
+source ranges_.
+
+`--instructions` counts retired instructions under cachegrind instead of
+timing, once per binary and its copy, in `run.mjs`'s pinned environment (fixed
+libc tunables, `NISH_SIMD=base`, `fixed-key.so`). It defaults to `--mb 16` and
+`--builds 500`, and adds an **http** case: `bench/http1-server.ts` serving
+`--requests` keep-alive POSTs of `http-payload.json` to `/json-echo-doc`, the
+server's instructions counted. The counts repeat to within 0.002%, so a gap of
+a tenth of a percent is real; a timing band on a shared machine is rarely under
+2%.
+
+```bash
+npm run build
+node bench/json-value/measure.mjs
+node bench/json-value/measure.mjs --before ../main/build/nish --rounds 40
+node bench/json-value/measure.mjs --before ../main/build/nish --instructions
+```
+
+
 ## Math accuracy
 
 How far `Math.tan`, `Math.atan2` and `Math.hypot` (fdlibm ports in
