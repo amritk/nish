@@ -119,7 +119,7 @@ numbers are the platform's errno values (Linux's shown).
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, trust anchors, base64url, bcrypt |
-| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
+| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket (both sides of its handshake), an HTTP router, a PostgreSQL client |
 | [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing; `urlParse`, `urlResolve` and `urlOrigin` for a whole URL |
 | [`nish/net/dns-message`](#nishnetdns-message) | `dnsBuildQuery` and `dnsParseReply`: one DNS question as bytes, and the A or AAAA addresses a reply gives it, following its CNAME chain, with every count and pointer bounded |
@@ -2099,7 +2099,8 @@ a record written with their code); the records are in
 The protocol stack written on `nish/crypto`: TLS 1.3 (`nish/net/tls`), QUIC
 (`nish/net/quic` and its parts), HPACK and QPACK, HTTP/1.1
 (`nish/net/http1`, `nish/net/http1-server`), HTTP/2 (`nish/net/http2`),
-HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`) and WebTransport.
+HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`, the server's and
+the client's side of its handshake) and WebTransport.
 Most of these modules are *sans-IO*: they take bytes and answer bytes, and
 never read a socket or a clock themselves, so you drive them from your own
 loop over [`nish:net`](networking.md). The ones
@@ -2140,6 +2141,13 @@ them (`tlsClientAuthenticate`), and `nish/net/tls-tcp`'s `TlsTcpClient` and
 blocking `tlsConnect` put the client on a TCP socket and check the server
 themselves, against the system's roots or ones you name.
 [TLS client](tls-client.md) shows them.
+
+`nish/net/websocket` is both sides of a WebSocket's opening handshake: a
+server accepts with `Http1Connection.acceptWebSocket`, and a client makes its
+key with `websocketClientKey` from 16 random bytes, writes the request with
+`websocketUpgradeRequest`, and checks the server's 101 with
+`websocketCheckResponse`, which answers a `WS_HS_*` code and the chosen
+subprotocol. [WebSocket](websocket.md) shows both.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)

@@ -216,7 +216,7 @@ terminal I/O and styling, with pixel graphics in `std/term-pixels`).
 ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, bcrypt and X.509,
 with secret material held as a wiped `Secret<T>`. `nish/net/*` holds the
 protocols built on them: TLS 1.3, QUIC, HTTP/1.1, HTTP/2 (HPACK), HTTP/3
-(QPACK), WebSocket, WebTransport, a URL parser, an HTTP router, a prefork
+(QPACK), WebSocket (server and client), WebTransport, a URL parser, an HTTP router, a prefork
 server and a sans-IO PostgreSQL client. The [standard
 library](docs/guide/using-nish/standard-library.md) guide page walks through
 them, and the [`std/` README](std/README.md) lists every module.
