@@ -17,7 +17,9 @@
  * pieces of 1..16, 63/64/65 and 127/128/129 bytes, which must give the
  * one-call answer. And every length 0..256 ending at the last byte before a
  * page no access is allowed to, so a path that reads one byte past its input
- * faults rather than passing on whatever lay there.
+ * faults rather than passing on whatever lay there. That last check is native
+ * only: wasm32-wasi has no mmap or page protection to fault with, and no kernel
+ * there to over-read, so its build runs every other case on the reference.
  *
  * The runtime file is included rather than linked, as tests/simd/aes-gcm.c
  * includes runtime-aes.c, so the resolver's stored answer can be reset and
@@ -32,9 +34,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <time.h>
+#ifndef __wasi__
+#include <sys/mman.h>
 #include <unistd.h>
+#endif
 
 #include "../../runtime/runtime-checksum.c"
 
@@ -207,6 +211,7 @@ static int streaming(const uint8_t *data) {
   return 1;
 }
 
+#ifndef __wasi__
 static int edges(void) {
   size_t page = (size_t)sysconf(_SC_PAGESIZE);
   uint8_t *map = mmap(NULL, 2 * page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -222,6 +227,10 @@ static int edges(void) {
   munmap(map, 2 * page);
   return 1;
 }
+#else
+/* No page to guard: wasm32-wasi has no mmap, and no kernel to over-read. */
+static int edges(void) { return 1; }
+#endif
 
 /* ---- The resolver ----------------------------------------------------------- */
 
