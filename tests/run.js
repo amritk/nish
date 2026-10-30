@@ -2370,10 +2370,8 @@ if (dealtHere("termIo")) {
     }
     // `nish break` on a terminal: Enter leaves the title, Space serves, F3 the
     // stats, p and q pause and leave the level, q quits, each with the screen
-    // restored and the termios as it was. F4 and F6 close the terminal and open
-    // it again with the new rate and graphics: kitty images before, and after,
-    // since the relay answers the probe only once, the half-blocks a terminal
-    // that did not answer for kitty gets.
+    // restored and the termios as it was. F6 changes the graphics setting and
+    // keeps the terminal open; F4 closes it and opens it again with the new rate.
     const wallKeys = (...keys) => keys.map(([afterFrames, bytes]) => ({ afterFrames, bytes }))
     // The relay keeps only the last megabyte, a fraction of one kitty frame at this
     // size: the play run looks for the image's deletion at close, and the reopen run
