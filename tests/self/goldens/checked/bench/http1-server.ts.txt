@@ -38483,7 +38483,9 @@ function jsonValueCompareBytes(bytes: u8[], a: i32, an: i32, b: i32, bn: i32): i
   local +2:11 x: i32 (const)
   local +3:11 y: i32 (const)
 import netAddress from "nish:net" -> builtin netAddress
+import NET_TCP_QUICKACK from "nish:net" -> builtin NET_TCP_QUICKACK
 import netClose from "nish:net" -> builtin netClose
+import netSetOption from "nish:net" -> builtin netSetOption
 import pollAdd from "nish:net" -> builtin pollAdd
 import pollCreate from "nish:net" -> builtin pollCreate
 import pollModify from "nish:net" -> builtin pollModify
@@ -38524,6 +38526,10 @@ import JsonDocument from "nish/json-value" -> struct JsonDocument
 const LISTENER: i32 = -1
 const ZERO: i32 = 0
 const MAX_BODY: i32 = 4096
+const QUICKACK_NONE: i32 = 0
+const QUICKACK_RESET0: i32 = 1
+const QUICKACK_ONCE0: i32 = 2
+const QUICKACK_RESET1: i32 = 3
 const ROUTE_NONE: i32 = -1
 const ROUTE_PLAINTEXT: i32 = 0
 const ROUTE_JSON: i32 = 1
@@ -38569,7 +38575,7 @@ struct Order (class) size=80 align=8
   field notes: string | null index=9 offset=64 initialized
   field paid: boolean index=10 offset=72 initialized
   constructor -> @Order.constructor
-struct Bench (class) size=216 align=8
+struct Bench (class) size=224 align=8
   field server: Http1Server index=0 offset=0
   field loop: i32 index=1 offset=8 initialized
   field listener: i32 index=2 offset=12 initialized
@@ -38599,6 +38605,7 @@ struct Bench (class) size=216 align=8
   field params: i32[] index=26 offset=200
   field requests: i32 index=27 offset=208 initialized
   field limit: i32 index=28 offset=212 initialized
+  field quickack: i32 index=29 offset=216 initialized
   constructor -> @Bench.constructor
   method add -> @Bench.add
   method begin -> @Bench.begin
@@ -38650,7 +38657,7 @@ function Bench.constructor(this: Bench, listener: i32, slots: i32): void -> @Ben
   sharedWrite: via nish_poll_create
   escaping: listener slots
   calls: Bench.add Order.constructor bytesOf extraRoutes nish.Http1Server.constructor nish.JsonDecoder.constructor nish.JsonDocument.constructor nish.JsonLimits.constructor nish.JsonWriter.constructor nish.Router.constructor nish_alloc_struct nish_array_grow nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_create nish_str_concat nish_str_eq nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new routeTable
-  pointer this: size=216 writesThrough=true captured=false passedTo=Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0 Bench.add#0
   stackSites=3 stackLocals=1
   local +0:11 config: Http1Config (const)
   callee +2:19 new Http1Server -> @nish.Http1Server.constructor
@@ -38708,7 +38715,7 @@ function Bench.add(this: Bench, method: string, pattern: string, route: i32): vo
   sharedWrite: via nish.Router.add
   escaping: method pattern
   calls: nish.Router.add nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 got: i32 (const)
   callee +0:22 Router.add -> @nish.Router.add
@@ -38717,7 +38724,7 @@ function Bench.begin(this: Bench, slot: i32, conn: Http1Connection): void -> @Be
   sharedWrite: +0:5
   escaping: slot
   calls: Bench.answer nish.Router.match nish_panic nish_panic_index
-  pointer this: size=216 writesThrough=true captured=false passedTo=Bench.answer#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=Bench.answer#0
   pointer conn: size=176 writesThrough=true captured=false passedTo=Bench.answer#1
   stackSites=0 stackLocals=0
   local -10:11 p: Http1Parser (const)
@@ -38729,7 +38736,7 @@ function Bench.gather(this: Bench, slot: i32, conn: Http1Connection): void -> @B
   sharedWrite: +0:7
   escaping: slot
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer conn: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -3:11 have: i32 (const)
@@ -38742,7 +38749,7 @@ function Bench.finish(this: Bench, slot: i32, conn: Http1Connection): void -> @B
   sharedWrite: +0:5
   escaping: slot
   calls: Bench.echo Bench.echoDoc Bench.reply Bench.rewrite nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.JsonWriter.reset nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=Bench.reply#0 Bench.echo#0 Bench.echoDoc#0 Bench.rewrite#0 Bench.reply#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=Bench.reply#0 Bench.echo#0 Bench.echoDoc#0 Bench.rewrite#0 Bench.reply#0
   pointer conn: size=176 writesThrough=true captured=false passedTo=Bench.reply#1 Bench.reply#1 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
   local -4:11 route: i32 (const)
@@ -38763,7 +38770,7 @@ function Bench.echo(this: Bench, body: u8[], length: i32, w: JsonWriter): boolea
   sharedWrite: +0:5
   escaping: length
   calls: nish.JsonDecoder.reset nish.jsonDecode$$Order nish.jsonEncode$$Order nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.reset#1
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonEncode$$Order#0
   stackSites=0 stackLocals=0
@@ -38777,7 +38784,7 @@ function Bench.echoDoc(this: Bench, body: u8[], length: i32, w: JsonWriter): boo
   sharedWrite: via nish.JsonDocument.parse
   escaping: length
   calls: nish.JsonDocument.get nish.JsonDocument.i64 nish.JsonDocument.isI64 nish.JsonDocument.newI64 nish.JsonDocument.parse nish.JsonDocument.set nish.JsonDocument.write nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonDocument.parse#1
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonDocument.write#2
   stackSites=0 stackLocals=0
@@ -38798,7 +38805,7 @@ function Bench.rewrite(this: Bench, body: u8[], length: i32, w: JsonWriter): boo
   sharedWrite: via nish.JsonDocument.parse
   escaping: length
   calls: nish.JsonDocument.parse nish.JsonDocument.write
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonDocument.parse#1
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonDocument.write#2
   stackSites=0 stackLocals=0
@@ -38811,7 +38818,7 @@ function Bench.reply(this: Bench, conn: Http1Connection, status: i32, body: u8[]
   sharedWrite: via nish.Http1Connection.respond
   escaping: status
   calls: nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.Http1Connection.write#1
   stackSites=0 stackLocals=0
@@ -38823,7 +38830,7 @@ function Bench.answer(this: Bench, conn: Http1Connection, route: i32): void -> @
   sharedWrite: +0:5
   escaping: route
   calls: Bench.deep Bench.query Bench.reply nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish_panic_overflow
-  pointer this: size=216 writesThrough=true captured=false passedTo=Bench.reply#0 Bench.query#0 Bench.deep#0 Bench.reply#0 Bench.reply#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=Bench.reply#0 Bench.query#0 Bench.deep#0 Bench.reply#0 Bench.reply#0
   pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 Bench.reply#1 Bench.query#1 Bench.deep#1 Bench.reply#1 Bench.reply#1
   stackSites=0 stackLocals=0
   callee +3:9 Http1Connection.respond -> @nish.Http1Connection.respond
@@ -38849,7 +38856,7 @@ function Bench.query(this: Bench, conn: Http1Connection): void -> @Bench.query [
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Connection.respond
   calls: indexOf nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
   local +0:11 head: u8[] (const)
@@ -38872,7 +38879,7 @@ function Bench.deep(this: Bench, conn: Http1Connection): void -> @Bench.deep [me
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Connection.respond
   calls: nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic_index nish_panic_overflow
-  pointer this: size=216 writesThrough=false captured=false
+  pointer this: size=224 writesThrough=false captured=false
   pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
   local +0:11 head: u8[] (const)
@@ -38887,40 +38894,44 @@ function Bench.deep(this: Bench, conn: Http1Connection): void -> @Bench.deep [me
 function Bench.acceptAll(this: Bench): void -> @Bench.acceptAll [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Server.accept
-  calls: nish.Http1Server.accept nish.Http1Server.fd nish_poll_add
-  pointer this: size=216 writesThrough=false captured=false
+  calls: nish.Http1Server.accept nish.Http1Server.fd nish_net_set_option nish_poll_add
+  pointer this: size=224 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 slot: i32 (const)
   callee +0:25 Http1Server.accept -> @nish.Http1Server.accept
-  callee +2:28 Http1Server.fd -> @nish.Http1Server.fd
+  callee +3:24 Http1Server.fd -> @nish.Http1Server.fd
+  callee +5:28 Http1Server.fd -> @nish.Http1Server.fd
 function Bench.serve(this: Bench, slot: i32, events: i32): void -> @Bench.serve [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Server.readable
   escaping: slot
-  calls: Bench.begin Bench.finish Bench.gather nish.Http1Server.close nish.Http1Server.connection nish.Http1Server.fd nish.Http1Server.flush nish.Http1Server.holds nish.Http1Server.next nish.Http1Server.readable nish.Http1Server.rearm nish.Http1Server.writable nish_poll_modify
-  pointer this: size=216 writesThrough=true captured=false passedTo=Bench.begin#0 Bench.gather#0 Bench.finish#0
+  calls: Bench.begin Bench.finish Bench.gather nish.Http1Server.close nish.Http1Server.connection nish.Http1Server.fd nish.Http1Server.flush nish.Http1Server.holds nish.Http1Server.next nish.Http1Server.readable nish.Http1Server.rearm nish.Http1Server.writable nish_net_set_option nish_poll_modify
+  pointer this: size=224 writesThrough=true captured=false passedTo=Bench.begin#0 Bench.gather#0 Bench.finish#0
   stackSites=0 stackLocals=0
   callee +0:10 Http1Server.holds -> @nish.Http1Server.holds
-  local +3:9 wants: i32 (let)
-  callee +3:43 Http1Server.readable -> @nish.Http1Server.readable
-  callee +3:72 Http1Server.writable -> @nish.Http1Server.writable
-  local +4:11 conn: Http1Connection (const)
-  callee +4:35 Http1Server.connection -> @nish.Http1Server.connection
-  local +5:9 event: i32 (let)
-  callee +5:22 Http1Server.next -> @nish.Http1Server.next
-  callee +8:9 Bench.begin -> @Bench.begin
-  callee +10:9 Bench.gather -> @Bench.gather
-  callee +12:9 Bench.finish -> @Bench.finish
-  callee +14:15 Http1Server.next -> @nish.Http1Server.next
-  callee +16:13 Http1Server.flush -> @nish.Http1Server.flush
-  callee +18:7 Http1Server.close -> @nish.Http1Server.close
-  callee +21:9 Http1Server.rearm -> @nish.Http1Server.rearm
-  callee +22:29 Http1Server.fd -> @nish.Http1Server.fd
+  local +3:11 answered: i32 (const)
+  local +4:9 wants: i32 (let)
+  callee +4:43 Http1Server.readable -> @nish.Http1Server.readable
+  callee +4:72 Http1Server.writable -> @nish.Http1Server.writable
+  local +5:11 conn: Http1Connection (const)
+  callee +5:35 Http1Server.connection -> @nish.Http1Server.connection
+  local +6:9 event: i32 (let)
+  callee +6:22 Http1Server.next -> @nish.Http1Server.next
+  callee +9:9 Bench.begin -> @Bench.begin
+  callee +11:9 Bench.gather -> @Bench.gather
+  callee +13:9 Bench.finish -> @Bench.finish
+  callee +15:15 Http1Server.next -> @nish.Http1Server.next
+  callee +17:13 Http1Server.flush -> @nish.Http1Server.flush
+  callee +19:7 Http1Server.close -> @nish.Http1Server.close
+  callee +29:22 Http1Server.fd -> @nish.Http1Server.fd
+  callee +31:22 Http1Server.fd -> @nish.Http1Server.fd
+  callee +34:9 Http1Server.rearm -> @nish.Http1Server.rearm
+  callee +35:29 Http1Server.fd -> @nish.Http1Server.fd
 function Bench.run(this: Bench): void -> @Bench.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22
   calls: Bench.acceptAll Bench.serve nish_panic_index nish_panic_overflow nish_poll_add nish_poll_wait
-  pointer this: size=216 writesThrough=true captured=false passedTo=Bench.acceptAll#0 Bench.serve#0
+  pointer this: size=224 writesThrough=true captured=false passedTo=Bench.acceptAll#0 Bench.serve#0
   stackSites=0 stackLocals=0
   local +0:13 n: i32 (const)
   local +1:16 k: i32 (let)
@@ -38935,6 +38946,12 @@ function benchCores(): i32 -> @benchCores
   stackSites=0 stackLocals=0
   local +0:9 env: string | null (const)
   local +1:9 n: i32 (const)
+function benchQuickack(): i32 -> @benchQuickack
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_getenv
+  calls: nish_arena_mark nish_arena_release nish_getenv nish_str_eq
+  stackSites=0 stackLocals=0
+  local +0:9 env: string | null (const)
 function twoBytesOf(buf: u8[], value: i32): u8[] -> @twoBytesOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -38964,7 +38981,7 @@ function awaitPeers(index: i32, count: i32, port: i32): void -> @awaitPeers
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via benchCores
-  calls: Bench.constructor Bench.run awaitPeers benchCores llvm.fptosi.sat.i32.f64 nish.preforkArgs nish.preforkWith nish.preforkWorkerCount nish_alloc_struct nish_arena_mark nish_arena_release nish_getenv nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_tcp_listen_flags
+  calls: Bench.constructor Bench.run awaitPeers benchCores benchQuickack llvm.fptosi.sat.i32.f64 nish.preforkArgs nish.preforkWith nish.preforkWorkerCount nish_alloc_struct nish_arena_mark nish_arena_release nish_getenv nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_tcp_listen_flags
   stackSites=1 stackLocals=1
   local +0:9 cores: i32 (const)
   callee +0:22 benchCores -> @benchCores
@@ -38981,5 +38998,6 @@ function main(): i32 -> @nish_main [exported entry]
   local +16:9 listener: i32 (const)
   local +21:9 bench: Bench (const)
   callee +21:24 new Bench -> @Bench.constructor
-  callee +24:5 awaitPeers -> @awaitPeers
-  callee +31:3 Bench.run -> @Bench.run
+  callee +23:20 benchQuickack -> @benchQuickack
+  callee +25:5 awaitPeers -> @awaitPeers
+  callee +32:3 Bench.run -> @Bench.run

@@ -144,7 +144,7 @@ one of five ids `nish:net` exports, and any other number answers `-22`:
 | Option | `value` |
 | --- | --- |
 | `NET_TCP_NODELAY` | `1` sends small writes at once, `0` lets Nagle batch them |
-| `NET_TCP_QUICKACK` | `1` acknowledges what arrives at once; Linux only, `-95` on macOS |
+| `NET_TCP_QUICKACK` | `1` acknowledges what arrives at once, `0` delays the ACK; Linux only, `-95` on macOS |
 | `NET_SO_KEEPALIVE` | `1` probes a connection that has gone quiet |
 | `NET_SO_SNDBUF` | the send buffer, in bytes (Linux stores twice the value) |
 | `NET_SO_RCVBUF` | the receive buffer, in bytes (Linux stores twice the value) |
@@ -152,19 +152,42 @@ one of five ids `nish:net` exports, and any other number answers `-22`:
 It answers `0`, or a negative error: `-9` for a closed descriptor, `-88` for
 one that is not a socket.
 
-Linux does not keep quick-ACK mode. The kernel leaves it on its own, by its
-own reading of the traffic, so a server that wants every request
-acknowledged at once sets it again after each response:
+On Linux a keep-alive connection already delays its ACKs: once the server
+has sent its first response, the kernel waits to acknowledge the next request
+until it can ride on that request's response. Most servers need no call at
+all. Setting `NET_TCP_QUICKACK` changes that, and the trade runs both ways:
+
+- **`1` after each response** turns delayed ACKs off until the kernel next
+  turns them on, so every request is acknowledged at once in a segment of its
+  own. That is one more system call and one more packet per request, worth it
+  only for a peer that waits on the ACK before it sends more.
+- **`0` once, after accept,** keeps delayed ACKs on from the first request.
+  It costs one call per connection. The kernel still switches them off for
+  the next request when a response took longer than its ACK timer (tens of
+  milliseconds) or a segment arrived out of order, and nothing short of a
+  call after each response turns them back on that early. On a connection
+  answered quickly, that call after each response changes nothing.
+- **No call** behaves like `0` once from the second request on.
+
+`bench/quickack/` in the repository measures each way. On a 4-vCPU Xeon VM
+running Linux 6.18, at 256 keep-alive connections over loopback, `1` after
+each response added one system call and one segment per request and served
+13 to 18% fewer requests per second than no call. `0` after each response and
+`0` once stayed within the noise, since `0` saves an ACK only after a slow
+response. A server that wants the delayed ACKs from the
+first request sets the option once, as it accepts:
 
 ```ts nish:ok
-import { NET_TCP_QUICKACK, netSetOption, netWrite } from "nish:net";
+import { NET_TCP_QUICKACK, netSetOption, tcpAccept } from "nish:net";
 
-export const respond = (conn: i32, answer: u8[]): i32 => {
-  const n = netWrite(conn, answer, 0, answer.length);
-  // Quick-ACK may be off again by now: turn it back on for the next request.
-  // On macOS this answers -95, which a server can ignore.
-  netSetOption(conn, NET_TCP_QUICKACK, 1);
-  return n;
+export const acceptOne = (listener: i32, peer: u8[]): i32 => {
+  const conn = tcpAccept(listener, peer);
+  if (conn >= 0) {
+    // Delay ACKs from the first request, so each one rides on its response.
+    // On macOS this answers -95, which a server can ignore.
+    netSetOption(conn, NET_TCP_QUICKACK, 0);
+  }
+  return conn;
 };
 ```
 
