@@ -1758,6 +1758,50 @@ time drops to 3.68 µs, from 6.30 with Nagle off, while its user time stays
 near 0.9 µs. Its qps is 3.2 % under the twin's. The benchmark keeps Nagle off
 on both sides, as libpq does.
 
+### When to start a batch
+
+`pg-batch-clock.ts` compares `PgBatchClock`'s adaptive policy with fixed
+windows at three steady arrival rates. It is a simulation, not a server: the
+real clock, driven by a modelled pool of 4 connections on an 8-core box, a
+statement costing the server 70 µs plus 20 µs a row, and the app's own 400 µs a
+request slowing every statement by 1 / (1 − load). The same build prints the
+same tables every run.
+
+```bash
+build/nish bench/pg-batch-clock.ts --link build/pg-batch-clock --profile speed
+build/pg-batch-clock
+```
+
+The policies, all `maxCount` 128: none (`maxWaitUs` 0), the fixed window
+(`minCount` 128, `factor` 0, `maxWaitUs` 10 or 30 ms) and adaptive (`minCount`
+16, `factor` 1.1, `weight` 0.25, `maxWaitUs` 10 ms, `lightCount` 8 in 10 ms).
+Wait is the time from an item's arrival to its batch's start.
+
+| rate | policy | batch | wait p50 ms | wait p95 ms | statements/item | server µs/item |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 1,000/s, 5 % busy | none | 1.0 | 0.00 | 0.00 | 1.000 | 90.0 |
+| | fixed 10 ms | 10.9 | 5.47 | 10.00 | 0.091 | 26.4 |
+| | fixed 30 ms | 30.8 | 15.40 | 29.41 | 0.033 | 22.3 |
+| | adaptive | 5.0 | 4.58 | 10.00 | 0.200 | 34.0 |
+| 8,000/s, 42 % busy | none | 1.0 | 0.00 | 0.00 | 0.994 | 89.6 |
+| | fixed 10 ms | 80.9 | 5.06 | 9.62 | 0.012 | 20.9 |
+| | fixed 30 ms | 127.9 | 7.88 | 15.43 | 0.008 | 20.5 |
+| | adaptive | 78.4 | 4.93 | 9.51 | 0.013 | 20.9 |
+| 16,000/s, 84 % busy | none | 2.5 | 0.07 | 0.30 | 0.402 | 48.2 |
+| | fixed 10 ms | 128.0 | 3.96 | 7.74 | 0.008 | 20.5 |
+| | fixed 30 ms | 128.0 | 3.95 | 7.74 | 0.008 | 20.5 |
+| | adaptive | 125.4 | 3.92 | 7.73 | 0.008 | 20.6 |
+
+Adaptive matches the better fixed window at every rate: its p95 is no higher
+than the lower fixed p95, and where the box is a quarter busy or more its
+server CPU per item is within 2 % of the cheaper fixed window. When the box is
+quiet it spends statements to cut latency (0.200 an item against 0.091), which
+costs a server with 95 % to spare nothing it needs. Near saturation the batch
+cap, not the window, sets both fixed rows, so the model does not reproduce the
+25 ms a 30 ms window added to p95 on Conduit; that needs a run against a live
+server, which this suite does not make. Until one does, the fixed window stays
+`PgBatchClockConfig`'s default.
+
 ## YAML against @amritk/yaml
 
 `yaml-compare/` times nish/yaml against @amritk/yaml, a YAML parser written in
@@ -2099,6 +2143,9 @@ Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
 
 - `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
   accuracy figures ("Math accuracy" above).
+- `pg-batch-clock.ts`: when to start a PostgreSQL batch, adaptive against
+  fixed windows ("When to start a batch" above), a simulation not part of
+  this suite.
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
   not part of this suite.
 - `substr.ts`: what proving a `substring` bound is worth (WP15 §8 `NL9009`),

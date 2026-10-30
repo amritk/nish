@@ -142,6 +142,17 @@
  * take writes into may still grow, up to its `maxOutput`); when to take is
  * the program's.
  *
+ * **Batch timing.** `PgBatchClock` is one answer to when: given the time in
+ * microseconds, `check(now, inFlight)` says a batch is due once
+ * max(`minCount`, the moving average of recent batch sizes × `factor`) items
+ * wait, once the oldest has waited `maxWaitUs`, or, with the idle bypass on,
+ * at once when nothing is in flight and fewer than `lightCount` arrived in the
+ * last `lightWindowUs`; `average`, `lastSize`, `lastReason` and `startsFor`
+ * are its metrics. Its defaults are the fixed window. `PgBatcher.takeDue`
+ * takes only when its clock says so, and `PgBatchTurns` lets one free
+ * connection collect while the others execute, woken only when its batch is
+ * due. Neither reads a clock or allocates per item.
+ *
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
@@ -2746,6 +2757,15 @@ export class PgPool {
     return this.queueCount
   }
 
+  /** The number of groups in flight on every connection, sent and not yet done: the `inFlight` a `PgBatchClock` reads. */
+  inFlight(): i32 {
+    let n: i32 = 0
+    for (const slot of this.slots) {
+      n += slot.count
+    }
+    return n
+  }
+
   /**
    * Hands the oldest waiting request to a ready connection with room (the
    * one with the fewest in flight, or under `PgConfig.pack` the first), and
@@ -3300,6 +3320,29 @@ export class PgBatcher {
   }
 
   /**
+   * `take(conn)` when `clock` says a batch is due at `nowUs`, with `inFlight`
+   * of the program's executions or groups running (`PgPool.inFlight()`), and
+   * the batch taken recorded in `clock`; -1 when it is not due or `take`
+   * answers -1. The program calls `clock.arrived(now)` for each request it
+   * adds. Panics when the clock's waiting count is not this batcher's, or its
+   * `maxCount` is below `maxRequests`.
+   */
+  takeDue(conn: PgConnection, clock: PgBatchClock, nowUs: i64, inFlight: i32): i32 {
+    if (clock.waiting() !== this.count || clock.maxCount < this.maxRequests) {
+      panic("nish/net/postgres: PgBatcher.takeDue with a clock that does not mirror the batcher")
+    }
+    if (clock.check(nowUs, inFlight) === PG_CLOCK_WAIT) {
+      return -1
+    }
+    const before: i32 = this.count
+    const r: i32 = this.take(conn)
+    if (r >= 0) {
+      clock.started(before - this.count, nowUs)
+    }
+    return r
+  }
+
+  /**
    * Binds the oldest waiting requests on `conn` as one execution of `sql`,
    * prepared there already, and answers its run's handle, which names this
    * execution and no later one of the same run; the caller ends the group
@@ -3551,5 +3594,367 @@ export class PgBatcher {
       run.open = false
     }
     return PG_BATCH_NONE
+  }
+}
+
+// --- Batch timing --------------------------------------------------------------
+
+/** `PgBatchClock.check`: not yet; wait for an item or for `deadline()`. */
+export const PG_CLOCK_WAIT: i32 = 0
+/** `PgBatchClock.check`: `minCount` items are waiting, and the average asks no more. */
+export const PG_CLOCK_COUNT: i32 = 1
+/** `PgBatchClock.check`: the moving average of recent batches, times `factor`, is waiting. */
+export const PG_CLOCK_AVERAGE: i32 = 2
+/** `PgBatchClock.check`: the oldest item has waited `maxWaitUs`. */
+export const PG_CLOCK_TIMER: i32 = 3
+/** `PgBatchClock.check`: nothing is in flight and little has arrived lately, so the item goes at once. */
+export const PG_CLOCK_IDLE: i32 = 4
+
+const PG_CLOCK_MAX_COUNT: i32 = 1048576
+const PG_CLOCK_MAX_LIGHT: i32 = 1024
+// A minute: a longer wait is a stalled program, not a batching policy.
+const PG_CLOCK_MAX_WAIT: i64 = 60000000
+const PG_CLOCK_MAX_FACTOR: f64 = 64.0
+
+/**
+ * When a `PgBatchClock` starts a batch. The defaults are the fixed window:
+ * a batch starts when `maxCount` items wait or the oldest has waited
+ * `maxWaitUs`, whatever the load. To adapt, set `factor` (1.1 is a good
+ * start), lower `minCount` (16), and turn on the idle bypass (`lightCount`
+ * 8); `bench/pg-batch-clock.ts` measures each against the fixed windows.
+ */
+export class PgBatchClockConfig {
+  /** The share of the recent batch size that must wait before a batch starts, 0 to 64; 0 leaves the average out, the fixed window. Above 1 batches grow until the timer bounds them (fewer statements, more wait); below 1 they shrink toward `minCount`. */
+  factor: f64 = 0.0
+  /** How far each batch moves the average, over 0 up to 1. Higher follows a change of load sooner and jumps more on one odd batch. */
+  weight: f64 = 0.25
+  /** The longest the oldest item waits for others, in microseconds, 0 to a minute: the most latency batching adds when the load is light. */
+  maxWaitUs: i64 = 10000
+  /** The window `lightCount` counts arrivals over, in microseconds, 0 to a minute. */
+  lightWindowUs: i64 = 10000
+  /** The most items one batch takes, `PgBatchConfig.maxRequests` for a batcher's clock. The count to start never passes it, so a backlog always starts by count. */
+  maxCount: i32 = 32
+  /** The fewest items that start a batch by count. Lower answers sooner under light load and spends more statements per item; `maxCount` is the fixed window. */
+  minCount: i32 = 32
+  /** The idle bypass: with nothing in flight and fewer than `lightCount` items arrived in the last `lightWindowUs`, an item goes at once. 0, the default, turns it off; up to 1024. */
+  lightCount: i32 = 0
+  /** The most items waiting, 1 to 2^20: `PgBatchConfig.queueSize` for a batcher's clock. */
+  queueSize: i32 = 1024
+}
+
+/**
+ * Says when to start a batch, sans-IO like `PgBatcher`: the program passes
+ * the time, in microseconds from any fixed point, and the clock reads none.
+ * It keeps the arrival time of each waiting item, oldest first, and the
+ * moving average (EWMA) of the batches started. `check` answers the reason a
+ * batch should start now, or `PG_CLOCK_WAIT`: the target count is waiting
+ * (the larger of `minCount` and the average times `factor`, never more than
+ * `maxCount`), the oldest has waited `maxWaitUs`, or, with the idle bypass on,
+ * nothing is in flight and the load is light. `deadline()` is when the timer
+ * fires, for a poll's timeout.
+ *
+ * Under a backlog the target is already waiting, so the batch starts by count
+ * the moment a connection is free, and nothing waits on the timer; a batch
+ * started by count is at least the target, so the average does not fall
+ * while the backlog lasts. Only a batch the timer or the bypass starts can
+ * be smaller than the average and pull it down, as the load falls.
+ *
+ * The program mirrors its queue: `arrived(now)` for each item queued,
+ * `started(size, now)` for each batch taken, oldest items first. A
+ * `PgBatcher` does both itself through `takeDue`; a program forming its own
+ * batches calls them by hand. The fields after a start are for metrics.
+ * Everything is allocated in the constructor; nothing per item.
+ */
+export class PgBatchClock {
+  /** The moving average of the batch sizes started, 0 before the first. */
+  average: f64 = 0.0
+  /** The size of the last batch started, 0 before the first. */
+  lastSize: i32 = 0
+  /** Why the last batch started: the reason `check` last answered, `PG_CLOCK_WAIT` when it started without one. */
+  lastReason: i32 = 0
+  /** How long the oldest item of the last batch waited, in microseconds. */
+  lastWaitUs: i64 = 0
+  readonly maxCount: i32
+  private readonly minCount: i32
+  private readonly factor: f64
+  private readonly weight: f64
+  private readonly maxWaitUs: i64
+  private readonly lightWindowUs: i64
+  // The waiting items' arrival times, a ring from `head`; and the last
+  // `lightCount` arrivals', a ring of their own, `lightAt` the next to write.
+  private readonly times: i64[]
+  private readonly light: i64[]
+  private readonly starts: i64[]
+  private head: i32 = 0
+  private count: i32 = 0
+  private lightAt: i32 = 0
+  private lightSeen: i32 = 0
+  private last: i64 = 0
+  private due: i32 = 0
+
+  /** A clock for `config`; panics when a setting is out of the range its field names. */
+  constructor(config: PgBatchClockConfig) {
+    const factor: f64 = config.factor
+    const weight: f64 = config.weight
+    if (
+      config.maxCount < 1 ||
+      config.maxCount > PG_CLOCK_MAX_COUNT ||
+      config.minCount < 1 ||
+      config.minCount > config.maxCount ||
+      !(factor >= 0.0 && factor <= PG_CLOCK_MAX_FACTOR) ||
+      !(weight > 0.0 && weight <= 1.0) ||
+      config.maxWaitUs < 0 ||
+      config.maxWaitUs > PG_CLOCK_MAX_WAIT ||
+      config.lightCount < 0 ||
+      config.lightCount > PG_CLOCK_MAX_LIGHT ||
+      config.lightWindowUs < 0 ||
+      config.lightWindowUs > PG_CLOCK_MAX_WAIT ||
+      config.queueSize < 1 ||
+      config.queueSize > PG_BATCH_MAX_QUEUE
+    ) {
+      panic("nish/net/postgres: a PgBatchClockConfig setting out of range")
+    }
+    this.maxCount = config.maxCount
+    this.minCount = config.minCount
+    this.factor = factor
+    this.weight = weight
+    this.maxWaitUs = config.maxWaitUs
+    this.lightWindowUs = config.lightWindowUs
+    this.times = new Array<i64>(config.queueSize)
+    this.light = new Array<i64>(config.lightCount)
+    this.starts = new Array<i64>(5)
+  }
+
+  /** The number of items waiting. */
+  waiting(): i32 {
+    return this.count
+  }
+
+  /**
+   * Records an item queued at `nowUs`; false when `queueSize` are waiting. A
+   * time before the last one given counts as the last one, so a clock that
+   * steps back cannot make an item older than its neighbours.
+   */
+  arrived(nowUs: i64): boolean {
+    const ring: i32 = toI32(this.times.length)
+    if (this.count === ring) {
+      return false
+    }
+    const now: i64 = nowUs < this.last ? this.last : nowUs
+    this.last = now
+    this.times[(this.head + this.count) % ring] = now
+    this.count += 1
+    const lights: i32 = toI32(this.light.length)
+    if (lights > 0) {
+      this.light[this.lightAt] = now
+      this.lightAt = (this.lightAt + 1) % lights
+      if (this.lightSeen < lights) {
+        this.lightSeen += 1
+      }
+    }
+    return true
+  }
+
+  /** The count that starts a batch now: the larger of `minCount` and the average times `factor`, at most `maxCount`. */
+  target(): i32 {
+    const scaled: f64 = Math.ceil(this.average * this.factor)
+    let target: i32 = this.minCount
+    if (scaled > toF64(target)) {
+      target = toI32(scaled)
+    }
+    return target < this.maxCount ? target : this.maxCount
+  }
+
+  /**
+   * The reason a batch should start at `nowUs`, with `inFlight` batches (or
+   * groups) still running, or `PG_CLOCK_WAIT`. It only says; the program
+   * starts the batch when a connection is free, then calls `started`.
+   */
+  check(nowUs: i64, inFlight: i32): i32 {
+    let reason: i32 = PG_CLOCK_WAIT
+    if (this.count > 0) {
+      const target: i32 = this.target()
+      if (this.count >= target) {
+        reason = target > this.minCount ? PG_CLOCK_AVERAGE : PG_CLOCK_COUNT
+      } else if (nowUs - this.times[this.head] >= this.maxWaitUs) {
+        reason = PG_CLOCK_TIMER
+      } else if (inFlight <= 0 && this.quiet(nowUs)) {
+        reason = PG_CLOCK_IDLE
+      }
+    }
+    this.due = reason
+    return reason
+  }
+
+  /** When the oldest waiting item has waited `maxWaitUs`, in the caller's microseconds; -1 when none waits. */
+  deadline(): i64 {
+    if (this.count === 0) {
+      return -1
+    }
+    return this.times[this.head] + this.maxWaitUs
+  }
+
+  /**
+   * Records a batch of the `size` oldest items started at `nowUs`, and moves
+   * the average toward it; the first batch sets it. Panics when `size` is
+   * below 1 or more than are waiting or than `maxCount`.
+   */
+  started(size: i32, nowUs: i64): void {
+    if (size < 1 || size > this.count || size > this.maxCount) {
+      panic("nish/net/postgres: PgBatchClock.started with a size out of range")
+    }
+    this.lastWaitUs = nowUs - this.times[this.head]
+    if (this.lastWaitUs < 0) {
+      this.lastWaitUs = 0
+    }
+    this.head = (this.head + size) % toI32(this.times.length)
+    this.count -= size
+    const n: f64 = toF64(size)
+    this.average = this.lastSize === 0 ? n : this.average + this.weight * (n - this.average)
+    this.lastSize = size
+    this.lastReason = this.due
+    this.starts[this.due] += 1
+    this.due = PG_CLOCK_WAIT
+  }
+
+  /** How many batches have started for `reason`, one of the `PG_CLOCK_*` (`PG_CLOCK_WAIT` counts those started without a due `check`). */
+  startsFor(reason: i32): i64 {
+    if (reason < 0 || reason > PG_CLOCK_IDLE) {
+      panic("nish/net/postgres: PgBatchClock.startsFor with a reason out of range")
+    }
+    return this.starts[reason]
+  }
+
+  /** Whether fewer than `lightCount` items arrived in the `lightWindowUs` before `nowUs`. */
+  private quiet(nowUs: i64): boolean {
+    const lights: i32 = toI32(this.light.length)
+    if (lights === 0) {
+      return false
+    }
+    if (this.lightSeen < lights) {
+      return true
+    }
+    // `lightAt` is the next to write, so it holds the oldest of the last `lightCount`.
+    return nowUs - this.light[this.lightAt] >= this.lightWindowUs
+  }
+}
+
+/** `PgBatchTurns`: no slot to wake. */
+export const PG_TURNS_NONE: i32 = -1
+/** `PgBatchTurns.push`: the item was not recorded, `queueSize` are waiting. */
+export const PG_TURNS_FULL: i32 = -2
+
+/**
+ * Turn-taking for a program with several connections that forms batches
+ * with one `PgBatchClock`: one free connection, the collector, gathers while
+ * the others execute, and a push wakes it only when its batch is due, not on
+ * every item. Sans-IO like the clock: a slot is the program's own number for
+ * a connection, 0 to `size - 1`, and the answer to each call is the slot to
+ * wake, or `PG_TURNS_NONE`.
+ *
+ * The collector is the lowest-numbered free slot. `push(now)` records an item
+ * and answers the collector when this item makes the batch due; `poll(now)`
+ * answers it when the timer has made it due, at `deadline()`. Once a slot is
+ * named, no other is until it calls `started(slot, size, now)` with the batch
+ * it took, or `release(slot)` when it took none. `finished(slot, now)` frees
+ * a slot after its batch. Both `started` and `finished` answer the next slot
+ * to wake when a batch is already due, as under a backlog: nothing waits on
+ * the timer then. The in-flight count the idle bypass reads is the slots
+ * holding a batch.
+ */
+export class PgBatchTurns {
+  /** The clock the turns read and record into. */
+  readonly clock: PgBatchClock
+  /** The number of slots. */
+  readonly size: i32
+  private readonly busy: boolean[]
+  private running: i32 = 0
+  private woken: i32 = -1
+
+  /** Turns over `size` slots (1 to 1024), all free; panics on a size out of range. */
+  constructor(clock: PgBatchClock, size: i32) {
+    if (size < 1 || size > PG_POOL_MAX_SLOTS) {
+      panic("nish/net/postgres: a PgBatchTurns size out of range")
+    }
+    this.clock = clock
+    this.size = size
+    this.busy = new Array<boolean>(size)
+  }
+
+  /** The slot that collects: the lowest-numbered free one, or `PG_TURNS_NONE` when every slot holds a batch. */
+  collector(): i32 {
+    for (let i: i32 = 0; i < this.size; i++) {
+      if (!this.busy[i]) {
+        return i
+      }
+    }
+    return PG_TURNS_NONE
+  }
+
+  /** The number of slots holding a batch. */
+  inFlight(): i32 {
+    return this.running
+  }
+
+  /** When the collector's timer fires, `PgBatchClock.deadline()`; -1 when nothing waits. */
+  deadline(): i64 {
+    return this.clock.deadline()
+  }
+
+  /** Records an item queued at `nowUs` and answers the slot to wake, or `PG_TURNS_FULL` when the clock is full. */
+  push(nowUs: i64): i32 {
+    if (!this.clock.arrived(nowUs)) {
+      return PG_TURNS_FULL
+    }
+    return this.poll(nowUs)
+  }
+
+  /** The slot to wake at `nowUs`, when a batch is due and no slot is named already. */
+  poll(nowUs: i64): i32 {
+    if (this.woken >= 0) {
+      return PG_TURNS_NONE
+    }
+    const slot: i32 = this.collector()
+    if (slot < 0 || this.clock.check(nowUs, this.running) === PG_CLOCK_WAIT) {
+      return PG_TURNS_NONE
+    }
+    this.woken = slot
+    return slot
+  }
+
+  /** Records `slot` starting a batch of `size` items at `nowUs`, and answers the next slot to wake. Panics on a slot out of range or holding a batch already, or as `PgBatchClock.started`. */
+  started(slot: i32, size: i32, nowUs: i64): i32 {
+    this.free(slot)
+    this.clock.started(size, nowUs)
+    this.busy[slot] = true
+    this.running += 1
+    if (this.woken === slot) {
+      this.woken = -1
+    }
+    return this.poll(nowUs)
+  }
+
+  /** Records `slot`'s batch done at `nowUs`, and answers the slot to wake. Panics on a slot out of range or holding no batch. */
+  finished(slot: i32, nowUs: i64): i32 {
+    if (slot < 0 || slot >= this.size || !this.busy[slot]) {
+      panic("nish/net/postgres: PgBatchTurns.finished on a slot holding no batch")
+    }
+    this.busy[slot] = false
+    this.running -= 1
+    return this.poll(nowUs)
+  }
+
+  /** Gives back a wake that started nothing, so the next push or poll can wake a slot again. */
+  release(slot: i32): void {
+    this.free(slot)
+    if (this.woken === slot) {
+      this.woken = -1
+    }
+  }
+
+  private free(slot: i32): void {
+    if (slot < 0 || slot >= this.size || this.busy[slot]) {
+      panic("nish/net/postgres: PgBatchTurns slot out of range or holding a batch")
+    }
   }
 }
