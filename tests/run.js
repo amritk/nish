@@ -43,6 +43,7 @@ import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import zlib from "node:zlib"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
@@ -131,7 +132,8 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
- * CPU's AES instructions, `runtime-term.c` stdin and the terminal of
+ * CPU's AES instructions, `runtime-checksum.c` CRC-32 on its carry-less
+ * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
  * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes` and
  * `runtime-sandbox.c` the `--sandbox` confinement, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
@@ -155,6 +157,7 @@ const RUNTIME_C = [
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
+  "runtime/runtime-checksum.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
   "runtime/runtime-sandbox.c",
@@ -8929,6 +8932,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-net.c",
       "runtime-simd.c",
       "runtime-aes.c",
+      "runtime-checksum.c",
       "runtime-term.c",
       "runtime-bytes.c",
       "runtime-sandbox.c",
@@ -17137,7 +17141,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-term.c, runtime-bytes.c and runtime-sandbox.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c and runtime-sandbox.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -17989,7 +17993,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|crc32): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -18055,6 +18059,35 @@ if (!only || "simd".includes(only)) {
     )
   }
 
+  // WP38 §3.1: runtime/runtime-checksum.c runs CRC-32 on PCLMULQDQ folding, or on the
+  // ARMv8 CRC32 instructions, and
+  // Crc32.update takes that path or std/compress/checksum.ts's tables. tests/simd/crc32.c
+  // includes the file, computes its fold constants again from the polynomial, and
+  // holds every path this machine has to a bit-at-a-time reference: the check value,
+  // the empty input, every length 0..4,096 at offsets 0..15, inputs of 1 to 16 MiB and
+  // streamed pieces of 1..16, 63..65 and 127..129 bytes, every length 0..256 ending
+  // at a no-access page so an over-read faults; then `nish_crc32_hw` under
+  // each `NISH_CRC32`. As for AES, the line must name the path /proc/cpuinfo says the
+  // CPU has.
+  const crcSaid = agree(`crc32 native ${process.arch}`, [], path.join(simdDir, "crc32"), native, "tests/simd/crc32.c")
+  let crcPath = null
+  if (process.arch === "x64" && features.has("pclmulqdq") && features.has("sse4_1")) {
+    crcPath = "pclmul;"
+  } else if (process.arch === "arm64" && features.has("crc32")) {
+    crcPath = "armv8-crc32;"
+  }
+  if (crcPath === null) {
+    skip(
+      `simd: crc32: /proc/cpuinfo names no carry-less multiply or CRC32 instructions for ${process.platform}-${process.arch}, so no kernel path is required to run`
+    )
+  } else {
+    check(
+      `simd: crc32 ran the ${crcPath.replace(/[;(]$/, "").trim()} path, which /proc/cpuinfo says this CPU has`,
+      crcSaid.includes(`cases agree across ${crcPath}`),
+      crcSaid
+    )
+  }
+
   if (WASI_SYSROOT && has("wasm-ld")) {
     for (const [label, flags, source, name] of [
       ["wasm32-wasi, the scalar base path", [], driver, "index-of-any"],
@@ -18063,6 +18096,7 @@ if (!only || "simd".includes(only)) {
       ["byte-runs wasm32-wasi -msimd128", ["-msimd128"], runs, "byte-runs"],
       ["regex-scan wasm32-wasi, the scalar base path", [], scanDriver, "regex-scan"],
       ["regex-scan wasm32-wasi -msimd128", ["-msimd128"], scanDriver, "regex-scan"],
+      ["crc32 wasm32-wasi, no kernel", [], "tests/simd/crc32.c", "crc32"],
     ]) {
       agree(
         label,
@@ -18128,6 +18162,13 @@ if (!only || "simd".includes(only)) {
           "the ARMv8 AES path",
           /cases agree across armv8-aes-pmull;/,
         ],
+        [
+          "crc32 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 CRC32 path",
+          "tests/simd/crc32.c",
+          path.join(simdDir, "crc32.aarch64"),
+          "the ARMv8 CRC32 path",
+          /cases agree across armv8-crc32;/,
+        ],
       ]) {
         const linked = build(cross, out, source)
         const r =
@@ -18138,7 +18179,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|crc32:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -18188,22 +18229,28 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
       return { ok: true, names, bytes: fs.readFileSync(out), why: "" }
     }
     const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
-    // The runtime as it was before build.sh paired runtime-aes.c: every file but that one.
-    const noAesDir = path.join(simdDir, "runtime-without-aes")
-    fs.rmSync(noAesDir, { recursive: true, force: true })
-    fs.mkdirSync(noAesDir, { recursive: true })
-    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
-      if (/\.(c|h)$/.test(file) && file !== "runtime-aes.c") {
-        fs.copyFileSync(path.join(root, "runtime", file), path.join(noAesDir, file))
+    const crcControl = crcPath === null ? null : "nish_crc32_hw: 1\ncbf43926\n"
+    /** The runtime as it was before build.sh paired `unit`: every file but that one. */
+    const runtimeWithout = (unit) => {
+      const dir = path.join(simdDir, `runtime-without-${unit}`)
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+        if (/\.(c|h)$/.test(file) && file !== unit) {
+          fs.copyFileSync(path.join(root, "runtime", file), path.join(dir, file))
+        }
       }
+      return dir
     }
+    const noAesDir = runtimeWithout("runtime-aes.c")
+    const noCrcDir = runtimeWithout("runtime-checksum.c")
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
@@ -18256,6 +18303,31 @@ if (!only || "simd".includes(only)) {
           `hello without: ${withoutAes.bytes?.length ?? "(not linked)"} bytes ${withoutAes.why}\n` +
           `the control keeps: ${aesCtrl.names.join(" ") || "(none)"} ${aesCtrl.why}\nthe control printed: ${printed || "(not run)"}`
       )
+
+      // runtime-checksum.c, the same way: hello is the same bytes without it, and its
+      // control keeps the kernel and gives the check value where the CPU runs it.
+      const withoutCrc =
+        compiled.status === 0
+          ? kept([helloLl], path.join(simdDir, `hello-no-crc32.${profile}`), profile, path.join(noCrcDir, "runtime.c"))
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      const crcExe = path.join(simdDir, `calls-crc32.${profile}`)
+      const crcCtrl = kept(["tests/simd/calls-crc32.c"], crcExe, profile)
+      const crcRan = crcCtrl.ok ? spawnSync(crcExe, [], { encoding: "utf8" }) : null
+      const crcPrinted = crcRan === null ? "" : String(crcRan.stdout)
+      check(
+        `simd: --profile ${profile} links hello with runtime-checksum.c to the same bytes as without it, and a program that calls the kernel runs it`,
+        withoutCrc.ok &&
+          quiet.ok &&
+          withoutCrc.bytes.equals(quiet.bytes) &&
+          crcCtrl.ok &&
+          crcCtrl.names.some((name) => name.startsWith("nish_crc32_")) &&
+          !crcCtrl.names.includes("__cpu_model") &&
+          crcRan.status === 0 &&
+          (crcControl === null ? /^nish_crc32_hw: [01]\n/.test(crcPrinted) : crcPrinted === crcControl),
+        `hello with runtime-checksum.c: ${quiet.bytes?.length ?? "(not linked)"} bytes ${quiet.why}\n` +
+          `hello without: ${withoutCrc.bytes?.length ?? "(not linked)"} bytes ${withoutCrc.why}\n` +
+          `the control keeps: ${crcCtrl.names.join(" ") || "(none)"} ${crcCtrl.why}\nthe control printed: ${crcPrinted || "(not run)"}`
+      )
     }
   }
 
@@ -18280,8 +18352,23 @@ if (!only || "simd".includes(only)) {
       ran !== null && ran.status === 0 && ran.stdout === "nish_aes_hw: 0\n",
       b.status !== 0 ? b.stderr : `${ran.stdout}${ran.stderr}`
     )
+    const crcWasm = path.join(simdDir, "calls-crc32.wasm")
+    const cb = spawnSync(
+      "bash",
+      ["scripts/build.sh", "tests/simd/calls-crc32.c", "runtime/runtime.c", "-o", crcWasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+    )
+    const crcRan =
+      cb.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", crcWasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      "simd: --profile wasi links runtime-checksum.c, and nish_crc32_hw answers 0 there",
+      crcRan !== null && crcRan.status === 0 && crcRan.stdout === "nish_crc32_hw: 0\n",
+      cb.status !== 0 ? cb.stderr : `${crcRan.stdout}${crcRan.stderr}`
+    )
   } else {
-    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's wasm32 build is not linked")
+    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's and runtime-checksum.c's wasm32 builds are not linked")
   }
 
   // The freestanding `wasm` profile links runtime-wasm.c, not runtime.c, so nothing
@@ -18824,6 +18911,427 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
   } else {
     skip(
       "aes kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of crypto_aes_agree is not checked for kernel references"
+    )
+  }
+}
+
+// ---- WP38: the CRC-32 kernel against the Nish walk, end to end ------------------------
+// The compiler lowers `Crc32.update`'s call of std/compress/checksum.ts's `crc32Walk` to
+// a branch on `nish_crc32_hw`: runtime-checksum.c's `nish_crc32_update` (PCLMULQDQ
+// folding on x86-64, the ARMv8 CRC32 instructions on AArch64) on one arm, the walk on
+// the other (src/kernels.ts). `tests/link/std_compress_crc_paths` holds the checksum to
+// its check value, empty input, gzip trailers and streamed pieces;
+// `tests/link/std_compress_crc_diff` folds 65,552 window CRCs and twelve large ones into
+// its stdout. Each is linked with the kernel wrapped (`-Wl,--wrap`) by a counter that
+// reports its calls on exit, then run with `NISH_CRC32` unset and with
+// `NISH_CRC32=soft`: the two stdouts must be each other's and `expected.out`, the soft
+// run must call no kernel, and where /proc/cpuinfo names the instructions the unset run
+// must call it. The debug profile links them, for the reason the AES section above gives.
+//
+// A wasm32 build has no kernel, so the lowering is skipped there: a `--profile wasi`
+// build names no `nish_crc32_` symbol in its IR or its link, against the native IR
+// linked the same way as the trace's control. IR compiled for the host and linked
+// freestanding (`--profile wasm`) gets runtime-checksum.c from build.sh, whose wasm32
+// build answers 0, and its CRCs must be Node's.
+if (
+  !only ||
+  "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff std_compress_gzip_files".includes(only)
+) {
+  const crcDir = path.join(buildDir, "crc32-kernel")
+  fs.rmSync(crcDir, { recursive: true, force: true })
+  fs.mkdirSync(crcDir, { recursive: true })
+  const crcFeatures = new Set(
+    ((fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : "").match(
+      /^(flags|Features)\s*:(.*)$/m
+    )?.[2] ?? "")
+      .trim()
+      .split(/\s+/)
+  )
+  const cpuHasCrc =
+    (process.arch === "x64" && crcFeatures.has("pclmulqdq") && crcFeatures.has("sse4_1")) ||
+    (process.arch === "arm64" && crcFeatures.has("crc32"))
+  /** The modules of tests/link/<program> compiled into a directory of their own, or none and the reason. */
+  const compileCrc = (program, dir, flags) => {
+    const r = spawnSync(
+      NISH,
+      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
+      }
+    )
+    const lls =
+      r.status === 0
+        ? fs
+            .readdirSync(dir)
+            .filter((f) => f.endsWith(".ll"))
+            .sort()
+            .map((f) => path.join(dir, f))
+        : []
+    return { lls, why: r.status === 0 ? "" : r.stderr }
+  }
+  const crcPrograms = ["std_compress_crc_paths", "std_compress_crc_diff", "std_compress_gzip_files"]
+
+  if (!HAS_CLANG) {
+    skip("crc32 kernel: no clang to link the CRC-32 programs against runtime-checksum.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `crc32 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    const counter = path.join(crcDir, "count.c")
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        "struct nish_array;",
+        "static unsigned long nish_crc32_calls;",
+        "uint32_t __real_nish_crc32_update(uint32_t crc, const struct nish_array *buf, int32_t off, int32_t len);",
+        "uint32_t __wrap_nish_crc32_update(uint32_t crc, const struct nish_array *buf, int32_t off, int32_t len) {",
+        "  nish_crc32_calls++;",
+        "  return __real_nish_crc32_update(crc, buf, off, len);",
+        "}",
+        "__attribute__((destructor)) static void nish_crc32_report(void) {",
+        '  fprintf(stderr, "crc32 kernel calls: %lu\\n", nish_crc32_calls);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_CRC32
+    for (const program of crcPrograms) {
+      const compiled = compileCrc(program, path.join(crcDir, program), [])
+      const exe = path.join(crcDir, `${program}.counted`)
+      const linked =
+        compiled.lls.length > 0
+          ? spawnSync(
+              "bash",
+              [
+                "scripts/build.sh",
+                ...compiled.lls,
+                "runtime/runtime.c",
+                counter,
+                "-Wl,--wrap=nish_crc32_update",
+                "-o",
+                exe,
+                "--profile",
+                "debug",
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : null
+      if (linked === null || linked.status !== 0) {
+        check(
+          `crc32 kernel: ${program} links with the kernel counted`,
+          false,
+          linked === null ? compiled.why : linked.stderr
+        )
+        continue
+      }
+      const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+      const hw = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: { ...unset, NISH_CRC32: "soft" } })
+      /** The count the wrapper printed, or null. */
+      const calls = (r) => {
+        const m = /^crc32 kernel calls: (\d+)$/m.exec(r.stderr)
+        return m === null ? null : Number(m[1])
+      }
+      check(
+        `crc32 kernel: ${program} prints the same bytes with NISH_CRC32 unset and with NISH_CRC32=soft, and they are its expected.out`,
+        hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_CRC32 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_CRC32=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      check(`crc32 kernel: ${program} under NISH_CRC32=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+      if (cpuHasCrc) {
+        check(
+          `crc32 kernel: ${program} with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+          calls(hw) > 0,
+          hw.stderr
+        )
+      } else {
+        check(
+          `crc32 kernel: ${program} with NISH_CRC32 unset calls no kernel on a CPU /proc/cpuinfo names no CRC instructions for`,
+          calls(hw) === 0,
+          hw.stderr
+        )
+      }
+    }
+  }
+
+  // The targets CI cannot run, compiled: runtime-checksum.c with `-c
+  // -ffreestanding` for each, and the object's symbols read back. Darwin on
+  // x86-64 and AArch64 selects the kernel (the AArch64 one asks sysctlbyname);
+  // i686, ARMv7, big-endian AArch64 and a build whose intrinsic headers are
+  // hidden select the stub, which defines `nish_crc32_hw` and
+  // `nish_crc32_update` and nothing else, and asks the C library for nothing.
+  // A target this clang has no backend for is skipped with its reason.
+  const crcNm = ["llvm-nm", "llvm-nm-18"].find(has);
+  if (!HAS_CLANG || crcNm === undefined) {
+    skip(
+      "crc32 kernel: no clang and llvm-nm to compile runtime-checksum.c for the targets CI cannot run",
+    );
+  } else {
+    const xcDir = path.join(crcDir, "cross");
+    fs.mkdirSync(xcDir, { recursive: true });
+    // The three freestanding headers nish.h includes, and nothing else, for the hidden-header builds.
+    const resource = spawnSync("clang", ["-print-resource-dir"], {
+      encoding: "utf8",
+    }).stdout.trim();
+    const bare = path.join(xcDir, "include");
+    fs.mkdirSync(bare, { recursive: true });
+    for (const f of fs.readdirSync(path.join(resource, "include"))) {
+      if (
+        ["stdint.h", "stdbool.h", "stddef.h"].includes(f) ||
+        /^__stddef_.*\.h$/.test(f)
+      ) {
+        fs.copyFileSync(path.join(resource, "include", f), path.join(bare, f));
+      }
+    }
+    const stub = {
+      defined: ["nish_crc32_hw", "nish_crc32_update"],
+      undefined: [],
+    };
+    const crossTargets = [
+      [
+        "x86_64-apple-darwin",
+        [],
+        {
+          defined: ["nish_crc32_answer", "nish_crc32_clmul"],
+          undefined: ["getenv"],
+        },
+      ],
+      [
+        "arm64-apple-darwin",
+        [],
+        {
+          defined: ["nish_crc32_answer", "nish_crc32_arm"],
+          undefined: ["getenv", "sysctlbyname"],
+        },
+      ],
+      ["i686-linux-gnu", [], stub],
+      ["armv7-linux-gnueabihf", [], stub],
+      ["aarch64_be-linux-gnu", [], stub],
+      ["x86_64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+      ["aarch64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+    ];
+    for (const [triple, extra, want] of crossTargets) {
+      const hidden = extra.length > 0;
+      const label = hidden
+        ? `${triple} with the intrinsic headers hidden`
+        : triple;
+      const obj = path.join(xcDir, `${triple}${hidden ? "-hidden" : ""}.o`);
+      const cc = spawnSync(
+        "clang",
+        [
+          "-c",
+          "-ffreestanding",
+          `--target=${triple}`,
+          ...extra,
+          "-Iruntime",
+          "runtime/runtime-checksum.c",
+          "-o",
+          obj,
+        ],
+        { cwd: root, encoding: "utf8" },
+      );
+      if (
+        cc.status !== 0 &&
+        /no available targets|unknown target triple|unable to create target/i.test(
+          cc.stderr,
+        )
+      ) {
+        skip(
+          `crc32 kernel: this clang cannot compile for ${triple}: ${cc.stderr.trim().split("\n")[0]}`,
+        );
+        continue;
+      }
+      if (cc.status !== 0) {
+        check(
+          `crc32 kernel: runtime-checksum.c compiles for ${label}`,
+          false,
+          cc.stderr,
+        );
+        continue;
+      }
+      const nm = spawnSync(crcNm, [obj], { encoding: "utf8" });
+      // Mach-O names carry a leading underscore; ELF's do not.
+      const name = (n) => (triple.includes("apple") ? n.replace(/^_/, "") : n);
+      const syms = nm.stdout
+        .split("\n")
+        .map((l) => l.trim().split(/\s+/))
+        .filter((f) => f.length >= 2)
+        .map((f) => ({ type: f[f.length - 2], name: name(f[f.length - 1]) }));
+      const defined = syms.filter((x) => x.type !== "U").map((x) => x.name);
+      const undef = syms.filter((x) => x.type === "U").map((x) => x.name);
+      const ok =
+        want === stub
+          ? [...defined].sort().join(" ") === stub.defined.join(" ") &&
+            undef.length === 0
+          : ["nish_crc32_hw", "nish_crc32_update", ...want.defined].every((n) =>
+              defined.includes(n),
+            ) && [...undef].sort().join(" ") === want.undefined.join(" ");
+      check(
+        want === stub
+          ? `crc32 kernel: runtime-checksum.c for ${label} is the stub, nish_crc32_hw and nish_crc32_update and nothing it asks for`
+          : `crc32 kernel: runtime-checksum.c for ${label} selects the kernel, asking the C library for ${want.undefined.join(" and ")}`,
+        nm.status === 0 && ok,
+        `defined: ${defined.join(" ")}\nundefined: ${undef.join(" ")}\n${nm.stderr}`,
+      );
+    }
+  }
+
+  // The freestanding `wasm` profile: IR compiled for the host calls the kernel behind
+  // `nish_crc32_hw`, and build.sh adds runtime-checksum.c for it, once, whose wasm32
+  // build answers 0, so the walk runs; held to Node's zlib.crc32. `--trace-symbol`
+  // says which objects define `nish_crc32_hw`. checksum.ts's panic message joins
+  // strings with `nish_str_concat`, which runtime-wasm.c does not define, so it is
+  // left an import that throws: no window here panics. `zlib.crc32` is Node 22.2 on.
+  if (has("wasm-ld") && typeof zlib.crc32 === "function") {
+    const freeDir = path.join(crcDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "crc.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { crc32 } from "nish/compress/checksum"',
+        "",
+        "export const crcOf = (n: i32, seed: i32): i64 => {",
+        "  const b: u8[] = new Array<u8>(n)",
+        "  for (let i: i32 = 0; i < n; i += 1) {",
+        "    if (i < toI32(b.length)) {",
+        "      b[i] = toU8(i * seed + (i >> 3))",
+        "    }",
+        "  }",
+        "  return toI64(crc32(b, 0, n))",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const built = spawnSync(NISH, [source, "-o", `${path.join(freeDir, "ir")}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const lls =
+      built.status === 0
+        ? fs
+            .readdirSync(path.join(freeDir, "ir"))
+            .filter((f) => f.endsWith(".ll"))
+            .map((f) => path.join(freeDir, "ir", f))
+        : []
+    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_crc32_hw("))
+    const wasm = path.join(freeDir, "crc.wasm")
+    const linked =
+      lls.length > 0
+        ? spawnSync(
+            "bash",
+            [
+              "scripts/build.sh",
+              ...lls,
+              "runtime/runtime-wasm.c",
+              "-Wl,--trace-symbol=nish_crc32_hw,--allow-undefined",
+              "-o",
+              wasm,
+              "--profile",
+              "wasm",
+            ],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    const definitions =
+      linked === null
+        ? 0
+        : `${linked.stdout}${linked.stderr}`.split("\n").filter((l) => /definition of nish_crc32_hw/.test(l))
+            .length
+    const cases = [
+      [0, 3],
+      [9, 7],
+      [100, 11],
+      [5000, 13],
+    ]
+    const want = cases.map(([n, seed]) =>
+      zlib.crc32(Buffer.from(Array.from({ length: n }, (_, i) => (i * seed + (i >> 3)) & 255)))
+    )
+    let got = []
+    let trapped = ""
+    if (linked !== null && linked.status === 0) {
+      try {
+        const env = {
+          nish_str_concat: () => {
+            throw new Error("a window panicked")
+          },
+        }
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env })
+        got = cases.map(([n, seed]) => Number(instance.exports.crcOf(n, seed)))
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
+    }
+    check(
+      "crc32 kernel: the freestanding --profile wasm link of a CRC-32 module compiled for the host links runtime-checksum.c once, and its CRCs are Node's",
+      lowered && linked.status === 0 && definitions === 1 && trapped === "" && got.join(",") === want.join(","),
+      `${built.stderr}IR calls nish_crc32_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.stderr}objects defining nish_crc32_hw: ${definitions}\n`}${trapped}got  ${got.join(",")}\nwant ${want.join(",")}`
+    )
+  } else {
+    skip(
+      has("wasm-ld")
+        ? "crc32 kernel: this Node has no zlib.crc32, so the freestanding wasm link of a CRC-32 module is not checked"
+        : "crc32 kernel: no wasm-ld, so the freestanding wasm link of a CRC-32 module is not checked"
+    )
+  }
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const program = "std_compress_crc_paths"
+    const wasi = compileCrc(program, path.join(crcDir, "wasi"), ["--profile", "wasi"])
+    const native = compileCrc(program, path.join(crcDir, "native"), [])
+    const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_crc32_"))
+    /** The modules linked for wasm32-wasi with the CRC-32 symbols traced. */
+    const traced = (lls, out) =>
+      spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...lls,
+          "runtime/runtime.c",
+          "-Wl,--trace-symbol=nish_crc32_hw,--trace-symbol=nish_crc32_update",
+          "-o",
+          out,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+    const wasm = path.join(crcDir, `${program}.wasm`)
+    const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+    const control = native.lls.length > 0 ? traced(native.lls, path.join(crcDir, "native.wasm")) : null
+    const refs = (r) =>
+      r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_crc32_/.test(l))
+    const ran =
+      linked !== null && linked.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : null
+    const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+    check(
+      `crc32 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_crc32_ symbol, and it prints its expected.out`,
+      wasi.lls.length > 0 &&
+        named.length === 0 &&
+        linked.status === 0 &&
+        refs(linked).length === 0 &&
+        control !== null &&
+        control.status === 0 &&
+        refs(control).length > 0 &&
+        ran !== null &&
+        ran.status === 0 &&
+        ran.stdout === want,
+      `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+        `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+        `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+        `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+    )
+  } else {
+    skip(
+      "crc32 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of std_compress_crc_paths is not checked for kernel references"
     )
   }
 }
@@ -23733,19 +24241,12 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js reaches for a compiler of its own instead of refusing; " +
         "a platform with no prebuilt binary must be told, not quietly served something else"
     )
-    // One row per attached seed, all at one version. Two ways this goes wrong and
+    // One row per attached seed, at exactly this version. Two ways this goes wrong and
     // neither shows up in a build: a platform that gets a binary built and attached but
     // no package published, so every install on it refuses for want of a package that
-    // was never uploaded; and pins left behind, so every install resolves last
-    // release's binary against this release's compiler.
-    //
-    // The version is this release's or the one before it, and nothing older. The
-    // release commit leaves the pins behind on purpose, because their lockfile entries
-    // describe tarballs that are not published yet (release-pr.yml says why), and
-    // release.yml's `lockfile` job moves them after the publish. What a user installs
-    // never sees the gap: release.yml pins the package it packs to the tag, and checks
-    // the tarball it packed. Pins two releases behind mean a `lockfile` job that never
-    // landed, and the next publish would not notice that either.
+    // was never uploaded; and a version bump that moves package.json and leaves these
+    // behind, so every install resolves last release's binary against this release's
+    // compiler. `release-pr.yml` bumps them with the version for that second reason.
     const seedAssets = JSON.parse(
       fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
     ).targets.map((t) => t.asset)
@@ -23757,21 +24258,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       JSON.stringify(Object.keys(optional).sort()) === JSON.stringify(expectedOptional),
       `optionalDependencies is ${Object.keys(optional).sort().join(", ")}; expected ${expectedOptional.join(", ")}`
     )
-    const released = fs
-      .readdirSync(path.join(root, "changelog"))
-      .filter((f) => /^\d+\.\d+\.\d+\.json$/.test(f))
-      .map((f) => f.slice(0, -".json".length))
-    const previous = released
-      .filter((v) => v !== manifest.version && notAfter(v, manifest.version))
-      .reduce((a, v) => (a === undefined || notAfter(a, v) ? v : a), undefined)
-    const allowedPins = previous === undefined ? [manifest.version] : [manifest.version, previous]
-    const pinVersions = [...new Set(Object.values(optional))]
+    const misversioned = Object.entries(optional).filter(([, v]) => v !== manifest.version)
     check(
-      `every platform package is pinned to one version, this one or the release before (${allowedPins.join(" or ")})`,
-      pinVersions.length === 1 && allowedPins.includes(pinVersions[0]),
-      Object.entries(optional)
-        .map(([k, v]) => `${k} is pinned to ${v}`)
-        .join("\n")
+      `every platform package is pinned to this version (${manifest.version})`,
+      misversioned.length === 0,
+      misversioned.map(([k, v]) => `${k} is pinned to ${v}, not ${manifest.version}`).join("\n")
     )
     // And the lockfile's copy of that same list, which is a second file saying the same
     // thing and therefore a second thing to go stale. It did: 0.4.0 shipped with
@@ -23779,8 +24270,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // release bump read `optionalDependencies` at the top level and a lockfile keeps the
     // root package under `packages[""]`. Nothing was red -- `npm ci` tolerates it and
     // `npm install` rewrites the file under whoever runs it next, which is how it stayed
-    // invisible. `scripts/pin-platform-packages.mjs` moves both now, and this is the check
-    // that would have noticed whatever moved them apart.
+    // invisible. `release-pr.yml` moves both now, and this is the check that would have
+    // noticed whatever moved them apart.
     const lockRoot = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8")).packages?.[""]
       ?.optionalDependencies
     const lockDisagrees = Object.entries(optional).filter(([k, v]) => (lockRoot ?? {})[k] !== v)
@@ -24318,9 +24809,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- WP12: the release train's version bump ------------------------------------------
-// `release-pr.yml` bumps three things in one `node -e` script: package.json's version,
-// package-lock.json's two copies of it, and VERSION in src/branding.ts, and leaves the
-// platform packages pinned in optionalDependencies alone. Nothing ran it. It is a
+// `release-pr.yml` bumps four things in one `node -e` script: package.json's version,
+// package-lock.json's two copies of it, every platform package pinned in
+// optionalDependencies, and VERSION in src/branding.ts. Nothing ran it. It is a
 // workflow step, so it executes exactly once per merge to main, in a place where a
 // failure stops the release train rather than a pull request -- and the person who finds
 // out is whoever wanted to cut a release.
@@ -24371,34 +24862,34 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
         bumped.version === next && lock.version === next && lock.packages?.[""]?.version === next,
         `package.json ${bumped.version}, lock ${lock.version}, lock.packages[""] ${lock.packages?.[""]?.version}`
       )
-      // The pins are the half this bump must leave alone, in both copies of the list.
-      // package.json keeps optionalDependencies at the top level and a lockfile keeps
-      // the root package under `packages[""]`, and both are compared to what they were
-      // before the bump. A bump that moved them would put main out of step with its own
-      // lockfile until release.yml's `lockfile` job landed -- the red `lint` job on
-      // every release commit up to 0.26.0 -- because the entries those pins resolve to
-      // describe tarballs that are not published yet. release.yml moves the pins
-      // instead, in the package it packs and in the lockfile pull request.
-      const before = {
-        "package.json": JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).optionalDependencies,
-        'package-lock.json packages[""]': JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-          .packages?.[""]?.optionalDependencies,
-      }
+      // The half that was added with the installer, and the reason this block exists: a
+      // release whose optionalDependencies were left behind installs a compiler that
+      // resolves the previous release's binaries. It succeeds, it runs, and it is one
+      // version stale in the half nobody looks at.
+      //
+      // Both copies of that list, which is the half this check did not have. package.json
+      // keeps optionalDependencies at the top level and a lockfile keeps the root
+      // package under `packages[""]`, so a bump reading only the top level moves one and
+      // leaves the other -- and reading only the top level is what this check did too,
+      // so it passed while 0.4.0 shipped a lockfile still pinned to 0.3.0. `npm ci`
+      // tolerates the disagreement and `npm install` silently rewrites it, so nothing
+      // anywhere went red. A check that looks where the code looks cannot see the code
+      // looking in the wrong place: both places are named here.
       const pinSets = [
         ["package.json", bumped.optionalDependencies ?? {}],
         ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
       ]
-      const moved = pinSets.flatMap(([where, deps]) =>
+      const stale = pinSets.flatMap(([where, deps]) =>
         Object.entries(deps)
-          .filter(([k, v]) => (before[where] ?? {})[k] !== v)
-          .map(([k, v]) => `${where}: ${k} moved from ${(before[where] ?? {})[k]} to ${v}`)
+          .filter(([, v]) => v !== next)
+          .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
       )
       const pinCount = pinSets.reduce((n, [, deps]) => n + Object.keys(deps).length, 0)
       check(
-        `release-pr: the bump leaves every platform package pin alone in BOTH files (${pinCount})`,
-        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && moved.length === 0,
-        moved.length > 0
-          ? moved.join("\n")
+        `release-pr: the bump moves every platform package in BOTH files (${pinCount})`,
+        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
+        stale.length > 0
+          ? stale.join("\n")
           : pinSets.map(([where, deps]) => `${where} pins ${Object.keys(deps).length}`).join("; ")
       )
       const branding = fs.readFileSync(path.join(work, "src", "branding.ts"), "utf8")
@@ -24409,104 +24900,6 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       )
     }
   }
-}
-
-// ---- WP12: the pins release.yml moves -----------------------------------------------
-// The release commit leaves the platform packages pinned to the previous release, so
-// `scripts/pin-platform-packages.mjs` is what moves them: in the `release` job before
-// `npm pack`, and in the `lockfile` job with the entries they resolve to. Both run once
-// per release, after the tag, where a script that moved one file and not the other
-// would publish a package or a lockfile pinned to the last release. So it is run here,
-// against copies, with both workflow steps checked to call it.
-if (!only || "pin-platform".includes(only) || "wp12".includes(only)) {
-  const work = path.join(buildDir, "pin-platform-packages")
-  fs.rmSync(work, { recursive: true, force: true })
-  fs.mkdirSync(work, { recursive: true })
-  for (const f of ["package.json", "package-lock.json"]) {
-    fs.copyFileSync(path.join(root, f), path.join(work, f))
-  }
-  const script = path.join(root, "scripts", "pin-platform-packages.mjs")
-  const ran = spawnSync(process.execPath, [script, "9.9.9", "--dir", work], { encoding: "utf8" })
-  check("pin-platform-packages: runs against a copy of package.json and the lockfile", ran.status === 0, ran.stderr)
-  if (ran.status === 0) {
-    const pinned = JSON.parse(fs.readFileSync(path.join(work, "package.json"), "utf8"))
-    const lock = JSON.parse(fs.readFileSync(path.join(work, "package-lock.json"), "utf8"))
-    const pinSets = [
-      ["package.json", pinned.optionalDependencies ?? {}],
-      ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
-    ]
-    const stale = pinSets.flatMap(([where, deps]) =>
-      Object.entries(deps)
-        .filter(([, v]) => v !== "9.9.9")
-        .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
-    )
-    check(
-      "pin-platform-packages: moves every platform package in BOTH files",
-      pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
-      stale.join("\n")
-    )
-    // The lockfile job commits and merges whatever this writes, so a rewrite that
-    // touched anything else would land on main with nobody reading it.
-    const original = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
-    const originalLock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-    lock.packages[""].optionalDependencies = originalLock.packages[""].optionalDependencies
-    check(
-      "pin-platform-packages: changes nothing in either file but the pins",
-      JSON.stringify({ ...pinned, optionalDependencies: original.optionalDependencies }) === JSON.stringify(original) &&
-        JSON.stringify(lock) === JSON.stringify(originalLock),
-      "package.json or package-lock.json differs from the original outside the pins"
-    )
-  }
-  const refused = spawnSync(process.execPath, [script, "v9.9.9", "--dir", work], { encoding: "utf8" })
-  check(
-    "pin-platform-packages: refuses a version that is not one (a tag name with its `v`)",
-    refused.status === 2,
-    `exit ${refused.status}: ${refused.stderr}`
-  )
-  // An empty `--dir "$X"` must not mean the current directory, which here is the checkout.
-  const noDir = spawnSync(process.execPath, [script, "9.9.9", "--dir"], { encoding: "utf8", cwd: work })
-  check(
-    "pin-platform-packages: refuses a `--dir` with nothing after it",
-    noDir.status === 2,
-    `exit ${noDir.status}: ${noDir.stderr}`
-  )
-  // A lockfile without the root copy of the pins is refused before either file is written,
-  // so a failed run never leaves package.json moved and the lockfile not.
-  const half = path.join(work, "half")
-  fs.mkdirSync(half, { recursive: true })
-  fs.copyFileSync(path.join(root, "package.json"), path.join(half, "package.json"))
-  const bare = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-  delete bare.packages[""].optionalDependencies
-  fs.writeFileSync(path.join(half, "package-lock.json"), `${JSON.stringify(bare, null, 2)}\n`)
-  const halfRun = spawnSync(process.execPath, [script, "9.9.9", "--dir", half], { encoding: "utf8" })
-  check(
-    "pin-platform-packages: a lockfile with no root pins fails it before package.json is written",
-    halfRun.status === 1 &&
-      fs.readFileSync(path.join(half, "package.json"), "utf8") ===
-        fs.readFileSync(path.join(root, "package.json"), "utf8"),
-    `exit ${halfRun.status}: ${halfRun.stderr}`
-  )
-  const release = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
-  // Line numbers, not offsets: the lockfile pull request's body names the script too. Each
-  // call is held to its job, because one moved into `binaries` would pin a checkout on
-  // another runner and leave the `release` job packing the previous release's pins.
-  const lines = release.split("\n")
-  const lineOf = (text) => lines.findIndex((l) => l.includes(text))
-  const jobOf = (at) => lines.slice(0, at + 1).findLast((l) => /^ {2}[a-z][a-z0-9-]*:\s*$/.test(l))?.trim()
-  const calls = lines.flatMap((l, i) => (l.includes('node scripts/pin-platform-packages.mjs "${GITHUB_REF_NAME#v}"') ? [i] : []))
-  const pack = lineOf("npm pack --pack-destination build/release")
-  const relock = lineOf("npm install --package-lock-only")
-  check(
-    "pin-platform-packages: release.yml calls it twice, before `npm pack` and in the lockfile job",
-    calls.length === 2 &&
-      jobOf(calls[0]) === "release:" &&
-      jobOf(pack) === "release:" &&
-      calls[0] < pack &&
-      jobOf(calls[1]) === "lockfile:" &&
-      jobOf(relock) === "lockfile:" &&
-      calls[1] < relock,
-    `found calls on lines ${calls.map((i) => `${i + 1} (${jobOf(i)})`).join(", ")}`
-  )
 }
 
 // ---- The seed fetch -------------------------------------------------------------------

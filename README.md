@@ -435,10 +435,10 @@ JavaScript-exact number formatting, string parsing, `Math.random`,
 that wrap a system call (exit, files, directories, subprocesses, the
 environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
 `runtime-host.c`, `runtime-net.c`, `runtime-simd.c`, `runtime-aes.c`,
-`runtime-term.c`, `runtime-bytes.c` and `runtime-sandbox.c` hold threads, the copies that cross between
+`runtime-term.c`, `runtime-bytes.c`, `runtime-checksum.c` and `runtime-sandbox.c` hold threads, the copies that cross between
 their arenas, the host calls (wall clock, entropy, signals), `nish:net`'s sockets,
 the vector text search, AES-GCM, `nish:term`'s stdin and terminal, the
-byte-class runs JSON steps over and `--sandbox`'s confinement — see
+byte-class runs JSON steps over, the CRC-32 kernels and `--sandbox`'s confinement — see
 [docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for the
 budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
 stay `readnone`.

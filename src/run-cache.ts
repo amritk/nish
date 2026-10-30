@@ -80,6 +80,7 @@ export const runtimeUnits = (): string[] => [
   "runtime-net.c",
   "runtime-simd.c",
   "runtime-aes.c",
+  "runtime-checksum.c",
   "runtime-term.c",
   "runtime-bytes.c",
   "runtime-sandbox.c",

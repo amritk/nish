@@ -9,13 +9,14 @@
  * functions, the directory and subprocess calls, `nish_getenv`, the monotonic
  * clock, `nish_platform` / `nish_arch` — and runtime-parallel.c, runtime-host.c,
  * runtime-net.c, runtime-simd.c (the byte searches that read a vector at a
- * time), runtime-aes.c (AES-GCM on the CPU's AES instructions) and
- * runtime-term.c (stdin and the terminal, `nish:term`) split off
+ * time), runtime-aes.c (AES-GCM on the CPU's AES instructions),
+ * runtime-checksum.c (CRC-32 on its carry-less multiply or CRC instructions)
+ * and runtime-term.c (stdin and the terminal, `nish:term`) split off
  * the same way since. They are separate so that each carries its own measured
  * code-size ceiling (docs/wp7-runtime.md, "Runtime additions and budget"); a
  * host links all of them, which `scripts/build.sh` does for you when handed
- * runtime.c, runtime-aes.c included: the compiler calls its kernels from
- * std/crypto/aes.ts, so `scripts/build.sh` pairs it and `src/run-cache.ts`
+ * runtime.c, runtime-aes.c and runtime-checksum.c included: the compiler calls
+ * their kernels from std/crypto/aes.ts and std/compress/checksum.ts, so `scripts/build.sh` pairs it and `src/run-cache.ts`
  * caches it like the others. `tests/run.js` checks that every runtime function
  * declared in runtime.ts has a prototype in this file.
  *
@@ -348,6 +349,21 @@ void nish_aes_ctr(const nish_array *rk, int32_t rounds, const nish_array *j0, co
    `rk` instead, and they are the same H. 0 <= length <= data.len. */
 void nish_aes_ghash(nish_array *y, uint64_t hHi, uint64_t hLo, const nish_array *rk, const nish_array *data,
                     int32_t length);
+/* ---- CRC-32 on the CPU's carry-less multiply or CRC instructions ---------
+ * runtime/runtime-checksum.c: PCLMULQDQ folding on x86-64, the ARMv8 CRC32
+ * instructions on AArch64. The compiler calls the kernel in
+ * place of std/compress/checksum.ts's private `crc32Walk`, behind
+ * `nish_crc32_hw`, and calls the Nish walker itself when that answers 0. */
+/* 1 when this process runs the kernel, 0 when it runs the Nish tables.
+   Resolved on the first call and fixed from then on: `NISH_CRC32=soft` pins 0;
+   unset or any other value is the best this machine has, read on that call
+   from CPUID leaf 1 (PCLMULQDQ, SSE4.1), AArch64's AT_HWCAP (CRC32) or
+   Darwin's hw.optional sysctls. Always 0 on other targets, wasm32 among them. */
+int32_t nish_crc32_hw(void);
+/* The CRC-32 (ISO 3309, RFC 1952) `crc` extended over buf[off..off+len)
+   (u8[]), conditioned as zlib's crc32(): 0 starts a message, and the answer
+   continues one. The caller has checked 0 <= off <= off + len <= buf.len. */
+uint32_t nish_crc32_update(uint32_t crc, const nish_array *buf, int32_t off, int32_t len);
 
 /* `secureZero(bytes)` (#385): sets every byte of `bytes` to zero through
  * `volatile` stores, out of line, so that neither `-O2` nor `-flto` can drop

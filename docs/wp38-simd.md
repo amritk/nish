@@ -941,6 +941,64 @@ program's IR is unchanged.
 **What it does not buy.** Numeric code, and any scan whose step is not "find
 the next byte from this set".
 
+**CRC-32 on the same seam.** `nish/compress/checksum`'s `Crc32.update` hands
+its checked window to one private walker, `crc32Walk`, and the compiler
+branches in front of that call on `nish_crc32_hw` (`isCrc32Seam` in
+`src/kernels.ts`, `emitCrc32KernelArm` in `src/emit.ts`), so the
+slicing-by-8 tables stay the fallback and the answer at the edges stays the
+`std` file's. The kernels are `runtime/runtime-checksum.c`, a unit of its own
+with its own ceiling: PCLMULQDQ folding then a Barrett reduction on x86-64
+(never SSE4.2's `crc32`, which is CRC-32C), and the ARMv8 CRC32 instructions on
+AArch64, found through `AT_HWCAP` or `sysctl`. A PMULL fold in front of the
+CRC32 instructions was built and measured on CI's AArch64 runner, then
+dropped: 20.6 GB/s at 1 MiB and 21.0 GB/s at 64 KiB, against the instructions'
+24.9 and 27.0 GB/s. Each is compiled with
+`target(...)` alone. The path is chosen once per process; `NISH_CRC32=soft`
+pins the tables. `tests/simd/crc32.c` holds every path to a bit-at-a-time
+reference, and `bench/crc32.mjs` measures 64 B to 1 MiB and a gzip round trip
+on each path ([bench/README.md](../bench/README.md)). The security record is
+[compress.md](security/compress.md) (COMP-13).
+
+Median ns/op from `node bench/crc32.mjs --self --runs 9` (9 rounds of 3 after
+a warm-up) on an Intel Xeon at 2.10 GHz, x86-64, the PCLMULQDQ path:
+
+| Workload | `default` (`pclmul`) | `default (copy)` | `soft` (`tables`) | Soft over default |
+| --- | ---: | ---: | ---: | ---: |
+| CRC-32, 64 B | 16 | 16 | 47 | 2.96x |
+| CRC-32, 4 KiB | 188 | 193 | 1,434 | 7.63x |
+| CRC-32, 64 KiB | 2,976 | 3,035 | 23,196 | 7.79x |
+| CRC-32, 1 MiB | 50,746 | 53,482 | 465,955 | 9.18x |
+| gzip compress, 1 MiB | 58,558,905 | 59,432,084 | 59,025,291 | 1.01x |
+| gzip decompress, 1 MiB | 4,541,521 | 4,866,916 | 5,066,379 | 1.12x |
+
+`default (copy)` is the same binary again, so the gap between the first two
+columns is the noise band: 2 to 7% here. The CRC-32 rows clear it many times
+over: about 22 GB/s from 4 KiB up at the median (19.6 to 20.7 GB/s at 1 MiB),
+against 2.3 to 2.9 GB/s on the tables. The gzip rows do not: compressing is
+match finding, and the 12% on decompressing is about twice the band, a gain
+to read as small rather than as measured.
+
+On AArch64, CI's `simd-arm64` job runs the same command each push and prints
+its table in the step log. These are its medians at `43c4bbd` (the merge ref
+`902ec83`), on the GitHub `ubuntu-24.04-arm` runner, the ARMv8 CRC32 path:
+
+| Workload | `default` (`crc32`) | `default (copy)` | `soft` (`tables`) | Soft over default |
+| --- | ---: | ---: | ---: | ---: |
+| CRC-32, 64 B | 11 | 11 | 36 | 3.19x |
+| CRC-32, 4 KiB | 186 | 187 | 1,172 | 6.30x |
+| CRC-32, 64 KiB | 2,494 | 2,496 | 18,589 | 7.45x |
+| CRC-32, 1 MiB | 41,826 | 41,819 | 299,178 | 7.15x |
+| gzip compress, 1 MiB | 35,006,497 | 35,008,259 | 35,259,514 | 1.01x |
+| gzip decompress, 1 MiB | 2,314,526 | 2,313,356 | 2,574,127 | 1.11x |
+
+Here the copy column agrees with the default within 0.6% on every row, so the
+band is under 1%. The CRC-32 rows run at 22.0 to 26.3 GB/s from 4 KiB up at
+the median, against about 3.5 GB/s on the tables. The 11% on decompressing is
+past this band, but it is still a small gain. The PMULL verdict above, 21.0
+against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at 1 MiB, measured on this
+runner, is a 22% and a 17% gap, from one C-driver run: about twenty times the
+bench's band.
+
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 
 **What.** A builtin module with these types: `u8x16`, `i16x8`, `i32x4`,

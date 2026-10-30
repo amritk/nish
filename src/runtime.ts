@@ -1292,6 +1292,27 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP38 CRC: CRC-32 on PCLMULQDQ or the ARMv8 CRC32 instructions,
+    // runtime-checksum.c (`src/kernels.ts`). `nish_crc32_hw` is
+    // `nish_aes_hw`'s kind of resolver, and the kernel only reads the one
+    // array it is handed, behind its header as for the AES kernels, and keeps
+    // nothing of it.
+    this.add(
+      new RuntimeFunction(
+        "nish_crc32_hw",
+        "declare i32 @nish_crc32_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_crc32_update",
+        `declare i32 @nish_crc32_update(i32 noundef, ${AES_ARRAY} readonly, i32 noundef, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_READ
+      )
+    )
     this.buildIntrinsics()
   }
 

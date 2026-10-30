@@ -52,6 +52,7 @@ RUNTIME_C=(
   runtime/runtime-net.c
   runtime/runtime-simd.c
   runtime/runtime-aes.c
+  runtime/runtime-checksum.c
   runtime/runtime-term.c
   runtime/runtime-bytes.c
   runtime/runtime-sandbox.c

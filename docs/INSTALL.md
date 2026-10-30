@@ -255,7 +255,7 @@ routes are
   clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
     runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c \
-    runtime/runtime-sandbox.c -lm -o app
+    runtime/runtime-checksum.c runtime/runtime-sandbox.c -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -410,7 +410,7 @@ on the `clang` line, and it is eleven files:
 clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
   runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
   runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c \
-  runtime/runtime-sandbox.c -lm -o app
+  runtime/runtime-checksum.c runtime/runtime-sandbox.c -lm -o app
 ```
 
 `runtime.c` is the part every program touches — the arena, strings, arrays,
@@ -423,9 +423,10 @@ the strings and arrays a task answers, a channel sends or a `Mutex` keeps out
 of the arena they were made in, `runtime-host.c` holds the wall clock,
 entropy, file times and signals, `runtime-net.c` the sockets of `nish:net`,
 `runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM,
-`runtime-term.c` the stdin reads and terminal calls of `nish:term`, and
+`runtime-term.c` the stdin reads and terminal calls of `nish:term`,
 `runtime-bytes.c` the byte-class runs of `nish/bytes`, which `nish/json` steps
-over, and `runtime-sandbox.c` the confinement a `--sandbox` build applies.
+over, `runtime-checksum.c` the CRC-32 kernels of `nish/compress/checksum`,
+and `runtime-sandbox.c` the confinement a `--sandbox` build applies.
 They are separate so that each carries its own measured size ceiling
 ([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
 others, so a line that names only `runtime.c` and `runtime-os.c` still links a

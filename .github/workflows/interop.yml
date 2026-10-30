@@ -49,6 +49,7 @@ on:
       - "src/run-cache.ts"
       - "scripts/build.sh"
       - "runtime/runtime-aes.c"
+      - "runtime/runtime-checksum.c"
       - "runtime/runtime-bytes.c"
       - "runtime/runtime-sandbox.c"
       - "tests/interop/**"
