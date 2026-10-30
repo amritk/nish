@@ -6,6 +6,10 @@
 // expects. `--next` is what release-pr.yml reads, so this is the number the
 // Release PR would propose.
 //
+// The cases after the table pin the record itself: trailers come off an
+// entry's body, and `Changelog: skip` / `Changelog-Skip:` keep commits out of
+// every output, counted on stderr but never named.
+//
 //   node scripts/changelog-gen.test.mjs
 //
 // `npm test` runs it.
@@ -176,6 +180,92 @@ try {
     check(
       "the trailer is stripped from the entry's body",
       entry?.body === "The prose." && entry.refs.join() === "docs/wp12-release.md",
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+
+  // `Changelog: skip` and `Changelog-Skip: <sha>` keep commits out of every
+  // output. The kept-out subjects are distinctive, so a leak into stdout,
+  // stderr or the written files is a substring away.
+  const sha = (dir, rev = "HEAD") =>
+    spawnSync("git", ["rev-parse", rev], { cwd: dir, env: GIT_ENV, encoding: "utf8" }).stdout.trim()
+  const hiddenA = "feat(cli): zanzibar quokka"
+  const hiddenB = "fix(cli): mend the quokka"
+  const leaks = (text) => /quokka|zanzibar|Changelog(-Skip)?:/.test(text)
+  const both = (dir, args) => {
+    const md = run(dir, args)
+    const json = run(dir, [...args, "--stdout", "json"])
+    return { md, json, entries: json.status === 0 ? JSON.parse(json.stdout).entries : [] }
+  }
+  {
+    // One commit skips itself; a later one names an earlier one by a 7-char
+    // SHA, and a SHA that is in no commit of the range, which is ignored.
+    const dir = repo("0.9.0", [`${hiddenA}\n\nThe prose.\n\nChangelog: skip`, hiddenB])
+    dirs.push(dir)
+    const bSha = sha(dir).slice(0, 7)
+    const outside = sha(dir, "v0.9.0").slice(0, 7)
+    git(dir, [
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      `${fix}\n\nChangelog-Skip: ${bSha}, ${outside}, deadbeefcafe\nRefs: docs/a.md`,
+    ])
+    const { md, json, entries } = both(dir, ["--version", "0.9.1"])
+    check(
+      "Changelog: skip and Changelog-Skip: drop their commits, the rest stays",
+      md.status === 0 && entries.map((e) => e.title).join() === "mend a thing",
+      `exit ${json.status}\n${json.stdout}${json.stderr}`
+    )
+    check(
+      "a kept-out commit is counted on stderr and named nowhere",
+      md.stderr.includes("2 commits kept out of the changelog by trailer") &&
+        ![md.stdout, md.stderr, json.stdout, json.stderr].some(leaks),
+      `md: ${md.stdout}${md.stderr}json: ${json.stdout}${json.stderr}`
+    )
+    check(
+      "the trailers come off a kept entry's body",
+      entries[0]?.body === "The prose." && entries[0].refs.join() === "docs/a.md",
+      json.stdout
+    )
+    fs.writeFileSync(path.join(dir, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n")
+    const w = run(dir, ["--version", "0.9.1", "--write"])
+    const written = [
+      fs.readFileSync(path.join(dir, "changelog", "0.9.1.json"), "utf8"),
+      fs.readFileSync(path.join(dir, "CHANGELOG.md"), "utf8"),
+    ].join("")
+    check(
+      "--write leaves the kept-out commits out",
+      w.status === 0 && !leaks(written),
+      `${w.stderr}${written}`
+    )
+    const next = run(dir, ["--next"])
+    check("a kept-out feat does not move the version", next.stdout === "0.9.1\n", next.stdout + next.stderr)
+  }
+  {
+    // A version someone asked for is an explicit request, not a bump the notes
+    // must explain, so it holds on a kept-out commit too.
+    const dir = repo("0.9.0", [fix, `${releaseAs("0.12.0", hiddenA)}\nChangelog: skip`])
+    dirs.push(dir)
+    const r = run(dir, ["--next"])
+    check(
+      "a kept-out commit's Release-As still applies",
+      r.status === 0 && r.stdout === "0.12.0\n" && !leaks(r.stderr),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+  {
+    // Nothing left to announce is the empty release, refused with a count.
+    const dir = repo("0.9.0", [`${hiddenA}\n\nChangelog: skip`])
+    dirs.push(dir)
+    const r = run(dir, ["--version", "0.9.1"])
+    check(
+      "REFUSE a release whose every conventional commit is kept out",
+      r.status === 1 &&
+        r.stdout === "" &&
+        r.stderr.includes("1 commit kept out") &&
+        r.stderr.includes("every commit") &&
+        !leaks(r.stderr),
       `exit ${r.status}\n${r.stdout}${r.stderr}`
     )
   }

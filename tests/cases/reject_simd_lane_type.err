@@ -1,0 +1,9 @@
+Cannot initialize f32x4 variable `f` with i32x4
+`loadF32x4` takes an array whose elements are the vector's lane type, f32[], got f64[]
+`store` takes an array whose elements are the vector's lane type, u8[], got i32[]
+Non-integer literal `1.5` where i32 is expected
+`extract` takes a `nish:simd` vector as its first argument, got i32
+Cannot `store` through readonly u8[] (declare it u8[] to write through it)
+`store` takes a `nish:simd` vector as its first argument, got f64
+`replace` takes a `nish:simd` vector as its first argument, got i32
+8 errors

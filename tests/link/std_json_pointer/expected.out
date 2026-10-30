@@ -1,0 +1,35 @@
+PASS  parse: the empty pointer has no tokens
+PASS  parse: / is one empty token
+PASS  parse: ~1 and ~0 decode
+PASS  parse: ~01 is ~ then 1, not /
+PASS  parse: a pointer not led by / is refused
+PASS  parse: a bare ~ is refused
+PASS  parse: ~2 is refused
+PASS  escape: / and ~
+PASS  escape: nothing to escape
+PASS  escape: round trips through parse
+PASS  escape: text past U+00FF is copied whole
+PASS  parse: text past U+00FF is copied whole
+PASS  resolve: the empty pointer is the root
+PASS  resolve: /foo/0
+PASS  resolve: RFC 6901's examples
+PASS  resolve: /big/2
+PASS  resolve: a missing key
+PASS  resolve: - names nothing
+PASS  resolve: an index past the end
+PASS  resolve: a leading zero
+PASS  resolve: an index that is not digits
+PASS  resolve: an empty index
+PASS  resolve: an index past any integer, without overflow
+PASS  resolve: a token on a scalar
+PASS  resolve: past a missing member
+PASS  resolve: a root naming no value
+PASS  resolve: a text that is not a pointer
+PASS  resolve: a bad escape
+PASS  resolve: /0 of an empty array
+PASS  forms: every text is judged
+PASS  optional/format/json-pointer: every test agrees with upstream
+PASS  optional/format/json-pointer: the suite holds 40 tests
+PASS  optional/format/relative-json-pointer: every test agrees with upstream
+PASS  optional/format/relative-json-pointer: the suite holds 26 tests
+std/json-pointer: 34 passed, 0 failed, 0 skipped

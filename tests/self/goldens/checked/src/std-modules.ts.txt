@@ -15,6 +15,7 @@ const SECRET_STD_SPECIFIER: string = "nish/secret" [exported]
 const TEXT_SPECIFIER: string = "nish/text"
 const BYTES_SPECIFIER: string = "nish/bytes"
 const CRYPTO_AES_SPECIFIER: string = "nish/crypto/aes"
+const COMPRESS_CHECKSUM_SPECIFIER: string = "nish/compress/checksum"
 const REGEX_SPECIFIER: string = "nish/regex"
 const MATH_SPECIFIER: string = "nish/math" [exported]
 function stdModuleName(specifier: string): string -> @stdModuleName [exported]
@@ -67,6 +68,11 @@ function isBytesModule(packageName: string, name: string): boolean -> @isBytesMo
   stackSites=0 stackLocals=0
   callee +0:35 stdModuleName -> @stdModuleName
 function isCryptoAesModule(packageName: string, name: string): boolean -> @isCryptoAesModule [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
+  stackSites=0 stackLocals=0
+  callee +0:35 stdModuleName -> @stdModuleName
+function isCompressChecksumModule(packageName: string, name: string): boolean -> @isCompressChecksumModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   stackSites=0 stackLocals=0

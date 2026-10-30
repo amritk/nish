@@ -70,7 +70,8 @@
           },
           "/generics": { "type": "page", "title": "Generics", "filepath": "docs/guide/language/generics.md" },
           "/modules": { "type": "page", "title": "Modules", "filepath": "docs/guide/language/modules.md" },
-          "/memory": { "type": "page", "title": "Memory", "filepath": "docs/guide/language/memory.md" }
+          "/memory": { "type": "page", "title": "Memory", "filepath": "docs/guide/language/memory.md" },
+          "/simd": { "type": "page", "title": "Vectors (SIMD)", "filepath": "docs/guide/language/simd.md" }
         }
       },
       "/using-nish": {
@@ -98,12 +99,14 @@
           },
           "/tls-client": { "type": "page", "title": "TLS client", "filepath": "docs/guide/using-nish/tls-client.md" },
           "/terminal": { "type": "page", "title": "Terminal programs", "filepath": "docs/guide/using-nish/terminal.md" },
+          "/sandbox": { "type": "page", "title": "The sandbox", "filepath": "docs/guide/using-nish/sandbox.md" },
           "/password-hashing": {
             "type": "page",
             "title": "Password hashing",
             "filepath": "docs/guide/using-nish/password-hashing.md"
           },
           "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" },
+          "/websocket": { "type": "page", "title": "WebSocket", "filepath": "docs/guide/using-nish/websocket.md" },
           "/http-client": { "type": "page", "title": "HTTP client", "filepath": "docs/guide/using-nish/http-client.md" },
           "/postgres": { "type": "page", "title": "PostgreSQL", "filepath": "docs/guide/using-nish/postgres.md" },
           "/compression": { "type": "page", "title": "Compression", "filepath": "docs/guide/using-nish/compression.md" },

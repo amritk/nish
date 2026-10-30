@@ -5835,9 +5835,10 @@ divide with overflow` is simply unreachable on an unsigned type.
   on the stack when the object provably does not escape
   ([Memory model](#memory-model)), and runs the constructor (or the inline
   initializers) (`tests/cases/cls_point`, `mem_stack_struct`).
-- `new Array<T>(n)`: `n` zero-filled elements; `T` must be a scalar or a
+- `new Array<T>(n)`: `n` zero-filled elements; `T` must be a scalar, a
+  `nish:simd` vector (every lane zero) or a
   `U | null` (whose zero fill is `null`); type argument and length required
-  (`tests/cases/arr_new_zeroed`, `mem_nullable`;
+  (`tests/cases/arr_new_zeroed`, `mem_nullable`, `simd_zero_fill`;
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
   A length no array can hold panics with `array length out of range` before
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
@@ -6385,6 +6386,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
+| `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -6585,6 +6587,111 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   and a line naming its replacement (`` `--wrapping` is gone ``,
   `tests/nish/cli.ts`): an opt-out is written at the site, where `--emit-checked`
   and the no-panic scope can see it.
+
+### `nish:simd`: sixteen-byte vectors
+
+A vector is sixteen bytes of lanes of one number type, held and passed as one
+value: an LLVM `<N x T>` in a register, a local, a field or an array slot. The
+module names six of them, and the calls that make one, read one out of an
+array, write one back and take one lane out or put one in. Nothing here names a
+target: the IR is `insertelement`, `shufflevector`, `extractelement` and a
+vector `load` or `store`, and LLVM picks the instructions (`tests/run.js`'s
+`simd` section greps every `simd_*.ll` for `llvm.x86.` and `llvm.aarch64.`).
+Lane arithmetic is not in the language yet; a vector is built, moved and taken
+apart.
+
+```ts
+import { i32x4, loadI32x4, store, extract, replace } from "nish:simd";
+
+export const bumpFirst = (xs: i32[], at: i32): i32 => {
+  const v = loadI32x4(xs, at);
+  store(replace(v, 0, extract(v, 0) + 1), xs, at);
+  return extract(v, 3);
+};
+```
+
+| Type | Lanes | LLVM | Constructor | Splat | Load |
+| --- | --- | --- | --- | --- | --- |
+| `u8x16` | 16 × `u8` | `<16 x i8>` | `u8x16(a0, …, a15)` | `splatU8x16(x)` | `loadU8x16(xs: u8[], i)` |
+| `u16x8` | 8 × `u16` | `<8 x i16>` | `u16x8(a0, …, a7)` | `splatU16x8(x)` | `loadU16x8(xs: u16[], i)` |
+| `i32x4` | 4 × `i32` | `<4 x i32>` | `i32x4(a, b, c, d)` | `splatI32x4(x)` | `loadI32x4(xs: i32[], i)` |
+| `u32x4` | 4 × `u32` | `<4 x i32>` | `u32x4(a, b, c, d)` | `splatU32x4(x)` | `loadU32x4(xs: u32[], i)` |
+| `f32x4` | 4 × `f32` | `<4 x float>` | `f32x4(a, b, c, d)` | `splatF32x4(x)` | `loadF32x4(xs: f32[], i)` |
+| `f64x2` | 2 × `f64` | `<2 x double>` | `f64x2(a, b)` | `splatF64x2(x)` | `loadF64x2(xs: f64[], i)` |
+
+| Signature | Lowering | Test |
+| --- | --- | --- |
+| `i32x4(a, b, c, d)`, one argument per lane | one `insertelement` per lane into `undef`, which `opt` folds to a constant vector when every lane is one | `simd_lanes`; `reject_simd_arity`, `reject_simd_lane_type` |
+| `splatI32x4(x)` | one `insertelement` into lane 0 and a `shufflevector` whose mask is `zeroinitializer` | `simd_lanes` |
+| `loadI32x4(xs, i)` | one bounds check for the whole vector, `i < len` and `i + N <= len`, branching to `nish_panic_index(i, len)`; then the element's address bitcast to `<N x T>*` and one `load` aligned to the lane | `simd_access`, `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`; `reject_simd_lane_type` |
+| `store(v, xs, i)` | the same check, then one `store`; a statement | `simd_access`, `simd_store_oob`; `reject_simd_lane_type`, `reject_simd_arity` |
+| `extract(v, k)` | `extractelement` at the constant `k` | `simd_lanes`; `reject_simd_lane_index` |
+| `replace(v, k, x)` | `insertelement` at the constant `k`: a new vector, `v` unchanged | `simd_lanes`, `simd_values`; `reject_simd_lane_index` |
+
+- **The import is required.** The six types and every call are declared in
+  `runtime/nish.d.ts` under `declare module "nish:simd"` only, and a module
+  that spells one without the import is refused with
+  `` `i32x4` is a `nish:simd` name and is used only through an import of it: add `import { i32x4 } from "nish:simd"` ``
+  (NL2578, `reject_simd_no_import`). An import may rename (`as`) and cannot be
+  shadowed, as every builtin import.
+- **A load or store takes an array of the lane type, exactly**: a `u8x16` is
+  loaded from a `u8[]` and nothing else, so the sixteen bytes it reads are the
+  sixteen elements the index names, and an `f64[]` handed to `loadF32x4` is
+  `` `loadF32x4` takes an array whose elements are the vector's lane type, f32[], got f64[] ``
+  (NL2579). A `readonly` array may be loaded from and not stored to
+  (`` Cannot `store` through readonly u8[] ``). The index is an `i32`; the
+  check is one compare pair for the whole vector, so a load whose last lane is
+  past the end panics before it reads, naming a lane past the end (the first
+  when it is out of range, else the last) and the length, as `xs[i]` does (`simd_access_oob`, run by `tests/run.js` natively and under
+  Node). The access is aligned to the lane, not to sixteen: an array's
+  elements are where the arena put them.
+- **A lane index is an integer literal in range.** `extract(v, k)` and
+  `replace(v, k, x)` take `k` as a literal from 0 to one less than the lane
+  count, because a constant lane is one instruction and needs no check at run
+  time: a variable is
+  `` `extract` takes a lane index that is an integer literal, from 0 to 3: i32x4 has 4 lanes `` (NL2580)
+  and a literal past the end is
+  `` `extract` lane index 4 is out of range for i32x4, whose lanes are 0 to 3 `` (NL2583,
+  `reject_simd_lane_index`). The first argument must be a vector
+  (`` `extract` takes a `nish:simd` vector as its first argument, got i32 ``, NL2582),
+  and a lane given to a constructor, a splat or `replace` is the lane type, as
+  any argument is (`reject_simd_lane_type`).
+- **A vector is a value.** It is copied by assignment, passed and returned in
+  registers, and held in a local, a class field or an array (`simd_values`).
+  In an object or an array it is sixteen bytes aligned to sixteen, the layout
+  clang gives `__attribute__((vector_size(16)))`, which `tests/layout/simd.c`
+  asserts against the IR's struct and reads lane by lane; an array of vectors
+  steps by sixteen. The arena hands out objects aligned to eight, so a field
+  access is `align 8`.
+- **A vector has no operators yet, and no comparison.** `+`, unary `-`, a
+  truthiness test, a template hole and `console.log` of a whole vector are
+  refused with the usual operand-type diagnostics (`reject_simd_operators`).
+  `===`, `!==`, `<` and the rest, and the `===` inside an array's `indexOf`,
+  are
+  `` `===` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract` ``
+  (NL2581, `reject_simd_compare`): a lane-wise compare answers a vector, not a
+  boolean, and under Node a vector is a typed array whose `===` is identity. A
+  vector is not a `Map` key (`reject_simd_map_key`), not `Secret`
+  (`reject_simd_secret`) and not nullable (`reject_simd_nullable`).
+- **Under Node** `runtime/nish.mjs` resolves the import to `runtime/core.mjs`,
+  where a vector is a fresh typed array of its lanes, made once and never
+  written after (`replace` copies), whose element type does the lane's
+  arithmetic: a `u8` lane wraps through `Uint8Array`, an `f32` lane rounds
+  through `Float32Array`. `--emit-ts` writes the import as `nish/runtime`'s. A
+  load or a store checks the whole vector and panics with the native words.
+  `tests/run.js`'s `simd` section runs every `simd_*` program with a `.out`
+  natively, under `--profile wasi` (where a sysroot is installed) and under
+  Node, and holds the three to one output.
+- **A vector does not cross the interop boundary yet.** An exported function
+  whose parameter or result holds a vector at any depth (the vector itself,
+  an array of them, a `Result` with a vector arm, an array of a class that
+  holds one) is left out of `--emit-header`, `--emit-napi` and the
+  `--emit-dts` typings and wasm loader, with a comment naming the type, as
+  every type the sidecars cannot spell is. A class that holds a vector
+  anywhere (a field, an element, a `Result` arm, another class it points at)
+  is opaque in the header (`typedef struct Name Name;`), as a `Map` or
+  `Secret` holder is: C has no portable vector type to lay it out with. A bare
+  pointer to such a class still crosses, as an opaque `struct Name *`.
 
 ### Constant time: `ctSelect` and `ctEq`
 
@@ -9341,6 +9448,106 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   the program against the file before it looks in its cache, so the file is not
   part of the cache key and a cache hit is held to it too. `--fix` and
   `--emit-ast` refuse the flag.
+
+#### The sandbox
+
+`--sandbox` holds a running native program to the capabilities its `main`
+reaches. The policy above refuses at compile time a program that reaches more
+than it grants; the sandbox makes the kernel refuse, at run time, what the
+program's code does not reach, `ffi` callees and constructors included
+([wp37-os-sandbox.md](wp37-os-sandbox.md),
+[security/sandbox.md](security/sandbox.md)):
+
+```llvm
+@.sandbox.preinit = internal constant void ()* @.sandbox.apply, section ".preinit_array", align 8
+@llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"
+
+define internal void @.sandbox.apply() {
+entry:
+  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null)
+  ret void
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  call void @nish_sandbox_check()
+```
+
+- **The flag.** `--sandbox` is strict; `--sandbox=best-effort` runs on a
+  kernel that lacks part of the confinement and says in one line on stderr
+  what it could not withhold. Any other mode is a usage error, exit 2. It is
+  accepted by `--link`, by `nish run` (before the file) and on the IR-only
+  route, alone or beside the flags that write a file next to the IR; the
+  `.ll` then carries the call, and linking it by hand keeps the confinement
+  (`tests/cases/sandbox_hello`). `--emit-ast`, `--emit-checked`, `--emit-ts`,
+  `--fix`, `--emit-napi` and `--emit-napi-async` refuse it, exit 2, since none
+  writes a program with a `main` to confine, and so does an entry module that
+  declares no `main`. `--sandbox` and `--sandbox=best-effort` on one command
+  line are refused, exit 2; the same one twice is one.
+- **The call.** The first operand is `main`'s capability mask, numbered as
+  `--emit-capabilities` numbers the bits (`clock` 0 … `tty` 10, `unsafe` 11), the
+  second `1` for strict and `2` for best-effort; the two `i8*` operands are
+  `null`. `nish_sandbox` runs from `.preinit_array`, after the loader and
+  before any constructor of the executable, an `ffi` object or a shared
+  library, and applies, in order: `PR_SET_NO_NEW_PRIVS`, a drop of every
+  Linux capability (each set read back), a Landlock ruleset masked to the ABI
+  the kernel answers, and a seccomp filter. `main` calls
+  `nish_sandbox_check` first, which refuses to run a program whose C library
+  never ran `.preinit_array` (musl), with exit 126 and one line: `nish:
+  --sandbox: the C library did not run .preinit_array, so the program was
+  not confined`.
+- **What each capability's absence withholds.** Without `fs.read`, Landlock
+  withholds reading files and directories; without `fs.write`, writing,
+  making, removing, renaming and linking (within one directory too) and
+  truncating, and seccomp
+  answers `EPERM` to `chmod`, `chown`, `utimensat`, `setxattr` and their
+  siblings, which Landlock does not decide. Without `process.spawn`,
+  `execve`, `execveat`, `fork`, `vfork` and a `clone` without
+  `CLONE_THREAD` kill the process, `clone3` answers `ENOSYS`, and Landlock
+  withholds executing files and device `ioctl`s (ABI 5); with it, executing
+  and reading files and device `ioctl`s are granted beneath `/`, since a
+  child must load its binary and libraries, so a program that reaches
+  `process.spawn` can read any file the user can whether or not it reaches
+  `fs.read`. Without `net`, `socket`, `socketpair`, `connect`,
+  `bind`, `listen`, `accept` and `accept4` kill it. `ffi`, `unsafe`, `tty`,
+  `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing of their
+  own; the ABI 6 scopes under **Always** apply whatever `main` reaches.
+- **The CPU count.** Before it confines anything, `nish_sandbox` reads the
+  CPU count (the affinity mask and the cgroup quota) and keeps it as the
+  thread pool's ceiling, since without `fs.read` the quota under
+  `/sys/fs/cgroup` cannot be read afterwards. `NISH_NUM_THREADS` still lowers
+  the pool. `availableParallelism()` reads the count again on each call and
+  is not bounded by that ceiling, so in such a program it no longer sees the
+  quota.
+- **Always.** `ptrace`, `process_vm_readv`, `process_vm_writev` and
+  `pidfd_getfd` kill; io_uring kills unless both `net` and `process.spawn`
+  are granted; on x86-64 a system call numbered with bit 30 (x32) kills, and
+  a call from any other architecture's entry kills. A killed process ends by
+  `SIGSYS`, exit status 159 from a shell. From Landlock ABI 6 a sandboxed
+  process cannot signal or reach the abstract sockets of a process outside
+  it.
+- **Refusals.** A program whose sandbox cannot be applied prints one line,
+  `nish: --sandbox: ...`, and exits 126 before `main` runs. Strict refuses a
+  kernel without Landlock, and one below ABI 3 when `fs.write` is not
+  granted, since `TRUNCATE` cannot be withheld there; best-effort runs on
+  both, naming what it could not withhold (without Landlock, files are not
+  confined at all). Neither mode refuses a kernel without `IOCTL_DEV` (ABI 5)
+  or the signal and socket scopes (ABI 6); best-effort names them.
+- **Targets.** A darwin target, given or the host's, is refused (NL3044,
+  `tests/wordings/nl3044_sandbox_darwin`). The wasm and WASI targets
+  (`wasm32`, `wasm32-wasi`) accept the flag
+  and emit no call, since the host already holds a module to its imports;
+  `--profile wasm` refuses IR built with `--sandbox` for the host. A `.ll`
+  built with `--sandbox` and linked on a platform other than Linux refuses to
+  run, exit 126.
+- **No byte of a program's IR moves without the flag**: the entry, its
+  `@llvm.used` slot and the two declarations are emitted only under
+  `--sandbox` ("sandbox: without the flag the IR is the sandboxed IR less the
+  sandbox's lines"). `--runtime-decls`, which lists every declaration the
+  runtime answers, lists the two whatever the flag.
+- **Reserved names.** The runtime calls `prctl` and `syscall` from C, so in
+  every build, sandboxed or not, a `declare function` of either name is
+  refused as a reserved C symbol (NL3037).
 
 ## Semantics decisions
 

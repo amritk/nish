@@ -33,6 +33,7 @@ import {
   pushAll,
   resultDefinitions,
   spaceAfter,
+  structsHoldingVectors,
   tsKeyword,
   tsSignatureLine,
 } from "./interop-abi"
@@ -50,7 +51,10 @@ import { K_ARRAY, TypeTable } from "./types"
  * `interface`) is stored *inline*: `data` is a C array of the structs
  * themselves, so the note spells the element `struct Point` with no `*` and
  * says `inline`, which is a host's cue that `((struct Point *)a->data)[i]` is
- * element `i` and needs no marshalling. Every other element type is one
+ * element `i` and needs no marshalling. A `nish:simd` vector element is
+ * inline too, sixteen bytes a slot, and C has no portable type for it, so a
+ * signature holding one is skipped and a class holding one is opaque
+ * (`holdsVector`) rather than noted here. Every other element type is one
  * pointer per slot and keeps the pointer spelling it always had.
  */
 const elementNotes = (table: TypeTable, fn: ExternalFunction): string => {
@@ -118,6 +122,7 @@ const structDefinitions = (compilation: Compilation): string[] => {
   if (structs.length === 0) {
     return lines
   }
+  const vectored = structsHoldingVectors(compilation)
   lines.push("")
   lines.push("/* Classes and interfaces: the field layout of the compiled objects (natural")
   lines.push(" * alignment; a class that `implements` an interface lists its fields first).")
@@ -164,6 +169,17 @@ const structDefinitions = (compilation: Compilation): string[] => {
       i = i + 1
       continue
     }
+    // A `nish:simd` vector has no portable C spelling, so a class holding one
+    // anywhere -- a field, an element, a `Result` arm, another class it
+    // points at -- is opaque as well rather than describing what it cannot name.
+    if (vectored.has(info.name)) {
+      lines.push(
+        `/* ${file}: ${kind} ${info.name}, opaque: it holds a nish:simd vector, which C has no portable type for */`
+      )
+      lines.push(`typedef struct ${cName} ${cName};`)
+      i = i + 1
+      continue
+    }
     lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`)
     if (info.fields.length === 0) {
       lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`)
@@ -191,13 +207,15 @@ const structDefinitions = (compilation: Compilation): string[] => {
 /** Every field type of every class and interface, for the `Result` definitions above. */
 const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = []
+  const vectored = structsHoldingVectors(compilation)
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      // An opaque `Map`, `Set` (WP32), `Secret` or holder contributes no field to describe.
+      // An opaque `Map`, `Set` (WP32), `Secret`, holder or vector holder contributes no field to describe.
       if (
         isCollectionStruct(info) ||
         isSecretStruct(info) ||
-        secretFieldOf(compilation.table, info) !== null
+        secretFieldOf(compilation.table, info) !== null ||
+        vectored.has(info.name)
       ) {
         continue
       }

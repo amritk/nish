@@ -61,7 +61,7 @@ import {
   Node,
 } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
-import { T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
+import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
 
 /** Whether `type` is a record an array holds inline: an interface no class implements. */
 const inlineRecord = (program: CheckedProgram, type: i32): boolean => {
@@ -460,6 +460,32 @@ const typedArrayWidth = (name: string): string => {
   return name === "Int32Array" ? "i32" : "i64"
 }
 
+/**
+ * The zero vector `new Array<T>(n)` fills each slot with when `T` is a
+ * `nish:simd` vector, its splat of zero, or the empty string.
+ */
+const vectorZero = (walk: Walk, node: Node): string => {
+  const made = walk.typeAt(node)
+  if (made < 0 || walk.table.kindOf(made) !== K_ARRAY) {
+    return ""
+  }
+  const vector = walk.table.refOf(made)
+  if (!walk.table.isVector(vector)) {
+    return ""
+  }
+  const lane = walk.table.scalarName(walk.table.refOf(vector))
+  const head = lane.substring(0, 1)
+  let kind = "F"
+  if (head === "u") {
+    kind = "U"
+  }
+  if (head === "i") {
+    kind = "I"
+  }
+  const splat = `splat${kind}${lane.substring(1)}x${walk.table.laneCount(vector)}`
+  return `${walk.helperName(splat)}(0)`
+}
+
 /** `new Array<T>(n)` or `new Float64Array(n)` as a checked, zero-filled `newArray`, or `null`. */
 const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
@@ -470,8 +496,13 @@ const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   let zero = ""
   let element = ""
   if (callee.text === "Array" && typeArgs.length === 1) {
-    zero = fillZero(walk, typeArgs[0])
     element = walk.spanOf(typeArgs[0])
+    const vector = vectorZero(walk, node)
+    if (vector !== "") {
+      // A vector is a typed array: each slot gets one of its own.
+      return `${walk.helperName("newArray")}<${element}>(${operands.at(2)}, ${vector}).map(() => ${vector})`
+    }
+    zero = fillZero(walk, typeArgs[0])
   } else if (typeArgs.length === 0) {
     zero = typedArrayZero(callee.text)
     element = typedArrayWidth(callee.text)

@@ -126,41 +126,17 @@ module.
 ## The lockfile's copy of the platform pins
 
 `release-pr.yml` bumps the version in `package.json`, both copies in
-`package-lock.json` and `src/branding.ts`, and leaves the
-`optionalDependencies` pins alone. A pin is only half of what npm records: the
-lockfile also keeps each platform package's `resolved` URL and `integrity`,
-which describe a tarball that does not exist until `release.yml` has built it
-from the tag and published it. Until 0.26.0 the release commit moved the pins
-anyway, so `main` disagreed with its own lockfile from the release merge to
-the lockfile merge, and CI's `lint` job skipped its `npm ls
---package-lock-only` check on the Release PR and the tag and was red on every
-release commit regardless.
-
-So the pins on `main` stay at the previous release until the platform
-packages are on the registry, and `scripts/pin-platform-packages.mjs` moves
-them, twice per release:
-
-- the `release` job runs it on the tag just before `npm pack`, so the main
-  package that is published installs this release's binaries, then reads the
-  tarball's `package.json` back and fails unless every pin is this version;
-- the `lockfile` job runs it on `main` after the publish, regenerates the
-  lockfile, and opens a pull request that moves the pins in `package.json`,
-  the lockfile's `packages[""]` and the platform packages' entries in one
-  commit, then squash-merges it itself.
-
-The price is that a tag's own `package.json` pins the release before it: the
-published main package differs from its tagged commit in those four values and
-nowhere else, and an `npm pack` of the tag by hand packs the previous release's
-pins unless the script runs first. The alternative, pins on the release commit
-without their entries, is the red `main` this replaced.
-
-The script moves both copies of the pins, because v0.4.0 shipped with the
-lockfile still pinning 0.3.0 when the bump read only the top-level field.
-`tests/run.js` allows a pin equal to this version or to the release before it,
-requires all four to agree, and compares the two files on every run; the `lint`
-check now runs on every commit. Nobody merges a lockfile pull request by hand;
-one left open means the repository refused the job's merge, and its run says so
-in a warning.
+`package-lock.json`, `src/branding.ts`, and the `optionalDependencies` pins in
+both `package.json` and the lockfile's `packages[""]`. v0.4.0 shipped with the
+lockfile still pinning 0.3.0, because the bump and its test both read only the
+top-level field; both now walk both places, and a standing check compares the
+two files on every run. The platform packages' own lockfile entries (their
+`resolved` URL and `integrity`) cannot exist until they are published, so
+`release.yml`'s `lockfile` job opens a pull request with the regenerated
+lockfile after the publish and squash-merges it itself, and CI's `lint` job
+checks `npm ls --package-lock-only` everywhere except on the Release PR and on
+a tag. Nobody merges a lockfile pull request by hand; one left open means the
+repository refused the job's merge, and its run says so in a warning.
 
 ## Release procedure
 
@@ -220,8 +196,7 @@ Releases ride a train; nothing is published from a developer machine.
    by default. A failed publish is fixed by re-running the job, which skips
    versions already on the registry. A package for a newly added platform must
    be published by hand once before trust can be set on it; the job names the
-   two commands. `lockfile` then opens the pull request that pins `main` to
-   the packages just published, and merges it.
+   two commands. `lockfile` then opens the lockfile pull request and merges it.
    Beside `npm`, `interop` runs `interop.yml` with the compiler `release` just
    published as the server image's seed; a red `interop` after a good publish
    is re-run alone (or fixed in a patch release), not a reason to delete the
@@ -284,8 +259,8 @@ was handed over in October 2026, and 0.20.0 is the first release under it.
   no longer the main name plus a suffix: `PLATFORM_PACKAGE_PREFIX` in
   `bin/packaging.js` spells it once, and `platformPackageName` is what the
   launcher, `postinstall.mjs`, `platform-package.mjs`, `release.yml` and
-  `tests/run.js` call. `scripts/pin-platform-packages.mjs` moves every
-  `optionalDependencies` key rather than the ones that start with the main name, which since this
+  `tests/run.js` call. `release-pr.yml` bumps every `optionalDependencies`
+  key rather than the ones that start with the main name, which since this
   move is none of them.
 - `npm pack` names the main tarball `nish-<version>.tgz` and a platform one
   `amritk-nish-<asset>-<version>.tgz`, beside the release's

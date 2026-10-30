@@ -43,6 +43,7 @@ import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import zlib from "node:zlib"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
@@ -131,12 +132,13 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
- * CPU's AES instructions, `runtime-term.c` stdin and the terminal of
- * `nish:term` and `runtime-bytes.c` the byte-class runs of `nish/bytes`,
- * split apart so that each carries its own `.text*`
+ * CPU's AES instructions, `runtime-checksum.c` CRC-32 on its carry-less
+ * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
+ * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes` and
+ * `runtime-sandbox.c` the `--sandbox` confinement, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same ten:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eleven:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -155,8 +157,10 @@ const RUNTIME_C = [
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
+  "runtime/runtime-checksum.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
+  "runtime/runtime-sandbox.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -8142,7 +8146,7 @@ if (dealtHere("nishRunner")) {
     // an absolute one from, which is also why it folds `<root>/` out of a
     // golden rather than into its own output. `--compiler` names the compiler
     // under test, where the runner's own default is build/nish.
-    const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH)], { cwd: root })
+    const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), "--jobs", "1"], { cwd: root })
     const report = String(ran.stdout)
     check(
       "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",
@@ -8152,8 +8156,11 @@ if (dealtHere("nishRunner")) {
     // `--shard`, which CI's `runner` job splits the corpus with: two halves of
     // the same selection pass between them exactly the checks the whole does,
     // so no program is dropped or run twice. A spec outside 1..n is refused.
+    // `--jobs 1` is the runner in one process, the way a `--jobs` child runs.
     const passed = (args) => {
-      const r = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), ...args], { cwd: root })
+      const r = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), "--jobs", "1", ...args], {
+        cwd: root,
+      })
       const m = / (\d+) passed, 0 failed, /.exec(String(r.stdout))
       return r.status === 0 && m ? Number(m[1]) : -1
     }
@@ -8167,25 +8174,14 @@ if (dealtHere("nishRunner")) {
       whole > 0 && halves.every((n) => n > 0) && halves[0] + halves[1] === whole && refused.status !== 0,
       `whole ${whole}, halves ${halves.join(" + ")}, 3/2 exited ${refused.status}`
     )
-    // scripts/nish-runner-parallel.mjs, which CI's `runner` job runs: its two
-    // runners of each half pass between them exactly the checks that half
-    // passes alone, and its last line is their summaries summed in the
-    // runner's own words, so the slice arithmetic and the summing are pinned.
+    // `--jobs`, which CI's `runner` job runs with: the two processes of each
+    // half pass between them exactly the checks that half passes alone, and
+    // the last line is their summaries summed in the runner's own words, so
+    // the slice arithmetic and the summing are pinned.
     const parallel = (shard) => {
       const r = spawnSync(
-        "node",
-        [
-          path.join("scripts", "nish-runner-parallel.mjs"),
-          "pop",
-          "--runner",
-          runnerExe,
-          "--compiler",
-          NISH,
-          "--shard",
-          shard,
-          "--jobs",
-          "2",
-        ],
+        runnerExe,
+        ["pop", "--compiler", path.relative(root, NISH), "--shard", shard, "--jobs", "2"],
         { cwd: root, encoding: "utf8" }
       )
       const m = /\ngolden cases: (\d+) passed, 0 failed, \d+ skipped\n$/.exec(r.stdout)
@@ -8193,7 +8189,7 @@ if (dealtHere("nishRunner")) {
     }
     const parallelHalves = [parallel("1/2"), parallel("2/2")]
     check(
-      "scripts/nish-runner-parallel.mjs passes, over each half, the checks the Nish runner's --shard does alone",
+      "the Nish runner's --jobs 2 passes, over each half, the checks its --shard does in one process",
       parallelHalves[0] === halves[0] && parallelHalves[1] === halves[1],
       `runner halves ${halves.join(" + ")}, parallel halves ${parallelHalves.join(" + ")}`
     )
@@ -8873,7 +8869,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's ten translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's eleven translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -8928,8 +8924,10 @@ if (dealtHere("runtimeCache")) {
       "runtime-net.c",
       "runtime-simd.c",
       "runtime-aes.c",
+      "runtime-checksum.c",
       "runtime-term.c",
       "runtime-bytes.c",
+      "runtime-sandbox.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -8937,7 +8935,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the ten objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the twelve objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -8946,7 +8944,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the ten runtime units once",
+      "runtime cache: the miss compiled each of the twelve runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -10664,6 +10662,578 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
   }
 }
 
+// WP37 stage 1: `--sandbox` confines a native program to main's capability set
+// (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
+// Nish programs whose main reaches a chosen set of capabilities and hands its
+// first argument to `sb_probe` (probe.c), which tries one thing the sandbox
+// decides and prints what the kernel answered. A program the seccomp filter
+// kills ends by SIGSYS, which a shell reports as status 159; `spawnSync` reports
+// it as the signal.
+if (!only || "sandbox".includes(only)) {
+  const fixtures = path.join(linkDir, "sandbox_fixtures")
+  const probeC = path.join(fixtures, "probe.c")
+  const dir = path.join(buildDir, "sandbox")
+  const W = path.join(dir, "work")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(W, { recursive: true })
+  const compile = (fixture, flags, out) =>
+    spawnSync(NISH, [path.join(fixtures, `${fixture}.ts`), ...flags, "-o", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  /** Compiles a fixture with `flags` and links it with probe.c (or alone): the binary, or null and a FAIL. */
+  const built = new Map()
+  const build = (name, fixture, flags, { driver = probeC, defines = [] } = {}) => {
+    if (built.has(name)) return built.get(name)
+    const ll = path.join(dir, `${name}.ll`)
+    const exe = path.join(dir, name)
+    const c = compile(fixture, flags, ll)
+    const l = c.status === 0 ? linkNative(exe, ll, { driver, defines }) : c
+    const ok = l.status === 0
+    if (!ok) check(`sandbox: ${fixture}.ts ${flags.join(" ")} compiles and links`, false, shown(l))
+    built.set(name, ok ? exe : null)
+    return ok ? exe : null
+  }
+  const run = (exe, args, options = {}) =>
+    exe === null
+      ? null
+      : spawnSync(exe, args, {
+          cwd: W,
+          encoding: "utf8",
+          timeout: 60000,
+          ...options,
+        })
+  const said = (r) => (r === null ? "not built" : shown(r))
+  const killed = (r) => r !== null && r.signal === "SIGSYS"
+
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("sandbox: --sandbox confines through Linux system calls, and this host is not Linux with clang")
+  } else {
+    const abiProbe = path.join(dir, "abi")
+    fs.writeFileSync(
+      `${abiProbe}.c`,
+      "#include <stdio.h>\n#include <unistd.h>\n#include <sys/syscall.h>\n" +
+        'int main(void) { long r = syscall(444, NULL, 0, 1); printf("%ld\\n", r < 0 ? 0 : r); return 0; }\n'
+    )
+    const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], {
+      cwd: root,
+    })
+    if (a.status !== 0) check("sandbox: the Landlock ABI probe compiles", false, shown(a))
+    const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
+
+    // The filter kills each of these in every mode when main does not reach
+    // what they need. The calls into another process aim at a `sleep` started
+    // here, so a filter that let one through would reach it, not this runner.
+    const sleeper = spawn("sleep", ["600"], { stdio: "ignore" })
+    const victim = String(sleeper.pid)
+    const withheld = [
+      ["fork", [], "fork from ffi without process.spawn dies of SIGSYS"],
+      ["execve", [], "execve from ffi without process.spawn dies of SIGSYS"],
+      ["execveat", [], "execveat from ffi without process.spawn dies of SIGSYS"],
+      ["socket", [], "socket from ffi without net dies of SIGSYS"],
+      ["connect", [], "connect from ffi without net dies of SIGSYS"],
+      ["socketpair", [], "socketpair from ffi without net dies of SIGSYS"],
+      ["accept4", [], "accept4 from ffi without net dies of SIGSYS"],
+      ["io_uring_setup", [], "io_uring_setup from ffi without net dies of SIGSYS"],
+      ["thread-socket", [], "socket from a second thread without net dies of SIGSYS"],
+    ]
+    // These are killed whatever main reaches, so they also run against a
+    // program that holds fs.read, fs.write and process.spawn.
+    const always = [
+      ["process_vm_writev", [victim], "process_vm_writev into another process dies of SIGSYS"],
+      ["process_vm_readv", [victim], "process_vm_readv from another process dies of SIGSYS"],
+      ["ptrace", [victim], "ptrace(PTRACE_ATTACH) on another process dies of SIGSYS"],
+      ["pidfd_getfd", [], "pidfd_getfd dies of SIGSYS"],
+    ]
+    const plain = build("none-plain", "none", [])
+    if (process.arch === "x64") {
+      withheld.push(
+        ["raw-fork", [], "the raw fork system call without process.spawn dies of SIGSYS"],
+        ["raw-vfork", [], "the raw vfork system call without process.spawn dies of SIGSYS"]
+      )
+      always.push(["x32-socket", [], "an x32 socket from ffi dies of SIGSYS"])
+      // The arch row: a 32-bit entry reports AUDIT_ARCH_I386 and is killed
+      // before any number is read. A kernel without IA32 emulation cannot make
+      // the call at all, which the unconfined run shows.
+      const i386 = run(plain, ["i386"])
+      if (i386 !== null && i386.status === 0 && i386.stdout === "i386: start\ni386: ok\n") {
+        always.push(["i386", [], "a 32-bit system call from a 64-bit program dies of SIGSYS"])
+      } else {
+        skip(`sandbox: this kernel runs no 32-bit system call; the arch check did not run (${said(i386).trim()})`)
+      }
+    } else {
+      skip("sandbox: x32, raw fork and the 32-bit entry are x86-64's; those checks did not run")
+    }
+    for (const [mode, flag] of [
+      ["strict", "--sandbox"],
+      ["best-effort", "--sandbox=best-effort"],
+    ]) {
+      const none = build(`none-${mode}`, "none", [flag])
+      const every = build(`every-${mode}`, "every", [flag])
+      for (const [exe, holds, rows] of [
+        [none, "", [...withheld, ...always]],
+        [every, ", holding fs and process.spawn", always],
+      ]) {
+        for (const [op, args, why] of rows) {
+          const r = run(exe, [op, ...args])
+          check(`sandbox: ${why} (${mode}${holds})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+        }
+      }
+    }
+    sleeper.kill("SIGKILL")
+
+    // The control: the same program without the flag forks, so the kill above
+    // is the sandbox's and not the probe's.
+    const forked = run(plain, ["fork"])
+    check(
+      "sandbox: without --sandbox the same probe forks (the control)",
+      forked !== null && forked.status === 0 && forked.stdout === "fork: start\nfork: ok\n",
+      said(forked)
+    )
+    const spawner = build("spawn-strict", "spawn", ["--sandbox"])
+    const child = run(spawner, ["fork"])
+    check(
+      "sandbox: a process.spawn-granted program runs a child",
+      child !== null && child.status === 0 && child.stdout === "fork: start\nfork: ok\n",
+      said(child)
+    )
+
+    // clone3's flags are out of the filter's sight, so without process.spawn
+    // it answers ENOSYS and the C library falls back to clone, which it reads.
+    const clone3 = run(built.get("none-strict"), ["clone3"])
+    const clone3Plain = run(plain, ["clone3"])
+    const clone3Spawn = run(spawner, ["clone3"])
+    check(
+      "sandbox: clone3 without process.spawn answers ENOSYS, and with it reaches the kernel",
+      clone3 !== null &&
+        clone3.stdout === "clone3: ENOSYS\n" &&
+        clone3Plain !== null &&
+        clone3Plain.status === 0 &&
+        clone3Plain.stdout !== "clone3: ENOSYS\n" &&
+        clone3Spawn !== null &&
+        clone3Spawn.stdout === clone3Plain.stdout,
+      `${said(clone3)}\n--- without --sandbox\n${said(clone3Plain)}\n--- with process.spawn\n${said(clone3Spawn)}`
+    )
+
+    // seccomp answers EPERM to the metadata calls Landlock does not decide, so
+    // a program without fs.write cannot chmod, touch or tag a file.
+    const target = path.join(W, "meta.txt")
+    fs.writeFileSync(target, "x")
+    fs.chmodSync(target, 0o600)
+    fs.utimesSync(target, 1000000, 1000000)
+    const before = fs.statSync(target)
+    const meta = run(built.get("none-strict"), ["meta", target])
+    const after = fs.statSync(target)
+    check(
+      "sandbox: chmod, utimensat and setxattr without fs.write fail EPERM",
+      meta !== null &&
+        meta.status === 0 &&
+        meta.stdout === "chmod: EPERM\nutimensat: EPERM\nsetxattr: EPERM\n" &&
+        after.mode === before.mode &&
+        after.mtimeMs === before.mtimeMs,
+      said(meta)
+    )
+    // The control: unconfined, the same probe changes the mode and the times.
+    // The extended attribute is left to the filesystem, which may not keep one.
+    const metaPlain = run(plain, ["meta", target])
+    check(
+      "sandbox: without --sandbox the same probe chmods and touches the file (the control)",
+      metaPlain !== null &&
+        metaPlain.status === 0 &&
+        metaPlain.stdout.startsWith("chmod: ok\nutimensat: ok\nsetxattr: ") &&
+        !metaPlain.stdout.includes("EPERM") &&
+        fs.statSync(target).mtimeMs !== before.mtimeMs,
+      said(metaPlain)
+    )
+
+    if (a.status !== 0) {
+      skip("sandbox: the Landlock ABI probe did not build; the fs checks did not run")
+    } else if (abi < 1) {
+      skip(`sandbox: this kernel has no Landlock (ABI ${abi}); the fs checks did not run`)
+    } else {
+      const none = built.get("none-strict")
+      const open = run(none, ["open", "/etc/passwd"])
+      check(
+        "sandbox: open from ffi without fs.read is refused",
+        open !== null && open.status === 0 && open.stdout === "open: EACCES\n",
+        said(open)
+      )
+      const read = build("read-strict", "read", ["--sandbox"])
+      const opened = run(read, ["open", "/etc/passwd"])
+      check(
+        "sandbox: a program whose main reaches fs.read opens /etc/passwd",
+        opened !== null && opened.status === 0 && opened.stdout === "open: ok\n",
+        said(opened)
+      )
+
+      // The constructor and the probe's own `.preinit_array` entry both run
+      // after the wrapper's entry, which is linked first, so both are refused.
+      const ctor = run(none, ["ctor"])
+      const ctorPlain = run(plain, ["ctor"])
+      check(
+        "sandbox: a constructor in an ffi object runs confined, and the sandbox's preinit entry runs first",
+        ctor !== null &&
+          ctor.stdout === "ctor: EACCES, preinit: EACCES\n" &&
+          ctorPlain !== null &&
+          ctorPlain.stdout === "ctor: ok, preinit: ok\n",
+        `${said(ctor)}\n--- without --sandbox\n${said(ctorPlain)}`
+      )
+
+      // IOCTL_DEV is handled from ABI 5: a device opened for reading answers
+      // EACCES to an ioctl where the unconfined program hears ENOTTY.
+      if (abi < 5) {
+        skip("sandbox: this kernel has no IOCTL_DEV (ABI <5); the ioctl check did not run")
+      } else {
+        const readPlain = build("read-plain", "read", [])
+        const io = run(read, ["ioctl"])
+        const ioPlain = run(readPlain, ["ioctl"])
+        check(
+          "sandbox: a device ioctl without process.spawn is refused",
+          io !== null &&
+            io.stdout === "open: ok\nioctl: EACCES\n" &&
+            ioPlain !== null &&
+            ioPlain.stdout === "open: ok\nioctl: ENOTTY\n",
+          `${said(io)}\n--- without --sandbox\n${said(ioPlain)}`
+        )
+      }
+
+      // The child inherits the Landlock domain, so the redirect it opens is
+      // refused there, nothing is created, and spawnSyncTo answers -1, as for a
+      // child that could not be started.
+      const spawnto = build("spawnto", "spawnto", ["--sandbox"], {
+        driver: null,
+      })
+      const redirect = path.join(W, "redirect.txt")
+      const to = run(spawnto, ["true", redirect])
+      check(
+        "sandbox: a spawn redirect without fs.write fails in the child",
+        to !== null && to.status === 0 && to.stdout === "status -1\n" && !fs.existsSync(redirect),
+        said(to)
+      )
+
+      // What main is granted runs the same: a file written and read back, a
+      // child and the CPU count, with and without the sandbox and the pool.
+      const grantedDir = (name) => {
+        const d = path.join(W, name)
+        fs.mkdirSync(d, { recursive: true })
+        return d
+      }
+      const gPlain = run(build("granted-plain", "granted", [], { driver: null }), [grantedDir("plain")])
+      const gSandbox = run(build("granted-sandbox", "granted", ["--sandbox"], { driver: null }), [
+        grantedDir("sandbox"),
+      ])
+      check(
+        "sandbox: a granted program runs as it does unsandboxed",
+        gPlain !== null &&
+          gPlain.status === 0 &&
+          gPlain.stdout === "written and read back\nchild 0\ncpus true\n" &&
+          gSandbox !== null &&
+          gSandbox.status === 0 &&
+          gSandbox.stdout === gPlain.stdout &&
+          gSandbox.stderr === "",
+        `${said(gSandbox)}\n--- without --sandbox\n${said(gPlain)}`
+      )
+
+      // The simulated ABI: the runtime built with -DNISH_SANDBOX_SIMULATE_ABI
+      // answers the probe with that ABI, so the refusals and the best-effort
+      // line are read on a kernel that has every right.
+      const prefix = "nish: --sandbox: "
+      const noLandlock = `${prefix}this kernel has no Landlock; build with --sandbox=best-effort to run with seccomp alone\n`
+      const noTruncate = `${prefix}this kernel's Landlock cannot withhold TRUNCATE; build with --sandbox=best-effort to run without it\n`
+      for (const sim of [0, 1, 2]) {
+        const defines = [`-DNISH_SANDBOX_SIMULATE_ABI=${sim}`]
+        const strict = run(build(`none-abi${sim}`, "none", ["--sandbox"], { defines }), [
+          "open",
+          "/etc/passwd",
+        ])
+        check(
+          `sandbox: ${sim === 0 ? "strict refuses without Landlock" : "strict refuses below ABI 3 without fs.write"} (ABI ${sim})`,
+          strict !== null &&
+            strict.status === 126 &&
+            strict.stdout === "" &&
+            strict.stderr === (sim === 0 ? noLandlock : noTruncate),
+          said(strict)
+        )
+        const lenient = run(
+          build(`none-be-abi${sim}`, "none", ["--sandbox=best-effort"], {
+            defines,
+          }),
+          ["open", "/etc/passwd"]
+        )
+        const warning =
+          sim === 0
+            ? `${prefix}no Landlock, files are not confined\n`
+            : `${prefix}this kernel's Landlock cannot withhold TRUNCATE, IOCTL_DEV, the signal and abstract socket scopes, so they are not confined\n`
+        check(
+          `sandbox: ${sim === 0 ? "best-effort warns without Landlock" : "best-effort names TRUNCATE below ABI 3, and still confines the open"} (ABI ${sim})`,
+          lenient !== null &&
+            lenient.status === 0 &&
+            lenient.stderr === warning &&
+            lenient.stdout === (sim === 0 ? "open: ok\n" : "open: EACCES\n"),
+          said(lenient)
+        )
+        // Whatever Landlock lacks, the seccomp filter is still loaded.
+        const still = run(built.get(`none-be-abi${sim}`), ["socket"])
+        check(
+          `sandbox: best-effort still loads the seccomp filter (ABI ${sim})`,
+          killed(still) && still.stdout === "socket: start\n",
+          said(still)
+        )
+      }
+      const writeAbi2 = run(
+        build("write-abi2", "write", ["--sandbox"], {
+          defines: ["-DNISH_SANDBOX_SIMULATE_ABI=2"],
+        }),
+        ["ctor"]
+      )
+      check(
+        "sandbox: strict runs below ABI 3 with fs.write, which grants TRUNCATE anyway (ABI 2)",
+        writeAbi2 !== null && writeAbi2.status === 0 && writeAbi2.stderr === "",
+        said(writeAbi2)
+      )
+    }
+
+    // The wrapper checks in main that `.preinit_array` ran: IR with the entry
+    // taken out links, and refuses to run.
+    const helloLl = fs.readFileSync(path.join(casesDir, "sandbox_hello.ll"), "utf8")
+    const strippedLl = path.join(dir, "no-preinit.ll")
+    fs.writeFileSync(
+      strippedLl,
+      helloLl
+        .split("\n")
+        .filter((l) => !l.startsWith("@.sandbox.preinit") && !l.startsWith("@llvm.used"))
+        .join("\n")
+    )
+    const noPreinit = path.join(dir, "no-preinit")
+    const np = linkNative(noPreinit, strippedLl)
+    const npRun = np.status === 0 ? run(noPreinit, []) : np
+    check(
+      "sandbox: a libc that skips .preinit_array fails closed",
+      npRun.status === 126 &&
+        npRun.stdout === "" &&
+        npRun.stderr ===
+          "nish: --sandbox: the C library did not run .preinit_array, so the program was not confined\n",
+      said(npRun)
+    )
+
+    // The capability drop: in a user namespace the process holds every
+    // capability, and the sandbox gives them all up.
+    const userns = has("unshare") ? spawnSync("unshare", ["-r", "true"]) : null
+    if (userns === null || userns.status !== 0) {
+      skip("sandbox: no unprivileged user namespace; the capability drop did not run")
+    } else {
+      const caps = (r) =>
+        r === null
+          ? []
+          : r.stdout
+              .split("\n")
+              .filter((l) => /^Cap(Inh|Prm|Eff|Bnd|Amb):/.test(l))
+              .map((l) => l.split(/\s+/)[1])
+      const inNs = (exe) =>
+        exe === null
+          ? null
+          : spawnSync("unshare", ["-r", exe, "status"], {
+              cwd: W,
+              encoding: "utf8",
+            })
+      const confined = inNs(build("read-strict", "read", ["--sandbox"]))
+      const control = inNs(build("read-plain", "read", []))
+      check(
+        "sandbox: a process holding capabilities drops them",
+        caps(confined).length === 5 &&
+          caps(confined).every((c) => /^0+$/.test(c)) &&
+          caps(control).some((c) => !/^0+$/.test(c)) &&
+          /NoNewPrivs:\s+1/.test(confined.stdout) &&
+          /Seccomp:\s+2/.test(confined.stdout),
+        `${said(confined)}\n--- without --sandbox\n${said(control)}`
+      )
+    }
+
+    // The pool under the sandbox: the CPU count is primed before the filter
+    // refuses the cgroup read, and NISH_NUM_THREADS still lowers it.
+    const threadsBuild = (name, flags, fixture = "threads") => {
+      const out = path.join(dir, name) + path.sep
+      const exe = path.join(dir, `${name}-app`)
+      const c = spawnSync(NISH, [path.join(fixtures, `${fixture}.ts`), "--threads", ...flags, "-o", out], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const lls =
+        c.status === 0
+          ? fs
+              .readdirSync(out)
+              .filter((f) => f.endsWith(".ll"))
+              .map((f) => path.join(out, f))
+          : []
+      const l =
+        c.status === 0
+          ? spawnSync(
+              "bash",
+              ["scripts/build.sh", ...lls, "runtime/runtime.c", probeC, "-o", exe, "--threads"],
+              {
+                cwd: root,
+                encoding: "utf8",
+              }
+            )
+          : c
+      if (l.status !== 0)
+        check(`sandbox: ${fixture}.ts ${flags.join(" ")} --threads compiles and links`, false, shown(l))
+      return l.status === 0 ? exe : null
+    }
+    const tSandbox = threadsBuild("threads-sandbox", ["--sandbox"])
+    const tPlain = threadsBuild("threads-plain", [])
+    const threadsLine = (r) => (r === null ? null : (/Threads:\s+(\d+)/.exec(r.stdout) ?? [])[1])
+    const pooled = run(tSandbox, ["status"])
+    check(
+      "sandbox: a threaded program without process.spawn still runs its pool",
+      pooled !== null && pooled.status === 0 && pooled.stdout.startsWith("1999998\n"),
+      said(pooled)
+    )
+    for (const n of ["1", "3"]) {
+      const env = { ...process.env, NISH_NUM_THREADS: n }
+      const s = run(tSandbox, ["status"], { env })
+      const p = run(tPlain, ["status"], { env })
+      check(
+        `sandbox: NISH_NUM_THREADS still lowers the pool (${n})`,
+        threadsLine(s) !== undefined && threadsLine(s) === threadsLine(p),
+        `${said(s)}\n--- without --sandbox\n${said(p)}`
+      )
+    }
+    // The primed count, read where it matters: pool.ts does not reach fs.read,
+    // so once confined it cannot read the cgroup quota, and only the count
+    // primed before confinement keeps its pool to the quota. A tmpfs over
+    // /sys/fs/cgroup in a private mount namespace sets one at the root, as
+    // runtime-parallel's quota check does; `tasks` counts the threads, the
+    // pool's workers and main, without a file.
+    const cpus = os.availableParallelism()
+    const userCgroup = has("unshare")
+      ? spawnSync("unshare", ["-rm", "sh", "-c", "mount -t tmpfs none /sys/fs/cgroup"], { encoding: "utf8" })
+      : null
+    // Past 65 CPUs the quota sits above the pool's own cap (NISH_PAR_MAX, 64),
+    // which would decide the count instead.
+    if (cpus < 3 || cpus > 65 || userCgroup === null || userCgroup.status !== 0) {
+      const why =
+        cpus < 3
+          ? `${cpus} CPUs leave no quota below the count`
+          : cpus > 65
+            ? `${cpus} CPUs put the quota above the pool's cap of 64`
+            : "no mount namespace with a cgroup tmpfs"
+      skip(`sandbox: ${why}; the primed CPU count was not checked`)
+    } else {
+      const ceiling = cpus - 1
+      const underQuota = (exe) =>
+        exe === null
+          ? null
+          : spawnSync(
+              "unshare",
+              [
+                "-rm",
+                "sh",
+                "-c",
+                `set -e\nmount -t tmpfs none /sys/fs/cgroup\nprintf '%s\\n' '${ceiling * 100000} 100000' > /sys/fs/cgroup/cpu.max\nexec '${exe}' tasks`,
+              ],
+              { cwd: W, encoding: "utf8", timeout: 60000, env: envWithThreads(null) }
+            )
+      const tasks = (r) => (r === null ? null : (/^tasks: (\d+)$/m.exec(r.stdout) ?? [])[1])
+      const quotaSandbox = underQuota(threadsBuild("pool-sandbox", ["--sandbox"], "pool"))
+      const quotaPlain = underQuota(threadsBuild("pool-plain", [], "pool"))
+      check(
+        `sandbox: a pool without fs.read keeps to a cgroup quota of ${ceiling} CPUs, primed before confinement`,
+        tasks(quotaSandbox) === String(ceiling) && tasks(quotaPlain) === String(ceiling),
+        `${said(quotaSandbox)}\n--- without --sandbox\n${said(quotaPlain)}`
+      )
+    }
+
+    // `nish run --sandbox` builds and runs the confined program.
+    const viaRun = spawnSync(NISH, ["run", "--sandbox", path.join(fixtures, "status.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 120000,
+    })
+    check(
+      "sandbox: nish run --sandbox runs the program, and the child it starts, with no_new_privs and a seccomp filter",
+      viaRun.status === 0 && /NoNewPrivs:\s+1/.test(viaRun.stdout) && /Seccomp:\s+2/.test(viaRun.stdout),
+      shown(viaRun)
+    )
+    // The control: without the flag the program and its child hold what this
+    // runner holds, which on a runner with neither is no_new_privs off and no
+    // filter, so the lines above are the sandbox's.
+    const runnerStatus = fs.readFileSync("/proc/self/status", "utf8")
+    const runnerLine = (key) => (new RegExp(`^${key}:\\s+(\\d+)`, "m").exec(runnerStatus) ?? [])[1]
+    const runPlain = spawnSync(NISH, ["run", path.join(fixtures, "status.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 120000,
+    })
+    check(
+      "sandbox: nish run without --sandbox leaves no_new_privs and the filter as the runner has them (the control)",
+      runPlain.status === 0 &&
+        runPlain.stdout.includes(`NoNewPrivs:\t${runnerLine("NoNewPrivs")}\n`) &&
+        runPlain.stdout.includes(`Seccomp:\t${runnerLine("Seccomp")}\n`),
+      shown(runPlain)
+    )
+  }
+
+  // What holds on every host: wasm emits no call, a wasm profile refuses
+  // sandboxed IR, and no golden moves without the flag.
+  const hello = path.join(casesDir, "sandbox_hello.ts")
+  for (const target of ["wasm32", "wasm32-wasi"]) {
+    const out = path.join(dir, `hello-${target}.ll`)
+    const r = spawnSync(NISH, [hello, "--sandbox", "--target", target, "-o", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `sandbox: the wasm targets emit no call (${target})`,
+      r.status === 0 && !fs.readFileSync(out, "utf8").includes("nish_sandbox"),
+      shown(r)
+    )
+  }
+  const refused = spawnSync(
+    "bash",
+    [
+      "scripts/build.sh",
+      path.join(casesDir, "sandbox_hello.ll"),
+      "-o",
+      path.join(dir, "hello.wasm"),
+      "--profile",
+      "wasm",
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "sandbox: the wasm profile refuses sandboxed IR",
+    refused.status === 2 &&
+      refused.stderr.includes("was compiled with --sandbox, and a wasm module has no sandbox"),
+    shown(refused)
+  )
+  const plainHello = path.join(dir, "hello-plain.ll")
+  const ph = spawnSync(NISH, [hello, "-o", plainHello], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const sandboxedLines = fs.readFileSync(path.join(casesDir, "sandbox_hello.ll"), "utf8").split("\n")
+  const added = []
+  let at = 0
+  if (ph.status === 0) {
+    // The header names the source path, which the case golden leaves out.
+    const lines = fs.readFileSync(plainHello, "utf8").split("\n")
+    const body = lines.slice(lines.findIndex((l) => l.startsWith("@") || l.startsWith("declare")))
+    for (const line of body) {
+      while (at < sandboxedLines.length && sandboxedLines[at] !== line) added.push(sandboxedLines[at++])
+      at++
+    }
+  }
+  added.push(...sandboxedLines.slice(at))
+  check(
+    "sandbox: without the flag the IR is the sandboxed IR less the sandbox's lines",
+    ph.status === 0 &&
+      at <= sandboxedLines.length &&
+      added.every((l) => l === "" || /sandbox|llvm\.used|^entry:$|^ {2}ret void$|^\}$/.test(l)),
+    ph.status === 0 ? added.join("\n") : shown(ph)
+  )
+}
+
 // `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the
 // five functions, so `unsafe_get_set` and `unsafe_wrapping` run unmodified and must
 // print the `.out` the native round trip in section A is held to -- the wraps at
@@ -10680,6 +11250,215 @@ for (const name of ["unsafe_get_set", "unsafe_wrapping"]) {
     run.status === 0 && run.stdout === want,
     `--- native (.out)\n${want}--- node\n${shown(run)}`
   )
+}
+
+// WP38 S3: `nish:simd` three ways. Each `simd_*` program with a `.out` is linked
+// natively, built with `--profile wasi` and run under Node's WASI where a
+// sysroot is installed, and run from source under `runtime/nish.mjs` (or, one
+// that zero-fills vectors, as `--emit-ts` writes it), where a vector is a typed
+// array; all three must print the `.out` section A holds the
+// native build to. Then the out-of-range load panics with the same words on
+// both sides, an exported function with a vector in its signature is left out
+// of the C header and the `.d.ts` with a comment naming the type, and no
+// golden names a target's intrinsic: the lowering is generic IR.
+if (!only || "nish:simd".includes(only) || only.includes("simd")) {
+  const simdDir = path.join(buildDir, "simd")
+  fs.rmSync(simdDir, { recursive: true, force: true })
+  fs.mkdirSync(simdDir, { recursive: true })
+  const wasi = WASI_SYSROOT && has("wasm-ld")
+  const programs = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^simd_.*\.out$/.test(f))
+    .map((f) => f.slice(0, -".out".length))
+  check("simd: the section finds the simd_* programs with a .out", programs.length >= 3, programs.join(", "))
+  // Each slot of a `new Array<V>(n)` is a fresh zero vector, which only the
+  // `--emit-ts` route can build: its rewriter reads the element type.
+  const zeroFilled = new Set(["simd_zero_fill"])
+  for (const name of programs) {
+    const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+    const exe = buildCaseIn(simdDir, name)
+    if (exe !== null) {
+      const native = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
+      check(`${name}: native prints the .out`, native.status === 0 && native.stdout === want, shown(native))
+    }
+    if (zeroFilled.has(name)) {
+      // `new Array<V>(n)` has holes under the prelude, which sees no type
+      // argument (docs/RUN_UNDER_NODE.md): Node runs it as `--emit-ts` writes it.
+      const out = path.join(simdDir, `ts_${name}`)
+      const emitted = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--emit-ts", out + path.sep], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const node =
+        emitted.status === 0
+          ? spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
+          : emitted
+      check(
+        `${name}: written by --emit-ts, runs under Node and prints the native .out`,
+        emitted.status === 0 && node.status === 0 && node.stdout === want,
+        `--- native (.out)\n${want}--- node\n${shown(node)}`
+      )
+    } else {
+      const node = runCaseUnderPrelude(name, [])
+      check(
+        `${name}: runs under runtime/nish.mjs and prints the native .out`,
+        node.status === 0 && node.stdout === want,
+        `--- native (.out)\n${want}--- node\n${shown(node)}`
+      )
+    }
+    if (wasi) {
+      const wasm = path.join(simdDir, `${name}.wasm`)
+      const built = spawnSync(
+        NISH,
+        [
+          path.join(casesDir, `${name}.ts`),
+          "-o",
+          path.join(simdDir, `wasi_${name}`) + path.sep,
+          "--link",
+          wasm,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run =
+        built.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+          : built
+      check(
+        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the native .out under Node's WASI`,
+        built.status === 0 && run.status === 0 && run.stdout === want,
+        shown(run)
+      )
+    }
+  }
+  if (!wasi) {
+    skip(
+      `skipped: simd: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of simd_* are not run`
+    )
+  }
+
+  // An access out of range panics before it reads or writes, naming the first
+  // index past the end (a negative one as the unsigned value `xs[i]` names
+  // too) and the length, natively and under runtime/nish.mjs alike.
+  const oobCases = [
+    ["simd_access_oob", "a load whose last lane is past the end", "5\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
+    ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
+    ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+  ]
+  for (const [name, what, stdout, words] of oobCases) {
+    const exe = buildCaseIn(simdDir, name)
+    if (exe !== null) {
+      const native = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
+      check(
+        `${name}: ${what} panics natively, after the access before it`,
+        native.status !== 0 && native.stdout === stdout && native.stderr.includes(words),
+        shown(native)
+      )
+    }
+    const node = runCaseUnderPrelude(name, [])
+    check(
+      `${name}: ${what} panics under runtime/nish.mjs with the native words`,
+      node.status !== 0 && node.stdout === stdout && node.stderr.includes(words),
+      shown(node)
+    )
+  }
+
+  // The sidecars spell no vector: a function with one anywhere in its
+  // signature, as a parameter, a result, an array's element or a `Result` arm,
+  // is skipped by the header, the Node-API shim and the wasm loader, each with
+  // a comment naming the type; a class holding one at any depth -- a field, a
+  // `Result` arm, an array's element, another class -- is opaque in the
+  // header, as a `Map` holder is, and no `Result` over one is defined.
+  const lib = path.join(simdDir, "lib.ts")
+  fs.writeFileSync(
+    lib,
+    'import { i32x4, u8x16, f64x2, extract, splatI32x4, splatU8x16, splatF64x2 } from "nish:simd";\n' +
+      "export class Holder { n: i32; v: i32x4; constructor(n: i32) { this.n = n; this.v = splatI32x4(n) } }\n" +
+      "export class InResult { n: i32; r: Result<u8x16, string>; constructor(n: i32) { this.n = n; this.r = Ok(splatU8x16(1)) } }\n" +
+      "export class InArray { n: i32; a: u8x16[]; constructor(n: i32) { this.n = n; this.a = [splatU8x16(1)] } }\n" +
+      "export class Nested { n: i32; h: InResult; constructor(n: i32) { this.n = n; this.h = new InResult(n) } }\n" +
+      'export const pair = (x: f64): Result<f64x2, string> => x > 0 ? Ok(splatF64x2(x)) : Err("neg");\n' +
+      "export const peekNested = (h: Nested): i32 => h.n;\n" +
+      "export const first = (v: i32x4): i32 => extract(v, 0);\n" +
+      "export const make = (x: i32): i32x4 => splatI32x4(x);\n" +
+      "export const sum = (vs: i32x4[]): i32 => extract(vs[0], 0);\n" +
+      "export const peek = (h: Holder): i32 => h.n;\n" +
+      "export const twice = (x: i32): i32 => x * 2;\n"
+  )
+  const header = path.join(simdDir, "lib.h")
+  const dts = path.join(simdDir, "lib.d.ts")
+  const napi = path.join(simdDir, "lib_napi.c")
+  const sides = spawnSync(
+    NISH,
+    [lib, "-o", path.join(simdDir, "lib.ll"), "--emit-header", header, "--emit-dts", dts, "--emit-napi", napi],
+    { cwd: root, encoding: "utf8" }
+  )
+  const read = (f) => (sides.status === 0 ? fs.readFileSync(f, "utf8") : "")
+  const h = read(header)
+  const d = read(dts)
+  const m = read(path.join(simdDir, "lib.mjs"))
+  const n = read(napi)
+  const code = h.replace(/\/\*[\s\S]*?\*\//g, "")
+  check(
+    "simd: --emit-header leaves out a vector parameter, result, array of vectors and Result over one, naming each, and makes a holder at any depth opaque",
+    sides.status === 0 &&
+      h.includes("int32_t twice(int32_t x);") &&
+      h.includes("int32_t peek(struct Holder *h);") &&
+      h.includes("typedef struct Holder Holder;") &&
+      !/struct Holder \{/.test(code) &&
+      !/\b(first|make|sum)\(/.test(code) &&
+      h.includes("first(v: i32x4): number: not declared") &&
+      h.includes("make(x: number): i32x4: not declared") &&
+      h.includes("sum(vs: i32x4[]): number: not declared") &&
+      ["InResult", "InArray", "Nested"].every(
+        (c) => h.includes(`typedef struct ${c} ${c};`) && !new RegExp(`struct ${c} \\{`).test(code)
+      ) &&
+      h.includes("int32_t peekNested(struct Nested *h);") &&
+      !/\bpair\(/.test(code) &&
+      h.includes("pair(x: number): Result<f64x2, string>: not declared") &&
+      !/nish_result/.test(code),
+    `${shown(sides)}\n--- lib.h\n${h}`
+  )
+  check(
+    "simd: --emit-napi bridges none of the vector signatures, naming the type, nor a class that holds one",
+    sides.status === 0 &&
+      n.includes('{"twice", nish_napi_twice}') &&
+      !/nish_napi_(first|make|sum)\b/.test(n) &&
+      n.includes("first(v: i32x4): number -- not bridged: parameter 1 (v) is i32x4") &&
+      n.includes("make(x: number): i32x4 -- not bridged: it returns i32x4") &&
+      n.includes("sum(vs: i32x4[]): number -- not bridged: parameter 1 (vs) is i32x4[]") &&
+      !/nish_napi_pair\b/.test(n) &&
+      n.includes("pair(x: number): Result<f64x2, string> -- not bridged: it returns Result<f64x2, string>") &&
+      !/nish_napi_peek(Nested)?\b/.test(n) &&
+      n.includes("peek(h: Holder): number -- not bridged: parameter 1 (h) is Holder") &&
+      n.includes("peekNested(h: Nested): number -- not bridged: parameter 1 (h) is Nested"),
+    `${shown(sides)}\n--- lib_napi.c\n${n}`
+  )
+  check(
+    "simd: --emit-dts and its wasm loader export none of the vector signatures, naming the type, nor a class that holds one",
+    sides.status === 0 &&
+      d.includes("twice(x: number): number;") &&
+      m.includes("twice: raw.twice") &&
+      !/\b(first|make|sum): raw\./.test(m) &&
+      d.includes("argument 1 (v) is `i32x4`, a `nish:simd` vector") &&
+      d.includes("the result is `i32x4`, a `nish:simd` vector") &&
+      d.includes("sum(vs: i32x4[]): number  -- not exported to JS") &&
+      !/\bpair: raw\./.test(m) &&
+      d.includes("the result is `Result<f64x2, string>`, which holds a `nish:simd` vector") &&
+      !/\bpeek(Nested)?: raw\./.test(m) &&
+      d.includes("peek(h: Holder): number  -- not exported to JS: argument 1 (h) is `Holder`, which holds a `nish:simd` vector") &&
+      d.includes("peekNested(h: Nested): number  -- not exported to JS: argument 1 (h) is `Nested`, which holds a `nish:simd` vector"),
+    `${shown(sides)}\n--- lib.d.ts\n${d}\n--- lib.mjs\n${m}`
+  )
+
+  // Generic IR only: LLVM picks the instructions for the target it is given.
+  const named = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^simd_.*\.ll$/.test(f))
+    .filter((f) => /llvm\.(x86|aarch64)\./.test(fs.readFileSync(path.join(casesDir, f), "utf8")))
+  check("simd: no simd_*.ll golden calls an llvm.x86. or llvm.aarch64. intrinsic", named.length === 0, named.join(", "))
 }
 
 // RT-4 under Node (#405): `runtime/shim.mjs` opens what `writeFileSync`,
@@ -16246,6 +17025,80 @@ if (!only || "layout".includes(only)) {
         )
       }
     }
+    // `nish:simd` vectors: tests/layout/simd.ts against its C twin, whose
+    // fields are clang's `vector_size(16)` types. The asserts pin a vector at
+    // sixteen bytes aligned to sixteen and an array of them at a sixteen-byte
+    // stride; the run reads every lane through the object `makeLanes` built
+    // and the bytes a `store` wrote.
+    {
+      const simdTs = path.join(root, "tests", "layout", "simd.ts")
+      const simdC = path.join(root, "tests", "layout", "simd.c")
+      const simdLl = path.join(buildDir, "layout_simd.ll")
+      const sc = spawnSync(NISH, [simdTs, "-o", simdLl], { cwd: root })
+      check("layout: tests/layout/simd.ts compiles", sc.status === 0, String(sc.stderr))
+      if (sc.status === 0) {
+        const ir = fs.readFileSync(simdLl, "utf8")
+        const cText = fs.readFileSync(simdC, "utf8")
+        /** What `make<Name>` allocates, and what simd.c asserts `sizeof(struct <Name>)` is. */
+        const sizes = (name) => {
+          const alloc = ir.match(new RegExp(`define [^\\n]*@make${name}\\([^\\n]*\\{\\n[\\s\\S]*?@nish_alloc_struct\\(i64 (\\d+)\\)`))
+          const cSize = cText.match(new RegExp(`_Static_assert\\(sizeof\\(struct ${name}\\) == (\\d+)`))
+          return { ir: alloc && alloc[1], c: cSize && cSize[1] }
+        }
+        const lanes = sizes("Lanes")
+        check(
+          "layout: a vector field is `<N x T>`, an array of them `[K x <N x T>]`, and the object is the size simd.c asserts",
+          ir.includes(
+            "%struct.Lanes = type { i32, <4 x i32>, double, <2 x double>, { %struct.nish_array, [3 x <4 x i32>] }, <16 x i8>, <8 x i16>, <4 x i32>, <4 x float> }"
+          ) &&
+            lanes.ir !== null &&
+            lanes.ir === lanes.c,
+          `IR allocates ${lanes.ir}, simd.c asserts ${lanes.c}`
+        )
+        // An inline array of vectors is aligned to sixteen, not to its header's
+        // eight, so `Mid` and `Tail` (one after a lone i32, mid-object and last)
+        // are allocated at the size LLVM and clang give them.
+        const mid = sizes("Mid")
+        const tail = sizes("Tail")
+        check(
+          "layout: an inline array of vectors after an i32, mid-object and as the last field, is allocated at the size simd.c asserts",
+          mid.ir !== null && mid.ir === mid.c && tail.ir !== null && tail.ir === tail.c,
+          `Mid: IR ${mid.ir}, simd.c ${mid.c}; Tail: IR ${tail.ir}, simd.c ${tail.c}`
+        )
+        const exe = path.join(buildDir, "layout_simd")
+        const cc = spawnSync(
+          "clang",
+          [
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-Wno-override-module",
+            "-O2",
+            "-Iruntime",
+            simdC,
+            simdLl,
+            ...RUNTIME_C,
+            "-o",
+            exe,
+          ],
+          { cwd: root }
+        )
+        check(
+          "layout: simd.c compiles with -std=c11 -Wall -Wextra -Werror (vector sizes, alignment and stride agree with clang)",
+          cc.status === 0,
+          String(cc.stderr)
+        )
+        if (cc.status === 0) {
+          const run = spawnSync(exe)
+          check(
+            "layout: every vector lane agrees with clang at run time, and a store writes the sixteen bytes it names",
+            run.status === 0 && String(run.stdout).trim() === "simd layout ok",
+            `${run.stdout}${run.stderr}`
+          )
+        }
+      }
+    }
     // --emit-header describes every class, so a build that writes one keeps
     // the pointer layout, and the C struct it writes must be the IR's: a C host
     // reads the field through the header and the size matches the allocation.
@@ -16563,7 +17416,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-term.c and runtime-bytes.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c and runtime-sandbox.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -17415,7 +18268,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|crc32): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -17481,6 +18334,35 @@ if (!only || "simd".includes(only)) {
     )
   }
 
+  // WP38 §3.1: runtime/runtime-checksum.c runs CRC-32 on PCLMULQDQ folding, or on the
+  // ARMv8 CRC32 instructions, and
+  // Crc32.update takes that path or std/compress/checksum.ts's tables. tests/simd/crc32.c
+  // includes the file, computes its fold constants again from the polynomial, and
+  // holds every path this machine has to a bit-at-a-time reference: the check value,
+  // the empty input, every length 0..4,096 at offsets 0..15, inputs of 1 to 16 MiB and
+  // streamed pieces of 1..16, 63..65 and 127..129 bytes, every length 0..256 ending
+  // at a no-access page so an over-read faults; then `nish_crc32_hw` under
+  // each `NISH_CRC32`. As for AES, the line must name the path /proc/cpuinfo says the
+  // CPU has.
+  const crcSaid = agree(`crc32 native ${process.arch}`, [], path.join(simdDir, "crc32"), native, "tests/simd/crc32.c")
+  let crcPath = null
+  if (process.arch === "x64" && features.has("pclmulqdq") && features.has("sse4_1")) {
+    crcPath = "pclmul;"
+  } else if (process.arch === "arm64" && features.has("crc32")) {
+    crcPath = "armv8-crc32;"
+  }
+  if (crcPath === null) {
+    skip(
+      `simd: crc32: /proc/cpuinfo names no carry-less multiply or CRC32 instructions for ${process.platform}-${process.arch}, so no kernel path is required to run`
+    )
+  } else {
+    check(
+      `simd: crc32 ran the ${crcPath.replace(/[;(]$/, "").trim()} path, which /proc/cpuinfo says this CPU has`,
+      crcSaid.includes(`cases agree across ${crcPath}`),
+      crcSaid
+    )
+  }
+
   if (WASI_SYSROOT && has("wasm-ld")) {
     for (const [label, flags, source, name] of [
       ["wasm32-wasi, the scalar base path", [], driver, "index-of-any"],
@@ -17489,6 +18371,7 @@ if (!only || "simd".includes(only)) {
       ["byte-runs wasm32-wasi -msimd128", ["-msimd128"], runs, "byte-runs"],
       ["regex-scan wasm32-wasi, the scalar base path", [], scanDriver, "regex-scan"],
       ["regex-scan wasm32-wasi -msimd128", ["-msimd128"], scanDriver, "regex-scan"],
+      ["crc32 wasm32-wasi, no kernel", [], "tests/simd/crc32.c", "crc32"],
     ]) {
       agree(
         label,
@@ -17554,6 +18437,13 @@ if (!only || "simd".includes(only)) {
           "the ARMv8 AES path",
           /cases agree across armv8-aes-pmull;/,
         ],
+        [
+          "crc32 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 CRC32 path",
+          "tests/simd/crc32.c",
+          path.join(simdDir, "crc32.aarch64"),
+          "the ARMv8 CRC32 path",
+          /cases agree across armv8-crc32;/,
+        ],
       ]) {
         const linked = build(cross, out, source)
         const r =
@@ -17564,7 +18454,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|crc32:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -17614,22 +18504,28 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
       return { ok: true, names, bytes: fs.readFileSync(out), why: "" }
     }
     const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
-    // The runtime as it was before build.sh paired runtime-aes.c: every file but that one.
-    const noAesDir = path.join(simdDir, "runtime-without-aes")
-    fs.rmSync(noAesDir, { recursive: true, force: true })
-    fs.mkdirSync(noAesDir, { recursive: true })
-    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
-      if (/\.(c|h)$/.test(file) && file !== "runtime-aes.c") {
-        fs.copyFileSync(path.join(root, "runtime", file), path.join(noAesDir, file))
+    const crcControl = crcPath === null ? null : "nish_crc32_hw: 1\ncbf43926\n"
+    /** The runtime as it was before build.sh paired `unit`: every file but that one. */
+    const runtimeWithout = (unit) => {
+      const dir = path.join(simdDir, `runtime-without-${unit}`)
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+        if (/\.(c|h)$/.test(file) && file !== unit) {
+          fs.copyFileSync(path.join(root, "runtime", file), path.join(dir, file))
+        }
       }
+      return dir
     }
+    const noAesDir = runtimeWithout("runtime-aes.c")
+    const noCrcDir = runtimeWithout("runtime-checksum.c")
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
@@ -17682,6 +18578,31 @@ if (!only || "simd".includes(only)) {
           `hello without: ${withoutAes.bytes?.length ?? "(not linked)"} bytes ${withoutAes.why}\n` +
           `the control keeps: ${aesCtrl.names.join(" ") || "(none)"} ${aesCtrl.why}\nthe control printed: ${printed || "(not run)"}`
       )
+
+      // runtime-checksum.c, the same way: hello is the same bytes without it, and its
+      // control keeps the kernel and gives the check value where the CPU runs it.
+      const withoutCrc =
+        compiled.status === 0
+          ? kept([helloLl], path.join(simdDir, `hello-no-crc32.${profile}`), profile, path.join(noCrcDir, "runtime.c"))
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      const crcExe = path.join(simdDir, `calls-crc32.${profile}`)
+      const crcCtrl = kept(["tests/simd/calls-crc32.c"], crcExe, profile)
+      const crcRan = crcCtrl.ok ? spawnSync(crcExe, [], { encoding: "utf8" }) : null
+      const crcPrinted = crcRan === null ? "" : String(crcRan.stdout)
+      check(
+        `simd: --profile ${profile} links hello with runtime-checksum.c to the same bytes as without it, and a program that calls the kernel runs it`,
+        withoutCrc.ok &&
+          quiet.ok &&
+          withoutCrc.bytes.equals(quiet.bytes) &&
+          crcCtrl.ok &&
+          crcCtrl.names.some((name) => name.startsWith("nish_crc32_")) &&
+          !crcCtrl.names.includes("__cpu_model") &&
+          crcRan.status === 0 &&
+          (crcControl === null ? /^nish_crc32_hw: [01]\n/.test(crcPrinted) : crcPrinted === crcControl),
+        `hello with runtime-checksum.c: ${quiet.bytes?.length ?? "(not linked)"} bytes ${quiet.why}\n` +
+          `hello without: ${withoutCrc.bytes?.length ?? "(not linked)"} bytes ${withoutCrc.why}\n` +
+          `the control keeps: ${crcCtrl.names.join(" ") || "(none)"} ${crcCtrl.why}\nthe control printed: ${crcPrinted || "(not run)"}`
+      )
     }
   }
 
@@ -17706,8 +18627,23 @@ if (!only || "simd".includes(only)) {
       ran !== null && ran.status === 0 && ran.stdout === "nish_aes_hw: 0\n",
       b.status !== 0 ? b.stderr : `${ran.stdout}${ran.stderr}`
     )
+    const crcWasm = path.join(simdDir, "calls-crc32.wasm")
+    const cb = spawnSync(
+      "bash",
+      ["scripts/build.sh", "tests/simd/calls-crc32.c", "runtime/runtime.c", "-o", crcWasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+    )
+    const crcRan =
+      cb.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", crcWasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      "simd: --profile wasi links runtime-checksum.c, and nish_crc32_hw answers 0 there",
+      crcRan !== null && crcRan.status === 0 && crcRan.stdout === "nish_crc32_hw: 0\n",
+      cb.status !== 0 ? cb.stderr : `${crcRan.stdout}${crcRan.stderr}`
+    )
   } else {
-    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's wasm32 build is not linked")
+    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's and runtime-checksum.c's wasm32 builds are not linked")
   }
 
   // The freestanding `wasm` profile links runtime-wasm.c, not runtime.c, so nothing
@@ -18250,6 +19186,427 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
   } else {
     skip(
       "aes kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of crypto_aes_agree is not checked for kernel references"
+    )
+  }
+}
+
+// ---- WP38: the CRC-32 kernel against the Nish walk, end to end ------------------------
+// The compiler lowers `Crc32.update`'s call of std/compress/checksum.ts's `crc32Walk` to
+// a branch on `nish_crc32_hw`: runtime-checksum.c's `nish_crc32_update` (PCLMULQDQ
+// folding on x86-64, the ARMv8 CRC32 instructions on AArch64) on one arm, the walk on
+// the other (src/kernels.ts). `tests/link/std_compress_crc_paths` holds the checksum to
+// its check value, empty input, gzip trailers and streamed pieces;
+// `tests/link/std_compress_crc_diff` folds 65,552 window CRCs and twelve large ones into
+// its stdout. Each is linked with the kernel wrapped (`-Wl,--wrap`) by a counter that
+// reports its calls on exit, then run with `NISH_CRC32` unset and with
+// `NISH_CRC32=soft`: the two stdouts must be each other's and `expected.out`, the soft
+// run must call no kernel, and where /proc/cpuinfo names the instructions the unset run
+// must call it. The debug profile links them, for the reason the AES section above gives.
+//
+// A wasm32 build has no kernel, so the lowering is skipped there: a `--profile wasi`
+// build names no `nish_crc32_` symbol in its IR or its link, against the native IR
+// linked the same way as the trace's control. IR compiled for the host and linked
+// freestanding (`--profile wasm`) gets runtime-checksum.c from build.sh, whose wasm32
+// build answers 0, and its CRCs must be Node's.
+if (
+  !only ||
+  "crc32 kernel wasi std_compress_crc_paths std_compress_crc_diff std_compress_gzip_files".includes(only)
+) {
+  const crcDir = path.join(buildDir, "crc32-kernel")
+  fs.rmSync(crcDir, { recursive: true, force: true })
+  fs.mkdirSync(crcDir, { recursive: true })
+  const crcFeatures = new Set(
+    ((fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : "").match(
+      /^(flags|Features)\s*:(.*)$/m
+    )?.[2] ?? "")
+      .trim()
+      .split(/\s+/)
+  )
+  const cpuHasCrc =
+    (process.arch === "x64" && crcFeatures.has("pclmulqdq") && crcFeatures.has("sse4_1")) ||
+    (process.arch === "arm64" && crcFeatures.has("crc32"))
+  /** The modules of tests/link/<program> compiled into a directory of their own, or none and the reason. */
+  const compileCrc = (program, dir, flags) => {
+    const r = spawnSync(
+      NISH,
+      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
+      }
+    )
+    const lls =
+      r.status === 0
+        ? fs
+            .readdirSync(dir)
+            .filter((f) => f.endsWith(".ll"))
+            .sort()
+            .map((f) => path.join(dir, f))
+        : []
+    return { lls, why: r.status === 0 ? "" : r.stderr }
+  }
+  const crcPrograms = ["std_compress_crc_paths", "std_compress_crc_diff", "std_compress_gzip_files"]
+
+  if (!HAS_CLANG) {
+    skip("crc32 kernel: no clang to link the CRC-32 programs against runtime-checksum.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `crc32 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    const counter = path.join(crcDir, "count.c")
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        "struct nish_array;",
+        "static unsigned long nish_crc32_calls;",
+        "uint32_t __real_nish_crc32_update(uint32_t crc, const struct nish_array *buf, int32_t off, int32_t len);",
+        "uint32_t __wrap_nish_crc32_update(uint32_t crc, const struct nish_array *buf, int32_t off, int32_t len) {",
+        "  nish_crc32_calls++;",
+        "  return __real_nish_crc32_update(crc, buf, off, len);",
+        "}",
+        "__attribute__((destructor)) static void nish_crc32_report(void) {",
+        '  fprintf(stderr, "crc32 kernel calls: %lu\\n", nish_crc32_calls);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_CRC32
+    for (const program of crcPrograms) {
+      const compiled = compileCrc(program, path.join(crcDir, program), [])
+      const exe = path.join(crcDir, `${program}.counted`)
+      const linked =
+        compiled.lls.length > 0
+          ? spawnSync(
+              "bash",
+              [
+                "scripts/build.sh",
+                ...compiled.lls,
+                "runtime/runtime.c",
+                counter,
+                "-Wl,--wrap=nish_crc32_update",
+                "-o",
+                exe,
+                "--profile",
+                "debug",
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : null
+      if (linked === null || linked.status !== 0) {
+        check(
+          `crc32 kernel: ${program} links with the kernel counted`,
+          false,
+          linked === null ? compiled.why : linked.stderr
+        )
+        continue
+      }
+      const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+      const hw = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: { ...unset, NISH_CRC32: "soft" } })
+      /** The count the wrapper printed, or null. */
+      const calls = (r) => {
+        const m = /^crc32 kernel calls: (\d+)$/m.exec(r.stderr)
+        return m === null ? null : Number(m[1])
+      }
+      check(
+        `crc32 kernel: ${program} prints the same bytes with NISH_CRC32 unset and with NISH_CRC32=soft, and they are its expected.out`,
+        hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_CRC32 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_CRC32=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      check(`crc32 kernel: ${program} under NISH_CRC32=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+      if (cpuHasCrc) {
+        check(
+          `crc32 kernel: ${program} with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+          calls(hw) > 0,
+          hw.stderr
+        )
+      } else {
+        check(
+          `crc32 kernel: ${program} with NISH_CRC32 unset calls no kernel on a CPU /proc/cpuinfo names no CRC instructions for`,
+          calls(hw) === 0,
+          hw.stderr
+        )
+      }
+    }
+  }
+
+  // The targets CI cannot run, compiled: runtime-checksum.c with `-c
+  // -ffreestanding` for each, and the object's symbols read back. Darwin on
+  // x86-64 and AArch64 selects the kernel (the AArch64 one asks sysctlbyname);
+  // i686, ARMv7, big-endian AArch64 and a build whose intrinsic headers are
+  // hidden select the stub, which defines `nish_crc32_hw` and
+  // `nish_crc32_update` and nothing else, and asks the C library for nothing.
+  // A target this clang has no backend for is skipped with its reason.
+  const crcNm = ["llvm-nm", "llvm-nm-18"].find(has);
+  if (!HAS_CLANG || crcNm === undefined) {
+    skip(
+      "crc32 kernel: no clang and llvm-nm to compile runtime-checksum.c for the targets CI cannot run",
+    );
+  } else {
+    const xcDir = path.join(crcDir, "cross");
+    fs.mkdirSync(xcDir, { recursive: true });
+    // The three freestanding headers nish.h includes, and nothing else, for the hidden-header builds.
+    const resource = spawnSync("clang", ["-print-resource-dir"], {
+      encoding: "utf8",
+    }).stdout.trim();
+    const bare = path.join(xcDir, "include");
+    fs.mkdirSync(bare, { recursive: true });
+    for (const f of fs.readdirSync(path.join(resource, "include"))) {
+      if (
+        ["stdint.h", "stdbool.h", "stddef.h"].includes(f) ||
+        /^__stddef_.*\.h$/.test(f)
+      ) {
+        fs.copyFileSync(path.join(resource, "include", f), path.join(bare, f));
+      }
+    }
+    const stub = {
+      defined: ["nish_crc32_hw", "nish_crc32_update"],
+      undefined: [],
+    };
+    const crossTargets = [
+      [
+        "x86_64-apple-darwin",
+        [],
+        {
+          defined: ["nish_crc32_answer", "nish_crc32_clmul"],
+          undefined: ["getenv"],
+        },
+      ],
+      [
+        "arm64-apple-darwin",
+        [],
+        {
+          defined: ["nish_crc32_answer", "nish_crc32_arm"],
+          undefined: ["getenv", "sysctlbyname"],
+        },
+      ],
+      ["i686-linux-gnu", [], stub],
+      ["armv7-linux-gnueabihf", [], stub],
+      ["aarch64_be-linux-gnu", [], stub],
+      ["x86_64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+      ["aarch64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+    ];
+    for (const [triple, extra, want] of crossTargets) {
+      const hidden = extra.length > 0;
+      const label = hidden
+        ? `${triple} with the intrinsic headers hidden`
+        : triple;
+      const obj = path.join(xcDir, `${triple}${hidden ? "-hidden" : ""}.o`);
+      const cc = spawnSync(
+        "clang",
+        [
+          "-c",
+          "-ffreestanding",
+          `--target=${triple}`,
+          ...extra,
+          "-Iruntime",
+          "runtime/runtime-checksum.c",
+          "-o",
+          obj,
+        ],
+        { cwd: root, encoding: "utf8" },
+      );
+      if (
+        cc.status !== 0 &&
+        /no available targets|unknown target triple|unable to create target/i.test(
+          cc.stderr,
+        )
+      ) {
+        skip(
+          `crc32 kernel: this clang cannot compile for ${triple}: ${cc.stderr.trim().split("\n")[0]}`,
+        );
+        continue;
+      }
+      if (cc.status !== 0) {
+        check(
+          `crc32 kernel: runtime-checksum.c compiles for ${label}`,
+          false,
+          cc.stderr,
+        );
+        continue;
+      }
+      const nm = spawnSync(crcNm, [obj], { encoding: "utf8" });
+      // Mach-O names carry a leading underscore; ELF's do not.
+      const name = (n) => (triple.includes("apple") ? n.replace(/^_/, "") : n);
+      const syms = nm.stdout
+        .split("\n")
+        .map((l) => l.trim().split(/\s+/))
+        .filter((f) => f.length >= 2)
+        .map((f) => ({ type: f[f.length - 2], name: name(f[f.length - 1]) }));
+      const defined = syms.filter((x) => x.type !== "U").map((x) => x.name);
+      const undef = syms.filter((x) => x.type === "U").map((x) => x.name);
+      const ok =
+        want === stub
+          ? [...defined].sort().join(" ") === stub.defined.join(" ") &&
+            undef.length === 0
+          : ["nish_crc32_hw", "nish_crc32_update", ...want.defined].every((n) =>
+              defined.includes(n),
+            ) && [...undef].sort().join(" ") === want.undefined.join(" ");
+      check(
+        want === stub
+          ? `crc32 kernel: runtime-checksum.c for ${label} is the stub, nish_crc32_hw and nish_crc32_update and nothing it asks for`
+          : `crc32 kernel: runtime-checksum.c for ${label} selects the kernel, asking the C library for ${want.undefined.join(" and ")}`,
+        nm.status === 0 && ok,
+        `defined: ${defined.join(" ")}\nundefined: ${undef.join(" ")}\n${nm.stderr}`,
+      );
+    }
+  }
+
+  // The freestanding `wasm` profile: IR compiled for the host calls the kernel behind
+  // `nish_crc32_hw`, and build.sh adds runtime-checksum.c for it, once, whose wasm32
+  // build answers 0, so the walk runs; held to Node's zlib.crc32. `--trace-symbol`
+  // says which objects define `nish_crc32_hw`. checksum.ts's panic message joins
+  // strings with `nish_str_concat`, which runtime-wasm.c does not define, so it is
+  // left an import that throws: no window here panics. `zlib.crc32` is Node 22.2 on.
+  if (has("wasm-ld") && typeof zlib.crc32 === "function") {
+    const freeDir = path.join(crcDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "crc.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { crc32 } from "nish/compress/checksum"',
+        "",
+        "export const crcOf = (n: i32, seed: i32): i64 => {",
+        "  const b: u8[] = new Array<u8>(n)",
+        "  for (let i: i32 = 0; i < n; i += 1) {",
+        "    if (i < toI32(b.length)) {",
+        "      b[i] = toU8(i * seed + (i >> 3))",
+        "    }",
+        "  }",
+        "  return toI64(crc32(b, 0, n))",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const built = spawnSync(NISH, [source, "-o", `${path.join(freeDir, "ir")}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const lls =
+      built.status === 0
+        ? fs
+            .readdirSync(path.join(freeDir, "ir"))
+            .filter((f) => f.endsWith(".ll"))
+            .map((f) => path.join(freeDir, "ir", f))
+        : []
+    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_crc32_hw("))
+    const wasm = path.join(freeDir, "crc.wasm")
+    const linked =
+      lls.length > 0
+        ? spawnSync(
+            "bash",
+            [
+              "scripts/build.sh",
+              ...lls,
+              "runtime/runtime-wasm.c",
+              "-Wl,--trace-symbol=nish_crc32_hw,--allow-undefined",
+              "-o",
+              wasm,
+              "--profile",
+              "wasm",
+            ],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    const definitions =
+      linked === null
+        ? 0
+        : `${linked.stdout}${linked.stderr}`.split("\n").filter((l) => /definition of nish_crc32_hw/.test(l))
+            .length
+    const cases = [
+      [0, 3],
+      [9, 7],
+      [100, 11],
+      [5000, 13],
+    ]
+    const want = cases.map(([n, seed]) =>
+      zlib.crc32(Buffer.from(Array.from({ length: n }, (_, i) => (i * seed + (i >> 3)) & 255)))
+    )
+    let got = []
+    let trapped = ""
+    if (linked !== null && linked.status === 0) {
+      try {
+        const env = {
+          nish_str_concat: () => {
+            throw new Error("a window panicked")
+          },
+        }
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env })
+        got = cases.map(([n, seed]) => Number(instance.exports.crcOf(n, seed)))
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
+    }
+    check(
+      "crc32 kernel: the freestanding --profile wasm link of a CRC-32 module compiled for the host links runtime-checksum.c once, and its CRCs are Node's",
+      lowered && linked.status === 0 && definitions === 1 && trapped === "" && got.join(",") === want.join(","),
+      `${built.stderr}IR calls nish_crc32_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.stderr}objects defining nish_crc32_hw: ${definitions}\n`}${trapped}got  ${got.join(",")}\nwant ${want.join(",")}`
+    )
+  } else {
+    skip(
+      has("wasm-ld")
+        ? "crc32 kernel: this Node has no zlib.crc32, so the freestanding wasm link of a CRC-32 module is not checked"
+        : "crc32 kernel: no wasm-ld, so the freestanding wasm link of a CRC-32 module is not checked"
+    )
+  }
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const program = "std_compress_crc_paths"
+    const wasi = compileCrc(program, path.join(crcDir, "wasi"), ["--profile", "wasi"])
+    const native = compileCrc(program, path.join(crcDir, "native"), [])
+    const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_crc32_"))
+    /** The modules linked for wasm32-wasi with the CRC-32 symbols traced. */
+    const traced = (lls, out) =>
+      spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...lls,
+          "runtime/runtime.c",
+          "-Wl,--trace-symbol=nish_crc32_hw,--trace-symbol=nish_crc32_update",
+          "-o",
+          out,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+    const wasm = path.join(crcDir, `${program}.wasm`)
+    const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+    const control = native.lls.length > 0 ? traced(native.lls, path.join(crcDir, "native.wasm")) : null
+    const refs = (r) =>
+      r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_crc32_/.test(l))
+    const ran =
+      linked !== null && linked.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : null
+    const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+    check(
+      `crc32 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_crc32_ symbol, and it prints its expected.out`,
+      wasi.lls.length > 0 &&
+        named.length === 0 &&
+        linked.status === 0 &&
+        refs(linked).length === 0 &&
+        control !== null &&
+        control.status === 0 &&
+        refs(control).length > 0 &&
+        ran !== null &&
+        ran.status === 0 &&
+        ran.stdout === want,
+      `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+        `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+        `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+        `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+    )
+  } else {
+    skip(
+      "crc32 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of std_compress_crc_paths is not checked for kernel references"
     )
   }
 }
@@ -22218,9 +23575,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all ten runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all twelve runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 10 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 12 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -22967,6 +24324,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-cross.c",
       // And the ninth: stdin and the terminal of `nish:term`.
       "runtime/runtime-term.c",
+      // And the tenth: the confinement `--sandbox` applies before `main`, which
+      // build.sh pairs with runtime.c on every native link.
+      "runtime/runtime-sandbox.c",
       // The vendored SQLite, which build.sh compiles for a program that calls
       // it, and the notice that names its dedication to the public domain.
       // Read from the directory, so a unit added there is held to shipping too.
@@ -23156,19 +24516,12 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js reaches for a compiler of its own instead of refusing; " +
         "a platform with no prebuilt binary must be told, not quietly served something else"
     )
-    // One row per attached seed, all at one version. Two ways this goes wrong and
+    // One row per attached seed, at exactly this version. Two ways this goes wrong and
     // neither shows up in a build: a platform that gets a binary built and attached but
     // no package published, so every install on it refuses for want of a package that
-    // was never uploaded; and pins left behind, so every install resolves last
-    // release's binary against this release's compiler.
-    //
-    // The version is this release's or the one before it, and nothing older. The
-    // release commit leaves the pins behind on purpose, because their lockfile entries
-    // describe tarballs that are not published yet (release-pr.yml says why), and
-    // release.yml's `lockfile` job moves them after the publish. What a user installs
-    // never sees the gap: release.yml pins the package it packs to the tag, and checks
-    // the tarball it packed. Pins two releases behind mean a `lockfile` job that never
-    // landed, and the next publish would not notice that either.
+    // was never uploaded; and a version bump that moves package.json and leaves these
+    // behind, so every install resolves last release's binary against this release's
+    // compiler. `release-pr.yml` bumps them with the version for that second reason.
     const seedAssets = JSON.parse(
       fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
     ).targets.map((t) => t.asset)
@@ -23180,21 +24533,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       JSON.stringify(Object.keys(optional).sort()) === JSON.stringify(expectedOptional),
       `optionalDependencies is ${Object.keys(optional).sort().join(", ")}; expected ${expectedOptional.join(", ")}`
     )
-    const released = fs
-      .readdirSync(path.join(root, "changelog"))
-      .filter((f) => /^\d+\.\d+\.\d+\.json$/.test(f))
-      .map((f) => f.slice(0, -".json".length))
-    const previous = released
-      .filter((v) => v !== manifest.version && notAfter(v, manifest.version))
-      .reduce((a, v) => (a === undefined || notAfter(a, v) ? v : a), undefined)
-    const allowedPins = previous === undefined ? [manifest.version] : [manifest.version, previous]
-    const pinVersions = [...new Set(Object.values(optional))]
+    const misversioned = Object.entries(optional).filter(([, v]) => v !== manifest.version)
     check(
-      `every platform package is pinned to one version, this one or the release before (${allowedPins.join(" or ")})`,
-      pinVersions.length === 1 && allowedPins.includes(pinVersions[0]),
-      Object.entries(optional)
-        .map(([k, v]) => `${k} is pinned to ${v}`)
-        .join("\n")
+      `every platform package is pinned to this version (${manifest.version})`,
+      misversioned.length === 0,
+      misversioned.map(([k, v]) => `${k} is pinned to ${v}, not ${manifest.version}`).join("\n")
     )
     // And the lockfile's copy of that same list, which is a second file saying the same
     // thing and therefore a second thing to go stale. It did: 0.4.0 shipped with
@@ -23202,8 +24545,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // release bump read `optionalDependencies` at the top level and a lockfile keeps the
     // root package under `packages[""]`. Nothing was red -- `npm ci` tolerates it and
     // `npm install` rewrites the file under whoever runs it next, which is how it stayed
-    // invisible. `scripts/pin-platform-packages.mjs` moves both now, and this is the check
-    // that would have noticed whatever moved them apart.
+    // invisible. `release-pr.yml` moves both now, and this is the check that would have
+    // noticed whatever moved them apart.
     const lockRoot = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8")).packages?.[""]
       ?.optionalDependencies
     const lockDisagrees = Object.entries(optional).filter(([k, v]) => (lockRoot ?? {})[k] !== v)
@@ -23741,9 +25084,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- WP12: the release train's version bump ------------------------------------------
-// `release-pr.yml` bumps three things in one `node -e` script: package.json's version,
-// package-lock.json's two copies of it, and VERSION in src/branding.ts, and leaves the
-// platform packages pinned in optionalDependencies alone. Nothing ran it. It is a
+// `release-pr.yml` bumps four things in one `node -e` script: package.json's version,
+// package-lock.json's two copies of it, every platform package pinned in
+// optionalDependencies, and VERSION in src/branding.ts. Nothing ran it. It is a
 // workflow step, so it executes exactly once per merge to main, in a place where a
 // failure stops the release train rather than a pull request -- and the person who finds
 // out is whoever wanted to cut a release.
@@ -23794,34 +25137,34 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
         bumped.version === next && lock.version === next && lock.packages?.[""]?.version === next,
         `package.json ${bumped.version}, lock ${lock.version}, lock.packages[""] ${lock.packages?.[""]?.version}`
       )
-      // The pins are the half this bump must leave alone, in both copies of the list.
-      // package.json keeps optionalDependencies at the top level and a lockfile keeps
-      // the root package under `packages[""]`, and both are compared to what they were
-      // before the bump. A bump that moved them would put main out of step with its own
-      // lockfile until release.yml's `lockfile` job landed -- the red `lint` job on
-      // every release commit up to 0.26.0 -- because the entries those pins resolve to
-      // describe tarballs that are not published yet. release.yml moves the pins
-      // instead, in the package it packs and in the lockfile pull request.
-      const before = {
-        "package.json": JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).optionalDependencies,
-        'package-lock.json packages[""]': JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-          .packages?.[""]?.optionalDependencies,
-      }
+      // The half that was added with the installer, and the reason this block exists: a
+      // release whose optionalDependencies were left behind installs a compiler that
+      // resolves the previous release's binaries. It succeeds, it runs, and it is one
+      // version stale in the half nobody looks at.
+      //
+      // Both copies of that list, which is the half this check did not have. package.json
+      // keeps optionalDependencies at the top level and a lockfile keeps the root
+      // package under `packages[""]`, so a bump reading only the top level moves one and
+      // leaves the other -- and reading only the top level is what this check did too,
+      // so it passed while 0.4.0 shipped a lockfile still pinned to 0.3.0. `npm ci`
+      // tolerates the disagreement and `npm install` silently rewrites it, so nothing
+      // anywhere went red. A check that looks where the code looks cannot see the code
+      // looking in the wrong place: both places are named here.
       const pinSets = [
         ["package.json", bumped.optionalDependencies ?? {}],
         ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
       ]
-      const moved = pinSets.flatMap(([where, deps]) =>
+      const stale = pinSets.flatMap(([where, deps]) =>
         Object.entries(deps)
-          .filter(([k, v]) => (before[where] ?? {})[k] !== v)
-          .map(([k, v]) => `${where}: ${k} moved from ${(before[where] ?? {})[k]} to ${v}`)
+          .filter(([, v]) => v !== next)
+          .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
       )
       const pinCount = pinSets.reduce((n, [, deps]) => n + Object.keys(deps).length, 0)
       check(
-        `release-pr: the bump leaves every platform package pin alone in BOTH files (${pinCount})`,
-        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && moved.length === 0,
-        moved.length > 0
-          ? moved.join("\n")
+        `release-pr: the bump moves every platform package in BOTH files (${pinCount})`,
+        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
+        stale.length > 0
+          ? stale.join("\n")
           : pinSets.map(([where, deps]) => `${where} pins ${Object.keys(deps).length}`).join("; ")
       )
       const branding = fs.readFileSync(path.join(work, "src", "branding.ts"), "utf8")
@@ -23832,104 +25175,6 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       )
     }
   }
-}
-
-// ---- WP12: the pins release.yml moves -----------------------------------------------
-// The release commit leaves the platform packages pinned to the previous release, so
-// `scripts/pin-platform-packages.mjs` is what moves them: in the `release` job before
-// `npm pack`, and in the `lockfile` job with the entries they resolve to. Both run once
-// per release, after the tag, where a script that moved one file and not the other
-// would publish a package or a lockfile pinned to the last release. So it is run here,
-// against copies, with both workflow steps checked to call it.
-if (!only || "pin-platform".includes(only) || "wp12".includes(only)) {
-  const work = path.join(buildDir, "pin-platform-packages")
-  fs.rmSync(work, { recursive: true, force: true })
-  fs.mkdirSync(work, { recursive: true })
-  for (const f of ["package.json", "package-lock.json"]) {
-    fs.copyFileSync(path.join(root, f), path.join(work, f))
-  }
-  const script = path.join(root, "scripts", "pin-platform-packages.mjs")
-  const ran = spawnSync(process.execPath, [script, "9.9.9", "--dir", work], { encoding: "utf8" })
-  check("pin-platform-packages: runs against a copy of package.json and the lockfile", ran.status === 0, ran.stderr)
-  if (ran.status === 0) {
-    const pinned = JSON.parse(fs.readFileSync(path.join(work, "package.json"), "utf8"))
-    const lock = JSON.parse(fs.readFileSync(path.join(work, "package-lock.json"), "utf8"))
-    const pinSets = [
-      ["package.json", pinned.optionalDependencies ?? {}],
-      ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
-    ]
-    const stale = pinSets.flatMap(([where, deps]) =>
-      Object.entries(deps)
-        .filter(([, v]) => v !== "9.9.9")
-        .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
-    )
-    check(
-      "pin-platform-packages: moves every platform package in BOTH files",
-      pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
-      stale.join("\n")
-    )
-    // The lockfile job commits and merges whatever this writes, so a rewrite that
-    // touched anything else would land on main with nobody reading it.
-    const original = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
-    const originalLock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-    lock.packages[""].optionalDependencies = originalLock.packages[""].optionalDependencies
-    check(
-      "pin-platform-packages: changes nothing in either file but the pins",
-      JSON.stringify({ ...pinned, optionalDependencies: original.optionalDependencies }) === JSON.stringify(original) &&
-        JSON.stringify(lock) === JSON.stringify(originalLock),
-      "package.json or package-lock.json differs from the original outside the pins"
-    )
-  }
-  const refused = spawnSync(process.execPath, [script, "v9.9.9", "--dir", work], { encoding: "utf8" })
-  check(
-    "pin-platform-packages: refuses a version that is not one (a tag name with its `v`)",
-    refused.status === 2,
-    `exit ${refused.status}: ${refused.stderr}`
-  )
-  // An empty `--dir "$X"` must not mean the current directory, which here is the checkout.
-  const noDir = spawnSync(process.execPath, [script, "9.9.9", "--dir"], { encoding: "utf8", cwd: work })
-  check(
-    "pin-platform-packages: refuses a `--dir` with nothing after it",
-    noDir.status === 2,
-    `exit ${noDir.status}: ${noDir.stderr}`
-  )
-  // A lockfile without the root copy of the pins is refused before either file is written,
-  // so a failed run never leaves package.json moved and the lockfile not.
-  const half = path.join(work, "half")
-  fs.mkdirSync(half, { recursive: true })
-  fs.copyFileSync(path.join(root, "package.json"), path.join(half, "package.json"))
-  const bare = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
-  delete bare.packages[""].optionalDependencies
-  fs.writeFileSync(path.join(half, "package-lock.json"), `${JSON.stringify(bare, null, 2)}\n`)
-  const halfRun = spawnSync(process.execPath, [script, "9.9.9", "--dir", half], { encoding: "utf8" })
-  check(
-    "pin-platform-packages: a lockfile with no root pins fails it before package.json is written",
-    halfRun.status === 1 &&
-      fs.readFileSync(path.join(half, "package.json"), "utf8") ===
-        fs.readFileSync(path.join(root, "package.json"), "utf8"),
-    `exit ${halfRun.status}: ${halfRun.stderr}`
-  )
-  const release = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
-  // Line numbers, not offsets: the lockfile pull request's body names the script too. Each
-  // call is held to its job, because one moved into `binaries` would pin a checkout on
-  // another runner and leave the `release` job packing the previous release's pins.
-  const lines = release.split("\n")
-  const lineOf = (text) => lines.findIndex((l) => l.includes(text))
-  const jobOf = (at) => lines.slice(0, at + 1).findLast((l) => /^ {2}[a-z][a-z0-9-]*:\s*$/.test(l))?.trim()
-  const calls = lines.flatMap((l, i) => (l.includes('node scripts/pin-platform-packages.mjs "${GITHUB_REF_NAME#v}"') ? [i] : []))
-  const pack = lineOf("npm pack --pack-destination build/release")
-  const relock = lineOf("npm install --package-lock-only")
-  check(
-    "pin-platform-packages: release.yml calls it twice, before `npm pack` and in the lockfile job",
-    calls.length === 2 &&
-      jobOf(calls[0]) === "release:" &&
-      jobOf(pack) === "release:" &&
-      calls[0] < pack &&
-      jobOf(calls[1]) === "lockfile:" &&
-      jobOf(relock) === "lockfile:" &&
-      calls[1] < relock,
-    `found calls on lines ${calls.map((i) => `${i + 1} (${jobOf(i)})`).join(", ")}`
-  )
 }
 
 // ---- The seed fetch -------------------------------------------------------------------

@@ -73,6 +73,10 @@ list of those places is under
 Integer arithmetic is checked: what happens when a value overflows is on the
 [Control flow](control-flow.md#checked-arithmetic) page.
 
+Sixteen bytes of numbers held as one value — four `i32` lanes, sixteen `u8`
+lanes — are the `nish:simd` vector types, on the [Vectors (SIMD)](simd.md)
+page.
+
 ### `Math`
 
 `Math` gives the functions you know from JavaScript, with JavaScript's
