@@ -121,7 +121,7 @@ batcher's first review, and fixed before it merged.
 | PG-11 | Low | `authenticate` | MD5 and cleartext passwords are refused with `PG_ERR_AUTH_UNSUPPORTED`, so a role whose password is MD5-hashed cannot connect. | **Accepted.** Without TLS cleartext sends the password as it is, and an MD5 response is a hash anyone who sees it can replay; SCRAM-SHA-256 is PostgreSQL's default since 14. `nish/crypto/md5` is therefore not written. |
 | PG-12 | Low | `pgScramKeys`, `pgSha256Wiped` | `sha256(clientKey)`, the one-shot that made StoredKey, left a hasher whose state and block had absorbed ClientKey, which is password-equivalent for that server. | **Fixed.** StoredKey is computed by `pgSha256Wiped`, a hasher of its own whose `state`, `block` and `schedule` are wiped before it returns, as `HmacSha256.digest` does for its two. Not observable from outside (the hasher is a local); the wipes are read in the source. |
 | PG-13 | Low | the builders, `sent`, the output reservation | The output buffer doubled without a cap and was compacted only once fully drained, so a program that queued faster than it sent grew it without bound, toward an `i32` offset's end. The program is trusted, so this is Low. | **Fixed.** `maxOutput` (1 MiB by default) caps the bytes queued unsent: a builder call that would pass it answers false and writes nothing, the room for `Sync` and `Terminate` is kept free under it, and the sent prefix is moved off the front once more than half the buffer is gone, or before any message, `bindEnd`'s, `Sync` and `Terminate` included, that would otherwise grow the buffer past its end; the buffer doubles only while twice its length fits in an `i32`. "a prepare that would pass maxOutput is refused", "a parameter that would pass maxOutput is refused", "unsent bytes count against maxOutput", "a send past half the buffer moves the rest to its start", "rather than double the buffer". |
-| PG-14 | High if it failed | `PgBatcher.row` | A row is routed to requests by the ordinal in its last column, which the server sends. An ordinal past the keys, of 0 or less, NULL, not an integer, or past an int8 would index outside the run's arrays or give one request another's rows; one that goes back would answer a request after its last event. | **Holds.** `row` reads the ordinal with the connection's integer decoder and refuses each of these before it routes anything: it answers false, counts the row in `refused`, and fails the run, so every request still waiting on it gets `PG_BATCH_FAILED`. A run's rows are routed only while it is open, and `take` resets a reused run's keys, so a later batch cannot read an earlier one's. "an ordinal past the keys", "ordinal 0", "a negative ordinal", "a NULL ordinal", "an ordinal that is not an integer", "an ordinal past an int8", "a row of no columns", "an ordinal that goes back", "a later batch cannot read an earlier one's ordinals", "and a bad one does not set it" (the program's `text.failed`). |
+| PG-14 | High if it failed | `PgBatcher.row` | A row is routed to requests by the ordinal in its last column, which the server sends. An ordinal past the keys, of 0 or less, NULL, not an integer, or past an int8 would index outside the run's arrays or give one request another's rows; one that goes back would answer a request after its last event. | **Holds.** `row` reads the ordinal with the connection's integer decoder (`int` for a text batch, `binaryInt` for a `binary` one, with `binary.failed` saved and restored around it) and refuses each of these before it routes anything: it answers false, counts the row in `refused`, and fails the run, so every request still waiting on it gets `PG_BATCH_FAILED`. A run's rows are routed only while it is open, and `take` resets a reused run's keys, so a later batch cannot read an earlier one's. "an ordinal past the keys", "ordinal 0", "a negative ordinal", "a NULL ordinal", "an ordinal that is not an integer", "an ordinal past an int8", "a row of no columns", "an ordinal that goes back", "a later batch cannot read an earlier one's ordinals", "and a bad one does not set it" (the program's `text.failed`); for a `binary` batch, "a binary take answers a run", "its Bind asks for one result format, binary", "its ordinals are read as binary int8s, each row to its request", "binary.failed stays as the caller set it", "a text ordinal is refused" and "a NULL ordinal is refused" (`link/std_postgres_batch`). |
 | PG-15 | Medium | `PgBatcher.row`, `end`, `fail`, `next` | A run was named by its index, reused once answered, and an event on a run that was over panicked. So a server that sent `CommandComplete` twice, a `DataRow` or `CommandComplete` after an `ErrorResponse`, or a connection lost after its answer, ended the program; and had the panic been lifted, a late event would have reached the run's next batch, another set of requests. | **Fixed.** `take` answers a handle, the run's index plus its uses times `runs` (the uses wrap after 2^20, so a handle stays under 2^30), and a run's next take answers a new one. A spent handle — its run answered or taken again — makes `row`, `end` and `fail` do nothing and `next` answer `PG_BATCH_NONE`, and counts the call in `stray`. Only the program's own mistakes still panic (see Panic sites). "a second CommandComplete is stray", "a row after CommandComplete is stray", "an error after CommandComplete, as a commit at Sync can fail, is stray", "a connection lost after CommandComplete, before the group is done", "a row after an error is stray", "a CommandComplete after an error is stray", each through a `PgPool` from the server's bytes; "the one run is taken again under a new handle", "a row on the spent handle answers false", "and next on it answers nothing", "each counted stray", "the new execution is untouched", "the run is free again, under its next handle: a use of 16 runs on". |
 | PG-16 | Medium | `PgBatcher.addText` | A text key that is not UTF-8, or holds a NUL, is refused by the server for the whole array, so one client's bad key failed every request batched with it. | **Fixed.** `addText` answers false for a key with a NUL or that is not RFC 3629 UTF-8 (an overlong form, a surrogate, past U+10FFFF, a stray or missing continuation byte), before it is queued. "a key with a NUL is refused", "a lone continuation byte is refused", "an overlong NUL is refused", "an overlong three-byte form is refused", "a surrogate is refused", "past U+10FFFF is refused", "a character cut by the window is refused", "a bad second continuation byte is refused", "only the good ones wait". |
 | PG-17 | Low | `PgBatcher.take` | Each key is bound once, found by an open-addressed table hashed with a 31-bit polynomial a client could collide, and `maxRequests` reached 65,536: keys chosen to collide made one take probe on the order of 2^31 slots. | **Fixed.** `maxRequests` is at most 1024, so a take probes at most maxRequests² / 2 slots whatever the hash; it compares a key's bytes only on an equal 31-bit hash, so the bytes compared are at most that bound times the key length, which `maxBytes` caps. FNV-1a, which replaced the polynomial, makes chance collisions rarer but does not set that bound: it is unseeded, and `bwfgaa` and `zidhaa` share a 31-bit hash. "text keys quoted and escaped, each once", where only their bytes tell those two apart; `link/std_postgres_batch_config_requests_panic` (1025, after 1024 is taken). |
@@ -221,6 +221,14 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   outside the column. Each binary decoder checks the column's window against
   its buffer and its length against the type's (2, 4 or 8 for an integer, 1
   for a `bool`, 8 for a `float8` or a time) before it reads a byte.
+  `PgBinaryArray` walks a one-dimensional `int2[]`, `int4[]` or `int8[]` the
+  same way: its header's `ndim` (0 or 1), `hasnull` and element OID (20, 21 or
+  23) are checked, and every element's length word must equal its type's size
+  (a NULL needs `hasnull` 1), each before the bytes it names are read. The
+  walk ends with `PG_ARRAY_END` only when it has consumed the column exactly,
+  so a count the header gives and bytes left over, or a short column, both
+  fail. Its only allocation is its constructor's, and no element is read past
+  the column's window.
 - **The output buffer's doubling is bounded by `maxOutput`.** Every message
   first makes room by moving the unsent bytes to the front (PG-13), so the
   buffer grows past its length only when the unsent bytes need it, and never
@@ -375,7 +383,21 @@ that a binary bind does not leak into the next; "a binary bind refuses
 that one" and "bindEnd is never refused for room" that its two extra bytes
 are kept free under `maxOutput` from `bindStartBinary` on.
 `tests/postgres/live`'s `binary` scenario reads one statement's rows from
-PostgreSQL 18 in binary and in text and gets the same line for each.
+PostgreSQL 18 in binary and in text and gets the same line for each, and its
+`stamps_binary` batch (a `PgBatchConfig` with `binary` set) reads the same
+creation times as its `stamps_text` batch.
+
+**Binary arrays**: `link/std_postgres` walks hand-built arrays. "ndim 0: the
+empty array", "one int4", "1000 elements", "a NULL with hasnull 1" and "int2
+elements" read in place and end with `PG_ARRAY_END`. Each refusal sets
+`binary.failed`: "ndim 2", "another element type: text", "a 3-byte int4
+element", "a 4-byte element in an int2 array", "a hasnull that is not 0 or
+1", "a NULL with hasnull 0", "a negative dimension", "more elements promised
+than given", "bytes after an empty array", "truncated inside the element",
+"truncated inside the length word", "truncated inside the header", "a window
+past the buffer" and "a window before it". The live `binary` scenario reads
+int4[] and int8[] columns, each empty, one element or 1000, in binary and in
+text, and gets the same line for each.
 
 **Terminate**: "Terminate drops an open bind", so a half-built Bind is never
 sent, and "terminate drops an open array with its bind".
@@ -401,7 +423,11 @@ quoted and escaped, each once" "and routed"). A row's ordinal is refused
 when it is NULL, not an integer, outside the keys or going back (PG-14's
 tests). A spent run handle routes nothing, so no late event reaches a later
 batch (PG-15's tests, and "a later batch cannot read an earlier one's
-ordinals"). Its state is bounded by its config, with each cap's bound a
+ordinals"). With `binary` set, a batch's rows come in binary as well: `take`
+opens its bind with `bindStartBinary` and `row` reads the ordinal with
+`binaryInt`, so a binary batch's refusals are PG-14's, read back in binary
+("a binary take answers a run", "binary.failed stays as the caller set it").
+Its state is bounded by its config, with each cap's bound a
 panic test under Panic sites, and its refusals answered rather than grown:
 "only the ones that fit wait", "a full take fits maxOutput at the bound",
 "and a byte past it is refused". It passes as `link/std_postgres_batch:
