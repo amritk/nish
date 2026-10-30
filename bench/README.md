@@ -1798,11 +1798,13 @@ On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
 | parse | 18.693 ms | 19.561 ms | 4.6% | 56.5 |
 | load | 36.268 ms | 38.393 ms | 5.9% | 29.1 |
 
-The load costs 1.94x the parse alone, 17.6 ms a document more, for 75,025
-values from 276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`
-the load step is about 169M instructions a document against the parse's
-136M, 1.24x; the wall-clock ratio is wider than the instruction ratio because
-the load writes a second tree.
+Both rows time the whole binary, so **load** includes the parse. In wall
+clock, parse plus load is 1.94x the parse alone; the load step by itself is
+the 17.6 ms a document between them, 0.94x the parse, for 75,025 values from
+276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`, a document
+is 136M instructions to parse and 309M to parse and load, 2.27x; the load
+step alone is 173M, 1.27x the parse. The load step retires more instructions
+than the parse but takes less time than it.
 
 ```bash
 node bench/yaml-json/run.mjs

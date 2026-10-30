@@ -60,6 +60,7 @@ the record that found it. The notes below the table name each such finding.
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 1 ¹⁰ |
 | Percent-decoding, query strings and URL parsing | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
+| YAML into a JsonDocument | [yaml.md](yaml.md) | `std/yaml-json.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
 | Regular expressions | [regex.md](regex.md) | `std/regex.ts`; the `nish_regex_scan` kernel in `runtime/runtime-simd.c`, its contract in `runtime/nish.h` and its lowering in `src/kernels.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 ¹⁴ |
