@@ -967,20 +967,22 @@ jobs:
   # with `test`, so it costs a runner rather than wall-clock time, and it spawns a
   # compiler per case, which is why `npm test` does not pay for it.
   runner:
-    name: the golden cases, in Nish (shard ${{ matrix.shard }}/2)
+    name: the golden cases, in Nish (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The runner walks the corpus one program at a time, about forty minutes
-    # of one core in all; `--shard` deals the programs two ways, and
-    # scripts/nish-runner-parallel.mjs runs one runner per core on each half,
-    # each in a working directory of its own. Four jobs of one runner each
-    # took 8 to 13 minutes (run 40820090678) with three cores of four idle.
-    # The `/2` below is this list's length, and tests/run.js checks that the
-    # two agree.
+    # The runner walks the corpus one program at a time; `--shard` deals the
+    # programs three ways, and scripts/nish-runner-parallel.mjs runs one runner
+    # per core on each third, each in a working directory of its own. Four
+    # jobs of one runner each took 8 to 13 minutes (run 40820090678) with three
+    # cores of four idle. Two jobs of four runners each took 8 minutes on a
+    # fast machine and passed 15 on a slow one (run 40997535378), when every
+    # tests/link program still linked at -O3 with LTO; they now link under the
+    # profile tests/run.js gives them (tests/speed-link.txt). The `/3` below is
+    # this list's length, and tests/run.js checks that the two agree.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -1032,7 +1034,7 @@ jobs:
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          node scripts/nish-runner-parallel.mjs --runner build/nish-runner --compiler build/nish --shard "$SHARD/2" | tee "$RUNNER_TEMP/nish-runner.log"
+          node scripts/nish-runner-parallel.mjs --runner build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()
