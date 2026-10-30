@@ -8145,7 +8145,7 @@ if (dealtHere("nishRunner")) {
     // an absolute one from, which is also why it folds `<root>/` out of a
     // golden rather than into its own output. `--compiler` names the compiler
     // under test, where the runner's own default is build/nish.
-    const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH)], { cwd: root })
+    const ran = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), "--jobs", "1"], { cwd: root })
     const report = String(ran.stdout)
     check(
       "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",
@@ -8155,8 +8155,11 @@ if (dealtHere("nishRunner")) {
     // `--shard`, which CI's `runner` job splits the corpus with: two halves of
     // the same selection pass between them exactly the checks the whole does,
     // so no program is dropped or run twice. A spec outside 1..n is refused.
+    // `--jobs 1` is the runner in one process, the way a `--jobs` child runs.
     const passed = (args) => {
-      const r = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), ...args], { cwd: root })
+      const r = spawnSync(runnerExe, ["pop", "--compiler", path.relative(root, NISH), "--jobs", "1", ...args], {
+        cwd: root,
+      })
       const m = / (\d+) passed, 0 failed, /.exec(String(r.stdout))
       return r.status === 0 && m ? Number(m[1]) : -1
     }
@@ -8170,25 +8173,14 @@ if (dealtHere("nishRunner")) {
       whole > 0 && halves.every((n) => n > 0) && halves[0] + halves[1] === whole && refused.status !== 0,
       `whole ${whole}, halves ${halves.join(" + ")}, 3/2 exited ${refused.status}`
     )
-    // scripts/nish-runner-parallel.mjs, which CI's `runner` job runs: its two
-    // runners of each half pass between them exactly the checks that half
-    // passes alone, and its last line is their summaries summed in the
-    // runner's own words, so the slice arithmetic and the summing are pinned.
+    // `--jobs`, which CI's `runner` job runs with: the two processes of each
+    // half pass between them exactly the checks that half passes alone, and
+    // the last line is their summaries summed in the runner's own words, so
+    // the slice arithmetic and the summing are pinned.
     const parallel = (shard) => {
       const r = spawnSync(
-        "node",
-        [
-          path.join("scripts", "nish-runner-parallel.mjs"),
-          "pop",
-          "--runner",
-          runnerExe,
-          "--compiler",
-          NISH,
-          "--shard",
-          shard,
-          "--jobs",
-          "2",
-        ],
+        runnerExe,
+        ["pop", "--compiler", path.relative(root, NISH), "--shard", shard, "--jobs", "2"],
         { cwd: root, encoding: "utf8" }
       )
       const m = /\ngolden cases: (\d+) passed, 0 failed, \d+ skipped\n$/.exec(r.stdout)
@@ -8196,7 +8188,7 @@ if (dealtHere("nishRunner")) {
     }
     const parallelHalves = [parallel("1/2"), parallel("2/2")]
     check(
-      "scripts/nish-runner-parallel.mjs passes, over each half, the checks the Nish runner's --shard does alone",
+      "the Nish runner's --jobs 2 passes, over each half, the checks its --shard does in one process",
       parallelHalves[0] === halves[0] && parallelHalves[1] === halves[1],
       `runner halves ${halves.join(" + ")}, parallel halves ${parallelHalves.join(" + ")}`
     )

@@ -995,11 +995,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The runner walks the corpus one program at a time; `--shard` deals the
-    # programs three ways, and scripts/nish-runner-parallel.mjs runs one runner
-    # per core on each third, each in a working directory of its own. Four
-    # jobs of one runner each took 8 to 13 minutes (run 40820090678) with three
-    # cores of four idle. Two jobs of four runners each took 8 minutes on a
-    # fast machine and passed 15 on a slow one (run 40997535378), when every
+    # programs three ways, and the runner's own `--jobs` (one process per core
+    # by default) runs each third as several of itself. Four jobs of one
+    # runner each took 8 to 13 minutes (run 40820090678) with three cores of
+    # four idle. Two jobs of four runners each took 8 minutes on a fast
+    # machine and passed 15 on a slow one (run 40997535378), when every
     # tests/link program still linked at -O3 with LTO; they now link under the
     # profile tests/run.js gives them (tests/speed-link.txt). The `/3` below is
     # this list's length, and tests/run.js checks that the two agree.
@@ -1050,15 +1050,19 @@ jobs:
       # and a runner that answered 1 would still be a green step.
       # The runner is built by the compiler under test and handed it with
       # `--compiler`; with no filter it walks its shard of the whole corpus.
-      # The wrapper's last line sums the runners' summaries in the runner's
-      # own words, and it answers 1 when any runner did.
+      # With `--jobs` (a core each by default) the last line sums the
+      # processes' summaries in the same words, and it answers 1 when any did.
+      # `env --default-signal` is load-bearing too: the Actions runner starts
+      # the step shell with SIGPIPE ignored, `exec` keeps an ignored signal,
+      # and `io_spawn_piped` checks that a child starts with SIGPIPE at its
+      # default. Node reset it when it started the runner; nothing else does.
       - name: The corpus, through the Nish runner
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          node scripts/nish-runner-parallel.mjs --runner build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
+          env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()
