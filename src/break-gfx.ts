@@ -16,7 +16,7 @@
 // covers a bounded number of times with plain arithmetic, so draw cost follows
 // the framebuffer's size.
 
-import { Framebuffer } from "../std/term-pixels"
+import { Framebuffer } from "nish/term-pixels"
 
 /** Simulation steps a second: every duration the game and menu count is in these steps. */
 export const STEPS_PER_SECOND: i32 = 120
@@ -135,7 +135,7 @@ const gfxPixel = (v: f64): i32 => {
 // ---- Colour and motion -----------------------------------------------------
 
 /** `0xRRGGBB` from three channels, each clamped to 0..255. */
-export const rgb = (r: i32, g: i32, b: i32): i32 => (gfxByte(r) << 16) | (gfxByte(g) << 8) | gfxByte(b)
+export const gfxRgb = (r: i32, g: i32, b: i32): i32 => (gfxByte(r) << 16) | (gfxByte(g) << 8) | gfxByte(b)
 
 /** `v` clamped to a channel's 0..255. */
 const gfxByte = (v: i32): i32 => Math.min(Math.max(v, 0), 255)
@@ -155,9 +155,9 @@ const gfxWeight = (t: f64): i32 => {
 const gfxMixByte = (a: i32, b: i32, w: i32): i32 => a + (((b - a) * w) >> 8)
 
 /** `a` moved toward `b` by `t`, clamped to 0..1: 0 is `a`, 1 is `b`. */
-export const mix = (a: i32, b: i32, t: f64): i32 => gfxMixWeight(a, b, gfxWeight(t))
+export const gfxMix = (a: i32, b: i32, t: f64): i32 => gfxMixWeight(a, b, gfxWeight(t))
 
-/** `mix` with the fraction already a 0..256 weight, which the per-pixel loops compute once. */
+/** `gfxMix` with the fraction already a 0..256 weight, which the per-pixel loops compute once. */
 const gfxMixWeight = (a: i32, b: i32, w: i32): i32 =>
   (gfxMixByte((a >> 16) & 255, (b >> 16) & 255, w) << 16) |
   (gfxMixByte((a >> 8) & 255, (b >> 8) & 255, w) << 8) |
@@ -186,21 +186,21 @@ export const hue = (h: f64): i32 => {
   const rise: i32 = gfxByte(toI32((h6 - Math.floor(h6)) * 255.0))
   const fall: i32 = 255 - rise
   if (sector === 0) {
-    return rgb(255, rise, 0)
+    return gfxRgb(255, rise, 0)
   }
   if (sector === 1) {
-    return rgb(fall, 255, 0)
+    return gfxRgb(fall, 255, 0)
   }
   if (sector === 2) {
-    return rgb(0, 255, rise)
+    return gfxRgb(0, 255, rise)
   }
   if (sector === 3) {
-    return rgb(0, fall, 255)
+    return gfxRgb(0, fall, 255)
   }
   if (sector === 4) {
-    return rgb(rise, 0, 255)
+    return gfxRgb(rise, 0, 255)
   }
-  return rgb(255, 0, fall)
+  return gfxRgb(255, 0, fall)
 }
 
 /** `a` to `b` by `t`, not clamped: 0.5 is halfway, which is how a draw interpolates by `alpha`. */
@@ -352,8 +352,8 @@ export const bevelBrick = (view: View, x: f64, y: f64, w: f64, h: f64, face: i32
     return
   }
   const edge: i32 = Math.max(1, Math.min(gfxPixel(view.scale + 0.5), Math.min(pw, ph) / 3))
-  const light: i32 = mix(face, 0xffffff, 0.45)
-  const dark: i32 = mix(face, 0x000000, 0.45)
+  const light: i32 = gfxMix(face, 0xffffff, 0.45)
+  const dark: i32 = gfxMix(face, 0x000000, 0.45)
   gfxRect(fb, x0, y0, x1, y0 + edge, light, 256)
   gfxRect(fb, x0, y0 + edge, x0 + edge, y1, light, 256)
   gfxRect(fb, x0 + edge, y1 - edge, x1, y1, dark, 256)
@@ -447,7 +447,7 @@ export const glow = (view: View, cx: f64, cy: f64, r: f64, colour: i32, strength
  * what `drawTrail` draws behind a ball. `pushTrail` adds a point; a full
  * ring forgets its oldest.
  */
-export class Trail {
+export class GfxTrail {
   /** The world x of each point, in ring order. */
   xs: f64[]
   /** The world y of each point, in ring order. */
@@ -476,7 +476,7 @@ export class Trail {
 }
 
 /** Add the newest point to `trail`, forgetting the oldest when it is full. Call it once a step. */
-export const pushTrail = (trail: Trail, x: f64, y: f64): void => {
+export const pushTrail = (trail: GfxTrail, x: f64, y: f64): void => {
   const n: i32 = toI32(trail.xs.length)
   if (trail.head < 0 || trail.head >= n || n !== toI32(trail.ys.length)) {
     trail.head = 0
@@ -495,7 +495,7 @@ export const pushTrail = (trail: Trail, x: f64, y: f64): void => {
  * opaque than the one before, up to radius `r` and alpha `alpha` at the
  * newest: a streak that fades out behind what made it.
  */
-export const drawTrail = (view: View, trail: Trail, r: f64, colour: i32, alpha: f64): void => {
+export const drawTrail = (view: View, trail: GfxTrail, r: f64, colour: i32, alpha: f64): void => {
   const n: i32 = toI32(trail.xs.length)
   const count: i32 = Math.min(trail.count, n)
   for (let i: i32 = 0; i < count; i++) {
