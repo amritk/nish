@@ -86,9 +86,9 @@ if (process.argv[2] === "--check") {
   }
   process.exit(bad ? 1 : 0)
 }
-const W = Number(process.argv[2])
-if (![2, 3, 4, 5, 6].includes(W)) {
+const width = Number(process.argv[2])
+if (![2, 3, 4, 5, 6].includes(width)) {
   console.error("usage: node bench/crypto/bcrypt/gen-body.mjs <2|3|4|5|6> | --check")
   process.exit(2)
 }
-console.log(body(W).join("\n"))
+console.log(body(width).join("\n"))
