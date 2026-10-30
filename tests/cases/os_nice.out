@@ -1,5 +1,14 @@
-0
-0
-true
-0
-0
+lower to 1: 0
+nice reads: 1
+child inherits 1: 0
+same value: 0
+nice reads: 1
+above 19: -22
+nice reads: 1
+negative: -22
+nice reads: 1
+below current: -13
+nice reads: 1
+idle: 0
+policy idle: 1
+child class idle: 0

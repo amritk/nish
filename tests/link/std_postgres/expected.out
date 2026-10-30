@@ -415,4 +415,39 @@ PASS  timestamp: a column
 PASS  timestamp: infinity
 PASS  timestamp: four bytes
 PASS  the text decoder writes the same
-postgres: 417 passed, 0 failed, 0 skipped
+PASS  ndim 0: the empty array
+PASS  and it has no elements
+PASS  one int4
+PASS  its count
+PASS  its element OID
+PASS  int2 elements
+PASS  int8 elements, the most negative too
+PASS  a NULL with hasnull 1
+PASS  a NULL with hasnull 0
+PASS  1000 elements
+PASS  the count
+PASS  their sum
+PASS  then the end, exactly
+PASS  a NULL element
+PASS  its int fails
+PASS  ndim 2
+PASS  ndim -1
+PASS  another element type: text
+PASS  a 3-byte int4 element
+PASS  a 4-byte element in an int2 array
+PASS  an int8 element of 4 bytes
+PASS  a hasnull that is not 0 or 1
+PASS  a negative dimension
+PASS  more elements promised than given
+PASS  one element promised, two given
+PASS  bytes after an empty array
+PASS  truncated inside the element
+PASS  truncated inside the length word
+PASS  truncated inside the header
+PASS  an empty window
+PASS  a window past the buffer
+PASS  it is failed
+PASS  a window before it
+PASS  it is failed too
+PASS  int on a refused walk fails
+postgres: 452 passed, 0 failed, 0 skipped

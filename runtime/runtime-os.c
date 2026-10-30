@@ -775,15 +775,20 @@ int64_t nish_total_memory(void) {
 }
 
 /* `setNice(n)`: this process's nice value set to `n`, 0 or a negative errno.
-   The kernel clamps `n` to its range (-20 to 19), so only lowering the value
-   below what the process has can fail: -EACCES (Linux, Darwin) or -EPERM
-   without the privilege to raise a priority. Linux keeps the value per thread,
-   so it is the calling thread's and every thread started after it. */
+   Lower-only, even as root: `n` takes 0..19 (-EINVAL outside it, with no system
+   call), and a value below the current one is -EACCES (Linux, Darwin) without
+   a `setpriority` call, so the priority never rises. Linux keeps the value per
+   thread, so it is the calling thread's and every thread started after it. */
 int32_t nish_set_nice(int32_t n) {
 #ifdef __wasi__
   (void)n;
   return -ENOSYS;
 #else
+  if (n < 0 || n > 19) return -EINVAL;
+  errno = 0;
+  int current = getpriority(PRIO_PROCESS, 0);
+  if (current == -1 && errno != 0) return -errno;
+  if (n < current) return -EACCES;
   return setpriority(PRIO_PROCESS, 0, n) == 0 ? 0 : -errno;
 #endif
 }
