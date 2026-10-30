@@ -1,0 +1,7 @@
+license: gzip's trailer is Crc32.update's, and gunzip gives the file back
+language: gzip's trailer is Crc32.update's, and gunzip gives the file back
+certificate: gzip's trailer is Crc32.update's, and gunzip gives the file back
+self: gzip's trailer is Crc32.update's, and gunzip gives the file back
+a binary file: true
+a file past 64 KiB: true
+a length not a multiple of 16: true

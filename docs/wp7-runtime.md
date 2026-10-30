@@ -7,7 +7,7 @@ strings, and the `wasi` build profile. Later work superseded several parts:
 
 - signed overflow, `i64` included, is a checked panic by default (#426);
 - the shortest-digits search was replaced by a port of Ryu;
-- the runtime grew from one translation unit to ten, each with its own
+- the runtime grew from one translation unit to eleven, each with its own
   measured budget (below).
 
 The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",
@@ -178,15 +178,17 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,899 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,899 (2026-10-23) |
 | `runtime/runtime-os.c` | syscall wrappers: files (and `renameSync`, `unlinkSync`, `writeFileBytesSync`, `writeBytes`, `writeFileSyncMode`, `createFileExclusiveSync`), directories (and `mkdirSyncMode`), subprocesses (`spawnSync`, `spawnPiped`, and `spawn`, `kill`, `waitPid`), `getenv`, the two clocks, `realpath`, platform, the CPU count and physical memory | 4,608 (`RUNTIME_OS_TEXT_BUDGET`) | 4,450 (2026-10-29) |
 | `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 610 (2026-10-16) |
-| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,560 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,522 (2026-10-20) |
+| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,560 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,558 (2026-10-24) |
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, `SO_REUSEPORT` listeners, UDP, the readiness loop | 2,560 (`NET_TEXT_BUDGET`) | 2,335 (2026-10-20) |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s and `nish_regex_scan`'s scalar, base and AVX2 paths and their resolvers ([wp38](wp38-simd.md) S1) | 2,560 (`RUNTIME_SIMD_TEXT_BUDGET`) | 2,337 (2026-10-23) |
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
 | `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 1,536 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,303 (2026-10-23) |
+| `runtime/runtime-checksum.c` | CRC-32 on PCLMULQDQ folding (x86-64) or the CRC32 instructions (AArch64), the nibble-table tail and `nish_crc32_hw` ([wp38](wp38-simd.md) CRC) | 768 (`RUNTIME_CHECKSUM_TEXT_BUDGET`) | 718 (2026-10-30) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 | `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore, and the restore bytes | 2,048 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,825 (2026-10-24) |
+| `runtime/runtime-sandbox.c` | `--sandbox`: the capability drop, the Landlock ruleset and the seccomp filter `nish_sandbox` applies from `.preinit_array`, and `nish_sandbox_check` ([wp37](wp37-os-sandbox.md) stage 1, [security/sandbox.md](security/sandbox.md)) | 2,304 (`RUNTIME_SANDBOX_TEXT_BUDGET`) | 2,264 (2026-10-24) |
 
 **How the ceilings moved.**
 
@@ -225,11 +227,14 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-23 | `nish/regex`'s match-start scan, `nish_regex_scan`: `runtime-simd.c` 675 → 2,337. The scan is the 1,631: the AVX2 path 1,323 (one copy each for a window of 1, 2 and 3 positions, so the tables stay in registers; a width of 4 shares the third), the scalar path 202, its resolver 97 and the entry point 9. `indexOfAny`'s resolver now calls `nish_simd_choose` (158) rather than inlining it (203 → 76), so the two share one CPU question. Out of line, the candidate check would save 76 bytes (2,261) but took `/example/` over the bench prose from 0.195 to 0.215 ms, against 0.199 for Rust's `regex` crate, so it stays inlined | simd 2,560 |
 | 2026-10-24 | `setTerminalRestore`, bytes written to stdout on the way out: `runtime-term.c` 1,419 → 1,825. `nish_set_terminal_restore` 238 and `nish_term_finish` 94 (the `write` loop, inlined), the handlers' setup split out of `setRawMode` as `nish_term_arm` (+16 net), the restore keeping the panic hook while bytes wait (+10), and every signal blocked while the bytes go out (+48). Raised in place, not split off, because the bytes go out from this file's static handlers under its lock | term 2,048 |
 | 2026-10-24 | the writer's plain bytes, `nish_bytes_skip_json_plain` (wp38 S6a follow-up): `runtime-bytes.c` 1,303 → 1,525. Its own scalar path 49 and SSE2 path 110, its entry point 21 and the resolver's second pointer 45 (204 → 249), less 3 from the UTF-8 resume (29 → 26, layout). No AVX2 path: putting the class in the shared paths changed the three classes' loops and slowed `bench/json-tokenizer`, so those stay instruction for instruction as they were | bytes 1,536 |
+| 2026-10-24 | `runtime-sandbox.c` (2,264), wp37 stage 1; its own unit so a program built without `--sandbox` links none of it | sandbox 2,304 |
+| 2026-10-24 | `nish_cpu_prime`, which `--sandbox` calls to read the CPU count before Landlock closes `/sys`, and the ceiling `nish_cpu_count` clamps to: `runtime-parallel.c` threaded 2,522 → 2,558, 2 bytes under its ceiling | parallel threads 2,560 |
 | 2026-10-29 | `renameSync`, `unlinkSync`, `writeFileBytesSync` and `writeBytes`: `runtime-os.c` 2,380 → 2,745. `nish_rename` 85, `nish_unlink` 53, `nish_write_file_bytes` 139, `nish_write_bytes` 34, and `nish_put_all` 106, the write loop both share with `writeFileSync`, which took `nish_put_file` 142 → 93. `writeBytes` is here, not beside `write` in the closed `runtime.c`, whose loop answers nothing; sharing it grew that file 21 bytes past its ceiling | os 2,816 |
 | 2026-10-29 | the same four builtins met `setNice` and `setIdlePriority` from `main`: `runtime-os.c` 2,745 → 2,822, `nish_set_nice` 31 and `nish_set_idle_priority` 46, which each side's budget held alone and 2,816 did not hold together | os 3,072 |
 | 2026-10-29 | `wallClockNanos`: `runtime-os.c` 2,822 → 2,828 (2,380 → 2,386 alone), the two clocks sharing `nish_clock_nanos` | os 3,072 |
 | 2026-10-29 | `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (#992): `runtime-os.c` 2,828 → 3,174, `nish_put_file_mode` 253, its two callers 12 each, `nish_mkdir_mode` 72 | os 3,328 |
 | 2026-10-29 | `spawnPiped`: `runtime-os.c` 3,174 → 4,450. `nish_spawn_piped` 1,082 (the poll loop that writes stdin while it drains both outputs, the 16 MiB cap and its kill, SIGPIPE blocked on the calling thread), `nish_pipe` 109 (`pipe2` with `O_CLOEXEC`, both ends moved off 0–2), and `nish_spawn_start` 284 → 365 for the three `dup2` actions and the check that each was recorded; the rest is the shared helpers' growth | os 4,608 |
+| 2026-10-30 | `runtime-checksum.c` (718), wp38 CRC: the PCLMULQDQ folding kernel 514, its byte tail 58, the resolver 121 and the entry point 25 | checksum 768 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -393,6 +398,22 @@ freestanding link whose IR calls a kernel, as it adds `runtime-aes.c`, so a
 module compiled for the host links there too. `scripts/build.sh` pairs it,
 `src/run-cache.ts` lists it and the compiler first calls it in one commit. A
 program that never reaches a run keeps none of it, by section GC.
+
+### The checksum unit
+
+`runtime/runtime-checksum.c` (wp38 CRC, [wp38-simd.md](wp38-simd.md)) holds
+CRC-32 for `nish/compress/checksum`: on x86-64, four 128-bit lanes folded with
+PCLMULQDQ and a Barrett reduction (Gopal et al., Intel, 2009), never SSE4.2's
+`crc32`, which is CRC-32C; on AArch64, the ARMv8 `crc32x`/`w`/`h`/`b`
+instructions. The compiler branches on `nish_crc32_hw` in front of the private
+walker `crc32Walk` and joins the two answers at a `phi`, so where the CPU has
+neither, or `NISH_CRC32=soft` pins it, the Nish slicing-by-8 runs as before.
+The 718 bytes are the folding kernel 514, the nibble-table tail 58, the
+resolver 121 and the entry point 25. It is an eleventh unit rather than more of
+`runtime-aes.c` by the same rule as the byte-class unit. A wasm build emits no
+seam; a module compiled for the host and linked with `--profile wasm` gets the
+file's wasm32 stub, whose `nish_crc32_hw` answers 0. A program that never
+reaches a CRC keeps none of it, by section GC.
 
 ### Checked arithmetic
 

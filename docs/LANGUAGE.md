@@ -9449,6 +9449,106 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   part of the cache key and a cache hit is held to it too. `--fix` and
   `--emit-ast` refuse the flag.
 
+#### The sandbox
+
+`--sandbox` holds a running native program to the capabilities its `main`
+reaches. The policy above refuses at compile time a program that reaches more
+than it grants; the sandbox makes the kernel refuse, at run time, what the
+program's code does not reach, `ffi` callees and constructors included
+([wp37-os-sandbox.md](wp37-os-sandbox.md),
+[security/sandbox.md](security/sandbox.md)):
+
+```llvm
+@.sandbox.preinit = internal constant void ()* @.sandbox.apply, section ".preinit_array", align 8
+@llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"
+
+define internal void @.sandbox.apply() {
+entry:
+  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null)
+  ret void
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  call void @nish_sandbox_check()
+```
+
+- **The flag.** `--sandbox` is strict; `--sandbox=best-effort` runs on a
+  kernel that lacks part of the confinement and says in one line on stderr
+  what it could not withhold. Any other mode is a usage error, exit 2. It is
+  accepted by `--link`, by `nish run` (before the file) and on the IR-only
+  route, alone or beside the flags that write a file next to the IR; the
+  `.ll` then carries the call, and linking it by hand keeps the confinement
+  (`tests/cases/sandbox_hello`). `--emit-ast`, `--emit-checked`, `--emit-ts`,
+  `--fix`, `--emit-napi` and `--emit-napi-async` refuse it, exit 2, since none
+  writes a program with a `main` to confine, and so does an entry module that
+  declares no `main`. `--sandbox` and `--sandbox=best-effort` on one command
+  line are refused, exit 2; the same one twice is one.
+- **The call.** The first operand is `main`'s capability mask, numbered as
+  `--emit-capabilities` numbers the bits (`clock` 0 … `tty` 10, `unsafe` 11), the
+  second `1` for strict and `2` for best-effort; the two `i8*` operands are
+  `null`. `nish_sandbox` runs from `.preinit_array`, after the loader and
+  before any constructor of the executable, an `ffi` object or a shared
+  library, and applies, in order: `PR_SET_NO_NEW_PRIVS`, a drop of every
+  Linux capability (each set read back), a Landlock ruleset masked to the ABI
+  the kernel answers, and a seccomp filter. `main` calls
+  `nish_sandbox_check` first, which refuses to run a program whose C library
+  never ran `.preinit_array` (musl), with exit 126 and one line: `nish:
+  --sandbox: the C library did not run .preinit_array, so the program was
+  not confined`.
+- **What each capability's absence withholds.** Without `fs.read`, Landlock
+  withholds reading files and directories; without `fs.write`, writing,
+  making, removing, renaming and linking (within one directory too) and
+  truncating, and seccomp
+  answers `EPERM` to `chmod`, `chown`, `utimensat`, `setxattr` and their
+  siblings, which Landlock does not decide. Without `process.spawn`,
+  `execve`, `execveat`, `fork`, `vfork` and a `clone` without
+  `CLONE_THREAD` kill the process, `clone3` answers `ENOSYS`, and Landlock
+  withholds executing files and device `ioctl`s (ABI 5); with it, executing
+  and reading files and device `ioctl`s are granted beneath `/`, since a
+  child must load its binary and libraries, so a program that reaches
+  `process.spawn` can read any file the user can whether or not it reaches
+  `fs.read`. Without `net`, `socket`, `socketpair`, `connect`,
+  `bind`, `listen`, `accept` and `accept4` kill it. `ffi`, `unsafe`, `tty`,
+  `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing of their
+  own; the ABI 6 scopes under **Always** apply whatever `main` reaches.
+- **The CPU count.** Before it confines anything, `nish_sandbox` reads the
+  CPU count (the affinity mask and the cgroup quota) and keeps it as the
+  thread pool's ceiling, since without `fs.read` the quota under
+  `/sys/fs/cgroup` cannot be read afterwards. `NISH_NUM_THREADS` still lowers
+  the pool. `availableParallelism()` reads the count again on each call and
+  is not bounded by that ceiling, so in such a program it no longer sees the
+  quota.
+- **Always.** `ptrace`, `process_vm_readv`, `process_vm_writev` and
+  `pidfd_getfd` kill; io_uring kills unless both `net` and `process.spawn`
+  are granted; on x86-64 a system call numbered with bit 30 (x32) kills, and
+  a call from any other architecture's entry kills. A killed process ends by
+  `SIGSYS`, exit status 159 from a shell. From Landlock ABI 6 a sandboxed
+  process cannot signal or reach the abstract sockets of a process outside
+  it.
+- **Refusals.** A program whose sandbox cannot be applied prints one line,
+  `nish: --sandbox: ...`, and exits 126 before `main` runs. Strict refuses a
+  kernel without Landlock, and one below ABI 3 when `fs.write` is not
+  granted, since `TRUNCATE` cannot be withheld there; best-effort runs on
+  both, naming what it could not withhold (without Landlock, files are not
+  confined at all). Neither mode refuses a kernel without `IOCTL_DEV` (ABI 5)
+  or the signal and socket scopes (ABI 6); best-effort names them.
+- **Targets.** A darwin target, given or the host's, is refused (NL3044,
+  `tests/wordings/nl3044_sandbox_darwin`). The wasm and WASI targets
+  (`wasm32`, `wasm32-wasi`) accept the flag
+  and emit no call, since the host already holds a module to its imports;
+  `--profile wasm` refuses IR built with `--sandbox` for the host. A `.ll`
+  built with `--sandbox` and linked on a platform other than Linux refuses to
+  run, exit 126.
+- **No byte of a program's IR moves without the flag**: the entry, its
+  `@llvm.used` slot and the two declarations are emitted only under
+  `--sandbox` ("sandbox: without the flag the IR is the sandboxed IR less the
+  sandbox's lines"). `--runtime-decls`, which lists every declaration the
+  runtime answers, lists the two whatever the flag.
+- **Reserved names.** The runtime calls `prctl` and `syscall` from C, so in
+  every build, sandboxed or not, a `declare function` of either name is
+  refused as a reserved C symbol (NL3037).
+
 ## Semantics decisions
 
 - **Signed integer overflow is a checked panic; `wrappingAdd`,
