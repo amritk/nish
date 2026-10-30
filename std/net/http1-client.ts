@@ -10,7 +10,10 @@
  * with nothing allocated. A chunked body is written with `http1Chunk` and
  * `http1LastChunk` from `nish/net/http1`. The writer refuses anything that
  * would let a caller's string end a line early or frame the body itself — the
- * request-splitting and request-smuggling shapes.
+ * request-splitting and request-smuggling shapes. `http1UpgradeRequestHead`
+ * is the one way to ask the server to switch protocols: it writes `Upgrade`
+ * and `Connection: Upgrade` itself, and every other writer refuses a
+ * `Connection` that lists `upgrade`.
  *
  * **The parser** is a push-pull machine, like the server's. A caller tells it
  * what it asked (`expect`), `feed`s whatever slice the socket gave it, cut
@@ -34,10 +37,11 @@
  * final one follows), `HTTP1_HEAD` (the final response's status line and
  * header section are in), `HTTP1_BODY` (some body bytes, de-chunked),
  * `HTTP1_END` (the response is complete; with `keepAlive()` the next one
- * follows), `HTTP1_UPGRADE` (a CONNECT was answered with 2xx and the
- * connection is a tunnel now: `tunnelBytes()` answers what was fed past the
- * head), `HTTP1_CLOSED` (the connection is done: the server closed it
- * between responses, or the last response was not kept alive) and
+ * follows), `HTTP1_UPGRADE` (a CONNECT was answered with 2xx, or a request
+ * that `expectUpgrade` named was answered with 101, and the connection is a
+ * tunnel now: `tunnelBytes()` answers what was fed past the head),
+ * `HTTP1_CLOSED` (the connection is done: the server closed it between
+ * responses, or the last response was not kept alive) and
  * `HTTP1_ERROR`. The last three repeat on every later call. Only complete
  * lines are acted on, body bytes are counted, never guessed, and every
  * refusal is decided by the same byte wherever the input was cut, so the
@@ -55,7 +59,7 @@
  * **What it refuses**, each with its own code in `error`: a malformed status
  * line, an HTTP major version other than 1, a bare LF, a malformed field line
  * (an obs-fold, whitespace before the colon, a control byte in a value), a 101
- * (this client never asks to switch protocols), `Transfer-Encoding` together
+ * to a request that did not ask to switch protocols, `Transfer-Encoding` together
  * with `Content-Length`, a transfer coding other than one `chunked` or one in
  * an HTTP/1.0 response, a `Content-Length` that is not a decimal or whose
  * repeats disagree, a malformed chunk, a status line, header section, field
@@ -112,7 +116,7 @@ export const HTTP1_E_VERSION: i32 = 2
 export const HTTP1_E_BARE_LF: i32 = 3
 /** `error`: a malformed field line: an obs-fold, a bad name, whitespace before the colon, a control byte. */
 export const HTTP1_E_FIELD: i32 = 4
-/** `error`: a 101, which this client never asks for. */
+/** `error`: a 101 to a request that did not ask to switch protocols (see `expectUpgrade`). */
 export const HTTP1_E_SWITCH: i32 = 5
 /** `error`: both `Transfer-Encoding` and `Content-Length` (RFC 9112 §6.1). */
 export const HTTP1_E_FRAMING: i32 = 6
@@ -290,9 +294,14 @@ const http1ClientRequestNeed = (
   target: string,
   names: string[],
   values: string[],
-  bodyLength: i64
+  bodyLength: i64,
+  upgrade: string
 ): i64 => {
   if (!http1IsToken(method) || !http1ClientTargetOk(method, target)) {
+    return toI64(-1)
+  }
+  const upgrading: boolean = toI32(upgrade.length) > 0
+  if (upgrading && (!http1IsToken(upgrade) || bodyLength !== toI64(-2))) {
     return toI64(-1)
   }
   if (bodyLength < toI64(-2)) {
@@ -319,7 +328,13 @@ const http1ClientRequestNeed = (
     ) {
       return toI64(-1)
     }
-    if (http1SameWord(name, 0, nameLength, "connection") && http1ClientListHas(value, "upgrade")) {
+    if (
+      http1SameWord(name, 0, nameLength, "connection") &&
+      (upgrading || http1ClientListHas(value, "upgrade"))
+    ) {
+      return toI64(-1)
+    }
+    if (upgrading && http1SameWord(name, 0, nameLength, "upgrade")) {
       return toI64(-1)
     }
     if (http1SameWord(name, 0, nameLength, "host")) {
@@ -334,6 +349,10 @@ const http1ClientRequestNeed = (
     need = need + toI64(18 + http1ClientDigits(bodyLength))
   } else if (bodyLength === toI64(-1)) {
     need = need + toI64(28)
+  }
+  if (upgrading) {
+    // "Upgrade: " value CRLF "Connection: Upgrade" CRLF
+    need = need + toI64(upgrade.length) + toI64(32)
   }
   return need
 }
@@ -364,9 +383,9 @@ const http1ClientPutField = (out: u8[], at: i32, names: string[], values: string
  * early and let the rest be read as a field or a second request); `names` and
  * `values` of different lengths; not exactly one `Host`; a `Content-Length` or
  * `Transfer-Encoding` among the caller's fields, since the framing is decided
- * here; a `Connection` that lists `upgrade`, which the parser refuses the
- * answer to; and a `bodyLength` below -2. Answers `HTTP1_NO_ROOM` when it is
- * well formed but does not fit. Either way `out` is untouched.
+ * here; a `Connection` that lists `upgrade`, which only
+ * `http1UpgradeRequestHead` may write; and a `bodyLength` below -2. Answers
+ * `HTTP1_NO_ROOM` when it is well formed but does not fit. Either way `out` is untouched.
  */
 export const http1WriteRequestHead = (
   out: u8[],
@@ -377,14 +396,14 @@ export const http1WriteRequestHead = (
   values: string[],
   bodyLength: i64
 ): i32 => {
-  const need: i64 = http1ClientRequestNeed(method, target, names, values, bodyLength)
+  const need: i64 = http1ClientRequestNeed(method, target, names, values, bodyLength, "")
   if (need < toI64(0)) {
     return HTTP1_REFUSED
   }
   if (at < 0 || need > toI64(toI32(out.length) - at)) {
     return HTTP1_NO_ROOM
   }
-  return http1ClientPutHead(out, at, method, target, names, values, bodyLength)
+  return http1ClientPutHead(out, at, method, target, names, values, bodyLength, "")
 }
 
 /** Writes a head `http1ClientRequestNeed` accepted into room it counted; answers the end. */
@@ -395,7 +414,8 @@ const http1ClientPutHead = (
   target: string,
   names: string[],
   values: string[],
-  bodyLength: i64
+  bodyLength: i64,
+  upgrade: string
 ): i32 => {
   let end: i32 = http1PutText(out, at, method)
   end = http1PutText(out, end, " ")
@@ -419,6 +439,11 @@ const http1ClientPutHead = (
   } else if (bodyLength === toI64(-1)) {
     end = http1PutText(out, end, "Transfer-Encoding: chunked\r\n")
   }
+  if (toI32(upgrade.length) > 0) {
+    end = http1PutText(out, end, "Upgrade: ")
+    end = http1PutText(out, end, upgrade)
+    end = http1PutText(out, end, "\r\nConnection: Upgrade\r\n")
+  }
   return http1PutText(out, end, "\r\n")
 }
 
@@ -432,13 +457,46 @@ export const http1RequestHead = (
   names: string[],
   values: string[],
   bodyLength: i64
+): u8[] | null => http1ClientHeadArray(method, target, names, values, bodyLength, "")
+
+/**
+ * A request that asks the server to switch the connection to `upgrade` (RFC
+ * 9110 §7.8), such as a WebSocket opening handshake: `http1RequestHead`'s head
+ * with no body, and `Upgrade: <upgrade>` and `Connection: Upgrade` written
+ * after the caller's fields. Answers `null` for everything `http1RequestHead`
+ * refuses, an `upgrade` that is not one token, and an `Upgrade` or
+ * `Connection` among the caller's fields, which would contradict the two this
+ * writes. A response to it is read after `expect(false, false)` and then
+ * `expectUpgrade()`, so that its 101 answers `HTTP1_UPGRADE`.
+ */
+export const http1UpgradeRequestHead = (
+  method: string,
+  target: string,
+  names: string[],
+  values: string[],
+  upgrade: string
 ): u8[] | null => {
-  const need: i64 = http1ClientRequestNeed(method, target, names, values, bodyLength)
+  if (toI32(upgrade.length) === 0) {
+    return null
+  }
+  return http1ClientHeadArray(method, target, names, values, toI64(-2), upgrade)
+}
+
+/** The head `http1ClientRequestNeed` accepts in an array of its own, or `null`. */
+const http1ClientHeadArray = (
+  method: string,
+  target: string,
+  names: string[],
+  values: string[],
+  bodyLength: i64,
+  upgrade: string
+): u8[] | null => {
+  const need: i64 = http1ClientRequestNeed(method, target, names, values, bodyLength, upgrade)
   if (need < toI64(0) || need > toI64(1073741824)) {
     return null
   }
   const out: u8[] = new Array<u8>(toI32(need))
-  http1ClientPutHead(out, 0, method, target, names, values, bodyLength)
+  http1ClientPutHead(out, 0, method, target, names, values, bodyLength, upgrade)
   return out
 }
 
@@ -533,6 +591,8 @@ export class Http1ResponseParser {
   /** What `expect` said of the request this response answers. */
   wasHead: boolean = false
   wasConnect: boolean = false
+  /** Whether `expectUpgrade` said the request asked to switch protocols. */
+  wasUpgrade: boolean = false
   /** Whether `finish()` said the server closed the connection. */
   closed: boolean = false
 
@@ -567,6 +627,24 @@ export class Http1ResponseParser {
     if (this.state === HTTP1_CLIENT_S_STATUS_LINE && this.informational === 0) {
       this.wasHead = methodWasHead
       this.wasConnect = wasConnect
+      this.wasUpgrade = false
+    }
+  }
+
+  /**
+   * Says the request this response answers asked to switch protocols (it was
+   * written by `http1UpgradeRequestHead`), so a 101 is that switch: the parser
+   * answers `HTTP1_HEAD` with its status and fields readable, `HTTP1_END`, and
+   * then `HTTP1_UPGRADE`, and `tunnelBytes()` answers what was fed past the
+   * head. Any other status is read as it would be without it. It is said after
+   * `expect`, which clears it, and like `expect` it takes effect only while the
+   * parser waits for a response's first status line. Without it a 101 is
+   * refused with `HTTP1_E_SWITCH`: a server may not switch a connection whose
+   * client never asked.
+   */
+  expectUpgrade(): void {
+    if (this.state === HTTP1_CLIENT_S_STATUS_LINE && this.informational === 0) {
+      this.wasUpgrade = true
     }
   }
 
@@ -949,7 +1027,13 @@ const http1ClientConnectionHas = (p: Http1ResponseParser, word: string): boolean
 const http1ClientEndOfHead = (p: Http1ResponseParser): i32 => {
   const status: i32 = p.status
   if (status === 101) {
-    return http1ClientFail(p, HTTP1_E_SWITCH, "a 101 Switching Protocols this client never asks for")
+    if (!p.wasUpgrade) {
+      return http1ClientFail(p, HTTP1_E_SWITCH, "a 101 Switching Protocols the request did not ask for")
+    }
+    // RFC 9110 §15.2.2: the connection switches right after the 101's empty
+    // line, so what follows the head is the new protocol's.
+    p.state = HTTP1_CLIENT_S_MESSAGE_END
+    return HTTP1_HEAD
   }
   if (status < 200) {
     if (p.informational >= HTTP1_MAX_INFORMATIONAL) {
@@ -1203,7 +1287,7 @@ const http1ClientNext = (p: Http1ResponseParser): i32 => {
         break
       }
       case HTTP1_CLIENT_S_MESSAGE_END: {
-        if (p.wasConnect && p.status < 300) {
+        if ((p.wasConnect && p.status < 300) || (p.wasUpgrade && p.status === 101)) {
           p.state = HTTP1_CLIENT_S_TUNNEL
         } else if (!p.persistent) {
           p.state = HTTP1_CLIENT_S_CLOSED
@@ -1213,6 +1297,7 @@ const http1ClientNext = (p: Http1ResponseParser): i32 => {
           p.informational = 0
           p.wasHead = false
           p.wasConnect = false
+          p.wasUpgrade = false
         }
         return HTTP1_END
       }

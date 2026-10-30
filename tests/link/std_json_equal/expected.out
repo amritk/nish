@@ -1,0 +1,35 @@
+PASS  equal: every pair answers both ways round
+PASS  equal: a handle naming no value equals nothing
+PASS  equal: not even another
+PASS  canonical: scalars
+PASS  canonical: members in key-byte order
+PASS  canonical: a refused number keeps its text
+PASS  canonical: a handle naming no value
+PASS  hash: null
+PASS  hash: [1.0, "x"]
+PASS  hash: no value is the offset basis
+PASS  hash: equal values agree
+PASS  duplicate: not an array
+PASS  duplicate: empty
+PASS  duplicate: none
+PASS  duplicate: 1.0 repeats 1
+PASS  duplicate: the first repeat is named
+PASS  duplicate: objects in another key order
+PASS  duplicate: strings past U+00FF stay apart
+PASS  duplicate: 0e9999999999999999 repeats 0
+PASS  depth: 100000 levels compare without recursion
+PASS  depth: and differ by one level
+PASS  depth: the canonical text has every level
+PASS  depth: the hashes agree
+PASS  driver: reads what it answers
+PASS  driver: an unknown type name is unread
+PASS  driver: a nested schema after a failing one still counts
+PASS  driver: so does a prefix item past the instance
+PASS  driver: and a keyword the instance's kind skips
+PASS  const: every test agrees with upstream
+PASS  const: the suite holds 54 tests
+PASS  enum: every test agrees with upstream
+PASS  enum: the suite holds 53 tests
+PASS  uniqueItems: every test agrees with upstream
+PASS  uniqueItems: the suite holds 69 tests
+std/json-equal: 34 passed, 0 failed, 0 skipped

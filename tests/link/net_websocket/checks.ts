@@ -2,9 +2,11 @@
 // example frames encoded byte for byte and decoded, a stream of frames fed at
 // every split point, fragmentation with control frames between the fragments,
 // UTF-8 across fragment boundaries, every refusal with its close code, and the
-// opening handshake read through `nish/net/http1`.
+// opening handshake read through `nish/net/http1`, and the client's side of
+// it: the key, the request bytes, and every check of the server's answer.
 import { Suite } from "nish/testing";
-import { HTTP1_HEAD, Http1Parser } from "nish/net/http1";
+import { HTTP1_END, HTTP1_HEAD, HTTP1_UPGRADE, Http1Parser } from "nish/net/http1";
+import { Http1ResponseParser } from "nish/net/http1-client";
 import {
   WS_CLOSE,
   WS_CLOSE_INVALID_DATA,
@@ -14,6 +16,14 @@ import {
   WS_CLOSE_TOO_BIG,
   WS_ERROR,
   WS_GUID,
+  WS_HS_ACCEPT,
+  WS_HS_CONNECTION,
+  WS_HS_EXTENSION,
+  WS_HS_OK,
+  WS_HS_PROTOCOL,
+  WS_HS_STATUS,
+  WS_HS_UPGRADE,
+  WS_HS_VERSION,
   WS_MAX_CONTROL,
   WS_MESSAGE,
   WS_NEED_MORE,
@@ -28,13 +38,18 @@ import {
   WS_PONG,
   WS_REFUSED,
   WsDecoder,
+  WsHandshake,
   websocketAcceptKey,
+  websocketCheckResponse,
+  websocketClientKey,
   websocketClosePayload,
   websocketFrame,
   websocketFrameSize,
   websocketIsUtf8,
   websocketKeyIsValid,
+  websocketOfferedProtocols,
   websocketRequestKey,
+  websocketUpgradeRequest,
   websocketUpgradeResponse,
   websocketWriteFrame,
 } from "nish/net/websocket";
@@ -194,6 +209,48 @@ const requestKeyOf = (text: string): string => {
   return key === null ? "null" : key;
 };
 
+/** The protocols `websocketOfferedProtocols` reads from `text`, comma-joined, or "null". */
+const offerOf = (text: string): string => {
+  const offer: string[] | null = websocketOfferedProtocols(headOf(text));
+  return offer === null ? "null" : `[${offer.join(",")}]`;
+};
+
+/** A request head as text, or "null" for a refusal. */
+const requestText = (head: u8[] | null): string => (head === null ? "null" : textOf(head, toI32(head.length)));
+
+/** The §1.3 key, and the accept value a server answers it with. */
+const SAMPLE_KEY: string = "dGhlIHNhbXBsZSBub25jZQ==";
+const SAMPLE_ACCEPT: string = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
+
+/**
+ * The response parser after it read the head of `text`, a response to an
+ * opening handshake: told the request asked to switch protocols.
+ */
+const responseFrom = (data: u8[]): Http1ResponseParser => {
+  const p: Http1ResponseParser = new Http1ResponseParser(256, 4096, 32, toI64(1024), 1024);
+  p.expect(false, false);
+  p.expectUpgrade();
+  const start: i32 = 0;
+  p.feed(data, start, toI32(data.length));
+  if (p.next() !== HTTP1_HEAD) {
+    panic("net_websocket: a response fixture that is not a head");
+  }
+  return p;
+};
+
+/** `responseFrom` for a response written as text. */
+const responseOf = (text: string): Http1ResponseParser => responseFrom(bytesOf(text));
+
+/** What `websocketCheckResponse` answers for `text` and the §1.3 key, as "code protocol". */
+const checkOf = (text: string, offered: string[]): string => {
+  const answer: WsHandshake = websocketCheckResponse(responseOf(text), SAMPLE_KEY, offered);
+  return `${answer.error} ${answer.protocol}`;
+};
+
+/** A 101 to the §1.3 key with `extra` field lines (each ending CRLF) after its accept. */
+const switching = (extra: string): string =>
+  `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n${extra}\r\n`;
+
 const SAMPLE_REQUEST: string =
   "GET /chat HTTP/1.1\r\nHost: server.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
   "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: http://example.com\r\n" +
@@ -311,6 +368,190 @@ export const websocketChecks = (): i32 => {
     websocketUpgradeResponse("dGhlIHNhbXBsZSBub25jZQ==", "chat\r\nX: y") === null,
     true
   );
+
+  // --- The client's side of the handshake (§4.1) ------------------------------
+  const nonce: u8[] = bytesOf("the sample nonce");
+  const clientKey: string | null = websocketClientKey(nonce);
+  const sampleKey: string = clientKey === null ? "null" : clientKey;
+  t.eqStr("the §1.3 nonce gives the §1.3 key", sampleKey, SAMPLE_KEY);
+  t.eqStr("the client key's accept value is §1.3's", websocketAcceptKey(sampleKey), SAMPLE_ACCEPT);
+  t.eqBool("refused client key: a 15-byte nonce", websocketClientKey(bytesOf("the sample nonc")) === null, true);
+  t.eqBool("refused client key: a 17-byte nonce", websocketClientKey(bytesOf("the sample nonce!")) === null, true);
+  t.eqBool("refused client key: no nonce", websocketClientKey([]) === null, true);
+
+  const noProtocols: string[] = [];
+  t.eqStr(
+    "the client's request with no protocols",
+    requestText(websocketUpgradeRequest("server.example.com", "/chat", SAMPLE_KEY, noProtocols)),
+    "GET /chat HTTP/1.1\r\nHost: server.example.com\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+      "Sec-WebSocket-Version: 13\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+  );
+  t.eqStr(
+    "the client's request offering chat and superchat",
+    requestText(websocketUpgradeRequest("server.example.com", "/chat", SAMPLE_KEY, ["chat", "superchat"])),
+    "GET /chat HTTP/1.1\r\nHost: server.example.com\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+      "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: chat, superchat\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+  );
+  t.eqStr(
+    "the client's request is a handshake the server reads",
+    requestKeyOf(requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["chat"]))),
+    SAMPLE_KEY
+  );
+  t.eqStr("refused request: an invalid key", requestText(websocketUpgradeRequest("a", "/", "short==", noProtocols)), "null");
+  t.eqStr("refused request: a protocol that is not a token", requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["a b"])), "null");
+  t.eqStr("refused request: a protocol holding a comma", requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["a,b"])), "null");
+  t.eqStr("refused request: an empty protocol", requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["chat", ""])), "null");
+  t.eqStr(
+    "refused request: a protocol offered twice",
+    requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["chat", "superchat", "chat"])),
+    "null"
+  );
+  t.eqStr("refused request: CR LF in the host", requestText(websocketUpgradeRequest("a\r\nX: y", "/", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: an empty host", requestText(websocketUpgradeRequest("", "/", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr(
+    "refused request: CR LF in the target",
+    requestText(websocketUpgradeRequest("a", "/\r\nX: y", SAMPLE_KEY, noProtocols)),
+    "null"
+  );
+  t.eqStr(
+    "refused request: CR LF in a protocol",
+    requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["chat\r\nX: y"])),
+    "null"
+  );
+  t.eqStr("refused request: a lone CR in the host", requestText(websocketUpgradeRequest("a\rb", "/", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone LF in the host", requestText(websocketUpgradeRequest("a\nb", "/", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone CR in the target", requestText(websocketUpgradeRequest("a", "/a\rb", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone LF in the target", requestText(websocketUpgradeRequest("a", "/a\nb", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone CR in a protocol", requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["ch\rat"])), "null");
+  t.eqStr("refused request: a lone LF in a protocol", requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["ch\nat"])), "null");
+
+  t.eqStr("offer: none", offerOf("GET / HTTP/1.1\r\nHost: a\r\nSec-WebSocket-Version: 13\r\n\r\n"), "[]");
+  t.eqStr("offer: the §1.3 request's list", offerOf(SAMPLE_REQUEST), "[chat,superchat]");
+  t.eqStr(
+    "offer: repeated fields, OWS and empty elements",
+    offerOf("GET / HTTP/1.1\r\nHost: a\r\nSec-WebSocket-Protocol: chat ,\t, v2\r\nSec-WebSocket-Protocol:  superchat\r\n\r\n"),
+    "[chat,v2,superchat]"
+  );
+  t.eqStr("refused offer: an element that is not a token", offerOf("GET / HTTP/1.1\r\nHost: a\r\nSec-WebSocket-Protocol: chat, a b\r\n\r\n"), "null");
+  t.eqStr("refused offer: a quoted element", offerOf("GET / HTTP/1.1\r\nHost: a\r\nSec-WebSocket-Protocol: \"chat\"\r\n\r\n"), "null");
+
+  const offered: string[] = ["chat", "superchat"];
+  t.eqStr("check: the §1.3 response, no protocol offered", checkOf(switching(""), noProtocols), `${WS_HS_OK} `);
+  t.eqStr("check: the server chose superchat", checkOf(switching("Sec-WebSocket-Protocol: superchat\r\n"), offered), `${WS_HS_OK} superchat`);
+  t.eqStr("check: the server chose no protocol of those offered", checkOf(switching(""), offered), `${WS_HS_OK} `);
+  t.eqStr(
+    "check: Upgrade and Connection in other cases, Connection a list",
+    checkOf(
+      `HTTP/1.1 101 OK\r\nupgrade: WebSocket\r\nConnection: keep-alive, UPGRADE\r\nSec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n\r\n`,
+      noProtocols
+    ),
+    `${WS_HS_OK} `
+  );
+  const redirect: Http1ResponseParser = responseOf("HTTP/1.1 302 Found\r\nLocation: /elsewhere\r\nContent-Length: 5\r\n\r\nmoved");
+  t.eqI32("refused check 1: a 302 is not followed", websocketCheckResponse(redirect, SAMPLE_KEY, noProtocols).error, WS_HS_STATUS);
+  t.eqI32("refused check 1: and its status stays readable", redirect.status, toI32(302));
+  t.eqStr("refused check 1: a 200", checkOf("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", noProtocols), `${WS_HS_STATUS} `);
+  t.eqStr(
+    "refused check 2: an HTTP/1.0 101",
+    checkOf(`HTTP/1.0 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n\r\n`, noProtocols),
+    `${WS_HS_VERSION} `
+  );
+  t.eqStr(
+    "refused check 3: no Upgrade",
+    checkOf(`HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n\r\n`, noProtocols),
+    `${WS_HS_UPGRADE} `
+  );
+  t.eqStr(
+    "refused check 3: Upgrade: h2c",
+    checkOf(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: h2c\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n\r\n`, noProtocols),
+    `${WS_HS_UPGRADE} `
+  );
+  t.eqStr("refused check 3: Upgrade twice", checkOf(switching("Upgrade: websocket\r\n"), noProtocols), `${WS_HS_UPGRADE} `);
+  t.eqStr(
+    "refused check 4: no Connection",
+    checkOf(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n\r\n`, noProtocols),
+    `${WS_HS_CONNECTION} `
+  );
+  t.eqStr(
+    "refused check 4: Connection without upgrade",
+    checkOf(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: keep-alive, upgraded\r\nSec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n\r\n`, noProtocols),
+    `${WS_HS_CONNECTION} `
+  );
+  t.eqStr(
+    "refused check 5: no Sec-WebSocket-Accept",
+    checkOf("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n", noProtocols),
+    `${WS_HS_ACCEPT} `
+  );
+  t.eqStr(
+    "refused check 5: a forged Sec-WebSocket-Accept",
+    checkOf(
+      "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: SI8+ZDWY/3CvhQ4D69HioKIAv9s=\r\n\r\n",
+      noProtocols
+    ),
+    `${WS_HS_ACCEPT} `
+  );
+  t.eqStr(
+    "refused check 5: Sec-WebSocket-Accept twice",
+    checkOf(switching(`Sec-WebSocket-Accept: ${SAMPLE_ACCEPT}\r\n`), noProtocols),
+    `${WS_HS_ACCEPT} `
+  );
+  t.eqI32(
+    "refused check 5: an accept for another key",
+    websocketCheckResponse(responseOf(switching("")), "MDAwMDAwMDAwMDAwMDAxMg==", noProtocols).error,
+    WS_HS_ACCEPT
+  );
+  t.eqI32(
+    "refused check 5: an invalid key matches nothing",
+    websocketCheckResponse(responseOf(switching("")), "short==", noProtocols).error,
+    WS_HS_ACCEPT
+  );
+  t.eqStr(
+    "refused check 6: a Sec-WebSocket-Extensions",
+    checkOf(switching("Sec-WebSocket-Extensions: permessage-deflate\r\n"), noProtocols),
+    `${WS_HS_EXTENSION} `
+  );
+  t.eqStr(
+    "refused check 7: a protocol when none was offered",
+    checkOf(switching("Sec-WebSocket-Protocol: chat\r\n"), noProtocols),
+    `${WS_HS_PROTOCOL} `
+  );
+  t.eqStr(
+    "refused check 7: a protocol that was not offered",
+    checkOf(switching("Sec-WebSocket-Protocol: v2\r\n"), offered),
+    `${WS_HS_PROTOCOL} `
+  );
+  t.eqStr(
+    "refused check 7: a protocol list",
+    checkOf(switching("Sec-WebSocket-Protocol: chat, superchat\r\n"), offered),
+    `${WS_HS_PROTOCOL} `
+  );
+  t.eqStr(
+    "refused check 7: Sec-WebSocket-Protocol twice",
+    checkOf(switching("Sec-WebSocket-Protocol: chat\r\nSec-WebSocket-Protocol: chat\r\n"), offered),
+    `${WS_HS_PROTOCOL} `
+  );
+  t.eqStr(
+    "refused check 7: a protocol in another case",
+    checkOf(switching("Sec-WebSocket-Protocol: Chat\r\n"), offered),
+    `${WS_HS_PROTOCOL} `
+  );
+
+  // A 101 with the server's first frame glued to its head: the frame is the
+  // tunnel's, and a client's decoder reads it unmasked.
+  const gluedBytes: u8[] = bytesOf(switching(""));
+  const serverFrame: u8[] = fromHex("81 05 48 65 6c 6c 6f");
+  for (let i: i32 = 0; i < toI32(serverFrame.length); i += 1) {
+    gluedBytes.push(serverFrame[i]);
+  }
+  const glued: Http1ResponseParser = responseFrom(gluedBytes);
+  t.eqI32("glued: the 101 is accepted", websocketCheckResponse(glued, SAMPLE_KEY, noProtocols).error, WS_HS_OK);
+  t.eqI32("glued: then HTTP1_END", glued.next(), HTTP1_END);
+  t.eqI32("glued: then HTTP1_UPGRADE", glued.next(), HTTP1_UPGRADE);
+  const tunnel: u8[] = glued.tunnelBytes();
+  const client: WsDecoder = new WsDecoder(false, 100);
+  client.feed(tunnel, zero, toI32(tunnel.length));
+  t.eqI32("glued: the frame past the head is a message", client.next(), WS_MESSAGE);
+  t.eqStr("glued: and it says Hello", textOf(client.data, client.dataLen), "Hello");
 
   // --- §5.7's examples, encoded ----------------------------------------------
   const hello: u8[] = bytesOf("Hello");

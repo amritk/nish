@@ -1,0 +1,105 @@
+PASS  twins: both load
+PASS  twins: equal trees
+PASS  twins: line:column of every JSON value and key
+PASS  twins: line:column of every YAML value and key
+PASS  ranges: loads
+PASS  ranges: every value and key slices to its node
+PASS  ranges: decoded strings
+PASS  ranges: an empty value is null
+PASS  numbers: load
+PASS  numbers: exact JSON text
+PASS  numbers: a hex integer past 256 digits
+PASS  numbers: at it
+PASS  not finite: .inf is refused
+PASS  not finite: .inf at its node
+PASS  not finite: .inf leaves the document empty
+PASS  not finite: -.inf is refused
+PASS  not finite: -.inf at its node
+PASS  not finite: -.inf leaves the document empty
+PASS  not finite: +.INF is refused
+PASS  not finite: +.INF at its node
+PASS  not finite: +.INF leaves the document empty
+PASS  not finite: .nan is refused
+PASS  not finite: .nan at its node
+PASS  not finite: .nan leaves the document empty
+PASS  not finite: .NaN is refused
+PASS  not finite: .NaN at its node
+PASS  not finite: .NaN leaves the document empty
+PASS  not finite: named
+PASS  not finite: a quoted or tagged one is a string
+PASS  bomb: a billion laughs is refused
+PASS  bomb: at the first alias whose copy is past the limit
+PASS  bomb: nothing was built
+PASS  bomb: named
+PASS  bomb: an expansion within maxValues loads
+PASS  bomb: as copies
+PASS  bomb: the copy's root has the alias's range
+PASS  bomb: inside it, the anchored text's
+PASS  bomb: one past maxValues is refused
+PASS  bomb: no alias, too many values
+PASS  text bomb: copies of a long string past maxTotalBytes are refused
+PASS  text bomb: at the copy that does not fit
+PASS  text bomb: nothing is kept
+PASS  text bomb: one copy fits
+PASS  text bomb: no alias, too much text
+PASS  text bomb: at the string
+PASS  keys: non-string keys are their source text
+PASS  keys: with their ranges
+PASS  keys: the stream reports 1 and '1' as one key
+PASS  keys: 1 and '1' are one JSON key
+PASS  keys: refused at the second
+PASS  keys: or the last value, in the first one's place
+PASS  keys: with the first key's range
+PASS  keys: a wide map loads
+PASS  keys: a repeat past the scan is found
+PASS  merge: loads
+PASS  merge: a merge in a merged map
+PASS  merge: own keys win, then the first map listed
+PASS  merge: a merged key keeps its source range
+PASS  merge: from the anchored map
+PASS  merge bomb: a doubling merge chain loads
+PASS  merge bomb: in linear time, well under a second
+PASS  merge bomb: as the empty maps it merges
+PASS  merge bomb: a map merging itself is refused by the parser
+PASS  merge bomb: at the alias to the unfinished map
+PASS  merge bomb: merge visits past the budget are refused
+PASS  merge bomb: at the merge key it ran out on
+PASS  merge bomb: within the default budget it loads
+PASS  merge bomb: the walks of a shared merge sequence are charged
+PASS  merge bomb: at the merge key that names the sequence
+PASS  merge bomb: a shared merge sequence loads within the default budget
+PASS  merge bomb: a saturated count stays saturated
+PASS  merge bomb: refused by the count, at the root
+PASS  merge shape 0: a merge value that is not a mapping is refused
+PASS  merge shape 0: at the value
+PASS  merge shape 1: a merge value that is not a mapping is refused
+PASS  merge shape 1: at the value
+PASS  merge shape 2: a merge value that is not a mapping is refused
+PASS  merge shape 2: at the value
+PASS  merge shape 3: a merge value that is not a mapping is refused
+PASS  merge shape 3: at the value
+PASS  merge shape 4: a merge value that is not a mapping is refused
+PASS  merge shape 4: at the value
+PASS  merge shape 0: the loader refuses it too
+PASS  merge shape 0: the loader refuses it at the value
+PASS  merge shape 1: the loader refuses it too
+PASS  merge shape 1: the loader refuses it at the value
+PASS  merge shape 2: the loader refuses it too
+PASS  merge shape 2: the loader refuses it at the value
+PASS  merge shape 3: the loader refuses it too
+PASS  merge shape 3: the loader refuses it at the value
+PASS  merge shape 4: the loader refuses it too
+PASS  merge shape 4: the loader refuses it at the value
+PASS  merge off: loads
+PASS  merge off: `<<` is an ordinary key
+PASS  merge shape: named
+PASS  document: past the last
+PASS  yaml: a document with an error
+PASS  yaml: at its diagnostic
+PASS  depth: 65 deep is refused
+PASS  depth: at the one too deep
+PASS  depth: 64 deep loads
+PASS  document: the first loads
+PASS  document: an empty one is null
+PASS  names: an unknown code
+std/yaml-json: 104 passed, 0 failed, 0 skipped

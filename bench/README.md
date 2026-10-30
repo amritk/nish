@@ -578,6 +578,52 @@ nominal clock, taken from its model name or from `--ghz`, and not counted.
 the one pinned in the driver. Every build of `std/crypto/aes.ts`, kernel or
 bitsliced, must keep printing that checksum.
 
+## CRC-32
+
+`crc32.ts` times `Crc32.update` on 64 B, 4 KiB, 64 KiB and 1 MiB, and the gzip
+round trip of 1 MiB that it sits inside: compress and decompress, each in
+ns/op. It is the measure of WP38's CRC-32 kernel
+([docs/wp38-simd.md §3.1](../docs/wp38-simd.md)). It is not in this suite's
+tables, and it has no twins. `crc32.mjs` builds it and runs it twice a round:
+once with `NISH_CRC32` unset, so the kernel this CPU has runs, and once under
+`NISH_CRC32=soft`, the Nish tables. Each row names the path its column ran
+(`pclmul`, `crc32` or `tables`), inferred from the CPU flags the runtime
+reads, as `/proc/cpuinfo` lists them; that file is Linux only, and elsewhere
+the default column says `unknown`. `--runs` is rounded up to a multiple of the
+column count, so each column goes first equally often:
+
+```bash
+npm run build
+node bench/crc32.mjs --check            # one short run on each path; each checksum against the pinned one
+node bench/crc32.mjs --runs 15          # both paths, minimum and median
+node bench/crc32.mjs --self             # the default column against a copy of itself: the noise band
+```
+
+Each checksum call takes the previous call's answer as its seed, and its
+window moves a byte a turn, so every start offset mod 16 is timed. The gzip
+input is a 16-letter alphabet, which compresses about 2:1 as text does; random
+bytes would make stored blocks, and CRC-32 nearly all the work. Both paths
+must print the same checksum, or the run stops. `--check` runs at a 64th of the
+size and fails if either path's checksum differs from the one pinned in the
+driver. `tests/simd/crc32 bench` times the C kernels directly, beside the
+table reference.
+
+Median ns/op from `--self --runs 9`, on two machines. The x86-64 run is an
+Intel Xeon at 2.10 GHz on the `pclmul` path. The AArch64 run is CI's
+`simd-arm64` job on `ubuntu-24.04-arm` at 43c4bbd, on the `crc32` path. `copy`
+is the default binary run again, so its gap from `default` is the noise band: 2
+to 7% on the Xeon and about 1% on the ARM runner. The reading is in
+[docs/wp38-simd.md §3.1](../docs/wp38-simd.md).
+
+| Workload | x86-64 default | copy | soft | AArch64 default | copy | soft |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| crc-64 | 16 | 16 | 47 | 11 | 11 | 36 |
+| crc-4k | 188 | 193 | 1,434 | 186 | 187 | 1,172 |
+| crc-64k | 2,976 | 3,035 | 23,196 | 2,494 | 2,496 | 18,589 |
+| crc-1m | 50,746 | 53,482 | 465,955 | 41,826 | 41,819 | 299,178 |
+| gzip-compress-1m | 58,558,905 | 59,432,084 | 59,025,291 | 35,006,497 | 35,008,259 | 35,259,514 |
+| gzip-decompress-1m | 4,541,521 | 4,866,916 | 5,066,379 | 2,314,526 | 2,313,356 | 2,574,127 |
+
 ## HTTP
 
 `http1-server.ts` is a program built on `nish/net/http1-server` the way the
@@ -1806,6 +1852,84 @@ print the same checksum for a case, or the script exits 1. `--size` also prints
 the linked size of `regex/size.ts`, a program that imports `nish/regex` and
 uses no property escape. The figures are in
 [docs/BENCHMARKS.md](../docs/BENCHMARKS.md#regular-expressions).
+
+## Loading YAML into a JsonDocument
+
+`yaml-json/run.mjs` times `nish/yaml`'s parse alone (**parse**) against the
+parse plus `YamlJsonLoader.load` into a `JsonDocument` with its source ranges
+(**load**), both from `yaml-json/main.ts`. The input is an OpenAPI document
+the script generates into `build/yaml-json/openapi.yaml` from a fixed pattern:
+`--paths` paths (default 1000, about 1.1 MB), with an anchored parameter every
+path aliases and a merge key into each response map, so aliases and merges
+are on the measured path. The binary is built twice with
+`--link --profile speed` and `cmp` must find the pair byte-identical; the gap
+between them is the noise band. Rounds are interleaved, rotated and every
+other one reversed (`--rounds`, default 15), each run `--mb` megabytes of
+input (default 32). It is run by hand and is not in `tests/run.js`.
+
+On a 4-core cloud container, 1,107,038 bytes, 30 documents a run, 15 rounds:
+
+| Workload | Median | Copy | Band | MB/s |
+| --- | ---: | ---: | ---: | ---: |
+| parse | 18.693 ms | 19.561 ms | 4.6% | 56.5 |
+| load | 36.268 ms | 38.393 ms | 5.9% | 29.1 |
+
+Both rows time the whole binary, so **load** includes the parse. In wall
+clock, parse plus load is 1.94x the parse alone; the load step by itself is
+the 17.6 ms a document between them, 0.94x the parse, for 75,025 values from
+276,790 nodes. Under `valgrind --tool=cachegrind --cache-sim=no`, a document
+is 136M instructions to parse and 309M to parse and load, 2.27x; the load
+step alone is 173M, 1.27x the parse. The load step retires more instructions
+than the parse but takes less time than it.
+
+```bash
+node bench/yaml-json/run.mjs
+node bench/yaml-json/run.mjs --compiler build/nish-test --paths 4000 --rounds 31
+```
+
+## JsonDocument source ranges
+
+`json-value/measure.mjs` times `JsonDocument`'s `parse` and `parseRanged`, and
+with `--before` the same programs built by another compiler, normally main's.
+Every binary is built twice and `cmp` must find the pair byte-identical: the gap
+between them is the noise band each ratio is read against. Its cases, each
+interleaved on its own:
+
+- **parse**: `json-value/main.ts` (`parse`), `json-value/ranged.ts`
+  (`parseRanged`) and `json-value/both.ts` (`parse` in a program that also
+  calls `parseRanged` once, so both loops are in the binary) over
+  twitter.json, citm_catalog.json and canada.json from json-compare's corpus
+  (fetched into its cache on first use), `--mb` megabytes of input a run, and
+  json-compare's 1,427-byte `sample.json`. Each iteration rewrites one digit
+  so no parse can be hoisted.
+- **builders**: `json-value/builders.ts`, `--builds` documents a run, each an
+  object of 100 arrays of 10 numbers built with `new*`, `push` and `set`, then
+  every key set again.
+- **tokenize, typed, typed-reuse**: json-compare's workloads, which reach
+  `nish/json-tokenizer` and `nish/json-typed` but not `nish/json-value`, as a
+  check that the change moves nothing around it.
+
+The rounds are json-compare's `rounds.mjs`: asked-for rounds go up to a multiple
+of twice the binaries. The bench is run by hand and is not in `tests/run.js`;
+its results are in [docs/BENCHMARKS.md](../docs/BENCHMARKS.md), _JsonDocument's
+source ranges_.
+
+`--instructions` counts retired instructions under cachegrind instead of
+timing, once per binary and its copy, in `run.mjs`'s pinned environment (fixed
+libc tunables, `NISH_SIMD=base`, `fixed-key.so`). It defaults to `--mb 16` and
+`--builds 500`, and adds an **http** case: `bench/http1-server.ts` serving
+`--requests` keep-alive POSTs of `http-payload.json` to `/json-echo-doc`, the
+server's instructions counted. The counts repeat to within 0.002%, so a gap of
+a tenth of a percent is real; a timing band on a shared machine is rarely under
+2%.
+
+```bash
+npm run build
+node bench/json-value/measure.mjs
+node bench/json-value/measure.mjs --before ../main/build/nish --rounds 40
+node bench/json-value/measure.mjs --before ../main/build/nish --instructions
+```
+
 
 ## Math accuracy
 
