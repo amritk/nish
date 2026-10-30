@@ -7634,7 +7634,7 @@ would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All twenty functions
+so a child that `spawnSync` starts inherits none of them. All twenty-one functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -7964,8 +7964,8 @@ is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
 `net_` block of `tests/run.js`, for `netAddress`, `tcpConnect`, `udpBind` and
 `pollCreate`). The option ids are plain numbers, so they read the same
-under Node as natively, and only `netSetOption` throws (`net_set_option` in
-`tests/run.js`). `netMss` throws too rather than answer `-1`: Node's
+under Node as natively, and `netSetOption` throws rather than set one
+(`net_set_option` in `tests/run.js`). `netMss` throws too rather than answer `-1`: Node's
 `net.Socket` has no MSS to read, and a `-1` would be a guess that the program
 keeps (`net_mss` in `tests/run.js`). In a browser there are no sockets at all.
 A loop has no reading either: the one a Node program has is Node's own, which

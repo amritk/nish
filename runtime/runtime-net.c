@@ -44,7 +44,7 @@
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
  * rows and run by its `runtime-net (macos-latest)` job: tests/runtime-test.c and
  * the `net_` sections of tests/run.js, on a mac. A WASI build has none of this (the checker refuses
- * every `nish:net` call under a wasm target), so there the file is empty.
+ * every `nish:net` call on wasm but `netMss`, folded to -1), so the file is empty.
  */
 #if defined(__wasi__) || defined(__wasm__)
 /* ISO C wants at least one declaration in a translation unit. */
