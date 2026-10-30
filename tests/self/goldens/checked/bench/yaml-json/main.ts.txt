@@ -8176,10 +8176,10 @@ function YamlJsonLoader.buildMap(this: YamlJsonLoader, at: i32, depth: i32): i32
   calls: nish.JsonDocument.append nish.JsonDocument.index nish.JsonDocument.newObject nish.JsonDocument.setKeyRange nish.JsonDocument.storeText nish.Map$str$i32.clear nish.YamlJsonLoader.addEntry nish.YamlJsonLoader.build nish.YamlJsonLoader.fail nish.YamlJsonLoader.isMergeKey nish.YamlJsonLoader.mergeInto nish.YamlJsonLoader.nullAt nish.YamlJsonLoader.tooMuchText nish.YamlStream.child nish.YamlStream.count nish.YamlStream.end nish.YamlStream.key nish.YamlStream.start nish_panic_index nish_panic_overflow
   pointer this: size=104 writesThrough=true captured=false passedTo=nish.YamlJsonLoader.isMergeKey#0 nish.YamlJsonLoader.addEntry#0 nish.YamlJsonLoader.mergeInto#0 nish.YamlJsonLoader.fail#0 nish.YamlJsonLoader.nullAt#0 nish.YamlJsonLoader.build#0 nish.YamlJsonLoader.tooMuchText#0 nish.YamlJsonLoader.fail#0
   stackSites=0 stackLocals=0
-  local -40:11 stream: YamlStream (const)
-  local -39:11 doc: JsonDocument (const)
-  local -38:11 base: i32 (const)
-  callee -37:5 Map<string, i32>.clear -> @nish.Map$str$i32.clear
+  local -43:11 stream: YamlStream (const)
+  local -42:11 doc: JsonDocument (const)
+  local -41:11 base: i32 (const)
+  callee -38:7 Map<string, i32>.clear -> @nish.Map$str$i32.clear
   local -36:14 i: i32 (let)
   callee -36:30 YamlStream.count -> @nish.YamlStream.count
   local -35:13 pair: i32 (const)
