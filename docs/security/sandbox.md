@@ -1,7 +1,8 @@
 # `--sandbox`: holding a running process to `main`'s capabilities
 
-The record for the OS sandbox's first stage: the `--sandbox` flag, the wrapper
-calls it lowers to, and `runtime/runtime-sandbox.c`, which applies it. It says
+The record for the OS sandbox's first two stages: the `--sandbox` flag, the
+wrapper calls it lowers to, `runtime/runtime-sandbox.c`, which applies it, and
+the `fs.read=<dir>` and `fs.write=<dir>` scopes it enforces. It says
 what the sandbox withholds, against which adversary, what it leaves that
 adversary, and which test pins each answer. The design and its open questions
 are [`wp37-os-sandbox.md`](../wp37-os-sandbox.md); a `§` or an "open question"
@@ -12,16 +13,17 @@ functions rather than lines, so it has no `file:line` anchors to move.
 
 | File | What |
 | --- | --- |
-| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_seccomp` and its syscall tables; the non-Linux stubs |
-| `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, and the call of `@nish_sandbox_check` first in `@main` |
-| `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main` |
+| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; the non-Linux stubs |
+| `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read` and `@.sandbox.write` (`sandboxDirs`) |
+| `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main`; the scopes (`capabilityListMask`, `capabilityScopes`): which are accepted, and each directory's resolution |
+| `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13) |
 | `runtime/runtime-parallel.c` | `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to, step 1 |
 | `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check` and `nish_cpu_prime` |
 | `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles |
 
-Out of scope, for stage 2: the `fs.read=<dir>` and `fs.write=<dir>` scopes
-(still refused beside `--sandbox`, word for word), widening `ffi` (open
-question 13), and the third and fourth operands, which are always `null`.
+Out of scope: scopes in `package.json`'s `"nish"` field, which stay refused
+(open question 1), and scopes of any capability but `fs.read` and
+`fs.write`, which are refused.
 
 ## Threat model
 
@@ -54,8 +56,13 @@ namespace, the domain and the filter stay attached, and Landlock refuses
 **What `ffi` code is allowed.** The mask is computed from the Nish code, so
 an `ffi` callee is held to what the Nish code reaches, not to what the C
 code needs (§1). That errs towards refusal: a C library that needs more is
-killed or refused, never granted more. Whether a policy may widen it is open
-question 13.
+killed or refused, unless the policy grants it. A main that reaches `ffi`
+under an allowlist (`--allow`, the manifest's `allow`, or both, intersected)
+is widened by that list's `net`, `fs.read`, `fs.write` and `process.spawn`,
+less any denial, a directory scope kept as a scope (open question 13). The
+widening is the person building the program choosing what the C code may
+reach; it never exceeds what the policy writes, and without an allowlist
+nothing is widened.
 
 **What runs before the call.** The dynamic loader, `LD_AUDIT`, `LD_PRELOAD`'s
 interposition and libc's own start-up run first. They are the launcher's
@@ -89,7 +96,14 @@ first as well, and the program then refuses to run (§3, §7).
   environment;
 - under best-effort without Landlock, every file the user can reach,
   `/proc/<pid>/mem` of another process included;
-- under `process.spawn`, read and execute on every file (open question 5);
+- under `process.spawn`, read and execute on every file (open question 5),
+  a `fs.read=<dir>` scope notwithstanding;
+- inside an `fs.write=<dir>` scope, nothing more than outside it of the
+  metadata writes: `chmod`, `chown`, `utimensat` and the extended-attribute
+  writes still answer `EPERM` there (open question 1);
+- beneath a scope, everything under the directory as the binary opens it at
+  start, not as the compiler resolved it (see Limits), including a directory
+  later moved or bind-mounted beneath it;
 - kernel bugs, which no part of a sandbox in the same kernel holds;
 - the IFUNC resolvers above, and every constructor on a libc that skips
   `.preinit_array`;
@@ -133,9 +147,15 @@ constructor, and applies, in order:
 4. Landlock: every right the kernel's ABI knows is handled (REFER from ABI 2,
    TRUNCATE from 3, IOCTL_DEV from 5, the signal and abstract-socket scopes
    from 6), and one `path_beneath` rule on `/` grants back the rights the mask
-   grants — `fs.read`: READ_FILE, READ_DIR; `fs.write`: WRITE_FILE, the
+   grants whole — `fs.read`: READ_FILE, READ_DIR; `fs.write`: WRITE_FILE, the
    MAKE_* and REMOVE_* rights, REFER, TRUNCATE; `process.spawn`: EXECUTE,
-   READ_FILE and IOCTL_DEV (open question 5).
+   READ_FILE and IOCTL_DEV (open question 5). A scoped `fs.read` or
+   `fs.write` (the third and fourth operands, each a list of directories
+   ended by a NUL and the list by a second, `null` for none) is left out of
+   the rule on `/` and granted by one `path_beneath` rule per directory,
+   opened `O_PATH | O_DIRECTORY`; a directory that cannot be opened refuses
+   strict and, under best-effort, is named and left out, which only narrows
+   what is granted.
 5. A seccomp denylist (open question 4), `SECCOMP_FILTER_FLAG_TSYNC`:
    - an architecture other than the build's kills, and on x86-64 a number with
      bit 30 (x32) kills;
@@ -145,8 +165,8 @@ constructor, and applies, in order:
      `accept`, `accept4` kill;
    - unless both `net` and `process.spawn`: `io_uring_setup`, `_enter`,
      `_register` kill;
-   - without `fs.write`: the mode, owner, times and extended-attribute writes
-     answer `EPERM`;
+   - without `fs.write`, or with it only beneath directories: the mode,
+     owner, times and extended-attribute writes answer `EPERM`;
    - without `process.spawn`: `execve`, `execveat`, `fork`, `vfork` kill,
      `clone3` answers `ENOSYS`, and `clone` kills unless `CLONE_THREAD` is
      set.
@@ -156,12 +176,15 @@ constructor, and applies, in order:
 A failure in any step prints `nish: --sandbox: <what> (<errno>)` and exits
 126. The two modes differ only where Landlock is missing or too old: strict
 exits 126 without Landlock, or below ABI 3 when `fs.write` is not granted
-(TRUNCATE could not be withheld); best-effort runs and names what it could not
-withhold.
+whole (TRUNCATE could not be withheld); best-effort runs and names what it
+could not withhold. A scope directory that cannot be opened is the one
+failure the modes treat differently outside Landlock's ABI: strict exits 126,
+`nish: --sandbox: cannot open the directory <dir> (<errno>)`, and best-effort
+names it once and runs with nothing granted beneath it.
 
 ## Findings
 
-None. The stage is new code; what it does not hold is stated in the threat
+None. Both stages are new code; what it does not hold is stated in the threat
 model's "What the adversary keeps" list above, and the limits below are
 recorded rather than counted.
 
@@ -174,6 +197,14 @@ recorded rather than counted.
   the same on every ABI (open question 12).
 - **The scopes below ABI 6.** Signals to the same uid and abstract Unix
   sockets are not scoped; strict runs anyway (open question 8).
+- **Scopes are resolved at build time.** The directory is the realpath the
+  compiler saw; the binary opens that path when it starts, so a directory
+  renamed, removed or replaced by a symlink in between is opened as it then
+  is (a symlink is followed, since only the launcher, who is trusted, can
+  place one there), or refused if it is gone.
+- **A directory cannot hold a comma**, which separates `--allow`'s list.
+- **Metadata writes inside an `fs.write` scope** stay `EPERM`, since seccomp
+  cannot see the path (open question 1(a)).
 - **Non-Linux.** Both symbols print `nish: --sandbox: this platform has no
   sandbox` and exit 126, so a `.ll` built for Linux and linked elsewhere
   refuses to run rather than run unconfined.
@@ -190,6 +221,10 @@ Each is a kernel answer the test machines do not give; each fails closed:
 - ABI 3 and 4 (exercised only as the simulated 0, 1 and 2 and the machine's
   own), and the best-effort line's IOCTL_DEV and scope names on a real kernel
   below ABI 5 or 6;
+- a scope directory that opens but is refused by `landlock_add_rule`
+  (`EBADFD`, `EINVAL`), and a scope list longer than one directory at run
+  time (the compiler emits it, `tests/run.js` checks the constant, no run
+  opens two);
 - `SECCOMP_GET_ACTION_AVAIL` refusing `KILL_PROCESS`, and
   `SECCOMP_SET_MODE_FILTER` failing;
 - `PR_SET_NO_NEW_PRIVS` failing;
@@ -235,6 +270,14 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
 - `sandbox: strict refuses below ABI 3 without fs.write (ABI 2)`
 - `sandbox: best-effort names TRUNCATE below ABI 3, and still confines the open (ABI 2)`
 - `sandbox: strict runs below ABI 3 with fs.write, which grants TRUNCATE anyway (ABI 2)`
+- `sandbox: strict refuses below ABI 3 with fs.write=<dir>, which grants nothing beneath / (ABI 2)`
+- `sandbox: fs.read=<dir> reads inside and not outside`
+- `sandbox: an ffi main is widened by the policy's fs.read=<dir>, and held to it`
+- `sandbox: a missing scope directory refuses strict, naming it`
+- `sandbox: best-effort names a missing scope directory once and reads nothing`
+- `sandbox: fs.write=<dir> creates inside and not outside` (ABI 3 or later)
+- `sandbox: chmod, utimensat and setxattr inside an fs.write=<dir> scope still fail EPERM` (ABI 3 or later)
+- `sandbox: a scope is a NUL-ended list constant passed to nish_sandbox, and llvm-as accepts it`
 - `sandbox: a libc that skips .preinit_array fails closed`
 - `sandbox: a process holding capabilities drops them`
 - `sandbox: a threaded program without process.spawn still runs its pool`
@@ -251,7 +294,10 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
 - `runtime objects: linking none-abi2.ll against the runtime built with -DNISH_SANDBOX_SIMULATE_ABI=2 gives the bytes the sources do`
 - `` `--sandbox --emit-napi` is a usage error, exit 2 ``
 - `` `--sandbox` on an entry with no `main` is a usage error, exit 2 ``
-- `` a directory scope beside `--sandbox` is still a usage error, exit 2 ``
+- `` a directory scope beside `--sandbox` is accepted, exit 0 ``
+- the scope refusals, each word for word, exit 2: a scope without
+  `--sandbox`, a scope in `--deny`, a scope of `net`, a directory that does not
+  exist, and a path that is a file
 - `tests/wordings/nl3044_sandbox_darwin` (the darwin refusal, word for word)
 - `tests/runtime-budgets.js`: `RUNTIME_SANDBOX_TEXT_BUDGET`, the ceiling on
   the unit's `.text`

@@ -151,8 +151,8 @@ that. Wall time moved within its noise.
 ## 7. Out of scope
 
 - **Enforcement**: built as WP36's compile-time policy. Holding a running
-  process to the computed set (`--sandbox`) is WP37's, proposed in
-  [wp37-os-sandbox.md](wp37-os-sandbox.md) and not built.
+  process to the computed set (`--sandbox`) is WP37's, built as
+  [wp37-os-sandbox.md](wp37-os-sandbox.md) records.
 - Argument-level precision (which path is read, which host is dialled),
   capability-typed handles, and taint.
 - Nondeterminism from thread scheduling or float reduction order.

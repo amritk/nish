@@ -9334,8 +9334,9 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   it"). No flag turns a check off for a whole program, so `nish:unsafe` is
   the only way to one and `--deny unsafe` sees every unchecked site.
 - A name that is no capability, `--allow unsafe`, a capability both allowed
-  and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
-  yet) are usage errors, exit 2. In `package.json` they are errors where the
+  and denied, and a directory scope (`fs.read=<dir>`) without `--sandbox`,
+  which alone enforces one (**Directory scopes** under
+  [The sandbox](#the-sandbox)), are usage errors, exit 2. In `package.json` they are errors where the
   manifest writes them: the wrong shape of `capabilities`, `allow` or `deny`
   written twice included (NL3032, `tests/link/caps_policy_manifest_shape`,
   `caps_policy_manifest_repeated`), a name that is no capability (NL3033,
@@ -9487,7 +9488,8 @@ entry:
 - **The call.** The first operand is `main`'s capability mask, numbered as
   `--emit-capabilities` numbers the bits (`clock` 0 … `tty` 10, `unsafe` 11), the
   second `1` for strict and `2` for best-effort; the two `i8*` operands are
-  `null`. `nish_sandbox` runs from `.preinit_array`, after the loader and
+  the `fs.read` and `fs.write` directory scopes below, `null` when there are
+  none. `nish_sandbox` runs from `.preinit_array`, after the loader and
   before any constructor of the executable, an `ffi` object or a shared
   library, and applies, in order: `PR_SET_NO_NEW_PRIVS`, a drop of every
   Linux capability (each set read back), a Landlock ruleset masked to the ABI
@@ -9512,6 +9514,28 @@ entry:
   `bind`, `listen`, `accept` and `accept4` kill it. `ffi`, `unsafe`, `tty`,
   `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing of their
   own; the ABI 6 scopes under **Always** apply whatever `main` reaches.
+- **Directory scopes.** Under `--sandbox`, `--allow fs.read=<dir>` and
+  `--allow fs.write=<dir>` grant the capability beneath `<dir>` alone. The
+  directory is resolved, symlinks and all, when the program is built, and
+  must exist then, or it is a usage error, exit 2: `` compile:
+  `fs.read=<dir>` names no directory; a scope is a directory that exists when
+  the program is built ``. Any other capability scoped, or a scope in
+  `--deny`, is refused, exit 2, and so is a scope without `--sandbox`, as
+  before. A scope narrows the policy like any `--allow` list, so the same
+  list names every other capability the program reaches. A capability also
+  granted whole is granted whole. The scopes are emitted as one constant per
+  capability, each directory ended by a NUL and the list by a second:
+  `@.sandbox.read = private unnamed_addr constant [N x i8] c"/srv/data\00\00"`,
+  passed as `nish_sandbox`'s third (`fs.read`) and fourth (`fs.write`)
+  operand, `null` when `main` does not reach the capability. Landlock grants
+  the scoped access beneath each directory and nothing else, except that a
+  `main` reaching `process.spawn` keeps reading every file beneath `/`
+  (`READ_FILE`, so that `exec` can load a program), scope or not; `chmod`,
+  `chown`, `utimensat`, `setxattr` and their siblings still answer `EPERM`
+  inside an `fs.write` scope, since seccomp cannot read a path. A main that
+  reaches `ffi` is widened by the policy's `net`, `fs.read`, `fs.write` and
+  `process.spawn` grants, a scope included, since foreign code reaches them
+  without the checker seeing it. A directory cannot hold a comma.
 - **The CPU count.** Before it confines anything, `nish_sandbox` reads the
   CPU count (the affinity mask and the cgroup quota) and keeps it as the
   thread pool's ceiling, since without `fs.read` the quota under
@@ -9529,9 +9553,14 @@ entry:
 - **Refusals.** A program whose sandbox cannot be applied prints one line,
   `nish: --sandbox: ...`, and exits 126 before `main` runs. Strict refuses a
   kernel without Landlock, and one below ABI 3 when `fs.write` is not
-  granted, since `TRUNCATE` cannot be withheld there; best-effort runs on
+  granted, since `TRUNCATE` cannot be withheld there, or when it is granted
+  only beneath a directory, since below ABI 3 that grants nothing beneath
+  `/`; best-effort runs on
   both, naming what it could not withhold (without Landlock, files are not
-  confined at all). Neither mode refuses a kernel without `IOCTL_DEV` (ABI 5)
+  confined at all). A scope directory missing at run time is refused by
+  strict, `nish: --sandbox: cannot open the directory <dir> (ENOENT)`;
+  best-effort leaves its rule out, so nothing beneath it is granted, and
+  names it once. Neither mode refuses a kernel without `IOCTL_DEV` (ABI 5)
   or the signal and socket scopes (ABI 6); best-effort names them.
 - **Targets.** A darwin target, given or the host's, is refused (NL3044,
   `tests/wordings/nl3044_sandbox_darwin`). The wasm and WASI targets

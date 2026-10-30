@@ -42,6 +42,7 @@ import {
   FactsTable,
   FunctionFacts,
 } from "./attributes"
+import { capabilityIndex } from "./capabilities"
 import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
 import { emitArrayLiteral, emitBytesKernel, emitElementAccess, emitForOf } from "./emit-arrays"
@@ -194,6 +195,7 @@ import {
   nodeName,
 } from "./nodes"
 import { Options } from "./options"
+import { irEscapeInto, StringBuilder } from "./strings"
 
 import {
   CheckedProgram,
@@ -856,13 +858,37 @@ export class Emitter {
     this.module.addGlobal(
       `@llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"`
     )
+    const caps = this.opts.sandboxCapabilities
+    const read = this.sandboxDirs("read", this.opts.sandboxRead, caps, "fs.read")
+    const write = this.sandboxDirs("write", this.opts.sandboxWrite, caps, "fs.write")
     const apply = new IRFunction(".sandbox.apply", [], "void")
     apply.linkage = "internal"
-    apply.emit(
-      `call void ${sandbox}(i32 ${this.opts.sandboxCapabilities}, i32 ${this.opts.sandbox}, i8* null, i8* null)`
-    )
+    apply.emit(`call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write})`)
     apply.emit("ret void")
     this.module.addFunction(apply)
+  }
+
+  /**
+   * WP37 §2: the directories a scoped capability is held to, as one constant
+   * of NUL-terminated paths ended by an empty one, and the operand that points
+   * at it; `null` when `main` does not reach the capability or it is granted
+   * whole, which the runtime reads as a rule beneath `/`.
+   */
+  sandboxDirs(name: string, dirs: string[], caps: i32, capability: string): string {
+    if (dirs.length === 0 || (caps & (1 << capabilityIndex(capability))) === 0) {
+      return "null"
+    }
+    const out = new StringBuilder()
+    let size = 1
+    for (const dir of dirs) {
+      irEscapeInto(out, dir)
+      out.add("\\00")
+      size = size + dir.length + 1
+    }
+    const body = out.toText()
+    const type = `[${size} x i8]`
+    this.module.addGlobal(`@.sandbox.${name} = private unnamed_addr constant ${type} c"${body}\\00"`)
+    return `getelementptr inbounds (${type}, ${type}* @.sandbox.${name}, i64 0, i64 0)`
   }
 
   // ---- Imports ------------------------------------------------------------

@@ -2830,7 +2830,13 @@ like a missing permission; a refused process or socket call ends the program
 with `SIGSYS` (status 159); a kernel that cannot apply it exits 126 before
 `main` unless built with `--sandbox=best-effort`. A darwin target, a library
 with no `main` and `--emit-napi` refuse the flag
-([LANGUAGE.md](LANGUAGE.md#the-sandbox)).
+([LANGUAGE.md](LANGUAGE.md#the-sandbox)). Only under `--sandbox` may an
+`--allow` list scope `fs.read` or `fs.write` to a directory
+(`--allow fs.read=/srv/data`): the directory must exist at build time, and
+the kernel grants the capability beneath it alone — except that a `main`
+reaching `process.spawn` can still read every file beneath `/`, so that
+`exec` can load a program. Any other scope, a scope
+in `--deny` and a scope without `--sandbox` are usage errors, exit 2.
 
 ## Before you say it compiles
 
