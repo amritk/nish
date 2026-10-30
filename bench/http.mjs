@@ -7,6 +7,7 @@
 //   node bench/http.mjs --only post-json new=build/bench/h1 old=build/bench/h1-old
 //   node bench/http.mjs --cores 1,2,4 build/bench/h1             # one table set per core count
 //   node bench/http.mjs --only startup build/bench/h1 build/http-twins/bun/serve
+//   node bench/http.mjs --acks --only keep-alive build/bench/h1   # TCP segments per request
 //
 // A server is `<path>`, labelled by its basename, or `<name>=<path>`, labelled
 // `name`. Each is started as `<path> <port> <slots>` and timed once it prints
@@ -43,6 +44,16 @@
 // them alike; each scenario reports the median of its rounds and the spread
 // (min to max). Read a difference against the spread of two byte-identical
 // builds (pass the same binary twice, or a copy of it): that is the noise band.
+//
+// --acks adds two columns from the kernel's TCP counters (/proc/net/snmp and
+// /proc/net/netstat, Linux only), read just before and after each timed run
+// and divided by its requests: segments sent, and delayed-ACK timer firings.
+// The counters cover the whole network namespace, wrk's side included, so a
+// keep-alive exchange that piggybacks every ACK reads 2 segments per request
+// (the request and the response) and anything above 2 is a pure ACK. Read a
+// difference between servers as the server's, since wrk is the same for all
+// of them. The kernel has no counter of pure ACKs sent: TCPPureAcks and
+// TCPHPAcks count ACKs received, and TCPHPAcks counts ACKs riding on data too.
 import { spawn, spawnSync } from "node:child_process"
 import { readdirSync, readFileSync } from "node:fs"
 import { request } from "node:http"
@@ -55,12 +66,13 @@ const args = process.argv.slice(2)
 let rounds = 5
 let duration = 5
 let syscalls = false
+let acks = false
 let only = null
 let slots = "16384"
 let coreCounts = null
 const bins = []
 const usage =
-  "usage: node bench/http.mjs [--rounds n] [--duration s] [--only a,b] [--cores 1,2,4] [--syscalls] [name=]<server>..."
+  "usage: node bench/http.mjs [--rounds n] [--duration s] [--only a,b] [--cores 1,2,4] [--syscalls] [--acks] [name=]<server>..."
 for (let k = 0; k < args.length; k++) {
   const a = args[k]
   if (a === "--rounds") {
@@ -69,6 +81,8 @@ for (let k = 0; k < args.length; k++) {
     duration = Number(args[++k])
   } else if (a === "--syscalls") {
     syscalls = true
+  } else if (a === "--acks") {
+    acks = true
   } else if (a === "--only") {
     only = args[++k].split(",")
   } else if (a === "--slots") {
@@ -326,6 +340,21 @@ const parseLatency = (text) => {
   }
   const scale = { us: 0.001, ms: 1, s: 1000 }[m[2]]
   return Number(m[1]) * scale
+}
+
+/** The `names` fields of the `prefix` table in a /proc/net/snmp-style file. */
+const procTable = (file, prefix, names) => {
+  const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.startsWith(`${prefix}:`))
+  const keys = lines[0].split(/\s+/)
+  const values = lines[1].split(/\s+/).map(Number)
+  return names.map((name) => values[keys.indexOf(name)])
+}
+
+/** The TCP counters `--acks` reads: segments sent and delayed-ACK timer firings. */
+const tcpCounters = () => {
+  const [segs] = procTable("/proc/net/snmp", "Tcp", ["OutSegs"])
+  const [delayed] = procTable("/proc/net/netstat", "TcpExt", ["DelayedACKs"])
+  return { segs, delayed }
 }
 
 /** One wrk run against `port`: requests per second, p99 in ms, and socket errors. */
@@ -593,6 +622,8 @@ const runLayout = async (lay) => {
       user: [],
       sys: [],
       rss: [],
+      segs: [],
+      delayed: [],
       errors: new Set(),
       na: null,
     }))
@@ -616,9 +647,16 @@ const runLayout = async (lay) => {
         const idle = scenario.idle ? await holdIdle(scenario.idle, p) : []
         await sleep(200)
         wrk(scenario, p, 1, lay) // warm-up: fills the slots, faults in the pages
+        const tcpBefore = acks ? tcpCounters() : null
         const before = cpuTimes(child.pid)
         const r = wrk(scenario, p, duration, lay)
         const after = cpuTimes(child.pid)
+        if (acks) {
+          const tcpAfter = tcpCounters()
+          for (const key of ["segs", "delayed"]) {
+            results[k][key].push((tcpAfter[key] - tcpBefore[key]) / r.total)
+          }
+        }
         results[k].rss.push(peakRss(child.pid))
         for (const socket of idle) {
           socket.destroy()
@@ -634,20 +672,23 @@ const runLayout = async (lay) => {
       }
     }
     console.log(`\n## ${scenario.name}${cores ? `, ${cores}` : ""}`)
+    const ackHead = acks ? " segs/req | delayed ACKs/req |" : ""
+    const ackRule = acks ? " ---: | ---: |" : ""
+    const ackNa = acks ? " n/a | n/a |" : ""
     console.log(
-      "| build | req/s (median) | spread | p99 ms | user µs/req | sys µs/req | peak RSS MB | notes |"
+      `| build | req/s (median) | spread | p99 ms | user µs/req | sys µs/req | peak RSS MB |${ackHead} notes |`
     )
-    console.log("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: |${ackRule} --- |`)
     const baseIndex = results.findIndex((r) => r.na === null)
     const base = baseIndex < 0 ? Number.NaN : median(results[baseIndex].rps)
     for (const k of servers.keys()) {
       const r = results[k]
       if (r.na === "single-core") {
-        console.log(`| ${label(k)} | n/a (single-core) | n/a | n/a | n/a | n/a | n/a | uses one core only |`)
+        console.log(`| ${label(k)} | n/a (single-core) | n/a | n/a | n/a | n/a | n/a |${ackNa} uses one core only |`)
         continue
       }
       if (r.na !== null) {
-        console.log(`| ${label(k)} | n/a | n/a | n/a | n/a | n/a | n/a | ${r.na} |`)
+        console.log(`| ${label(k)} | n/a | n/a | n/a | n/a | n/a | n/a |${ackNa} ${r.na} |`)
         continue
       }
       const m = median(r.rps)
@@ -655,9 +696,12 @@ const runLayout = async (lay) => {
       const hi = Math.max(...r.rps)
       const delta =
         k === baseIndex ? "" : ` (${m >= base ? "+" : ""}${(((m - base) / base) * 100).toFixed(1)}%)`
+      const ackCells = acks
+        ? ` ${median(r.segs).toFixed(3)} | ${median(r.delayed).toFixed(4)} |`
+        : ""
       const notes = [...(lay.shared ? ["client shares server cores"] : []), ...r.errors].join(" ")
       console.log(
-        `| ${label(k)} | ${Math.round(m).toLocaleString("en-US")}${delta} | ${Math.round(lo).toLocaleString("en-US")}–${Math.round(hi).toLocaleString("en-US")} | ${median(r.p99).toFixed(2)} | ${median(r.user).toFixed(2)} | ${median(r.sys).toFixed(2)} | ${Math.round(median(r.rss))} | ${notes} |`
+        `| ${label(k)} | ${Math.round(m).toLocaleString("en-US")}${delta} | ${Math.round(lo).toLocaleString("en-US")}–${Math.round(hi).toLocaleString("en-US")} | ${median(r.p99).toFixed(2)} | ${median(r.user).toFixed(2)} | ${median(r.sys).toFixed(2)} | ${Math.round(median(r.rss))} |${ackCells} ${notes} |`
       )
     }
   }
