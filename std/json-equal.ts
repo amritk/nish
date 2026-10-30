@@ -14,7 +14,7 @@
  * **The rule.** Two values are equal when they are the same kind and: two
  * numbers have the same mathematical value (`1`, `1.0` and `1e0` are equal;
  * `nish/json-number` decides, never through `f64`), two strings have the
- * same bytes, two booleans the same value, two arrays the same length and
+ * same string, two booleans the same value, two arrays the same length and
  * equal elements in order, and two objects the same keys with equal values,
  * in whatever order the members are written. `null` equals only `null`, and
  * `true` is not `1`. A number whose exponent is past
@@ -30,8 +30,10 @@
  * reads every key (one string each) and sorts them, `n log n` for `n`
  * members; it also allocates one string per string value, its stack, and
  * whatever `jsonNumberCompare` allocates per number pair. `jsonEqualCanonical`
- * builds the canonical bytes, about the size of the value written as JSON,
- * and sorts keys the same way. `jsonEqualHash` is FNV-1a of those bytes.
+ * builds the canonical text, about the size of the value written as JSON,
+ * and sorts keys the same way. `jsonEqualHash` is FNV-1a of that text's
+ * units: its bytes natively, its code units under Node. Every order and
+ * length below is in those units too.
  * `jsonEqualFirstDuplicate` makes the canonical text of every element up to
  * the first repeat and keeps them in a `Map`.
  *
@@ -52,13 +54,12 @@ import {
   JSON_VALUE_OBJECT,
   JSON_VALUE_STRING,
   JsonDocument,
-  JsonValue,
 } from "nish/json-value"
 
 /** On the canonical walk's stack, in place of a value: write the next key on the key stack. */
 const JSON_EQUAL_KEY_TASK: i32 = -1
 
-/** Whether `a`'s bytes sort before `b`'s, byte by byte and a prefix first. */
+/** Whether `a` sorts before `b`, unit by unit (byte or code unit) and a prefix first. */
 const jsonEqualBefore = (a: string, b: string): boolean => {
   for (let k: i32 = 0; k < toI32(a.length) && k < toI32(b.length); k++) {
     const x: i32 = toI32(a.charCodeAt(k))
@@ -87,11 +88,11 @@ const jsonEqualSetAt = (a: i32[], i: i32, x: i32): void => {
 }
 
 /**
- * The member positions of object `v` ordered by key bytes, with every key put
+ * The member positions of object `v` in key order, with every key put
  * in `keys` by its position. A bottom-up merge sort: `n log n` comparisons and
  * no recursion. Keys in one object are distinct, so the order is total.
  */
-const jsonEqualSortedMembers = (doc: JsonDocument, v: JsonValue, keys: string[]): i32[] => {
+const jsonEqualSortedMembers = (doc: JsonDocument, v: i32, keys: string[]): i32[] => {
   const n: i32 = doc.length(v)
   let order: i32[] = []
   let spare: i32[] = []
@@ -144,12 +145,12 @@ const jsonEqualNumbers = (a: string, b: string): boolean => {
  * their member order. The two may be one document. `false` when either
  * handle names no value. Iterative, so any depth compares.
  */
-export const jsonEqual = (da: JsonDocument, a: JsonValue, db: JsonDocument, b: JsonValue): boolean => {
-  const left: JsonValue[] = [a]
-  const right: JsonValue[] = [b]
+export const jsonEqual = (da: JsonDocument, a: i32, db: JsonDocument, b: i32): boolean => {
+  const left: i32[] = [a]
+  const right: i32[] = [b]
   while (left.length > 0) {
-    const x: JsonValue = jsonEqualAt(left, toI32(left.length) - 1)
-    const y: JsonValue = jsonEqualAt(right, toI32(right.length) - 1)
+    const x: i32 = jsonEqualAt(left, toI32(left.length) - 1)
+    const y: i32 = jsonEqualAt(right, toI32(right.length) - 1)
     left.pop()
     right.pop()
     const kind: i32 = da.kind(x)
@@ -198,12 +199,12 @@ export const jsonEqual = (da: JsonDocument, a: JsonValue, db: JsonDocument, b: J
   return true
 }
 
-/** Appends `s` to `out` whole, so every byte (every code unit under Node) is kept. */
+/** Appends `s` to `out` whole, so every unit of it is kept. */
 const jsonEqualPut = (out: string[], s: string): void => {
   out.push(s)
 }
 
-/** Appends `s` as the canonical form writes a string or a key: its length, `:`, its bytes. */
+/** Appends `s` as the canonical form writes a string or a key: its length, `:`, the string. */
 const jsonEqualPutText = (out: string[], s: string): void => {
   jsonEqualPut(out, `${toI32(s.length)}:`)
   jsonEqualPut(out, s)
@@ -215,22 +216,22 @@ const jsonEqualPutText = (out: string[], s: string): void => {
  * `jsonEqual`'s fallback too. A function of its own so that the texts it makes
  * are released when it returns rather than at the end of the walk.
  */
-const jsonEqualPutNumber = (out: string[], doc: JsonDocument, x: JsonValue): void => {
+const jsonEqualPutNumber = (out: string[], doc: JsonDocument, x: i32): void => {
   const text: string = doc.numberText(x)
   const canonical: string = jsonNumberCanonical(text)
   jsonEqualPut(out, canonical === "" ? `x${text};` : `n${canonical};`)
 }
 
 /** The canonical text of value `v` (`jsonEqualCanonical`), or `""` for a handle that names no value. */
-const jsonEqualCanonicalText = (doc: JsonDocument, v: JsonValue): string => {
+const jsonEqualCanonicalText = (doc: JsonDocument, v: i32): string => {
   const out: string[] = []
   if (doc.kind(v) === JSON_VALUE_NONE) {
     return ""
   }
-  const tasks: JsonValue[] = [v]
+  const tasks: i32[] = [v]
   const keyStack: string[] = []
   while (tasks.length > 0) {
-    const x: JsonValue = jsonEqualAt(tasks, toI32(tasks.length) - 1)
+    const x: i32 = jsonEqualAt(tasks, toI32(tasks.length) - 1)
     tasks.pop()
     if (x === JSON_EQUAL_KEY_TASK) {
       jsonEqualPutText(out, jsonEqualKeyAt(keyStack, toI32(keyStack.length) - 1))
@@ -275,31 +276,38 @@ const jsonEqualCanonicalText = (doc: JsonDocument, v: JsonValue): string => {
  * `jsonEqual` calls equal, so it is a key for a `Map` or `Set` of values. It
  * is not JSON: each value is a tag and what it holds, `z`, `t` and `f` for
  * null, true and false, `n` and a `jsonNumberCanonical` text and `;` for a
- * number, `s`, a byte length, `:` and the bytes for a string, `a` and a count
- * and `:` before an array's elements, and `o` and a count and `:` before an
- * object's members in key-byte order, each key a length, `:` and its bytes.
+ * number, `s`, a length, `:` and the string itself, `a` and a count and `:`
+ * before an array's elements, and `o` and a count and `:` before an object's
+ * members in key order, each key a length, `:` and the key (orders and lengths
+ * as the module header says).
  * `""` for a handle that names no value.
  */
-export const jsonEqualCanonical = (doc: JsonDocument, v: JsonValue): string => jsonEqualCanonicalText(doc, v)
+export const jsonEqualCanonical = (doc: JsonDocument, v: i32): string => jsonEqualCanonicalText(doc, v)
 
 /**
  * A 64-bit hash of value `v` that agrees with `jsonEqual`: equal values hash
- * the same. FNV-1a of the canonical text's bytes (its code units under
- * Node, so a string past U+00FF hashes differently there), unkeyed (the module header says
- * what that means for a table). The offset basis for a handle that names no
+ * the same. FNV-1a of the canonical text's units (its code units under
+ * Node, so a string past U+00FF hashes differently there), unkeyed (the
+ * module header says what that means for a table). The offset basis for a handle that names no
  * value.
  */
-export const jsonEqualHash = (doc: JsonDocument, v: JsonValue): u64 => {
+export const jsonEqualHash = (doc: JsonDocument, v: i32): u64 => {
   const text: string = jsonEqualCanonicalText(doc, v)
   // FNV-1a's 64-bit prime and offset basis (0xcbf29ce484222325, past what a
   // literal writes exactly), public domain. A module constant cannot be a
-  // `u64`, so they are made here.
-  const prime: u64 = 1099511628211
-  const high: u64 = 3421674724
-  const low: u64 = 2216829733
-  let h: u64 = (high << 32) | low
+  // `u64`, so they are made here from 16-bit pieces, every one through
+  // `toU64`: under Node a `u64` is a BigInt, which no plain number may meet
+  // and which does not wrap, so the product is masked to 64 bits (a no-op
+  // natively).
+  const quarter: u64 = toU64(65535)
+  const half: u64 = (quarter << toU64(16)) | quarter
+  const all: u64 = (half << toU64(32)) | half
+  const prime: u64 = (toU64(256) << toU64(32)) | toU64(435)
+  const upper: u64 = (toU64(52210) << toU64(16)) | toU64(40164)
+  const lower: u64 = (toU64(33826) << toU64(16)) | toU64(8997)
+  let h: u64 = (upper << toU64(32)) | lower
   for (let i: i32 = 0; i < toI32(text.length); i++) {
-    h = (h ^ toU64(toI32(text.charCodeAt(i)))) * prime
+    h = ((h ^ toU64(toI32(text.charCodeAt(i)))) * prime) & all
   }
   return h
 }
@@ -310,7 +318,7 @@ export const jsonEqualHash = (doc: JsonDocument, v: JsonValue): u64 => {
  * JSON Schema's `uniqueItems` holds exactly when this is `-1`. Linear in the
  * elements read, through a `Map` of their canonical texts.
  */
-export const jsonEqualFirstDuplicate = (doc: JsonDocument, v: JsonValue): i32 => {
+export const jsonEqualFirstDuplicate = (doc: JsonDocument, v: i32): i32 => {
   if (doc.kind(v) !== JSON_VALUE_ARRAY) {
     return -1
   }

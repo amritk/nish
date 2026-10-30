@@ -2,12 +2,13 @@
 // first duplicate, and the JSON-Schema-Test-Suite groups of `const`, `enum`
 // and `uniqueItems` (tests/json-schema-suite) through them.
 import { Suite } from "nish/testing";
-import { jssRunFile } from "./suite";
+import { jssDriverChecks, jssRunFile } from "./suite";
 import { jeUnits } from "./units";
 
 export const main = (): number => {
   const t = new Suite("std/json-equal");
   jeUnits(t);
+  jssDriverChecks(t);
   jssRunFile(t, "const", 54);
   jssRunFile(t, "enum", 53);
   jssRunFile(t, "uniqueItems", 69);

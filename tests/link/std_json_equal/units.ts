@@ -2,7 +2,7 @@
 // hash pinned by value, and a tree deeper than any recursion would survive.
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate, jsonEqualHash } from "nish/json-equal";
 import { JsonLimits } from "nish/json-tokenizer";
-import { JsonDocument, JsonValue } from "nish/json-value";
+import { JsonDocument } from "nish/json-value";
 import { Suite } from "nish/testing";
 
 /** Whether `a` and `b`, each parsed into its own document, are equal. */
@@ -80,7 +80,7 @@ const jeEquality = (t: Suite): void => {
   }
   t.eqStr("equal: every pair answers both ways round", wrong.join("; "), "");
   const doc = new JsonDocument(new JsonLimits());
-  const one: JsonValue = doc.parseText("1");
+  const one: i32 = doc.parseText("1");
   t.eqBool("equal: a handle naming no value equals nothing", jsonEqual(doc, -1, doc, one), false);
   t.eqBool("equal: not even another", jsonEqual(doc, -1, doc, -1), false);
 };
@@ -114,10 +114,10 @@ const jeDuplicates = (t: Suite): void => {
 };
 
 /** An array nested `depth` deep, built from the inside out: `[[[...[1]...]]]`. */
-const jeDeep = (doc: JsonDocument, depth: i32): JsonValue => {
-  let at: JsonValue = doc.newNumber("1");
+const jeDeep = (doc: JsonDocument, depth: i32): i32 => {
+  let at: i32 = doc.newNumber("1");
   for (let i: i32 = 0; i < depth; i++) {
-    const outer: JsonValue = doc.newArray();
+    const outer: i32 = doc.newArray();
     doc.push(outer, at);
     at = outer;
   }
@@ -127,8 +127,8 @@ const jeDeep = (doc: JsonDocument, depth: i32): JsonValue => {
 const jeDepth = (t: Suite): void => {
   const da = new JsonDocument(new JsonLimits());
   const db = new JsonDocument(new JsonLimits());
-  const a: JsonValue = jeDeep(da, 100000);
-  const b: JsonValue = jeDeep(db, 100000);
+  const a: i32 = jeDeep(da, 100000);
+  const b: i32 = jeDeep(db, 100000);
   t.eqBool("depth: 100000 levels compare without recursion", jsonEqual(da, a, db, b), true);
   t.eqBool("depth: and differ by one level", jsonEqual(da, a, db, db.at(b, 0)), false);
   t.eqI32("depth: the canonical text has every level", toI32(jsonEqualCanonical(da, a).length), 100000 * 3 + 5);

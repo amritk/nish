@@ -37,13 +37,7 @@
  * size.
  */
 
-import {
-  JSON_VALUE_ARRAY,
-  JSON_VALUE_NONE,
-  JSON_VALUE_OBJECT,
-  JsonDocument,
-  JsonValue,
-} from "nish/json-value"
+import { JSON_VALUE_ARRAY, JSON_VALUE_NONE, JSON_VALUE_OBJECT, JsonDocument } from "nish/json-value"
 
 /** `jsonPointerResolve`: the pointer is well formed and names nothing in the document. */
 export const JSON_POINTER_NONE: i32 = -1
@@ -227,11 +221,11 @@ const jsonPointerIndex = (p: string, from: i32, end: i32, length: i32): i32 => {
  * `JSON_POINTER_NONE` when the pointer names nothing there (or `root` names
  * no value), and `JSON_POINTER_ERR_SYNTAX` when `p` is not a JSON Pointer.
  */
-export const jsonPointerResolve = (doc: JsonDocument, root: JsonValue, p: string): JsonValue => {
+export const jsonPointerResolve = (doc: JsonDocument, root: i32, p: string): i32 => {
   if (!isJsonPointer(p)) {
     return JSON_POINTER_ERR_SYNTAX
   }
-  let at: JsonValue = root
+  let at: i32 = root
   let i: i32 = 0
   while (doc.kind(at) !== JSON_VALUE_NONE && i < toI32(p.length)) {
     const end: i32 = jsonPointerTokenEnd(p, i + 1)

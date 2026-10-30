@@ -10,7 +10,7 @@ import {
   jsonPointerResolve,
 } from "nish/json-pointer";
 import { JsonLimits } from "nish/json-tokenizer";
-import { JsonDocument, JsonValue } from "nish/json-value";
+import { JsonDocument } from "nish/json-value";
 import { Suite } from "nish/testing";
 
 /** The tokens of `p` joined by `|`, or `null` when it is refused. */
@@ -40,7 +40,7 @@ const jpEscape = (t: Suite): void => {
 const jpResolve = (t: Suite): void => {
   const doc = new JsonDocument(new JsonLimits());
   // RFC 6901 §5's document.
-  const root: JsonValue = doc.parseText(
+  const root: i32 = doc.parseText(
     '{"foo":["bar","baz"],"":0,"a/b":1,"c%d":2,"e^f":3,"g|h":4,"i\\\\j":5,"k\\"l":6," ":7,"m~n":8,"big":[10,20,30]}'
   );
   t.eqBool("resolve: the empty pointer is the root", jsonPointerResolve(doc, root, "") === root, true);
@@ -68,7 +68,7 @@ const jpResolve = (t: Suite): void => {
   t.eqI32("resolve: a root naming no value", jsonPointerResolve(doc, -1, ""), JSON_POINTER_NONE);
   t.eqI32("resolve: a text that is not a pointer", jsonPointerResolve(doc, root, "foo"), JSON_POINTER_ERR_SYNTAX);
   t.eqI32("resolve: a bad escape", jsonPointerResolve(doc, root, "/m~2n"), JSON_POINTER_ERR_SYNTAX);
-  const empty: JsonValue = doc.parseText("[]");
+  const empty: i32 = doc.parseText("[]");
   t.eqI32("resolve: /0 of an empty array", jsonPointerResolve(doc, empty, "/0"), JSON_POINTER_NONE);
 };
 

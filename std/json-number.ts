@@ -33,7 +33,7 @@
  * byte operations.
  *
  * **The bounds are stated.** An exponent is at most `JSON_NUMBER_MAX_EXPONENT`
- * in size, which keeps every exponent sum exact (under Node, too), and past
+ * in size, which keeps every exponent sum far inside `i64`, and past
  * it a text is `JSON_NUMBER_ERR_EXPONENT`, unless every digit is zero:
  * `0e9999999999999999` is zero. A division that would take more
  * than `JSON_NUMBER_MAX_STEPS` steps is `JSON_NUMBER_ERR_GAP` before it
@@ -56,7 +56,7 @@ export const JSON_NUMBER_ERR_DIVISOR: i32 = -12
 /** `jsonNumberMultipleOf` would take more than `JSON_NUMBER_MAX_STEPS` steps. */
 export const JSON_NUMBER_ERR_GAP: i32 = -13
 
-/** The largest exponent, in size, a text may write: 10^15, far inside the 2^53 that `i64` is exact to under Node. */
+/** The largest exponent, in size, a text may write: 10^15, so a sum of two stays far inside `i64`. */
 export const JSON_NUMBER_MAX_EXPONENT: i64 = 1000000000000000
 /** The most digit steps one `jsonNumberMultipleOf` may take, 2^20 (the module header says what a step costs). */
 export const JSON_NUMBER_MAX_STEPS: i64 = 1048576
@@ -115,8 +115,8 @@ class JsonNumberParts {
     this.fracLen = 0
     this.first = 0
     this.count = 0
-    this.lead = 0
-    this.last = 0
+    this.lead = toI64(0)
+    this.last = toI64(0)
     this.code = this.read()
   }
 
@@ -163,7 +163,7 @@ class JsonNumberParts {
         return JSON_NUMBER_ERR_SYNTAX
       }
     }
-    let exponent: i64 = 0
+    let exponent: i64 = toI64(0)
     // An exponent past the bound is refused only once the digits are known
     // not all to be zero: `0e9999999999` is zero, as any other zero is.
     let big: boolean = false
@@ -183,7 +183,7 @@ class JsonNumberParts {
         // Adding stops past the bound, so a thousand-digit exponent neither
         // overflows nor is mistaken for a small one.
         if (!big) {
-          exponent = exponent * 10 + toI64(jsonNumberByte(s, i) - JSON_NUMBER_DIGIT_0)
+          exponent = exponent * toI64(10) + toI64(jsonNumberByte(s, i) - JSON_NUMBER_DIGIT_0)
           big = exponent > JSON_NUMBER_MAX_EXPONENT
         }
         i += 1
@@ -327,7 +327,7 @@ const jsonNumberDividesLong = (v: JsonNumberParts, d: JsonNumberParts, total: i6
   for (let k: i32 = 0; k <= n; k++) {
     rem.push(0)
   }
-  for (let step: i64 = 0; step < total; step++) {
+  for (let step: i64 = toI64(0); step < total; step++) {
     // The remainder is below the divisor, so its top byte is zero and the
     // shift loses nothing.
     for (let k: i32 = 0; k + 1 < toI32(rem.length); k++) {
@@ -367,16 +367,16 @@ const jsonNumberDividesLong = (v: JsonNumberParts, d: JsonNumberParts, total: i6
  * with a digit shifted in: one multiply and one remainder per step.
  */
 const jsonNumberDividesShort = (v: JsonNumberParts, d: JsonNumberParts, total: i64): boolean => {
-  let divisor: u64 = 0
+  let divisor: u64 = toU64(0)
   for (let k: i32 = 0; k < d.count; k++) {
-    divisor = divisor * 10 + toU64(d.digit(k))
+    divisor = divisor * toU64(10) + toU64(d.digit(k))
   }
-  let rem: u64 = 0
-  for (let step: i64 = 0; step < total; step++) {
-    const digit: u64 = step < toI64(v.count) ? toU64(v.digit(toI32(step))) : 0
-    rem = (rem * 10 + digit) % divisor
+  let rem: u64 = toU64(0)
+  for (let step: i64 = toI64(0); step < total; step++) {
+    const digit: u64 = step < toI64(v.count) ? toU64(v.digit(toI32(step))) : toU64(0)
+    rem = (rem * toU64(10) + digit) % divisor
   }
-  return rem === 0
+  return rem === toU64(0)
 }
 
 /**
@@ -411,12 +411,14 @@ export const jsonNumberMultipleOf = (value: string, divisor: string): i32 => {
   // in a zero. A value whose last digit is finer than the divisor's would need
   // D * 10^k to divide V for some k above zero, and then ten would divide V.
   const gap: i64 = v.last - d.last
-  if (gap < 0) {
+  if (gap < toI64(0)) {
     return 0
   }
   const total: i64 = toI64(v.count) + gap
   const short: boolean = d.count <= JSON_NUMBER_SMALL_DIVISOR
-  if (total > (short ? JSON_NUMBER_MAX_STEPS : JSON_NUMBER_MAX_STEPS / toI64(d.count))) {
+  // A module constant is a plain number under Node, where an `i64` is a
+  // BigInt: comparing the two is allowed, dividing them is not.
+  if (total > (short ? JSON_NUMBER_MAX_STEPS : toI64(JSON_NUMBER_MAX_STEPS) / toI64(d.count))) {
     return JSON_NUMBER_ERR_GAP
   }
   if (short) {

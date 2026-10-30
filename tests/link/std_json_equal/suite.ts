@@ -19,7 +19,6 @@ import {
   JSON_VALUE_OBJECT,
   JSON_VALUE_STRING,
   JsonDocument,
-  JsonValue,
 } from "nish/json-value";
 
 export const JSS_CASES_PATH: string = "tests/json-schema-suite/cases.txt";
@@ -30,7 +29,7 @@ const JSS_INVALID: i32 = 0;
 const JSS_UNREAD: i32 = -1;
 
 /** Whether `data` is of JSON Schema type `name`: `integer` is a number whose value is whole, `1.0` included. */
-const jssType = (doc: JsonDocument, data: JsonValue, name: string): boolean => {
+const jssType = (doc: JsonDocument, data: i32, name: string): boolean => {
   const kind: i32 = doc.kind(data);
   if (name === "integer") {
     return doc.isIntegral(data);
@@ -45,8 +44,85 @@ const jssType = (doc: JsonDocument, data: JsonValue, name: string): boolean => {
   );
 };
 
+/** Whether every element of array `arg` is a string, and each is a `type` name when `names` is set. */
+const jssStrings = (doc: JsonDocument, arg: i32, names: boolean): boolean => {
+  if (doc.kind(arg) !== JSON_VALUE_ARRAY) {
+    return false;
+  }
+  for (let i: i32 = 0; i < doc.length(arg); i++) {
+    const item: i32 = doc.at(arg, i);
+    if (doc.kind(item) !== JSON_VALUE_STRING || (names && !jssTypeName(doc.string(item)))) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** Whether `name` is one of JSON Schema's seven type names. */
+const jssTypeName = (name: string): boolean =>
+  name === "null" ||
+  name === "boolean" ||
+  name === "number" ||
+  name === "integer" ||
+  name === "string" ||
+  name === "array" ||
+  name === "object";
+
+/**
+ * Whether this driver reads every keyword of `schema` and of every schema
+ * nested in it, whatever the instance: a nested schema the instance never
+ * reaches, or a keyword an earlier failing one would hide, still counts, so
+ * "unread anywhere" wins over any verdict.
+ */
+const jssReads = (doc: JsonDocument, schema: i32): boolean => {
+  if (doc.kind(schema) === JSON_VALUE_BOOLEAN) {
+    return true;
+  }
+  if (doc.kind(schema) !== JSON_VALUE_OBJECT) {
+    return false;
+  }
+  for (let i: i32 = 0; i < doc.length(schema); i++) {
+    const key: string = doc.keyAt(schema, i);
+    const arg: i32 = doc.at(schema, i);
+    const kind: i32 = doc.kind(arg);
+    let read: boolean = key === "$schema" || key === "$comment" || key === "const";
+    if (key === "type") {
+      read = kind === JSON_VALUE_STRING && jssTypeName(doc.string(arg));
+    } else if (key === "enum") {
+      read = kind === JSON_VALUE_ARRAY;
+    } else if (key === "uniqueItems") {
+      read = kind === JSON_VALUE_BOOLEAN;
+    } else if (
+      key === "multipleOf" ||
+      key === "minimum" ||
+      key === "exclusiveMinimum" ||
+      key === "maximum" ||
+      key === "exclusiveMaximum"
+    ) {
+      read = kind === JSON_VALUE_NUMBER;
+    } else if (key === "format") {
+      read =
+        kind === JSON_VALUE_STRING &&
+        (doc.string(arg) === "json-pointer" || doc.string(arg) === "relative-json-pointer");
+    } else if (key === "required") {
+      read = jssStrings(doc, arg, false);
+    } else if (key === "items") {
+      read = kind === JSON_VALUE_BOOLEAN && !doc.boolean(arg);
+    } else if (key === "properties" || key === "prefixItems") {
+      read = kind === (key === "properties" ? JSON_VALUE_OBJECT : JSON_VALUE_ARRAY);
+      for (let k: i32 = 0; read && k < doc.length(arg); k++) {
+        read = jssReads(doc, doc.at(arg, k));
+      }
+    }
+    if (!read) {
+      return false;
+    }
+  }
+  return true;
+};
+
 /** `jsonNumberCompare(data, bound)` held to `ok`'s answers, for a number instance; a refusal is unread. */
-const jssBound = (doc: JsonDocument, data: JsonValue, bound: JsonValue, low: i32, high: i32): i32 => {
+const jssBound = (doc: JsonDocument, data: i32, bound: i32, low: i32, high: i32): i32 => {
   if (doc.kind(data) !== JSON_VALUE_NUMBER) {
     return JSS_VALID;
   }
@@ -58,7 +134,7 @@ const jssBound = (doc: JsonDocument, data: JsonValue, bound: JsonValue, low: i32
 };
 
 /** Whether `value` of `doc` equals one of the elements of array `list`. */
-const jssOneOf = (doc: JsonDocument, list: JsonValue, value: JsonValue): boolean => {
+const jssOneOf = (doc: JsonDocument, list: i32, value: i32): boolean => {
   for (let i: i32 = 0; i < doc.length(list); i++) {
     if (jsonEqual(doc, doc.at(list, i), doc, value)) {
       return true;
@@ -68,7 +144,7 @@ const jssOneOf = (doc: JsonDocument, list: JsonValue, value: JsonValue): boolean
 };
 
 /** The verdict of keyword `key`, whose value is `arg`, of `schema` on `data`. */
-const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: JsonValue, data: JsonValue): i32 => {
+const jssKeyword = (doc: JsonDocument, schema: i32, key: string, arg: i32, data: i32): i32 => {
   const kind: i32 = doc.kind(data);
   if (key === "$schema" || key === "$comment") {
     return JSS_VALID;
@@ -134,7 +210,7 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
   }
   if (key === "properties") {
     for (let i: i32 = 0; i < doc.length(arg); i++) {
-      const member: JsonValue = doc.get(data, doc.keyAt(arg, i));
+      const member: i32 = doc.get(data, doc.keyAt(arg, i));
       if (doc.kind(member) !== JSON_VALUE_NONE) {
         const verdict: i32 = jssSchema(doc, doc.at(arg, i), member);
         if (verdict !== JSS_VALID) {
@@ -154,7 +230,7 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
     return JSS_VALID;
   }
   if (key === "items" && doc.kind(arg) === JSON_VALUE_BOOLEAN && !doc.boolean(arg)) {
-    const prefix: JsonValue = doc.get(schema, "prefixItems");
+    const prefix: i32 = doc.get(schema, "prefixItems");
     const allowed: i32 = doc.kind(prefix) === JSON_VALUE_ARRAY ? doc.length(prefix) : 0;
     return kind !== JSON_VALUE_ARRAY || doc.length(data) <= allowed ? JSS_VALID : JSS_INVALID;
   }
@@ -162,12 +238,12 @@ const jssKeyword = (doc: JsonDocument, schema: JsonValue, key: string, arg: Json
 };
 
 /**
- * The verdict of every keyword of `schema` on `data`: unread when any keyword
- * is unread, so a test is never judged by a schema read only in part; else
+ * The verdict of every keyword of `schema` on `data`, for a schema `jssReads`
+ * accepts: unread when an answer is refused (a number past the bound); else
  * the first that is not valid, else valid. `true` and `false` decide at once;
  * any other schema that is not an object is unread.
  */
-const jssSchema = (doc: JsonDocument, schema: JsonValue, data: JsonValue): i32 => {
+const jssSchema = (doc: JsonDocument, schema: i32, data: i32): i32 => {
   if (doc.kind(schema) === JSON_VALUE_BOOLEAN) {
     return doc.boolean(schema) ? JSS_VALID : JSS_INVALID;
   }
@@ -206,12 +282,13 @@ export const jssRunFile = (t: Suite, file: string, tests: i32): void => {
     if (line.startsWith("#") || space < 0 || line.slice(0, space) !== file) {
       continue;
     }
-    const group: JsonValue = doc.parseText(line.slice(space + 1));
-    const schema: JsonValue = doc.get(group, "schema");
-    const cases: JsonValue = doc.get(group, "tests");
+    const group: i32 = doc.parseText(line.slice(space + 1));
+    const schema: i32 = doc.get(group, "schema");
+    const cases: i32 = doc.get(group, "tests");
+    const reads: boolean = jssReads(doc, schema);
     for (let i: i32 = 0; i < doc.length(cases); i++) {
-      const test: JsonValue = doc.at(cases, i);
-      const verdict: i32 = jssSchema(doc, schema, doc.get(test, "data"));
+      const test: i32 = doc.at(cases, i);
+      const verdict: i32 = reads ? jssSchema(doc, schema, doc.get(test, "data")) : JSS_UNREAD;
       const valid: boolean = doc.boolean(doc.get(test, "valid"));
       if (verdict === JSS_UNREAD || (verdict === JSS_VALID) !== valid) {
         const why: string = verdict === JSS_UNREAD ? "a keyword is unread or refused" : `valid is ${valid}`;
@@ -226,4 +303,23 @@ export const jssRunFile = (t: Suite, file: string, tests: i32): void => {
     t.fail(`${file}: every test agrees with upstream`, wrong.join("\n"));
   }
   t.eqI32(`${file}: the suite holds ${tests} tests`, ran, tests);
+};
+
+/** Whether `jssReads` accepts the schema text `text`. */
+const jssReadsText = (text: string): boolean => {
+  const doc = new JsonDocument(new JsonLimits());
+  return jssReads(doc, doc.parseText(text));
+};
+
+/** The driver's own rule, that a keyword unread anywhere wins over any verdict, pinned. */
+export const jssDriverChecks = (t: Suite): void => {
+  t.eqBool("driver: reads what it answers", jssReadsText('{"properties":{"a":{"type":"string"}},"required":["a"]}'), true);
+  t.eqBool("driver: an unknown type name is unread", jssReadsText('{"type":"foo"}'), false);
+  t.eqBool(
+    "driver: a nested schema after a failing one still counts",
+    jssReadsText('{"properties":{"a":{"type":"string"},"b":{"bogus":1}}}'),
+    false
+  );
+  t.eqBool("driver: so does a prefix item past the instance", jssReadsText('{"prefixItems":[false,{"bogus":0}]}'), false);
+  t.eqBool("driver: and a keyword the instance's kind skips", jssReadsText('{"format":"email"}'), false);
 };
