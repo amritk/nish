@@ -16304,6 +16304,63 @@ if (!only || "layout".includes(only)) {
         )
       }
     }
+    // `nish:simd` vectors: tests/layout/simd.ts against its C twin, whose
+    // fields are clang's `vector_size(16)` types. The asserts pin a vector at
+    // sixteen bytes aligned to sixteen and an array of them at a sixteen-byte
+    // stride; the run reads every lane through the object `makeLanes` built
+    // and the bytes a `store` wrote.
+    {
+      const simdTs = path.join(root, "tests", "layout", "simd.ts")
+      const simdC = path.join(root, "tests", "layout", "simd.c")
+      const simdLl = path.join(buildDir, "layout_simd.ll")
+      const sc = spawnSync(NISH, [simdTs, "-o", simdLl], { cwd: root })
+      check("layout: tests/layout/simd.ts compiles", sc.status === 0, String(sc.stderr))
+      if (sc.status === 0) {
+        const ir = fs.readFileSync(simdLl, "utf8")
+        const alloc = ir.match(/define [^\n]*@makeLanes\([^\n]*\{\n[\s\S]*?@nish_alloc_struct\(i64 (\d+)\)/)
+        const cSize = fs.readFileSync(simdC, "utf8").match(/_Static_assert\(sizeof\(struct Lanes\) == (\d+)/)
+        check(
+          "layout: a vector field is `<N x T>`, an array of them `[K x <N x T>]`, and the object is the size simd.c asserts",
+          ir.includes("%struct.Lanes = type { i32, <4 x i32>, double, <2 x double>, { %struct.nish_array, [3 x <4 x i32>] }, <16 x i8> }") &&
+            alloc !== null &&
+            cSize !== null &&
+            alloc[1] === cSize[1],
+          `IR allocates ${alloc && alloc[1]}, simd.c asserts ${cSize && cSize[1]}`
+        )
+        const exe = path.join(buildDir, "layout_simd")
+        const cc = spawnSync(
+          "clang",
+          [
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-Wno-override-module",
+            "-O2",
+            "-Iruntime",
+            simdC,
+            simdLl,
+            ...RUNTIME_C,
+            "-o",
+            exe,
+          ],
+          { cwd: root }
+        )
+        check(
+          "layout: simd.c compiles with -std=c11 -Wall -Wextra -Werror (vector sizes, alignment and stride agree with clang)",
+          cc.status === 0,
+          String(cc.stderr)
+        )
+        if (cc.status === 0) {
+          const run = spawnSync(exe)
+          check(
+            "layout: every vector lane agrees with clang at run time, and a store writes the sixteen bytes it names",
+            run.status === 0 && String(run.stdout).trim() === "simd layout ok",
+            `${run.stdout}${run.stderr}`
+          )
+        }
+      }
+    }
     // --emit-header describes every class, so a build that writes one keeps
     // the pointer layout, and the C struct it writes must be the IR's: a C host
     // reads the field through the header and the size matches the allocation.
