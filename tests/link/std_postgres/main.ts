@@ -5,6 +5,7 @@
 import {
   PgArrayWalker,
   PgBinary,
+  PgBinaryArray,
   PgConfig,
   PgConnection,
   PgText,
@@ -1315,6 +1316,121 @@ const binaryTimes = (t: Suite): void => {
   t.eqStr("the text decoder writes the same", String.fromBytes(same, 0, 24), iso(p, big(820540, 759409876), 0));
 };
 
+/** An element of `n` bytes holding `v`, as an array's length word and its bytes. */
+const elem = (v: i64, n: i32): u8[] => {
+  const out: u8[] = [];
+  pushI32(out, n);
+  for (const b of be(v, n)) {
+    out.push(b);
+  }
+  return out;
+};
+
+/** A NULL element: the length word -1 and no bytes. */
+const nullElem = (): u8[] => {
+  const out: u8[] = [];
+  pushI32(out, -1);
+  return out;
+};
+
+/** A binary array: its header, one dimension of `dim` elements when `ndim` is 1, then `elems` as they are. */
+const arrayOf = (ndim: i32, hasNull: i32, oid: i32, dim: i32, elems: u8[][]): u8[] => {
+  const out: u8[] = [];
+  pushI32(out, ndim);
+  pushI32(out, hasNull);
+  pushI32(out, oid);
+  if (ndim === 1) {
+    pushI32(out, dim);
+    pushI32(out, 1);
+  }
+  for (const e of elems) {
+    for (const b of e) {
+      out.push(b);
+    }
+  }
+  return out;
+};
+
+/** `b` walked by `w` over `p`: its elements' ints, NULL, then how the walk ended, and `failed`. */
+const walkArray = (w: PgBinaryArray, p: PgBinary, b: u8[]): string => {
+  p.reset();
+  w.begin(b, 0, toI32(b.length));
+  const items: string[] = [];
+  let r: i32 = w.next();
+  while (r === PG_ARRAY_ELEMENT || r === PG_ARRAY_NULL) {
+    items.push(r === PG_ARRAY_NULL ? "NULL" : `${w.int()}`);
+    r = w.next();
+  }
+  const end: string = r === PG_ARRAY_END ? "end" : r === PG_ARRAY_BAD ? "bad" : "other";
+  return `[${items.join(",")}] ${end}${p.failed ? " failed" : ""}`;
+};
+
+const binaryArrays = (t: Suite): void => {
+  const p = new PgBinary();
+  const w = new PgBinaryArray(p);
+  t.eqStr("ndim 0: the empty array", walkArray(w, p, arrayOf(0, 0, 23, 0, [])), "[] end");
+  t.eqI32("and it has no elements", w.count, 0);
+  t.eqStr("one int4", walkArray(w, p, arrayOf(1, 0, 23, 1, [elem(toI64(7), 4)])), "[7] end");
+  t.eqI32("its count", w.count, 1);
+  t.eqI32("its element OID", w.elementOid, 23);
+  t.eqStr("int2 elements", walkArray(w, p, arrayOf(1, 0, 21, 2, [elem(toI64(-2), 2), elem(toI64(32767), 2)])), "[-2,32767] end");
+  t.eqStr("int8 elements, the most negative too", walkArray(w, p, arrayOf(1, 0, 20, 2, [elem(MIN_I64(), 8), elem(toI64(1), 8)])), "[-9223372036854775808,1] end");
+  t.eqStr("a NULL with hasnull 1", walkArray(w, p, arrayOf(1, 1, 23, 3, [elem(toI64(1), 4), nullElem(), elem(toI64(-1), 4)])), "[1,NULL,-1] end");
+  t.eqStr("a NULL with hasnull 0", walkArray(w, p, arrayOf(1, 0, 23, 2, [elem(toI64(1), 4), nullElem()])), "[1] bad failed");
+
+  const many: u8[][] = [];
+  for (let i: i32 = 0; i < 1000; i++) {
+    many.push(elem(toI64(i), 4));
+  }
+  const big: u8[] = arrayOf(1, 0, 23, 1000, many);
+  p.reset();
+  w.begin(big, 0, toI32(big.length));
+  let n: i32 = 0;
+  let sum: i64 = toI64(0);
+  while (w.next() === PG_ARRAY_ELEMENT) {
+    sum += w.int();
+    n += 1;
+  }
+  t.eqI32("1000 elements", n, 1000);
+  t.eqI32("the count", w.count, 1000);
+  t.ok("their sum", sum === toI64(499500) && !p.failed);
+  t.eqI32("then the end, exactly", w.next(), PG_ARRAY_END);
+
+  const nul: u8[] = arrayOf(1, 1, 23, 1, [nullElem()]);
+  p.reset();
+  w.begin(nul, 0, toI32(nul.length));
+  t.eqI32("a NULL element", w.next(), PG_ARRAY_NULL);
+  t.ok("its int fails", w.int() === toI64(0) && p.failed);
+
+  // Malformed input: each refusal ends the walk, and sets binary.failed.
+  t.eqStr("ndim 2", walkArray(w, p, arrayOf(2, 0, 23, 1, [elem(toI64(7), 4)])), "[] bad failed");
+  t.eqStr("ndim -1", walkArray(w, p, arrayOf(-1, 0, 23, 0, [])), "[] bad failed");
+  t.eqStr("another element type: text", walkArray(w, p, arrayOf(1, 0, 25, 1, [elem(toI64(7), 4)])), "[] bad failed");
+  t.eqStr("a 3-byte int4 element", walkArray(w, p, arrayOf(1, 0, 23, 1, [elem(toI64(7), 3)])), "[] bad failed");
+  t.eqStr("a 4-byte element in an int2 array", walkArray(w, p, arrayOf(1, 0, 21, 1, [elem(toI64(7), 4)])), "[] bad failed");
+  t.eqStr("an int8 element of 4 bytes", walkArray(w, p, arrayOf(1, 0, 20, 1, [elem(toI64(7), 4)])), "[] bad failed");
+  t.eqStr("a hasnull that is not 0 or 1", walkArray(w, p, arrayOf(1, 2, 23, 1, [elem(toI64(7), 4)])), "[] bad failed");
+  t.eqStr("a negative dimension", walkArray(w, p, arrayOf(1, 0, 23, -1, [])), "[] bad failed");
+  t.eqStr("more elements promised than given", walkArray(w, p, arrayOf(1, 0, 23, 2, [elem(toI64(7), 4)])), "[7] bad failed");
+  t.eqStr("one element promised, two given", walkArray(w, p, arrayOf(1, 0, 23, 1, [elem(toI64(7), 4), elem(toI64(8), 4)])), "[7] bad failed");
+  t.eqStr("bytes after an empty array", walkArray(w, p, arrayOf(0, 0, 23, 0, [elem(toI64(7), 4)])), "[] bad failed");
+  const one: u8[] = arrayOf(1, 0, 23, 1, [elem(toI64(7), 4)]);
+  t.eqStr("truncated inside the element", walkArray(w, p, slice(one, 0, one.length - 1)), "[] bad failed");
+  t.eqStr("truncated inside the length word", walkArray(w, p, slice(one, 0, 21)), "[] bad failed");
+  t.eqStr("truncated inside the header", walkArray(w, p, slice(one, 0, 15)), "[] bad failed");
+  t.eqStr("an empty window", walkArray(w, p, slice(one, 0, 0)), "[] bad failed");
+  p.reset();
+  w.begin(one, 0, one.length + 1);
+  t.eqI32("a window past the buffer", w.next(), PG_ARRAY_BAD);
+  t.ok("it is failed", p.failed);
+  p.reset();
+  w.begin(one, -1, 4);
+  t.eqI32("a window before it", w.next(), PG_ARRAY_BAD);
+  t.ok("it is failed too", p.failed);
+  p.reset();
+  t.ok("int on a refused walk fails", w.int() === toI64(0) && p.failed);
+};
+
 export const main = (): number => {
   const t = new Suite("postgres");
   startup(t);
@@ -1340,5 +1456,6 @@ export const main = (): number => {
   binaryRows(t);
   binaryInts(t);
   binaryTimes(t);
+  binaryArrays(t);
   return t.done();
 };
