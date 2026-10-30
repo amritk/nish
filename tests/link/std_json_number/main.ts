@@ -2,7 +2,7 @@
 // and multipleOf on number text, every refusal, and the JSON-Schema-Test-Suite
 // groups of the numeric keywords (tests/json-schema-suite) through them.
 import { Suite } from "nish/testing";
-import { jssRunFile } from "../../json-schema-suite/driver";
+import { jssRunFile } from "../std_json_equal/suite";
 import { jnUnits } from "./units";
 
 export const main = (): number => {

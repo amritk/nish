@@ -2,7 +2,7 @@
 // first duplicate, and the JSON-Schema-Test-Suite groups of `const`, `enum`
 // and `uniqueItems` (tests/json-schema-suite) through them.
 import { Suite } from "nish/testing";
-import { jssRunFile } from "../../json-schema-suite/driver";
+import { jssRunFile } from "./suite";
 import { jeUnits } from "./units";
 
 export const main = (): number => {

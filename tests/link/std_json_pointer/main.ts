@@ -2,7 +2,7 @@
 // form checks, and the JSON-Schema-Test-Suite groups of the `json-pointer` and
 // `relative-json-pointer` formats (tests/json-schema-suite) through them.
 import { Suite } from "nish/testing";
-import { jssRunFile } from "../../json-schema-suite/driver";
+import { jssRunFile } from "../std_json_equal/suite";
 import { jpUnits } from "./units";
 
 export const main = (): number => {

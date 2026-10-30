@@ -53,7 +53,9 @@ Groups are in the table's file order, then upstream's.
 
 ## The driver
 
-[`driver.ts`](driver.ts) is no validator. `jssRunFile(t, file, tests)` checks
+The driver, [`tests/link/std_json_equal/suite.ts`](../link/std_json_equal/suite.ts),
+sits beside the link tests that import it, and is no validator.
+`jssRunFile(t, file, tests)` checks
 every test of `file`'s groups by calling the helpers directly for the keywords
 they answer (`const`, `enum`, `uniqueItems`, `multipleOf`, the four bounds and
 the two formats) and reading the few keywords the groups wrap them in (`type`,
