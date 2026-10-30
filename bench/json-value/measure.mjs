@@ -77,6 +77,9 @@ const PINNED_LIBC = [
   "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
 ].join(":")
 const FIXED_KEY = "fixed-key.so"
+// The counted run's tools, from PATH: `CC` builds the fixed-key preload, as bench/run.mjs builds it.
+const CC = process.env.CC || "cc"
+const VALGRIND = "valgrind"
 
 /** `program` built by `compiler` into `<outDir>/<name>/`, as `label` and a byte-identical copy beside it. */
 const build = (compiler, program, name, label) => {
@@ -242,7 +245,7 @@ const summary = (file) => {
 /** A program case's binary, counted once: its count and its checksum line. */
 const countRun = (c, impl) => {
   const { argv, options, file } = underCachegrind(impl.exe, c.args)
-  const r = spawnSync("valgrind", argv, {
+  const r = spawnSync(VALGRIND, argv, {
     ...options,
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -268,7 +271,7 @@ const countServer = async (impl, port) => {
     payload,
   ])
   const { argv, options, file } = underCachegrind(impl.exe, [port, 16, requests])
-  const child = spawn("valgrind", argv, {
+  const child = spawn(VALGRIND, argv, {
     ...options,
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -335,7 +338,7 @@ const freePort = () =>
 
 /** `--instructions`: every binary of every case counted once, as one table. */
 const countAll = async () => {
-  execFileSync("cc", [
+  execFileSync(CC, [
     "-O2",
     "-shared",
     "-fPIC",
