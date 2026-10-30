@@ -2,9 +2,16 @@
 // pixel: the view that maps the 320×180 world onto a framebuffer, every shape,
 // the font, the colour and easing arithmetic, and the two pools. The negatives
 // are the framebuffers too small to draw in and a pool spawned past its
-// capacity, which must clamp and never panic.
+// capacity, which must clamp and never panic. The kit is imported beside every
+// std module the game, the menu and the director pull in, the way they pull
+// them in, so a name it shares with one of them refuses this program.
 import { Suite } from "../../../std/testing"
-import { Framebuffer } from "../../../std/term-pixels"
+import { Framebuffer } from "nish/term-pixels"
+import { COLOR_DEFAULT } from "nish/term"
+import { defaultTerminalOptions } from "../../../std/term-io"
+import { RATE_FIRST } from "nish/term-rate"
+import { TERM_PROBE_TIMEOUT_MS } from "nish/term-probe"
+import { Rng } from "../../../std/random"
 import {
   GLYPH_ADVANCE,
   GLYPH_H,
@@ -12,7 +19,7 @@ import {
   NO_SHADOW,
   Particles,
   STEPS_PER_SECOND,
-  Trail,
+  GfxTrail,
   View,
   WORLD_H,
   WORLD_W,
@@ -35,14 +42,14 @@ import {
   gradient,
   hue,
   lerp,
-  mix,
+  gfxMix,
   outBack,
   outBounce,
   outCubic,
   pixelX,
   pixelY,
   pushTrail,
-  rgb,
+  gfxRgb,
   spawnParticle,
   stepParticles,
   textWidth,
@@ -130,12 +137,12 @@ const testView = (t: Suite): void => {
 }
 
 const testColour = (t: Suite): void => {
-  t.eqI32("rgb", rgb(0x12, 0x34, 0x56), 0x123456)
-  t.eqI32("rgb clamps each channel", rgb(300, -5, 16), 0xff0010)
-  t.eqI32("mix at 0", mix(0x102030, 0xffffff, 0.0), 0x102030)
-  t.eqI32("mix at 1", mix(0x102030, 0xffffff, 1.0), 0xffffff)
-  t.eqI32("mix halfway", mix(0x000000, 0xffffff, 0.5), 0x7f7f7f)
-  t.eqI32("mix clamps t", mix(0x000000, 0xffffff, 7.0), 0xffffff)
+  t.eqI32("gfxRgb", gfxRgb(0x12, 0x34, 0x56), 0x123456)
+  t.eqI32("gfxRgb clamps each channel", gfxRgb(300, -5, 16), 0xff0010)
+  t.eqI32("gfxMix at 0", gfxMix(0x102030, 0xffffff, 0.0), 0x102030)
+  t.eqI32("gfxMix at 1", gfxMix(0x102030, 0xffffff, 1.0), 0xffffff)
+  t.eqI32("gfxMix halfway", gfxMix(0x000000, 0xffffff, 0.5), 0x7f7f7f)
+  t.eqI32("gfxMix clamps t", gfxMix(0x000000, 0xffffff, 7.0), 0xffffff)
   t.eqI32("add", add(0x010203, 0x020304), 0x030507)
   t.eqI32("add saturates", add(0x808080, 0x90ff01), 0xffff81)
   t.eqI32("dim", dim(0xff8040, 0.5), 0x7f4020)
@@ -348,7 +355,7 @@ const testPools = (t: Suite): void => {
   p.clear()
   t.eqI32("clear kills them all", p.live(), 0)
 
-  const trail = new Trail(3)
+  const trail = new GfxTrail(3)
   for (let i: i32 = 0; i < 5; i++) {
     pushTrail(trail, toF64(100 + i * 10), 50.0)
   }
@@ -360,10 +367,22 @@ const testPools = (t: Suite): void => {
   trail.clear()
   drawTrail(v, trail, 2.0, 0xffffff, 1.0)
   t.eqI32("a cleared trail draws nothing", lit(fb) + trail.count, 0)
-  const one = new Trail(0)
+  const one = new GfxTrail(0)
   pushTrail(one, 5.0, 5.0)
   pushTrail(one, 6.0, 5.0)
   t.eqI32("a trail of capacity 0 is clamped to 1", one.count, 1)
+}
+
+// The neighbours the game draws beside: each import is used once, and the
+// figures the game leans on are pinned against the kit's.
+const testNeighbours = (t: Suite): void => {
+  const options = defaultTerminalOptions()
+  t.eqI32("the terminal loop prefers rate first", options.prefer, RATE_FIRST)
+  t.eqI32("the default colour is -1", COLOR_DEFAULT, -1)
+  t.eqBool("the probe waits a positive time", TERM_PROBE_TIMEOUT_MS > 0.0, true)
+  const a = new Rng(7)
+  const b = new Rng(7)
+  t.eqI32("a seeded rng repeats itself", a.nextInt(0, 1000), b.nextInt(0, 1000))
 }
 
 export const main = (): number => {
@@ -374,5 +393,6 @@ export const main = (): number => {
   testShapes(t)
   testText(t)
   testPools(t)
+  testNeighbours(t)
   return t.done()
 }
