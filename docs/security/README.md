@@ -286,7 +286,8 @@ build, run and replay one: [`tests/fuzz/README.md`](../../tests/fuzz/README.md))
 and its record says what fuzzing found. The TLS, QUIC, HTTP/1, WebSocket,
 HPACK and X.509 targets each ran for at least 30 minutes from their seed
 corpora and found no crash, sanitizer report, timeout or OOM, except
-`tls-server-flight`, which has not yet had its run; CI replays every
+`tls-server-flight` and `websocket-client`, which have not yet had their
+run; CI replays every
 corpus on each PR and runs each target for 30 minutes weekly. RT-21 was found
 building the runtime for the harness, not by a target.
 

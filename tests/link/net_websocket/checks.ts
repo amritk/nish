@@ -418,6 +418,12 @@ export const websocketChecks = (): i32 => {
     requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["chat\r\nX: y"])),
     "null"
   );
+  t.eqStr("refused request: a lone CR in the host", requestText(websocketUpgradeRequest("a\rb", "/", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone LF in the host", requestText(websocketUpgradeRequest("a\nb", "/", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone CR in the target", requestText(websocketUpgradeRequest("a", "/a\rb", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone LF in the target", requestText(websocketUpgradeRequest("a", "/a\nb", SAMPLE_KEY, noProtocols)), "null");
+  t.eqStr("refused request: a lone CR in a protocol", requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["ch\rat"])), "null");
+  t.eqStr("refused request: a lone LF in a protocol", requestText(websocketUpgradeRequest("a", "/", SAMPLE_KEY, ["ch\nat"])), "null");
 
   t.eqStr("offer: none", offerOf("GET / HTTP/1.1\r\nHost: a\r\nSec-WebSocket-Version: 13\r\n\r\n"), "[]");
   t.eqStr("offer: the §1.3 request's list", offerOf(SAMPLE_REQUEST), "[chat,superchat]");

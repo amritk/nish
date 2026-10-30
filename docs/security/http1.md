@@ -84,9 +84,9 @@ Fuzzed by `tests/fuzz/targets/http1.ts`, `tests/fuzz/targets/websocket.ts`,
 | `websocket-client` | a server's answer to the client's upgrade, offering none, either or both of `chat` and `superchat`, fed whole or in pieces of 1 to 255 bytes through `Http1ResponseParser` told to expect the upgrade, then `websocketCheckResponse` and a client's `WsDecoder` over the bytes past the head; checking that only a 101 to HTTP/1.1 is accepted, that its accept never matches another key, that its protocol is one offered, and that text frames are UTF-8 | not yet run |
 
 `websocket-client` has not run under libFuzzer: the session that wrote it had
-no `libclang-rt`. Its 17 seeds in `tests/fuzz/corpus/websocket-client/` (an
+no `libclang-rt`. Its 18 seeds in `tests/fuzz/corpus/websocket-client/` (an
 accepted 101 with and without a protocol and with a frame glued on, and each
-refusal) were replayed through `fuzzOne` linked natively against
+refusal, a missing `Sec-WebSocket-Accept` among them) were replayed through `fuzzOne` linked natively against
 `tests/fuzz/harness.c`, with 4,000 mutations of them besides, without a crash;
 its 31-minute run is owed with the next fuzzing pass.
 

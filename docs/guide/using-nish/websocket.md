@@ -66,7 +66,9 @@ The client's side is six steps over a connection you opened:
    end a line. Send the bytes.
 3. **Feed the response.** Read the answer with an `Http1ResponseParser`, and
    call `expectUpgrade()` after `expect`, before you feed it: a 101 is
-   refused unless you did. Feed it until `next()` answers `HTTP1_HEAD`.
+   refused unless you did. Feed it until `next()` answers `HTTP1_HEAD`,
+   reading past any `HTTP1_INFORMATIONAL` (a `100` can come before the
+   `101`); anything else is not a WebSocket, so close the connection.
 4. **Read the protocol.** `websocketCheckResponse(parser, key, offered)`
    checks the head and answers a `WsHandshake`: `error` is `WS_HS_OK` and
    `protocol` the one the server chose, or `""` for none. Anything else is a
@@ -85,7 +87,7 @@ Over TLS, with `tlsConnect`:
 ```ts nish:ok
 import { netAddress } from "nish:net";
 import { HTTP1_HEAD, HTTP1_NEED_MORE } from "nish/net/http1";
-import { Http1ResponseParser } from "nish/net/http1-client";
+import { HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client";
 import { tlsConnect } from "nish/net/tls-tcp";
 import {
   WS_HS_OK,
@@ -133,17 +135,23 @@ export const main = (): i32 => {
   response.expectUpgrade();
   const buf: u8[] = new Array<u8>(4096);
   let event: i32 = response.next();
-  while (event === HTTP1_NEED_MORE) {
-    const n: i32 = client.readWait(buf, 0, toI32(buf.length), 5000);
-    if (n <= 0) {
-      client.close();
-      return 1;
+  while (event === HTTP1_NEED_MORE || event === HTTP1_INFORMATIONAL) {
+    if (event === HTTP1_NEED_MORE) {
+      const n: i32 = client.readWait(buf, 0, toI32(buf.length), 5000);
+      if (n <= 0) {
+        client.close();
+        return 1;
+      }
+      response.feed(buf, 0, n);
     }
-    response.feed(buf, 0, n);
     event = response.next();
   }
+  if (event !== HTTP1_HEAD) {
+    client.close();
+    return 1;
+  }
   // 4. Check it, and read the protocol.
-  const answer: WsHandshake = event === HTTP1_HEAD ? websocketCheckResponse(response, key, offered) : new WsHandshake(-1, "");
+  const answer: WsHandshake = websocketCheckResponse(response, key, offered);
   if (answer.error !== WS_HS_OK) {
     console.log(`refused: ${answer.error}`);
     client.close();

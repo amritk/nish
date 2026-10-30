@@ -139,7 +139,7 @@ then the 101 answers `HTTP1_HEAD`, `HTTP1_END` and `HTTP1_UPGRADE`, its
 bytes after its empty line are the new protocol's), and `tunnelBytes()`
 answers what was fed past the head (`a 101 to a request that asked to switch
 protocols, frame bytes glued to its head`, `a 101 that asked to switch
-protocols ignores its framing fields`, `a 101 to HEAD`). Any other answer to
+protocols ignores its framing fields`). Any other answer to
 such a request is read as it would be without it (`a request that asked to
 switch protocols, answered 200, reads as any other`, `asked to switch, a 200
 ends`). The opt-in lasts one request: `expect` clears it (`refused: expect()
