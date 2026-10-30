@@ -270,10 +270,10 @@ function vectorZero(walk: Walk, node: Node): string -> @vectorZero
   callee +8:16 TypeTable.scalarName -> @TypeTable.scalarName
   callee +8:38 TypeTable.refOf -> @TypeTable.refOf
   local +9:9 head: string (const)
-  local +10:9 kind: string (const)
-  local +11:9 splat: string (const)
-  callee +11:53 TypeTable.laneCount -> @TypeTable.laneCount
-  callee +12:13 Walk.helperName -> @Walk.helperName
+  local +10:7 kind: string (let)
+  local +17:9 splat: string (const)
+  callee +17:53 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +18:13 Walk.helperName -> @Walk.helperName
 function newRow(walk: Walk, node: Node, operands: Operands): string | null -> @newRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via vectorZero
