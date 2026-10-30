@@ -105,7 +105,7 @@ const generate = (paths) => {
       "      responses:",
       "        <<: *errors",
       "        '204':",
-      "          description: Stored.",
+      "          description: Stored."
     )
   }
   out.push("components:", "  schemas:")
@@ -121,7 +121,7 @@ const generate = (paths) => {
       "        tags:",
       "          type: array",
       "          items: {type: string}",
-      `        mode: {enum: [fast, slow, ${i % 2 === 0 ? "true" : "~"}]}`,
+      `        mode: {enum: [fast, slow, ${i % 2 === 0 ? "true" : "~"}]}`
     )
   }
   return `${out.join("\n")}\n`
@@ -130,7 +130,16 @@ const generate = (paths) => {
 const build = () => {
   fs.mkdirSync(outDir, { recursive: true })
   const exe = path.join(outDir, "main")
-  const args = [...nishc.prefix, path.join(here, "main.ts"), "-o", `${outDir}/`, "--link", exe, "--profile", "speed"]
+  const args = [
+    ...nishc.prefix,
+    path.join(here, "main.ts"),
+    "-o",
+    `${outDir}/`,
+    "--link",
+    exe,
+    "--profile",
+    "speed",
+  ]
   const r = spawnSync(nishc.cmd, args, { encoding: "utf8" })
   if (r.error !== undefined || r.status !== 0) {
     fail(`building main.ts failed:\n${r.stdout}${r.stderr}`)
@@ -186,7 +195,9 @@ const main = () => {
   }
   const msPer = (r) => median(r.ns) / iterations / 1e6
   const mbps = (ms) => bytes / 1024 / 1024 / (ms / 1000)
-  console.log(`${path.relative(root, file)}: ${bytes} bytes, ${iterations} iterations a run, ${opts.rounds} rounds`)
+  console.log(
+    `${path.relative(root, file)}: ${bytes} bytes, ${iterations} iterations a run, ${opts.rounds} rounds`
+  )
   for (const workload of ["parse", "load"]) {
     const [a, b] = runs.filter((r) => r.workload === workload)
     const ma = msPer(a)
@@ -197,12 +208,14 @@ const main = () => {
       fail(`${workload}: the runs disagree: ${[...seen].join(" | ")}`)
     }
     console.log(
-      `${workload.padEnd(5)}  ${ma.toFixed(3)} ms (copy ${mb.toFixed(3)} ms, band ${band.toFixed(1)}%)  ${mbps(ma).toFixed(1)} MB/s  ${[...seen][0]}`,
+      `${workload.padEnd(5)}  ${ma.toFixed(3)} ms (copy ${mb.toFixed(3)} ms, band ${band.toFixed(1)}%)  ${mbps(ma).toFixed(1)} MB/s  ${[...seen][0]}`
     )
   }
   const parse = msPer(runs[0])
   const load = msPer(runs[2])
-  console.log(`load costs ${(load / parse).toFixed(2)}x the parse alone (+${(load - parse).toFixed(3)} ms a document)`)
+  console.log(
+    `load costs ${(load / parse).toFixed(2)}x the parse alone (+${(load - parse).toFixed(3)} ms a document)`
+  )
 }
 
 main()
