@@ -23169,13 +23169,6 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // never sees the gap: release.yml pins the package it packs to the tag, and checks
     // the tarball it packed. Pins two releases behind mean a `lockfile` job that never
     // landed, and the next publish would not notice that either.
-    //
-    // Unless the release between never published: its `lockfile` job never ran, and
-    // there is no package to pin to. 0.27.0 failed its own CI, so 0.27.1 came up with
-    // the pins at 0.26.0 and this check turned that release red too, and the next
-    // one would have been red the same way. The seed is the last release that got as
-    // far as its GitHub release (CI fetches the latest), which release.yml creates
-    // just before the publish, so its version is allowed as well.
     const seedAssets = JSON.parse(
       fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
     ).targets.map((t) => t.asset)
@@ -23194,18 +23187,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     const previous = released
       .filter((v) => v !== manifest.version && notAfter(v, manifest.version))
       .reduce((a, v) => (a === undefined || notAfter(a, v) ? v : a), undefined)
-    const seedVersion =
-      seed.error === undefined ? /^nish (\S+)$/m.exec(spawnSeed(seed, ["--version"]).stdout ?? "")?.[1] : undefined
-    const lastPublished =
-      seedVersion !== undefined && released.includes(seedVersion) && notAfter(seedVersion, manifest.version)
-        ? seedVersion
-        : undefined
-    const allowedPins = [
-      ...new Set([manifest.version, previous, lastPublished].filter((v) => v !== undefined)),
-    ]
+    const allowedPins = previous === undefined ? [manifest.version] : [manifest.version, previous]
     const pinVersions = [...new Set(Object.values(optional))]
     check(
-      `every platform package is pinned to one version, this one, the release before or the last published (${allowedPins.join(" or ")})`,
+      `every platform package is pinned to one version, this one or the release before (${allowedPins.join(" or ")})`,
       pinVersions.length === 1 && allowedPins.includes(pinVersions[0]),
       Object.entries(optional)
         .map(([k, v]) => `${k} is pinned to ${v}`)
