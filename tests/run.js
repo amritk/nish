@@ -8933,7 +8933,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's ten translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's eleven translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -17476,7 +17476,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|crc32): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -17542,6 +17542,34 @@ if (!only || "simd".includes(only)) {
     )
   }
 
+  // WP38 §3.1: runtime/runtime-checksum.c runs CRC-32 on PCLMULQDQ folding, or on the
+  // ARMv8 CRC32 instructions with PMULL folding in front where the CPU has both, and
+  // Crc32.update takes that path or std/compress/checksum.ts's tables. tests/simd/crc32.c
+  // includes the file, computes its fold constants again from the polynomial, and
+  // holds every path this machine has to a bit-at-a-time reference: the check value,
+  // the empty input, every length 0..4,096 at offsets 0..15, inputs of 1 to 16 MiB and
+  // streamed pieces of 1..16, 63..65 and 127..129 bytes; then `nish_crc32_hw` under
+  // each `NISH_CRC32`. As for AES, the line must name the path /proc/cpuinfo says the
+  // CPU has.
+  const crcSaid = agree(`crc32 native ${process.arch}`, [], path.join(simdDir, "crc32"), native, "tests/simd/crc32.c")
+  let crcPath = null
+  if (process.arch === "x64" && features.has("pclmulqdq") && features.has("sse4_1")) {
+    crcPath = "pclmul;"
+  } else if (process.arch === "arm64" && features.has("crc32")) {
+    crcPath = features.has("pmull") ? "armv8-crc32 and armv8-pmull;" : "armv8-crc32 ("
+  }
+  if (crcPath === null) {
+    skip(
+      `simd: crc32: /proc/cpuinfo names no carry-less multiply or CRC32 instructions for ${process.platform}-${process.arch}, so no kernel path is required to run`
+    )
+  } else {
+    check(
+      `simd: crc32 ran the ${crcPath.replace(/[;(]$/, "").trim()} path, which /proc/cpuinfo says this CPU has`,
+      crcSaid.includes(`cases agree across ${crcPath}`),
+      crcSaid
+    )
+  }
+
   if (WASI_SYSROOT && has("wasm-ld")) {
     for (const [label, flags, source, name] of [
       ["wasm32-wasi, the scalar base path", [], driver, "index-of-any"],
@@ -17550,6 +17578,7 @@ if (!only || "simd".includes(only)) {
       ["byte-runs wasm32-wasi -msimd128", ["-msimd128"], runs, "byte-runs"],
       ["regex-scan wasm32-wasi, the scalar base path", [], scanDriver, "regex-scan"],
       ["regex-scan wasm32-wasi -msimd128", ["-msimd128"], scanDriver, "regex-scan"],
+      ["crc32 wasm32-wasi, no kernel", [], "tests/simd/crc32.c", "crc32"],
     ]) {
       agree(
         label,
@@ -17615,6 +17644,13 @@ if (!only || "simd".includes(only)) {
           "the ARMv8 AES path",
           /cases agree across armv8-aes-pmull;/,
         ],
+        [
+          "crc32 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 CRC32 and PMULL paths",
+          "tests/simd/crc32.c",
+          path.join(simdDir, "crc32.aarch64"),
+          "the ARMv8 CRC32 path",
+          /cases agree across armv8-crc32 and armv8-pmull;/,
+        ],
       ]) {
         const linked = build(cross, out, source)
         const r =
@@ -17625,7 +17661,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|crc32:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -17675,22 +17711,28 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
       return { ok: true, names, bytes: fs.readFileSync(out), why: "" }
     }
     const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
-    // The runtime as it was before build.sh paired runtime-aes.c: every file but that one.
-    const noAesDir = path.join(simdDir, "runtime-without-aes")
-    fs.rmSync(noAesDir, { recursive: true, force: true })
-    fs.mkdirSync(noAesDir, { recursive: true })
-    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
-      if (/\.(c|h)$/.test(file) && file !== "runtime-aes.c") {
-        fs.copyFileSync(path.join(root, "runtime", file), path.join(noAesDir, file))
+    const crcControl = crcPath === null ? null : "nish_crc32_hw: 1\ncbf43926\n"
+    /** The runtime as it was before build.sh paired `unit`: every file but that one. */
+    const runtimeWithout = (unit) => {
+      const dir = path.join(simdDir, `runtime-without-${unit}`)
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+        if (/\.(c|h)$/.test(file) && file !== unit) {
+          fs.copyFileSync(path.join(root, "runtime", file), path.join(dir, file))
+        }
       }
+      return dir
     }
+    const noAesDir = runtimeWithout("runtime-aes.c")
+    const noCrcDir = runtimeWithout("runtime-checksum.c")
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
@@ -17743,6 +17785,31 @@ if (!only || "simd".includes(only)) {
           `hello without: ${withoutAes.bytes?.length ?? "(not linked)"} bytes ${withoutAes.why}\n` +
           `the control keeps: ${aesCtrl.names.join(" ") || "(none)"} ${aesCtrl.why}\nthe control printed: ${printed || "(not run)"}`
       )
+
+      // runtime-checksum.c, the same way: hello is the same bytes without it, and its
+      // control keeps the kernel and gives the check value where the CPU runs it.
+      const withoutCrc =
+        compiled.status === 0
+          ? kept([helloLl], path.join(simdDir, `hello-no-crc32.${profile}`), profile, path.join(noCrcDir, "runtime.c"))
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      const crcExe = path.join(simdDir, `calls-crc32.${profile}`)
+      const crcCtrl = kept(["tests/simd/calls-crc32.c"], crcExe, profile)
+      const crcRan = crcCtrl.ok ? spawnSync(crcExe, [], { encoding: "utf8" }) : null
+      const crcPrinted = crcRan === null ? "" : String(crcRan.stdout)
+      check(
+        `simd: --profile ${profile} links hello with runtime-checksum.c to the same bytes as without it, and a program that calls the kernel runs it`,
+        withoutCrc.ok &&
+          quiet.ok &&
+          withoutCrc.bytes.equals(quiet.bytes) &&
+          crcCtrl.ok &&
+          crcCtrl.names.some((name) => name.startsWith("nish_crc32_")) &&
+          !crcCtrl.names.includes("__cpu_model") &&
+          crcRan.status === 0 &&
+          (crcControl === null ? /^nish_crc32_hw: [01]\n/.test(crcPrinted) : crcPrinted === crcControl),
+        `hello with runtime-checksum.c: ${quiet.bytes?.length ?? "(not linked)"} bytes ${quiet.why}\n` +
+          `hello without: ${withoutCrc.bytes?.length ?? "(not linked)"} bytes ${withoutCrc.why}\n` +
+          `the control keeps: ${crcCtrl.names.join(" ") || "(none)"} ${crcCtrl.why}\nthe control printed: ${crcPrinted || "(not run)"}`
+      )
     }
   }
 
@@ -17767,8 +17834,23 @@ if (!only || "simd".includes(only)) {
       ran !== null && ran.status === 0 && ran.stdout === "nish_aes_hw: 0\n",
       b.status !== 0 ? b.stderr : `${ran.stdout}${ran.stderr}`
     )
+    const crcWasm = path.join(simdDir, "calls-crc32.wasm")
+    const cb = spawnSync(
+      "bash",
+      ["scripts/build.sh", "tests/simd/calls-crc32.c", "runtime/runtime.c", "-o", crcWasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+    )
+    const crcRan =
+      cb.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", crcWasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      "simd: --profile wasi links runtime-checksum.c, and nish_crc32_hw answers 0 there",
+      crcRan !== null && crcRan.status === 0 && crcRan.stdout === "nish_crc32_hw: 0\n",
+      cb.status !== 0 ? cb.stderr : `${crcRan.stdout}${crcRan.stderr}`
+    )
   } else {
-    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's wasm32 build is not linked")
+    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's and runtime-checksum.c's wasm32 builds are not linked")
   }
 
   // The freestanding `wasm` profile links runtime-wasm.c, not runtime.c, so nothing
@@ -22279,9 +22361,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all ten runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eleven runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 10 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 11 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")

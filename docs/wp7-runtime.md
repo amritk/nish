@@ -184,6 +184,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s and `nish_regex_scan`'s scalar, base and AVX2 paths and their resolvers ([wp38](wp38-simd.md) S1) | 2,560 (`RUNTIME_SIMD_TEXT_BUDGET`) | 2,337 (2026-10-23) |
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
 | `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 1,536 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,303 (2026-10-23) |
+| `runtime/runtime-checksum.c` | CRC-32 on PCLMULQDQ folding (x86-64) or the CRC32 instructions (AArch64), the nibble-table tail and `nish_crc32_hw` ([wp38](wp38-simd.md) CRC) | 768 (`RUNTIME_CHECKSUM_TEXT_BUDGET`) | 718 (2026-10-30) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 | `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore, and the restore bytes | 2,048 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,825 (2026-10-24) |
@@ -230,6 +231,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-29 | `wallClockNanos`: `runtime-os.c` 2,822 → 2,828 (2,380 → 2,386 alone), the two clocks sharing `nish_clock_nanos` | os 3,072 |
 | 2026-10-29 | `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (#992): `runtime-os.c` 2,828 → 3,174, `nish_put_file_mode` 253, its two callers 12 each, `nish_mkdir_mode` 72 | os 3,328 |
 | 2026-10-29 | `spawnPiped`: `runtime-os.c` 3,174 → 4,450. `nish_spawn_piped` 1,082 (the poll loop that writes stdin while it drains both outputs, the 16 MiB cap and its kill, SIGPIPE blocked on the calling thread), `nish_pipe` 109 (`pipe2` with `O_CLOEXEC`, both ends moved off 0–2), and `nish_spawn_start` 284 → 365 for the three `dup2` actions and the check that each was recorded; the rest is the shared helpers' growth | os 4,608 |
+| 2026-10-30 | `runtime-checksum.c` (718), wp38 CRC: the PCLMULQDQ folding kernel 514, its byte tail 58, the resolver 121 and the entry point 25 | checksum 768 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -393,6 +395,22 @@ freestanding link whose IR calls a kernel, as it adds `runtime-aes.c`, so a
 module compiled for the host links there too. `scripts/build.sh` pairs it,
 `src/run-cache.ts` lists it and the compiler first calls it in one commit. A
 program that never reaches a run keeps none of it, by section GC.
+
+### The checksum unit
+
+`runtime/runtime-checksum.c` (wp38 CRC, [wp38-simd.md](wp38-simd.md)) holds
+CRC-32 for `nish/compress/checksum`: on x86-64, four 128-bit lanes folded with
+PCLMULQDQ and a Barrett reduction (Gopal et al., Intel, 2009), never SSE4.2's
+`crc32`, which is CRC-32C; on AArch64, the ARMv8 `crc32x`/`w`/`h`/`b`
+instructions. The compiler branches on `nish_crc32_hw` in front of the private
+walker `crc32Walk` and joins the two answers at a `phi`, so where the CPU has
+neither, or `NISH_CRC32=soft` pins it, the Nish slicing-by-8 runs as before.
+The 718 bytes are the folding kernel 514, the nibble-table tail 58, the
+resolver 121 and the entry point 25. It is an eleventh unit rather than more of
+`runtime-aes.c` by the same rule as the byte-class unit. A wasm build emits no
+seam; a module compiled for the host and linked with `--profile wasm` gets the
+file's wasm32 stub, whose `nish_crc32_hw` answers 0. A program that never
+reaches a CRC keeps none of it, by section GC.
 
 ### Checked arithmetic
 
