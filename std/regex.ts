@@ -1452,14 +1452,21 @@ class RegexParser {
         let a: i32 = left
         let b: i32 = mid
         let o: i32 = left
-        while (o < right) {
-          if (a < mid && (b >= right || srcLo[a] <= srcLo[b])) {
-            dstLo[o] = srcLo[a]
-            dstHi[o] = srcHi[a]
+        // Every scratch array holds `n` entries and `a`, `b`, `o` stay below
+        // `n`; the length tests say so where the prover reads them.
+        while (o >= 0 && o < right && o < toI32(dstLo.length) && o < toI32(dstHi.length)) {
+          let fromA: boolean = a < mid
+          if (fromA && b < right && a >= 0 && a < toI32(srcLo.length) && b >= 0 && b < toI32(srcLo.length)) {
+            fromA = srcLo[a] <= srcLo[b]
+          }
+          const pick: i32 = fromA ? a : b
+          if (pick >= 0 && pick < toI32(srcLo.length) && pick < toI32(srcHi.length)) {
+            dstLo[o] = srcLo[pick]
+            dstHi[o] = srcHi[pick]
+          }
+          if (fromA) {
             a += 1
           } else {
-            dstLo[o] = srcLo[b]
-            dstHi[o] = srcHi[b]
             b += 1
           }
           o += 1
@@ -1475,7 +1482,7 @@ class RegexParser {
       width *= 2
     }
     i = 0
-    while (i < n) {
+    while (i < n && i < toI32(srcLo.length) && i < toI32(srcHi.length)) {
       this.clsLo[from + i] = srcLo[i]
       this.clsHi[from + i] = srcHi[i]
       i += 1
