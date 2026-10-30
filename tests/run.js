@@ -3032,78 +3032,20 @@ if (!only || "net_loop".includes(only)) {
 
 // ---- The link profile of a `tests/link` program (WP5) -------------------------
 //
-// A program links under `--profile debug` (no optimiser, no LTO, the runtime's asserts
-// on) unless it is on `SPEED_LINK` or its args name a profile of its own. The profile
-// changes the link, never a byte of the IR (src/compile.ts), so the goldens, expected.ir
-// and the wipe checks read what they always read. Measured on main at 804120e, every
-// positive program built under each profile on one 4-core machine, speed twice:
-//   541 positive programs   build    run   total
-//   speed, first          738.5 s  83.6 s  822.1 s
-//   speed, second         735.1 s  64.0 s  799.1 s
-//   debug                 173.1 s 171.7 s  344.8 s
-// The two speed passes differ by 0.5% in build and 23 s in run (the first run of each
-// binary pays a cold start), so the band is about 3%; debug saves 454-477 s, far
-// outside it, and the default is debug. No program's exit code or stdout differed
-// between the profiles; only stderr's timings and addresses did.
-// The programs below keep the speed profile, each for the reason beside it.
-const SPEED_LINK = new Map([
-  // expected.ir pins alias metadata, which only an optimised link acts on.
-  ["class_export", "expected.ir pins `noalias`"],
-  ["generic_import", "expected.ir pins `noalias`"],
-  ["net_prefork", "expected.ir pins `noalias`"],
-  ["result_import", "expected.ir pins `noalias`"],
-  // arr_* aliasing domains.
-  ["arr_bounds_returned_import", "an arr_* aliasing domain"],
-  // Wipes that must survive optimisation: tests/wipes and the `-O2` wipe checks
-  // compile these, so the binary the link loop runs is the optimised one too.
-  ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
-  ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
-  ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
-  ["crypto_bcrypt_batch", "tests/wipes counts its wipes after -O2"],
-  ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
-  ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
-  ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
-  ["crypto_p256", "tests/wipes and the p256ScalarInverse wipes survive opt -O2"],
-  ["crypto_p256_ecdh", "tests/wipes counts its wipes after -O2"],
-  ["net_quic_server_wipes", "tests/wipes counts its wipes after -O2"],
-  ["net_quic_server_wipes_f64", "the f64 twin of net_quic_server_wipes"],
-  ["net_quic_wipes", "tests/wipes counts its wipes after -O2"],
-  ["net_quic_wipes_f64", "the f64 twin of net_quic_wipes"],
-  ["net_tls_client_record", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_rfc8448", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_ticket", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_wipes", "tests/wipes counts its wipes after -O2"],
-  ["net_tls_wipes_f64", "the f64 twin of net_tls_wipes"],
-  ["std_pbkdf2", "tests/wipes counts its wipes after -O2"],
-  // SIMD kernels: runtime-simd.c's byte search and regex scan, runtime-aes.c's
-  // AES rounds, and a parallel map whose element loop vectorises.
-  ["crypto_aes", "runtime-aes.c's kernels"],
-  ["crypto_aes_agree", "runtime-aes.c's kernels"],
-  ["crypto_aes_f64", "runtime-aes.c's kernels"],
-  ["crypto_aes_into", "runtime-aes.c's kernels"],
-  ["crypto_aes_into_f64", "runtime-aes.c's kernels"],
-  ["par_map_vector", "its element loop vectorises"],
-  ["std_regex", "runtime-simd.c's regex scan"],
-  ["std_regex_f64", "runtime-simd.c's regex scan"],
-  ["std_text_index_of_any", "runtime-simd.c's byte search"],
-  ["std_text_index_of_any_non_ascii_offset", "runtime-simd.c's byte search"],
-  // Size and performance figures a check after the loop reads from the binary.
-  ["net_tls_resume_bench", "a timed handshake ratio"],
-  ["par_map_idle", "an RSS bound"],
-  ["par_map_join_small", "an RSS bound"],
-  ["par_map_reclaim", "an RSS bound"],
-  ["par_map_release", "an RSS bound"],
-  ["thread_channel_string_many", "a wall-clock bound"],
-  ["thread_scope_reclaim", "an RSS bound"],
-  ["thread_task_release", "an RSS bound"],
-  ["net_relay_soak", "an RSS bound, and 4.9 s of run becomes 37.8 s"],
-  // Run so much slower unoptimised that the debug build costs more in all
-  // (speed build + run, then debug build + run).
-  ["crypto_x25519", "1.7 + 0.2 s, against 0.2 + 2.3 s"],
-  ["crypto_x509_malformed", "2.2 + 2.0 s, against 0.5 + 11.7 s"],
-  ["net_tls_memory", "4.8 + 1.3 s, against 0.8 + 14.4 s"],
-  ["net_tls_memory_f64", "4.7 + 1.5 s, against 0.8 + 15.2 s"],
-])
+// A program links under `--profile debug` unless it is on `SPEED_LINK` or its args
+// name a profile of its own. The list, the measurement that made debug the default
+// and the reason each program keeps the speed profile are in tests/speed-link.txt,
+// which tests/nish/run.ts reads too, so the two harnesses link every program alike.
+const SPEED_LINK = new Map(
+  fs
+    .readFileSync(path.join(root, "tests", "speed-link.txt"), "utf8")
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !line.startsWith("#"))
+    .map((line) => {
+      const [name, ...reason] = line.trim().split(/\s+/)
+      return [name, reason.join(" ")]
+    })
+)
 /**
  * The `--profile` flags a link of `tests/link/<name>` adds: none when its `args` name a
  * profile or it is on `SPEED_LINK` (build.sh's default, speed), and `debug` otherwise.

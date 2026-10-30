@@ -140,4 +140,11 @@ PASS  both still wait
 PASS  the connection still works
 PASS  a full take fits maxOutput at the bound
 PASS  and a byte past it is refused
-postgres batch: 142 passed, 0 failed, 0 skipped
+PASS  a binary take answers a run
+PASS  its Bind asks for one result format, binary
+PASS  its ordinals are read as binary int8s, each row to its request
+PASS  nothing refused
+PASS  binary.failed stays as the caller set it
+PASS  a text ordinal is refused
+PASS  a NULL ordinal is refused
+postgres batch: 149 passed, 0 failed, 0 skipped
