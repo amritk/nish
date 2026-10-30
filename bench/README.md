@@ -651,14 +651,18 @@ larger distance from `nish`, at the minimum and at the median), and whether the
 kernel clears the 20% bar at both sizes.
 
 Median ns/op on two machines. The x86-64 run is `--runs 16` on an Intel Xeon
-at 2.10 GHz, at 9046339. AARCH64_README
+at 2.10 GHz, at 9046339. The AArch64 run is CI's `simd-arm64` job on
+`ubuntu-24.04-arm` at 9046339, `--runs 12`. The reading is in
+[docs/wp38-simd.md §3.1](../docs/wp38-simd.md).
 
 | Workload | x86-64 nish | copy | ssse3 | scalar C | AArch64 nish | copy | neon | scalar C |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| adler-64k | 22,719 | 22,691 | 3,199 | 20,806 | AARCH64_64K |
-| adler-1m | 375,586 | 368,880 | 53,562 | 343,377 | AARCH64_1M |
+| adler-64k | 22,719 | 22,691 | 3,199 | 20,806 | 21,699 | 21,691 | 2,878 | 33,096 |
+| adler-1m | 375,586 | 368,880 | 53,562 | 343,377 | 347,110 | 347,366 | 48,164 | 530,742 |
 
-AARCH64_README_GAIN
+The AArch64 run is CI's `simd-arm64` job on
+`ubuntu-24.04-arm` at 9046339, `--runs 12`. The reading is in
+[docs/wp38-simd.md §3.1](../docs/wp38-simd.md)._GAIN
 
 ## HTTP
 
