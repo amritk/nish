@@ -18,21 +18,32 @@ promised). For a pattern the attacker writes, the audit found compile time
 unbounded for nested exact repeats of an empty body (REGEX-1), parse time
 quadratic in a class's ranges (REGEX-2) and in named groups (REGEX-3), and
 compile memory of about 424 MiB for a 10 KB pattern (REGEX-5); each is fixed
-with a cap or a cut, and a row of `tests/link/std_regex` pins it. Five
-findings are fixed (one Medium, four Low) and one is accepted (Medium).
+with a cap or a cut, and a row of `tests/link/std_regex` pins it. Six
+findings are fixed (one Medium, five Low, REGEX-7 below) and one is accepted
+(Medium).
+
+Property escapes (`\p{…}`, `\P{…}`) and Unicode case folding under `i` came
+later (#1048). They grow a pattern's classes from tables rather than from its
+bytes, so they get their own cap: at most `REGEX_MAX_PROPERTY_RANGES`
+(100,000) ranges per pattern, counted across every escape and every folded
+class (REGEX-7). Sorting those ranges is O(r log r) above 64 of them, so the
+cap bounds the work as well as the memory.
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/regex.ts` | `RegexParser` (`parseAlt`, `parseGroup`, `parseBraces`, `parseClass`, `parseClassAtom`, `addRange`, `finishClass`, `fail`); the compiler (`emit`, `compileNode`, `compileIteration`, `compileEmptyCheckedRepeat`, `compileMarked`); `regexSortPoints`, `regexScanFrom`; `Regex` (`build`, `findPrefilters`, `findInner`, `findScan`, `scanTo`, `dSkipTo`, `ctxBefore`, `ctxAt`, `dfaForward`, `dfaReverse`, `dfaInner`, `run`, `vm`, `test`, `exec`, `find`, `findAll`, `count`, `replace`, `replaceAll`, `replaceMatches`, `slotText`, `expand`, `split`); `regexCompile`, `regexEscape` |
+| `std/regex.ts` | `RegexParser` (`parseAlt`, `parseGroup`, `parseBraces`, `parseClass`, `parseClassAtom`, `addRange`, `finishClass`, `fail`; the property escapes `addProperty`, `countPropertyRanges`, `tableNumber`, `regexPropertyEntry`; the case folding `charNode`, `loadFolds`, `foldIndex`, `foldRanges`, `rangesHave`; `storeRanges`, `mergeSort`); the compiler (`emit`, `compileNode`, `compileIteration`, `compileEmptyCheckedRepeat`, `compileMarked`); `regexSortPoints`, `regexScanFrom`; `Regex` (`build`, `findPrefilters`, `findInner`, `findScan`, `scanTo`, `dSkipTo`, `ctxBefore`, `ctxAt`, `dfaForward`, `dfaReverse`, `dfaInner`, `run`, `vm`, `test`, `exec`, `find`, `findAll`, `count`, `replace`, `replaceAll`, `replaceMatches`, `slotText`, `expand`, `split`); `regexCompile`, `regexEscape` |
 | `runtime/runtime-simd.c` | `nish_regex_scan`, `nish_scan_pick` (scalar, AVX2, NEON and WASM SIMD paths) |
 | `runtime/nish.h` | the `nish_regex_scan` contract |
 | `src/kernels.ts` | the lowering of `regexScanFrom` to `nish_regex_scan` |
+| `scripts/gen-regex-unicode.mjs` | the generator of the property and folding tables in `std/regex.ts` from the pinned (sha256) Unicode 16.0.0 data files, and of the Node oracle `tests/link/std_regex_unicode/oracle.ts` |
 
 Out of scope: lookaround and backreferences, which are refused at compile
-time; Unicode case folding, since the `i` flag folds ASCII only; and the
-callers' use of matches.
+time; the Unicode data itself, which the generator takes as published once its
+hash matches; and the callers' use of matches. Folding never crosses into
+ASCII (K does not match U+212A KELVIN SIGN, s does not match U+017F) — a
+documented difference from JavaScript, not a gap.
 
 ## Threat model
 
@@ -61,6 +72,7 @@ first case, is its own.
 | REGEX-4 | Medium | `findAll`, `count`, `replaceMatches`, `split` | Leftmost-first iteration runs one search per match. When a preferred branch reads to the end before a short branch wins (`.*X\|a`, `<[^>]*>\|<`), the iteration is O(n²) in the subject: 1.5 s at 40,000 bytes, 9.2 s at 100,000. One search stays linear. The module header, the guide and `std/README.md` promised linear time "whatever the pattern". | Accepted: inherent to leftmost-first iteration, the same bound RE2 and Rust's `regex` document. The module header, `std/README.md` and the guide's regular-expressions section now say one search is linear and iterating can be quadratic, and how to bound the long branch. |
 | REGEX-5 | Low | `build`, `compileIteration` | Groups under `{0}` emit nothing, yet every enclosing iteration's CLEAR clears their slots. `build` sizes the VM stack at one frame per cleared slot times 2^levels: 424 MiB for a 10 KB pattern, held for the `Regex`'s life. It is bounded (about 8 × 4194304 frames) but far above the documented 1 MiB. | Fixed: `build` refuses a pattern whose stack frames would pass `REGEX_MAX_SLOT_TABLE`, "too many groups for the pattern's size", before it allocates them. Never-set groups still go into CLEAR; the cap is what bounds the memory. Test: the row "a backtrack stack past the slot table" |
 | REGEX-6 | Low | `src/kernels.ts` (the `regexScanFrom` comment) | The comment states a mask array of 32 bytes per position. The contract in `runtime/nish.h`, and the kernel, need 288 bytes per position. No caller is affected. | Fixed: the comment states 288 bytes a position |
+| REGEX-7 | Low | `addProperty`, `foldRanges`, `finishClass` | Found while adding them: a property escape adds up to about 700 ranges from 9 pattern bytes (`\p{L}`), and a class under `i` adds its folded orbits, so the class cap of 10,000 bounds neither a pattern of many escapes outside classes nor the ranges folding adds after it. | Fixed: `countPropertyRanges` refuses a pattern whose escapes and folding add more than `REGEX_MAX_PROPERTY_RANGES` (100,000) ranges, "property escapes and case folding add more than 100000 ranges"; a class's own ranges stay under `REGEX_MAX_CLASS_RANGES` before folding; `storeRanges` merge-sorts more than `REGEX_INSERTION_SORT` (64) ranges, so the sort is O(r log r). The tables are decoded once, lazily (`loadFolds`), with their size fixed by the generator. Tests: the rows "property escapes past 100000 ranges", "case folding past 100000 ranges" and "property escapes of 100000 ranges compile" |
 
 ## Properties verified
 
@@ -77,8 +89,8 @@ first case, is its own.
 **Pattern errors are refused, not panicked on.**
 
 - A repeat count over 1000 is refused, as are nesting deeper than 250 and more than 100,000 instructions.
-- Malformed syntax gets a refusal naming its byte: an unclosed class or group, a lone quantifier, a bad escape, a bad range, a bad or duplicate name.
-- More than 1,024 groups and a class of more than 10,000 ranges are refused, and so is a backtrack stack past the slot table ("too many groups for the pattern's size", in `build`).
+- Malformed syntax gets a refusal naming its byte: an unclosed class or group, a lone quantifier, a bad escape, a bad range, a bad or duplicate name, an unknown property name or value (`\p`, `\p{Foo}`, `\p{gc=Foo}`), and a property escape as a range end (`[\p{L}-z]`).
+- More than 1,024 groups, a class of more than 10,000 ranges, and property escapes and folding adding more than 100,000 ranges are refused, and so is a backtrack stack past the slot table ("too many groups for the pattern's size", in `build`).
 - A repeat whose body compiles to nothing ends its loop rather than repeating it (REGEX-2).
 - Fuzzing found no panic and no disagreement between `test`, `exec`, `count` and `findAll`:
   - 2,000 + 8 × 40,000 token patterns with every flag combination;
@@ -106,7 +118,7 @@ first case, is its own.
 
 ## Tests
 
-- `link/${name}: exits with ${wantCode} and stdout matches expected.out` — `tests/link/std_regex` (JavaScript-generated rows, error rows, the compile-bound rows, prefilter rows, the linear-time rows) and `tests/link/std_regex_f64` (the same suite under `--number-mode f64`)
+- `link/${name}: exits with ${wantCode} and stdout matches expected.out` — `tests/link/std_regex` (JavaScript-generated rows, error rows, the compile-bound rows, prefilter rows, the linear-time rows, the property-escape and folding rows) and `tests/link/std_regex_f64` (the same suite under `--number-mode f64`); `tests/link/std_regex_unicode` (every property escape, every folded code point and a set of classes under `i`, against Node's `RegExp` with `u` and `iu` over a sample of every code point)
 - `simd: ${label}: ${said}`, where `said` is the agreement driver's report line (its `regex-scan: ` prefix removed), with `label` one of:
   - `regex-scan native ${process.arch}`
   - `regex-scan wasm32-wasi, the scalar base path`

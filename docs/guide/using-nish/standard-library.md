@@ -250,18 +250,31 @@ A `Regex` has `test`, `exec` (into a `RegexMatch` you reuse), `find`,
 `findAll`, `count`, `replace`, `replaceAll` and `split`. A replacement
 template reads `$&`, `$1` to `$99`, `$<name>`, `` $` ``, `$'` and `$$`, as
 in JavaScript. `regexEscape(text)` makes a pattern that matches `text`
-exactly. The flags are `i` (ASCII letters), `m` and `s`; there is no `g`,
-since `findAll` and `replaceAll` are the global forms.
+exactly. The flags are `i`, `m`, `s` and `u`, which changes nothing, as
+every pattern is read the `u` way; there is no `g`, since `findAll` and
+`replaceAll` are the global forms.
+
+`\p{…}` matches a Unicode property, and `\P{…}` everything outside it, with
+JavaScript's names from Unicode 16.0: a General_Category value (`\p{L}`,
+`\p{Lu}`, `\p{Uppercase_Letter}`, `\p{gc=Nd}`), a script (`\p{Script=Greek}`,
+`\p{sc=Grek}`, or `\p{scx=Deva}` for Script_Extensions), or a binary property
+(`\p{Alphabetic}`, `\p{Emoji}`, `\p{White_Space}`, `\p{Any}`,
+`\p{Assigned}`). They work inside classes too, as in `[\p{L}\p{Nd}_]+`. A
+name JavaScript does not know is refused: `regex: invalid property name at
+byte 0`, or `invalid property value` for `\p{sc=Lu}`.
 
 Matching never backtracks, so a pattern cannot make one search slow:
 `(a+)+$` against a long run of `a`s takes as long as `a+$`. The price is
 that backreferences (`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused
 when the pattern is compiled. So is a pattern past the engine's limits: a
 repeat count over 1,000, more than 1,024 capturing groups, more than 10,000
-ranges in one class, or more than 100,000 instructions once its repeats are
-written out. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
-`\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
-letters, where JavaScript's folds every letter: `é` does not match `É`.
+ranges in one class, more than 100,000 instructions once its repeats are
+written out, or property escapes and case folding that add more than 100,000
+ranges to its classes. Offsets are UTF-8 bytes, as `s.length` is, and `\w`,
+`\d` and `\b` are ASCII, as they are in JavaScript. The `i` flag folds every
+letter by Unicode's simple case folding, so `é` matches `É` and `σ` matches
+`Σ` and `ς`. One difference from JavaScript: no letter outside ASCII folds to
+one inside it, so the Kelvin sign `K` and the long `ſ` do not match `k` or `s`.
 
 Finding every match is one search per match, so `findAll`, `count`,
 `replaceAll` and `split` are quadratic when a long branch is preferred to a

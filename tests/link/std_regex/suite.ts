@@ -228,7 +228,7 @@ export const runSuite = (): i32 => {
   row(t, "\\01", "", "", "regex: octal escapes are not supported at byte 0")
   row(t, "a", "g", "", "regex: invalid flags \"g\"")
   row(t, "a", "ii", "", "regex: invalid flags \"ii\"")
-  row(t, "a", "u", "", "regex: invalid flags \"u\"")
+  row(t, "a", "uu", "", "regex: invalid flags \"uu\"")
 
   // --- the API around a match ----------------------------------------------
   const words = compile("\\w+", "")
@@ -308,8 +308,77 @@ export const runSuite = (): i32 => {
   // --- flags -----------------------------------------------------------------
   row(t, "a", "g", "a", "regex: invalid flags \"g\"")
   row(t, "a", "ii", "a", "regex: invalid flags \"ii\"")
-  row(t, "a", "u", "a", "regex: invalid flags \"u\"")
   row(t, "A", "ims", "a", "0-1")
+
+  // --- property escapes ------------------------------------------------------
+  // General_Category, Script and Script_Extensions values and the binary
+  // properties, by long and short name, alone and in classes; `u` is accepted
+  // and changes nothing.
+  row(t, "a", "u", "a", "0-1")
+  row(t, "\\p{L}+", "", "12 déjà vu", "3-9")
+  row(t, "\\P{L}+", "", "déjà 12 vu", "6-10")
+  row(t, "\\p{Lu}+", "", "abcΣΑΣd", "3-9")
+  row(t, "\\p{gc=Lu}+", "", "abcΣΑΣd", "3-9")
+  row(t, "\\p{General_Category=Decimal_Number}+", "", "x١٢٣y", "1-7")
+  row(t, "\\p{Letter}\\p{Nd}", "", "a b7", "2-4")
+  row(t, "\\p{Script=Greek}+", "", "abΣαβ", "2-8")
+  row(t, "\\p{sc=Grek}+", "", "abΣαβ", "2-8")
+  row(t, "\\p{sc=Deva}", "", "a॥क", "4-7")
+  row(t, "\\p{scx=Deva}", "", "a॥क", "1-4")
+  row(t, "\\p{Script_Extensions=Devanagari}+", "", "a॥क", "1-7")
+  row(t, "\\p{Alphabetic}+", "", "1Ⅻé2", "1-6")
+  row(t, "\\p{Alpha}+", "", "1Ⅻé2", "1-6")
+  row(t, "\\p{Assigned}+", "", "a͸b", "0-1")
+  row(t, "\\P{Assigned}", "", "a͸b", "1-3")
+  row(t, "\\p{ASCII}+", "", "éabc", "2-5")
+  row(t, "\\p{Any}+", "", "aé日😀", "0-10")
+  row(t, "\\p{Emoji_Presentation}", "", "a☺😀", "4-8")
+  row(t, "\\p{LC}+", "", "ǅaβ", "0-5")
+  row(t, "[\\p{N}x]+", "", "ab١x2c", "2-6")
+  row(t, "[^\\p{L}\\s]+", "", "ab 12 é", "3-5")
+  row(t, "[\\P{L}]+", "", "ab12é", "2-4")
+  row(t, "\\p{L}+", "u", "12 déjà vu", "3-9")
+  row(t, "[\\p{L}\\p{N}\\p{P}]+", "", " a1,é٣ ", "1-8")
+  row(t, "\\P{Any}", "", "a", "none")
+  row(t, "\\p", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\pL", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\p{", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\p{}", "", "", "regex: invalid property name at byte 0")
+  row(t, "a\\p{L", "", "", "regex: invalid property name at byte 1")
+  row(t, "\\p{Foo}", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\p{L!}", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\p{Script}", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\p{Foo=Lu}", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\p{gc=L=x}", "", "", "regex: invalid property name at byte 0")
+  row(t, "\\p{gc=Foo}", "", "", "regex: invalid property value at byte 0")
+  row(t, "\\p{sc=Lu}", "", "", "regex: invalid property value at byte 0")
+  row(t, "[x\\P{gc=Greek}]", "", "", "regex: invalid property value at byte 2")
+  row(t, "[\\p{L}-z]", "", "", "regex: invalid class range at byte 1")
+  row(t, "[a-\\p{L}]", "", "", "regex: invalid class range at byte 1")
+
+  // --- case folding above ASCII ----------------------------------------------
+  // Under `i` a code point matches its simple case folding's orbit: one other
+  // case, or several (Σ σ ς), and a class is closed under it before `^`.
+  row(t, "σ", "i", "xΣ", "1-3")
+  row(t, "ς+", "i", "ΣσςX", "0-6")
+  row(t, "é", "i", "É", "0-2")
+  row(t, "Ǆ+", "i", "ǅǆǄ", "0-6")
+  row(t, "ß", "i", "ẞ", "0-3")
+  row(t, "\\u{10400}", "i", "𐐨", "0-4")
+  row(t, "[α-ω]+", "i", "ΑΒΓ", "0-6")
+  row(t, "[^α]", "i", "Α", "none")
+  row(t, "[^α]", "i", "Β", "0-2")
+  row(t, "\\p{Lu}+", "i", "abcσ", "0-5")
+  row(t, "\\P{Ll}", "i", "a", "0-1")
+  row(t, "[\\p{Lu}é]+", "i", "σÉ", "0-4")
+  row(t, "\\p{Script=Greek}+", "iu", "ΣσςΩ", "0-8")
+  row(t, "(?:é|ü)+", "i", "ÉÜé", "0-6")
+  row(t, "Straße", "i", "STRAẞE", "0-8")
+  row(t, "日+", "i", "x日日", "1-7")
+  // ASCII folding stays A-Z to a-z: unlike JavaScript, the Kelvin sign and ſ
+  // fold to nothing in ASCII, nor k and s to them.
+  row(t, "\\u{212a}", "i", "k", "none")
+  row(t, "s", "i", "ſ", "none")
 
   // --- the lazy DFA ----------------------------------------------------------
   // Texts long enough that the match is found by the DFA's table rather than
@@ -398,6 +467,20 @@ export const runSuite = (): i32 => {
   t.ok("a{0} repeated 1000^3 times compiles", compile("(?:(?:(?:a{0}){1000}){1000}){1000}", "").test("b"))
   refuses(t, "a class of 10001 ranges", `[${rep("a", toI32(10001))}]`, "regex: a class has more than 10000 ranges at byte 0")
   t.ok("a class of 10000 ranges compiles", regexCompile(`[${rep("a", toI32(10000))}]`, "").isOk())
+  refuses(
+    t,
+    "property escapes past 100000 ranges",
+    rep("\\p{L}", toI32(200)),
+    "regex: property escapes and case folding add more than 100000 ranges at byte 735"
+  )
+  t.ok("property escapes of 100000 ranges compile", regexCompile(rep("\\p{L}", toI32(100)), "").isOk())
+  // \p{L} first, so that the 49th class's folding rather than its escape passes the cap.
+  const folding = regexCompile(`\\p{L}${rep("[\\p{Lu}]", toI32(60))}`, "i")
+  if (folding.isErr()) {
+    t.eqStr("case folding past 100000 ranges", folding.error, "regex: property escapes and case folding add more than 100000 ranges at byte 397")
+  } else {
+    t.fail("case folding past 100000 ranges", "compiled")
+  }
   refuses(t, "1025 groups", rep("()", toI32(1025)), "regex: too many groups at byte 2048")
   t.ok("500 groups compile", regexCompile(rep("()", toI32(500)), "").isOk())
   refuses(
