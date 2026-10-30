@@ -51,16 +51,21 @@ PASS  duplicates: refused, the parse fails
 PASS  duplicates: errorAt is the repeated key
 PASS  duplicates: a value built on the old root's index has no range
 PASS  off: the document parses
-PASS  off: keepRanges is off by default
 PASS  off: start answers -1
 PASS  off: end answers -1
 PASS  off: keyStart answers -1
 PASS  off: keyEnd answers -1
 PASS  off: no range array holds anything
-PASS  off: setRange is refused
-PASS  off: setKeyRange is refused
-PASS  off: turned on, the current contents still have none
-PASS  off: and a setter is still refused
+PASS  off: setRange on a parsed value
+PASS  off: the value reads it back
+PASS  off: a value below it has none
+PASS  off: setKeyRange on a parsed key
+PASS  off: the key reads it back
+PASS  off: the key before it has none
+PASS  off: a range that ends before it starts is refused
+PASS  off: parseRanged after it ranges every value
+PASS  off: and parse after that keeps none
+PASS  off: nor any key
 PASS  reparse: the first document's ranges
 PASS  reparse: the second document parses
 PASS  reparse: the second document's root
@@ -68,12 +73,14 @@ PASS  reparse: its key
 PASS  reparse: its value
 PASS  reparse: a handle from the first document has no range
 PASS  reparse: a value built past the second document has no range
-PASS  reparse: ranges off, the document parses
-PASS  reparse: ranges off, a reparse answers -1
-PASS  reparse: ranges off, for keys too
-PASS  reparse: on again, the ranges are back
+PASS  reparse: through parse, the document parses
+PASS  reparse: through parse, a reparse answers -1
+PASS  reparse: through parse, for keys too
+PASS  reparse: ranged again, the ranges are back
 PASS  reparse: a failed parse fails
-PASS  reparse: and leaves no range behind
+PASS  reparse: and leaves no value range behind
+PASS  reparse: a member set after it
+PASS  reparse: nor a key range
 PASS  builders: every new value has no range
 PASS  builders: nor the new object
 PASS  builders: a new key has no range
@@ -129,8 +136,8 @@ PASS  parsed edits: a set of a new key
 PASS  parsed edits: on a slot the longer one ranged has none
 PASS  parsed edits: a handle from the longer document is not adopted
 PASS  parsed edits: and adds no member
-PASS  limits: ranges off
-PASS  limits: ranges on answers the same
+PASS  limits: parse
+PASS  limits: parseRanged answers the same, and ranges its root
 PASS  moves: a wide document parses
 PASS  moves: the document parses
 PASS  moves: set of a new key on the first container
@@ -142,4 +149,4 @@ PASS  moves: its added key has none
 PASS  moves: a third key on the first container, in the room it had
 PASS  moves: has no range, though the wide document ranged that slot
 PASS  moves: and the root's keys keep theirs
-std/json-value ranges: 144 passed, 0 failed, 0 skipped
+std/json-value ranges: 151 passed, 0 failed, 0 skipped
