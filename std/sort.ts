@@ -19,7 +19,8 @@
  * **Shape.** The array is copied once into a scratch array of the same
  * length, the only allocation, which the function's arena scope gives back
  * before it returns, so a sort leaves `Arena.used()` where it was. Runs of
- * `RUN` are sorted by insertion from the scratch into the array, then merged
+ * `RUN` are sorted by insertion from the scratch into the array (a strictly
+ * descending run is copied reversed instead), then merged
  * bottom-up, alternating between the two, and copied back once if the last
  * pass ended in the scratch. A pair of runs already in order is copied without
  * a merge. Every merge takes from the left run on a tie, which is what makes
@@ -53,6 +54,24 @@ const stepTo = (lo: i32, step: i32, n: i32): i32 => (wrappingSub(n, lo) > step ?
  * forgets every array length, so each access after it repeats its guard.
  */
 const insertionRun = <T>(src: T[], dst: T[], cmp: (a: T, b: T) => number, lo: i32, hi: i32): void => {
+  // A strictly descending run is copied reversed: no two of its elements are
+  // equal, so reversing it keeps the sort stable, and costs one comparison each.
+  let d = lo + 1
+  while (d > 0 && d < hi && d < toI32(src.length)) {
+    const p = d - 1
+    if (!(cmp(src[p], src[d]) > 0)) {
+      break
+    }
+    d = d + 1
+  }
+  if (d >= hi) {
+    let r = hi - 1
+    for (let k: i32 = lo; k >= 0 && k < hi && k < toI32(dst.length) && r >= 0 && r < toI32(src.length); k++) {
+      dst[k] = src[r]
+      r = r - 1
+    }
+    return
+  }
   for (let i: i32 = lo; i >= 0 && i < hi; i++) {
     let j = i
     while (j > lo && j > 0 && j < toI32(dst.length) && i < toI32(src.length)) {

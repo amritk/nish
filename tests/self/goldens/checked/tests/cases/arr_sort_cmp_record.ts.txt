@@ -4,14 +4,14 @@ entry: tests/cases/arr_sort_cmp_record.ts
 module std/sort.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
-unsafe import 40:10 wrappingAdd from "nish:unsafe"
-unsafe import 40:23 wrappingSub from "nish:unsafe"
-unsafe call 49:54 wrappingSub (node 34)
-unsafe call 49:82 wrappingAdd (node 42)
-unsafe call 151:13 wrappingSub (node 815)
-unsafe call 151:45 wrappingAdd (node 823)
-unsafe call 103:11 wrappingAdd (node 517)
-unsafe call 109:11 wrappingAdd (node 556)
+unsafe import 41:10 wrappingAdd from "nish:unsafe"
+unsafe import 41:23 wrappingSub from "nish:unsafe"
+unsafe call 50:54 wrappingSub (node 34)
+unsafe call 50:82 wrappingAdd (node 42)
+unsafe call 170:13 wrappingSub (node 939)
+unsafe call 170:45 wrappingAdd (node 947)
+unsafe call 122:11 wrappingAdd (node 641)
+unsafe call 128:11 wrappingAdd (node 680)
 const RUN: i32 = 32
 function stepTo(lo: i32, step: i32, n: i32): i32 -> @nish.stepTo
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -37,7 +37,7 @@ function sortWith<Row, byKey>(xs: Row[], cmp: void): Row[] -> @nish.sortWith$$Ro
   callee -8:7 mergePass<Row, byKey> -> @nish.mergePass$$Row$fn.5.byKey
   local -1:14 k: i32 (let)
 function sortWith<string, byLength>(xs: string[], cmp: void): string[] -> @nish.sortWith$str$fn.8.byLength [exported instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: xs
   calls: nish.insertionRun$str$fn.8.byLength nish.mergePass$str$fn.8.byLength nish.stepTo nish_arena_mark nish_arena_release nish_array_grow
@@ -59,14 +59,19 @@ function insertionRun<Row, byKey>(src: Row[], dst: Row[], cmp: void, lo: i32, hi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: lo
-  calls: byKey$
-  pointer src: size=0 writesThrough=false captured=false passedTo=byKey$#1
+  calls: byKey$ nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=byKey$#0 byKey$#1 byKey$#1
   pointer dst: size=0 writesThrough=true captured=false passedTo=byKey$#0
   stackSites=0 stackLocals=0
-  local -7:12 i: i32 (let)
-  local -6:9 j: i32 (let)
-  local -4:13 k: i32 (const)
-  callee -3:13 byKey -> @byKey$
+  local -11:7 d: i32 (let)
+  local -9:11 p: i32 (const)
+  callee -8:11 byKey -> @byKey$
+  local -2:9 r: i32 (let)
+  local -1:14 k: i32 (let)
+  local +5:12 i: i32 (let)
+  local +6:9 j: i32 (let)
+  local +8:13 k: i32 (const)
+  callee +9:13 byKey -> @byKey$
 function mergePass<Row, byKey>(src: Row[], dst: Row[], cmp: void, n: i32, width: i32): void -> @nish.mergePass$$Row$fn.5.byKey [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.mergeRuns$$Row$fn.5.byKey
@@ -82,17 +87,22 @@ function mergePass<Row, byKey>(src: Row[], dst: Row[], cmp: void, n: i32, width:
   callee +3:16 stepTo -> @nish.stepTo
   callee +4:5 mergeRuns<Row, byKey> -> @nish.mergeRuns$$Row$fn.5.byKey
 function insertionRun<string, byLength>(src: string[], dst: string[], cmp: void, lo: i32, hi: i32): void -> @nish.insertionRun$str$fn.8.byLength [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: lo
-  calls: byLength$
+  calls: byLength$ nish_panic_overflow
   pointer src: size=0 writesThrough=true captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -7:12 i: i32 (let)
-  local -6:9 j: i32 (let)
-  local -4:13 k: i32 (const)
-  callee -3:13 byLength -> @byLength$
+  local -11:7 d: i32 (let)
+  local -9:11 p: i32 (const)
+  callee -8:11 byLength -> @byLength$
+  local -2:9 r: i32 (let)
+  local -1:14 k: i32 (let)
+  local +5:12 i: i32 (let)
+  local +6:9 j: i32 (let)
+  local +8:13 k: i32 (const)
+  callee +9:13 byLength -> @byLength$
 function mergePass<string, byLength>(src: string[], dst: string[], cmp: void, n: i32, width: i32): void -> @nish.mergePass$str$fn.8.byLength [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.mergeRuns$str$fn.8.byLength

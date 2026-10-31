@@ -4,14 +4,14 @@ entry: docs/cookbook/arr-sort.ts
 module std/sort.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
-unsafe import 40:10 wrappingAdd from "nish:unsafe"
-unsafe import 40:23 wrappingSub from "nish:unsafe"
-unsafe call 49:54 wrappingSub (node 34)
-unsafe call 49:82 wrappingAdd (node 42)
-unsafe call 151:13 wrappingSub (node 815)
-unsafe call 151:45 wrappingAdd (node 823)
-unsafe call 103:11 wrappingAdd (node 517)
-unsafe call 109:11 wrappingAdd (node 556)
+unsafe import 41:10 wrappingAdd from "nish:unsafe"
+unsafe import 41:23 wrappingSub from "nish:unsafe"
+unsafe call 50:54 wrappingSub (node 34)
+unsafe call 50:82 wrappingAdd (node 42)
+unsafe call 170:13 wrappingSub (node 939)
+unsafe call 170:45 wrappingAdd (node 947)
+unsafe call 122:11 wrappingAdd (node 641)
+unsafe call 128:11 wrappingAdd (node 680)
 const RUN: i32 = 32
 function stepTo(lo: i32, step: i32, n: i32): i32 -> @nish.stepTo
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -40,14 +40,19 @@ function insertionRun<i32, ascending>(src: i32[], dst: i32[], cmp: void, lo: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: lo
-  calls: ascending$
+  calls: ascending$ nish_panic_overflow
   pointer src: size=0 writesThrough=true captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -7:12 i: i32 (let)
-  local -6:9 j: i32 (let)
-  local -4:13 k: i32 (const)
-  callee -3:13 ascending -> @ascending$
+  local -11:7 d: i32 (let)
+  local -9:11 p: i32 (const)
+  callee -8:11 ascending -> @ascending$
+  local -2:9 r: i32 (let)
+  local -1:14 k: i32 (let)
+  local +5:12 i: i32 (let)
+  local +6:9 j: i32 (let)
+  local +8:13 k: i32 (const)
+  callee +9:13 ascending -> @ascending$
 function mergePass<i32, ascending>(src: i32[], dst: i32[], cmp: void, n: i32, width: i32): void -> @nish.mergePass$i32$fn.9.ascending [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.mergeRuns$i32$fn.9.ascending
