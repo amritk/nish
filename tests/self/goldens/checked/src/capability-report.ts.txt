@@ -492,3 +492,12 @@ function capabilitySummary(compilation: Compilation): string -> @capabilitySumma
   callee +1:17 capabilityNames -> @capabilityNames
   local +2:9 listed: string (const)
   callee +3:38 isDeterministic -> @isDeterministic
+function programUsesNet(compilation: Compilation): boolean -> @programUsesNet [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Compilation.analyze
+  calls: Compilation.analyze capabilityIndex programCapabilities
+  pointer compilation: size=200 writesThrough=true captured=false passedTo=programCapabilities#0 Compilation.analyze#0
+  stackSites=0 stackLocals=0
+  callee +0:5 programCapabilities -> @programCapabilities
+  callee +0:38 Compilation.analyze -> @Compilation.analyze
+  callee +0:64 capabilityIndex -> @capabilityIndex
