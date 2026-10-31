@@ -18,17 +18,17 @@
 //     is lowered here, in place, per key type, and the instance itself is never
 //     emitted (`emitMapIntrinsic`, `emitStoredKey`). No runtime function is
 //     added: the runtime's `.text` budget has no room, so `nish_str_eq` is the
-//     one function reached, and the string hash's key is data (`seedHashKey`).
+//     one function reached, and the hash key is data (`seedHashKey`).
 //
 // The hashes are §5.2's, and a hash of 0 is moved to 1 because a stored hash
 // of 0 marks a deleted entry:
 //
 //   string                    SipHash-1-3 of the UTF-8 bytes under a per-process key, halves XORed
-//   <= 32-bit integer, boolean, enum   murmur3's fmix32 of the zero-extended value
-//   i64, u64                  fmix64, the two halves XORed
-//   f64                       -0 -> +0 (`fadd 0.0`), every NaN -> 0x7FF8000000000000, then as i64
+//   <= 32-bit integer, boolean, enum   multiply-add-shift of the zero-extended value under the same key
+//   i64, u64                  a folded 128-bit multiply under the same key, halves XORed
+//   f64                       -0 -> +0 (`fadd 0.0`), every NaN -> 0x7FF8000000000000, then fmix64
 //   f32                       `fpext`, then as f64
-//   a class instance          its address as i64, then as i64
+//   a class instance          its address as i64, then fmix64
 //
 // and equality is SameValueZero: `nish_str_eq` for a string, `icmp eq` for
 // every integer, boolean, enum and pointer, and for a float `a == b`
@@ -146,13 +146,10 @@ const hashOf = (emitter: Emitter, key: i32, value: string): string => {
   }
   const bits = intBits(key)
   if (bits === 64) {
-    return fmix64(emitter, value)
+    return foldedMultiply(emitter, value)
   }
-  if (bits === 32 || emitter.table.enumBase(key) >= 0) {
-    return fmix32(emitter, value)
-  }
-  if (bits > 0 || key === T_BOOL) {
-    return fmix32(emitter, fn.emitValue(`zext ${emitter.llvm(key)} ${value} to i32`))
+  if (bits > 0 || key === T_BOOL || emitter.table.enumBase(key) >= 0) {
+    return multiplyAddShift(emitter, fn.emitValue(`zext ${emitter.llvm(key)} ${value} to i64`))
   }
   process.exit(internalErrorFor(`emitter: no key hash for ${emitter.table.typeName(key)}`, emitter.opts.json))
 }
@@ -294,12 +291,12 @@ const rotl = (emitter: Emitter, x: string, by: i32): string => {
  * Declare `@nish_hash_key` and register the constructor that fills it, once
  * per module: an `internal` function in `@llvm.global_ctors`, which `appending`
  * linkage merges across the modules of a program, so every module that hashes
- * a string seeds the key and the first to run does it. A key already filled is
- * left alone — bit 0 of word 0 is set so a filled one never reads as zero —
- * and the priority, 101, is the first an ordinary constructor may take, so a
- * host's own constructor that fills a table finds the key in place. There is no
- * weaker source to fall back to when `getentropy` fails, so it panics before
- * `main` instead. `size_t` is 32 bits on wasm32, which reaches `getentropy`
+ * a string or an integer seeds the key and the first to run does it. A key
+ * already filled is left alone — bit 0 of word 0 is set so a filled one never
+ * reads as zero — and the priority, 101, is the first an ordinary constructor
+ * may take, so a host's own constructor that fills a table finds the key in
+ * place. There is no weaker source to fall back to when `getentropy` fails, so
+ * it panics before `main` instead. `size_t` is 32 bits on wasm32, which reaches `getentropy`
  * through WASI's `random_get`.
  */
 const seedHashKey = (emitter: Emitter): void => {
@@ -333,16 +330,45 @@ done:
 }
 
 /**
- * murmur3's 32-bit finaliser. Every multiply wraps, which is what it is written
- * against. MurmurHash3 and its constants are public domain.
+ * Dietzfelbinger's multiply-add-shift of a key below 2^32 under the process's
+ * key: `((a * x + b) mod 2^64) >> 32`, with `a` and `b` the two words of
+ * `@nish_hash_key`. For random `a` and `b` it is strongly universal onto 32
+ * bits (Thorup, "High Speed Hashing for Integers and Strings"), so any set of
+ * its bits, the home bucket's among them, makes two keys collide with chance
+ * 2^-bits, whoever chose the keys (docs/wp32-map.md §5.2). Word 0 has bit 0 set
+ * (`seedHashKey`), which leaves bits 32 to 63 of `a * (x - y)` uniform for any
+ * `x != y` below 2^32.
  */
-const fmix32 = (emitter: Emitter, x: string): string => {
+const multiplyAddShift = (emitter: Emitter, x: string): string => {
   const fn = emitter.fn
-  const a = fn.emitValue(`xor i32 ${x}, ${fn.emitValue(`lshr i32 ${x}, 16`)}`)
-  const b = fn.emitValue(`mul i32 ${a}, -2048144789`)
-  const c = fn.emitValue(`xor i32 ${b}, ${fn.emitValue(`lshr i32 ${b}, 13`)}`)
-  const d = fn.emitValue(`mul i32 ${c}, -1028477387`)
-  return fn.emitValue(`xor i32 ${d}, ${fn.emitValue(`lshr i32 ${d}, 16`)}`)
+  seedHashKey(emitter)
+  const a64 = emitter.alignSuffix(T_I64)
+  const a = fn.emitValue(`load i64, i64* ${hashKeyWord(0)}${a64}`)
+  const b = fn.emitValue(`load i64, i64* ${hashKeyWord(1)}${a64}`)
+  const h = fn.emitValue(`add i64 ${fn.emitValue(`mul i64 ${x}, ${a}`)}, ${b}`)
+  return fn.emitValue(`trunc i64 ${fn.emitValue(`lshr i64 ${h}, 32`)} to i32`)
+}
+
+/**
+ * A 64-bit key under the process's key: the 128-bit product of `x ^ a` and
+ * `b`, its halves XORed and then folded to 32 bits, foldhash's mixer. Keyed,
+ * so which keys share a bucket is not known in advance, but not provably
+ * universal: two words of key are too few for a universal family on 64-bit
+ * keys (docs/wp32-map.md §5.2).
+ */
+const foldedMultiply = (emitter: Emitter, x: string): string => {
+  const fn = emitter.fn
+  seedHashKey(emitter)
+  const a64 = emitter.alignSuffix(T_I64)
+  const a = fn.emitValue(`load i64, i64* ${hashKeyWord(0)}${a64}`)
+  const b = fn.emitValue(`load i64, i64* ${hashKeyWord(1)}${a64}`)
+  const wideX = fn.emitValue(`zext i64 ${fn.emitValue(`xor i64 ${x}, ${a}`)} to i128`)
+  const wide = fn.emitValue(`mul i128 ${wideX}, ${fn.emitValue(`zext i64 ${b} to i128`)}`)
+  const low = fn.emitValue(`trunc i128 ${wide} to i64`)
+  const high = fn.emitValue(`trunc i128 ${fn.emitValue(`lshr i128 ${wide}, 64`)} to i64`)
+  const folded = fn.emitValue(`xor i64 ${low}, ${high}`)
+  const top = fn.emitValue(`trunc i64 ${fn.emitValue(`lshr i64 ${folded}, 32`)} to i32`)
+  return fn.emitValue(`xor i32 ${fn.emitValue(`trunc i64 ${folded} to i32`)}, ${top}`)
 }
 
 /** murmur3's 64-bit finaliser, folded to 32 bits by XORing the halves. */
