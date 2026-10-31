@@ -13,7 +13,9 @@
 //      supervisor channel at 3, whose peer is the supervisor, and which the
 //      supervisor's callback answers; a worker killed with SIGKILL comes back
 //      with a working channel, and the supervisor holds as many descriptors
-//      after the restart as before it;
+//      after the restart as before it. That worker first hands a copy of its
+//      end to a holder process, so its death is no hang-up: the holder sees
+//      the supervisor's end close only because the supervisor reaped it;
 //   3. `svc`: three workers with supervisor channels and worker 0 the service
 //      worker. Workers 1 and 2 hold exactly 0 to 4, the service channel at 4,
 //      and the service worker answers each with its pid; it holds exactly 0 to
@@ -23,7 +25,10 @@
 //      supervisor's descriptor count never moves;
 //   4. `solo`: a service worker (1) and no supervisor channels, through
 //      `preforkWith`: worker 0's service channel is 3, the service worker's end
-//      to it 3, and neither has a supervisor channel.
+//      to it 3, and neither has a supervisor channel;
+//   5. `off`: `restart` off and worker 0 the service worker: killing worker 1
+//      restarts nothing and signals nothing, and the service worker sees the
+//      hang-up on its end to worker 1 and is still running after it.
 //
 // Every wait is bounded. A worker that finds the driver gone sends the
 // supervisor SIGTERM, as in `net_prefork`, so nothing outlives the driver.
@@ -43,7 +48,7 @@ import {
   udpRecvFrom,
   udpSendTo,
 } from "nish:net";
-import { kill, platform, spawn, waitPid } from "nish:process";
+import { kill, platform, spawn, spawnWithFds, waitPid } from "nish:process";
 import {
   PreforkConfig,
   preforkArgs,
@@ -159,13 +164,15 @@ const orphaned = (args: string[]): boolean => {
 
 /** How many workers `mode` runs, and which is the service worker. */
 const workerCount = (mode: string): i32 => (mode === "svc" ? 3 : 2);
-const serviceOf = (mode: string): i32 => (mode === "svc" ? 0 : mode === "solo" ? 1 : -1);
+const serviceOf = (mode: string): i32 => (mode === "svc" || mode === "off" ? 0 : mode === "solo" ? 1 : -1);
+/** Whether `mode`'s workers have supervisor channels. */
+const toSupervisor = (mode: string): boolean => mode === "sup" || mode === "svc";
 
 /** True when worker `index` of `mode` finds its ends where the docs put them. */
 const laidOut = (mode: string, index: i32, argv: string[]): boolean => {
   const service = serviceOf(mode);
-  const first: i32 = mode === "solo" ? 3 : 4;
-  let ok = preforkSupervisorChannel(argv) === (mode === "solo" ? -1 : 3);
+  const first: i32 = toSupervisor(mode) ? 4 : 3;
+  let ok = preforkSupervisorChannel(argv) === (toSupervisor(mode) ? 3 : -1);
   if (index !== service) {
     ok = ok && preforkServiceChannel(argv) === (service < 0 ? -1 : first);
     return ok && preforkServiceChannelOf(argv, 0) === -1;
@@ -185,7 +192,7 @@ const greetings = (mode: string): i32 => (mode === "svc" ? 9 : mode === "sup" ? 
 
 /** How many ends worker `index` of `mode` holds. */
 const endsOf = (mode: string, index: i32): i32 => {
-  const own: i32 = mode === "solo" ? 0 : 1;
+  const own: i32 = toSupervisor(mode) ? 1 : 0;
   if (serviceOf(mode) < 0) {
     return own;
   }
@@ -218,6 +225,10 @@ const worker = (mode: string, index: i32, argv: string[]): number => {
     servicePid = parseInt(hear(vc, 5000));
   }
   tell(port, `w ${index} ${selfPid()} ${ok ? 1 : 0} ${servicePid}`);
+  if (mode === "sup" && index === 1) {
+    // A copy of the end outlives this worker, so its death is no hang-up.
+    spawnWithFds([selfPath(), "hold", `${port}`], [sc]);
+  }
 
   const loop = pollCreate();
   if (index === service) {
@@ -237,8 +248,28 @@ const worker = (mode: string, index: i32, argv: string[]): number => {
       if (netRead(end, buf, 0, 64) > 0) {
         say(end, `${selfPid()}`);
       } else {
+        // The worker at the other end is gone.
         netClose(end);
+        tell(port, `g ${index}`);
       }
+    }
+  }
+  return 0;
+};
+
+/**
+ * Hold descriptor 3, a worker's supervisor channel, until the supervisor
+ * closes its end, then tell the driver `h`; ten seconds at most.
+ */
+const hold = (port: i32): number => {
+  const loop = pollCreate();
+  pollAdd(loop, 3, 1, 0);
+  const ready: i32[] = new Array<i32>(2);
+  const buf: u8[] = new Array<u8>(64);
+  for (let k: i32 = 0; k < 100; k++) {
+    if (pollWait(loop, ready, 100) > 0 && netRead(3, buf, 0, 64) === 0) {
+      tell(port, "h");
+      return 0;
     }
   }
   return 0;
@@ -269,8 +300,9 @@ const supervise = (mode: string, port: i32): number => {
   config.graceMs = 2000;
   config.workers = workerCount(mode);
   config.serviceWorker = serviceOf(mode);
-  config.supervisorChannels = mode !== "solo";
-  config.channelKind = mode === "solo" ? NET_UNIX_STREAM : NET_UNIX_SEQPACKET;
+  config.restart = mode !== "off";
+  config.supervisorChannels = toSupervisor(mode);
+  config.channelKind = toSupervisor(mode) ? NET_UNIX_SEQPACKET : NET_UNIX_STREAM;
   const argv: string[] = [];
   for (const arg of process.argv) {
     argv.push(arg);
@@ -280,7 +312,7 @@ const supervise = (mode: string, port: i32): number => {
   }
   const hub = new Hub();
   hub.port = port;
-  const index = mode === "solo" ? preforkWith(argv, config) : preforkSupervise(argv, config, hub, greet);
+  const index = toSupervisor(mode) ? preforkSupervise(argv, config, hub, greet) : preforkWith(argv, config);
   if (index < 0) {
     return index === -1 ? 0 : 1;
   }
@@ -293,6 +325,7 @@ class Heard {
   oks: boolean[];
   services: i32[];
   counts: i32[];
+  holds: i32 = 0;
 
   constructor() {
     this.pids = [];
@@ -339,7 +372,9 @@ const reported = (fd: i32, loop: i32, heard: Heard, old: i32[]): boolean => {
   while (!fresh && !quiet) {
     const got = message(fd, loop, 10000);
     quiet = got === "";
-    if (got.startsWith("s ")) {
+    if (got === "h") {
+      heard.holds = heard.holds + 1;
+    } else if (got.startsWith("s ")) {
       heard.counts.push(field(got, 1));
     } else if (got.startsWith("w ")) {
       const index = field(got, 1);
@@ -355,6 +390,20 @@ const reported = (fd: i32, loop: i32, heard: Heard, old: i32[]): boolean => {
     }
   }
   return fresh;
+};
+
+/**
+ * True once a holder has said its end closed, waiting ten seconds at most.
+ * Only the supervisor's `reap` closes it: the holder's copy keeps the worker's
+ * death from reaching the supervisor as a hang-up.
+ */
+const released = (fd: i32, loop: i32, heard: Heard): boolean => {
+  for (let k: i32 = 0; k < 50 && heard.holds === 0; k++) {
+    if (message(fd, loop, 200) === "h") {
+      heard.holds = heard.holds + 1;
+    }
+  }
+  return heard.holds > 0;
 };
 
 /** Every worker said ok, and each names the service worker's pid (or none). */
@@ -426,9 +475,45 @@ const run = (mode: string, victims: i32[]): void => {
     for (let i: i32 = 0; i < heard.pids.length; i++) {
       old.push(service >= 0 || i === victim ? heard.pids[i] : -1);
     }
-    console.log(started && signal(heard.pids[victim], 9) && reported(fd, loop, heard, old) && agreed(heard, service));
+    const back = started && signal(heard.pids[victim], 9) && reported(fd, loop, heard, old) && agreed(heard, service);
+    console.log(back && (mode !== "sup" || released(fd, loop, heard)));
   }
   console.log(steady(heard, greetings(mode)));
+  console.log(signal(sup, 15) && exitsZero(sup, 10000));
+  netClose(loop);
+  netClose(fd);
+};
+
+/**
+ * `off`: with `restart` off, killing worker 1 leaves the service worker
+ * running and shows it a hang-up on its end. Prints one line for the start,
+ * one for the hang-up, one for the shutdown.
+ */
+const runOff = (): void => {
+  const fd = udpBind("127.0.0.1", 0, 0);
+  const port = netLocalPort(fd);
+  const loop = pollCreate();
+  pollAdd(loop, fd, 1, 0);
+  const sup = spawn([selfPath(), "off", `${port}`, `${selfPid()}`]);
+  const heard = new Heard();
+  const none: i32[] = [0, 0];
+  for (let i: i32 = 0; i < 2; i++) {
+    heard.pids.push(0);
+    heard.oks.push(false);
+    heard.services.push(0);
+  }
+  const started = sup > 0 && reported(fd, loop, heard, none) && agreed(heard, 0);
+  console.log(started);
+  let hungUp = false;
+  if (started && signal(heard.pids[1], 9)) {
+    for (let k: i32 = 0; k < 50 && !hungUp; k++) {
+      const got = message(fd, loop, 200);
+      hungUp = got === "g 0";
+    }
+  }
+  // Nothing signals the service worker: it is still there a moment later.
+  pause(300);
+  console.log(hungUp && signal(heard.pids[0], 0));
   console.log(signal(sup, 15) && exitsZero(sup, 10000));
   netClose(loop);
   netClose(fd);
@@ -454,13 +539,16 @@ const accessors = (): void => {
 
 export const main = (): number => {
   const argv = process.argv;
+  if (preforkIndex(argv) < 0 && argv.length === 3 && argv[1] === "hold") {
+    return hold(parseInt(argv[2]));
+  }
   if (preforkIndex(argv) >= 0 || (argv.length > 2 && argv.length < 6)) {
     return supervise(preforkArgs(argv)[1], parseInt(preforkArgs(argv)[2]));
   }
   accessors();
   if (platform !== "linux") {
     // Seqpacket channels and `/proc` are Linux's.
-    for (let i: i32 = 0; i < 12; i++) {
+    for (let i: i32 = 0; i < 15; i++) {
       console.log(true);
     }
     return 0;
@@ -468,5 +556,6 @@ export const main = (): number => {
   run("sup", [1]);
   run("svc", [0, 2]);
   run("solo", []);
+  runOff();
   return 0;
 };
