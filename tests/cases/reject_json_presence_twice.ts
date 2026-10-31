@@ -1,4 +1,4 @@
-// Typed JSON's `presence` option: a field is recorded once (NL2592).
+// Typed JSON's `presence` option: a field is recorded once (NL2592). The duplicate key is refused by tsc too (TS1117), so this is a `reject_` case.
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";
 

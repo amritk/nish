@@ -9441,7 +9441,7 @@ export const main = (): i32 => {
   | a rename to a key that is not valid UTF-8, a lone surrogate such as `"\ud800"` included, which no input could give | NL2499 | `json_reject_options_surrogate` |
   | `presence` or one of its entries not written as an object literal of string literals | NL2493 | `json_reject_presence_not_object`, `json_reject_presence_not_literal` |
   | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
-  | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `json_reject_presence_twice` |
+  | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `reject_json_presence_twice` |
 
   A spread or a computed key in the literal is refused by Phase 0 as it is
   anywhere (NL1061, NL1041; `reject_json_options_spread`,
