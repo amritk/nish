@@ -66,7 +66,7 @@ function refuseWhen(ctx: CheckContext, refused: boolean, call: Node, name: strin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
@@ -75,7 +75,7 @@ function refuseOnWasm(ctx: CheckContext, call: Node, name: string): boolean -> @
   sharedWrite: via refuseWhen
   escaping: name
   calls: refuseWhen
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=refuseWhen#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=refuseWhen#0
   pointer call: size=40 writesThrough=false captured=false passedTo=refuseWhen#2
   stackSites=0 stackLocals=0
   callee +0:3 refuseWhen -> @refuseWhen
@@ -84,7 +84,7 @@ function refuseOnFreestandingWasm(ctx: CheckContext, call: Node, name: string): 
   sharedWrite: via refuseWhen
   escaping: name
   calls: refuseWhen
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=refuseWhen#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=refuseWhen#0
   pointer call: size=40 writesThrough=false captured=false passedTo=refuseWhen#2
   stackSites=0 stackLocals=0
   callee +0:3 refuseWhen -> @refuseWhen
@@ -111,7 +111,7 @@ function checkBuiltinArity(ctx: CheckContext, call: Node, name: string, args: No
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat nish_str_from_i32
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   pointer args: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -121,7 +121,7 @@ function requireStatementPosition(ctx: CheckContext, call: Node, name: string): 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 statement: Node | null (const)
@@ -131,7 +131,7 @@ function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: str
   sharedWrite: via checkExpression
   escaping: want
   calls: CheckContext.error TypeTable.typeName checkExpression nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -145,7 +145,7 @@ function checkConstantTime(ctx: CheckContext, call: Node, scope: Scope, name: st
   sharedWrite: via checkOneWordType
   escaping: name
   calls: checkOneWordType nish_str_eq
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkOneWordType#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkOneWordType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkOneWordType#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkOneWordType#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkOneWordType#4
@@ -156,7 +156,7 @@ function checkWrapping(ctx: CheckContext, call: Node, scope: Scope, name: string
   sharedWrite: via checkOneWordType
   escaping: name
   calls: checkOneWordType
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkOneWordType#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkOneWordType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkOneWordType#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkOneWordType#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkOneWordType#4
@@ -167,7 +167,7 @@ function checkOneWordType(ctx: CheckContext, call: Node, scope: Scope, name: str
   sharedWrite: via checkBuiltinArity
   escaping: arity name
   calls: CheckContext.error CheckContext.errorType TypeTable.typeName checkBuiltinArity checkExpression literalOperand nish_panic_index nish_panic_overflow nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkExpression#0 CheckContext.errorType#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkExpression#0 CheckContext.errorType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 CheckContext.errorType#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
@@ -194,7 +194,7 @@ function checkUncheckedAccess(ctx: CheckContext, call: Node, scope: Scope, name:
   sharedWrite: via checkBuiltinArity
   escaping: name
   calls: CheckContext.error TypeTable.isArray TypeTable.isReadonlyArray TypeTable.refOf TypeTable.typeName checkArgumentType checkBuiltinArity checkExpression isNumeric nish_panic_index nish_str_concat nish_str_eq readonlyWriteMessage requireStatementPosition
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0 readonlyWriteMessage#0 checkArgumentType#0 checkExpression#0 checkArgumentType#0 requireStatementPosition#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0 readonlyWriteMessage#0 checkArgumentType#0 checkExpression#0 checkArgumentType#0 requireStatementPosition#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 requireStatementPosition#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 checkArgumentType#2 checkExpression#2 checkArgumentType#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
@@ -229,7 +229,7 @@ function checkNamespaceProperty(ctx: CheckContext, expr: Node, namespace: string
   sharedWrite: +0:5
   escaping: member namespace
   calls: CheckContext.errorType TypeTable.arrayOf cryptoRefusal dateRefusal isNamespace netOption nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
   callee -5:14 CheckContext.errorType -> @CheckContext.errorType
@@ -246,7 +246,7 @@ function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 -> @unkn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   calls: CheckContext.errorType nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=CheckContext.errorType#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorType#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.errorType -> @CheckContext.errorType
@@ -255,7 +255,7 @@ function checkImportedDottedBuiltin(ctx: CheckContext, call: Node, scope: Scope,
   sharedWrite: via checkProcess
   escaping: member
   calls: checkProcess nish_panic_index nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkProcess#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkProcess#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkProcess#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkProcess#5
   stackSites=0 stackLocals=0
@@ -264,7 +264,7 @@ function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   calls: CheckContext.errorType checkArena checkBuiltinArity checkConsole checkCrypto checkDate checkFromBytes checkIndexArgument checkMath checkProcess isNamespace nish_panic_index nish_str_concat nish_str_eq unknownBuiltin
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=CheckContext.errorType#0 unknownBuiltin#0 checkConsole#0 checkMath#0 checkProcess#0 checkArena#0 checkDate#0 checkCrypto#0 checkBuiltinArity#0 checkIndexArgument#0 checkFromBytes#0 unknownBuiltin#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 unknownBuiltin#0 checkConsole#0 checkMath#0 checkProcess#0 checkArena#0 checkDate#0 checkCrypto#0 checkBuiltinArity#0 checkIndexArgument#0 checkFromBytes#0 unknownBuiltin#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkConsole#1 checkMath#1 checkProcess#1 checkArena#1 checkDate#1 checkCrypto#1 checkBuiltinArity#1 checkFromBytes#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkConsole#5 checkMath#5 checkProcess#5 checkCrypto#5 checkIndexArgument#2 checkFromBytes#3
   stackSites=0 stackLocals=0
@@ -291,7 +291,7 @@ function checkFromBytes(ctx: CheckContext, call: Node, args: Node, scope: Scope)
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   calls: CheckContext.error TypeTable.arrayOf TypeTable.assignable TypeTable.readonlyArrayOf TypeTable.typeName checkBuiltinArity checkExpression checkIndexArgument nish_panic_index nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkIndexArgument#0 checkIndexArgument#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkIndexArgument#0 checkIndexArgument#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 checkIndexArgument#2 checkIndexArgument#2
@@ -313,7 +313,7 @@ function checkConsole(ctx: CheckContext, call: Node, args: Node, name: string, m
   sharedWrite: via unknownBuiltin
   escaping: name
   calls: CheckContext.error CheckContext.errorType TypeTable.typeName checkExpression isStringifiable nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 requireStatementPosition unknownBuiltin
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=unknownBuiltin#0 CheckContext.errorType#0 checkExpression#0 CheckContext.error#0 requireStatementPosition#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=unknownBuiltin#0 CheckContext.errorType#0 checkExpression#0 CheckContext.error#0 requireStatementPosition#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 requireStatementPosition#1
   pointer args: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
@@ -330,7 +330,7 @@ function checkImulOperand(ctx: CheckContext, arg: Node, scope: Scope): void -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   calls: CheckContext.error TypeTable.baseOf TypeTable.typeName checkExpression nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -345,7 +345,7 @@ function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, memb
   sharedWrite: +0:7
   escaping: member name
   calls: CheckContext.error CheckContext.errorType CheckContext.numberType StringMap.get TypeTable.baseOf TypeTable.rangedOf TypeTable.typeName checkBuiltinArity checkExpression checkImulOperand internalErrorFor isF64Binary isF64Unary isNumeric nish_exit nish_panic_index nish_str_concat nish_str_eq requireF64 unknownBuiltin
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkBuiltinArity#0 requireF64#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkImulOperand#0 checkImulOperand#0 checkBuiltinArity#0 unknownBuiltin#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 requireF64#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkImulOperand#0 checkImulOperand#0 checkBuiltinArity#0 unknownBuiltin#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 CheckContext.errorType#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=requireF64#3 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkImulOperand#2 checkImulOperand#2
@@ -403,7 +403,7 @@ function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): v
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   calls: CheckContext.error TypeTable.typeName checkExpression isNumeric nish_str_concat
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -419,7 +419,7 @@ function checkProcess(ctx: CheckContext, call: Node, args: Node, name: string, m
   sharedWrite: via unknownBuiltin
   escaping: name
   calls: checkArgumentType checkBuiltinArity nish_panic_index nish_str_eq requireStatementPosition unknownBuiltin
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=unknownBuiltin#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=unknownBuiltin#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 requireStatementPosition#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkArgumentType#2
@@ -433,7 +433,7 @@ function checkArena(ctx: CheckContext, call: Node, args: Node, name: string, mem
   sharedWrite: via checkBuiltinArity
   escaping: name
   calls: checkBuiltinArity nish_str_eq unknownBuiltin
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=checkBuiltinArity#0 unknownBuiltin#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=checkBuiltinArity#0 unknownBuiltin#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   stackSites=0 stackLocals=0
@@ -444,7 +444,7 @@ function checkDate(ctx: CheckContext, call: Node, args: Node, name: string, memb
   sharedWrite: via CheckContext.errorType
   escaping: name
   calls: CheckContext.errorType checkBuiltinArity dateRefusal nish_str_eq refuseOnWasm
-  pointer ctx: size=272 writesThrough=true captured=false passedTo=CheckContext.errorType#0 checkBuiltinArity#0 refuseOnWasm#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorType#0 checkBuiltinArity#0 refuseOnWasm#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 refuseOnWasm#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   stackSites=0 stackLocals=0
@@ -457,7 +457,7 @@ function checkCrypto(ctx: CheckContext, call: Node, args: Node, name: string, me
   sharedWrite: via CheckContext.errorType
   escaping: name
   calls: CheckContext.errorType checkBuffer checkBuiltinArity cryptoRefusal nish_panic_index nish_str_eq refuseOnWasm requireStatementPosition
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuffer#0 requireStatementPosition#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuffer#0 requireStatementPosition#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 refuseOnWasm#1 requireStatementPosition#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkBuffer#2
@@ -472,7 +472,7 @@ function checkReadCString(ctx: CheckContext, call: Node, scope: Scope, args: Nod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   calls: checkArgumentType checkBuiltinArity nish_panic_index
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkArgumentType#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkArgumentType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkArgumentType#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
@@ -483,7 +483,7 @@ function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope): i32 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   calls: CheckContext.errorType checkBuiltinFunctionNamed isUnsafeExport nish_panic_index unsafeImportMessage
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkBuiltinFunctionNamed#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkBuiltinFunctionNamed#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinFunctionNamed#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkBuiltinFunctionNamed#2
   stackSites=0 stackLocals=0
@@ -497,7 +497,7 @@ function checkBuiltinFunctionNamed(ctx: CheckContext, call: Node, scope: Scope, 
   sharedWrite: via checkSimdCall
   escaping: name
   calls: CheckContext.error CheckContext.errorType CheckContext.numberType CheckedProgram.noteUnsafeCall TypeTable.arrayOf TypeTable.nullableOf TypeTable.typeName checkArgumentType checkBuffer checkBuiltinArity checkConstantTime checkExpression checkNet checkReadCString checkSimdCall checkUncheckedAccess checkWrapping conversionTarget isNetExport isNumeric isSimdExport isStringifiable isUnsafeExport nish_panic_index nish_str_concat nish_str_eq refuseOnFreestandingWasm refuseOnWasm requireStatementPosition
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkSimdCall#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkConstantTime#0 checkReadCString#0 checkUncheckedAccess#0 checkWrapping#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 checkBuffer#0 requireStatementPosition#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuffer#0 checkBuffer#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkNet#0 CheckContext.errorType#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkSimdCall#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkConstantTime#0 checkReadCString#0 checkUncheckedAccess#0 checkWrapping#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 checkBuffer#0 requireStatementPosition#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuffer#0 checkBuffer#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkNet#0 CheckContext.errorType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkSimdCall#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkConstantTime#1 CheckedProgram.noteUnsafeCall#1 checkReadCString#1 checkUncheckedAccess#1 checkWrapping#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkNet#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkSimdCall#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkConstantTime#2 checkReadCString#2 checkUncheckedAccess#2 checkWrapping#2 checkExpression#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkBuffer#2 checkBuffer#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkNet#2
   stackSites=0 stackLocals=0
@@ -673,7 +673,7 @@ function checkNet(ctx: CheckContext, call: Node, scope: Scope, name: string): i3
   sharedWrite: via checkBuiltinArity
   escaping: name
   calls: checkArgumentType checkBuffer checkBuiltinArity isNetBufferLetter isNetWrittenLetter netSignature nish_str_eq refuseOnWasm
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkBuiltinArity#0 refuseOnWasm#0 checkBuffer#0 checkArgumentType#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 refuseOnWasm#0 checkBuffer#0 checkArgumentType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 refuseOnWasm#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkBuffer#2 checkArgumentType#2
   stackSites=0 stackLocals=0
@@ -694,7 +694,7 @@ function checkBuffer(ctx: CheckContext, arg: Node, scope: Scope, name: string, e
   sharedWrite: via TypeTable.arrayOf
   escaping: element
   calls: CheckContext.error TypeTable.arrayOf TypeTable.isReadonlyArray TypeTable.refOf TypeTable.typeName checkExpression nish_str_concat nish_str_eq readonlyWriteMessage typedArrayElement typedArraySpelling
-  pointer ctx: size=272 writesThrough=true captured=true passedTo=checkExpression#0 typedArraySpelling#0 CheckContext.error#0 CheckContext.error#0 readonlyWriteMessage#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 typedArraySpelling#0 CheckContext.error#0 CheckContext.error#0 readonlyWriteMessage#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 typedArraySpelling#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 typedArraySpelling#2
   stackSites=0 stackLocals=0
@@ -717,7 +717,7 @@ function checkBuffer(ctx: CheckContext, arg: Node, scope: Scope, name: string, e
 function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean -> @terminatesControlFlow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.signature CheckedProgram.builtinImport nish_panic_index nish_str_eq
-  pointer ctx: size=272 writesThrough=false captured=false passedTo=CheckContext.signature#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.signature#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -728,7 +728,7 @@ function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: expr
   calls: CheckedProgram.builtinImport CheckedProgram.constant Scope.lookup nish_panic_index nish_str_eq
-  pointer ctx: size=272 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.lookup#0
   stackSites=0 stackLocals=0

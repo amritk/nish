@@ -12840,8 +12840,8 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 One `switch` instruction: a constant-to-label table and a default edge, which
 the backend turns into a jump table once the labels are dense enough. Empty
-clauses have no block of their own — `case 1:` points at the body of `case 2:`,
-which is the whole of Nish's fallthrough. A label that names a module
+clauses have no block of their own — `case 1:` points at the body of `case 2:`.
+A clause with statements that falls through is in the next section. A label that names a module
 constant is folded before the table is written, so `KIND_CALL` is a `4` here.
 
 <!-- cookbook:begin stmt-switch -->
@@ -12896,6 +12896,81 @@ attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-switch -->
+
+### `switch` fallthrough
+
+A clause that does not end in `break`, `return` or `continue` ends in a `br`
+to the next clause's block, the edge a hand-written `goto` would be: no flag,
+no copy of the body. `sw.case` runs on into `sw.case.1` and that into
+`sw.case.2`, whose `break` is the only edge to `sw.end`.
+
+<!-- cookbook:begin stmt-switch-fallthrough -->
+```ts
+const points = (stars: number): number => {
+  let total = 0
+  switch (stars) {
+    // biome-ignore lint/suspicious/noFallthroughSwitchClause: the fallthrough is the point
+    case 3:
+      total = 100
+    // biome-ignore lint/suspicious/noFallthroughSwitchClause: the fallthrough is the point
+    case 2:
+      total |= 10
+    case 1:
+      total |= 1
+      break
+    default:
+      total = -1
+  }
+  return total
+}
+```
+
+```llvm
+define internal noundef i32 @points(i32 noundef %stars) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  store i32 0, i32* %total.addr, align 4
+  switch i32 %stars, label %sw.default [
+    i32 3, label %sw.case
+    i32 2, label %sw.case.1
+    i32 1, label %sw.case.2
+  ]
+
+sw.case:
+  store i32 100, i32* %total.addr, align 4
+  br label %sw.case.1
+
+sw.case.1:
+  %0 = load i32, i32* %total.addr, align 4
+  %1 = or i32 %0, 10
+  store i32 %1, i32* %total.addr, align 4
+  br label %sw.case.2
+
+sw.case.2:
+  %2 = load i32, i32* %total.addr, align 4
+  %3 = or i32 %2, 1
+  store i32 %3, i32* %total.addr, align 4
+  br label %sw.end
+
+sw.default:
+  store i32 -1, i32* %total.addr, align 4
+  br label %sw.end
+
+sw.end:
+  %4 = load i32, i32* %total.addr, align 4
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end stmt-switch-fallthrough -->
 
 ### `break` / `continue`
 
@@ -12993,6 +13068,120 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-break-continue -->
+
+### Labelled `break` / `continue`
+
+A label names a loop, a block or a `switch`, and a jump that names it is a
+`br` to that statement's block from any depth: `continue outer` inside the
+inner loop is `br label %for.inc`, the outer loop's step, and `break outer`
+is `br label %for.end`, the outer loop's exit. The inner loop's own blocks
+carry the `.1` suffix and are skipped, as a `done` flag tested after the
+inner loop would skip them, without the flag.
+
+<!-- cookbook:begin stmt-labelled -->
+```ts
+const firstPair = (limit: number, target: number): number => {
+  outer: for (let i = 0; i < limit; i++) {
+    for (let j = 0; j < limit; j++) {
+      if (j > i) {
+        continue outer
+      }
+      if (i * j === target) {
+        break outer
+      }
+    }
+  }
+  return 0
+}
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
+
+define internal noundef i32 @firstPair(i32 noundef %limit, i32 noundef %target) #0 {
+entry:
+  %i.addr = alloca i32, align 4
+  %j.addr = alloca i32, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %limit
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  store i32 0, i32* %j.addr, align 4
+  br label %for.cond.1
+
+for.cond.1:
+  %2 = load i32, i32* %j.addr, align 4
+  %3 = icmp slt i32 %2, %limit
+  br i1 %3, label %for.body.1, label %for.end.1
+
+for.body.1:
+  %4 = load i32, i32* %j.addr, align 4
+  %5 = load i32, i32* %i.addr, align 4
+  %6 = icmp sgt i32 %4, %5
+  br i1 %6, label %if.then, label %if.end
+
+if.then:
+  br label %for.inc
+
+if.end:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = load i32, i32* %j.addr, align 4
+  %9 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %7, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %12 = icmp eq i32 %10, %target
+  br i1 %12, label %if.then.1, label %if.end.1
+
+if.then.1:
+  br label %for.end
+
+if.end.1:
+  br label %for.inc.1
+
+for.inc.1:
+  %13 = load i32, i32* %j.addr, align 4
+  %14 = add nsw i32 %13, 1
+  store i32 %14, i32* %j.addr, align 4
+  br label %for.cond.1
+
+for.end.1:
+  br label %for.inc
+
+for.inc:
+  %15 = load i32, i32* %i.addr, align 4
+  %16 = add nsw i32 %15, 1
+  store i32 %16, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end stmt-labelled -->
 
 ### `Result<T, E>`
 

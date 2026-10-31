@@ -13,7 +13,8 @@
 // shape mutation, a string-keyed element access. The rest is syntax the
 // language forbids, which the parser reads into a node so that the rule is
 // stated here rather than as a syntax error (WP33 R1; the shapes are in
-// `src/nodes.ts`): `var`, `try`, `with`, a labelled statement, `for...in`, and
+// `src/nodes.ts`): `var`, `try`, `with`, a label on anything but a loop, a block or a
+// `switch`, `for...in`, and
 // the forbidden expressions — `==`, `?.`, `typeof` and the rest of the
 // operators the language does not have, a regex, a dynamic `import()`,
 // `import.meta` and an assertion to `any` or `unknown` — and the forbidden
@@ -46,13 +47,16 @@ import {
   N_BIGINT,
   N_BINARY,
   N_ARROW,
+  N_BLOCK,
   N_CALL,
   N_CONSTRUCTOR,
   N_DECORATOR,
+  N_DO,
   N_EMPTY,
   N_ENUM,
   N_EXPORT_DECLARATION,
   N_FIELD,
+  N_FOR,
   N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
@@ -72,6 +76,7 @@ import {
   N_REGEX,
   N_SPREAD,
   N_STRING,
+  N_SWITCH,
   N_TEMPLATE,
   N_THROW,
   N_TRY,
@@ -81,6 +86,7 @@ import {
   N_TYPE_UNION,
   N_UNARY,
   N_VAR,
+  N_WHILE,
   N_WITH,
   Node,
 } from "./nodes"
@@ -454,12 +460,27 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
     case N_WITH:
       ctx.error(node, "`with` is forbidden in " + LANGUAGE + " (no dynamic scope)")
       break
-    case N_LABELED:
-      // A `break` or `continue` that names the label is part of this one
-      // refusal: the parser reads a label only inside the statement that
-      // declares it (`Parser.labels`).
-      ctx.error(node, "Labeled statements are forbidden in " + LANGUAGE + " (use structured loops)")
+    case N_LABELED: {
+      // A label names what a `break` or `continue` leaves: a loop, a block or
+      // a `switch`. On anything else -- another label among them -- it names
+      // nothing a jump could use. The parser has already held every jump to a
+      // label around it in the same function (`Parser.parseJump`).
+      const body = node.children[0].kind
+      const named =
+        body === N_WHILE ||
+        body === N_DO ||
+        body === N_FOR ||
+        body === N_FOR_OF ||
+        body === N_BLOCK ||
+        body === N_SWITCH
+      if (!named) {
+        ctx.error(
+          node,
+          "Labeled statements are forbidden in " + LANGUAGE + " except on a loop, a block or a `switch`"
+        )
+      }
       break
+    }
     case N_FOR_OF:
       if ((node.flags & FLAG_FOR_IN) !== 0) {
         ctx.error(

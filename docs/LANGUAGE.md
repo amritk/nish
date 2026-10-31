@@ -1139,8 +1139,11 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try`, a labelled statement, destructuring and an arrow that captures a
-local are refused by Nish on their own, so no loop that compiles holds them.
+`try`, destructuring and an arrow that captures a local are refused by Nish
+on their own, so no loop that compiles holds them. A loop that holds a
+labelled statement or a labelled `break` or `continue` anywhere in its body,
+or whose `switch` has a clause that falls into the next, is one the pass
+gives up on: it keeps the checker's widened state.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
@@ -5673,13 +5676,15 @@ switch (node.kind) {
   `tests/cases/reject_switch_duplicate_case`), and there is at most one
   `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
   which may appear anywhere among the clauses.
-- **There is no implicit fallthrough.** A clause with statements ends in
-  `break`, `return`, `continue` or `process.exit`, unless it is the
-  last clause (``A `case` clause with statements must end in `break`,
-  `return`, `continue` or `process.exit` ``,
-  `tests/cases/reject_switch_fallthrough`). An **empty** clause does fall
-  through, which is how `case 1: case 2:` gives several labels one body
-  (`tests/cases/cf_switch`).
+- **A clause falls through, as in TypeScript.** A clause whose statements do
+  not end in `break`, `return`, `continue` or `process.exit` runs on into the
+  next clause's statements; the IR branches into the next clause's block, with
+  no flag (`tests/cases/cf_switch_fallthrough`, `cf_label_walks`). An **empty**
+  clause falls through the same way, which is how `case 1: case 2:` gives
+  several labels one body (`tests/cases/cf_switch`). A clause reached by
+  falling into it is reached with either label's value: a tag test does not
+  narrow there (`reject_switch_fall_narrow`), and a local the clauses above it
+  assigned holds its declared type.
 - A clause cannot declare a variable directly; wrap its body in a block
   (``A `case` clause cannot declare a variable directly ``,
   `tests/cases/reject_switch_case_declaration`). Clauses share one scope in
@@ -5687,7 +5692,8 @@ switch (node.kind) {
   ones below it.
 - `break` inside a `switch` leaves the switch, not an enclosing loop;
   `continue` looks past the switch to the loop
-  (`tests/cases/cf_switch_break`).
+  (`tests/cases/cf_switch_break`). A labelled `break` or `continue` names
+  the loop instead (see below, `cf_label_switch`).
 - A `switch` terminates (see Termination) when no `break` targets it, its
   last clause terminates, and it has a `default` or is a complete `switch` on a
   union's tag, whose labels name every variant
@@ -5697,10 +5703,28 @@ switch (node.kind) {
 
 ### `break` / `continue`
 
-Unlabelled only: labeled statements are forbidden outright
-(`tests/cases/reject_labeled_statement`), and a `break` or `continue` that names
-one is part of that one refusal. A label nothing declares is a syntax error, as
-it is in TypeScript. `break` needs an
+A label goes on a loop, a block or a `switch` (`outer: for (...)`,
+`check: { ... }`, `sw: switch (...)`); on any other statement it is refused
+(`` Labeled statements are forbidden in Nish except on a loop, a block or a
+`switch` ``, `tests/cases/reject_label_if`). `break label` leaves the statement
+the label names, from any depth inside it; `continue label` starts the next turn
+of the loop it names. Each lowers to the branch a hand-kept `done` flag would
+take — to that statement's exit block or its loop's step block — with no flag
+(`tests/cases/cf_label_loops`, `cf_label_block`, `cf_label_switch`,
+`cf_label_walks`). Leaving a scoped pass or a `Map` walk this way releases it
+as an unlabelled exit would, and a `Secret` local a labelled exit skips past
+must be wiped first (`reject_label_secret_break`, `reject_label_secret_block`).
+
+- A label is not reused inside the statement it names (``Duplicate label
+  'outer'``, `reject_label_duplicate`).
+- `continue label` names a loop (`` A `continue` can only jump to a label of
+  an enclosing loop ``, `reject_label_continue_block`), and `break label` a
+  statement around it (`` A `break` can only jump to a label of an enclosing
+  statement ``, `reject_label_unknown`).
+- A jump does not leave an arrow for a label outside it (``Jump target cannot
+  cross function boundary``, `reject_label_crosses_arrow`).
+
+Unlabelled, `break` needs an
 enclosing loop or `switch` (`` `break` outside of a loop or `switch` ``,
 `tests/cases/reject_cf_break_outside`) and `continue` an enclosing loop
 (`` `continue` outside of a loop ``, `reject_cf_continue_outside`), which it
@@ -5735,8 +5759,11 @@ A statement *terminates* when control cannot fall out of it: `return`,
 `break`, `continue`, `process.exit(...)`, `panic(...)`; an `if` whose branches
 both terminate; a `switch` with a `default` or one complete on a union's tag,
 no `break` aimed at it and a terminating last clause; a loop with no condition or the condition `true` and
-no `break` aimed at it. Any other loop may run zero times and does not
-terminate. Rules (`src/statements.ts`, `checker.ts`):
+no `break` aimed at it; a labelled block whose statements terminate and no
+`break` names. A `break` aimed at a statement is an unlabelled one directly
+inside it or a labelled one that names it from any depth, so a `break outer`
+in an inner loop makes `outer: while (true)` one that may finish. Any other
+loop may run zero times and does not terminate. Rules (`src/statements.ts`, `checker.ts`):
 
 - A non-`void` function's body must terminate
   (`must return a value of type i32 on every path`,
@@ -5752,7 +5779,8 @@ terminate. Rules (`src/statements.ts`, `checker.ts`):
 ### Rejected statements
 
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
-`debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
+`debugger` (`reject_debugger`), a label on a statement other than a loop, a
+block or a `switch` (`reject_label_if`),
 `var` (`reject_var_keyword`), `for...in` (`` `for...in` is forbidden in Nish
 (it enumerates property names, and object layout is fixed at compile time); use
 `for...of` ``, NL1056, `reject_for_in`), nested `function`, `enum`, `type`,
@@ -11215,7 +11243,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
 | `throw` | `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
 | `debugger` | `` `debugger` is forbidden in Nish (no debugger hook) `` | `reject_debugger` |
-| labeled statements | `` Labeled statements are forbidden in Nish (use structured loops) `` | `reject_labeled_statement` |
+| a label on another statement | `` Labeled statements are forbidden in Nish except on a loop, a block or a `switch` `` | `reject_label_if` |
 | `for...in` | `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` `` | `reject_for_in`, `reject_map_iter_for_in` |
 
 ### Expressions

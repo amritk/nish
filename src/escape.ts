@@ -77,6 +77,7 @@ import {
   N_IDENT,
   N_IF,
   N_INDEX,
+  N_LABELED,
   N_LIST,
   N_MEMBER,
   N_NEW,
@@ -2279,6 +2280,7 @@ const collectLoopScopes = (
     collectLoopScopes(unit, table, f, facts, scope.body)
   } else if (
     kind === N_BLOCK ||
+    kind === N_LABELED ||
     kind === N_LIST ||
     kind === N_SWITCH ||
     kind === N_CASE ||

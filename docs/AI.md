@@ -1903,32 +1903,52 @@ export const main = (): i32 => {
   `push` inside the body extends the loop. `for...in`, `for await` and
   `for (x of xs)` over an existing `x` are each refused by name.
 - `switch` takes an **integer or enum** discriminant; every `case` label is an
-  integer constant expression of that type. **There is no implicit
-  fallthrough** — a clause with statements ends in `break`, `return`,
-  `continue` or `process.exit`, unless it is the last. An *empty* clause does
-  fall through, which is how `case 1: case 2:` shares a body. A clause cannot
-  declare a variable directly; wrap its body in a block.
-- `break` / `continue` are unlabelled only; labeled statements are forbidden.
+  integer constant expression of that type. A clause that does not end in
+  `break`, `return`, `continue` or `process.exit` **falls through** into the
+  next, as in TypeScript; an *empty* clause is how `case 1: case 2:` shares a
+  body. A clause reached by falling into it is not narrowed by its label. A
+  clause cannot declare a variable directly; wrap its body in a block.
+- **Labels** go on a loop, a block or a `switch`: `break outer` leaves the
+  statement named `outer` from any depth, `continue outer` starts the next
+  turn of the loop named `outer`. A label on any other statement is refused,
+  and a jump cannot leave an arrow for a label outside it.
 - `process.exit(code)` and `panic(msg)` **terminate control flow**, so a
   non-`void` function may end with either.
 - **Unreachable code is an error**, not a warning: anything after a `return`,
   `break`, `continue`, `process.exit`, an `if` whose branches all return, or an
   infinite loop.
 
-```ts nish:err NL2166
-const classify = (n: i32): string => {
+```ts nish:ok
+const firstPair = (limit: i32, target: i32): i32 => {
+  outer: for (let i: i32 = 0; i < limit; i++) {
+    for (let j: i32 = 0; j < limit; j++) {
+      if (i * j === target) {
+        return i * 100 + j;
+      }
+      if (j > i) {
+        continue outer;   // the next `i`
+      }
+    }
+  }
+  return -1;
+};
+
+const classify = (n: i32): i32 => {
+  let score: i32 = 0;
   switch (n) {
     case 0:
-      console.log("zero");   // no `break`: a clause with statements must end in one
+      score += 10;   // no `break`: falls into `case 1`
     case 1:
-      return "one";
+      score += 1;
+      break;
     default:
-      return "many";
+      score = -1;
   }
+  return score;
 };
 
 export const main = (): i32 => {
-  console.log(classify(0));
+  console.log(`${firstPair(10, 12)} ${classify(0)} ${classify(1)}`);   // 304 11 1
   return 0;
 };
 ```

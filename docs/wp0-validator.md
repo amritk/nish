@@ -51,6 +51,11 @@ Two rows have reasons of their own: labeled statements keep control flow
 structured so the emitter's block naming stays simple, and comma expressions
 go for readability and because they close the indirect-eval idiom `(0, eval)`.
 
+*Status:* labelled statements are no longer refused. A label on a loop or a
+block, with `break`/`continue` naming it, is accepted in strict mode and
+lowers to direct branches (docs/LANGUAGE.md, "Labels"); a label on any other
+statement is still refused.
+
 "Numeric-shaped" index keys (identifiers, numeric literals, parentheses, unary
 `+`/`-`, arithmetic over those, calls, property and element access) are
 accepted syntactically so that array indexing was not blocked; the checker

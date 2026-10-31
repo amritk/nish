@@ -62,6 +62,7 @@ import {
   emitDo,
   emitFor,
   emitIf,
+  emitLabeled,
   emitSwitch,
   emitThrow,
   emitWhile,
@@ -175,6 +176,7 @@ import {
   N_IDENT,
   N_IF,
   N_INDEX,
+  N_LABELED,
   N_MEMBER,
   N_NEW,
   N_NULL,
@@ -225,13 +227,12 @@ import { isWasmBuild } from "./visibility"
 /**
  * Branch targets of an enclosing loop, for `break` and `continue`. A `switch`
  * pushes one too, with no `continueBlock`: it catches `break` while `continue`
- * looks past it for the enclosing loop, as in JavaScript.
+ * looks past it for the enclosing loop, as in JavaScript. A labelled block
+ * pushes one that only a `break` naming its label targets (`labelOnly`).
  */
 export class LoopTarget {
   breakBlock: IRBlock
   continueBlock: IRBlock | null
-  /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
-  hasBreak: boolean
   /**
    * The arena's `buf` and `off` at the top of the current pass when the
    * loop's passes are scoped (`emitPass`), and `""` otherwise; a `switch`
@@ -245,6 +246,9 @@ export class LoopTarget {
    * otherwise.
    */
   walkClose: string
+  /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
+  hasBreak: boolean
+  labelOnly: boolean
 
   constructor(breakBlock: IRBlock, continueBlock: IRBlock | null) {
     this.breakBlock = breakBlock
@@ -253,6 +257,7 @@ export class LoopTarget {
     this.markBuf = ""
     this.markOff = ""
     this.walkClose = ""
+    this.labelOnly = false
   }
 
   scopesPass(): boolean {
@@ -289,6 +294,9 @@ export class Emitter {
   readsArenaGlobal: boolean
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[]
+  /** The labels around the statement being emitted, innermost last, each with the index in `loops` of what it names. */
+  labelNames: string[]
+  labelDepths: i32[]
   /**
    * WP29 P2: each scope a `using` declaration opened and its block has not
    * yet closed, innermost last, as the `i8*` its tasks are filed under, and
@@ -374,6 +382,8 @@ export class Emitter {
     this.tailCallId = -1
     this.uncopied = -1
     this.loops = []
+    this.labelNames = []
+    this.labelDepths = []
     this.openScopes = []
     this.openScopeLoops = []
     this.openScopeArenas = []
@@ -569,6 +579,8 @@ export class Emitter {
     this.chainTests = []
     this.fusedProbes = []
     this.loops = []
+    this.labelNames = []
+    this.labelDepths = []
     this.openScopes = []
     this.openScopeLoops = []
     this.openScopeArenas = []
@@ -1279,10 +1291,13 @@ export class Emitter {
         emitSwitch(this, stmt)
         return
       case N_BREAK:
-        emitBreak(this)
+        emitBreak(this, stmt)
         return
       case N_CONTINUE:
-        emitContinue(this)
+        emitContinue(this, stmt)
+        return
+      case N_LABELED:
+        emitLabeled(this, stmt)
         return
       case N_THROW:
         emitThrow(this, stmt)
