@@ -1,5 +1,6 @@
-// R3: a guard is never captured. An arrow argument is lifted into a function
-// of its own, so naming `g` in it is refused before the lock rules run.
+// R3: a guard is never captured. An arrow argument may read its function's
+// `const` locals, but not one whose type holds a guard, a lock, a channel or a
+// scope, since its callee may hand it on to a `spawn`.
 import { Mutex } from "nish/threads";
 
 class Counter {

@@ -845,10 +845,14 @@ export const main = (): i32 => {
 - **Call it, or pass it on to another function parameter. Nothing else**:
   `const g = f`, `return f` and `[f]` are
   `` `f` is a function parameter and can only be called or passed on as a function argument ``.
-- **An arrow captures nothing.** It sees its own parameters and top-level
-  names; reading a local of the function around it is
-  `` The arrow reads `k`, which belongs to the function it is written in ``.
-  Pass the value in as another argument of the template instead.
+- **An arrow may read the `const` locals and parameters of the function it is
+  written in**, and write through a captured reference
+  (`(x) => { if (x > limit) { hits.push(x) } }`); each capture becomes one more
+  argument of the direct call. It may not assign to one, read a `let`
+  (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
+  read `this` (bind `const self = this`), or read a function parameter of its
+  function. An arrow inside another arrow, or given to a method, a
+  constructor, `expose` or `exposeWith`, captures nothing.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -858,12 +862,13 @@ export const main = (): i32 => {
 - **Only a top-level function** may have one: not a method, a constructor, a
   field, a local, a return type or an alias.
 
-```ts nish:err NL2335
+```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
 export const main = (): i32 => {
-  const k = 3;
-  return apply((x) => x + k, 1);   // captures `k`: pass it to `apply` instead
+  let k = 3;
+  k = k + 1;
+  return apply((x) => x + k, 1);   // reads the `let` `k`: bind `const kNow = k` before the call
 };
 ```
 

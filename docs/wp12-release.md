@@ -135,7 +135,9 @@ two files on every run. The platform packages' own lockfile entries (their
 `release.yml`'s `lockfile` job opens a pull request with the regenerated
 lockfile after the publish and squash-merges it itself, and CI's `lint` job
 checks `npm ls --package-lock-only` everywhere except on the Release PR and on
-a tag. Nobody merges a lockfile pull request by hand; one left open means the
+a tag. The job first waits for the registry to serve every package of the
+release, for up to half an hour, so a slow registry costs a wait rather than
+a re-run. Nobody merges a lockfile pull request by hand; one left open means the
 repository refused the job's merge, and its run says so in a warning.
 
 ## Release procedure
