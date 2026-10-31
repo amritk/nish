@@ -27,8 +27,8 @@ import { fileURLToPath } from "node:url"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
-const flag = (name) => {
-  const at = args.indexOf(name)
+const flag = (option) => {
+  const at = args.indexOf(option)
   return at < 0 ? null : args[at + 1]
 }
 const variants = Number(flag("--variants") ?? 200)
@@ -51,8 +51,12 @@ const fieldsOf = (i) => {
   const fields = []
   // `flags` and `name` are the fields many variants share, as typescript-go's
   // node data shares `Flags` and `Name()`: an accessor switches over them.
-  if (i % 4 === 0) fields.push({ name: "flags", kind: I32 })
-  if (i % 3 === 0) fields.push({ name: "name", kind: STR })
+  if (i % 4 === 0) {
+    fields.push({ name: "flags", kind: I32 })
+  }
+  if (i % 3 === 0) {
+    fields.push({ name: "name", kind: STR })
+  }
   for (let j = 0; fields.length < count; j++) {
     const kind = (i * 3 + j) % 4
     const prefix = ["v", "s", "c", "cs"][kind]
@@ -80,22 +84,30 @@ emit("// strings, children and lists of children; a tree built from a fixed seed
 emit("// `switch (n.kind)` over every variant that reads its own fields; a")
 emit("// forEachChild-style walk; and accessors for the fields many variants share.")
 emit("enum Kind {")
-for (const { i } of all) emit(`  ${tag(i)},`)
+for (const { i } of all) {
+  emit(`  ${tag(i)},`)
+}
 emit("}")
 emit()
 for (const { i, fields } of all) {
   emit(`class ${name(i)} {`)
   emit(`  readonly kind: Kind.${tag(i)} = Kind.${tag(i)};`)
-  for (const f of fields) emit(`  ${f.name}: ${typeOf(f.kind)};`)
+  for (const f of fields) {
+    emit(`  ${f.name}: ${typeOf(f.kind)};`)
+  }
   emit(`  constructor(${fields.map((f) => `${f.name}: ${typeOf(f.kind)}`).join(", ")}) {`)
-  for (const f of fields) emit(`    this.${f.name} = ${f.name};`)
+  for (const f of fields) {
+    emit(`    this.${f.name} = ${f.name};`)
+  }
   emit("  }")
   emit("}")
   emit()
 }
 emit("type Node =")
 // One variant a line, the `|` trailing: the parser takes no leading `|`.
-for (const { i } of all) emit(`  ${name(i)}${i === variants - 1 ? ";" : " |"}`)
+for (const { i } of all) {
+  emit(`  ${name(i)}${i === variants - 1 ? ";" : " |"}`)
+}
 emit()
 
 // The builder: a linear congruential seed and a budget of nodes left.
@@ -133,6 +145,7 @@ const arg = (f) => {
     case I32:
       return "b.next()"
     case STR:
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
       return "`s${b.next() % 100}`"
     case CHILD:
       return "child(b, depth)"
@@ -231,7 +244,9 @@ emit("  t.names += nameOf(n).length;")
 emit("  switch (n.kind) {")
 for (const { i, fields } of all) {
   const kids = fields.filter((f) => f.kind === CHILD || f.kind === LIST)
-  if (kids.length === 0) continue
+  if (kids.length === 0) {
+    continue
+  }
   emit(`    case Kind.${tag(i)}: {`)
   for (const f of kids) {
     if (f.kind === CHILD) {
@@ -265,7 +280,9 @@ emit("  for (const r of roots) {")
 emit("    visit(r, w);")
 emit("    tally(r, t);")
 emit("  }")
+// biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
 emit("  console.log(`roots ${roots.length} nodes ${w.count} checksum ${w.sum}`);")
+// biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
 emit("  console.log(`flags ${t.flags} names ${t.names}`);")
 emit("};")
 
