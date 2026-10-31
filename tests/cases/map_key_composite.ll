@@ -36,7 +36,6 @@ declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #1
 declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #1
-declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64) #1
 
 define internal void @nish.hash.seed() nounwind {
 entry:
@@ -86,25 +85,20 @@ slow:
 define internal noundef i64 @pack(i32 noundef %hi, i32 noundef %lo) #0 {
 entry:
   %0 = sext i32 %hi to i64
-  %1 = call i64 @llvm.fptosi.sat.i64.f64(double 0x41F0000000000000)
-  %2 = call { i64, i1 } @llvm.smul.with.overflow.i64(i64 %0, i64 %1)
-  %3 = extractvalue { i64, i1 } %2, 0
-  %4 = extractvalue { i64, i1 } %2, 1
-  br i1 %4, label %ovf.fail, label %ovf.ok
+  %1 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4040000000000000)
+  %2 = and i64 %1, 63
+  %3 = shl i64 %0, %2
+  %4 = sext i32 %lo to i64
+  %5 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %3, i64 %4)
+  %6 = extractvalue { i64, i1 } %5, 0
+  %7 = extractvalue { i64, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %5 = sext i32 %lo to i64
-  %6 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %3, i64 %5)
-  %7 = extractvalue { i64, i1 } %6, 0
-  %8 = extractvalue { i64, i1 } %6, 1
-  br i1 %8, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  ret i64 %7
+  ret i64 %6
 
 ovf.fail:
-  %ovf.op = phi i32 [ 2, %entry ], [ 0, %ovf.ok ]
-  call void @nish_panic_overflow(i32 %ovf.op)
+  call void @nish_panic_overflow(i32 0)
   unreachable
 }
 
