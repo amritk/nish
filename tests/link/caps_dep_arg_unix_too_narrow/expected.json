@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_dep_arg_unix_too_narrow/node_modules/pkg_http/src/index.ts","line":4,"column":50,"endLine":4,"endColumn":67,"severity":"error","code":"NL2594","message":"the dependency `pkg_http` hands `unixConnect` \"/run/other.sock\", which its `net` grant does not cover: it is granted net=/run/app.sock; name it in the grant, or grant `net` whole"}

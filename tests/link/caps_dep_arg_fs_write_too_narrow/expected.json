@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_dep_arg_fs_write_too_narrow/node_modules/pkg_log/src/index.ts","line":2,"column":41,"endLine":2,"endColumn":61,"severity":"error","code":"NL2594","message":"the dependency `pkg_log` hands `writeFileSync` \"/tmp/nish-caps.log\", which its `fs.write` grant does not cover: it is granted fs.write=out; name it in the grant, or grant `fs.write` whole"}

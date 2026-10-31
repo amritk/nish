@@ -193,9 +193,13 @@ names it once and runs with nothing granted beneath it.
 
 ## Findings
 
-None. Both stages are new code; what it does not hold is stated in the threat
-model's "What the adversary keeps" list above, and the limits below are
-recorded rather than counted.
+What the sandbox does not hold by design is stated in the threat model's "What
+the adversary keeps" list above, and the limits below are recorded rather than
+counted. One finding is counted:
+
+| ID | Severity | Where | What must hold | Status |
+| --- | --- | --- | --- | --- |
+| SBX-1 | High | `narrowSandbox` in `src/compilation.ts`, `nish_sandbox` in `runtime/runtime-sandbox.c` | Under `--sandbox`, a dependency granted `process.spawn=<program>` must run only that program. | **Open.** The exec allowlist grants EXECUTE on each granted program's ELF interpreter (`PT_INTERP`, e.g. `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`), which the kernel needs to start the program. That loader is a program too: `spawnSync([loader, "/bin/echo", "x"])` is an allowed `execve`, and the loader then opens `/bin/echo` for reading, which `process.spawn`'s READ_FILE on `/` allows, and maps it executable. Landlock checks EXECUTE at `execve` and open-for-exec, not at `mmap`, so any program on the machine runs. The allowlist therefore bounds a dependency that spawns only what it names, not one written to escape it. Closing it needs the runtime's spawn path to refuse a program that is a granted program's loader, which the wrapper's list would have to mark; recorded for a later change. Pinned by `sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)` in `tests/run.js`, which fails once it is closed. |
 
 ## Limits
 
@@ -248,7 +252,9 @@ recorded rather than counted.
   reads its own libraries; only which files may be executed is narrowed. A
   program the allowlist names may itself be an interpreter (`sh`, `python3`)
   and run whatever it is told: grant a program that takes a script only to a
-  dependency that may run anything.
+  dependency that may run anything. The same holds of the ELF loader the
+  allowlist adds for a dynamic program: it runs any binary it is handed
+  (SBX-1, counted above).
 - **The allowlist is the build's.** Each program is the realpath the compiler
   found on `PATH` (or from the root package's directory), and its interpreter
   is read from the file then; a program replaced after the build with one

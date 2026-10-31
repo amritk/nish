@@ -1,7 +1,9 @@
 // WP40 §2a, at run time: `pkg_runner` is granted `process.spawn` of `true`,
-// and runs the program the first argument names. Under `--sandbox`
-// (tests/run.js) `true` runs and any other program is refused by Landlock;
-// with no argument it runs nothing and exits 0.
+// and runs the command line the program's arguments name. Under `--sandbox`
+// (tests/run.js) `true` runs and any other program is refused by Landlock,
+// except through the granted program's ELF loader (SBX-* in
+// docs/security/sandbox.md, recorded open); with no argument it runs nothing
+// and exits 0.
 import { runProgram } from "pkg_runner";
 
 export const main = (): i32 => {
@@ -9,6 +11,10 @@ export const main = (): i32 => {
   if (args.length < 2) {
     return 0;
   }
-  console.log(runProgram(args[1]));
+  const argv: string[] = [];
+  for (let i = 1; i < args.length; i++) {
+    argv.push(args[i]);
+  }
+  console.log(runProgram(argv));
   return 0;
 };

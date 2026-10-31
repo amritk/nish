@@ -11860,6 +11860,40 @@ if (!only || "sandbox dependency grants".includes(only)) {
           ),
         ir(reader)
       )
+      const writer = "sandbox_dep_fs_write_scoped"
+      const wScoped = build(writer, ["--sandbox"])
+      const wPlain = build(writer, [])
+      const wInside = path.join(linkDir, writer, "out", "mark.txt")
+      const wOutside = path.join(dir, "outside-mark.txt")
+      const wOutsidePlain = path.join(dir, "outside-mark-plain.txt")
+      const rwIn = run(wScoped, [wInside])
+      const wroteIn = fs.existsSync(wInside) && fs.readFileSync(wInside, "utf8") === "x"
+      fs.rmSync(wInside, { force: true })
+      const rwOut = run(wScoped, [wOutside])
+      const rwPlain = run(wPlain, [wOutsidePlain])
+      check(
+        "sandbox dependency grants: a dependency granted fs.write=<dir> writes inside it and not beside it",
+        rwIn !== null &&
+          rwIn.status === 0 &&
+          rwIn.stdout === "1\n" &&
+          wroteIn &&
+          rwOut !== null &&
+          rwOut.status !== 0 &&
+          rwOut.stderr.includes(`cannot write ${wOutside}`) &&
+          !fs.existsSync(wOutside) &&
+          rwPlain !== null &&
+          rwPlain.status === 0 &&
+          fs.existsSync(wOutsidePlain),
+        `${said(rwIn)}\n--- outside\n${said(rwOut)}\n--- without --sandbox\n${said(rwPlain)}`
+      )
+      check(
+        "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
+        ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
+          /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
+            ir(writer)
+          ),
+        ir(writer)
+      )
       const runner = "sandbox_dep_exec_allowlist"
       const allow = build(runner, ["--sandbox"])
       const open = build(runner, [])
@@ -11868,18 +11902,21 @@ if (!only || "sandbox dependency grants".includes(only)) {
       const rEchoPlain = run(open, ["echo"])
       // The allowlist holds the real file Landlock is given, which is not
       // always named `true`: some coreutils install it behind a symbolic link.
-      const trueOnPath = (process.env.PATH ?? "")
-        .split(path.delimiter)
-        .map((dir) => path.join(dir === "" ? "." : dir, "true"))
-        .find((file) => {
-          try {
-            fs.accessSync(file, fs.constants.X_OK)
-            return fs.statSync(file).isFile()
-          } catch {
-            return false
-          }
-        })
-      const trueReal = trueOnPath === undefined ? null : fs.realpathSync(trueOnPath)
+      const realOnPath = (name) => {
+        const found = (process.env.PATH ?? "")
+          .split(path.delimiter)
+          .map((dir) => path.join(dir === "" ? "." : dir, name))
+          .find((file) => {
+            try {
+              fs.accessSync(file, fs.constants.X_OK)
+              return fs.statSync(file).isFile()
+            } catch {
+              return false
+            }
+          })
+        return found === undefined ? null : fs.realpathSync(found)
+      }
+      const trueReal = realOnPath("true")
       check(
         "sandbox dependency grants: a dependency granted process.spawn=true runs true and cannot exec echo",
         rTrue !== null &&
@@ -11897,6 +11934,26 @@ if (!only || "sandbox dependency grants".includes(only)) {
         trueReal !== null && ir(runner).includes(`@.sandbox.exec = `) && ir(runner).includes(`c"${trueReal}\\00`),
         `the first \`true\` on PATH resolves to ${trueReal}\n${ir(runner)}`
       )
+      // SBX-1, recorded open in docs/security/sandbox.md: the allowlist grants
+      // EXECUTE on the granted program's ELF loader, and the loader runs any
+      // binary it is handed. This pins that it still does; closing SBX-1
+      // turns this check red, and it then pins the refusal instead.
+      const execList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(runner))
+      const loaders =
+        execList === null ? [] : execList[1].split("\\00").filter((p) => p !== "" && p !== trueReal)
+      const echoReal = realOnPath("echo")
+      if (loaders.length === 0 || echoReal === null) {
+        skip(
+          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or no \`echo\` is on PATH; SBX-1 is not pinned`
+        )
+      } else {
+        const rLoader = run(allow, [loaders[0], echoReal, "sbx-1"])
+        check(
+          "sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)",
+          rLoader !== null && rLoader.status === 0 && rLoader.stdout === "sbx-1\n0\n",
+          `${loaders[0]} ${echoReal} sbx-1\n${said(rLoader)}`
+        )
+      }
     }
   }
 }

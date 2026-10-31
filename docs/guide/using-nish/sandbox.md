@@ -181,6 +181,16 @@ your own code does not reach it, `--allow` gives it no scope of its own and
 before. The scopes hold for the whole process, not one package: any
 dependency that reads files may read every granted directory.
 
+A program grant does not hold a dependency that sets out to escape it.
+Starting a program that is not a static binary needs its loader, such as
+`/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`, so the sandbox lets that
+loader run too, and the loader runs any program it is handed:
+`spawnSync([loader, "/bin/echo", "x"])` runs `echo` under a
+`process.spawn=git` grant. Treat `process.spawn=<program>` as a check on
+the programs a dependency means to run, and grant `process.spawn` only to a
+dependency you have read. This is recorded open as SBX-1 in the sandbox's
+security record.
+
 Addresses are checked at build time only. The kernel cannot see which
 address a socket call is given, so a `net=<host>` grant does not stop a
 dependency that builds its address at run time. Grant `net` to a dependency
