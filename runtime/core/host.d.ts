@@ -73,8 +73,9 @@ export declare function isTerminal(fd: i32): boolean;
 export declare function terminalSize(): i32[];
 /** `crypto.getRandomValues(bytes)` for a `u8[]`; a typed array goes straight through. */
 export declare function getRandomValues<T extends u8[] | Uint8Array>(bytes: T): T;
-/** These four have no synchronous reading: each throws, naming itself, and is typed as `runtime/nish.d.ts` types it. */
+/** These five have no synchronous reading: each throws, naming itself, and is typed as `runtime/nish.d.ts` types it. */
 export declare function spawn(argv: string[]): i32;
+export declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
 export declare function waitPid(pid: i32, flags: i32): i32[];
 export declare function signalFd(): i32;
 export declare function readSignal(fd: i32): i32;

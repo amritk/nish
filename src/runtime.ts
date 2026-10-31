@@ -607,6 +607,15 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `nish_spawn_child` with descriptors handed to the child. The vector is
+    // captured as there; the descriptor array is only read and kept by nothing.
+    this.add(
+      plain(
+        "nish_spawn_with_fds",
+        `declare noundef i32 @nish_spawn_with_fds(%struct.nish_array* noundef nonnull align 8, ${NET_BUFFER} readonly)`,
+        EFFECT_WRITE
+      )
+    )
     // One `kill(2)`. A signal is external state, so the call writes, and two
     // of them never fold into one; a program that signals itself with 9 or 15
     // never sees the call return, so no `willreturn`.
@@ -969,6 +978,28 @@ export class RuntimeTable {
         `declare noundef i32 @nish_unix_socket_pair(i32 noundef, ${NET_BUFFER})`,
         EFFECT_WRITE
       )
+    )
+    // A descriptor passed over a Unix socket and the peer it came from. Both
+    // transfers may block on the peer, as `nish_net_read` does, so neither is
+    // `willreturn`; the credentials are one `getsockopt` and never wait.
+    this.add(
+      new RuntimeFunction(
+        "nish_send_fd",
+        `declare noundef i32 @nish_send_fd(i32 noundef, i32 noundef, ${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_recv_fd",
+        `declare noundef i32 @nish_recv_fd(i32 noundef, ${NET_BUFFER}, i64 noundef, i64 noundef, ${NET_BUFFER})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain("nish_peer_credentials", `declare noundef i32 @nish_peer_credentials(i32 noundef, ${NET_BUFFER})`, EFFECT_WRITE)
     )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own

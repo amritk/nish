@@ -358,19 +358,23 @@ _Bool nish_mkdir(const nish_str *path) {
    value rather than through a child that has already run.
 
    `out` and `err` are paths for the child's stdout and stderr, or NULL to let
-   it inherit this process's; `dup`, when not NULL, is three descriptors the
-   child takes as its stdin, stdout and stderr instead (`spawnPiped`'s pipes). Every spawn builtin starts its child here, so the
-   argv vector and the redirects are written once; it is `static`, so a program
+   it inherit this process's; `dup`, when not NULL, is `n` descriptors the
+   child takes as `base`, `base + 1`, ...: its stdin, stdout and stderr for
+   `spawnPiped`'s pipes, and 3 onward for `spawnWithFds`. Every spawn builtin
+   starts its child here, so the argv vector and the redirects are written once; it is `static`, so a program
    that spawns nothing loses it to `--gc-sections`. The answer is the child's
    pid, or a negative errno: -EINVAL for an empty argv or an argument holding a
    NUL, and `posix_spawnp`'s own error otherwise (-ENOENT for a command that is
    not on PATH, on glibc). */
-static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err, const int *dup) {
+static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err, const int *dup,
+                                int base, int n) {
 #ifdef __wasi__
   (void)argv;
   (void)out;
   (void)err;
   (void)dup;
+  (void)base;
+  (void)n;
   return -ENOSYS;
 #else
   if (!argv->len) return -EINVAL; /* argv[0] would read past an empty array */
@@ -395,7 +399,7 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
   if (failed) return -failed;
   /* A `dup2` action that could not be recorded would start the child on this
      process's own stream in its place, so it fails the spawn. */
-  for (int k = 0; dup && k < 3 && !failed; k++) failed = posix_spawn_file_actions_adddup2(&fa, dup[k], k);
+  for (int k = 0; dup && k < n && !failed; k++) failed = posix_spawn_file_actions_adddup2(&fa, dup[k], base + k);
   if (failed) {
     posix_spawn_file_actions_destroy(&fa);
     return -failed;
@@ -425,7 +429,7 @@ static int32_t nish_exit_code(int status) {
 /* The two blocking builtins: start, then wait for that one child. A failed
    start is -1, the answer they have always given. */
 static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, const nish_str *err) {
-  int32_t pid = nish_spawn_start(argv, out, err, 0);
+  int32_t pid = nish_spawn_start(argv, out, err, 0, 0, 0);
   if (pid < 0) return -1;
 #ifdef __wasi__
   return -1;
@@ -456,7 +460,53 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
 /* `spawn(argv)`: the child's pid, or a negative errno, without waiting. The
    child is this process's until a `waitPid` reaps it; one never reaped stays
    a zombie until the program exits, as it would in C. */
-int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv, 0, 0, 0); }
+int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv, 0, 0, 0, 0, 0); }
+
+/* The most descriptors `spawnWithFds` hands on in one call. */
+#define NISH_SPAWN_FDS 64
+
+/* `spawnWithFds(argv, fds)`: `spawn`, with the child holding `fds[i]` as
+   descriptor `3 + i`, close-on-exec cleared there, and its pid or a negative
+   errno back. More than NISH_SPAWN_FDS descriptors, or a negative one, is
+   -EINVAL before anything is opened or started. Each source is first
+   duplicated, close-on-exec, to a scratch descriptor at or above `3 + n`, and
+   the child's `dup2` actions read only the scratch ones: a source that is
+   already its own target (`fds[0] == 3`) is then a `dup2` between two
+   different descriptors, which clears close-on-exec on every libc where a
+   `dup2` onto itself leaves it set, and a source that is an earlier entry's
+   target (`fds = [4, 3]`) is not overwritten before it is read. A source that
+   is not open is the `F_DUPFD_CLOEXEC`'s -EBADF. The scratch descriptors are
+   closed on every path out, so this process holds what it held before; every
+   descriptor of its own stays as it was, so the child also inherits whatever
+   this process holds without close-on-exec, which nothing the runtime opens
+   is (docs/security/runtime.md, RT-17). The child shares each descriptor's
+   open file: its offset and its status flags, `O_NONBLOCK` among them. */
+int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds) {
+#ifdef __wasi__
+  (void)argv;
+  (void)fds;
+  return -ENOSYS;
+#else
+  const int32_t *src = (const int32_t *)fds->data;
+  int n = (int)fds->len;
+  if (fds->len > NISH_SPAWN_FDS) return -EINVAL;
+  for (int k = 0; k < n; k++)
+    if (src[k] < 0) return -EINVAL;
+  int scratch[NISH_SPAWN_FDS];
+  int32_t rc = 0;
+  int made = 0;
+  for (; made < n; made++) {
+    scratch[made] = fcntl(src[made], F_DUPFD_CLOEXEC, 3 + n);
+    if (scratch[made] < 0) {
+      rc = -errno;
+      break;
+    }
+  }
+  if (!rc) rc = nish_spawn_start(argv, 0, 0, scratch, 3, n);
+  while (made-- > 0) close(scratch[made]);
+  return rc;
+#endif
+}
 
 /* `spawnPiped(argv, stdin, stdout, stderr)`: run the child as `nish_spawn`
    does, with `stdin`'s bytes on its standard input and its standard output
@@ -525,7 +575,7 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
   int32_t rc = -1;
   if (nish_pipe(p) || nish_pipe(p + 2) || nish_pipe(p + 4)) goto done;
   int child[3] = { p[0], p[3], p[5] };
-  int32_t pid = nish_spawn_start(argv, 0, 0, child);
+  int32_t pid = nish_spawn_start(argv, 0, 0, child, 0, 3);
   /* The child holds its ends now; this process keeps only its own. */
   for (int k = 0; k < 3; k++) {
     close(child[k]);
