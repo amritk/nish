@@ -82,7 +82,9 @@ ${AS[@]+"${AS[@]}"} "$PG_BIN/initdb" -D "$DIR/data" -U postgres --auth=trust -E 
   echo "unix_socket_directories = '$DIR/sock'"
   echo "password_encryption = 'scram-sha-256'"
 } | ${AS[@]+"${AS[@]}"} tee -a "$DIR/data/postgresql.conf" > /dev/null
-printf 'local all postgres trust\nhost all all 127.0.0.1/32 scram-sha-256\n' | ${AS[@]+"${AS[@]}"} tee "$DIR/data/pg_hba.conf" > /dev/null
+# The seed loads as postgres over the socket; the bench's role, conduit, signs
+# in with SCRAM over TCP and, for run.mjs --unix, over the socket.
+printf 'local all postgres trust\nlocal all all scram-sha-256\nhost all all 127.0.0.1/32 scram-sha-256\n' | ${AS[@]+"${AS[@]}"} tee "$DIR/data/pg_hba.conf" > /dev/null
 
 # The seed loads through the socket, so the setup's port is any free one.
 PORT="$(node -e 'const s = require("net").createServer().listen(0, "127.0.0.1", () => { console.log(s.address().port); s.close() })')"

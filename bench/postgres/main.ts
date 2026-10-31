@@ -1,7 +1,7 @@
 // Three of the multicore server challenge's queries through `nish/net/postgres`,
 // against a live PostgreSQL 18 holding the challenge's --dev seed:
 //
-//   main <pk|list|insert> <port> <user> <password> <database> <count>
+//   main <pk|list|insert|one|rows> <port> <user> <password> <database> <count> [<socket dir>]
 //
 // `bench/postgres/run.mjs` builds it with `--link` (the speed profile) and runs
 // it beside `twin.c`, the same loop written against libpq in pipeline mode.
@@ -18,13 +18,24 @@
 // - insert: an INSERT of a follow, one group in flight, so each waits for the
 //   ReadyForQuery of the one before; the rows its tag counts are folded. The
 //   rows it adds are deleted before and after the timed loop.
+// - one: `SELECT 1`, one group in flight; the transport's cost with next to
+//   no server work.
+// - rows: 100 users from a random id up, one group in flight; 100 rows of
+//   the five columns `pk` reads.
+//
+// With a socket directory the connection is `unixConnect` to
+// `<dir>/.s.PGSQL.<port>`, the socket the server makes there; without one it
+// is `tcpConnect` to 127.0.0.1, which sets TCP_NODELAY.
 //
 // Each mode runs `depth` queries untimed first (the connect, SCRAM and the
 // prepares fall in them), then `count` timed. It prints
 // `rows R checksum S failed F count N ns T user U sys K`, the line `twin.c`
 // prints for the same arguments: T the timed loop's wall time in nanoseconds,
 // U and K the process's user and system CPU time over it, in microseconds
-// (getrusage).
+// (getrusage). `one` and `rows` ask `pg_backend_pid()` first and add
+// ` server_ticks B server_ns C`: the server backend's utime + stime over the
+// timed loop in clock ticks (`/proc/<pid>/stat`), and its time on a CPU in
+// nanoseconds (`/proc/<pid>/schedstat`), so the server must be on this machine.
 //
 // PK_SQL, LIST_SQL and INSERT_SQL are the queries of the challenge's SPEC.md
 // (https://github.com/arjaythedev/multicore-server-challenge).
@@ -41,8 +52,9 @@ import {
   pollModify,
   pollWait,
   tcpConnect,
-} from "nish:net"
-import { secret, wipe } from "nish:secret"
+  unixConnect,
+} from "nish:net";
+import { secret, wipe } from "nish:secret";
 import {
   PG_ARRAY_ELEMENT,
   PG_ARRAY_END,
@@ -58,14 +70,15 @@ import {
   PgConfig,
   PgConnection,
   PgPool,
-} from "nish/net/postgres"
+} from "nish/net/postgres";
 
-declare function calloc(count: u64, size: u64): CPtr | null
-declare function free(p: CPtr): void
-declare function getrusage(who: i32, usage: CPtr): i32
-declare function bcopy(src: CPtr, dst: u8[], n: u64): void
+declare function calloc(count: u64, size: u64): CPtr | null;
+declare function free(p: CPtr): void;
+declare function getrusage(who: i32, usage: CPtr): i32;
+declare function bcopy(src: CPtr, dst: u8[], n: u64): void;
 
-const PK_SQL: string = "SELECT id, username, email, bio, image FROM users WHERE id = $1"
+const PK_SQL: string =
+  "SELECT id, username, email, bio, image FROM users WHERE id = $1";
 const LIST_SQL: string =
   "SELECT a.id, a.slug, a.title, a.description, a.created_at, a.updated_at, " +
   "ARRAY(SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id " +
@@ -75,225 +88,312 @@ const LIST_SQL: string =
   "u.username, u.bio, u.image, " +
   "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = a.author_id) AS following " +
   "FROM articles a JOIN users u ON u.id = a.author_id " +
-  "ORDER BY a.id DESC LIMIT $2 OFFSET $3"
+  "ORDER BY a.id DESC LIMIT $2 OFFSET $3";
 const INSERT_SQL: string =
-  "INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+  "INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING";
 // Every follow the timed loop adds is a self-follow, which the seed has none of.
-const RESET_SQL: string = "DELETE FROM follows WHERE follower_id = followee_id"
+const RESET_SQL: string = "DELETE FROM follows WHERE follower_id = followee_id";
+const ONE_SQL: string = "SELECT 1";
+const ROWS_SQL: string =
+  "SELECT id, username, email, bio, image FROM users WHERE id > $1 ORDER BY id LIMIT 100";
+const PID_SQL: string = "SELECT pg_backend_pid()";
 
-const PK: i32 = 0
-const LIST: i32 = 1
-const INSERT: i32 = 2
-const RESET: i32 = 3
-const INT8: i32 = 20
-const USERS: i64 = 100000
+const PK: i32 = 0;
+const LIST: i32 = 1;
+const INSERT: i32 = 2;
+const RESET: i32 = 3;
+const ONE: i32 = 4;
+const ROWS: i32 = 5;
+const PID: i32 = 6;
+const INT8: i32 = 20;
+const USERS: i64 = 100000;
+/** What a `rows` query reads: its first id is at most `USERS - ROWS_READ`, so every query reads all of them. */
+const ROWS_READ: i64 = 100;
 /** `netRead` and `netWrite`: nothing to do now. */
-const AGAIN: i32 = -11
-const WANT_READ: i32 = 1
-const WANT_WRITE: i32 = 2
+const AGAIN: i32 = -11;
+const WANT_READ: i32 = 1;
+const WANT_WRITE: i32 = 2;
 /** The u32 a NULL folds as. */
-const NULL_FOLD: i32 = -1
+const NULL_FOLD: i32 = -1;
 
 const bytesOf = (s: string): u8[] => {
-  const out: u8[] = new Array<u8>(s.length)
+  const out: u8[] = new Array<u8>(s.length);
   for (let k: i32 = 0; k < toI32(s.length) && k < toI32(out.length); k++) {
-    out[k] = toU8(s.charCodeAt(k))
+    out[k] = toU8(s.charCodeAt(k));
   }
-  return out
-}
+  return out;
+};
 
 /** The process's CPU time so far in microseconds: user at `at` 0, system at 16. */
 const cpuMicros = (at: i32): i64 => {
-  const p: CPtr | null = calloc(toU64(1), toU64(144))
+  const p: CPtr | null = calloc(toU64(1), toU64(144));
   if (p === null) {
-    return 0
+    return 0;
   }
-  getrusage(0, p)
-  const usage: u8[] = new Array<u8>(32)
-  bcopy(p, usage, toU64(usage.length))
-  free(p)
-  return word(usage, at) * 1000000 + word(usage, at + 8)
-}
+  getrusage(0, p);
+  const usage: u8[] = new Array<u8>(32);
+  bcopy(p, usage, toU64(usage.length));
+  free(p);
+  return word(usage, at) * 1000000 + word(usage, at + 8);
+};
 
 /** The little-endian i64 at `b[at, at + 8)`. */
 const word = (b: u8[], at: i32): i64 => {
-  let v: i64 = 0
+  let v: i64 = 0;
   for (let k: i32 = 7; k >= 0; k--) {
-    v = v * 256 + toI64(b[at + k])
+    v = v * 256 + toI64(b[at + k]);
   }
-  return v
-}
+  return v;
+};
+
+// `readFileBytesSync` sizes a file by seeking to its end, which a /proc file
+// has none of, so these read it as it streams.
+declare function open(path: string, flags: i32): i32;
+declare function read(fd: i32, buf: u8[], n: u64): i64;
+declare function close(fd: i32): i32;
+const O_RDONLY_CLOEXEC: i32 = 0x80000;
+/** More than a `stat` or `schedstat` line takes. */
+const PROC_BYTES: i32 = 1024;
+
+/**
+ * The `field`th space-separated number after the `)` that ends the command
+ * name in `/proc/<pid>/stat` (0 is the state), or the first number of a file
+ * with no `)` such as `schedstat`; -1 when the file cannot be read.
+ */
+const procNumber = (path: string, field: i32): i64 => {
+  const fd: i32 = open(path, O_RDONLY_CLOEXEC);
+  if (fd < 0) {
+    return -1;
+  }
+  const b = new Array<u8>(PROC_BYTES);
+  const got: i64 = read(fd, b, toU64(PROC_BYTES));
+  close(fd);
+  if (got <= 0) {
+    return -1;
+  }
+  const end: i32 = toI32(got);
+  let at: i32 = 0;
+  for (let k: i32 = 0; k < end; k++) {
+    if (b[k] === 41) {
+      at = k + 2;
+    }
+  }
+  let seen: i32 = 0;
+  while (at < end && seen < field) {
+    if (b[at] === 32) {
+      seen += 1;
+    }
+    at += 1;
+  }
+  let v: i64 = 0;
+  let digits: i32 = 0;
+  while (at < end && b[at] >= 48 && b[at] <= 57) {
+    v = v * 10 + toI64(b[at] - 48);
+    digits += 1;
+    at += 1;
+  }
+  return digits > 0 ? v : -1;
+};
+
+/** Backend `pid`'s utime + stime in clock ticks, fields 14 and 15 of its stat. */
+const serverTicks = (pid: i64): i64 => {
+  const path: string = `/proc/${pid}/stat`;
+  return procNumber(path, 11) + procNumber(path, 12);
+};
+
+/** Backend `pid`'s time on a CPU in nanoseconds, the first field of its schedstat. */
+const serverNanos = (pid: i64): i64 => procNumber(`/proc/${pid}/schedstat`, 0);
 
 /** The checksum every value read is folded into: `sum = sum * 31 + v`, the sum a u32. */
 class Fold {
-  rows: i64 = 0
+  rows: i64 = 0;
   /** A timestamp's 24 bytes, and an escaped array element's unescaped ones. */
-  readonly buf: u8[]
-  readonly walker: PgArrayWalker
-  sum: u32 = 0
-  failed: i32 = 0
+  readonly buf: u8[];
+  readonly walker: PgArrayWalker;
+  sum: u32 = 0;
+  failed: i32 = 0;
 
   constructor() {
-    this.buf = new Array<u8>(1024)
-    this.walker = new PgArrayWalker()
+    this.buf = new Array<u8>(1024);
+    this.walker = new PgArrayWalker();
   }
 
   add(v: u32): void {
-    this.sum = this.sum * 31 + v
+    this.sum = this.sum * 31 + v;
   }
 
   /** Column `c` as text: its length, then every byte; NULL as `NULL_FOLD`. */
   text(conn: PgConnection, c: i32): void {
-    const n: i32 = conn.colLength(c)
+    const n: i32 = conn.colLength(c);
     if (n < 0) {
-      this.add(toU32(NULL_FOLD))
-      return
+      this.add(toU32(NULL_FOLD));
+      return;
     }
-    this.bytes(conn.inputBuffer(), conn.colStart(c), n)
+    this.bytes(conn.inputBuffer(), conn.colStart(c), n);
   }
 
   /** `b[start, start + n)`: its length, then every byte. */
   bytes(b: u8[], start: i32, n: i32): void {
     // The sum is kept in a local across the loop, as twin.c's stays in a
     // register: a store to `this.sum` each byte would time the fold.
-    let sum: u32 = this.sum * 31 + toU32(n)
-    const end: i32 = start + n
+    let sum: u32 = this.sum * 31 + toU32(n);
+    const end: i32 = start + n;
     for (let k: i32 = start; k >= 0 && k < end && k < toI32(b.length); k++) {
-      sum = sum * 31 + toU32(b[k])
+      sum = sum * 31 + toU32(b[k]);
     }
-    this.sum = sum
+    this.sum = sum;
   }
 
   /** Column `c` as an integer: its low 32 bits. */
   int(conn: PgConnection, c: i32): void {
-    this.add(toU32(conn.int(c) & 4294967295))
+    this.add(toU32(conn.int(c) & 4294967295));
   }
 
   /** Column `c` as a boolean: 1 or 0. */
   bool(conn: PgConnection, c: i32): void {
-    this.add(conn.bool(c) ? toU32(1) : toU32(0))
+    this.add(conn.bool(c) ? toU32(1) : toU32(0));
   }
 
   /** Column `c` as a timestamp: its 24 decoded bytes, or `NULL_FOLD` and a failure. */
   timestamp(conn: PgConnection, c: i32): void {
-    const n: i32 = conn.text.timestamp(conn.inputBuffer(), conn.colStart(c), conn.colLength(c), this.buf, 0)
+    const n: i32 = conn.text.timestamp(
+      conn.inputBuffer(),
+      conn.colStart(c),
+      conn.colLength(c),
+      this.buf,
+      0,
+    );
     if (n < 0) {
-      this.add(toU32(NULL_FOLD))
-      return
+      this.add(toU32(NULL_FOLD));
+      return;
     }
-    this.bytes(this.buf, 0, n)
+    this.bytes(this.buf, 0, n);
   }
 
   /** Column `c` as a `text[]`: each element as text, unescaped, then the count; a malformed array is a failure. */
   array(conn: PgConnection, c: i32): void {
-    const b: u8[] = conn.inputBuffer()
-    const walker: PgArrayWalker = this.walker
-    walker.begin(b, conn.colStart(c), conn.colLength(c))
-    let count: u32 = 0
-    let event: i32 = walker.next()
+    const b: u8[] = conn.inputBuffer();
+    const walker: PgArrayWalker = this.walker;
+    walker.begin(b, conn.colStart(c), conn.colLength(c));
+    let count: u32 = 0;
+    let event: i32 = walker.next();
     while (event === PG_ARRAY_ELEMENT || event === PG_ARRAY_NULL) {
       if (event === PG_ARRAY_NULL) {
-        this.add(toU32(NULL_FOLD))
+        this.add(toU32(NULL_FOLD));
       } else if (walker.escaped) {
-        const n: i32 = walker.copy(this.buf, 0)
+        const n: i32 = walker.copy(this.buf, 0);
         if (n < 0) {
-          this.failed += 1
+          this.failed += 1;
         } else {
-          this.bytes(this.buf, 0, n)
+          this.bytes(this.buf, 0, n);
         }
       } else {
-        this.bytes(b, walker.start, walker.length)
+        this.bytes(b, walker.start, walker.length);
       }
-      count += 1
-      event = walker.next()
+      count += 1;
+      event = walker.next();
     }
     if (event !== PG_ARRAY_END) {
-      this.failed += 1
+      this.failed += 1;
     }
-    this.add(count)
+    this.add(count);
   }
 
   /** The row `conn` just read, as `mode` returns it. */
   row(conn: PgConnection, mode: i32): void {
-    if (mode === PK) {
-      this.int(conn, 0)
+    if (mode === PK || mode === ROWS) {
+      this.int(conn, 0);
       for (let c: i32 = 1; c < 5; c++) {
-        this.text(conn, c)
+        this.text(conn, c);
       }
     } else if (mode === LIST) {
-      this.int(conn, 0)
-      this.text(conn, 1)
-      this.text(conn, 2)
-      this.text(conn, 3)
-      this.timestamp(conn, 4)
-      this.timestamp(conn, 5)
-      this.array(conn, 6)
-      this.int(conn, 7)
-      this.bool(conn, 8)
-      this.text(conn, 9)
-      this.text(conn, 10)
-      this.text(conn, 11)
-      this.bool(conn, 12)
+      this.int(conn, 0);
+      this.text(conn, 1);
+      this.text(conn, 2);
+      this.text(conn, 3);
+      this.timestamp(conn, 4);
+      this.timestamp(conn, 5);
+      this.array(conn, 6);
+      this.int(conn, 7);
+      this.bool(conn, 8);
+      this.text(conn, 9);
+      this.text(conn, 10);
+      this.text(conn, 11);
+      this.bool(conn, 12);
+    } else if (mode === ONE) {
+      this.int(conn, 0);
     }
-    this.rows += 1
+    this.rows += 1;
     if (conn.text.failed) {
-      this.failed += 1
-      conn.text.reset()
+      this.failed += 1;
+      conn.text.reset();
     }
   }
 }
 
 /** The pool, its one socket and the epoll loop around it. */
 class Bench {
-  readonly pool: PgPool
-  readonly address: u8[]
-  readonly loop: i32
-  readonly ready: i32[]
-  readonly fold: Fold
-  fd: i32 = -1
-  connected: boolean = false
+  readonly pool: PgPool;
+  readonly address: u8[];
+  /** The server's socket, or "" for TCP to `address`. */
+  readonly socket: string;
+  readonly loop: i32;
+  readonly ready: i32[];
+  readonly fold: Fold;
+  fd: i32 = -1;
+  connected: boolean = false;
   /** The poll mask `fd` is registered with. */
-  mask: i32 = 0
+  mask: i32 = 0;
   /** The xorshift32 state the ids are drawn from. */
-  x: u32 = 0
+  x: u32 = 0;
+  /** The server backend's pid, once a `PID` query answered it. */
+  backend: i64 = -1;
 
-  constructor(pool: PgPool, address: u8[]) {
-    this.pool = pool
-    this.address = address
-    this.loop = pollCreate()
-    this.ready = new Array<i32>(64)
-    this.fold = new Fold()
+  constructor(pool: PgPool, address: u8[], socket: string) {
+    this.pool = pool;
+    this.address = address;
+    this.socket = socket;
+    this.loop = pollCreate();
+    this.ready = new Array<i32>(64);
+    this.fold = new Fold();
   }
 
   /** The next id, from 1 to USERS. */
   id(): i64 {
-    let x: u32 = this.x
-    x = x ^ (x << 13)
-    x = x ^ (x >> 17)
-    x = x ^ (x << 5)
-    this.x = x
-    return (toI64(x) % USERS) + 1
+    let x: u32 = this.x;
+    x = x ^ (x << 13);
+    x = x ^ (x >> 17);
+    x = x ^ (x << 5);
+    this.x = x;
+    return (toI64(x) % USERS) + 1;
   }
 
   /** Binds query `i` of `mode` on `conn`. */
   bind(conn: PgConnection, mode: i32, i: i32): void {
     if (mode === PK) {
-      conn.bindStart("pk")
-      conn.paramInt(this.id())
+      conn.bindStart("pk");
+      conn.paramInt(this.id());
     } else if (mode === LIST) {
-      conn.bindStart("list")
-      conn.paramInt(this.id())
-      conn.paramInt(toI64(20))
-      conn.paramInt(toI64(i % 10) * toI64(20))
+      conn.bindStart("list");
+      conn.paramInt(this.id());
+      conn.paramInt(toI64(20));
+      conn.paramInt(toI64(i % 10) * toI64(20));
+    } else if (mode === ONE) {
+      conn.bindStart("one");
+    } else if (mode === ROWS) {
+      conn.bindStart("rows");
+      conn.paramInt(this.id() % (USERS - ROWS_READ));
+    } else if (mode === PID) {
+      conn.bindStart("pid");
     } else if (mode === INSERT) {
-      const u: i64 = toI64(1) + (toI64(i) % USERS)
-      conn.bindStart("insert")
-      conn.paramInt(u)
-      conn.paramInt(u)
+      const u: i64 = toI64(1) + (toI64(i) % USERS);
+      conn.bindStart("insert");
+      conn.paramInt(u);
+      conn.paramInt(u);
     } else {
-      conn.bindStart("reset")
+      conn.bindStart("reset");
     }
-    conn.bindEnd()
+    conn.bindEnd();
   }
 
   /** Writes what the connection queued; false when the socket is gone. */
@@ -303,17 +403,17 @@ class Bench {
         this.fd,
         conn.outputBuffer(),
         conn.outputStart(),
-        conn.outputEnd() - conn.outputStart()
-      )
+        conn.outputEnd() - conn.outputStart(),
+      );
       if (n === AGAIN) {
-        return true
+        return true;
       }
       if (n <= 0) {
-        return false
+        return false;
       }
-      conn.sent(n)
+      conn.sent(n);
     }
-    return true
+    return true;
   }
 
   /**
@@ -322,166 +422,215 @@ class Bench {
    * fails or the server stops answering.
    */
   run(mode: i32, n: i32, depth: i32, fold: boolean): boolean {
-    const pool = this.pool
-    this.x = 2463534242
-    let requested: i32 = 0
-    let bound: i32 = 0
-    let done: i32 = 0
-    let pending: boolean = this.fd >= 0
+    const pool = this.pool;
+    this.x = 2463534242;
+    let requested: i32 = 0;
+    let bound: i32 = 0;
+    let done: i32 = 0;
+    let pending: boolean = this.fd >= 0;
     while (done < n) {
       if (pending) {
-        pending = false
-        let event: i32 = pool.next(0)
+        pending = false;
+        let event: i32 = pool.next(0);
         while (event !== PG_NEED_MORE) {
           if (event === PG_ROW) {
-            if (fold) {
-              this.fold.row(pool.connection(0), mode)
+            if (mode === PID) {
+              this.backend = pool.connection(0).int(0);
+            } else if (fold) {
+              this.fold.row(pool.connection(0), mode);
             }
           } else if (event === PG_COMPLETE) {
             if (fold && mode === INSERT) {
-              const rows: i64 = pool.connection(0).tagRows()
-              this.fold.rows += rows
-              this.fold.add(toU32(rows & 4294967295))
+              const rows: i64 = pool.connection(0).tagRows();
+              this.fold.rows += rows;
+              this.fold.add(toU32(rows & 4294967295));
             }
           } else if (event === PG_ERROR) {
             if (fold) {
-              this.fold.failed += 1
+              this.fold.failed += 1;
             }
           } else if (event === PG_GROUP_DONE) {
-            done += 1
+            done += 1;
           } else if (event === PG_LOST || event === PG_FAILED) {
-            console.log(`connection failed: ${pool.connection(0).failure}`)
-            return false
+            console.log(`connection failed: ${pool.connection(0).failure}`);
+            return false;
           }
-          event = pool.next(0)
+          event = pool.next(0);
         }
         if (done === n) {
-          break
+          break;
         }
       }
       while (requested < n && requested - done < depth && pool.request() >= 0) {
-        requested += 1
+        requested += 1;
       }
-      let slot: i32 = pool.dispatch()
+      let slot: i32 = pool.dispatch();
       while (slot >= 0) {
-        this.bind(pool.connection(slot), mode, bound)
-        pool.send()
-        bound += 1
-        slot = pool.dispatch()
+        this.bind(pool.connection(slot), mode, bound);
+        pool.send();
+        bound += 1;
+        slot = pool.dispatch();
       }
       if (pool.wanted() === 0) {
-        const nonce = new Array<u8>(18)
-        crypto.getRandomValues(nonce)
-        pool.connect(0, nonce)
-        this.fd = tcpConnect(this.address)
-        this.connected = false
-        this.mask = WANT_WRITE
+        const nonce = new Array<u8>(18);
+        crypto.getRandomValues(nonce);
+        pool.connect(0, nonce);
+        this.fd =
+          this.socket === ""
+            ? tcpConnect(this.address)
+            : unixConnect(this.socket);
+        this.connected = false;
+        this.mask = WANT_WRITE;
         if (this.fd < 0 || pollAdd(this.loop, this.fd, WANT_WRITE, 0) < 0) {
-          console.log(`connect failed: ${this.fd}`)
-          return false
+          console.log(`connect failed: ${this.fd}`);
+          return false;
         }
       }
       if (this.connected) {
-        const conn = pool.connection(0)
+        const conn = pool.connection(0);
         if (!this.flush(conn)) {
-          conn.closed()
-          pending = true
-          continue
+          conn.closed();
+          pending = true;
+          continue;
         }
-        const wants: i32 = conn.outputEnd() > conn.outputStart() ? WANT_READ | WANT_WRITE : WANT_READ
+        const wants: i32 =
+          conn.outputEnd() > conn.outputStart()
+            ? WANT_READ | WANT_WRITE
+            : WANT_READ;
         if (wants !== this.mask) {
-          pollModify(this.loop, this.fd, wants, 0)
-          this.mask = wants
+          pollModify(this.loop, this.fd, wants, 0);
+          this.mask = wants;
         }
       }
-      const got: i32 = pollWait(this.loop, this.ready, toI32(10000))
+      const got: i32 = pollWait(this.loop, this.ready, toI32(10000));
       if (got <= 0) {
-        console.log("timed out")
-        return false
+        console.log("timed out");
+        return false;
       }
-      const conn = pool.connection(0)
+      const conn = pool.connection(0);
       if (!this.connected) {
         // The socket is writable once its connect finished, or failed.
         if (connectResult(this.fd) === 0) {
-          this.connected = true
+          this.connected = true;
         } else {
-          conn.closed()
+          conn.closed();
         }
       } else if ((this.ready[1] & 5) !== 0) {
-        const read: i32 = netRead(this.fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom())
+        const read: i32 = netRead(
+          this.fd,
+          conn.inputBuffer(),
+          conn.inputEnd(),
+          conn.inputRoom(),
+        );
         if (read === 0 || (read < 0 && read !== AGAIN)) {
-          conn.closed()
+          conn.closed();
         } else if (read > 0) {
-          conn.received(read)
+          conn.received(read);
         }
       }
-      pending = true
+      pending = true;
     }
-    return true
+    return true;
   }
 }
 
 export const main = (): i32 => {
   if (process.argv.length < 7) {
-    console.log("usage: main <pk|list|insert> <port> <user> <password> <database> <count>")
-    return 2
+    console.log(
+      "usage: main <pk|list|insert|one|rows> <port> <user> <password> <database> <count> [<socket dir>]",
+    );
+    return 2;
   }
-  const name: string = process.argv[1]
-  let mode: i32 = -1
+  const name: string = process.argv[1];
+  let mode: i32 = -1;
   if (name === "pk") {
-    mode = PK
+    mode = PK;
   } else if (name === "list") {
-    mode = LIST
+    mode = LIST;
   } else if (name === "insert") {
-    mode = INSERT
+    mode = INSERT;
+  } else if (name === "one") {
+    mode = ONE;
+  } else if (name === "rows") {
+    mode = ROWS;
   }
   if (mode < 0) {
-    console.log(`unknown mode ${name}`)
-    return 2
+    console.log(`unknown mode ${name}`);
+    return 2;
   }
-  const count: i32 = toI32(parseInt(process.argv[6]))
-  const depth: i32 = mode === INSERT ? 1 : 16
-  const config = new PgConfig()
-  config.user = process.argv[3]
-  config.database = process.argv[5]
-  config.maxInFlight = depth
-  const password = secret(bytesOf(process.argv[4]))
-  const pool = new PgPool(config, password, toI32(1), depth)
-  wipe(password)
+  const count: i32 = toI32(parseInt(process.argv[6]));
+  const depth: i32 = mode === PK || mode === LIST ? 16 : 1;
+  const config = new PgConfig();
+  config.user = process.argv[3];
+  config.database = process.argv[5];
+  config.maxInFlight = depth;
+  const password = secret(bytesOf(process.argv[4]));
+  const pool = new PgPool(config, password, toI32(1), depth);
+  wipe(password);
   if (mode === PK) {
-    pool.register("pk", PK_SQL, [INT8])
+    pool.register("pk", PK_SQL, [INT8]);
   } else if (mode === LIST) {
-    pool.register("list", LIST_SQL, [INT8, INT8, INT8])
+    pool.register("list", LIST_SQL, [INT8, INT8, INT8]);
+  } else if (mode === ONE || mode === ROWS) {
+    const none: i32[] = [];
+    pool.register("one", ONE_SQL, none);
+    pool.register("rows", ROWS_SQL, [INT8]);
+    pool.register("pid", PID_SQL, none);
   } else {
-    pool.register("insert", INSERT_SQL, [INT8, INT8])
-    const none: i32[] = []
-    pool.register("reset", RESET_SQL, none)
+    pool.register("insert", INSERT_SQL, [INT8, INT8]);
+    const none: i32[] = [];
+    pool.register("reset", RESET_SQL, none);
   }
-  const address = new Array<u8>(18)
-  netAddress(address, "127.0.0.1", parseInt(process.argv[2]))
-  const bench = new Bench(pool, address)
+  const address = new Array<u8>(18);
+  netAddress(address, "127.0.0.1", parseInt(process.argv[2]));
+  const socket: string =
+    process.argv.length > 7
+      ? `${process.argv[7]}/.s.PGSQL.${process.argv[2]}`
+      : "";
+  const bench = new Bench(pool, address, socket);
+  const server: boolean = mode === ONE || mode === ROWS;
 
-  if (!bench.run(mode, depth, depth, false) || (mode === INSERT && !bench.run(RESET, 1, 1, false))) {
-    return 1
+  if (
+    !bench.run(mode, depth, depth, false) ||
+    (mode === INSERT && !bench.run(RESET, 1, 1, false))
+  ) {
+    return 1;
   }
-  const user0: i64 = cpuMicros(0)
-  const sys0: i64 = cpuMicros(16)
-  const t0: i64 = monotonicNanos()
-  const ok: boolean = bench.run(mode, count, depth, true)
-  const ns: i64 = monotonicNanos() - t0
-  const user: i64 = cpuMicros(0) - user0
-  const sys: i64 = cpuMicros(16) - sys0
+  if (server && (!bench.run(PID, 1, 1, false) || bench.backend <= 0)) {
+    console.log("pg_backend_pid() did not answer");
+    return 1;
+  }
+  const ticks0: i64 = server ? serverTicks(bench.backend) : 0;
+  const nanos0: i64 = server ? serverNanos(bench.backend) : 0;
+  const user0: i64 = cpuMicros(0);
+  const sys0: i64 = cpuMicros(16);
+  const t0: i64 = monotonicNanos();
+  const ok: boolean = bench.run(mode, count, depth, true);
+  const ns: i64 = monotonicNanos() - t0;
+  const user: i64 = cpuMicros(0) - user0;
+  const sys: i64 = cpuMicros(16) - sys0;
+  const ticks: i64 = server ? serverTicks(bench.backend) - ticks0 : 0;
+  const nanos: i64 = server ? serverNanos(bench.backend) - nanos0 : 0;
   if (!ok || (mode === INSERT && !bench.run(RESET, 1, 1, false))) {
-    return 1
+    return 1;
   }
-  const fold = bench.fold
+  if (server && (ticks0 < 0 || nanos0 < 0 || ticks < 0 || nanos < 0)) {
+    console.log(
+      `cannot read /proc/${bench.backend}: the server must run on this machine`,
+    );
+    return 1;
+  }
+  const fold = bench.fold;
+  const suffix: string = server
+    ? ` server_ticks ${ticks} server_ns ${nanos}`
+    : "";
   console.log(
-    `rows ${fold.rows} checksum ${fold.sum} failed ${fold.failed} count ${count} ns ${ns} user ${user} sys ${sys}`
-  )
-  const conn = pool.connection(0)
-  conn.terminate()
-  bench.flush(conn)
-  netClose(bench.fd)
-  pool.dispose()
-  return 0
-}
+    `rows ${fold.rows} checksum ${fold.sum} failed ${fold.failed} count ${count} ns ${ns} user ${user} sys ${sys}${suffix}`,
+  );
+  const conn = pool.connection(0);
+  conn.terminate();
+  bench.flush(conn);
+  netClose(bench.fd);
+  pool.dispose();
+  return 0;
+};
