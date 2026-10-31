@@ -1,7 +1,9 @@
 # WP43: The HTTP application layer — the router first
 
-**Status: in progress.** Stage 1, the router (`std/net/router.ts`), is built.
-The handler interface, static files and compression are planned and unbuilt.
+**Status: in progress.** Stage 1, the router (`std/net/router.ts`), and
+stage 2's HTTP/1.1 half, the handler (`std/net/handler.ts`) with the example
+server `examples/http-app`, are built. The handler over HTTP/2 and HTTP/3,
+static files and compression are planned and unbuilt.
 
 Issue #485 asks for the pieces every HTTP server on `nish/net` would otherwise
 rebuild: one handler interface across HTTP/1.1, 2 and 3, routing, static
@@ -16,7 +18,7 @@ depend on how a program is laid out:
 
 1. **The router** (`nish/net/router`), now. Method and path to a route index,
    with parameters as byte ranges.
-2. **The handler interface**, later. One request view (method, path, query,
+2. **The handler interface**, now over HTTP/1.1 (§5). One request view (method, path, query,
    fields, a body reader) and one response writer over `http1-server`,
    `http2-tls` and `http3-server`, with Alt-Svc advertising h3.
 3. **Static files**, later. MIME types, `ETag` and `Last-Modified`, `Range`,
@@ -147,10 +149,79 @@ both runs.
 
 ## 4. Later stages of #485
 
-- **Stage 2, the handler interface:** `nish/net/handler`, one request and
-  response pair over the three carriers, with `bench/http1-server.ts` routing
-  through the router.
+- **Stage 2, the handler interface:** `nish/net/handler`. Its HTTP/1.1 half
+  is built (§5); the same `HttpRequest` and answers over `http2-tls` and
+  `http3-server`, with Alt-Svc advertising h3, are the follow-up §5 explains.
 - **Stage 3, static files:** `nish/net/static`.
 - **Stage 4, compression:** `nish/net/compress`.
 - **The example server:** `examples/http-app`, with logging, configuration and
-  graceful shutdown.
+  graceful shutdown, is built (§5).
+
+## 5. The handler over HTTP/1.1
+
+`nish/net/handler` turns `Http1Server`'s events into whole requests and takes
+their answers back. A program builds a `Router`, hands it and a listener to
+`HttpHandler`, and loops on `wait`, `ready` and `take`, switching on
+`req.route`. The user guide is
+[An API server](guide/using-nish/api-server.md); the security record is
+[handler.md](security/handler.md).
+
+### Decisions
+
+- **The program pulls.** Nish has no function values, so there is no handler
+  callback per route. `wait` runs one turn of the readiness loop and queues
+  the requests it made whole; the program takes them and dispatches on the
+  route index the router answered, exactly as stage 1 describes.
+- **A request is whole before it is handed over.** The handler gathers the
+  body, up to `http.maxBody`, which `HandlerLimits` lowers to one MiB from the
+  carrier's default because it holds a body whole. A program that streams
+  large uploads drives `Http1Server` itself. Streaming *responses* are
+  provided (`start`, `write`, `end`).
+- **An answer may come later, and a late one is dropped.** A taken request
+  is the program's until it answers, in that turn or a later one. Each slot
+  carries a generation bumped on close, so an answer whose connection has gone
+  answers `HANDLER_DROPPED` and never reaches a new connection on the same
+  slot.
+- **Order and back-pressure are the carrier's.** It reads a connection's
+  next request only once the one before is answered, and the handler parks a
+  whole request while more than half an output of the answer before it is
+  unsent, so pipelined answers go out in order and a peer that never reads
+  holds one answer in flight.
+- **Nothing is allocated per request once warm.** The head is copied into
+  the request's own buffer at `H1_REQUEST`, bodies and the free list grow to
+  the largest seen, and JSON goes into one scratch writer.
+- **Refusals are problems.** `refuse` answers 404, or 405 with an `Allow`
+  built once per set of methods, as RFC 9457 `application/problem+json`; a
+  `HEAD` that only a `GET` route matches takes that route.
+- **A graceful stop is a drain, not a policy.** `watch` adds the program's
+  own descriptors to the loop (`signalFd()` among them), and `drain` stops
+  accepting, closes idle connections and closes busy ones once answered.
+  Deadlines, logging and configuration stay in `examples/http-app`, as §1
+  says.
+
+### Why HTTP/2 and HTTP/3 are a follow-up
+
+The request view and the answers are written against nothing HTTP/1-specific
+except where the bytes come from, but the two other carriers differ in what
+the handler would own. `http2-tls` multiplexes streams over one TLS
+connection, so a request's lifetime is a stream's, flow control decides when
+a body may be read and written, and its decoded fields live in the
+connection's HPACK state only until the next header block
+([HTTP routing](guide/using-nish/http-router.md#from-http11-http2-and-http3)).
+`http3-server` runs over QUIC on UDP, with its own readiness loop and timers.
+Each needs its own copy-out point, its own back-pressure rule and its own
+late-answer test, and each is a security-relevant change to its own record.
+Landing HTTP/1.1 first gives the API a real user (`examples/http-app`) before
+it is fixed across three carriers.
+
+### Measured
+
+`bench/http-app.ts` answers `bench/http1-server.ts`'s contract — plaintext,
+JSON, echo, query, deep parameters and the same 342-route table, which both
+import from `bench/http-app-routes.ts` — through `HttpHandler`.
+`bench/http1-server.ts` stays the carrier's own load test, driving
+`Http1Server` by hand; `bench/http.mjs`, given both builds, reads what the
+request and response layer costs on top. A byte-identical copy of the
+carrier gives the noise band.
+
+BENCH_TABLE
