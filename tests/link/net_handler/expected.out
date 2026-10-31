@@ -1,0 +1,41 @@
+PASS  the handler answers its codes as named
+PASS  a GET of a text route is answered 200 with its body
+PASS  and its content type
+PASS  a parameter and a form-decoded query come back as JSON
+PASS  as application/json
+PASS  a query without the name leaves it out
+PASS  a malformed escape in the query is the program's 400
+PASS  HEAD takes the GET route and is answered with its length and no body
+PASS  an unknown path is 404
+PASS  as an RFC 9457 problem
+PASS  a method the path does not take is 405
+PASS  with an Allow naming GET and DELETE
+PASS  and a second one reuses the Allow value made for the first
+PASS  a parameter that is not a number is the program's 400
+PASS  a body is echoed
+PASS  a chunked body is gathered whole
+PASS  a response written in three pieces arrives chunked
+PASS  an empty answer is a 204 with no body
+PASS  the client's close is seen
+PASS  a declared body one byte over the cap is answered 413
+PASS  and the connection ends
+PASS  a body exactly at the cap is taken whole and echoed byte for byte
+PASS  both clients are gone
+PASS  the first of three pipelined requests is answered first
+PASS  then the second
+PASS  then the third
+PASS  the pipelining client is gone
+PASS  a request the program holds is taken
+PASS  its peer leaves, and the idle timeout ends the connection before the answer
+PASS  the late answer is dropped
+PASS  a second request is held
+PASS  and its peer leaves and times out too
+PASS  a new connection on the freed slot is answered
+PASS  an answer for the old connection is dropped though the slot is in use again
+PASS  and the new connection never sees it
+PASS  the dropped requests went back to the pool
+PASS  the last client is gone
+PASS  a warm connection answers two thousand more requests, two pipelined at a time
+PASS  and the arena stays flat
+PASS  and the pool makes no request past its warm size
+PASS  the warm client is gone
