@@ -999,7 +999,11 @@ export class RuntimeTable {
       )
     )
     this.add(
-      plain("nish_peer_credentials", `declare noundef i32 @nish_peer_credentials(i32 noundef, ${NET_BUFFER})`, EFFECT_WRITE)
+      plain(
+        "nish_peer_credentials",
+        `declare noundef i32 @nish_peer_credentials(i32 noundef, ${NET_BUFFER})`,
+        EFFECT_WRITE
+      )
     )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
