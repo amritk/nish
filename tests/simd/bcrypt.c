@@ -33,6 +33,10 @@
 
 static long cases;
 
+#if defined(__x86_64__)
+
+/* The random states and the reference only feed the kernels, which exist on
+   x86-64 alone; elsewhere the driver checks the resolver. */
 static uint64_t rng_state;
 static uint32_t rnd(void) {
   rng_state ^= rng_state << 13;
@@ -69,8 +73,6 @@ static void ref_body(uint32_t *st) {
     st[i + 1] = r;
   }
 }
-
-#if defined(__x86_64__)
 
 /* ---- The kernels -------------------------------------------------------------- */
 
@@ -222,12 +224,11 @@ static int resolves(const char *pin, int want_answer) {
 }
 
 int main(int argc, char **argv) {
-  uint64_t seed = argc > 1 ? strtoull(argv[1], NULL, 10) : 20261031;
-  rng_state = seed | 1;
-
   const char *path;
   int hw = 0;
 #if defined(__x86_64__)
+  uint64_t seed = argc > 1 ? strtoull(argv[1], NULL, 10) : 20261031;
+  rng_state = seed | 1;
   hw = nish_bcrypt_cpu();
   path = hw ? "bmi2" : "the reference alone (bmi2 SKIPPED: this CPU has no BMI1 and BMI2)";
   if (hw) {
@@ -241,7 +242,9 @@ int main(int argc, char **argv) {
     if (!guard()) return 1;
   }
 #else
-  path = "the reference alone (no kernel on this target)";
+  (void)argc;
+  (void)argv;
+  path = "the resolver alone (no kernel on this target)";
 #endif
 
   if (!resolves("soft", 0) || !resolves(NULL, hw) || !resolves("hw", hw) || !resolves("softer", hw)) return 1;
