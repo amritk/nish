@@ -313,7 +313,7 @@ class PreforkSupervisor {
 
   /**
    * Start worker `index` with its channel ends, the service ones from
-   * `pairs`; false when a socketpair or the spawn failed.
+   * `pairs`; false when a socketpair, the loop or the spawn refused it.
    */
   start(index: i32): boolean {
     const fds: i32[] = []
@@ -321,6 +321,12 @@ class PreforkSupervisor {
     if (this.config.supervisorChannels) {
       const pair: i32[] = [-1, -1]
       if (unixSocketPair(this.config.channelKind, pair) !== 0) {
+        return false
+      }
+      // On the loop before the worker starts, so a refusal is a failed start.
+      if (pollAdd(this.loop, pair[0], 1, index + 1) < 0) {
+        netClose(pair[0])
+        netClose(pair[1])
         return false
       }
       own = pair[0]
@@ -363,7 +369,6 @@ class PreforkSupervisor {
     const slot: PreforkSlot = this.slots[index]
     if (own >= 0) {
       slot.channel = own
-      pollAdd(this.loop, own, 1, index + 1)
     }
     slot.pid = pid
     slot.at = preforkNowMs()
