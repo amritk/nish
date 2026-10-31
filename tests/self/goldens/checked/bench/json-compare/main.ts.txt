@@ -695,13 +695,24 @@ function jsonWriterPutDigits64(w: JsonWriter, v: i64): boolean -> @nish.jsonWrit
   local -2:9 width: i32 (const)
   local +7:12 k: i32 (let)
   local +8:11 digit: i32 (const)
-function jsonWriterPutF64(w: JsonWriter, v: f64): boolean -> @nish.jsonWriterPutF64
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.jsonWriterPutText
-  calls: nish.jsonWriterPutText nish_arena_mark nish_arena_release nish_str_from_f64
-  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterPutText#0
+function jsonPutF64Walk(buf: u8[], at: i32, v: f64): i32 -> @nish.jsonPutF64Walk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_from_f64
+  pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +0:62 jsonWriterPutText -> @nish.jsonWriterPutText
+  local -6:9 text: string (const)
+  local -5:9 n: i32 (const)
+  local -1:12 k: i32 (let)
+function jsonWriterPutF64(w: JsonWriter, v: f64): boolean -> @nish.jsonWriterPutF64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: v
+  calls: nish.jsonPutF64Walk
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 stop: i32 (const)
+  callee -2:21 jsonPutF64Walk -> @nish.jsonPutF64Walk
 function jsonStringifyString(s: string): string -> @nish.jsonStringifyString [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.constructor

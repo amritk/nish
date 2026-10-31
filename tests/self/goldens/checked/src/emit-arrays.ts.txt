@@ -30,6 +30,7 @@ import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
+import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -267,7 +268,7 @@ function inlineHeaderPointer(emitter: Emitter, info: StructInfo, receiver: strin
   calls: Emitter.declareType IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.declareType#0
   pointer info: size=168 writesThrough=false captured=false
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 Emitter.declareType -> @Emitter.declareType
   local +1:9 ty: string (const)
@@ -278,7 +279,7 @@ function inlineDataPointer(emitter: Emitter, info: StructInfo, receiver: string,
   calls: Emitter.llvm IRFunction.emitValue TypeTable.refOf nish_str_concat nish_str_from_i32
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvm#0
   pointer info: size=168 writesThrough=false captured=false
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   local +1:9 slot: string (const)
@@ -327,7 +328,7 @@ function emitInlineArrayAssignment(emitter: Emitter, expr: Node, field: FieldInf
   calls: CheckedProgram.inlineAssignLength Emitter.declare Emitter.emitExpression IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize inlineDataPointer inlineHeaderPointer inlineOwnerOf internalErrorFor loadHeaderField nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType storeElement storeHeaderField unwrapParens
   pointer emitter: size=296 writesThrough=true captured=false passedTo=inlineOwnerOf#0 elementSize#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 inlineHeaderPointer#0 inlineDataPointer#0 slotType#0 storeElement#0 Emitter.declare#0 elementAccess#0 loadHeaderField#0 Emitter.declare#0 elementAccess#0 storeHeaderField#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckedProgram.inlineAssignLength#1
-  pointer field: size=64 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
+  pointer field: size=72 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
   stackSites=1 stackLocals=1
   local +0:9 target: Node (const)
   callee +0:18 unwrapParens -> @unwrapParens
@@ -1645,6 +1646,21 @@ function emitBytesKernel(emitter: Emitter, walk: i32, values: string[]): string 
   callee +15:17 Emitter.useRuntime -> @Emitter.useRuntime
   callee +15:36 bytesKernelOf -> @bytesKernelOf
   callee +17:10 IRFunction.emitValue -> @IRFunction.emitValue
+function emitJsonPutF64Kernel(emitter: Emitter, values: string[]): string -> @emitJsonPutF64Kernel [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadData
+  calls: Emitter.useRuntime IRFunction.emitValue loadData loadLength nish_panic_index nish_str_concat
+  pointer emitter: size=296 writesThrough=false captured=false passedTo=loadData#0 loadLength#0 Emitter.useRuntime#0
+  pointer values: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 data: string (const)
+  callee +1:16 loadData -> @loadData
+  local +2:9 length: string (const)
+  callee +2:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:44 loadLength -> @loadLength
+  callee +3:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:17 Emitter.useRuntime -> @Emitter.useRuntime
 function bytePointer(emitter: Emitter, arr: string, at: string): string -> @bytePointer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via loadData

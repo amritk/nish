@@ -1791,16 +1791,45 @@ const jsonWriterPutDigits64 = (w: JsonWriter, v: i64): boolean => {
 }
 
 /**
- * The digits `${v}` spells for a finite `v`, at the cursor. They are a string
+ * The digits `${v}` spells for a finite `v`, in `buf` from `at`: the new end,
+ * or -1, with nothing written, when `at` is negative or they do not fit —
+ * `jsonWriterPutText`'s rule. Natively the compiler replaces the one call to
+ * it with the runtime's `nish_json_put_f64` (`src/kernels.ts`), which formats
+ * into the stack and copies, so no string is built at all; that is why the
+ * walk takes the array and the cursor rather than the writer.
+ *
+ * As written, which is what Node and `--emit-ts` run, the digits are a string
  * the runtime builds, and nothing holds it once its bytes are copied, so the
  * function's automatic arena scope (LANGUAGE.md, "Memory model", item 2)
  * gives it back before the call returns: a loop of `f64` writes keeps
- * `Arena.used()` flat like every other write, and `tests/link/std_json_writer`
- * measures it. The scope is the compiler's rather than a `using a = arena()`
- * block because this module also runs under Node, which `tests/run.js` holds
- * to `JSON.stringify`, and Node 22 does not parse `using`.
+ * `Arena.used()` flat like every other write either way, and
+ * `tests/link/std_json_writer` measures it. The scope is the compiler's rather
+ * than a `using a = arena()` block because this module also runs under Node,
+ * which `tests/run.js` holds to `JSON.stringify`, and Node 22 does not parse
+ * `using`.
  */
-const jsonWriterPutF64 = (w: JsonWriter, v: f64): boolean => jsonWriterPutText(w, `${v}`)
+const jsonPutF64Walk = (buf: u8[], at: i32, v: f64): i32 => {
+  const text: string = `${v}`
+  const n: i32 = toI32(text.length)
+  if (at < 0 || at > toI32(buf.length) - n) {
+    return -1
+  }
+  for (let k: i32 = 0; k < n && at + k < toI32(buf.length); k += 1) {
+    buf[at + k] = toU8(text.charCodeAt(k))
+  }
+  return at + n
+}
+
+/** The digits `${v}` spells for a finite `v`, at the cursor; all of them or, with `JSON_WRITE_FULL`, none. */
+const jsonWriterPutF64 = (w: JsonWriter, v: f64): boolean => {
+  const stop: i32 = jsonPutF64Walk(w.buf, w.end, v)
+  if (stop < 0) {
+    w.failed = JSON_WRITE_FULL
+    return false
+  }
+  w.end = stop
+  return true
+}
 
 /**
  * `s` as `JSON.stringify(s)` writes it — quoted, with the escapes

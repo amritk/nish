@@ -9452,12 +9452,15 @@ export const main = (): i32 => {
   | --- | --- | --- |
   | `static json` without `readonly` but with a type, `static readonly json` with a type annotation, or on a generic class | NL2492 | `json_reject_options_mutable_typed`, `json_reject_options_annotated`, `json_reject_options_generic`, and on a generic class nothing instantiates, `json_reject_options_generic_unused` |
   | options, `rename`, a key or an `optional` entry not written as the literal it must be: a module constant, an array for the object, a string for `optional`'s array | NL2493 | `json_reject_options_alias`, `json_reject_options_alias_whole`, `json_reject_options_not_object`, `json_reject_options_optional_not_array` |
-  | an option other than `rename` and `optional` | NL2494 | `json_reject_options_unknown` |
+  | an option other than `rename`, `optional` and `presence` | NL2494 | `json_reject_options_unknown` |
   | a name that is not one of the class's fields | NL2495 | `json_reject_options_misspelt_rename`, `json_reject_options_misspelt_optional` |
   | a rename to a value that is not a string | NL2496 | `json_reject_options_rename_number` |
   | two fields with one key, a rename to another field's own name included, or a field renamed or made optional twice | NL2497 | `json_reject_options_wire_collides`, `json_reject_options_wire_twice`, `json_reject_options_optional_twice` |
   | an optional field with no initializer | NL2498 | `json_reject_options_no_initializer` |
   | a rename to a key that is not valid UTF-8, a lone surrogate such as `"\ud800"` included, which no input could give | NL2499 | `json_reject_options_surrogate` |
+  | `presence` or one of its entries not written as an object literal of string literals | NL2493 | `json_reject_presence_not_object`, `json_reject_presence_not_literal` |
+  | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
+  | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `reject_json_presence_twice` |
 
   A spread or a computed key in the literal is refused by Phase 0 as it is
   anywhere (NL1061, NL1041; `reject_json_options_spread`,
@@ -9477,6 +9480,36 @@ export const main = (): i32 => {
   a namespace of their own ("order: a json field before the options
   decodes", "order: a json method before the options decodes"). Under Node the literal is a
   static property of the class that nothing reads.
+- **`presence` records which keys were given.** A third option names, for a
+  field, a `boolean` field of the same class that every decoding sets to
+  whether the input gave that field's key; a key given `null` is given:
+
+  ```typescript
+  class UserPatch {
+    static readonly json = { optional: ["email"], presence: { email: "hasEmail" } };
+    email: string | null = null;
+    hasEmail: boolean = false;
+  }
+  ```
+
+  So `{}` leaves `hasEmail` false, and `{"email":null}` and `{"email":"a"}`
+  set it true, which `optional` alone cannot tell apart from a key given the
+  initializer. Any field may be recorded, of any kind the decoder takes and
+  optional or not (`tests/link/json_presence`). The presence field is off the
+  wire: no key decodes into it, `jsonEncode` leaves it out, it takes no part
+  in the key-uniqueness rule, and no option renames it, makes it optional or
+  records it. It is set when the object closes, from the per-field flag the
+  decoder already keeps to report a duplicate or a missing key: one `store i1`
+  per recorded field, no allocation, and a class that records nothing compiles
+  to the code it did before. Each object decoded sets its own, so a nested
+  class, an array element and a map's value answer for their own keys, and a
+  second decoding into one object answers for its own input. A decoding that
+  fails may have set some presence fields and not others (none, when the input
+  is not an object), so they are read only after `JSON_DECODE_OK`. A JSON Merge Patch (RFC 7396) is applied with it: the patch
+  is a class whose fields are all optional and recorded, and `null` on a field
+  that is not `| null` is `JSON_DECODE_TYPE`, so the patch is refused before
+  any of it is applied (`examples/merge-patch.ts`,
+  `tests/link/json_merge_patch`).
 - **A `JsonNumber` is a number's text.** `JsonNumber`, from `nish/json-typed`,
   holds a number as the bytes it was written in, so a field of it decodes and
   encodes any number byte for byte: an integer wider than a `u64`, a fraction

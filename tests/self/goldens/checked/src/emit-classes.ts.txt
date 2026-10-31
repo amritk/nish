@@ -69,7 +69,7 @@ function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
   pointer emitter: size=296 writesThrough=false captured=false
   pointer info: size=168 writesThrough=false captured=false passedTo=structTypeName#0
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 structTypeName -> @structTypeName
@@ -81,7 +81,7 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue fieldTbaa nish_str_concat structFieldPointer
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
   pointer info: size=168 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
-  pointer field: size=64 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
+  pointer field: size=72 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
@@ -98,7 +98,7 @@ function storeField(emitter: Emitter, info: StructInfo, receiver: string, field:
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit fieldTbaa nish_str_concat structFieldPointer
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
   pointer info: size=168 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
-  pointer field: size=64 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
+  pointer field: size=72 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
@@ -137,7 +137,7 @@ function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @ini
   sharedWrite: via nish_exit
   calls: Emitter.stringConstant floatText internalErrorFor isFloat nish_exit nish_panic_index nish_panic_overflow nish_str_from_i32 nish_str_from_i64 numericLiteralValue parseIntegerLiteral
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.stringConstant#0 Emitter.stringConstant#0
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 init: Node | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
@@ -395,7 +395,7 @@ function fieldLLVMType(emitter: Emitter, field: FieldInfo): string -> @fieldLLVM
   sharedWrite: via Emitter.llvm
   calls: Emitter.llvm FieldInfo.inline TypeTable.refOf nish_str_concat nish_str_from_i32
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0
-  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=72 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee +0:8 FieldInfo.inline -> @FieldInfo.inline
   callee +1:12 Emitter.llvm -> @Emitter.llvm

@@ -88,7 +88,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/hpack, net/http-client, net/http-compress, net/http-fields, net/http1, net/http1-client, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/postgres, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/url, net/websocket, net/webtransport, pair, random, regex, secret, sqlite, sync/ring, sync/shm, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
+  "base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/handler, net/hpack, net/http-client, net/http-compress, net/http-fields, net/http1, net/http1-client, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/postgres, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/url, net/websocket, net/webtransport, pair, random, regex, secret, sqlite, sync/ring, sync/shm, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -161,6 +161,16 @@ const BYTES_SPECIFIER: string = "nish/bytes"
 /** Whether a module is the standard library's `std/bytes.ts`: the package is part of the test, as for `isTextModule`. */
 export const isBytesModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(BYTES_SPECIFIER)
+
+/**
+ * `nish/json`: ordinary Nish but for one call, the writer's f64 walk, which
+ * the emitter replaces with a runtime kernel (`src/kernels.ts`).
+ */
+const JSON_SPECIFIER: string = "nish/json"
+
+/** Whether a module is the standard library's `std/json.ts`: the package is part of the test, as for `isTextModule`. */
+export const isJsonModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(JSON_SPECIFIER)
 
 /**
  * `nish/crypto/aes`: ordinary Nish but for four calls, the seams the emitter
