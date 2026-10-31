@@ -679,7 +679,8 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
  * supervisor closes it after a hang-up, when the worker is reaped and when it
  * stops, and a restarted worker comes with a new one. Panics, besides, when
  * `serviceWorker` is not below the worker count or the count is above 64 with
- * a service worker, the most `spawnWithFds` hands one child.
+ * a service worker, the most `spawnWithFds` hands one child; and, through
+ * `preforkInvalid`, on seqpacket channels off Linux.
  */
 export const preforkSupervise = <S>(
   args: string[],
