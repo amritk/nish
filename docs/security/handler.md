@@ -25,8 +25,9 @@ before merge found four faults and fixed each with a test that failed
 before the fix (HANDLER-9 to HANDLER-12): a draining connection that kept
 reading pipelined requests, a listener that spun the loop when an accept
 failed for want of descriptors, length checks that missed bytes still
-pending, and `sendJson` sending a value no `json()` began. None is left
-open. Two properties are the program's, by design, and
+pending, and `sendJson` sending a value no `json()` began. A fifth, a body
+trickled a byte at a time inside the carrier's idle timeout, holds a slot no
+longer than `bodyTimeout` (HANDLER-5). None is left open. Two properties are the program's, by design, and
 are recorded as accepted: how many taken requests it holds unanswered
 (HANDLER-7) and what it does with a parameter or query value (HANDLER-8).
 
@@ -34,7 +35,7 @@ are recorded as accepted: how many taken requests it holds unanswered
 
 | File | Functions |
 | --- | --- |
-| `std/net/handler.ts` | `HandlerLimits`; `HttpRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpHandler` (`watch`, `fired`, `wait`, `drain`, `acceptAll`, `drive`, `roomy`, `begin`, `route`, `gather`, `whole`, `enqueue`, `resume`, `pushPending`, `finish`, `obtain`, `release`, `releaseReading`, `closeSlot`, `forget`, `sweep`, `ready`, `take`, `live`, `pooled`, `connections`, `start`, `write`, `keep`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `writeProblem`, `writeProblemObject`, `refuse`, `allowFor`); the helpers `handlerAllowAppend`, `handlerGrown`, `handlerSpanIs`, `handlerDecimal`, `handlerFormByte`, `handlerFormIs`, `handlerFormDecode` |
+| `std/net/handler.ts` | `HandlerLimits`; `HttpRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpHandler` (`watch`, `fired`, `wait`, `expireBodies`, `drain`, `acceptAll`, `drive`, `roomy`, `begin`, `route`, `gather`, `whole`, `enqueue`, `resume`, `pushPending`, `finish`, `obtain`, `release`, `releaseReading`, `closeSlot`, `forget`, `sweep`, `ready`, `take`, `live`, `pooled`, `connections`, `start`, `write`, `keep`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `writeProblem`, `writeProblemObject`, `refuse`, `allowFor`); the helpers `handlerAllowAppend`, `handlerGrown`, `handlerSpanIs`, `handlerDecimal`, `handlerFormByte`, `handlerFormIs`, `handlerFormDecode` |
 
 Out of scope: the carrier (`std/net/http1-server.ts`, `std/net/http1.ts`;
 `docs/security/http1.md`), which has refused a malformed or oversized head,
@@ -71,7 +72,7 @@ none is open.
 | HANDLER-2 | Medium if it failed | `begin` | Copying a head out of the carrier must not read or write past either buffer. | **Holds.** `begin` copies `p.headLength` bytes and `4 * headerCount` spans, the parser's own counts, which the carrier's head and field caps bound, into buffers grown to fit first. Every span a program reads afterwards is into that copy. |
 | HANDLER-3 | High if it failed | `live`, `finish`, `closeSlot`, `forget` | An answer for a request whose connection closed — the peer left, the idle timeout passed — must not reach whoever holds the slot now. | **Holds.** Each slot carries a generation, bumped when its connection closes, and a request remembers the one it was read under; an answer for a stale generation answers `HANDLER_DROPPED`, sends nothing and hands the request back to the pool. |
 | HANDLER-4 | Medium if it failed | `whole`, `resume`, `pushPending` | Pipelined requests must be answered in order, and a peer that never reads must not make the handler buffer answers without bound. | **Holds.** The carrier reads a connection's next request only once the one before it is answered, and `whole` parks a finished request while more than half an output of the answer before it is unsent (`roomy`), so a connection holds one answer in flight. |
-| HANDLER-5 | Medium if it failed | `drive`, `sweep` | A slow or silent peer must not hold a slot past the carrier's timeouts, nor its request past its connection. | **Holds.** The carrier's head, body and idle deadlines close the connection; `sweep` then releases the request being read, and one taken is dropped when answered (HANDLER-3). |
+| HANDLER-5 | Medium | `wait`, `expireBodies`, `begin`, `sweep` | A slow or silent peer must not hold a slot past a deadline, nor its request past its connection. The carrier bounds a head (`headTimeout`) and silence (`idleTimeout`) but not a body: its idle timeout restarts on every byte, so a peer that sent a body a byte at a time, each inside `idleTimeout`, held its slot for as long as it liked, and with every slot held new connections were shed. | **Fixed.** `HandlerLimits.bodyTimeout` (30 s by default; 0 or less refused at construction) is a deadline for a whole body, counted from the turn its head was read (`begin` stamps `since`). `wait` checks it at most once a second (`expireBodies`) and closes a connection whose request is still being read past it; `sweep` then releases the request, and one taken is dropped when answered (HANDLER-3). Before the fix "a body trickled inside the idle timeout is cut off at the body deadline" and "with no answer" failed in `tests/link/net_handler`. |
 | HANDLER-6 | Low if it failed | `queryIndex`, `handlerFormByte`, `handlerFormDecode`, `route` | A malformed escape in the query must not be read past, and HEAD must not reach a route GET does not. | **Holds.** Each escape is checked before it is used; a `%` at the end or with a non-hex digit matches nothing and decodes to `ROUTER_BAD_ESCAPE`, a decoded length past `out` to `ROUTER_NO_ROOM`. A HEAD takes a route only through the router's own match for GET on the same target. |
 | HANDLER-7 | Low | `take` | A request the program has taken and not answered stays allocated, even after its connection closes and a new one takes the slot, so a program that never answers grows the pool by one request per connection. | **Accepted.** Answering later is the point of the pull interface; how long the program holds a request is its policy. Answering, even with a dropped result, returns it. `tests/link/net_handler` pins that the pool makes no request past its warm size when every request is answered. |
 | HANDLER-8 | Low | `param`, `query` | A decoded parameter or query value may hold `/`, `..`, NUL or any byte. | **Accepted.** As ROUTE-8 and ROUTE-9 record, refusing those is the caller's job; the handler hands the bytes over as ranges and decodes only on request. A query value decodes through `percentDecode` (`docs/security/url.md`) with `URL_DECODE_ALLOW_NUL`, so `%00` is a NUL byte there as it is in a parameter. |
@@ -97,8 +98,15 @@ dropped", "a new connection on the freed slot is answered", "an answer for
 the old connection is dropped though the slot is in use again", "and the new
 connection never sees it", "the dropped requests went back to the pool".
 
-**Order** (HANDLER-4): "the first of three pipelined requests is answered
-first", "then the second", "then the third".
+**Order and backpressure** (HANDLER-4): "the first of three pipelined
+requests is answered first", "then the second", "then the third"; with 128
+answers of 200 KB pipelined, "a peer that pipelines large answers and reads
+none is given only what its socket holds", "once it reads, every answer
+comes, in order and whole".
+
+**The body deadline** (HANDLER-5): "a body sent whole inside the body
+deadline is answered", "a body trickled inside the idle timeout is cut off at
+the body deadline", "with no answer", "and its slot is freed".
 
 **Queries and HEAD** (HANDLER-6): "a parameter and a form-decoded query come
 back as JSON", "a query without the name leaves it out", "a %00 in the query

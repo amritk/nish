@@ -73,7 +73,7 @@ function App.constructor(this: App, h: HttpHandler, config: Config): void -> @Ap
   escaping: h
   calls: Notes.constructor nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
-  pointer h: size=208 writesThrough=true captured=true
+  pointer h: size=232 writesThrough=true captured=true
   pointer config: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new Notes -> @Notes.constructor
@@ -82,7 +82,7 @@ function App.answer(this: App, req: HttpRequest): void -> @App.answer [exported 
   sharedWrite: via App.dispatch
   calls: App.dispatch nish.http1Text nish_print nish_str_concat nish_str_from_i32
   pointer this: size=24 writesThrough=false captured=false passedTo=App.dispatch#0
-  pointer req: size=112 writesThrough=true captured=false passedTo=App.dispatch#1
+  pointer req: size=120 writesThrough=true captured=false passedTo=App.dispatch#1
   stackSites=0 stackLocals=0
   local +0:9 line: string (let)
   callee +3:17 http1Text -> @nish.http1Text
@@ -94,7 +94,7 @@ function App.dispatch(this: App, req: HttpRequest): i32 -> @App.dispatch [export
   sharedWrite: via nish.HttpHandler.json
   calls: Notes.add Notes.count Notes.find Notes.remove nish.HttpHandler.empty nish.HttpHandler.json nish.HttpHandler.problem nish.HttpHandler.refuse nish.HttpHandler.sendJson nish.HttpRequest.paramDecimal nish.JsonWriter.beginArray nish.JsonWriter.beginObject nish.JsonWriter.endArray nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.string nish.jsonField nish_panic_index nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_new writeNote
   pointer this: size=24 writesThrough=false captured=false
-  pointer req: size=112 writesThrough=true captured=false passedTo=nish.HttpHandler.sendJson#1 nish.HttpHandler.sendJson#1 nish.HttpHandler.problem#1 nish.HttpHandler.problem#1 nish.HttpHandler.sendJson#1 nish.HttpRequest.paramDecimal#0 nish.HttpHandler.problem#1 nish.HttpHandler.sendJson#1 nish.HttpRequest.paramDecimal#0 nish.HttpHandler.problem#1 nish.HttpHandler.empty#1 nish.HttpHandler.refuse#1
+  pointer req: size=120 writesThrough=true captured=false passedTo=nish.HttpHandler.sendJson#1 nish.HttpHandler.sendJson#1 nish.HttpHandler.problem#1 nish.HttpHandler.problem#1 nish.HttpHandler.sendJson#1 nish.HttpRequest.paramDecimal#0 nish.HttpHandler.problem#1 nish.HttpHandler.sendJson#1 nish.HttpRequest.paramDecimal#0 nish.HttpHandler.problem#1 nish.HttpHandler.empty#1 nish.HttpHandler.refuse#1
   stackSites=0 stackLocals=0
   local +0:11 h: HttpHandler (const)
   local +3:15 w: JsonWriter (const)

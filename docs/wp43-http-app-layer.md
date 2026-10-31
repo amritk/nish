@@ -18,9 +18,10 @@ depend on how a program is laid out:
 
 1. **The router** (`nish/net/router`), now. Method and path to a route index,
    with parameters as byte ranges.
-2. **The handler interface**, now over HTTP/1.1 (§5). One request view (method, path, query,
-   fields, a body reader) and one response writer over `http1-server`,
-   `http2-tls` and `http3-server`, with Alt-Svc advertising h3.
+2. **The handler interface**, now, over HTTP/1.1 only (§5). One request view
+   (method, path, query, fields, a body reader) and one response writer over
+   `http1-server`; `http2-tls` and `http3-server`, with Alt-Svc advertising
+   h3, come after it.
 3. **Static files**, later. MIME types, `ETag` and `Last-Modified`, `Range`,
    and a path normalisation that refuses traversal, on WP36's `fs.read` policy.
 4. **Compression**, later. gzip and deflate for responses, and a

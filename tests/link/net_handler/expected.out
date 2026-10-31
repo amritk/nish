@@ -37,6 +37,13 @@ PASS  an answer for the old connection is dropped though the slot is in use agai
 PASS  and the new connection never sees it
 PASS  the dropped requests went back to the pool
 PASS  the last client is gone
+PASS  a body sent whole inside the body deadline is answered
+PASS  a body trickled inside the idle timeout is cut off at the body deadline
+PASS  with no answer
+PASS  and its slot is freed
+PASS  a peer that pipelines large answers and reads none is given only what its socket holds
+PASS  once it reads, every answer comes, in order and whole
+PASS  the reading client is gone
 PASS  a warm connection answers two thousand more requests, two pipelined at a time
 PASS  and the arena stays flat
 PASS  and the pool makes no request past its warm size

@@ -1,4 +1,4 @@
-// The route lists `bench/http1-server.ts` and `bench/http-app.ts` both add,
+// The route lists `bench/http1-server.ts` and `bench/http-app-carrier.ts` both add,
 // so that the carrier's server and the handler's pay for the same table.
 
 /**

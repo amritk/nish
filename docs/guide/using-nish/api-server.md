@@ -132,6 +132,7 @@ handler's pool, so do not keep it after answering.
 | Field | Default | Past it |
 | --- | --- | --- |
 | `http.maxBody` | 1 MiB | the request is answered 413 and its connection ends |
+| `bodyTimeout` | 30 000 ms | a body still arriving that long after its head ends its connection |
 | `slots` | 256 | a new connection is accepted and closed at once |
 | `jsonBytes` | 64 KiB | `sendJson` answers 500 |
 | `maxEvents` | 256 | readiness events wait for the next turn |
@@ -141,7 +142,9 @@ listener's backlog: the handler stops accepting for 100 ms, then tries
 again, rather than spin.
 
 `http` is the HTTP/1.1 carrier's own configuration (`Http1Config`): its head
-size and field count caps, and its head, body and idle timeouts. Each slot
+size and field count caps, its head timeout and its idle timeout. The idle
+timeout restarts on every byte, so `bodyTimeout` is what stops a client that
+sends its body one byte at a time. Each slot
 keeps a body buffer as large as the largest body it has held, so a server
 holds at most `slots` times `http.maxBody` in bodies. Once warm, a request
 allocates nothing.

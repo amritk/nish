@@ -10,9 +10,13 @@
 //   4. The late answer: a request held while its peer leaves answers
 //      HANDLER_DROPPED, also once a new connection has taken its slot, and the
 //      new connection is answered as if nothing happened.
-//   5. The flat arena: a warm connection serves two thousand requests with
+//   5. The body deadline: a body trickled a byte at a time, each inside the
+//      idle timeout, is cut off at `bodyTimeout` with no answer.
+//   6. Backpressure: a peer that pipelines large answers and reads none is
+//      given only what its socket holds, then every answer once it reads.
+//   7. The flat arena: a warm connection serves two thousand requests with
 //      `Arena.used()` unchanged and no request made past the pool.
-//   6. The drain: an idle connection closes at once, no new one is accepted,
+//   8. The drain: an idle connection closes at once, no new one is accepted,
 //      and a held request is still answered before its connection closes,
 //      with `Connection: close` and no pipelined request read behind it.
 import { copyBytes } from "nish/bytes"
@@ -51,9 +55,14 @@ const SLOW: i32 = 3
 const STREAM: i32 = 4
 const REMOVE: i32 = 5
 const PROBLEM: i32 = 6
+const BIG: i32 = 7
 
 const CAP: i32 = 65536
 const FIVE_SECONDS: i64 = 5000000000
+const MILLISECOND: i64 = 1000000
+/** The body of `GET /big`, and how many of it a peer pipelines and does not read. */
+const BIG_LENGTH: i32 = 200000
+const BIG_COUNT: i32 = 128
 
 /** The server half: the handler, and the requests it holds unanswered on purpose. */
 class App {
@@ -67,10 +76,13 @@ class App {
   streamNames: u8[][]
   streamValues: u8[][]
   pieces: u8[][]
+  big: u8[]
   port: i32 = 0
   failures: i32 = 0
+  /** How many `GET /big` the program has answered. */
+  bigCount: i32 = 0
 
-  constructor(idleMs: i32) {
+  constructor(idleMs: i32, bodyMs: i32) {
     const router = new Router(new RouterLimits())
     router.add("GET", "/")
     router.add("GET", "/users/:id")
@@ -79,10 +91,12 @@ class App {
     router.add("GET", "/stream")
     router.add("DELETE", "/users/:id")
     router.add("GET", "/problem")
+    router.add("GET", "/big")
     const limits = new HandlerLimits()
     limits.slots = 8
     limits.http.maxBody = CAP
     limits.http.idleTimeout = idleMs
+    limits.bodyTimeout = bodyMs
     const listener: i32 = tcpListen("127.0.0.1", 0, 64)
     this.port = netLocalPort(listener)
     this.h = new HttpHandler(limits, listener, router)
@@ -94,6 +108,7 @@ class App {
     this.streamNames = [ascii("content-type")]
     this.streamValues = [ascii("text/plain")]
     this.pieces = [ascii("one,"), ascii("two,"), ascii("three")]
+    this.big = new Array<u8>(BIG_LENGTH)
   }
 
   /** One turn of the handler, then every whole request answered (or held, for `/slow`). */
@@ -159,6 +174,10 @@ class App {
         h.problem(req, 418, "I'm a teapot", detail)
         break
       }
+      case BIG:
+        this.bigCount += 1
+        h.send(req, 200, this.octets, this.big, ZERO, BIG_LENGTH)
+        break
       default:
         h.refuse(req)
     }
@@ -480,10 +499,60 @@ const lateAnswer = (app: App): void => {
   check(app, "an answer for the old connection is dropped though the slot is in use again", app.h.problem(s, 503, "Service Unavailable", "") === HANDLER_DROPPED)
   send(app, e, "GET /users/5 HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "and the new connection never sees it", response(app, e, false) && e.status === 200 && bodyIs(e, "{\"id\":5}"))
-  check(app, "the dropped requests went back to the pool", app.h.pooled() <= pooled + 2)
+  // Two requests were ever made, the held two; the new connection reused one, and both are back.
+  check(app, "the dropped requests went back to the pool", app.h.pooled() === pooled + 2)
   app.heldCount = 0
   netClose(e.fd)
   check(app, "the last client is gone", awaitConnections(app, toI32(0)))
+}
+
+const bodyDeadline = (app: App): void => {
+  const c = connect(app)
+  send(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 4\r\n\r\nfast")
+  check(app, "a body sent whole inside the body deadline is answered", response(app, c, false) && bodyIs(c, "fast"))
+  send(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 40\r\n\r\n")
+  // A byte every 100 ms keeps the connection inside its 300 ms idle timeout,
+  // so only the body deadline can end it before the fortieth.
+  const one: u8[] = ascii("x")
+  let sent: i32 = 0
+  while (sent < 40 && !c.closed) {
+    if (netWrite(c.fd, one, ZERO, toI32(1)) === 1) {
+      sent += 1
+    }
+    const until: i64 = monotonicNanos() + toI64(100) * MILLISECOND
+    while (!c.closed && monotonicNanos() < until) {
+      app.turn()
+      pull(c)
+    }
+  }
+  check(app, "a body trickled inside the idle timeout is cut off at the body deadline", c.closed && sent < 40)
+  check(app, "with no answer", c.length === c.responseLength)
+  check(app, "and its slot is freed", awaitConnections(app, toI32(0)))
+  netClose(c.fd)
+}
+
+const backpressure = (app: App): void => {
+  const c = connect(app)
+  let pipeline: string = ""
+  for (let k: i32 = 0; k < BIG_COUNT; k++) {
+    pipeline = pipeline + "GET /big HTTP/1.1\r\nHost: t\r\n\r\n"
+  }
+  send(app, c, pipeline)
+  const until: i64 = monotonicNanos() + toI64(500) * MILLISECOND
+  while (monotonicNanos() < until) {
+    app.turn()
+  }
+  const early: i32 = app.bigCount
+  check(app, "a peer that pipelines large answers and reads none is given only what its socket holds", early >= 1 && early < BIG_COUNT)
+  let good: i32 = 0
+  for (let k: i32 = 0; k < BIG_COUNT; k++) {
+    if (response(app, c, false) && c.status === 200 && c.bodyLength === BIG_LENGTH) {
+      good += 1
+    }
+  }
+  check(app, "once it reads, every answer comes, in order and whole", good === BIG_COUNT && app.bigCount === BIG_COUNT)
+  netClose(c.fd)
+  check(app, "the reading client is gone", awaitConnections(app, toI32(0)))
 }
 
 const flat = (app: App): void => {
@@ -551,7 +620,7 @@ const drainingPipelined = (app: App): void => {
 }
 
 export const main = (): i32 => {
-  const app = new App(toI32(60000))
+  const app = new App(toI32(60000), toI32(30000))
   check(app, "the handler answers its codes as named", HANDLER_SENT === 0 && HANDLER_DROPPED < 0 && HANDLER_ABSENT < 0)
   routing(app)
   limits(app)
@@ -559,9 +628,17 @@ export const main = (): i32 => {
   // A peer that closes may only have half-closed and still be waiting for
   // its answer, so a held request's connection ends at the idle timeout:
   // a short one here.
-  lateAnswer(new App(toI32(300)))
+  const late = new App(toI32(300), toI32(30000))
+  lateAnswer(late)
+  // The body deadline against a peer the idle timeout would keep.
+  const slow = new App(toI32(300), toI32(300))
+  bodyDeadline(slow)
+  backpressure(app)
   flat(app)
-  draining(new App(toI32(60000)))
-  drainingPipelined(new App(toI32(60000)))
-  return app.failures === 0 ? 0 : 1
+  const drained = new App(toI32(60000), toI32(30000))
+  draining(drained)
+  const drainedPipelined = new App(toI32(60000), toI32(30000))
+  drainingPipelined(drainedPipelined)
+  const failures: i32 = app.failures + late.failures + slow.failures + drained.failures + drainedPipelined.failures
+  return failures === 0 ? 0 : 1
 }

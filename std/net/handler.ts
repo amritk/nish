@@ -144,6 +144,9 @@ const HANDLER_ACCEPT_NONE: i32 = -11
 const HANDLER_ACCEPT_ABORTED: i32 = -103
 /** How long the listener rests after an accept fails for want of descriptors or memory: 100 ms. */
 const HANDLER_ACCEPT_REST: i64 = 100000000
+/** How often, at most, `wait` looks for a body past `bodyTimeout`: a second, in nanoseconds. */
+const HANDLER_BODY_SWEEP: i64 = 1000000000
+const HANDLER_NANOS_PER_MS: i64 = 1000000
 /** `handlerFormByte`'s count of bytes taken, in its bits above the byte. */
 const HANDLER_TOOK_ONE: i32 = 256
 const HANDLER_TOOK_THREE: i32 = 768
@@ -163,6 +166,15 @@ export class HandlerLimits {
   jsonBytes: i32 = 65536
   /** The most readiness events one `wait` takes. */
   maxEvents: i32 = 256
+  /**
+   * Milliseconds from a request's head to the end of its body. A request
+   * still reading its body past it has its connection closed: the carrier's
+   * `idleTimeout` is refreshed by every byte, so a body trickled a byte at a
+   * time would otherwise hold its slot for good (HANDLER-5). It is checked
+   * each `wait`, at most once a second, so a connection may outlive it by up
+   * to a second, or until `wait` returns.
+   */
+  bodyTimeout: i32 = 30000
 
   constructor() {
     this.http = new Http1Config()
@@ -186,6 +198,8 @@ export class HttpRequest {
   body: u8[]
   /** What the carrier had no room for yet: `pending[pendingStart .. pendingEnd)`. */
   pending: u8[]
+  /** When the head was read, as the handler's turn saw it (`monotonicNanos`); `bodyTimeout` runs from here. */
+  since: i64 = 0
   /** The index `Router.add` answered for the route, or a negative `ROUTER_*` code. */
   route: i32 = 0
   /** How many parameter pairs `params` holds. */
@@ -383,6 +397,12 @@ export class HttpHandler {
    * every turn while its connection waits. 0 while it is in the loop.
    */
   acceptRestUntil: i64 = 0
+  /** `bodyTimeout` in nanoseconds. */
+  bodyTimeout: i64 = 0
+  /** When the current turn's sockets were ready (`monotonicNanos`): a head read in it is stamped with this. */
+  turnAt: i64 = 0
+  /** When `wait` next looks for a body past `bodyTimeout`. */
+  bodyCheckAt: i64 = 0
   listener: i32 = 0
   loop: i32 = 0
   queueStart: i32 = 0
@@ -400,11 +420,12 @@ export class HttpHandler {
    * before the first `wait`.
    */
   constructor(limits: HandlerLimits, listener: i32, router: Router) {
-    if (limits.slots < 1 || limits.jsonBytes < 256 || limits.maxEvents < 1) {
+    if (limits.slots < 1 || limits.jsonBytes < 256 || limits.maxEvents < 1 || limits.bodyTimeout < 1) {
       panic(
-        `HttpHandler: slots ${limits.slots}, jsonBytes ${limits.jsonBytes} and maxEvents ${limits.maxEvents} need at least 1, 256 and 1`
+        `HttpHandler: slots ${limits.slots}, jsonBytes ${limits.jsonBytes}, maxEvents ${limits.maxEvents} and bodyTimeout ${limits.bodyTimeout} need at least 1, 256, 1 and 1`
       )
     }
+    this.bodyTimeout = toI64(limits.bodyTimeout) * HANDLER_NANOS_PER_MS
     this.server = new Http1Server(limits.http, listener, limits.slots)
     this.router = router
     this.listener = listener
@@ -486,6 +507,8 @@ export class HttpHandler {
       }
     }
     const n: i32 = pollWait(this.loop, this.readyFds, timeout)
+    const now: i64 = monotonicNanos()
+    this.turnAt = now
     for (let k: i32 = 0; k < n; k++) {
       const token: i32 = this.readyFds[2 * k]
       if (token === HANDLER_LISTENER) {
@@ -504,8 +527,12 @@ export class HttpHandler {
         this.drive(token)
       }
     }
-    if (this.server.expire(monotonicNanos()) > 0) {
+    if (this.server.expire(now) > 0) {
       this.sweep()
+    }
+    if (now >= this.bodyCheckAt) {
+      this.bodyCheckAt = now + HANDLER_BODY_SWEEP
+      this.expireBodies(now)
     }
     return this.queueCount
   }
@@ -643,6 +670,7 @@ export class HttpHandler {
     r.bodyLength = 0
     r.slot = slot
     r.gen = this.slotGen[slot]
+    r.since = this.turnAt
     r.state = HANDLER_READING
     r.pendingStart = 0
     r.pendingEnd = 0
@@ -831,6 +859,19 @@ export class HttpHandler {
       const r: HttpRequest = this.requests[at]
       if (r.state === HANDLER_READING || r.state === HANDLER_PARKED || r.state === HANDLER_FLUSHING) {
         this.release(r)
+      }
+    }
+  }
+
+  /** Closes every connection whose request has been reading its body for longer than `bodyTimeout` at `now`. */
+  expireBodies(now: i64): void {
+    for (let s: i32 = 0; s < toI32(this.current.length) && s < toI32(this.open.length); s++) {
+      const at: i32 = this.current[s]
+      if (this.open[s] && at >= 0 && at < toI32(this.requests.length)) {
+        const r: HttpRequest = this.requests[at]
+        if (r.state === HANDLER_READING && now - r.since > this.bodyTimeout) {
+          this.closeSlot(s)
+        }
       }
     }
   }
