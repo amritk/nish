@@ -4,13 +4,15 @@ PASS  and its content type
 PASS  a parameter and a form-decoded query come back as JSON
 PASS  as application/json
 PASS  a query without the name leaves it out
+PASS  a %00 in the query decodes to a NUL byte, as in a parameter
 PASS  a malformed escape in the query is the program's 400
 PASS  HEAD takes the GET route and is answered with its length and no body
 PASS  an unknown path is 404
 PASS  as an RFC 9457 problem
 PASS  a method the path does not take is 405
-PASS  with an Allow naming GET and DELETE
+PASS  with an Allow naming GET and DELETE, and HEAD for the GET
 PASS  and a second one reuses the Allow value made for the first
+PASS  a problem too large for the JSON buffer is sent without its detail
 PASS  a parameter that is not a number is the program's 400
 PASS  a body is echoed
 PASS  a chunked body is gathered whole
@@ -47,4 +49,8 @@ PASS  a draining handler accepts no new connection
 PASS  the held request is still answered
 PASS  and its client reads the answer
 PASS  then that connection closes too
+PASS  and none are left
+PASS  a held request with another pipelined behind it is taken
+PASS  a draining connection's answer says it closes
+PASS  and the pipelined request is not read: the connection closes
 PASS  and none are left

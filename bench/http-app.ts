@@ -229,17 +229,7 @@ class AppBench {
 
   /** Appends `r.head[start .. end)` to `this.out` at `at`, growing it; answers the new end. */
   put(r: HttpRequest, at: i32, start: i32, end: i32): i32 {
-    let size: i32 = toI32(this.out.length)
-    while (at + end - start > size) {
-      size = size * 2
-    }
-    if (size > toI32(this.out.length)) {
-      const grown: u8[] = new Array<u8>(size)
-      for (let k: i32 = 0; k < at && k < toI32(grown.length) && k < toI32(this.out.length); k++) {
-        grown[k] = this.out[k]
-      }
-      this.out = grown
-    }
+    this.room(at + end - start)
     for (
       let k: i32 = start;
       k < end && k < toI32(r.head.length) && at + k - start < toI32(this.out.length);
@@ -250,13 +240,29 @@ class AppBench {
     return at + end - start
   }
 
-  /** Appends one space to `this.out` at `at`; answers the new end. */
+  /** Appends one space to `this.out` at `at`, growing it; answers the new end. */
   space(at: i32): i32 {
+    this.room(at + 1)
     if (at >= 0 && at < toI32(this.out.length)) {
       this.out[at] = 32
       return at + 1
     }
     return at
+  }
+
+  /** Grows `this.out`, doubling, until it holds `need` bytes; what it held is kept. */
+  room(need: i32): void {
+    let size: i32 = toI32(this.out.length)
+    while (need > size) {
+      size = size * 2
+    }
+    if (size > toI32(this.out.length)) {
+      const grown: u8[] = new Array<u8>(size)
+      for (let k: i32 = 0; k < toI32(this.out.length); k++) {
+        grown[k] = this.out[k]
+      }
+      this.out = grown
+    }
   }
 
   /** `GET /id/:id?name=<name>`: answers `<id> <name>`, both as written, the name empty when the query has none. */

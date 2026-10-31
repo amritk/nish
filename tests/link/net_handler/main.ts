@@ -13,7 +13,8 @@
 //   5. The flat arena: a warm connection serves two thousand requests with
 //      `Arena.used()` unchanged and no request made past the pool.
 //   6. The drain: an idle connection closes at once, no new one is accepted,
-//      and a held request is still answered before its connection closes.
+//      and a held request is still answered before its connection closes,
+//      with `Connection: close` and no pipelined request read behind it.
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { HTTP1_CHUNKED } from "nish/net/http1"
@@ -49,6 +50,7 @@ const ECHO: i32 = 2
 const SLOW: i32 = 3
 const STREAM: i32 = 4
 const REMOVE: i32 = 5
+const PROBLEM: i32 = 6
 
 const CAP: i32 = 65536
 const FIVE_SECONDS: i64 = 5000000000
@@ -76,6 +78,7 @@ class App {
     router.add("GET", "/slow")
     router.add("GET", "/stream")
     router.add("DELETE", "/users/:id")
+    router.add("GET", "/problem")
     const limits = new HandlerLimits()
     limits.slots = 8
     limits.http.maxBody = CAP
@@ -147,6 +150,15 @@ class App {
       case REMOVE:
         h.empty(req, 204)
         break
+      case PROBLEM: {
+        // A detail twice the JSON buffer: the problem goes without it.
+        let detail: string = "x"
+        for (let k: i32 = 0; k < 17; k++) {
+          detail = detail + detail
+        }
+        h.problem(req, 418, "I'm a teapot", detail)
+        break
+      }
       default:
         h.refuse(req)
     }
@@ -370,6 +382,9 @@ const routing = (app: App): void => {
   send(app, c, "GET /users/7 HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a query without the name leaves it out", response(app, c, false) && bodyIs(c, "{\"id\":7}"))
 
+  send(app, c, "GET /users/7?name=a%00b HTTP/1.1\r\nHost: t\r\n\r\n")
+  check(app, "a %00 in the query decodes to a NUL byte, as in a parameter", response(app, c, false) && bodyIs(c, "{\"id\":7,\"name\":\"a\\u0000b\"}"))
+
   send(app, c, "GET /users/7?name=%zz HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a malformed escape in the query is the program's 400", response(app, c, false) && c.status === 400)
 
@@ -382,9 +397,12 @@ const routing = (app: App): void => {
 
   send(app, c, "PUT /users/3 HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n")
   check(app, "a method the path does not take is 405", response(app, c, false) && c.status === 405)
-  check(app, "with an Allow naming GET and DELETE", headHas(c, "\r\nallow: ") && headHas(c, "GET") && headHas(c, "DELETE") && !headHas(c, "POST"))
+  check(app, "with an Allow naming GET and DELETE, and HEAD for the GET", headHas(c, "\r\nallow: GET, DELETE, HEAD\r\n"))
   send(app, c, "PATCH /users/3 HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n")
   check(app, "and a second one reuses the Allow value made for the first", response(app, c, false) && c.status === 405 && headHas(c, "DELETE"))
+
+  send(app, c, "GET /problem HTTP/1.1\r\nHost: t\r\n\r\n")
+  check(app, "a problem too large for the JSON buffer is sent without its detail", response(app, c, false) && c.status === 418 && bodyIs(c, "{\"type\":\"about:blank\",\"title\":\"I'm a teapot\",\"status\":418}"))
 
   send(app, c, "GET /users/%zz HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a parameter that is not a number is the program's 400", response(app, c, false) && c.status === 400)
@@ -518,6 +536,20 @@ const draining = (app: App): void => {
   netClose(late.fd)
 }
 
+const drainingPipelined = (app: App): void => {
+  const c = connect(app)
+  send(app, c, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\nGET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  check(app, "a held request with another pipelined behind it is taken", awaitHeld(app, toI32(1)))
+  app.h.drain()
+  const r: HttpRequest = app.held[0]
+  app.heldCount = 0
+  app.h.send(r, 200, app.text, app.hello, ZERO, toI32(app.hello.length))
+  check(app, "a draining connection's answer says it closes", response(app, c, false) && headHas(c, "\r\nConnection: close\r\n"))
+  check(app, "and the pipelined request is not read: the connection closes", awaitClose(app, c) && c.length === c.responseLength)
+  check(app, "and none are left", app.h.connections() === 0)
+  netClose(c.fd)
+}
+
 export const main = (): i32 => {
   const app = new App(toI32(60000))
   check(app, "the handler answers its codes as named", HANDLER_SENT === 0 && HANDLER_DROPPED < 0 && HANDLER_ABSENT < 0)
@@ -530,5 +562,6 @@ export const main = (): i32 => {
   lateAnswer(new App(toI32(300)))
   flat(app)
   draining(new App(toI32(60000)))
+  drainingPipelined(new App(toI32(60000)))
   return app.failures === 0 ? 0 : 1
 }

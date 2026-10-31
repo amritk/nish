@@ -76,7 +76,7 @@ export const main = (): i32 => {
 ```
 
 `curl localhost:8080/users/7` answers `{"id":7}`; `curl -X POST
-localhost:8080/` answers 405 with `Allow: GET`; any other path a 404.
+localhost:8080/` answers 405 with `Allow: GET, HEAD`; any other path a 404.
 Both refusals are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problems,
 `application/problem+json`.
 
@@ -107,7 +107,8 @@ Every request you take is answered exactly once:
 - `h.json()` gives the handler's JSON writer, cleared; write one value, then
   `h.sendJson(req, status)`. A value that outgrew `HandlerLimits.jsonBytes`
   is answered 500 instead.
-- `h.problem(req, status, title, detail)` sends an RFC 9457 problem.
+- `h.problem(req, status, title, detail)` sends an RFC 9457 problem. One too
+  large for `jsonBytes` is sent without its detail.
 - `h.refuse(req)` answers a request no route took: 404, or 405 with `Allow`.
 - `h.start(req, status, names, values, length)`, then `h.write(req, buf, off,
   len)` as often as you like, then `h.end(req)`, streams a body; a length of
@@ -115,7 +116,8 @@ Every request you take is answered exactly once:
 
 The handler writes `Content-Length`, `Transfer-Encoding`, `Connection` and
 `Date` itself; naming one of the first four yourself, a status outside 200 to
-599, or more body than the length said, panics, as a bug in your program.
+599, more or less body than the length said, or `sendJson` with no `json()`
+before it, panics, as a bug in your program.
 
 **A request may be answered later**, after a database answers, say: keep it
 and answer it in a later turn. If its client has gone in the meantime, the
@@ -133,6 +135,10 @@ handler's pool, so do not keep it after answering.
 | `slots` | 256 | a new connection is accepted and closed at once |
 | `jsonBytes` | 64 KiB | `sendJson` answers 500 |
 | `maxEvents` | 256 | readiness events wait for the next turn |
+
+When the process runs out of descriptors, a waiting connection stays in the
+listener's backlog: the handler stops accepting for 100 ms, then tries
+again, rather than spin.
 
 `http` is the HTTP/1.1 carrier's own configuration (`Http1Config`): its head
 size and field count caps, and its head, body and idle timeouts. Each slot
@@ -160,7 +166,8 @@ netClose(listener);
 ```
 
 `drain` stops accepting, closes each idle connection at once, and closes each
-busy one once the request on it is answered and sent. A request already read
+busy one once the request on it is answered and sent: that answer says
+`Connection: close`, and a request pipelined behind it is not read. A request already read
 is still handed over, so answer what `take` gives you until `connections()`
 is 0. Put a deadline on that second loop if a client may never read its
 answer.

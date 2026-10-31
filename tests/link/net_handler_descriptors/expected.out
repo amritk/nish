@@ -1,0 +1,4 @@
+PASS  a client connects with the last descriptor
+PASS  with no descriptor to accept into, the handler holds no connection
+PASS  and its turns wait out their timeout rather than spin
+PASS  once a descriptor is free, the waiting connection is taken

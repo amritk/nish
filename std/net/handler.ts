@@ -104,6 +104,7 @@ import {
   Router,
   routerDecode,
 } from "nish/net/router"
+import { URL_DECODE_ALLOW_NUL, URL_DECODE_ERR_SPACE, URL_DECODE_FORM, percentDecode } from "nish/net/url"
 import { pollAdd, pollCreate, pollModify, pollRemove, pollWait } from "nish:net"
 
 /** An answer sent, or queued to be sent. */
@@ -138,6 +139,11 @@ const HANDLER_LISTENER: i32 = -1
 const HANDLER_READ_BITS: i32 = 5
 const HANDLER_ZERO: i32 = 0
 const HANDLER_ONE_MIB: i32 = 1048576
+/** `tcpAccept`: none is waiting (EAGAIN), or the one that was left before it was taken (ECONNABORTED). */
+const HANDLER_ACCEPT_NONE: i32 = -11
+const HANDLER_ACCEPT_ABORTED: i32 = -103
+/** How long the listener rests after an accept fails for want of descriptors or memory: 100 ms. */
+const HANDLER_ACCEPT_REST: i64 = 100000000
 /** `handlerFormByte`'s count of bytes taken, in its bits above the byte. */
 const HANDLER_TOOK_ONE: i32 = 256
 const HANDLER_TOOK_THREE: i32 = 768
@@ -366,7 +372,7 @@ export class HttpHandler {
   allowNames: u8[][]
   allowValues: u8[][]
   /** Each `Allow` value made, by the bit mask of the methods it lists: made once a mask and kept. */
-  allowMasks: i32[]
+  allowMasks: i64[]
   allowBytes: u8[][]
   jsonType: u8[]
   problemType: u8[]
@@ -378,6 +384,12 @@ export class HttpHandler {
   outputSize: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   draining: boolean = false
+  /**
+   * When an accept failed for want of a resource (EMFILE, ENFILE, ENOMEM):
+   * the listener is out of the loop until then, which it would otherwise wake
+   * every turn while its connection waits. 0 while it is in the loop.
+   */
+  acceptRestUntil: i64 = 0
 
   /**
    * A handler over `listener`, a listening socket the program made
@@ -457,7 +469,21 @@ export class HttpHandler {
     for (let id: i32 = 0; id < HANDLER_MAX_WATCHED; id++) {
       this.watchedFired[id] = false
     }
-    const n: i32 = pollWait(this.loop, this.readyFds, timeoutMs)
+    if (this.acceptRestUntil > 0 && monotonicNanos() >= this.acceptRestUntil) {
+      this.acceptRestUntil = 0
+      if (!this.draining) {
+        pollAdd(this.loop, this.listener, H1_WANT_READ, HANDLER_LISTENER)
+      }
+    }
+    let timeout: i32 = timeoutMs
+    if (this.acceptRestUntil > 0 && !this.draining) {
+      // Wake for the listener's return, whatever the program asked.
+      const rest: i32 = toI32((this.acceptRestUntil - monotonicNanos()) / toI64(1000000)) + 1
+      if (timeout < 0 || rest < timeout) {
+        timeout = rest
+      }
+    }
+    const n: i32 = pollWait(this.loop, this.readyFds, timeout)
     for (let k: i32 = 0; k < n; k++) {
       const token: i32 = this.readyFds[2 * k]
       if (token === HANDLER_LISTENER) {
@@ -494,7 +520,9 @@ export class HttpHandler {
       return
     }
     this.draining = true
-    pollRemove(this.loop, this.listener)
+    if (this.acceptRestUntil === 0) {
+      pollRemove(this.loop, this.listener)
+    }
     for (let s: i32 = 0; s < toI32(this.open.length) && s < toI32(this.current.length); s++) {
       if (
         this.open[s] &&
@@ -503,6 +531,10 @@ export class HttpHandler {
         !this.server.connection(s).wantsWrite()
       ) {
         this.closeSlot(s)
+      } else if (this.open[s] && this.server.holds(s)) {
+        // Its exchange is its last: the answer says `Connection: close` if
+        // it is not yet started, and no pipelined request is read behind it.
+        this.server.connection(s).closeAfter = true
       }
     }
   }
@@ -513,13 +545,19 @@ export class HttpHandler {
       return
     }
     let slot: i32 = this.server.accept()
-    while (slot >= 0 || slot === H1_POOL_FULL) {
+    while (slot >= 0 || slot === H1_POOL_FULL || slot === HANDLER_ACCEPT_ABORTED) {
       if (slot >= 0) {
         this.open[slot] = true
         this.current[slot] = -1
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
       }
       slot = this.server.accept()
+    }
+    if (slot !== HANDLER_ACCEPT_NONE) {
+      // Out of descriptors or memory: the connection stays in the backlog
+      // and the listener stays readable, so rest it rather than spin.
+      pollRemove(this.loop, this.listener)
+      this.acceptRestUntil = monotonicNanos() + HANDLER_ACCEPT_REST
     }
   }
 
@@ -572,6 +610,10 @@ export class HttpHandler {
 
   /** A head: a request from the free list, the head copied into it, and its route. */
   begin(slot: i32, conn: Http1Connection): void {
+    if (this.draining) {
+      // A head read during the drain is the connection's last.
+      conn.closeAfter = true
+    }
     const r: HttpRequest = this.obtain()
     const p = conn.parser
     const length: i32 = p.headLength
@@ -901,6 +943,14 @@ export class HttpHandler {
       return HANDLER_DROPPED
     }
     const conn: Http1Connection = this.server.connection(r.slot)
+    // The carrier checks the length of what it takes; what is pending it has
+    // not seen, so the check counts it here.
+    const owed: i32 = conn.responseLeft - (r.pendingEnd - r.pendingStart)
+    if (conn.responseFraming >= 0 && !conn.responseEmpty && len > owed) {
+      panic(
+        `HttpHandler.write: ${len} byte(s) is more than the ${owed} the length the response declared leaves`
+      )
+    }
     let taken: i32 = 0
     if (r.pendingEnd === r.pendingStart) {
       taken = conn.write(buf, off, len)
@@ -953,15 +1003,9 @@ export class HttpHandler {
     }
     const slot: i32 = r.slot
     const conn: Http1Connection = this.server.connection(slot)
-    if (
-      r.pendingEnd === r.pendingStart &&
-      conn.responseFraming >= 0 &&
-      conn.responseLeft > 0 &&
-      !conn.responseEmpty
-    ) {
-      panic(
-        `HttpHandler.end: the body is ${conn.responseLeft} byte(s) short of the length the response declared`
-      )
+    const short: i32 = conn.responseLeft - (r.pendingEnd - r.pendingStart)
+    if (conn.responseFraming >= 0 && short > 0 && !conn.responseEmpty) {
+      panic(`HttpHandler.end: the body is ${short} byte(s) short of the length the response declared`)
     }
     this.finish(r, conn)
     this.drive(slot)
@@ -1007,8 +1051,12 @@ export class HttpHandler {
    */
   json(): JsonWriter {
     this.writer.reset(this.scratch, HANDLER_ZERO)
+    this.jsonBegun = true
     return this.writer
   }
+
+  /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
+  jsonBegun: boolean = false
 
   /**
    * Answers `r` with `status` and the value `json`'s writer holds, as
@@ -1016,6 +1064,10 @@ export class HttpHandler {
    * outgrew `jsonBytes`, say — is answered as a 500 problem instead.
    */
   sendJson(r: HttpRequest, status: i32): i32 {
+    if (!this.jsonBegun) {
+      panic("HttpHandler.sendJson: no value was begun with json()")
+    }
+    this.jsonBegun = false
     if (!this.writer.complete()) {
       return this.problem(r, toI32(500), "Internal Server Error", "the response did not fit its buffer")
     }
@@ -1034,14 +1086,33 @@ export class HttpHandler {
     return this.send(r, status, this.problemType, this.scratch, HANDLER_ZERO, length)
   }
 
-  /** Writes a problem object into the scratch buffer and answers its length. */
+  /**
+   * Writes a problem object into the scratch buffer and answers its length.
+   * One too large for it is written without its detail, and then without its
+   * title, which leaves room enough in the least `jsonBytes`.
+   */
   writeProblem(status: i32, title: string, detail: string): i32 {
+    let length: i32 = this.writeProblemObject(status, title, detail)
+    if (length < 0) {
+      length = this.writeProblemObject(status, title, "")
+    }
+    if (length < 0) {
+      length = this.writeProblemObject(status, "", "")
+    }
+    this.jsonBegun = false
+    return length
+  }
+
+  /** `writeProblem`'s one try: the object's length, or -1 when it did not fit. */
+  writeProblemObject(status: i32, title: string, detail: string): i32 {
     const w: JsonWriter = this.json()
     w.beginObject()
     w.key("type")
     w.string("about:blank")
-    w.key("title")
-    w.string(title)
+    if (toI32(title.length) > 0) {
+      w.key("title")
+      w.string(title)
+    }
     w.key("status")
     w.i32(status)
     if (toI32(detail.length) > 0) {
@@ -1049,7 +1120,7 @@ export class HttpHandler {
       w.string(detail)
     }
     w.endObject()
-    return w.complete() ? w.end : 0
+    return w.complete() ? w.end : -1
   }
 
   /**
@@ -1075,12 +1146,16 @@ export class HttpHandler {
     return this.problem(r, toI32(404), "Not Found", "")
   }
 
-  /** The `Allow` value for `r`'s path: each method a route of it takes, made once for each set of methods. */
+  /**
+   * The `Allow` value for `r`'s path: each method a route of it takes, and
+   * HEAD wherever GET is, since a GET route answers HEAD too. Made once for
+   * each set of methods.
+   */
   allowFor(r: HttpRequest): u8[] {
     const router: Router = this.router
     const methods: i32 = toI32(router.methodStart.length)
-    let mask: i32 = 0
-    for (let m: i32 = 0; m < methods && m < 31; m++) {
+    let mask: i64 = 0
+    for (let m: i32 = 0; m < methods; m++) {
       const route: i32 = router.match(
         router.methodBytes,
         router.methodStart[m],
@@ -1091,7 +1166,7 @@ export class HttpHandler {
         this.probe
       )
       if (route >= 0) {
-        mask = mask | (1 << m)
+        mask = mask | (toI64(1) << toI64(m))
       }
     }
     for (let k: i32 = 0; k < toI32(this.allowMasks.length); k++) {
@@ -1099,21 +1174,36 @@ export class HttpHandler {
         return this.allowBytes[k]
       }
     }
+    let get: boolean = false
+    let head: boolean = false
     const value: u8[] = []
-    for (let m: i32 = 0; m < methods && m < 31; m++) {
-      if ((mask & (1 << m)) !== 0) {
-        if (value.length > 0) {
-          value.push(toU8(44))
-          value.push(toU8(32))
-        }
-        for (let k: i32 = router.methodStart[m]; k < router.methodEnd[m]; k++) {
-          value.push(router.methodBytes[k])
-        }
+    for (let m: i32 = 0; m < methods; m++) {
+      if ((mask & (toI64(1) << toI64(m))) !== toI64(0)) {
+        const start: i32 = router.methodStart[m]
+        const end: i32 = router.methodEnd[m]
+        get = get || handlerSpanIs(router.methodBytes, start, end, "GET")
+        head = head || handlerSpanIs(router.methodBytes, start, end, "HEAD")
+        handlerAllowAppend(value, router.methodBytes, start, end)
       }
+    }
+    if (get && !head) {
+      const name: u8[] = httpFieldBytes("HEAD")
+      handlerAllowAppend(value, name, HANDLER_ZERO, toI32(name.length))
     }
     this.allowMasks.push(mask)
     this.allowBytes.push(value)
     return value
+  }
+}
+
+/** Appends `bytes[start .. end)` to an `Allow` value, after a `, ` if it is not the first. */
+const handlerAllowAppend = (value: u8[], bytes: u8[], start: i32, end: i32): void => {
+  if (value.length > 0) {
+    value.push(toU8(44))
+    value.push(toU8(32))
+  }
+  for (let k: i32 = start; k < end; k++) {
+    value.push(bytes[k])
   }
 }
 
@@ -1195,28 +1285,22 @@ const handlerFormIs = (bytes: u8[], start: i32, end: i32, name: string): boolean
   return k === n
 }
 
-/** `bytes[start .. end)` form-decoded into `out` from 0: its length, `ROUTER_BAD_ESCAPE`, or `ROUTER_NO_ROOM`. */
+/**
+ * `bytes[start .. end)` form-decoded into `out` from 0: its length,
+ * `ROUTER_BAD_ESCAPE`, or `ROUTER_NO_ROOM`. `%00` decodes like any byte, as a
+ * route parameter's does.
+ */
 const handlerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32 => {
-  let length: i32 = 0
-  let at: i32 = start
-  while (at < end) {
-    const packed: i32 = handlerFormByte(bytes, at, end)
-    if (packed < 0) {
-      return ROUTER_BAD_ESCAPE
-    }
-    length += 1
-    at += packed >> 8
-  }
-  if (length > toI32(out.length)) {
+  const length: i32 = percentDecode(
+    bytes,
+    start,
+    end - start,
+    out,
+    HANDLER_ZERO,
+    URL_DECODE_FORM | URL_DECODE_ALLOW_NUL
+  )
+  if (length === URL_DECODE_ERR_SPACE) {
     return ROUTER_NO_ROOM
   }
-  at = start
-  let k: i32 = 0
-  while (at < end && k < toI32(out.length)) {
-    const packed: i32 = handlerFormByte(bytes, at, end)
-    out[k] = toU8(packed & 255)
-    at += packed >> 8
-    k += 1
-  }
-  return length
+  return length < 0 ? ROUTER_BAD_ESCAPE : length
 }
