@@ -31,8 +31,9 @@ node bench/map-keys/run.mjs --compiler head=build/nish --compiler other=path/to/
 
 A 2.1 GHz Xeon virtual machine (4 cores, 48 KiB L1d, 2 MiB L2), clang 18,
 rustc 1.97; 9 rounds, median ns per operation, and in brackets the ratio to
-`head`. `head` is this change (the compiler at f0fb2c63, keyed integer
-hashes); `0.28.0` is the last release, with integer keys on murmur3's
+`head`. `head` is this change (keyed integer hashes), measured at f0fb2c63
+(the branch's own later commits change only docs, tests and goldens);
+`0.28.0` is the last release, with integer keys on murmur3's
 unkeyed `fmix32`/`fmix64`; `head-copy` is `head`'s binary timed again, so its
 distance from 1.000 is the noise band. On this run that band is 0.78 to 1.33,
 and within ±5% on most rows.
@@ -74,18 +75,19 @@ keyed hash at 0.83 to 1.09 of 0.28.0: no regression, and no speedup beyond
 noise either.
 
 Rust's `FxHashMap` is up to 8 times faster on the `i32` rows and the L1 `i64`
-rows (2.4 to 7.8 times), and about twice as fast on the enum. That gap is the
-table, not the hash: a Nish `Map` keeps insertion order, so a hit loads a
-bucket, then the entry's stored hash, then its key, then its value, from four
-arrays, through a probe the call site does not inline, where SwissTable
-compares a control byte and reads the key and value from one slot. An
-Fx-style multiply put in place of the keyed hash, in an earlier version of
-this bench, took something like a fifth off the integer rows, measured once
-and inside a wide band, never the 70% or more the gap would need. Fx's own
-failure mode is in the `i64` rows, whose keys pack a grid only 1,024 wide, so
-their low word has 1,024 values: the low bits of `k * C` depend only on the
-low bits of `k`, SwissTable takes the bucket from the low bits, so every key
-lands on one of 1,024 buckets. At L2 that is 64 keys a bucket and Fx no faster
-than Nish; at L3+, 8,192 a bucket and 34 to 131 times slower. A keyed hash
-has neither that cliff nor the predictability a flooding attack exploits; the
-reasoning is in [docs/wp32-map.md](../../docs/wp32-map.md) §5.2.
+rows (2.4 to 7.8 times), and about twice as fast on an enum hit or miss,
+though slower on an enum insert (1.13). That gap is the table, not the hash: a
+Nish `Map` keeps insertion order, so a hit loads a bucket, then the entry's
+stored hash, then its key, then its value, from four arrays, through a probe
+the call site does not inline, where SwissTable compares a control byte and
+reads the key and value from one slot. An Fx-style multiply put in place of
+the keyed hash, in an earlier version of this bench, took something like a
+fifth off the integer rows, measured once and inside a wide band, never the
+70% or more the gap would need. Fx's own failure mode is in the `i64` rows,
+whose keys pack a grid only 1,024 wide, so their low word has 1,024 values:
+the low bits of `k * C` depend only on the low bits of `k`, SwissTable takes
+the bucket from the low bits, so every key lands on one of 1,024 buckets. At
+L2 that is 64 keys a bucket and Fx no faster than Nish; at L3+, 8,192 a bucket
+and 34 to 131 times slower. A keyed hash has neither that cliff nor the
+predictability a flooding attack exploits; the reasoning is in
+[docs/wp32-map.md](../../docs/wp32-map.md) §5.2.

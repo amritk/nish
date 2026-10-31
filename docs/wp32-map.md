@@ -304,10 +304,12 @@ export before `_initialize` runs the constructors probes under an all-zero key,
 which is JSON-13's open caveat in `docs/security/json.md`, now reaching integer
 keys too. And the 64-bit hash's 128-bit multiply is one instruction pair on
 x86-64 and AArch64 but a call to compiler-rt's `__multi3` on wasm32, which
-`bench/map-keys` has not measured there. No test pins the flooding bound
-itself: a collision count depends on the random key, so `tests/cases/map_key_*`
-pin the hash's IR and every key width's behaviour, and the bound rests on the
-proof above.
+`bench/map-keys` has not measured there. `tests/cases/map_key_int_collide`
+pins the flood itself: 8,192 keys built to share one bucket under 0.28's
+`fmix32` must run within 8 times as long as ordinary keys, which the keyed hash
+does and 0.28 does not. A collision count depends on the random key, so the
+bound for every key, beyond that one flood, rests on the proof above, and
+`tests/cases/map_key_*` pin the hash's IR and every key width's behaviour.
 
 ## 6. Deletion, iteration and `Set`
 

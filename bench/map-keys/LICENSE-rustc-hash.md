@@ -6,8 +6,10 @@ multiply by `0x517cc1b727220a95` and the `write`, `write_u32`, `write_u64`,
 `write_isize` and `finish` methods built on them. The tables, keys, probe order
 and timing around it are written here.
 
-rustc-hash is Copyright 2015 The Rust Project Developers and offered under
-Apache-2.0 or MIT; this repository takes MIT. The licence, verbatim:
+rustc-hash is offered under Apache-2.0 or MIT; this repository takes MIT.
+Its `LICENSE-MIT` carries no copyright line; the copyright is the one in
+`src/lib.rs`'s header, "Copyright 2015 The Rust Project Developers". The
+licence, verbatim:
 
 ```
 Permission is hereby granted, free of charge, to any
