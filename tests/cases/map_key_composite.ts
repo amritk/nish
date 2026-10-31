@@ -1,7 +1,7 @@
-// WP32 (docs/wp32-map.md §5.2): two `i32`s keyed as one `i64`, `toI64(hi) * toI64(2^32) + toI64(lo)`, with no string built.
-// Every operand is an `i64`: under Node each is a BigInt, which a bare `4294967296` would refuse to multiply, and the
-// key is exact on both sides for every pair, the extremes below included, because it never leaves the `i64` range.
-const pack = (hi: i32, lo: i32): i64 => toI64(hi) * toI64(4294967296) + toI64(lo);
+// WP32 (docs/wp32-map.md §5.2): two `i32`s keyed as one `i64`, `(toI64(hi) << toI64(32)) + toI64(lo)`, with no
+// string built. Every operand is an `i64`: under Node each is a BigInt, which a bare `32` could not shift, and the key
+// is exact on both sides for every pair, the extremes below included, as `hi * 2^32 + lo` never leaves the `i64` range.
+const pack = (hi: i32, lo: i32): i64 => (toI64(hi) << toI64(32)) + toI64(lo);
 
 export const main = (): i32 => {
   const grid = new Map<i64, number>();

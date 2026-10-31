@@ -36,7 +36,7 @@ const SIZE: i32 = 65536
 const step = (x: i32): i32 => wrappingAdd(wrappingMul(x, 1664525), 1013904223)
 
 /** Two `i32`s as one `i64` key, every operand an `i64` (docs/guide/language/maps-and-sets.md). */
-const pack = (hi: i32, lo: i32): i64 => toI64(hi) * toI64(4294967296) + toI64(lo)
+const pack = (hi: i32, lo: i32): i64 => (toI64(hi) << toI64(32)) + toI64(lo)
 
 /**
  * One pass over a `Map<i32, i32>`: fill it with `SIZE` keys spread by a

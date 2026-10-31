@@ -4,7 +4,7 @@
 
 - a `Map<i32, i32>` of 65,536 keys spread by a multiply;
 - a `Map<i64, i32>` over a 256 by 256 grid, keyed by two `i32`s packed into
-  one `i64` (`toI64(hi) * toI64(4294967296) + toI64(lo)`, the composite-key
+  one `i64` (`(toI64(hi) << toI64(32)) + toI64(lo)`, the composite-key
   idiom in [the user guide](../../docs/guide/language/maps-and-sets.md));
 - a `Map<Op, i32>` histogram over a 16-member enum.
 
