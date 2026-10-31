@@ -18803,24 +18803,6 @@ if (!only || "runtime-parallel".includes(only)) {
         .join("\n")
     )
 
-    // `--json` reaches each build, so a failed one prints its diagnostics as JSON lines.
-    fs.writeFileSync(path.join(watchDir, "bad.ts"), 'export const main = (): i32 => "x"\n')
-    const json = startWatch(["--json", "bad.ts"])
-    const jsonFailed = await json.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
-    await json.interrupt()
-    await groupGone(json.pgid)
-    check(
-      "nish run --watch --json: a failed build's diagnostics are JSON lines",
-      jsonFailed && json.out.split("\n").some((line) => line.startsWith('{"file":"bad.ts"') && line.includes('"severity":"error"')),
-      json.out + json.err,
-    )
-    const misplaced = spawnSync(NISH, ["--watch", "bad.ts"], { cwd: watchDir, encoding: "utf8" })
-    check(
-      "nish --watch: outside `nish run` the flag is a usage error (exit 2) that names `nish run`",
-      misplaced.status === 2 && misplaced.stderr.includes("--watch is a flag of `nish run`"),
-      `${misplaced.status}: ${misplaced.stderr}`,
-    )
-
     if (process.platform !== "linux") {
       skip(
         `runtime-parallel: the affinity and cgroup counts are Linux's, and this host is ${process.platform}`

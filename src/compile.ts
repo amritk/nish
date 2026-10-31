@@ -1910,7 +1910,15 @@ const runWatch = (pkg: PackageSearch, entry: string, argsFrom: i32, json: boolea
   }
   const driver = `${dir}/driver-${hexOfI64(monotonicNanos(), 16)}`
   spawnSyncTo(["sh", "-c", "echo $PPID"], driver, "/dev/null")
-  const pid = readFileSyncOrNull(driver)
+  const pidText = readFileSyncOrNull(driver)
+  const pid = pidText === null ? "" : splitByte(pidText, 10)[0]
+  if (pid.length === 0 || parseInt(pid) <= 1) {
+    reportToolchainFailure(
+      "run: cannot find this process's id to watch it with (sh -c 'echo $PPID' failed)",
+      json
+    )
+    return 3
+  }
   const state = `${driver}.state`
   const build: string[] = [self, "run"]
   for (let i = 2; i < argsFrom - 1; i++) {
@@ -1920,13 +1928,7 @@ const runWatch = (pkg: PackageSearch, entry: string, argsFrom: i32, json: boolea
   }
   build.push(`--watch-build=${state}`)
   build.push(entry)
-  const argv: string[] = [
-    supervisor.binary,
-    pid === null ? "0" : splitByte(pid, 10)[0],
-    state,
-    entry,
-    `${build.length}`,
-  ]
+  const argv: string[] = [supervisor.binary, pid, state, entry, `${build.length}`]
   for (const word of build) {
     argv.push(word)
   }

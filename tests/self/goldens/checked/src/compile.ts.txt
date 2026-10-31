@@ -3703,7 +3703,7 @@ function runWatch(pkg: PackageSearch, entry: string, argsFrom: i32, json: boolea
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via runCacheRoot
   escaping: argsFrom entry json
-  calls: Compilation.check Compilation.constructor Compilation.emit Options.constructor cachedBinary hexOfI64 internalErrorFor loadRoots makeDirectory makePrivateRoot nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat nish_str_eq nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_write_file programOnPath refuseCacheRoot report reportToolchainFailure runCacheRoot sha256Hex splitByte
+  calls: Compilation.check Compilation.constructor Compilation.emit Options.constructor cachedBinary hexOfI64 internalErrorFor llvm.fptosi.sat.i32.f64 loadRoots makeDirectory makePrivateRoot nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_parse_number nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat nish_str_eq nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_write_file programOnPath refuseCacheRoot report reportToolchainFailure runCacheRoot sha256Hex splitByte
   pointer pkg: size=32 writesThrough=false captured=false passedTo=cachedBinary#1
   stackSites=3 stackLocals=2
   local +0:9 cacheRoot: string (const)
@@ -3733,16 +3733,18 @@ function runWatch(pkg: PackageSearch, entry: string, argsFrom: i32, json: boolea
   callee +35:35 Compilation.emit -> @Compilation.emit
   local +39:9 driver: string (const)
   callee +39:35 hexOfI64 -> @hexOfI64
-  local +41:9 pid: string | null (const)
-  local +42:9 state: string (const)
-  local +43:9 build: string[] (const)
-  local +44:12 i: i32 (let)
-  local +51:9 argv: string[] (const)
-  callee +53:26 splitByte -> @splitByte
-  local +58:14 word: string (const)
-  local +61:12 i: i32 (let)
-  local +64:9 status: i32 (const)
-  callee +67:5 reportToolchainFailure -> @reportToolchainFailure
+  local +41:9 pidText: string | null (const)
+  local +42:9 pid: string (const)
+  callee +42:39 splitByte -> @splitByte
+  callee +44:5 reportToolchainFailure -> @reportToolchainFailure
+  local +50:9 state: string (const)
+  local +51:9 build: string[] (const)
+  local +52:12 i: i32 (let)
+  local +59:9 argv: string[] (const)
+  local +60:14 word: string (const)
+  local +63:12 i: i32 (let)
+  local +66:9 status: i32 (const)
+  callee +69:5 reportToolchainFailure -> @reportToolchainFailure
 function refuseCacheRoot(cacheRoot: string, json: boolean): boolean -> @refuseCacheRoot
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via distrustOf

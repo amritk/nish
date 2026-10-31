@@ -109,7 +109,8 @@ const millisSince = (from: i64): i64 => (monotonicNanos() - from) / MS
 /** Waits up to \`ms\` for a signal, and answers whether the watch should stop. */
 const pause = (w: Watch, ms: i32): boolean => {
   if (w.stop === 0 && pollWait(w.loop, w.ready, ms) > 0) {
-    w.stop = readSignal(w.signals)
+    const signal: i32 = readSignal(w.signals)
+    w.stop = signal > 0 ? signal : 15
   }
   // The \`nish run --watch\` that started this one is gone, so nothing is left
   // to print to or to stop the watch: it stops as a hangup would stop it.
@@ -141,8 +142,9 @@ const stopProcess = (w: Watch, pid: i32): void => {
     }
     if (w.stop === 0) {
       pause(w, 20)
-    } else {
-      pollWait(w.loop, w.ready, 20)
+    } else if (pollWait(w.loop, w.ready, 20) > 0) {
+      // A second signal while stopping: read it, or the poll returns at once.
+      readSignal(w.signals)
     }
   }
 }
@@ -205,8 +207,12 @@ const watchFiles = (w: Watch, lines: string[]): void => {
   }
 }
 
-const swap = (w: Watch, binary: string): void => {
-  if (w.program > 0 && w.server) {
+const swap = (w: Watch, binary: string, server: boolean): void => {
+  // Started beside the old one only when both are servers: a program that
+  // just became one would otherwise run beside an old one that is not.
+  const beside: boolean = w.server && server
+  w.server = server
+  if (w.program > 0 && beside) {
     // A server: the new one binds beside the old with SO_REUSEPORT, so it is
     // started first, and the old one is stopped once the new one has lasted.
     const next: i32 = startProgram(w, binary)
@@ -243,10 +249,9 @@ const finishBuild = (w: Watch, status: i32): void => {
     return
   }
   watchFiles(w, lines)
-  w.server = lines[1] === "1"
   console.error(\`watch: \${w.builds === 0 ? "built" : "rebuilt"} in \${took} ms\`)
   w.builds = w.builds + 1
-  swap(w, lines[0])
+  swap(w, lines[0], lines[1] === "1")
 }
 
 export const main = (): number => {
