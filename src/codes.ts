@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 724
+export const RULE_COUNT: i32 = 725
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -367,6 +367,8 @@ const diagnosticRules = (): string[] => [
   "NL2436",
   ": a handle class has no type parameters, no `implements` and no `export`, so no other type and no other module can name it",
   "NL2565",
+  ": no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least ",
+  "NL2584",
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
   "NL4011",
   "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",

@@ -976,6 +976,11 @@ export const main = (): i32 => {
   (NL2388): `using s = scope()`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
+- **A task that recurses deeply gets a bigger stack from `scopeWithStack`.**
+  `using s = scopeWithStack(64 * 1024 * 1024)` is a scope whose tasks each run
+  on a new thread with a 64 MiB stack; a thread's default is 8 MiB. Ask for at
+  least 131072 bytes: a number below it is refused (NL2584). Under Node the size
+  is ignored, so run Node with `--stack-size` too.
 - **The task is a top-level function named in the `spawn`, or an arrow written
   there.** `s.spawn(entry, arg)` with no destination runs an entry that
   answers `void`; `s.spawn(() => work(a, b))` runs an arrow that reads the
@@ -2254,6 +2259,26 @@ directly. `netMss(fd)` answers a connected TCP socket's send MSS, the payload
 bytes one segment carries, and `-1` for anything else (never an errno), so size
 writes by it with a fallback. None but `netMss` exists on a wasm target (there
 it is always `-1`), and under Node each throws.
+
+Unix-domain stream sockets: `unixListen(path, backlog, flags)` listens on a
+socket file left at 0600 (`unixListenMode(path, backlog, flags, mode)` for
+another mode), `unixConnect(path)` and `unixAccept(fd)` answer descriptors
+that `netRead`, `netWrite`, `netShutdown`, `netClose` and the loop take as
+they are, and `unixSocketPair(NET_UNIX_STREAM, fds)` fills `fds: i32[]` with
+two connected ends (`NET_UNIX_SEQPACKET` keeps message boundaries; Linux
+only, `-95` on Darwin). A path starting with `@` is Linux's abstract
+namespace and makes no file (`-95` on Darwin); write `./@name` for a socket
+file so named. A path that exists is `-98`; flag `NET_UNIX_UNLINK_STALE`
+first removes a socket file nobody listens on (Linux; on Darwin it is `-95`
+at a socket file, since a full backlog and a dead file both refuse there).
+`NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM` and `NET_TCP_NODELAY` are all `1`,
+so pass the constant each call names. A path as written is at most 107
+bytes (103 on Darwin) and an abstract name at most 107 after its `@`; longer
+is `-36`. A full backlog makes `unixConnect`
+`-11` on Linux and `-111` on Darwin. Under `--sandbox`, a listener on a path
+also needs `fs.write` (`-13` without it); an abstract name does not, and a
+connect to a path is not confined. The Unix calls are refused on a wasm
+target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write

@@ -1729,6 +1729,27 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end thread-scope -->
 
+`using s = scopeWithStack(256 * 1024 * 1024)` lowers as `scope()` does, but
+the scope comes from `nish/threads`'s own `scopeWithStack`, which checks the
+size and stores it in `ThreadScope`'s one field, the word `nish_scope_join`
+reads first (`tests/link/thread_stack_deep`):
+
+```llvm
+; main
+%11 = call %struct.ThreadScope* @nish.scopeWithStack(i32 %10)
+; nish/threads
+%0 = icmp slt i32 %bytes, 131072
+br i1 %0, label %if.then, label %if.end   ; if.then: nish_panic
+if.end:
+  %6 = call %struct.ThreadScope* @nish.scope()
+  %8 = getelementptr inbounds %struct.ThreadScope, %struct.ThreadScope* %7, i32 0, i32 0
+  store i32 %bytes, i32* %8, align 4
+```
+
+A nonzero word sends every task to a new thread of its own made with
+`pthread_attr_setstacksize` (the size rounded up to the page, one page more)
+and `pthread_attr_setguardsize` of a page, none on the joining thread.
+
 ### `nish/threads`: an arrow task, with no destination
 
 `s.spawn(() => addTo(tally, a))` is the whole spelling of a task that answers
@@ -22242,6 +22263,85 @@ attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-net-reuseport -->
 
+### `nish:net`: `unixListen`, `unixConnect`, `unixAccept` and `unixSocketPair`
+
+Unix-domain stream sockets, each one call into `runtime/runtime-net.c`
+answering an `i32` and each a write. A path travels as the string's header,
+`readonly nocapture`: the runtime copies it into `sun_path` and refuses one
+that does not fit (`-36`) before any socket exists, so the IR carries no check
+of its own. Listening and connecting never wait and keep `willreturn`;
+`unixAccept` is `nounwind` alone, as `tcpAccept` is. `unixSocketPair` fills
+its `i32[]`, so the array loses `readonly`, and the constant kind folds to its
+value. The descriptors these answer are ordinary sockets to `netRead`,
+`netWrite`, `netShutdown`, `netClose` and the readiness loop
+([LANGUAGE.md](LANGUAGE.md#unix-domain-sockets)).
+
+<!-- cookbook:begin builtin-net-unix -->
+```ts
+// `nish:net`'s Unix-domain calls, one call into runtime-net.c each. A path is
+// a `string` the runtime copies into `sun_path`, `readonly nocapture`; a
+// leading "@" names the abstract namespace. Listening and connecting never
+// wait, so they keep `willreturn`; `unixAccept` is `nounwind` alone, as
+// `tcpAccept` is. `unixSocketPair` fills an `i32[]` and so travels as its
+// header without `readonly`; the runtime answers -22 for one shorter than 2,
+// and `NET_UNIX_STREAM` folds to its value, 1.
+import { NET_UNIX_STREAM, unixAccept, unixConnect, unixListen, unixSocketPair } from "nish:net"
+
+export const serve = (backlog: i32): i32 => unixListen("@app", backlog, 0)
+
+export const dial = (): i32 => unixConnect("@app")
+
+export const take = (fd: i32): i32 => unixAccept(fd)
+
+export const pair = (fds: i32[]): i32 => unixSocketPair(NET_UNIX_STREAM, fds)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"@app\00" }, align 8
+
+declare noundef i32 @nish_unix_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish_unix_connect(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_unix_accept(i32 noundef) #1
+declare noundef i32 @nish_unix_socket_pair(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #0
+
+define noundef i32 @serve(i32 noundef %backlog) #0 {
+entry:
+  %0 = call i32 @nish_unix_listen(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i32 %backlog, i32 0)
+  ret i32 %0
+}
+
+define noundef i32 @dial() #0 {
+entry:
+  %0 = call i32 @nish_unix_connect(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  ret i32 %0
+}
+
+define noundef i32 @take(i32 noundef %fd) #1 {
+entry:
+  %0 = call i32 @nish_unix_accept(i32 %fd)
+  ret i32 %0
+}
+
+define noundef i32 @pair(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %fds) #0 {
+entry:
+  %0 = call i32 @nish_unix_socket_pair(i32 1, %struct.nish_array* %fds)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-unix -->
+
 ### `nish:net`: `netMss`
 
 A connected TCP socket's send MSS, the payload that fits one segment, to size
@@ -24977,6 +25077,11 @@ declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 no
 declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_wait(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_unix_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_unix_listen_mode(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_unix_connect(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noundef i32 @nish_unix_accept(i32 noundef) #3
+declare noundef i32 @nish_unix_socket_pair(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2

@@ -302,8 +302,19 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * that the first region's fresh read (which sees `NISH_NUM_THREADS`, unset while
  * `.preinit_array` runs) may lower. The fallback above measured 608, 1 more, inside its
  * ceiling.
+ *
+ * **Raised to 2,896 by `scopeWithStack`**, measured **2,881 bytes** on 2026-10-31 with
+ * clang 18.1.3 on linux-x64, 323 more: a scope with a stack runs each task on a thread of
+ * its own made with that stack, the size rounded to the page and a guard page below it
+ * (`nish_jobs_run_sized`, 256 in `.text.unlikely`), and `nish_stack_fail` (51, cold) ends
+ * the program when one cannot be started, saying whether the system was out of threads
+ * or memory. Both are out of line and cold, so `nish_scope_join`, which
+ * `-ffunction-sections` sizes at 133 against 117 before, gains only the load of the
+ * scope's stack and a predicted branch. Inlined, the sized path made it 328. A thread per
+ * task reuses the unpooled path's `nish_job_thread`; a queue that a CPU-count of sized
+ * threads shared measured 3,166. The fallback measured 608, unchanged.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2560
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2896
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
@@ -398,7 +409,8 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose` and
  * `netSetOption` and `netMss`, then `udpBind`,
  * `udpSendTo` and `udpRecvFrom`, then the readiness loop: `pollCreate`, `pollAdd`,
- * `pollModify`, `pollRemove` and `pollWait`.
+ * `pollModify`, `pollRemove` and `pollWait`, then the Unix-domain calls: `unixListen`,
+ * `unixListenMode`, `unixConnect`, `unixAccept` and `unixSocketPair`.
  *
  * Measured **853 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`,
  * **1,782 bytes** on 2026-09-30 once UDP, its segmentation offload and its ECN
@@ -407,7 +419,9 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * **2,335 bytes** on 2026-10-20 once `tcpListenFlags` and its `SO_REUSEPORT` were
  * added (2,304 to 2,560), and **2,588 bytes** on 2026-10-29 once `netSetOption` and
  * its five-option whitelist were added (2,560 to 2,816), and **2,797 bytes** on
- * 2026-10-30 once `netMss` was added, inside the same ceiling.
+ * 2026-10-30 once `netMss` was added, inside the same ceiling, and **3,841 bytes**
+ * on 2026-10-31 once the Unix-domain calls were added (2,816 to 4,096): most of the
+ * growth is the stale-socket probe and the unlink on each failure after a bind.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -415,7 +429,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 2816
+const NET_TEXT_BUDGET = 4096
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
