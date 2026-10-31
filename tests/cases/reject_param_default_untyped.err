@@ -1,0 +1,1 @@
+Parameter `y` has a default and no type annotation; write its type before the default, `y: T = 2`

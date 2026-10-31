@@ -1,0 +1,1 @@
+Rest parameter `xs` cannot have a default: a call that passes nothing for it passes `[]`

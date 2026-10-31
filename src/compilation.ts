@@ -1200,6 +1200,11 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // A call to a rest parameter gathers its trailing arguments into an array
+    // node while it is checked (`gatherRest`), so the links are taken again.
+    for (const unit of this.modules) {
+      unit.parents.link(unit.file)
+    }
     // WP40 §4: the handle rules read the checked tables, so they run once
     // every body, every instance's included, has checked clean.
     for (const unit of this.modules) {

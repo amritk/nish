@@ -8,9 +8,9 @@ unsafe import 3:10 wrappingAdd from "nish:unsafe"
 unsafe import 3:23 wrappingMul from "nish:unsafe"
 unsafe import 3:36 wrappingSub from "nish:unsafe"
 unsafe call 7:7 wrappingAdd (node 26)
-unsafe call 9:7 wrappingSub (node 40)
-unsafe call 11:7 wrappingMul (node 54)
-unsafe call 22:11 wrappingMul (node 127)
+unsafe call 9:7 wrappingSub (node 42)
+unsafe call 11:7 wrappingMul (node 58)
+unsafe call 22:11 wrappingMul (node 135)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print

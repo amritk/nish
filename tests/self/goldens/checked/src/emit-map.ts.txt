@@ -68,7 +68,7 @@ struct FusedProbe (class) size=48 align=8 exported
   constructor -> @FusedProbe.constructor
 function mapIntrinsicOf(sig: FunctionSig): i32 -> @mapIntrinsicOf [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
 function emitMapIntrinsic(emitter: Emitter, sig: FunctionSig, values: string[]): string -> @emitMapIntrinsic [exported]
@@ -76,7 +76,7 @@ function emitMapIntrinsic(emitter: Emitter, sig: FunctionSig, values: string[]):
   sharedWrite: via emitMapRoute
   calls: emitMapRoute hashOf internalErrorFor isMapRoute nish_exit nish_panic_index nish_str_concat nonZero sameKeyOf
   pointer emitter: size=296 writesThrough=true captured=false passedTo=emitMapRoute#0 nonZero#0 hashOf#0 sameKeyOf#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=isMapRoute#0 emitMapRoute#1
+  pointer sig: size=160 writesThrough=false captured=false passedTo=isMapRoute#0 emitMapRoute#1
   pointer values: size=0 writesThrough=true captured=false passedTo=emitMapRoute#2
   stackSites=0 stackLocals=0
   callee +0:7 isMapRoute -> @isMapRoute
@@ -93,7 +93,7 @@ function emitStoredKey(emitter: Emitter, sig: FunctionSig, arg: Node): string ->
   sharedWrite: via nish_exit
   calls: Emitter.emitRawExpression Emitter.llvm IRFunction.emitValue internalErrorFor isFloat nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=296 writesThrough=true captured=false passedTo=Emitter.emitRawExpression#0 Emitter.llvm#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=true captured=true passedTo=Emitter.emitRawExpression#1
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
@@ -498,12 +498,12 @@ function MaybeParts.constructor(this: MaybeParts, found: string, value: string, 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: found packed read receiver value
   pointer this: size=40 writesThrough=true captured=false
-  pointer read: size=144 writesThrough=true captured=true
+  pointer read: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function valueReaderOf(probe: FunctionSig): FunctionSig | null -> @valueReaderOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.method
-  pointer probe: size=144 writesThrough=false captured=false
+  pointer probe: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
   callee +1:34 StructInfo.method -> @StructInfo.method
@@ -553,7 +553,7 @@ function callValueAt(emitter: Emitter, read: FunctionSig, operands: string): str
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.llvmAbi FunctionSig.visibleOutside IRFunction.emitValue TypeTable.resultByValue nish_str_concat privateAbi unpackReturnedResult
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 unpackReturnedResult#0
-  pointer read: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  pointer read: size=160 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   local +0:9 isPrivate: boolean (const)
   callee +0:21 privateAbi -> @privateAbi
@@ -569,7 +569,7 @@ function valueOperand(emitter: Emitter, sig: FunctionSig, index: i32, value: str
   escaping: index value
   calls: Emitter.llvmAbi FunctionSig.visibleOutside TypeTable.resultByValue nish_panic_index nish_str_concat packResultObject privateAbi
   pointer emitter: size=296 writesThrough=false captured=false passedTo=packResultObject#0 Emitter.llvmAbi#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
   local +1:9 isPrivate: boolean (const)
@@ -914,7 +914,7 @@ function walkMethodsOf(read: FunctionSig): FunctionSig[] -> @walkMethodsOf [expo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: read
   calls: methodsNamed nish_array_grow
-  pointer read: size=144 writesThrough=true captured=true
+  pointer read: size=160 writesThrough=true captured=true
   stackSites=1 stackLocals=0
   local +0:9 out: FunctionSig[] (const)
   local +1:14 sig: FunctionSig (const)
@@ -935,7 +935,7 @@ function FusedProbe.constructor(this: FusedProbe, id: i32, receiver: string, key
   pointer owner: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function tableMethod(emitter: Emitter, owner: StructInfo, name: string): FunctionSig -> @tableMethod
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=144
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=160
   sharedWrite: via nish_exit
   escaping: name
   calls: StructInfo.method internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
@@ -1001,7 +1001,7 @@ function ownerOf(emitter: Emitter, method: FunctionSig): StructInfo -> @ownerOf
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=296 writesThrough=false captured=false
-  pointer method: size=144 writesThrough=false captured=false
+  pointer method: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
@@ -1011,7 +1011,7 @@ function emitProbeCall(emitter: Emitter, id: i32, probe: FunctionSig, receiver: 
   escaping: id key receiver
   calls: Emitter.llvm FusedProbe.constructor IRFunction.emitValue nish_alloc_struct nish_panic_index nish_str_concat ownerOf
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0 ownerOf#0
-  pointer probe: size=144 writesThrough=false captured=false passedTo=ownerOf#1
+  pointer probe: size=160 writesThrough=false captured=false passedTo=ownerOf#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 operands: string (const)
@@ -1083,7 +1083,7 @@ function emitMapRoute(emitter: Emitter, sig: FunctionSig, values: string[]): str
   sharedWrite: via nish_exit
   calls: Emitter.llvm FunctionSig.visibleOutside IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock MaybeParts.constructor TypeTable.resultByValue emitInsertAt emitProbeCall internalErrorFor loadMaybeValue mapIntrinsicOf nish_exit nish_panic_index nish_str_concat privateAbi routeOwnerOf tableMethod unpackReturnedResult
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvm#0 tableMethod#0 Emitter.llvm#0 unpackReturnedResult#0 emitProbeCall#0 tableMethod#0 Emitter.llvm#0 loadMaybeValue#0 tableMethod#0 emitInsertAt#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=routeOwnerOf#1 mapIntrinsicOf#0 FunctionSig.visibleOutside#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=routeOwnerOf#1 mapIntrinsicOf#0 FunctionSig.visibleOutside#0
   pointer values: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
@@ -1135,7 +1135,7 @@ function routeOwnerOf(table: TypeTable, sig: FunctionSig): StructInfo | null -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf nish_panic_index
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   callee +1:60 TypeTable.isStruct -> @TypeTable.isStruct
@@ -1165,7 +1165,7 @@ function fusedCalleesOf(program: CheckedProgram, table: TypeTable, call: Node): 
 function isMapRoute(sig: FunctionSig): boolean -> @isMapRoute [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: mapIntrinsicOf
-  pointer sig: size=144 writesThrough=false captured=false passedTo=mapIntrinsicOf#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=mapIntrinsicOf#0
   stackSites=0 stackLocals=0
   local +0:9 route: i32 (const)
   callee +0:17 mapIntrinsicOf -> @mapIntrinsicOf
@@ -1173,7 +1173,7 @@ function routeCalleesOf(table: TypeTable, sig: FunctionSig): FunctionSig[] -> @r
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: mapIntrinsicOf methodsNamed routeOwnerOf
   pointer table: size=96 writesThrough=false captured=false passedTo=routeOwnerOf#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=routeOwnerOf#1 mapIntrinsicOf#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=routeOwnerOf#1 mapIntrinsicOf#0
   stackSites=2 stackLocals=0
   callee +0:3 methodsNamed -> @methodsNamed
   callee +1:5 routeOwnerOf -> @routeOwnerOf

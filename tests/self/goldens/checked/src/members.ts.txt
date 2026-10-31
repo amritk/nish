@@ -36,6 +36,7 @@ import linkedParent from "./expressions" -> function @linkedParent
 import templateFix from "./expressions" -> function @templateFix
 import recordUpdateFusion from "./fusion" -> function @recordUpdateFusion
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
+import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -55,6 +56,7 @@ import N_THIS from "./nodes" -> const N_THIS
 import N_UNARY from "./nodes" -> const N_UNARY
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
+import fitArguments from "./declarations" -> function @fitArguments
 import ParentTable from "./parents" -> struct ParentTable
 import channelCapacityMessage from "./parallel" -> function @channelCapacityMessage
 import isChannelClass from "./parallel" -> function @isChannelClass
@@ -266,7 +268,7 @@ function exposeMethod(ctx: CheckContext, method: FunctionSig): void -> @exposeMe
   sharedWrite: +0:5
   calls: FunctionSig.definedIn
   pointer ctx: size=288 writesThrough=false captured=false
-  pointer method: size=144 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0
+  pointer method: size=160 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee -1:28 FunctionSig.definedIn -> @FunctionSig.definedIn
 function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMethodCall [exported]
@@ -346,7 +348,7 @@ function checkMapGet(ctx: CheckContext, expr: Node, info: StructInfo, args: Node
   pointer ctx: size=288 writesThrough=true captured=true passedTo=checkMethodArguments#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#1
   pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0 StructInfo.method#0
-  pointer args: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#3
+  pointer args: size=40 writesThrough=true captured=false passedTo=checkMethodArguments#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkMethodArguments#5
   stackSites=0 stackLocals=0
   local -6:9 probe: FunctionSig | null (const)
@@ -384,7 +386,7 @@ function isWalkIterable(ctx: CheckContext, info: StructInfo, call: Node, access:
   callee +1:53 CheckedProgram.isCollections -> @CheckedProgram.isCollections
   callee +7:10 unwrapParens -> @unwrapParens
 function walkReaderOf(ctx: CheckContext, info: StructInfo, name: string): FunctionSig -> @walkReaderOf [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=144
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=160
   sharedWrite: via nish_exit
   calls: StructInfo.method internalErrorFor isMapOwner nish_exit nish_str_eq
   pointer ctx: size=288 writesThrough=false captured=false
@@ -403,7 +405,7 @@ function checkWalkIterable(ctx: CheckContext, call: Node, info: StructInfo, acce
   pointer call: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#1
   pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0 walkReaderOf#1
   pointer access: size=40 writesThrough=false captured=false
-  pointer args: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#3
+  pointer args: size=40 writesThrough=true captured=false passedTo=checkMethodArguments#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkMethodArguments#5
   stackSites=0 stackLocals=0
   local -6:9 loop: Node | null (const)
@@ -415,28 +417,29 @@ function checkWalkIterable(ctx: CheckContext, call: Node, info: StructInfo, acce
   callee +1:38 walkReaderOf -> @walkReaderOf
 function checkMethodArguments(ctx: CheckContext, call: Node, callee: FunctionSig, args: Node, what: string, scope: Scope, literalContext: boolean): void -> @checkMethodArguments
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via CheckContext.error
-  calls: CheckContext.error TypeTable.assignable TypeTable.typeName checkExpression nish_panic_index nish_str_concat nish_str_from_i32 takesDeclaredContext
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.error#0 checkExpression#0 CheckContext.error#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
-  pointer callee: size=144 writesThrough=false captured=false
-  pointer args: size=40 writesThrough=false captured=false
+  sharedWrite: via fitArguments
+  escaping: what
+  calls: CheckContext.error TypeTable.assignable TypeTable.typeName checkExpression fitArguments nish_panic_index nish_str_concat nish_str_from_i32 takesDeclaredContext
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=fitArguments#0 checkExpression#0 CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=fitArguments#1
+  pointer callee: size=160 writesThrough=false captured=false passedTo=fitArguments#3
+  pointer args: size=40 writesThrough=true captured=false passedTo=fitArguments#2
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local +0:9 arity: i32 (const)
-  callee +2:5 CheckContext.error -> @CheckContext.error
-  local +5:7 i: i32 (let)
-  local +7:11 arg: Node (const)
-  local +8:11 want: i32 (const)
-  local +9:11 context: i32 (const)
-  callee +9:39 takesDeclaredContext -> @takesDeclaredContext
-  local +10:11 got: i32 (const)
-  callee +10:17 checkExpression -> @checkExpression
-  callee +11:29 TypeTable.assignable -> @TypeTable.assignable
-  local +12:13 spelled: string (const)
-  callee +12:23 TypeTable.typeName -> @TypeTable.typeName
-  callee +13:7 CheckContext.error -> @CheckContext.error
-  callee +13:84 TypeTable.typeName -> @TypeTable.typeName
+  callee +0:8 fitArguments -> @fitArguments
+  local +3:7 i: i32 (let)
+  local +5:11 arg: Node (const)
+  local +6:11 want: i32 (const)
+  local +9:11 gathered: boolean (const)
+  local +10:11 context: i32 (const)
+  callee +10:51 takesDeclaredContext -> @takesDeclaredContext
+  local +11:11 got: i32 (const)
+  callee +11:17 checkExpression -> @checkExpression
+  callee +12:29 TypeTable.assignable -> @TypeTable.assignable
+  local +13:13 spelled: string (const)
+  callee +13:23 TypeTable.typeName -> @TypeTable.typeName
+  callee +14:7 CheckContext.error -> @CheckContext.error
+  callee +14:84 TypeTable.typeName -> @TypeTable.typeName
 function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkNew [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

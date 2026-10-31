@@ -69,6 +69,7 @@ import {
 } from "./members"
 import {
   FLAG_ACCESSOR,
+  FLAG_SPREAD_ARGUMENT,
   FLAG_ANGLE,
   FLAG_CONST,
   FLAG_OPTIONAL,
@@ -114,6 +115,7 @@ import {
   N_WHILE,
   Node,
 } from "./nodes"
+import { fitArguments } from "./declarations"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
@@ -162,7 +164,14 @@ export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
       }
       break
     case N_SPREAD:
-      ctx.error(node, "Spread in array literals is not supported")
+      if ((node.flags & FLAG_SPREAD_ARGUMENT) !== 0) {
+        ctx.error(
+          node,
+          "Spread arguments are not supported: pass the array itself to a parameter of array type, or write each argument"
+        )
+      } else {
+        ctx.error(node, "Spread in array literals is not supported")
+      }
       break
     case N_NEW:
       if (node.children[0].kind !== N_IDENT) {
@@ -723,7 +732,13 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * five and `Math.sqrt(2)` an `f64` two. Without a context it is `number`,
  * which is `i32` unless `--number-mode f64`.
  */
-const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 => {
+export const checkNumericLiteral = (
+  ctx: CheckContext,
+  expr: Node,
+  want: i32,
+  negated: boolean,
+  at: Node
+): i32 => {
   if (ctx.table.isRanged(want)) {
     return checkRangedLiteral(ctx, expr, want, negated, at)
   }
@@ -3268,11 +3283,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     return T_ERROR
   }
   const args = expr.children[1]
-  if (args.children.length !== sig.paramTypes.length) {
-    return ctx.errorType(
-      expr,
-      `\`${sig.name}\` expects ${sig.paramTypes.length} argument(s), got ${args.children.length}`
-    )
+  if (!fitArguments(ctx, expr, args, sig, 0, sig.name)) {
+    return T_ERROR
   }
   let i = 0
   while (i < args.children.length) {

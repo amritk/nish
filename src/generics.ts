@@ -35,7 +35,7 @@ import { rejectHandleArgument } from "./handles"
 import { CheckContext } from "./context"
 import { Edit } from "./diagnostics"
 import { checkSignatureBody } from "./checker"
-import { collectFunctionSignature } from "./declarations"
+import { collectFunctionSignature, fitTemplateArguments } from "./declarations"
 import { internalErrorFor } from "./ice"
 import { checkExpression, enterMember, recordMemberEntry, recordRangeEntry, WANT_RANGE } from "./expressions"
 import { unwrapParens } from "./emit-util"
@@ -90,6 +90,7 @@ import {
 } from "./structs"
 import {
   FLAG_FOREIGN,
+  FLAG_GATHERED,
   N_ARRAY,
   N_ARROW,
   N_BIGINT,
@@ -1461,11 +1462,8 @@ export const checkGenericCall = (
 ): i32 => {
   const parameters = template.decl.children[1]
   const args = expr.children[1]
-  if (args.children.length !== parameters.children.length) {
-    return ctx.errorType(
-      expr,
-      `\`${template.sourceName}\` expects ${parameters.children.length} argument(s), got ${args.children.length}`
-    )
+  if (!fitTemplateArguments(ctx, expr, args, parameters, template.sourceName)) {
+    return T_ERROR
   }
   // A generic method has no function parameter — its signature collector
   // refuses one, so its arguments are all values and are checked as values —
@@ -1482,8 +1480,12 @@ export const checkGenericCall = (
   const later: boolean[] = []
   let i = 0
   while (i < args.children.length && i < parameters.children.length) {
+    // A rest parameter's gathered arguments take their element type from
+    // what the others bind, as a literal does.
     const deferred =
-      (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i])
+      (functional && isFunctionParameter(parameters.children[i])) ||
+      isContextualLiteral(args.children[i]) ||
+      (args.children[i].flags & FLAG_GATHERED) !== 0
     // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
     const type = deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE)
     const constant =
@@ -1536,7 +1538,7 @@ export const checkGenericCall = (
   argTypes = settled
   const functions: FunctionSig[] = []
   i = 0
-  while (i < parameters.children.length) {
+  while (i < parameters.children.length && i < args.children.length) {
     if (functional && isFunctionParameter(parameters.children[i])) {
       const fn = resolveFunctionArgument(ctx, template, i, args.children[i], names, bindings, scope)
       if (fn === null) {
@@ -2012,6 +2014,16 @@ const resolveFunctionArgument = (
       return null
     }
     refuseOnce(ctx, arg, `Unknown function \`${name}\``)
+    return null
+  }
+  if (fn.restIndex >= 0) {
+    // Called through the parameter, the gathered array would be one argument
+    // where Node gathers every argument into the rest.
+    refuseOnce(
+      ctx,
+      arg,
+      `Argument ${index + 1} of \`${template.sourceName}\`: \`${name}\` has a rest parameter, which a call through a function parameter does not gather; declare it \`${fn.paramNames[fn.restIndex]}: T[]\` to pass it here`
+    )
     return null
   }
   const wanted = fnType.children[0].children

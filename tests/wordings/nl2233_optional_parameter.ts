@@ -1,2 +1,5 @@
-// NL2233: Every parameter is passed, so an optional one has no value to default to.
-const add = (a: i32, b?: i32): i32 => a;
+// NL2233: An arrow written as a value gives no parameter a default: only a declaration's own list does.
+export function main(): void {
+  const xs = [1, 2]
+  console.log(xs.map((x: i32, i: i32 = 0): i32 => x + i).length)
+}

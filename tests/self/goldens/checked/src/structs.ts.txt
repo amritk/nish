@@ -22,7 +22,7 @@ import instantiateWritten from "./generics" -> function @instantiateWritten
 import isGenericFunction from "./generics" -> function @isGenericFunction
 import isExported from "./declarations" -> function @isExported
 import collectParams from "./declarations" -> function @collectParams
-import checkRangedLiteral from "./expressions" -> function @checkRangedLiteral
+import checkNumericLiteral from "./expressions" -> function @checkNumericLiteral
 import memberSlotMessage from "./expressions" -> function @memberSlotMessage
 import FLAG_DEFINITE from "./nodes" -> const FLAG_DEFINITE
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
@@ -53,6 +53,7 @@ import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
 import StructInfo from "./program" -> struct StructInfo
 import TemplateInfo from "./program" -> struct TemplateInfo
 import StringSet from "./map" -> struct StringSet
+import isNumeric from "./types" -> function @isNumeric
 import T_BOOL from "./types" -> const T_BOOL
 import T_CPTR from "./types" -> const T_CPTR
 import T_ERROR from "./types" -> const T_ERROR
@@ -272,9 +273,10 @@ function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 -
   stackSites=0 stackLocals=0
   callee +0:14 TypeTable.stripNull -> @TypeTable.stripNull
   callee +9:14 TypeTable.isNullable -> @TypeTable.isNullable
-function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, what: string): void -> @checkEnumInitializer
+function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, what: string, notLiteral: string): void -> @checkEnumInitializer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
+  escaping: notLiteral
   calls: CheckContext.error CheckContext.errorAtProperty CheckedProgram.enumNamed EnumInfo.hasMember EnumInfo.memberValue TypeTable.assignable TypeTable.isEnumMemberType TypeTable.memberValue TypeTable.refOf TypeTable.typeName memberSlotMessage nish_panic_index nish_str_concat
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtProperty#0 CheckContext.error#0 memberSlotMessage#0 CheckContext.error#0
   pointer field: size=64 writesThrough=true captured=false
@@ -299,57 +301,70 @@ function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, w
   callee +9:5 CheckContext.error -> @CheckContext.error
   callee +11:21 TypeTable.typeName -> @TypeTable.typeName
   callee +11:72 TypeTable.typeName -> @TypeTable.typeName
+function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node, what: string, notLiteral: string): void -> @checkLiteralInitializer [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkEnumInitializer
+  escaping: notLiteral what
+  calls: CheckContext.error TypeTable.assignable TypeTable.isRanged TypeTable.typeName checkEnumInitializer checkNumericLiteral isNumeric literalInitializerType nish_panic_index nish_str_concat
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=checkEnumInitializer#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 checkNumericLiteral#0
+  pointer field: size=64 writesThrough=true captured=false passedTo=checkEnumInitializer#1
+  pointer init: size=40 writesThrough=false captured=false passedTo=checkEnumInitializer#2 literalInitializerType#1 CheckContext.error#1 CheckContext.error#1 checkNumericLiteral#1 checkNumericLiteral#4
+  stackSites=0 stackLocals=0
+  local +0:9 type: i32 (const)
+  callee +2:5 checkEnumInitializer -> @checkEnumInitializer
+  local +5:9 initType: i32 (const)
+  callee +5:20 literalInitializerType -> @literalInitializerType
+  callee +7:5 CheckContext.error -> @CheckContext.error
+  callee +8:15 TypeTable.assignable -> @TypeTable.assignable
+  local +9:11 got: string (const)
+  callee +9:17 TypeTable.typeName -> @TypeTable.typeName
+  callee +10:5 CheckContext.error -> @CheckContext.error
+  callee +10:35 TypeTable.typeName -> @TypeTable.typeName
+  callee +11:36 isNumeric -> @isNumeric
+  callee +11:55 TypeTable.isRanged -> @TypeTable.isRanged
+  local +14:11 negated: boolean (const)
+  callee +15:5 checkNumericLiteral -> @checkNumericLiteral
 function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.assignable TypeTable.holdsSecret TypeTable.isRanged TypeTable.stripNull TypeTable.typeName admitsSecretField annotationSpelling checkEnumInitializer checkRangedLiteral handleFieldMessage handleJsonMessage isHandleFieldAnnotation kindWord literalInitializerType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectForeignPointer resolveType secretFieldMessage spelled
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 checkEnumInitializer#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 checkRangedLiteral#0
+  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.holdsSecret TypeTable.stripNull admitsSecretField annotationSpelling checkLiteralInitializer handleFieldMessage handleJsonMessage isHandleFieldAnnotation kindWord nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectForeignPointer resolveType secretFieldMessage spelled
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 checkLiteralInitializer#0
   pointer owner: size=168 writesThrough=true captured=false passedTo=kindWord#0 spelled#1 noteJsonOptions#1 StructInfo.hasMember#0 kindWord#0 spelled#1 admitsSecretField#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=noteJsonOptions#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -108:9 name: string (const)
-  local -107:9 what: string (const)
-  callee -107:40 kindWord -> @kindWord
-  callee -107:61 spelled -> @spelled
-  callee -101:7 CheckContext.error -> @CheckContext.error
-  callee -101:35 handleJsonMessage -> @handleJsonMessage
-  callee -98:5 noteJsonOptions -> @noteJsonOptions
-  callee -95:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -94:5 CheckContext.error -> @CheckContext.error
-  callee -92:42 kindWord -> @kindWord
-  callee -92:63 spelled -> @spelled
-  callee -72:5 CheckContext.error -> @CheckContext.error
-  callee -68:5 CheckContext.error -> @CheckContext.error
-  callee -64:5 CheckContext.error -> @CheckContext.error
-  local -61:9 type: i32 (const)
-  callee -61:16 resolveType -> @resolveType
-  callee -59:5 CheckContext.error -> @CheckContext.error
-  callee -52:23 TypeTable.stripNull -> @TypeTable.stripNull
-  local -51:11 sole: boolean (const)
-  callee -51:48 isHandleFieldAnnotation -> @isHandleFieldAnnotation
-  callee -49:7 CheckContext.error -> @CheckContext.error
-  callee -49:35 handleFieldMessage -> @handleFieldMessage
-  callee -46:14 rejectForeignPointer -> @rejectForeignPointer
-  callee -40:5 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee -39:6 admitsSecretField -> @admitsSecretField
-  callee -37:5 CheckContext.error -> @CheckContext.error
-  callee -37:33 secretFieldMessage -> @secretFieldMessage
-  local -33:9 field: FieldInfo (const)
-  callee -33:17 new FieldInfo -> @FieldInfo.constructor
-  callee -30:20 annotationSpelling -> @annotationSpelling
-  local -29:9 initializer: Node (const)
-  callee -27:5 checkEnumInitializer -> @checkEnumInitializer
-  local -24:11 initType: i32 (const)
-  callee -24:22 literalInitializerType -> @literalInitializerType
-  callee -22:7 CheckContext.error -> @CheckContext.error
-  callee -18:17 TypeTable.assignable -> @TypeTable.assignable
-  local -17:13 got: string (const)
-  callee -17:19 TypeTable.typeName -> @TypeTable.typeName
-  callee -16:7 CheckContext.error -> @CheckContext.error
-  callee -16:44 TypeTable.typeName -> @TypeTable.typeName
-  callee -15:16 TypeTable.isRanged -> @TypeTable.isRanged
-  local -13:13 negated: boolean (const)
-  callee -12:7 checkRangedLiteral -> @checkRangedLiteral
+  local -93:9 name: string (const)
+  local -92:9 what: string (const)
+  callee -92:40 kindWord -> @kindWord
+  callee -92:61 spelled -> @spelled
+  callee -86:7 CheckContext.error -> @CheckContext.error
+  callee -86:35 handleJsonMessage -> @handleJsonMessage
+  callee -83:5 noteJsonOptions -> @noteJsonOptions
+  callee -80:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -79:5 CheckContext.error -> @CheckContext.error
+  callee -77:42 kindWord -> @kindWord
+  callee -77:63 spelled -> @spelled
+  callee -57:5 CheckContext.error -> @CheckContext.error
+  callee -53:5 CheckContext.error -> @CheckContext.error
+  callee -49:5 CheckContext.error -> @CheckContext.error
+  local -46:9 type: i32 (const)
+  callee -46:16 resolveType -> @resolveType
+  callee -44:5 CheckContext.error -> @CheckContext.error
+  callee -37:23 TypeTable.stripNull -> @TypeTable.stripNull
+  local -36:11 sole: boolean (const)
+  callee -36:48 isHandleFieldAnnotation -> @isHandleFieldAnnotation
+  callee -34:7 CheckContext.error -> @CheckContext.error
+  callee -34:35 handleFieldMessage -> @handleFieldMessage
+  callee -31:14 rejectForeignPointer -> @rejectForeignPointer
+  callee -25:5 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee -24:6 admitsSecretField -> @admitsSecretField
+  callee -22:5 CheckContext.error -> @CheckContext.error
+  callee -22:33 secretFieldMessage -> @secretFieldMessage
+  local -18:9 field: FieldInfo (const)
+  callee -18:17 new FieldInfo -> @FieldInfo.constructor
+  callee -15:20 annotationSpelling -> @annotationSpelling
+  local -14:9 initializer: Node (const)
+  local -12:11 notLiteral: string (const)
+  callee -11:5 checkLiteralInitializer -> @checkLiteralInitializer
   callee -1:3 StringMap.set -> @StringMap.set
 function rejectMemberModifiers(ctx: CheckContext, decl: Node, what: string): boolean -> @rejectMemberModifiers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -404,7 +419,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void -
   callee -2:15 collectMethodSignature -> @collectMethodSignature
   callee -1:3 StringMap.set -> @StringMap.set
 function collectMethodSignature(ctx: CheckContext, owner: StructInfo, decl: Node, symbol: string, shownName: string): FunctionSig -> @collectMethodSignature [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=144
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=160
   sharedWrite: via collectParams
   escaping: owner shownName symbol
   calls: FunctionSig.constructor annotationSpelling collectParams nish_alloc_struct nish_panic_index rejectForeignPointer resolveType
@@ -543,7 +558,7 @@ function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet
   sharedWrite: via noteStructNames
   calls: nish_panic_index noteStructNames
   pointer table: size=96 writesThrough=false captured=false passedTo=noteStructNames#0 noteStructNames#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)

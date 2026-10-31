@@ -3,7 +3,7 @@
 entry: tests/cases/i64_basic.ts
 import wrappingMul from "nish:unsafe" -> builtin wrappingMul
 unsafe import 7:10 wrappingMul from "nish:unsafe"
-unsafe call 20:15 wrappingMul (node 83)
+unsafe call 20:15 wrappingMul (node 89)
 function square(x: i64): i64 -> @square
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow

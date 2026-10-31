@@ -142,6 +142,43 @@ export class FunctionSig {
    * 2 not. Only an answer that rested on no assumption is written.
    */
   keepsLength: i32[]
+  /**
+   * Per parameter, parallel to `paramNames` (`this` included for a member),
+   * the default a call that omits the argument passes, or `null`; empty when
+   * no parameter has one. A default is a literal or an enum member, kept as
+   * a field initializer is so that the caller's emitter writes it as the same
+   * constant (`initializerConstant` in `src/emit-classes.ts`), or the name of
+   * an earlier parameter of the same scalar type, whose position is the
+   * entry's `index`. Every parameter after the first with a default has one.
+   */
+  defaults: (FieldInfo | null)[]
+  /**
+   * The position of a final rest parameter `...xs: T[]`, or -1. A call
+   * gathers the arguments from there on into one array literal
+   * (`gatherRestArguments` in `src/expressions.ts`), so from the checker on
+   * every pass sees a call that passes the array.
+   */
+  restIndex: i32
+
+  /**
+   * How many arguments a call must write: up to the first default, or the
+   * rest parameter; every written parameter when there is neither.
+   */
+  requiredArity(): i32 {
+    let i = 0
+    while (i < this.defaults.length) {
+      if (this.defaults[i] !== null) {
+        return i
+      }
+      i = i + 1
+    }
+    return this.restIndex >= 0 ? this.restIndex : this.writtenArity()
+  }
+
+  /** Whether parameter `index` has a default (`defaults`). */
+  defaultOf(index: i32): FieldInfo | null {
+    return index < this.defaults.length ? this.defaults[index] : null
+  }
 
   /** The parameters a call writes: every one but the captures an arrow appended (WP29). */
   writtenArity(): i32 {
@@ -230,6 +267,8 @@ export class FunctionSig {
     this.capturesForCall = false
     this.returnSpelling = ""
     this.keepsLength = []
+    this.defaults = []
+    this.restIndex = -1
   }
 }
 

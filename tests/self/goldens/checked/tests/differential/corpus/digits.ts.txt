@@ -6,7 +6,7 @@ import wrappingMul from "nish:unsafe" -> builtin wrappingMul
 unsafe import 2:10 wrappingAdd from "nish:unsafe"
 unsafe import 2:23 wrappingMul from "nish:unsafe"
 unsafe call 18:9 wrappingAdd (node 79)
-unsafe call 18:21 wrappingMul (node 82)
+unsafe call 18:21 wrappingMul (node 83)
 function digitSum(n: i32): i32 -> @digitSum
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n

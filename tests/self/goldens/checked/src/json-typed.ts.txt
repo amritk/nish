@@ -209,7 +209,7 @@ function jsonRouteRole(template: TemplateInfo): i32 -> @jsonRouteRole [exported]
   callee +0:35 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped
 function jsonRouteOf(sig: FunctionSig | null): i32 -> @jsonRouteOf [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
 function jsonScalar(type: i32): i32 -> @jsonScalar
@@ -465,7 +465,7 @@ function jsonRouteCallees(program: CheckedProgram, table: TypeTable, sig: Functi
   calls: CheckedProgram.struct FunctionSig.definedIn StringSet.at StringSet.has StringSet.size StructInfo.method TypeTable.nameOf jsonClassOf jsonMadeClasses jsonMapMethods jsonMaps jsonRouteNames nish_array_grow nish_panic_index
   pointer program: size=656 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 jsonClassOf#0 jsonRouteNames#0 jsonMaps#0 jsonMadeClasses#0 jsonMaps#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.nameOf#0 jsonClassOf#1 jsonRouteNames#1 jsonMaps#1 jsonMadeClasses#1 jsonMaps#1
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: FunctionSig[] (const)
   local +1:9 instance: Instantiation | null (const)

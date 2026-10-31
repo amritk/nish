@@ -1547,11 +1547,12 @@ spelling; the two compile to identical IR, instruction for instruction
 - **A function may be generic**, and each instantiation is compiled on its
   own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
-  destructured / rest / optional / default parameters
-  (`Destructured parameters are not supported`, `reject_param_destructured`;
-  `Rest parameters are not supported`, `reject_param_rest`;
-  `Optional/default parameters are not supported`, `reject_param_default`),
-  in a declaration, a method or an arrow argument alike, overloads
+  destructured parameters (`Destructured parameters are not supported`,
+  `reject_param_destructured`), optional parameters (`x?: T`,
+  `Optional parameters are not supported`, `reject_param_optional`, which names
+  `x: T = <default>` instead), a default or rest parameter anywhere but the
+  declarations [Default and rest parameters](#default-and-rest-parameters)
+  lists (`reject_param_default`, `reject_param_rest`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
   signature with no body, `function f(): void;`, is
   `Functions must have a body`), an anonymous `export default function ()`
@@ -1566,6 +1567,55 @@ spelling; the two compile to identical IR, instruction for instruction
   (`` Function `f` must return a value of type i32 on every path ``,
   `tests/cases/reject_missing_return`, `reject_cf_missing_return_loop`); see
   [Termination](#termination-definite-return-and-unreachable-code).
+
+#### Default and rest parameters
+
+```ts
+function scale(x: number, by: number = 2): number { return x * by }
+function area(w: number, h: number = w): number { return w * h }
+function total(...xs: i64[]): i64 { let s: i64 = 0; for (const x of xs) { s = s + x } return s }
+
+scale(3)        // scale(3, 2)
+area(4)         // area(4, 4)
+total()         // total([])
+total(1, 2, 3)  // total([1, 2, 3])
+```
+
+A function, a method with a body, a constructor, and an arrow bound to a
+module `const` may give trailing parameters a **default** or end in one **rest
+parameter**. Both are filled in **at the call site**: the callee is compiled as
+if every argument were always passed, with no branch on a missing one, so a call
+that passes every argument compiles to the same IR it did before the function
+had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
+`param_generic`, across modules `tests/link/param_modules`).
+
+- **A default is a constant or an earlier parameter**: a numeric literal (a
+  negative one too), `true`/`false`, a string literal, an enum member, or the
+  name of a parameter written before it. Anything else is refused
+  (`reject_param_default_expression`, `reject_param_default_later`,
+  `reject_param_default_array`, `reject_param_default_fraction`).
+- **A default's parameter is annotated**, `n: i32 = 1`, never `n = 1`
+  (`reject_param_default_untyped`), and its type is a number, `boolean`,
+  `string` or enum (`reject_param_default_parameter_type`), not a type
+  parameter (`reject_param_default_generic`). Every parameter after one with a
+  default has one too (`reject_param_default_order`).
+- **A rest parameter is last, has an array type and no default**
+  (`reject_param_rest_not_last`, `reject_param_rest_not_array`,
+  `reject_param_rest_default`), and a function has a default or a rest, not
+  both (`reject_param_rest_and_default`). The call gathers its trailing
+  arguments into one array of exactly that many elements, on the stack unless
+  the callee lets it escape — the same array an explicit literal
+  `total([1, 2, 3])` builds.
+- **Not on a function-typed parameter**, which a call names by value
+  (`reject_param_function_default`, `reject_param_function_type`), and a
+  function with a rest parameter is never passed as a function value
+  (`reject_param_rest_function_value`): called through the parameter, Node
+  would gather differently.
+- **No spread argument**: `total(...xs)` is
+  `Spread arguments are not supported` (`reject_param_spread_call`); pass `xs`
+  to a parameter of array type.
+- Too few or too many arguments name the range the function takes
+  (`reject_param_arity`).
 
 ### Module constants
 
@@ -5483,7 +5533,7 @@ close it.
 Each of these is refused, and each refusal is pinned by a case:
 
 - **A variadic C function, spelled variadically.** A rest parameter is
-  `Rest parameters are not supported` before its type is read, `...bytes:
+  `Rest parameters are not supported here` before its type is read, `...bytes:
   u8[]` included (`reject_ffi_variadic`, `reject_ffi_buffer_rest`). A variadic function declared with a
   fixed arity, `printf(fmt: string, x: i32)`, is accepted and is the
   declaration's contract: the compiler cannot tell `open` is variadic from its
@@ -11329,7 +11379,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a function with no body (an overload signature) | `Functions must have a body` | `nl2204_function_without_body` |
 | `export default function ()` | `Functions must be named` | `reject_fn_anonymous` |
 | a destructuring pattern | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
-| a default, optional or rest parameter | `Optional/default parameters are not supported` / `Rest parameters are not supported` | `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest` |
+| an optional parameter; a default or rest outside a function, method, constructor or `const` arrow; a spread argument | `Optional parameters are not supported` / `Optional/default parameters are not supported here` / `Rest parameters are not supported here` / `Spread arguments are not supported` | `reject_param_optional`, `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest`, `reject_param_spread_call` |
 | an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
 | a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
 | more than one function or binding form in one declaration | the first in source order, alone | `reject_fn_sweep_together` |

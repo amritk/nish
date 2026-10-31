@@ -3,19 +3,19 @@
 entry: tests/cases/ffi_owned_string.ts
 import readCString from "nish:unsafe" -> builtin readCString
 unsafe import 15:10 readCString from "nish:unsafe"
-unsafe call 36:17 readCString (node 144)
-unsafe call 52:9 readCString (node 213)
-unsafe call 66:9 readCString (node 272)
-unsafe call 81:9 readCString (node 334)
-unsafe call 96:11 readCString (node 406)
-unsafe call 111:11 readCString (node 481)
-unsafe call 123:17 readCString (node 540)
-unsafe call 140:17 readCString (node 616)
-unsafe call 156:17 readCString (node 697)
-unsafe call 172:19 readCString (node 791)
-unsafe call 189:16 readCString (node 871)
-unsafe call 201:16 readCString (node 916)
-unsafe call 211:16 readCString (node 957)
+unsafe call 36:17 readCString (node 147)
+unsafe call 52:9 readCString (node 220)
+unsafe call 66:9 readCString (node 282)
+unsafe call 81:9 readCString (node 347)
+unsafe call 96:11 readCString (node 422)
+unsafe call 111:11 readCString (node 500)
+unsafe call 123:17 readCString (node 562)
+unsafe call 140:17 readCString (node 642)
+unsafe call 156:17 readCString (node 727)
+unsafe call 172:19 readCString (node 825)
+unsafe call 189:16 readCString (node 910)
+unsafe call 201:16 readCString (node 958)
+unsafe call 211:16 readCString (node 1002)
 function strdup(s: string): CPtr | null -> @strdup
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
