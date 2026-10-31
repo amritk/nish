@@ -83,6 +83,7 @@ import { Url, urlDecode, urlDefaultPort, urlOrigin, urlParse, urlResolve } from 
 import { resolveHost } from "nish/net/dns"
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
 import { DNS_RESOLVE_MAX_ADDRESSES, DNS_RESOLVE_TIMEOUT } from "nish/net/dns-resolver"
+import { OutboundPolicy, outboundAddressText, outboundFilter, outboundHostAllowed } from "nish/net/outbound"
 import {
   connectResult,
   netClose,
@@ -136,6 +137,8 @@ export const HTTP_E_REQUEST: i32 = 14
 export const HTTP_E_IO: i32 = 15
 /** A proxy setting that is not an `http://` URL with a host. */
 export const HTTP_E_PROXY: i32 = 16
+/** The outbound policy refused the URL's host or every address it resolved to. */
+export const HTTP_E_BLOCKED: i32 = 17
 
 /** A typed zero: a bare literal is an `f64` under `--number-mode f64`. */
 const HTTP_CLIENT_ZERO: i32 = 0
@@ -185,6 +188,7 @@ export const httpErrorName = (code: i32): string => {
     "request",
     "io",
     "proxy",
+    "blocked",
   ]
   return code >= 0 && code < toI32(names.length) ? names[code] : "unknown"
 }
@@ -230,6 +234,12 @@ export class HttpOptions {
   maxBodyBytes: i64 = 268435456
   /** A PEM file of the roots an https server's chain must end at; null for the system's. */
   rootsPemPath: string | null = null
+  /**
+   * For a URL the program did not choose: only the addresses and hosts the
+   * policy allows are reached, no proxy is used, and its caps apply (see
+   * `nish/net/outbound`). Null for none.
+   */
+  outbound: OutboundPolicy | null = null
   /** The budget for the lookup and the connect together; 0 or less for none but the total. */
   connectTimeoutMs: i32 = 10000
   /** The longest wait for the server to send or take a byte; 0 or less for none. */
@@ -371,6 +381,8 @@ export class HttpClient {
   noProxy: string = ""
   /** Where `fd` leads: an origin, or the proxy an http request went through. */
   route: string = ""
+  /** The outbound policy `fd` was dialled under; a connection is reused only under the same one. */
+  routePolicy: OutboundPolicy | null = null
   parser: Http1ResponseParser
   /** The TLS connection over `fd` to an https origin; null over plain http. */
   tls: TlsRecordClient | null = null
@@ -442,11 +454,16 @@ export class HttpClient {
       this.drop()
     }
     this.generation += 1
-    const total: i32 = this.options.totalTimeoutMs
+    const total: i32 = httpClientTotalMs(this.options)
     this.deadline = total > 0 ? monotonicNanos() + toI64(total) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
     let url: Url | null = urlParse(req.url)
     if (url === null || (url.scheme !== "http" && url.scheme !== "https")) {
       this.fail(HTTP_E_URL, `not an absolute http or https URL: ${httpClientRedact(url)}`)
+      return null
+    }
+    const refusal: string = this.hostRefusal(url)
+    if (refusal !== "") {
+      this.fail(HTTP_E_BLOCKED, refusal)
       return null
     }
     let method: string = req.method
@@ -468,10 +485,11 @@ export class HttpClient {
         return res
       }
       const next: Url | null = urlResolve(url, location)
-      if (hops >= this.options.maxRedirects) {
+      const maxRedirects: i32 = httpClientMaxRedirects(this.options)
+      if (hops >= maxRedirects) {
         return this.refuse(
           HTTP_E_TOO_MANY_REDIRECTS,
-          `more than ${this.options.maxRedirects} redirects, the last to ${httpClientRedact(next)}`
+          `more than ${maxRedirects} redirects, the last to ${httpClientRedact(next)}`
         )
       }
       if (next === null || (next.scheme !== "http" && next.scheme !== "https")) {
@@ -485,6 +503,10 @@ export class HttpClient {
           HTTP_E_REDIRECT_REFUSED,
           `a redirect from https to http (${httpClientRedact(next)})`
         )
+      }
+      const hopRefusal: string = this.hostRefusal(next)
+      if (hopRefusal !== "") {
+        return this.refuse(HTTP_E_BLOCKED, hopRefusal)
       }
       const from: string | null = urlOrigin(url)
       const to: string | null = urlOrigin(next)
@@ -515,6 +537,15 @@ export class HttpClient {
       url = next
     }
     return null
+  }
+
+  /** Why the outbound policy refuses to let a URL name `url`'s host; "" when there is no policy or it allows the host. */
+  hostRefusal(url: Url): string {
+    const policy: OutboundPolicy | null = this.options.outbound
+    if (policy === null || outboundHostAllowed(policy, url.host)) {
+      return ""
+    }
+    return `${httpClientRedact(url)} names a host the outbound policy does not allow`
   }
 
   /** Closes the connection; the client can still fetch, on a new one. */
@@ -564,14 +595,11 @@ export class HttpClient {
    */
   open(url: Url): boolean {
     const port: i32 = url.port >= 0 ? url.port : urlDefaultPort(url.scheme)
-    const proxyText: string = httpProxyFor(
-      url.scheme,
-      url.host,
-      port,
-      this.httpProxy,
-      this.httpsProxy,
-      this.noProxy
-    )
+    // A proxy would look the name up itself, past the policy's address check.
+    const proxyText: string =
+      this.options.outbound !== null
+        ? ""
+        : httpProxyFor(url.scheme, url.host, port, this.httpProxy, this.httpsProxy, this.noProxy)
     let proxy: Url | null = null
     if (proxyText !== "") {
       proxy = httpClientProxyUrl(proxyText)
@@ -592,7 +620,12 @@ export class HttpClient {
     } else if (proxy !== null) {
       route = `${origin} via ${httpClientHostText(proxy.host)}:${proxy.port}`
     }
-    if (this.fd >= 0 && this.route === route && this.quiet()) {
+    if (
+      this.fd >= 0 &&
+      this.route === route &&
+      httpClientSamePolicy(this.routePolicy, this.options.outbound) &&
+      this.quiet()
+    ) {
       this.reused = true
       return true
     }
@@ -610,6 +643,7 @@ export class HttpClient {
     }
     this.fd = fd
     this.route = route
+    this.routePolicy = this.options.outbound
     this.parser = httpClientParser(this.options)
     if (url.scheme === "https") {
       let early: u8[] = []
@@ -863,7 +897,7 @@ export class HttpClient {
       if (code === HTTP1_E_BODY_LIMIT) {
         this.fail(
           HTTP_E_BODY_TOO_LARGE,
-          `the body is larger than maxBodyBytes (${this.options.maxBodyBytes})`
+          `the body is larger than maxBodyBytes (${httpClientBodyCap(this.options)})`
         )
       } else {
         // A response the server closed part way through is a connection lost,
@@ -1080,9 +1114,22 @@ export class HttpClient {
       )
       return -1
     }
+    let usable: i32 = count < DNS_RESOLVE_MAX_ADDRESSES ? count : DNS_RESOLVE_MAX_ADDRESSES
+    const policy: OutboundPolicy | null = this.options.outbound
+    if (policy !== null) {
+      // Only the bytes checked here are connected to: no second lookup a rebinding answer could change.
+      usable = outboundFilter(policy, addresses, usable)
+      if (usable === 0) {
+        this.fail(
+          HTTP_E_BLOCKED,
+          `${host} resolves to ${outboundAddressText(addresses, 0)}, which the outbound policy does not allow`
+        )
+        return -1
+      }
+    }
     const one: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
     let last: i32 = 0
-    for (let i: i32 = 0; i < count && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
+    for (let i: i32 = 0; i < usable && i < DNS_RESOLVE_MAX_ADDRESSES; i += 1) {
       copyBytes(one, 0, addresses, i * DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES)
       const fd: i32 = tcpConnect(one)
       if (fd < 0) {
@@ -1320,7 +1367,7 @@ export class HttpClient {
   /** Sets the error for a wait that ended with `code`, `text` saying what timed out. */
   failWait(code: i32, text: string): void {
     if (code === HTTP_E_TOTAL_TIMEOUT) {
-      this.fail(code, `the fetch ran past ${this.options.totalTimeoutMs} ms`)
+      this.fail(code, `the fetch ran past ${httpClientTotalMs(this.options)} ms`)
     } else if (code === HTTP_E_IO) {
       this.fail(code, "the poll loop failed")
     } else {
@@ -1468,9 +1515,43 @@ const httpClientParser = (options: HttpOptions): Http1ResponseParser =>
     options.maxHeaderBytes,
     options.maxHeaderBytes,
     HTTP_CLIENT_MAX_HEADERS,
-    options.maxBodyBytes,
+    httpClientBodyCap(options),
     options.maxHeaderBytes
   )
+
+/** Whether `a` and `b` are the same outbound policy, or both none. */
+const httpClientSamePolicy = (a: OutboundPolicy | null, b: OutboundPolicy | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null
+  }
+  return a === b
+}
+
+/** `maxBodyBytes`, or the outbound policy's cap when it is lower. */
+const httpClientBodyCap = (options: HttpOptions): i64 => {
+  const policy: OutboundPolicy | null = options.outbound
+  return policy !== null && policy.maxBodyBytes < options.maxBodyBytes
+    ? policy.maxBodyBytes
+    : options.maxBodyBytes
+}
+
+/** `totalTimeoutMs`, or the outbound policy's budget when it is set and the options' is not, or is longer. */
+const httpClientTotalMs = (options: HttpOptions): i32 => {
+  const policy: OutboundPolicy | null = options.outbound
+  const own: i32 = options.totalTimeoutMs
+  if (policy === null || policy.totalTimeoutMs <= 0) {
+    return own
+  }
+  return own > 0 && own < policy.totalTimeoutMs ? own : policy.totalTimeoutMs
+}
+
+/** `maxRedirects`, or the outbound policy's limit when it is lower. */
+const httpClientMaxRedirects = (options: HttpOptions): i32 => {
+  const policy: OutboundPolicy | null = options.outbound
+  return policy !== null && policy.maxRedirects < options.maxRedirects
+    ? policy.maxRedirects
+    : options.maxRedirects
+}
 
 /** The statuses a redirect is followed for: 301, 302, 303, 307 and 308. */
 const httpClientIsRedirect = (status: i32): boolean =>
