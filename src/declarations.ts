@@ -17,7 +17,8 @@ import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
-import { functionTypeHereMessage, isFunctionParameter } from "./generics"
+import { functionTypeHereMessage, isContextualLiteral, isFunctionParameter } from "./generics"
+import { isScalarArgument } from "./escape"
 import { isThreadsSource } from "./parallel"
 import {
   FLAG_COMPUTED,
@@ -31,7 +32,6 @@ import {
   N_EMPTY,
   N_IDENT,
   N_LIST,
-  N_NUMBER,
   N_UNARY,
   Node,
 } from "./nodes"
@@ -42,7 +42,6 @@ import {
   isForeignType,
   isNumeric,
   K_ARRAY,
-  T_BOOL,
   T_ERROR,
   T_I32,
   T_STRING,
@@ -224,10 +223,7 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
   }
   // A number is a value of a number type only: the literal check takes a
   // number as the type it is written for, which a field's own check relies on.
-  const numeral =
-    init.kind === N_NUMBER ||
-    (init.kind === N_UNARY && init.children.length > 0 && init.children[0].kind === N_NUMBER)
-  if (numeral && !isNumeric(type) && !ctx.table.isRanged(type)) {
+  if (isContextualLiteral(init) && !isNumeric(type) && !ctx.table.isRanged(type)) {
     ctx.error(init, `Parameter \`${name}\` is ${ctx.table.typeName(type)} but its initializer is a number`)
     return
   }
@@ -240,11 +236,7 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
  * for anything the callee could write through.
  */
 const isScalarDefault = (ctx: CheckContext, type: i32): boolean =>
-  isNumeric(type) ||
-  type === T_BOOL ||
-  ctx.table.isEnum(type) ||
-  ctx.table.isEnumMemberType(type) ||
-  ctx.table.isRanged(type)
+  isScalarArgument(ctx.table, type) || ctx.table.isRanged(type)
 
 /**
  * A signature with both a default and a rest parameter: a call that writes
@@ -303,7 +295,7 @@ export const fitArguments = (
       ctx.error(call, `\`${shown}\` expects at least ${fixed} argument(s), got ${got}`)
       return false
     }
-    gatherRest(call, args, fixed)
+    gatherRest(ctx, call, args, fixed)
     return true
   }
   const least = sig.requiredArity() - skip
@@ -337,7 +329,7 @@ export const fitTemplateArguments = (
       ctx.error(call, `\`${shown}\` expects at least ${written - 1} argument(s), got ${got}`)
       return false
     }
-    gatherRest(call, args, written - 1)
+    gatherRest(ctx, call, args, written - 1)
     return true
   }
   let least = 0
@@ -362,10 +354,11 @@ export const fitTemplateArguments = (
  * the same call — a generic body is checked once per instance — it finds the
  * literal already there.
  */
-const gatherRest = (call: Node, args: Node, from: i32): void => {
+const gatherRest = (ctx: CheckContext, call: Node, args: Node, from: i32): void => {
   if (args.children.length === from + 1 && args.children[from].id === args.id + 1) {
     return
   }
+  ctx.program.gathered = true
   const elements: Node[] = []
   const kept: Node[] = []
   for (const arg of args.children) {

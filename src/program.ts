@@ -1343,6 +1343,12 @@ export class CheckedProgram {
   file: Node
   isEntry: boolean
   /**
+   * A call checked in this module gathered a rest parameter's arguments into
+   * a new array node (`gatherRest` in `src/declarations.ts`), so the
+   * module's parent links are taken again after checking.
+   */
+  gathered: boolean
+  /**
    * The package this module belongs to (WP21 S1, `src/packages.ts`). `""` is
    * the root package — the program being compiled — which is where every
    * module of a single-package build lives.
@@ -1672,6 +1678,7 @@ export class CheckedProgram {
     this.functions = []
     this.exports = new StringMap()
     this.imports = []
+    this.gathered = false
     this.structs = new StringMap()
     this.structList = []
     this.reachableStructs = []

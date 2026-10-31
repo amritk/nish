@@ -434,6 +434,10 @@ export const FLAG_SIGNATURE: i32 = 67108864
 // It has no brackets in the source, so a printer writes its elements where
 // the call wrote them.
 export const FLAG_GATHERED: i32 = 67108864
+
+/** The array literal a rest parameter's arguments were gathered into (`FLAG_GATHERED`). */
+export const isGatheredRest = (node: Node): boolean =>
+  node.kind === N_ARRAY && (node.flags & FLAG_GATHERED) !== 0
 // N_SPREAD: a call's argument, `f(...xs)`, which the checker refuses with
 // its own message rather than the array literal's.
 export const FLAG_SPREAD_ARGUMENT: i32 = 67108864

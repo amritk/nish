@@ -90,7 +90,7 @@ import {
 } from "./structs"
 import {
   FLAG_FOREIGN,
-  FLAG_GATHERED,
+  isGatheredRest,
   N_ARRAY,
   N_ARROW,
   N_BIGINT,
@@ -1485,7 +1485,7 @@ export const checkGenericCall = (
     const deferred =
       (functional && isFunctionParameter(parameters.children[i])) ||
       isContextualLiteral(args.children[i]) ||
-      ((args.children[i].flags & FLAG_GATHERED) !== 0 && args.children[i].kind === N_ARRAY)
+      isGatheredRest(args.children[i])
     // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
     const type = deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE)
     const constant =
@@ -2175,7 +2175,7 @@ const captureMode = (template: TemplateInfo): i32 => {
 }
 
 /** A numeric literal, negated or not, whose type is whatever its context says it is. */
-const isContextualLiteral = (arg: Node): boolean =>
+export const isContextualLiteral = (arg: Node): boolean =>
   arg.kind === N_NUMBER || (arg.kind === N_UNARY && arg.text === "-" && arg.children[0].kind === N_NUMBER)
 
 /** `(a, b) => ...`: how a lifted arrow is named in a diagnostic and in an instantiation's display name. */

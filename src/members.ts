@@ -44,7 +44,7 @@ import { assignInto, checkExpression, linkedParent, templateFix } from "./expres
 import { recordUpdateFusion } from "./fusion"
 import {
   FLAG_OPTIONAL,
-  FLAG_GATHERED,
+  isGatheredRest,
   N_ARRAY,
   N_ARROW,
   N_BINARY,
@@ -559,7 +559,7 @@ const checkMethodArguments = (
     const want = callee.paramTypes[i + 1]
     // A rest parameter's gathered arguments are its array's elements, which
     // take its element type as a function's do.
-    const gathered = (arg.flags & FLAG_GATHERED) !== 0 && arg.kind === N_ARRAY
+    const gathered = isGatheredRest(arg)
     const context = literalContext || gathered || takesDeclaredContext(arg) ? want : -1
     const got = checkExpression(ctx, arg, scope, context)
     if (got !== T_ERROR && !ctx.table.assignable(got, want)) {
