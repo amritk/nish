@@ -409,17 +409,33 @@ export class CapabilityLock {
 
   /** The arguments row `row` records for capability `c`, as `cap=arg` entries. */
   recorded(row: i32, c: i32): string[] {
-    const out: string[] = []
-    const prefix = `${capabilityName(c)}=`
-    let j = 0
-    while (j < this.argRows.length && j < this.argTexts.length) {
-      if (this.argRows[j] === row && this.argTexts[j].startsWith(prefix)) {
-        out.push(this.argTexts[j])
-      }
-      j = j + 1
-    }
-    return out
+    return argumentsOf(this.argRows, this.argTexts, row, capabilityName(c))
   }
+}
+
+/**
+ * The `cap=arg` entries of `texts` whose `rows` is `row` and whose capability
+ * is `cap`, sorted, so that the lockfile is written in one order and read
+ * back the same.
+ */
+const argumentsOf = (rows: i32[], texts: string[], row: i32, cap: string): string[] => {
+  const out: string[] = []
+  const prefix = `${cap}=`
+  let j = 0
+  while (j < rows.length && j < texts.length) {
+    if (rows[j] === row && texts[j].startsWith(prefix)) {
+      let at = out.length
+      out.push(texts[j])
+      while (at > 0 && compareStrings(out[at - 1], out[at]) > 0) {
+        const held = out[at]
+        out[at] = out[at - 1]
+        out[at - 1] = held
+        at = at - 1
+      }
+    }
+    j = j + 1
+  }
+  return out
 }
 
 /** A byte a JSON number can hold, so that `1.0` or `10` is read whole and refused. */
@@ -477,22 +493,7 @@ export const capabilityLockText = (
       if ((narrow & (1 << capabilityIndex(cap))) === 0) {
         entries.push(cap)
       } else {
-        const own: string[] = []
-        let j = 0
-        while (j < argRows.length && j < argTexts.length) {
-          if (argRows[j] === p && argTexts[j].startsWith(`${cap}=`)) {
-            let at = own.length
-            own.push(argTexts[j])
-            while (at > 0 && compareStrings(own[at - 1], own[at]) > 0) {
-              const held = own[at]
-              own[at] = own[at - 1]
-              own[at - 1] = held
-              at = at - 1
-            }
-          }
-          j = j + 1
-        }
-        for (const text of own) {
+        for (const text of argumentsOf(argRows, argTexts, p, cap)) {
           entries.push(text)
         }
       }

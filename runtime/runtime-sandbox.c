@@ -278,27 +278,30 @@ static size_t nish_sb_name(char *line, size_t at, const char *name) {
   return at + len;
 }
 
-/* One path_beneath rule granting `rights` beneath `path`. A rule granting
+/* One path_beneath rule granting `rights` beneath `path`, a directory when
+ * `dir` is set and refused if it is not one, else a program the exec
+ * allowlist names, which O_PATH opens as a file. A rule granting
  * nothing is refused (ENOMSG), and nothing is what it would add, so it is
  * left out. A scope directory gone since the build refuses strict; under
  * best-effort it is named and its rule left out, which withholds the right
  * there too, so the program loses the directory rather than gaining more. */
-static void nish_sb_rule(int ruleset, const char *path, uint64_t rights, int32_t mode) {
+static void nish_sb_rule(int ruleset, const char *path, uint64_t rights, int32_t mode, int dir) {
   struct nish_ll_path_beneath rule = {rights, -1};
   if (!rights) return;
-  rule.parent_fd = open(path, O_PATH | O_CLOEXEC);
+  rule.parent_fd = open(path, O_PATH | O_CLOEXEC | (dir ? O_DIRECTORY : 0));
   if (rule.parent_fd < 0) {
-    if (mode != 2) nish_sb_fail_at("cannot open the directory ", path);
-    nish_sb_say("the scope directory ", path, " cannot be opened, so the program gets no access beneath it");
+    if (mode != 2) nish_sb_fail_at(dir ? "cannot open the directory " : "cannot open the program ", path);
+    nish_sb_say(dir ? "the scope directory " : "the allowed program ", path, " cannot be opened, so the program gets no access beneath it");
     return;
   }
   if (syscall(LL_ADD_RULE, ruleset, LL_RULE_PATH_BENEATH, &rule, 0) != 0) nish_sb_fail("cannot add the Landlock rule");
   close(rule.parent_fd);
 }
 
-/* One rule per directory of a scope list, each granting `rights`. */
-static void nish_sb_scope(int ruleset, const char *dirs, uint64_t rights, int32_t mode) {
-  for (; dirs && *dirs; dirs += strlen(dirs) + 1) nish_sb_rule(ruleset, dirs, rights, mode);
+/* One rule per path of a scope list, each granting `rights`: directories
+ * when `dir` is set, the exec allowlist's programs when not. */
+static void nish_sb_scope(int ruleset, const char *dirs, uint64_t rights, int32_t mode, int dir) {
+  for (; dirs && *dirs; dirs += strlen(dirs) + 1) nish_sb_rule(ruleset, dirs, rights, mode, dir);
 }
 
 /* Step 4. Every right the ABI knows is handled, and one path_beneath rule on
@@ -354,10 +357,10 @@ static void nish_sb_landlock(int32_t caps, int32_t mode, const char *read_dirs, 
   struct nish_ll_ruleset attr = {known, 0, abi >= 6 ? LL_SCOPE_ALL : 0};
   int ruleset = (int)syscall(LL_CREATE, &attr, sizeof attr, 0);
   if (ruleset < 0) nish_sb_fail("cannot create the Landlock ruleset");
-  nish_sb_rule(ruleset, "/", granted & known, 1);
-  if (read_dirs && (caps & CAP_BIT_FS_READ)) nish_sb_scope(ruleset, read_dirs, nish_sb_granted(CAP_BIT_FS_READ) & known, mode);
-  if (write_dirs && (caps & CAP_BIT_FS_WRITE)) nish_sb_scope(ruleset, write_dirs, nish_sb_granted(CAP_BIT_FS_WRITE) & known, mode);
-  if (caps & CAP_BIT_SPAWN) nish_sb_scope(ruleset, exec_paths, LL_EXECUTE, mode);
+  nish_sb_rule(ruleset, "/", granted & known, 1, 1);
+  if (read_dirs && (caps & CAP_BIT_FS_READ)) nish_sb_scope(ruleset, read_dirs, nish_sb_granted(CAP_BIT_FS_READ) & known, mode, 1);
+  if (write_dirs && (caps & CAP_BIT_FS_WRITE)) nish_sb_scope(ruleset, write_dirs, nish_sb_granted(CAP_BIT_FS_WRITE) & known, mode, 1);
+  if (caps & CAP_BIT_SPAWN) nish_sb_scope(ruleset, exec_paths, LL_EXECUTE, mode, 0);
   if (syscall(LL_RESTRICT, ruleset, 0) != 0) nish_sb_fail("cannot apply the Landlock ruleset");
   close(ruleset);
 }

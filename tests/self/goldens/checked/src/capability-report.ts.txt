@@ -13,6 +13,7 @@ import capabilityNames from "./capabilities" -> function @capabilityNames
 import isDeterministic from "./capabilities" -> function @isDeterministic
 import Compilation from "./compilation" -> struct Compilation
 import ModuleUnit from "./compilation" -> struct ModuleUnit
+import builtinNameOf from "./emit-util" -> function @builtinNameOf
 import StringMap from "./map" -> struct StringMap
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import isStdModule from "./std-modules" -> function @isStdModule
@@ -259,7 +260,7 @@ function reachArguments(name: string, c: i32): i32 -> @reachArguments
   callee +12:13 capabilityIndex -> @capabilityIndex
 function literalReaches(compilation: Compilation, reach: DependencyReach): LiteralReach[] -> @literalReaches [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: LiteralReach.constructor argumentCapabilities builtinCapability capabilityIndex nish_alloc_struct nish_array_grow nish_panic_index reachArguments
+  calls: LiteralReach.constructor argumentCapabilities builtinCapability builtinNameOf capabilityIndex nish_alloc_struct nish_array_grow nish_panic_index reachArguments
   pointer compilation: size=200 writesThrough=false captured=false
   pointer reach: size=24 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -272,17 +273,17 @@ function literalReaches(compilation: Compilation, reach: DependencyReach): Liter
   local +7:13 stack: Node[] (const)
   local +9:15 node: Node (const)
   local +11:13 k: i32 (let)
-  local +21:17 imported: string (const)
-  local +22:17 name: string (const)
-  local +23:17 c: i32 (const)
-  callee +23:21 builtinCapability -> @builtinCapability
-  local +24:17 positions: i32 (const)
-  callee +24:65 reachArguments -> @reachArguments
-  local +25:17 given: Node[] (const)
-  local +26:15 a: i32 (let)
-  local +29:19 literal: Node (let)
-  callee +30:25 capabilityIndex -> @capabilityIndex
-  callee +35:26 new LiteralReach -> @LiteralReach.constructor
+  local +21:17 name: string (const)
+  callee +21:24 builtinNameOf -> @builtinNameOf
+  local +22:17 c: i32 (const)
+  callee +22:21 builtinCapability -> @builtinCapability
+  local +23:17 positions: i32 (const)
+  callee +23:65 reachArguments -> @reachArguments
+  local +24:17 given: Node[] (const)
+  local +25:15 a: i32 (let)
+  local +28:19 literal: Node (let)
+  callee +29:25 capabilityIndex -> @capabilityIndex
+  callee +34:26 new LiteralReach -> @LiteralReach.constructor
 function numericHost(host: string): boolean -> @numericHost [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: host
@@ -309,8 +310,8 @@ function findProgram(name: string, base: string): string | null -> @findProgram 
   local +2:9 path: string | null (const)
   local +3:14 dir: string (const)
   callee +3:21 splitByte -> @splitByte
-  local +5:13 found: string | null (const)
-  callee +5:21 executableFile -> @executableFile
+  local +4:11 found: string | null (const)
+  callee +4:19 executableFile -> @executableFile
 function executableFile(path: string): string | null -> @executableFile
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_realpath

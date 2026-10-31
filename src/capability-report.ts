@@ -29,6 +29,7 @@ import {
   isDeterministic,
 } from "./capabilities"
 import { Compilation, ModuleUnit } from "./compilation"
+import { builtinNameOf } from "./emit-util"
 import { StringMap } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 import { isStdModule } from "./std-modules"
@@ -452,8 +453,7 @@ export const literalReaches = (compilation: Compilation, reach: DependencyReach)
           node.children[0].kind === N_IDENT &&
           program.nodeCallees[node.id] === null
         ) {
-          const imported = program.nodeBuiltins[node.id]
-          const name = imported.length > 0 ? imported : node.children[0].text
+          const name = builtinNameOf(program, node)
           const c = builtinCapability(name)
           const positions = c >= 0 && (args & (1 << c)) !== 0 ? reachArguments(name, c) : 0
           const given = node.children[1].children
@@ -527,7 +527,8 @@ export const numericHost = (host: string): boolean => {
 /**
  * The real path of the program `name` names, as `posix_spawnp` would find it
  * when the build runs, or null: a name with a `/` is a path from `base`, and
- * a bare one the first executable file of that name in a `PATH` directory.
+ * a bare one the first executable file of that name in a `PATH` directory
+ * (an empty entry is the working directory, as POSIX has it).
  */
 export const findProgram = (name: string, base: string): string | null => {
   if (name.indexOf("/") >= 0) {
@@ -535,11 +536,9 @@ export const findProgram = (name: string, base: string): string | null => {
   }
   const path = getenv("PATH")
   for (const dir of splitByte(path === null ? "/usr/bin:/bin" : path, 58)) {
-    if (dir.length > 0) {
-      const found = executableFile(`${dir}/${name}`)
-      if (found !== null) {
-        return found
-      }
+    const found = executableFile(`${dir.length === 0 ? "." : dir}/${name}`)
+    if (found !== null) {
+      return found
     }
   }
   return null

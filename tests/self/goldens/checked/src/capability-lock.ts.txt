@@ -249,15 +249,25 @@ function CapabilityLock.readRow(this: CapabilityLock, name: string, row: i32): i
   callee +43:14 CapabilityLock.separator -> @CapabilityLock.separator
   callee +45:10 CapabilityLock.failed -> @CapabilityLock.failed
 function CapabilityLock.recorded(this: CapabilityLock, row: i32, c: i32): string[] -> @CapabilityLock.recorded [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: c
-  calls: capabilityName nish_array_grow nish_str_at nish_str_concat
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: c row
+  calls: argumentsOf capabilityName
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 out: string[] (const)
-  local +1:11 prefix: string (const)
-  callee +1:23 capabilityName -> @capabilityName
-  local +2:9 j: i32 (let)
+  callee +0:12 argumentsOf -> @argumentsOf
+  callee +0:58 capabilityName -> @capabilityName
+function argumentsOf(rows: i32[], texts: string[], row: i32, cap: string): string[] -> @argumentsOf
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: compareStrings nish_array_grow nish_panic_index nish_str_at nish_str_concat
+  pointer rows: size=0 writesThrough=false captured=false
+  pointer texts: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 out: string[] (const)
+  local +1:9 prefix: string (const)
+  local +2:7 j: i32 (let)
+  local +5:11 at: i32 (let)
+  callee +7:24 compareStrings -> @compareStrings
+  local +8:15 held: string (const)
 function lockNumberByte(code: i32): boolean -> @lockNumberByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -274,13 +284,13 @@ function readCapabilityLock(text: string): CapabilityLock -> @readCapabilityLock
   callee +1:3 CapabilityLock.read -> @CapabilityLock.read
 function capabilityLockText(names: string[], masks: i32[], scoped: i32[], argRows: i32[], argTexts: string[]): string -> @capabilityLockText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText capabilityIndex capabilityNames compareStrings jsonQuote nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText argumentsOf capabilityIndex capabilityNames jsonQuote nish_array_grow nish_panic_overflow nish_str_concat
   pointer names: size=0 writesThrough=false captured=false
   pointer masks: size=0 writesThrough=false captured=false
   pointer scoped: size=0 writesThrough=false captured=false
-  pointer argRows: size=0 writesThrough=false captured=false
-  pointer argTexts: size=0 writesThrough=true captured=false
-  stackSites=3 stackLocals=3
+  pointer argRows: size=0 writesThrough=false captured=false passedTo=argumentsOf#0
+  pointer argTexts: size=0 writesThrough=true captured=false passedTo=argumentsOf#1
+  stackSites=2 stackLocals=2
   local +0:9 out: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
   callee +1:3 StringBuilder.add -> @StringBuilder.add
@@ -296,17 +306,13 @@ function capabilityLockText(names: string[], masks: i32[], scoped: i32[], argRow
   local +10:16 cap: string (const)
   callee +10:23 capabilityNames -> @capabilityNames
   callee +11:27 capabilityIndex -> @capabilityIndex
-  local +14:15 own: string[] (const)
-  local +15:13 j: i32 (let)
-  local +18:17 at: i32 (let)
-  callee +20:30 compareStrings -> @compareStrings
-  local +21:21 held: string (const)
-  local +29:20 text: string (const)
-  local +34:9 c: i32 (let)
-  local +35:16 entry: string (const)
-  callee +37:9 StringBuilder.add -> @StringBuilder.add
-  callee +39:7 StringBuilder.add -> @StringBuilder.add
-  callee +39:15 jsonQuote -> @jsonQuote
-  callee +42:5 StringBuilder.add -> @StringBuilder.add
-  callee +45:3 StringBuilder.add -> @StringBuilder.add
-  callee +46:10 StringBuilder.toText -> @StringBuilder.toText
+  local +14:20 text: string (const)
+  callee +14:28 argumentsOf -> @argumentsOf
+  local +19:9 c: i32 (let)
+  local +20:16 entry: string (const)
+  callee +22:9 StringBuilder.add -> @StringBuilder.add
+  callee +24:7 StringBuilder.add -> @StringBuilder.add
+  callee +24:15 jsonQuote -> @jsonQuote
+  callee +27:5 StringBuilder.add -> @StringBuilder.add
+  callee +30:3 StringBuilder.add -> @StringBuilder.add
+  callee +31:10 StringBuilder.toText -> @StringBuilder.toText

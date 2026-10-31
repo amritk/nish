@@ -1800,6 +1800,9 @@ export class Compilation {
    * sandbox's (docs/wp37-os-sandbox.md §2a), not this check's.
    */
   refuseNarrowGrants(): void {
+    if (!this.anyGrantScoped()) {
+      return
+    }
     const reach = dependencyPackages(this)
     if (reach.names.length === 0) {
       return
@@ -1846,6 +1849,16 @@ export class Compilation {
         )
       }
     }
+  }
+
+  /** Whether any grant takes a capability only with arguments: without one, nothing is narrowed, at build or at run time. */
+  anyGrantScoped(): boolean {
+    for (const scoped of this.grantScoped) {
+      if (scoped !== 0) {
+        return true
+      }
+    }
+    return false
   }
 
   /** The refusal of a literal a grant's arguments do not cover, a method of its own for the reason `reportRefusal` is. */
@@ -2962,7 +2975,7 @@ export class Compilation {
    */
   narrowSandbox(facts: FactsTable): void {
     const caps = this.opts.sandboxCapabilities
-    if ((caps & (1 << capabilityIndex("ffi"))) !== 0) {
+    if ((caps & (1 << capabilityIndex("ffi"))) !== 0 || !this.anyGrantScoped()) {
       return
     }
     const reach = dependencyPackages(this)
