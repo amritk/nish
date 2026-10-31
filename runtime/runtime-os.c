@@ -479,8 +479,9 @@ int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv,
    closed on every path out, so this process holds what it held before; every
    descriptor of its own stays as it was, so the child also inherits whatever
    this process holds without close-on-exec, which nothing the runtime opens
-   is (docs/security/runtime.md, RT-17). The child shares each descriptor's
-   open file: its offset and its status flags, `O_NONBLOCK` among them. */
+   is (docs/security/runtime.md, RT-17, and RT-40 for what this call hands
+   on). The child shares each descriptor's open file: its offset and its
+   status flags, `O_NONBLOCK` among them. */
 int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds) {
 #ifdef __wasi__
   (void)argv;

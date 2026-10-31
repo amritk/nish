@@ -141,8 +141,16 @@ const RUNTIME_TEXT_BUDGET = 3698
  * `nish_spawn_start` 284 to 365 for the descriptors it now hands the child and the failed `dup2` action it refuses; the rest is
  * layout. The poll loop is the cost of not deadlocking against a child that writes before
  * it has read everything. The budget is the next 256-byte boundary, leaving 158.
+ *
+ * **Raised to 4,864 for `spawnWithFds`**, measured **4,726 bytes** on 2026-10-31 with
+ * clang 18.1.3 on linux-x64, from 4,514 at the head it started from: under
+ * `-ffunction-sections`, `nish_spawn_with_fds` 178 (the 64-descriptor bound and the
+ * `F_DUPFD_CLOEXEC` copies above every target, which make self-dups and collisions one
+ * case, docs/security/runtime.md RT-40) and `nish_spawn_start` 365 to 380 for the base its
+ * `dup2` actions count from. It is `spawn` with descriptors handed on, so it belongs beside
+ * `nish_spawn_start`, which it reuses. The budget is the next 256-byte boundary, leaving 138.
  */
-const RUNTIME_OS_TEXT_BUDGET = 4608
+const RUNTIME_OS_TEXT_BUDGET = 4864
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
@@ -399,7 +407,8 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * `netSetOption` and `netMss`, then `udpBind`,
  * `udpSendTo` and `udpRecvFrom`, then the readiness loop: `pollCreate`, `pollAdd`,
  * `pollModify`, `pollRemove` and `pollWait`, then the Unix-domain calls: `unixListen`,
- * `unixListenMode`, `unixConnect`, `unixAccept` and `unixSocketPair`.
+ * `unixListenMode`, `unixConnect`, `unixAccept` and `unixSocketPair`, then the
+ * descriptor calls: `sendFd`, `recvFd` and `peerCredentials`.
  *
  * Measured **853 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`,
  * **1,782 bytes** on 2026-09-30 once UDP, its segmentation offload and its ECN
@@ -410,7 +419,12 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * its five-option whitelist were added (2,560 to 2,816), and **2,797 bytes** on
  * 2026-10-30 once `netMss` was added, inside the same ceiling, and **3,841 bytes**
  * on 2026-10-31 once the Unix-domain calls were added (2,816 to 4,096): most of the
- * growth is the stale-socket probe and the unlink on each failure after a bind.
+ * growth is the stale-socket probe and the unlink on each failure after a bind. It
+ * measured **4,511 bytes** on 2026-10-31 with clang 18.1.3 on linux-x64 once the
+ * descriptor calls were added (4,096 to 4,608): under `-ffunction-sections`,
+ * `nish_recv_fd` 318 (the control buffer for eight descriptors and the loop that keeps
+ * the first and closes the rest), `nish_send_fd` 188, `nish_peer_credentials` 109 and
+ * `nish_unix_only` 55, the family check the three share, leaving 97.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -418,7 +432,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 4096
+const NET_TEXT_BUDGET = 4608
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`

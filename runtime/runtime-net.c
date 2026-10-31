@@ -30,7 +30,7 @@
  * (`EAFNOSUPPORT`, as in many containers) `::` falls back to IPv4's
  * `0.0.0.0`.
  *
- * Linux and Darwin differ in seven places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
+ * Linux and Darwin differ in nine places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
  * `accept4` against a `socket` or `accept` followed by `fcntl`, `MSG_NOSIGNAL`
  * against the `SO_NOSIGPIPE` socket option (a write to a gone peer is -32 on
  * both, never SIGPIPE), the errno numbers, UDP's segmentation offload
@@ -38,7 +38,12 @@
  * Darwin answers -95, and the readiness loop, which is epoll on Linux and
  * kqueue on Darwin, `TCP_QUICKACK`, which only Linux has (-95 on
  * Darwin), and the MSS, which `netMss` reads from Linux's `TCP_INFO` and from
- * `TCP_MAXSEG` on Darwin. Only the sending side and the GRO bind say -95 there: a
+ * `TCP_MAXSEG` on Darwin, a descriptor `recvFd` keeps, which Linux's
+ * `MSG_CMSG_CLOEXEC` makes close-on-exec as it arrives and Darwin marks with
+ * `fcntl` after `recvmsg` returns (the window RT-38 records), and
+ * `peerCredentials`, which reads Linux's `SO_PEERCRED` and Darwin's
+ * `getpeereid` with `LOCAL_PEERPID` (pid -1 where that refuses). Of the UDP calls, only the sending side and
+ * the GRO bind say -95 on Darwin: a
  * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
  * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
