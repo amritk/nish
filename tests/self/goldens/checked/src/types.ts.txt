@@ -401,7 +401,7 @@ function TypeTable.hasVariant(this: TypeTable, type: i32, variant: i32): boolean
   local +1:9 lo: i32 (let)
   local +2:9 hi: i32 (let)
   local +4:13 mid: i32 (const)
-  local +8:13 at: i32 (const)
+  local +12:13 at: i32 (const)
 function TypeTable.unionWithin(this: TypeTable, from: i32, to: i32): boolean -> @TypeTable.unionWithin [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to

@@ -565,6 +565,10 @@ export class TypeTable {
     let hi = variants.length
     while (lo < hi) {
       const mid = lo + ((hi - lo) >> 1)
+      // Never taken, since `lo <= mid < hi <= variants.length`, but the bounds
+      // pass cannot follow `lo` and `hi` through the loop. This test proves the
+      // read below in range, so it replaces that read's bounds check and its
+      // `nish_panic_index`, and adds no other check.
       if (mid < 0 || mid >= variants.length) {
         return false
       }

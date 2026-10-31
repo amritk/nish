@@ -3976,6 +3976,18 @@ if (!only || "diagnostics".includes(only)) {
     codesGen.stdout + codesGen.stderr
   )
 
+  // `tests/cases/union_scale.ts` is 7,891 generated lines, and the generator is
+  // its only author: `--check` fails when the file differs from what it writes.
+  const unionScaleGen = spawnSync("node", [path.join(root, "scripts", "gen-union-scale.mjs"), "--check"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "union_scale: scripts/gen-union-scale.mjs --check matches tests/cases/union_scale.ts",
+    unionScaleGen.status === 0,
+    unionScaleGen.stdout + unionScaleGen.stderr
+  )
+
   // ---- the security records' scope ---------------------------------------
   // Every file of the attacker-facing surface is in a record's scope or on the
   // index's "Not yet audited" list (CLAUDE.md, "Definition of done").
