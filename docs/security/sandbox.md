@@ -14,16 +14,19 @@ functions rather than lines, so it has no `file:line` anchors to move.
 | File | What |
 | --- | --- |
 | `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; the non-Linux stubs |
-| `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read` and `@.sandbox.write` (`sandboxDirs`) |
+| `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read`, `@.sandbox.write` and `@.sandbox.exec` (`sandboxDirs`) |
 | `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main`; the scopes (`capabilityListMask`, `capabilityScopes`): which are accepted, and each directory's resolution |
-| `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13) |
+| `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13); `narrowSandbox`, the scopes and the exec allowlist taken from a dependency's grant arguments (WP37 §2a, WP40 §2a) |
 | `runtime/runtime-parallel.c` | `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to, step 1 |
 | `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check` and `nish_cpu_prime` |
 | `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles |
 
-Out of scope: scopes in `package.json`'s `"nish"` field, which stay refused
-(open question 1), and scopes of any capability but `fs.read` and
-`fs.write`, which are refused.
+Out of scope: scopes in `package.json`'s `"nish"` field for the root's own
+capabilities, which stay refused (open question 1), and scopes of any
+capability but `fs.read` and `fs.write` on the command line, which are
+refused. A dependency's grant arguments are the one route by which the
+manifest narrows the sandbox; their build-time check is
+[capabilities.md](capabilities.md)'s (CAPS-14 to CAPS-20).
 
 ## Threat model
 
@@ -153,9 +156,15 @@ constructor, and applies, in order:
    `fs.write` (the third and fourth operands, each a list of directories
    ended by a NUL and the list by a second, `null` for none) is left out of
    the rule on `/` and granted by one `path_beneath` rule per directory,
-   opened `O_PATH | O_DIRECTORY`; a directory that cannot be opened refuses
-   strict and, under best-effort, is named and left out, which only narrows
-   what is granted.
+   opened `O_PATH` (a directory, or, for the fifth operand, a file); a path
+   that cannot be opened refuses strict and, under best-effort, is named and
+   left out, which only narrows what is granted. The fifth operand, the exec
+   allowlist (a list in the same shape: the programs a dependency's
+   `process.spawn=<program>` grants name, and the ELF interpreter or `#!`
+   interpreter each needs), takes EXECUTE off the rule on `/` and grants it
+   on each listed file alone. A directory scope is resolved by the compiler
+   and refused there unless it is a directory, so dropping `O_DIRECTORY`
+   widens no scope the command line can name.
 5. A seccomp denylist (open question 4), `SECCOMP_FILTER_FLAG_TSYNC`:
    - an architecture other than the build's kills, and on x86-64 a number with
      bit 30 (x32) kills;
@@ -184,9 +193,13 @@ names it once and runs with nothing granted beneath it.
 
 ## Findings
 
-None. Both stages are new code; what it does not hold is stated in the threat
-model's "What the adversary keeps" list above, and the limits below are
-recorded rather than counted.
+What the sandbox does not hold by design is stated in the threat model's "What
+the adversary keeps" list above, and the limits below are recorded rather than
+counted. One finding is counted:
+
+| ID | Severity | Where | What must hold | Status |
+| --- | --- | --- | --- | --- |
+| SBX-1 | High | `narrowSandbox` in `src/compilation.ts`, `nish_sandbox` in `runtime/runtime-sandbox.c` | Under `--sandbox`, a dependency granted `process.spawn=<program>` must run only that program. | **Open.** The exec allowlist grants EXECUTE on each granted program's ELF interpreter (`PT_INTERP`, e.g. `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`), which the kernel needs to start the program. That loader is a program too: `spawnSync([loader, "/bin/echo", "x"])` is an allowed `execve`, and the loader then opens `/bin/echo` for reading, which `process.spawn`'s READ_FILE on `/` allows, and maps it executable. Landlock checks EXECUTE at `execve` and open-for-exec, not at `mmap`, so any program on the machine runs. The allowlist therefore bounds a dependency that spawns only what it names, not one written to escape it. Closing it needs the runtime's spawn path to refuse a program that is a granted program's loader, which the wrapper's list would have to mark; recorded for a later change. Pinned by `sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)` in `tests/run.js`, which fails once it is closed. |
 
 ## Limits
 
@@ -234,6 +247,19 @@ recorded rather than counted.
 - **A directory cannot hold a comma**, which separates `--allow`'s list.
 - **Metadata writes inside an `fs.write` scope** stay `EPERM`, since seccomp
   cannot see the path (open question 1(a)).
+- **The exec allowlist narrows EXECUTE alone.** `process.spawn` still grants
+  READ_FILE and IOCTL_DEV on `/` whole, as it did, since a program it starts
+  reads its own libraries; only which files may be executed is narrowed. A
+  program the allowlist names may itself be an interpreter (`sh`, `python3`)
+  and run whatever it is told: grant a program that takes a script only to a
+  dependency that may run anything. The same holds of the ELF loader the
+  allowlist adds for a dynamic program: it runs any binary it is handed
+  (SBX-1, counted above).
+- **The allowlist is the build's.** Each program is the realpath the compiler
+  found on `PATH` (or from the root package's directory), and its interpreter
+  is read from the file then; a program replaced after the build with one
+  that needs another interpreter fails to start (`EACCES`), which narrows,
+  never widens.
 - **Non-Linux.** Both symbols print `nish: --sandbox: this platform has no
   sandbox` and exit 126, so a `.ll` built for Linux and linked elsewhere
   refuses to run rather than run unconfined.
@@ -330,6 +356,22 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
 - `tests/wordings/nl3044_sandbox_darwin` (the darwin refusal, word for word)
 - `tests/runtime-budgets.js`: `RUNTIME_SANDBOX_TEXT_BUDGET`, the ceiling on
   the unit's `.text`
+- the `sandbox dependency grants` block (`node tests/run.js "sandbox dependency grants"`),
+  on `tests/link/sandbox_dep_fs_scoped` and `sandbox_dep_exec_allowlist`,
+  each before/after: `sandbox dependency grants: a dependency granted
+  fs.read=<dir> reads inside it and not /etc/passwd` (unscoped, the same
+  build reads it), `sandbox dependency grants: the wrapper passes the grant's
+  real directory as the fs.read scope`, `sandbox dependency grants: a
+  dependency granted process.spawn=true runs true and cannot exec echo`
+  (without `--sandbox`, it runs `echo`), `sandbox dependency grants: the exec
+  allowlist names the granted program by its absolute path`; on
+  `sandbox_dep_fs_write_scoped`: `sandbox dependency grants: a dependency
+  granted fs.write=<dir> writes inside it and not beside it` (without
+  `--sandbox`, it writes beside it; skipped below Landlock ABI 3),
+  `sandbox dependency grants: the wrapper passes the grant's real directory
+  as the fs.write scope`; and the SBX-1 pin, `sandbox dependency grants: a
+  granted program's ELF loader runs a program the grant does not name
+  (SBX-1, open)`, which fails once SBX-1 is closed
 
 ### Checks CI does not run
 
