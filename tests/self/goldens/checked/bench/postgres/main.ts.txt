@@ -2456,42 +2456,48 @@ function pgTargetUrl(url: string): PgTarget -> @nish.pgTargetUrl [exported]
   local +10:7 authorityEnd: i32 (let)
   local +12:11 c: i32 (const)
   local +18:7 queryStart: i32 (let)
-  local +25:7 hostStart: i32 (let)
-  local +26:12 i: i32 (let)
-  callee +31:25 pgDecoded -> @nish.pgDecoded
-  callee +32:12 pgTargetFailed -> @nish.pgTargetFailed
-  callee +34:36 pgDecoded -> @nish.pgDecoded
-  callee +35:12 pgTargetFailed -> @nish.pgTargetFailed
-  local +38:7 hostEnd: i32 (let)
-  local +39:7 portStart: i32 (let)
-  local +40:7 bracketed: boolean (let)
-  local +42:9 close: i32 (let)
-  callee +47:14 pgTargetFailed -> @nish.pgTargetFailed
-  callee +53:16 pgTargetFailed -> @nish.pgTargetFailed
-  local +58:14 i: i32 (let)
-  local +66:9 decodedHost: string | null (const)
-  callee +67:7 pgDecoded -> @nish.pgDecoded
-  callee +68:7 pgDecoded -> @nish.pgDecoded
-  callee +70:12 pgTargetFailed -> @nish.pgTargetFailed
-  local +72:7 host: string (let)
-  local +73:7 port: i32 (let)
-  local +75:11 decodedPort: string | null (const)
-  callee +75:40 pgDecoded -> @nish.pgDecoded
-  callee +77:14 pgTargetFailed -> @nish.pgTargetFailed
-  callee +79:12 pgPortValue -> @nish.pgPortValue
-  callee +81:14 pgTargetFailed -> @nish.pgTargetFailed
-  local +85:7 i: i32 (let)
-  local +87:9 end: i32 (let)
-  local +88:9 eq: i32 (let)
-  callee +97:16 pgTargetFailed -> @nish.pgTargetFailed
-  local +99:13 key: string | null (const)
-  callee +99:34 pgDecoded -> @nish.pgDecoded
-  local +100:13 value: string | null (const)
-  callee +100:36 pgDecoded -> @nish.pgDecoded
-  callee +102:16 pgTargetFailed -> @nish.pgTargetFailed
-  callee +107:16 pgPortValue -> @nish.pgPortValue
-  callee +109:18 pgTargetFailed -> @nish.pgTargetFailed
-  callee +115:10 pgTarget -> @nish.pgTarget
+  local +23:12 i: i32 (let)
+  callee +25:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +33:7 firstAt: i32 (let)
+  local +35:11 c: i32 (const)
+  local +41:7 hostStart: i32 (let)
+  callee +44:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +48:12 i: i32 (let)
+  callee +50:14 pgTargetFailed -> @nish.pgTargetFailed
+  callee +53:25 pgDecoded -> @nish.pgDecoded
+  callee +54:12 pgTargetFailed -> @nish.pgTargetFailed
+  callee +56:36 pgDecoded -> @nish.pgDecoded
+  callee +57:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +60:7 hostEnd: i32 (let)
+  local +61:7 portStart: i32 (let)
+  local +62:7 bracketed: boolean (let)
+  local +64:9 close: i32 (let)
+  callee +69:14 pgTargetFailed -> @nish.pgTargetFailed
+  callee +75:16 pgTargetFailed -> @nish.pgTargetFailed
+  local +80:14 i: i32 (let)
+  local +88:9 decodedHost: string | null (const)
+  callee +89:7 pgDecoded -> @nish.pgDecoded
+  callee +90:7 pgDecoded -> @nish.pgDecoded
+  callee +92:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +94:7 host: string (let)
+  local +95:7 port: i32 (let)
+  local +97:11 decodedPort: string | null (const)
+  callee +97:40 pgDecoded -> @nish.pgDecoded
+  callee +99:14 pgTargetFailed -> @nish.pgTargetFailed
+  callee +101:12 pgPortValue -> @nish.pgPortValue
+  callee +103:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +107:7 i: i32 (let)
+  local +109:9 end: i32 (let)
+  local +110:9 eq: i32 (let)
+  callee +119:16 pgTargetFailed -> @nish.pgTargetFailed
+  local +121:13 key: string | null (const)
+  callee +121:34 pgDecoded -> @nish.pgDecoded
+  local +122:13 value: string | null (const)
+  callee +122:36 pgDecoded -> @nish.pgDecoded
+  callee +124:16 pgTargetFailed -> @nish.pgTargetFailed
+  callee +129:16 pgPortValue -> @nish.pgPortValue
+  callee +131:18 pgTargetFailed -> @nish.pgTargetFailed
+  callee +137:10 pgTarget -> @nish.pgTarget
 module std/bytes.ts [package nish]
 const BYTES_SPACE: i32 = 32
 const BYTES_TAB: i32 = 9
