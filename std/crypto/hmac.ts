@@ -55,8 +55,8 @@
  */
 import { SHA256_BLOCK, SHA256_SIZE, Sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, SHA512_BLOCK, SHA512_SIZE, Sha384, Sha512 } from "nish/crypto/sha512"
-import { timingSafeEqual } from "nish/crypto/ct"
-import { Secret, exposeWith, secret, wipe } from "nish:secret"
+import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
+import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 
 /** RFC 2104 §2's `ipad`, the byte XORed into the key for the inner hash. */
 const HMAC_IPAD: i32 = 0x36
@@ -796,4 +796,278 @@ export const pbkdf2HmacSha256 = (
     return null
   }
   return secret(dk)
+}
+
+// ---- A key held keyed: the pads absorbed once, as a Secret --------------------
+//
+// A verifier that checks many tags under one key — a JWT's HS256 signature on
+// every request — pays for the key's two pad blocks once, not once per tag.
+// RFC 2104 §4 notes the two keyed chaining values can be kept and the
+// computation started from them; `HmacKey` keeps exactly those, and keeps them
+// as a `Secret`, because they are key material: either one, with the hash's
+// length padding, MACs any message under the key without the key itself.
+//
+// A function `exposeWith` runs may not write through the argument it is
+// handed (NL2450), and a hasher made per tag stores its arrays in its fields,
+// which no arena block may release around (NL2424). So each tag copies the
+// midstates out with `expose`, resumes the two hashers the key owns from the
+// copy, wipes the copy, feeds and finishes them and wipes them; what it
+// allocates — the copy and the two digests — dies inside the arena block of
+// `hmacKeyedInto` and `hmacKeyedVerify`. That is the shape
+// `p256SignSha256Into` has (`std/crypto/p256.ts`): a plain copy of a secret
+// step's answer, used in caller-owned scratch and wiped before return.
+
+/** `HmacKey`'s hash: HMAC-SHA-256. */
+export const HMAC_SHA256: i32 = 1
+/** `HmacKey`'s hash: HMAC-SHA-384. */
+export const HMAC_SHA384: i32 = 2
+/** `HmacKey`'s hash: HMAC-SHA-512. */
+export const HMAC_SHA512: i32 = 3
+
+/** Words of one chaining value: eight, for SHA-256's `u32` and SHA-512's `u64` alike. */
+const HMAC_WORDS: i32 = 8
+
+/** The tag length of `hash` in bytes, 0 for no hash `HmacKey` knows. */
+const hmacTagSize = (hash: i32): i32 => {
+  if (hash === HMAC_SHA256) {
+    return SHA256_SIZE
+  }
+  if (hash === HMAC_SHA384) {
+    return SHA384_SIZE
+  }
+  if (hash === HMAC_SHA512) {
+    return SHA512_SIZE
+  }
+  return 0
+}
+
+/**
+ * The inner and outer chaining values after the key's pad blocks, for
+ * `exposeWith` to run on the plain key: words 0 to 7 the inner, 8 to 15 the
+ * outer, SHA-256's `u32` words widened to `u64`. The two keying hashers are
+ * wiped before it answers.
+ */
+const hmacMidstates = (key: u8[], hash: i32): u64[] => {
+  const out: u64[] = new Array<u64>(2 * HMAC_WORDS)
+  if (hash === HMAC_SHA256) {
+    const inner = new Sha256()
+    const outer = new Sha256()
+    hmacKeySha256(inner, outer, key)
+    for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(inner.state.length) && i < toI32(outer.state.length); i += 1) {
+      const j: i32 = i + HMAC_WORDS
+      if (i < toI32(out.length) && j < toI32(out.length)) {
+        out[i] = toU64(inner.state[i])
+        out[j] = toU64(outer.state[i])
+      }
+    }
+    hmacWipeSha256(inner)
+    hmacWipeSha256(outer)
+  } else if (hash === HMAC_SHA384) {
+    const inner = new Sha384()
+    const outer = new Sha384()
+    hmacKeySha384(inner, outer, key)
+    hmacMidstates512(out, inner.engine.state, outer.engine.state)
+    hmacWipeSha384(inner)
+    hmacWipeSha384(outer)
+  } else {
+    const inner = new Sha512()
+    const outer = new Sha512()
+    hmacKeySha512(inner, outer, key)
+    hmacMidstates512(out, inner.engine.state, outer.engine.state)
+    hmacWipeSha512(inner)
+    hmacWipeSha512(outer)
+  }
+  return out
+}
+
+/** `out[0 .. 8) = inner`, `out[8 .. 16) = outer`, for the SHA-512 family. */
+const hmacMidstates512 = (out: u64[], inner: u64[], outer: u64[]): void => {
+  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(inner.length) && i < toI32(outer.length); i += 1) {
+    const j: i32 = i + HMAC_WORDS
+    if (i < toI32(out.length) && j < toI32(out.length)) {
+      out[i] = inner[i]
+      out[j] = outer[i]
+    }
+  }
+}
+
+/**
+ * An HMAC key absorbed once: the inner and outer chaining values after the
+ * key's pad blocks (RFC 2104 §4), held as a `Secret<u64[]>`. Every tag it
+ * makes or checks starts from them, so a tag costs the message's blocks and
+ * two finishing blocks, and never the key's two again.
+ *
+ *     const key = new HmacKey(HMAC_SHA256, secretKey);   // once
+ *     hmacKeyedInto(key, data, 0, data.length, tag, 0);  // per message
+ *     const ok: boolean = hmacKeyedVerify(key, data, 0, data.length, tag, 0);
+ *     key.wipe();                                        // when done
+ *
+ * The tags are `hmacSha256`'s, `hmacSha384`'s and `hmacSha512`'s for the same
+ * key. The key itself is read only inside `exposeWith`, and the hashers that
+ * keyed it are wiped; the caller still owns and wipes the `Secret` it passed.
+ * An unknown `hash` panics.
+ *
+ * The key also owns two hashers of its family, made once, that each tag is
+ * computed in and that are wiped before the tag call returns. One key is
+ * therefore used by one computation at a time, as a `Sha256` is.
+ */
+export class HmacKey {
+  /** `HMAC_SHA256`, `HMAC_SHA384` or `HMAC_SHA512`. */
+  readonly hash: i32
+  /** Words 0 to 7: the keyed inner chaining value; 8 to 15: the keyed outer one. */
+  readonly pads: Secret<u64[]>
+  /** SHA-256's work hashers; idle and wiped between tags. */
+  readonly inner256: Sha256
+  readonly outer256: Sha256
+  /**
+   * SHA-384's and SHA-512's work hashers: SHA-384 is SHA-512's compression
+   * from another start, cut to 48 bytes, so resumed from a chaining value the
+   * two are one hasher and differ only in the digest length taken.
+   */
+  readonly inner512: Sha512
+  readonly outer512: Sha512
+
+  constructor(hash: i32, key: Secret<u8[]>) {
+    if (hmacTagSize(hash) === 0) {
+      panic("HmacKey: an unknown hash")
+    }
+    this.hash = hash
+    this.pads = secret(exposeWith(key, hash, hmacMidstates))
+    this.inner256 = new Sha256()
+    this.outer256 = new Sha256()
+    this.inner512 = new Sha512()
+    this.outer512 = new Sha512()
+    hmacWipeSha256(this.inner256)
+    hmacWipeSha256(this.outer256)
+    hmacWipeSha512(this.inner512)
+    hmacWipeSha512(this.outer512)
+  }
+
+  /** The tag length in bytes: 32, 48 or 64. */
+  size(): i32 {
+    return hmacTagSize(this.hash)
+  }
+
+  /** Zero both keyed chaining values and the work hashers; the key MACs nothing after. */
+  wipe(): void {
+    wipe(this.pads)
+    hmacWipeSha256(this.inner256)
+    hmacWipeSha256(this.outer256)
+    hmacWipeSha512(this.inner512)
+    hmacWipeSha512(this.outer512)
+  }
+}
+
+/** A plain copy of the 16 midstate words, for `expose` to run; the caller wipes it. */
+const hmacCopyWords = (pads: u64[]): u64[] => {
+  const out: u64[] = new Array<u64>(2 * HMAC_WORDS)
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(pads.length); i += 1) {
+    out[i] = pads[i]
+  }
+  return out
+}
+
+/** `h` started again at the point after one keyed block, chaining value `mid[at .. at + 8)`. */
+const hmacResume256 = (h: Sha256, mid: u64[], at: i32): void => {
+  hmacWipeSha256(h)
+  const state: u32[] = h.state
+  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(state.length) && at + i < toI32(mid.length); i += 1) {
+    state[i] = toU32(mid[at + i])
+  }
+  h.total = toI64(SHA256_BLOCK)
+  h.finished = false
+}
+
+/** `hmacResume256` for the SHA-512 family's hasher. */
+const hmacResume512 = (h: Sha512, mid: u64[], at: i32): void => {
+  hmacWipeSha512(h)
+  const state: u64[] = h.engine.state
+  for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(state.length) && at + i < toI32(mid.length); i += 1) {
+    state[i] = mid[at + i]
+  }
+  h.engine.count = toU64(SHA512_BLOCK)
+  h.engine.finished = false
+}
+
+/**
+ * The tag of `data[off .. off + len)` under `key`, as a fresh array the
+ * caller wipes: the midstates copied out of their `Secret`, the key's two
+ * hashers resumed from them, fed and finished, and the copy, the inner digest
+ * and both hashers wiped before it answers.
+ */
+const hmacKeyedTag = (key: HmacKey, data: u8[], off: i32, len: i32): u8[] => {
+  const mid: u64[] = expose(key.pads, hmacCopyWords)
+  if (key.hash === HMAC_SHA256) {
+    const inner: Sha256 = key.inner256
+    const outer: Sha256 = key.outer256
+    hmacResume256(inner, mid, 0)
+    hmacResume256(outer, mid, HMAC_WORDS)
+    wipe(mid)
+    inner.update(data, off, len)
+    const digest: u8[] = inner.digest()
+    outer.update(digest, HMAC_FROM, SHA256_SIZE)
+    const tag: u8[] = outer.digest()
+    wipe(digest)
+    hmacWipeSha256(inner)
+    hmacWipeSha256(outer)
+    return tag
+  }
+  const size: i32 = key.hash === HMAC_SHA384 ? SHA384_SIZE : SHA512_SIZE
+  const inner: Sha512 = key.inner512
+  const outer: Sha512 = key.outer512
+  hmacResume512(inner, mid, 0)
+  hmacResume512(outer, mid, HMAC_WORDS)
+  wipe(mid)
+  inner.update(data, off, len)
+  const digest: u8[] = inner.digest()
+  outer.update(digest, HMAC_FROM, size)
+  const tag: u8[] = outer.digest()
+  wipe(digest)
+  hmacWipeSha512(inner)
+  hmacWipeSha512(outer)
+  return tag
+}
+
+/**
+ * The tag of `data[off .. off + len)` under `key`, written at
+ * `out[at .. at + key.size())`. A window outside its array panics before
+ * anything is read. It runs in an arena block of its own and stores nothing,
+ * so a tag leaves the arena where it was.
+ */
+export const hmacKeyedInto = (key: HmacKey, data: u8[], off: i32, len: i32, out: u8[], at: i32): void => {
+  const size: i32 = key.size()
+  if (!hmacWindowFits(toI32(data.length), off, len)) {
+    panic("hmacKeyedInto: the message window is outside its array")
+  }
+  if (!hmacWindowFits(toI32(out.length), at, size)) {
+    panic("hmacKeyedInto: the tag window is outside its array")
+  }
+  using _scope = arena()
+  const tag: u8[] = hmacKeyedTag(key, data, off, len)
+  for (let i: i32 = 0; i < size && i < toI32(tag.length) && at + i < toI32(out.length); i += 1) {
+    out[at + i] = tag[i]
+  }
+  wipe(tag)
+}
+
+/**
+ * Whether `tag[tagAt .. tagAt + key.size())` is the tag of
+ * `data[off .. off + len)` under `key`, compared in constant time and the
+ * computed tag wiped, since it is the one tag a forger needs. A tag window
+ * that does not fit answers `false`; a message window outside its array
+ * panics. It runs in an arena block of its own and stores nothing.
+ */
+export const hmacKeyedVerify = (key: HmacKey, data: u8[], off: i32, len: i32, tag: u8[], tagAt: i32): boolean => {
+  const size: i32 = key.size()
+  if (!hmacWindowFits(toI32(data.length), off, len)) {
+    panic("hmacKeyedVerify: the message window is outside its array")
+  }
+  if (!hmacWindowFits(toI32(tag.length), tagAt, size)) {
+    return false
+  }
+  using _scope = arena()
+  const mine: u8[] = hmacKeyedTag(key, data, off, len)
+  const ok: boolean = timingSafeEqualAt(mine, HMAC_FROM, tag, tagAt, size)
+  wipe(mine)
+  return ok
 }
