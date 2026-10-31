@@ -1,11 +1,13 @@
-// Map lookups by integer and enum key: `set`, `get` and `has` on a
-// `Map<i32, i32>`, a `Map<i64, i32>` keyed by two packed `i32`s, and a
-// `Map<Op, i32>` over a 16-member enum. Each row times `rounds` passes, each
-// pass fed by the last one's checksum so no pass can be computed once, and
-// prints `<row> <ns> <ops> <checksum>`; run.mjs builds it with each compiler
-// it is given and reports the medians.
+// Map operations by integer, enum and string key, one operation per row:
+// `insert` (`set` of every key into a cleared table, its capacity kept), `hit`
+// (`get` of a present key) and `miss` (`get` of an absent one), at a table size
+// that fits in L1, one that fits in L2 and one past L3. Probes visit the
+// keys in an LCG's order. Every row prints `<row> <ns> <ops> <checksum>`;
+// run.mjs builds this with each compiler it is given, and fx.rs prints the
+// same integer and enum rows, with the same checksums, from Rust's `HashMap`
+// under rustc's `FxHasher`.
 //
-//   main [rounds]
+//   main [scale]     2^23 times `scale` operations a row (default 1)
 
 import { monotonicNanos } from "nish:process"
 import { wrappingAdd, wrappingMul } from "nish:unsafe"
@@ -29,78 +31,103 @@ enum Op {
   Ge = 15,
 }
 
-/** The keys each table holds: enough to leave the L1 and L2 caches. */
-const SIZE: i32 = 65536
+/**
+ * Keys a table holds: 1 Ki fits in L1 and 64 Ki in L2; 8 Mi, half what a `Map`
+ * can hold, is a table of over 128 MiB, past a server's L3.
+ */
+const L1: i32 = 1024
+const L2: i32 = 65536
+const L3: i32 = 8388608
 
 /** The next state of a 32-bit LCG (Numerical Recipes'). */
 const step = (x: i32): i32 => wrappingAdd(wrappingMul(x, 1664525), 1013904223)
 
-/** Two `i32`s as one `i64` key, every operand an `i64` (docs/guide/language/maps-and-sets.md). */
+/** The `i`th `i32` key: an odd multiple, so distinct keys for distinct `i`. */
+const keyI32 = (i: i32): i32 => wrappingMul(i, 7919)
+
+/** Two `i32`s as one `i64` key (docs/guide/language/maps-and-sets.md). */
 const pack = (hi: i32, lo: i32): i64 => (toI64(hi) << toI64(32)) + toI64(lo)
 
-/**
- * One pass over a `Map<i32, i32>`: fill it with `SIZE` keys spread by a
- * multiply, overwrite each once, then look up `SIZE` keys of which half are
- * present (`get`) and `SIZE` of which half are present (`has`).
- */
-const passI32 = (seed: i32): i32 => {
+/** The `i`th `i64` key, a cell of a grid 1024 wide; a `miss` takes a row below it. */
+const keyI64 = (i: i32, miss: boolean): i64 => pack(miss ? -1 - (i >> 10) : i >> 10, (i & 1023) - 512)
+
+/** Prints one row: `ops` operations in `ns` nanoseconds. */
+const report = (row: string, ns: i64, ops: i32, sum: i32): void => {
+  console.log(`${row} ${ns} ${ops} ${sum}`)
+}
+
+/** The three rows of a `Map<i32, i32>` of `size` keys, about `total` operations each. */
+const rowsI32 = (level: string, size: i32, total: i32): void => {
+  const reps: i32 = total > size ? total / size : 1
+  const ops: i32 = reps * size
+  const mask: i32 = size - 1
   const m = new Map<i32, i32>()
-  for (let i: i32 = 0; i < SIZE; i++) {
-    m.set(wrappingMul(i, 7919), i)
-  }
-  for (let i: i32 = 0; i < SIZE; i++) {
-    const k = wrappingMul(i, 7919)
-    m.set(k, (m.get(k) ?? 0) + seed)
+  for (let i: i32 = 0; i < size; i++) {
+    m.set(keyI32(i), i)
   }
   let sum: i32 = 0
-  let x = seed
-  for (let i: i32 = 0; i < SIZE; i++) {
+  let x: i32 = 12345
+  let started: i64 = monotonicNanos()
+  for (let i: i32 = 0; i < ops; i++) {
     x = step(x)
-    sum = wrappingAdd(sum, m.get(wrappingMul((x >>> 8) & (2 * SIZE - 1), 7919)) ?? 1)
+    sum = wrappingAdd(sum, m.get(keyI32((x >>> 8) & mask)) ?? 0)
   }
-  for (let i: i32 = 0; i < SIZE; i++) {
+  report(`i32-hit-${level}`, monotonicNanos() - started, ops, sum)
+  sum = 0
+  started = monotonicNanos()
+  for (let i: i32 = 0; i < ops; i++) {
     x = step(x)
-    if (m.has(wrappingMul((x >>> 8) & (2 * SIZE - 1), 7919))) {
-      sum = wrappingAdd(sum, 3)
+    sum = wrappingAdd(sum, m.get(keyI32(((x >>> 8) & mask) + size)) ?? 1)
+  }
+  report(`i32-miss-${level}`, monotonicNanos() - started, ops, sum)
+  started = monotonicNanos()
+  for (let r: i32 = 0; r < reps; r++) {
+    m.clear()
+    for (let i: i32 = 0; i < size; i++) {
+      m.set(keyI32(i), i ^ r)
     }
   }
-  return sum
+  const ns: i64 = monotonicNanos() - started
+  report(`i32-insert-${level}`, ns, ops, wrappingAdd(m.size, m.get(keyI32(size - 1)) ?? 0))
 }
 
-/** `passI32`'s pass over a grid of 256 by `SIZE / 256` cells keyed by `pack`. */
-const passI64 = (seed: i32): i32 => {
+/** `rowsI32`'s rows for a `Map<i64, i32>` keyed by two packed `i32`s. */
+const rowsI64 = (level: string, size: i32, total: i32): void => {
+  const reps: i32 = total > size ? total / size : 1
+  const ops: i32 = reps * size
+  const mask: i32 = size - 1
   const m = new Map<i64, i32>()
-  const rows: i32 = SIZE / 256
-  for (let y: i32 = 0; y < rows; y++) {
-    for (let x: i32 = 0; x < 256; x++) {
-      m.set(pack(y, x - 128), x + y)
-    }
-  }
-  for (let y: i32 = 0; y < rows; y++) {
-    for (let x: i32 = 0; x < 256; x++) {
-      const k = pack(y, x - 128)
-      m.set(k, (m.get(k) ?? 0) + seed)
-    }
+  for (let i: i32 = 0; i < size; i++) {
+    m.set(keyI64(i, false), i)
   }
   let sum: i32 = 0
-  let r = seed
-  for (let i: i32 = 0; i < SIZE; i++) {
-    r = step(r)
-    const k = pack((r >>> 16) & (2 * rows - 1), ((r >>> 8) & 255) - 128)
-    sum = wrappingAdd(sum, m.get(k) ?? 1)
+  let x: i32 = 12345
+  let started: i64 = monotonicNanos()
+  for (let i: i32 = 0; i < ops; i++) {
+    x = step(x)
+    sum = wrappingAdd(sum, m.get(keyI64((x >>> 8) & mask, false)) ?? 0)
   }
-  for (let i: i32 = 0; i < SIZE; i++) {
-    r = step(r)
-    if (m.has(pack((r >>> 16) & (2 * rows - 1), ((r >>> 8) & 255) - 128))) {
-      sum = wrappingAdd(sum, 3)
+  report(`i64-hit-${level}`, monotonicNanos() - started, ops, sum)
+  sum = 0
+  started = monotonicNanos()
+  for (let i: i32 = 0; i < ops; i++) {
+    x = step(x)
+    sum = wrappingAdd(sum, m.get(keyI64((x >>> 8) & mask, true)) ?? 1)
+  }
+  report(`i64-miss-${level}`, monotonicNanos() - started, ops, sum)
+  started = monotonicNanos()
+  for (let r: i32 = 0; r < reps; r++) {
+    m.clear()
+    for (let i: i32 = 0; i < size; i++) {
+      m.set(keyI64(i, false), i ^ r)
     }
   }
-  return sum
+  const ns: i64 = monotonicNanos() - started
+  report(`i64-insert-${level}`, ns, ops, wrappingAdd(m.size, m.get(keyI64(size - 1, false)) ?? 0))
 }
 
-/** A histogram of `4 * SIZE` enum keys, one `get` and one `set` each, then `4 * SIZE` probes of a `get` and a `has`. */
-const passEnum = (seed: i32): i32 => {
-  const m = new Map<Op, i32>()
+/** The rows of a `Map<Op, i32>`: `hit` on all 16 members, `miss` on a table of the first 8. */
+const rowsEnum = (total: i32): void => {
   const ops: Op[] = [
     Op.Add,
     Op.Sub,
@@ -119,38 +146,96 @@ const passEnum = (seed: i32): i32 => {
     Op.Gt,
     Op.Ge,
   ]
-  let x = seed
-  for (let i: i32 = 0; i < 4 * SIZE; i++) {
-    x = step(x)
-    const op = ops[(x >>> 12) & 15]
-    m.set(op, (m.get(op) ?? seed) + 1)
-  }
-  let sum: i32 = 0
-  for (let i: i32 = 0; i < 4 * SIZE; i++) {
-    x = step(x)
-    const value = m.get(ops[(x >>> 20) & 15]) ?? 0
-    if (m.has(ops[(x >>> 12) & 15])) {
-      sum = wrappingAdd(sum, value ^ x)
+  const all = new Map<Op, i32>()
+  const half = new Map<Op, i32>()
+  for (let i: i32 = 0; i < toI32(ops.length); i++) {
+    const op = ops[i]
+    all.set(op, i)
+    if (i < 8) {
+      half.set(op, i)
     }
   }
-  return sum
-}
-
-/** Times `rounds` passes of one row after two untimed ones, and prints it. */
-const time = (row: string, rounds: i32, opsPerPass: i32, pass: (seed: i32) => i32): void => {
-  let seed: i32 = pass(pass(1))
-  const started: i64 = monotonicNanos()
-  for (let i: i32 = 0; i < rounds; i++) {
-    seed = pass(seed)
+  let sum: i32 = 0
+  let x: i32 = 12345
+  let started: i64 = monotonicNanos()
+  for (let i: i32 = 0; i < total; i++) {
+    x = step(x)
+    const op = ops[toI32((x >>> 8) & 15)]
+    sum = wrappingAdd(sum, all.get(op) ?? 0)
+  }
+  report("enum-hit-L1", monotonicNanos() - started, total, sum)
+  sum = 0
+  started = monotonicNanos()
+  for (let i: i32 = 0; i < total; i++) {
+    x = step(x)
+    const op = ops[toI32((x >>> 8) & 7) + 8]
+    sum = wrappingAdd(sum, half.get(op) ?? 1)
+  }
+  report("enum-miss-L1", monotonicNanos() - started, total, sum)
+  const reps: i32 = total / 16
+  started = monotonicNanos()
+  for (let r: i32 = 0; r < reps; r++) {
+    all.clear()
+    for (let i: i32 = 0; i < toI32(ops.length); i++) {
+      all.set(ops[i], i ^ r)
+    }
   }
   const ns: i64 = monotonicNanos() - started
-  console.log(`${row} ${ns} ${toI64(rounds) * toI64(opsPerPass)} ${seed}`)
+  report("enum-insert-L1", ns, reps * 16, wrappingAdd(all.size, all.get(Op.Ge) ?? 0))
+}
+
+/** `rowsI32`'s rows for a `Map<string, i32>`, its keys built before any clock starts. */
+const rowsString = (level: string, size: i32, total: i32): void => {
+  const reps: i32 = total > size ? total / size : 1
+  const ops: i32 = reps * size
+  const mask: i32 = size - 1
+  const present: string[] = []
+  const absent: string[] = []
+  for (let i: i32 = 0; i < size; i++) {
+    present.push(`key-${keyI32(i)}`)
+    absent.push(`nil-${keyI32(i)}`)
+  }
+  const m = new Map<string, i32>()
+  for (let i: i32 = 0; i < toI32(present.length); i++) {
+    m.set(present[i], i)
+  }
+  let sum: i32 = 0
+  let x: i32 = 12345
+  let started: i64 = monotonicNanos()
+  for (let i: i32 = 0; i < ops; i++) {
+    x = step(x)
+    sum = wrappingAdd(sum, m.get(present[toI32((x >>> 8) & mask)]) ?? 0)
+  }
+  report(`string-hit-${level}`, monotonicNanos() - started, ops, sum)
+  sum = 0
+  started = monotonicNanos()
+  for (let i: i32 = 0; i < ops; i++) {
+    x = step(x)
+    sum = wrappingAdd(sum, m.get(absent[toI32((x >>> 8) & mask)]) ?? 1)
+  }
+  report(`string-miss-${level}`, monotonicNanos() - started, ops, sum)
+  started = monotonicNanos()
+  for (let r: i32 = 0; r < reps; r++) {
+    m.clear()
+    for (let i: i32 = 0; i < toI32(present.length); i++) {
+      m.set(present[i], i ^ r)
+    }
+  }
+  const ns: i64 = monotonicNanos() - started
+  report(`string-insert-${level}`, ns, ops, wrappingAdd(m.size, m.get(present[size - 1]) ?? 0))
 }
 
 export const main = (): i32 => {
-  const rounds: i32 = process.argv.length > 1 ? parseInt(process.argv[1]) : 20
-  time("i32", rounds, 5 * SIZE, passI32)
-  time("i64", rounds, 5 * SIZE, passI64)
-  time("enum", rounds, 16 * SIZE, passEnum)
+  const scale: i32 = process.argv.length > 1 ? parseInt(process.argv[1]) : 1
+  const total: i32 = scale * 8388608
+  rowsI32("L1", L1, total)
+  rowsI64("L1", L1, total)
+  rowsI32("L2", L2, total)
+  rowsI64("L2", L2, total)
+  rowsI32("L3+", L3, total)
+  rowsI64("L3+", L3, total)
+  rowsEnum(total)
+  rowsString("L1", L1, total)
+  rowsString("L2", L2, total)
   return 0
 }
