@@ -2826,7 +2826,9 @@ if (!only || "net_unix".includes(only)) {
 
 // `spawnWithFds` under the prelude, by its global spelling: it starts a child
 // as `spawn` does, so it throws, naming itself, for `spawn`'s reason
-// (`tests/cases/spawn_fds` is the native half).
+// (`tests/cases/spawn_fds_child` is the native half). `--emit-ts` imports it
+// from `nish/runtime`, which throws the same way, as it imports `spawnPiped`:
+// without its `AMBIENT_NAMES` entry the module calls a global Node never had.
 if (!only || "spawn_fds".includes(only)) {
   const fdsDir = path.join(buildDir, "spawn-fds-prelude")
   fs.mkdirSync(fdsDir, { recursive: true })
@@ -2837,6 +2839,16 @@ if (!only || "spawn_fds".includes(only)) {
     "spawn_fds: under the prelude spawnWithFds fails loudly rather than answering",
     loud.status !== 0 && loud.stderr.includes("`spawnWithFds` has no synchronous reading under Node"),
     shown(loud)
+  )
+  const emitted = path.join(fdsDir, "emitted")
+  fs.rmSync(emitted, { recursive: true, force: true })
+  const ts = spawnSync(NISH, [entry, "--emit-ts", emitted], { cwd: root, encoding: "utf8" })
+  const module = path.join(emitted, "spawn-with-fds.ts")
+  const text = ts.status === 0 && fs.existsSync(module) ? fs.readFileSync(module, "utf8") : ""
+  check(
+    "spawn_fds: --emit-ts imports spawnWithFds from nish/runtime",
+    text.startsWith('import { spawnWithFds } from "nish/runtime"\n'),
+    `exit ${ts.status}\n${ts.stderr}\n${text}`
   )
 }
 
