@@ -293,7 +293,7 @@ function preforkInvalid(config: PreforkConfig): string -> @nish.preforkInvalid
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer config: size=36 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function preforkDiscard(state: i32, index: i32, fd: i32, events: i32): void -> @nish.preforkDiscard
+function preforkDiscard(_state: i32, _index: i32, fd: i32, _events: i32): void -> @nish.preforkDiscard
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_net_read
   calls: nish_net_read nish_panic_slice
