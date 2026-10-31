@@ -31,8 +31,8 @@ typedef struct {
 } array;
 int32_t gather(int32_t b, array *kept);
 int32_t peer(int32_t fd, int32_t k);
-int32_t connected(int32_t k, int32_t listener);
-int32_t release(void);
+int32_t connected(int32_t k, int32_t listener, int32_t pid);
+int32_t release(int32_t pid);
 
 static int open_fds(void) {
   int n = 0;
@@ -124,7 +124,7 @@ int main(void) {
   int32_t socks[3];
   const char *kinds[] = {"listen", "connect", "accept"};
   for (int32_t k = 0; k < 3; k++) {
-    socks[k] = connected(k, k > 0 ? socks[0] : -1);
+    socks[k] = connected(k, k > 0 ? socks[0] : -1, (int32_t)getpid());
   }
   printf("pair: pid %d uid %d gid %d\n", peer(pair[0], 0) == (int32_t)getpid(), peer(pair[0], 1) == (int32_t)getuid(),
          peer(pair[0], 2) == (int32_t)getgid());
@@ -132,13 +132,12 @@ int main(void) {
     printf("%s: pid %d uid %d gid %d\n", kinds[k], peer(socks[k], 0) == (int32_t)getpid(),
            peer(socks[k], 1) == (int32_t)getuid(), peer(socks[k], 2) == (int32_t)getgid());
   }
-  /* A listener has no peer: Linux answers with the listener's own
-   * credentials, Darwin's `getpeereid` refuses with ENOTCONN. */
-  int32_t listen_pid = peer(socks[0], 0);
-  printf("listen: own or refused %d\n", listen_pid == (int32_t)getpid() || listen_pid == -ENOTCONN);
+  /* A listener has no peer, and both platforms refuse it with ENOTCONN
+   * rather than answer the listener's own credentials. */
+  printf("listen: refused %d\n", peer(socks[0], 0) == -ENOTCONN);
   for (int32_t k = 0; k < 3; k++) {
     close(socks[k]);
   }
-  printf("release %d\n", release());
+  printf("release %d\n", release((int32_t)getpid()));
   return 0;
 }

@@ -18,7 +18,7 @@
  * here answers the failure's errno, negated. The codes a loop branches on are Linux's numbers on every platform (-11
  * would block, -95 unsupported, -32 the peer is gone, -104 reset, -98 the
  * address is in use, -111 refused, -110 timed out, -22 a bad argument, -88
- * not a socket), so
+ * not a socket, -107 not connected), so
  * `nish_net_err` translates Darwin's; any other failure is the host's own
  * `-errno`. Nothing here allocates: the addresses a call reads or writes are
  * the caller's `u8[]`.
@@ -115,6 +115,7 @@ static int32_t nish_net_err(int e) {
   if (e == ENOTSOCK) return -88;
   if (e == ENAMETOOLONG) return -36;
   if (e == ELOOP) return -40;
+  if (e == ENOTCONN) return -107;
 #endif
   return -e;
 }
@@ -972,7 +973,9 @@ int32_t nish_send_fd(int32_t sock, int32_t fd, const nish_array *buf, int64_t of
    -22, as `sendFd`'s is, and so is an empty `fd`, both before anything is
    read. The descriptor kept is close-on-exec: from the receive on Linux
    (`MSG_CMSG_CLOEXEC`), and from the `fcntl` after it on Darwin, where a child
-   another thread spawns in between inherits it (RT-38). It is not made
+   another thread spawns in between inherits it (RT-38); a Darwin `fcntl`
+   that fails closes it and answers the failure, so no descriptor is handed
+   out without the flag. It is not made
    non-blocking: its status flags are the open file's, which the sender
    shares. */
 int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, nish_array *fd) {
@@ -994,6 +997,8 @@ int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, ni
   m.msg_controllen = sizeof c.room;
   ssize_t n = recvmsg(sock, &m, NISH_RECV_CLOEXEC);
   if (n < 0) return nish_net_fail();
+  int32_t err = 0;
+  int kept = 0;
   for (struct cmsghdr *h = CMSG_FIRSTHDR(&m); h; h = CMSG_NXTHDR(&m, h)) {
     if (h->cmsg_level != SOL_SOCKET || h->cmsg_type != SCM_RIGHTS) continue;
     /* Counted from the header, but never past the room the kernel filled:
@@ -1004,9 +1009,14 @@ int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, ni
     for (size_t k = 0; k < count; k++) {
       int got;
       memcpy(&got, CMSG_DATA(h) + k * sizeof(int), sizeof got);
-      if (out[0] < 0) {
+      if (!kept) {
+        kept = 1;
 #if !defined(__linux__)
-        fcntl(got, F_SETFD, FD_CLOEXEC);
+        if (fcntl(got, F_SETFD, FD_CLOEXEC) != 0) {
+          err = nish_net_fail();
+          close(got);
+          continue;
+        }
 #endif
         out[0] = got;
       } else {
@@ -1014,7 +1024,7 @@ int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, ni
       }
     }
   }
-  return (int32_t)n;
+  return err != 0 ? err : (int32_t)n;
 }
 
 /* `peerCredentials(fd, out)`: the process at the other end of a connected
@@ -1022,7 +1032,11 @@ int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, ni
    three is -22 before anything is asked. The kernel recorded them when the
    connection was made (`connect`, or `socketpair` for a pair), so a peer that
    has since changed its uid, or passed the socket to another process, still
-   reads as it was then (RT-39). Linux reads `SO_PEERCRED`. Darwin reads uid
+   reads as it was then (RT-39). A socket with no peer, listening or never
+   connected, is -107 (ENOTCONN) on both: Linux's `SO_PEERCRED` would answer
+   the listener's own credentials, or none, so `getpeername` is asked first;
+   a peer that has since closed keeps its connect-time answer. Linux reads
+   `SO_PEERCRED`. Darwin reads uid
    and gid from `getpeereid` and the pid from `LOCAL_PEERPID` where the SDK
    names it, else -1. */
 int32_t nish_peer_credentials(int32_t fd, nish_array *out) {
@@ -1031,6 +1045,9 @@ int32_t nish_peer_credentials(int32_t fd, nish_array *out) {
   if (kind != 0) return kind;
   int32_t *o = (int32_t *)out->data;
 #if defined(__linux__)
+  struct sockaddr_un a;
+  socklen_t an = sizeof a;
+  if (getpeername(fd, (struct sockaddr *)&a, &an) != 0) return nish_net_fail();
   struct ucred c;
   socklen_t n = sizeof c;
   if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &c, &n) != 0) return nish_net_fail();
