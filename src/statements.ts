@@ -1547,16 +1547,7 @@ const checkBreak = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   }
   ctx.loopBreaks[at] = true
   if (ctx.loopKinds[at] !== LOOP_ITERATION) {
-    // A `switch` and a labelled block each have a frame, innermost last.
-    let frame = ctx.switchFrames.length - 1
-    let inner = at + 1
-    while (inner < ctx.loopKinds.length) {
-      if (ctx.loopKinds[inner] !== LOOP_ITERATION) {
-        frame = frame - 1
-      }
-      inner = inner + 1
-    }
-    snapshotExit(ctx, ctx.switchFrames[frame], scope)
+    snapshotExit(ctx, ctx.switchFrames[ctx.loopFrames[at]], scope)
   } else if (stmt.text === "") {
     flowNoteBreak(ctx, scope)
   }

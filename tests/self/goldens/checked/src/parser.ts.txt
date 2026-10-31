@@ -2414,18 +2414,18 @@ function Parser.parseLabeled(this: Parser, start: i32): Node -> @Parser.parseLab
   callee +8:24 Parser.parseStatement -> @Parser.parseStatement
 function Parser.parseFunctionBlock(this: Parser): Node -> @Parser.parseFunctionBlock [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   calls: Parser.parseBlock nish_array_grow
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.parseBlock#0
   stackSites=0 stackLocals=0
-  local -10:11 labels: string[] (const)
-  local -9:11 labelLoops: boolean[] (const)
-  local -8:11 outerLabels: string[] (const)
-  local -7:11 hidden: string[] (const)
-  local -6:16 name: string (const)
-  local -3:16 name: string (const)
-  local +3:11 block: Node (const)
-  callee +3:19 Parser.parseBlock -> @Parser.parseBlock
+  local -13:11 labels: string[] (const)
+  local -12:11 labelLoops: boolean[] (const)
+  local -11:11 outerLabels: string[] (const)
+  local -7:13 hidden: string[] (const)
+  local -6:18 name: string (const)
+  local -3:18 name: string (const)
+  local +4:11 block: Node (const)
+  callee +4:19 Parser.parseBlock -> @Parser.parseBlock
 function Parser.parseIf(this: Parser, start: i32): Node -> @Parser.parseIf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5

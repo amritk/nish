@@ -267,6 +267,8 @@ export class CheckContext {
   loopKinds: i32[]
   loopBreaks: boolean[]
   loopLabels: string[]
+  /** Each one's frame in `switchFrames`, or -1 for a loop, which has none. */
+  loopFrames: i32[]
   /** The `switch`es enclosing the statement being checked, innermost last. */
   switchFrames: SwitchFrame[]
   /** The loops enclosing the statement being checked, innermost last, each with its pre-pass. */
@@ -322,6 +324,7 @@ export class CheckContext {
     this.loopKinds = []
     this.loopBreaks = []
     this.loopLabels = []
+    this.loopFrames = []
     this.switchFrames = []
     this.flowFrames = []
     this.statementExpression = null
@@ -603,6 +606,7 @@ export class CheckContext {
     this.loopKinds.push(kind)
     this.loopBreaks.push(false)
     this.loopLabels.push(label)
+    this.loopFrames.push(kind === LOOP_ITERATION ? -1 : this.switchFrames.length - 1)
   }
 
   /** Leave it, answering whether a `break` targeted it. */
@@ -611,6 +615,7 @@ export class CheckContext {
     this.loopKinds.pop()
     this.loopBreaks.pop()
     this.loopLabels.pop()
+    this.loopFrames.pop()
     return broke
   }
 }

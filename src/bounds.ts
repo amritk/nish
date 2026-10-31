@@ -4134,11 +4134,11 @@ const takeLabel = (walk: BoundsWalk): string => {
   return label
 }
 
-/** Name the current `breaks` and `continues` by `label`, when there is one. */
-const openLabel = (walk: BoundsWalk, label: string): void => {
+/** Name `breaks` and the current `continues` by `label`, when there is one. */
+const openLabel = (walk: BoundsWalk, label: string, breaks: State[]): void => {
   if (label !== "") {
     walk.labels.push(label)
-    walk.labelBreaks.push(walk.breaks)
+    walk.labelBreaks.push(breaks)
     walk.labelContinues.push(walk.continues)
   }
 }
@@ -4234,9 +4234,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     // A labelled block goes on after its closing brace from its end and from
     // every `break` that names it, so the state there is the join of those.
     const breaks: State[] = []
-    walk.labels.push(stmt.text)
-    walk.labelBreaks.push(breaks)
-    walk.labelContinues.push(walk.continues)
+    openLabel(walk, stmt.text, breaks)
     const exits = walkBoundsStatement(walk, state, target)
     closeLabel(walk, stmt.text)
     if (breaks.length === 0) {
@@ -4264,7 +4262,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
-    openLabel(walk, label)
+    openLabel(walk, label, walk.breaks)
     walkBoundsStatement(walk, body, stmt.children[1])
     closeLabel(walk, label)
     breakJoin(walk, state)
@@ -4286,7 +4284,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
-    openLabel(walk, label)
+    openLabel(walk, label, walk.breaks)
     const exits = walkBoundsStatement(walk, body, stmt.children[0])
     closeLabel(walk, label)
     const condition = continueJoin(walk, body, exits)
@@ -4325,7 +4323,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
-    openLabel(walk, label)
+    openLabel(walk, label, walk.breaks)
     const exits = walkBoundsStatement(walk, body, stmt.children[3])
     closeLabel(walk, label)
     const update = continueJoin(walk, body, exits)
@@ -4351,7 +4349,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
-    openLabel(walk, label)
+    openLabel(walk, label, walk.breaks)
     walkBoundsStatement(walk, body, stmt.children[2])
     closeLabel(walk, label)
     walk.continues = outer
@@ -4405,7 +4403,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     // further. A `continue` does reach the loop, and stays in its frame.
     const outerBreaks = walk.breaks
     walk.breaks = []
-    openLabel(walk, label)
+    openLabel(walk, label, walk.breaks)
     for (const clause of stmt.children[1].children) {
       const clauseState = cloneState(state)
       const body = clause.kind === N_CASE ? clause.children[1] : clause.children[0]

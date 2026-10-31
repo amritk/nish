@@ -60,7 +60,7 @@ function checkVectorArgument(ctx: CheckContext, arg: Node, scope: Scope, name: s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   calls: CheckContext.error TypeTable.isVector TypeTable.typeName checkExpression nish_str_concat
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -74,7 +74,7 @@ function checkLaneArray(ctx: CheckContext, arg: Node, scope: Scope, name: string
   sharedWrite: via TypeTable.arrayOf
   escaping: lane
   calls: CheckContext.error TypeTable.arrayOf TypeTable.isArray TypeTable.isReadonlyArray TypeTable.refOf TypeTable.typeName checkExpression nish_str_concat readonlyWriteMessage
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0 readonlyWriteMessage#0
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0 readonlyWriteMessage#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -95,7 +95,7 @@ function checkLaneIndex(ctx: CheckContext, arg: Node, scope: Scope, name: string
   sharedWrite: via checkExpression
   escaping: vector
   calls: CheckContext.error TypeTable.laneCount TypeTable.typeName checkExpression nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from parseIntegerLiteral unwrapParens
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 unwrapParens#0 CheckContext.error#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -115,7 +115,7 @@ function checkSimdCall(ctx: CheckContext, call: Node, scope: Scope, name: string
   sharedWrite: via madeVector
   escaping: name
   calls: TypeTable.laneCount TypeTable.refOf checkArgumentType checkBuiltinArity checkExpression checkIndexArgument checkLaneArray checkLaneIndex checkVectorArgument isSimdAccess madeVector nish_panic_index nish_str_eq requireStatementPosition simdLaneType
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkLaneArray#0 checkIndexArgument#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkVectorArgument#0 checkExpression#0 checkLaneArray#0 checkIndexArgument#0 requireStatementPosition#0 checkBuiltinArity#0 checkVectorArgument#0 checkLaneIndex#0 checkExpression#0 checkArgumentType#0
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkLaneArray#0 checkIndexArgument#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkVectorArgument#0 checkExpression#0 checkLaneArray#0 checkIndexArgument#0 requireStatementPosition#0 checkBuiltinArity#0 checkVectorArgument#0 checkLaneIndex#0 checkExpression#0 checkArgumentType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkLaneArray#2 checkIndexArgument#2 checkArgumentType#2 checkVectorArgument#2 checkExpression#2 checkLaneArray#2 checkIndexArgument#2 checkVectorArgument#2 checkLaneIndex#2 checkExpression#2 checkArgumentType#2
   stackSites=0 stackLocals=0

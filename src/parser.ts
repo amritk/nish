@@ -3563,16 +3563,20 @@ export class Parser {
     const labels = this.labels
     const labelLoops = this.labelLoops
     const outerLabels = this.outerLabels
-    const hidden: string[] = []
-    for (const name of outerLabels) {
-      hidden.push(name)
+    if (labels.length > 0) {
+      // The labels around this function are hidden in it, not gone: naming one
+      // reads as a jump out of the function, not as a label nothing declares.
+      const hidden: string[] = []
+      for (const name of outerLabels) {
+        hidden.push(name)
+      }
+      for (const name of labels) {
+        hidden.push(name)
+      }
+      this.outerLabels = hidden
+      this.labels = []
+      this.labelLoops = []
     }
-    for (const name of labels) {
-      hidden.push(name)
-    }
-    this.outerLabels = hidden
-    this.labels = []
-    this.labelLoops = []
     const block = this.parseBlock()
     this.labels = labels
     this.labelLoops = labelLoops
