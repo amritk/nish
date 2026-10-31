@@ -807,15 +807,22 @@ export class TypeTable {
 
   unionMangle(type: i32): string {
     const variants = this.variantsOf(type)
-    return `un${variants.length}${this.joinedMangles(variants, 0)}`
+    return `un${variants.length}${this.joinedMangles(variants, 0, variants.length)}`
   }
 
-  /** `.` and each variant's mangle from `at` on, recursively so that nothing is written. */
-  joinedMangles(variants: i32[], at: i32): string {
-    if (at < 0 || at >= variants.length) {
+  /**
+   * `.` and each variant's mangle in `[from, to)`, recursively so that nothing
+   * is written, and halving as `joinedNames` does.
+   */
+  joinedMangles(variants: i32[], from: i32, to: i32): string {
+    if (from < 0 || to > variants.length || from >= to) {
       return ""
     }
-    return `.${this.mangle(variants[at])}${this.joinedMangles(variants, at + 1)}`
+    if (to - from === 1) {
+      return `.${this.mangle(variants[from])}`
+    }
+    const mid = from + ((to - from) >> 1)
+    return `${this.joinedMangles(variants, from, mid)}${this.joinedMangles(variants, mid, to)}`
   }
 
   /** An array's element as its type spells it: a union in parentheses, `(A | B)[]`. */
