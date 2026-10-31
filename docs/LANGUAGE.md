@@ -8915,6 +8915,25 @@ export const main = (): i32 => {
   failed ``. On wasm32 the key comes from WASI's `random_get`, and a reactor
   module is keyed only once its host calls `_initialize`
   (docs/security/json.md, JSON-13).
+- **An integer, `boolean` or enum key is hashed under a per-process random
+  key too**, drawn the same way: a key of 32 bits or fewer by
+  multiply-add-shift, `(a * x + b) >> 32`, and an `i64` or `u64` key by a
+  folded 128-bit multiply. 8192 `i32` keys built to collide under 0.28's
+  unkeyed `fmix32` run within 8 times of as many ordinary keys, where 0.28
+  ran them about 215 times slower (`tests/cases/map_key_int_collide`). The
+  `i64` hash is keyed but not provably universal, and before `_initialize` a
+  wasm32 reactor hashes every key of 32 bits or fewer to one bucket
+  (docs/security/json.md, JSON-15). **A float key and a class instance key
+  are not keyed**: a float hashes its canonical bits with `fmix64` and an
+  instance its address, so a program keying a table by floats a peer chose
+  converts them to a string or a scaled integer first (JSON-16).
+- **A pair of `i32`s is one `i64` key**, packed exactly for every pair:
+  `(toI64(hi) << toI64(32)) | toI64(toU32(lo))`. `toU32` takes `lo`
+  unsigned, so it stays in the low half, so nothing is added and nothing overflows; with `+` in
+  place of `|` the key leaves the `i64` range at `hi = -2^31` with a negative
+  `lo`. Every operand is an `i64` so the same line runs under Node, where an
+  `i64` is a `BigInt` (`tests/cases/map_key_composite`, both extremes
+  included).
 - **Every `set`, `add`, `has` and `delete` is one probe.** A bucket holds eight
   bits of the key's hash beside the entry's index, and each entry keeps its
   full hash, so a probe reads a key only when both match: 10000 lookups of
