@@ -27,18 +27,18 @@ function sortWith<f64, (a, b) => ...>(xs: f64[], cmp: void): f64[] -> @nish.sort
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$f64#0 nish.insertionRun$f64$fn.16.nish_main$arrow0#1 nish.mergePass$f64$fn.16.nish_main$arrow0#1 nish.mergePass$f64$fn.16.nish_main$arrow0#0 nish.copyRun$f64#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +6:9 tmp: f64[] (const)
-  callee +7:3 copyRun<f64> -> @nish.copyRun$f64
-  local +8:7 lo: i32 (let)
-  local +10:11 hi: i32 (const)
-  callee +10:16 stepTo -> @nish.stepTo
-  callee +11:5 insertionRun<f64, (a, b) => ...> -> @nish.insertionRun$f64$fn.16.nish_main$arrow0
-  local +14:7 inTmp: boolean (let)
-  local +15:7 width: i32 (let)
-  callee +18:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow0
-  callee +20:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow0
-  callee +23:13 stepTo -> @nish.stepTo
-  callee +26:5 copyRun<f64> -> @nish.copyRun$f64
+  local +7:9 tmp: f64[] (const)
+  callee +8:3 copyRun<f64> -> @nish.copyRun$f64
+  local +9:7 lo: i32 (let)
+  local +11:11 hi: i32 (const)
+  callee +11:16 stepTo -> @nish.stepTo
+  callee +12:5 insertionRun<f64, (a, b) => ...> -> @nish.insertionRun$f64$fn.16.nish_main$arrow0
+  local +15:7 inTmp: boolean (let)
+  local +16:7 width: i32 (let)
+  callee +19:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow0
+  callee +21:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow0
+  callee +24:13 stepTo -> @nish.stepTo
+  callee +27:5 copyRun<f64> -> @nish.copyRun$f64
 function sortWith<f64, (a, b) => ...>(xs: f64[], cmp: void): f64[] -> @nish.sortWith$f64$fn.16.nish_main$arrow1 [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$f64
@@ -47,18 +47,18 @@ function sortWith<f64, (a, b) => ...>(xs: f64[], cmp: void): f64[] -> @nish.sort
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$f64#0 nish.insertionRun$f64$fn.16.nish_main$arrow1#1 nish.mergePass$f64$fn.16.nish_main$arrow1#1 nish.mergePass$f64$fn.16.nish_main$arrow1#0 nish.copyRun$f64#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +6:9 tmp: f64[] (const)
-  callee +7:3 copyRun<f64> -> @nish.copyRun$f64
-  local +8:7 lo: i32 (let)
-  local +10:11 hi: i32 (const)
-  callee +10:16 stepTo -> @nish.stepTo
-  callee +11:5 insertionRun<f64, (a, b) => ...> -> @nish.insertionRun$f64$fn.16.nish_main$arrow1
-  local +14:7 inTmp: boolean (let)
-  local +15:7 width: i32 (let)
-  callee +18:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow1
-  callee +20:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow1
-  callee +23:13 stepTo -> @nish.stepTo
-  callee +26:5 copyRun<f64> -> @nish.copyRun$f64
+  local +7:9 tmp: f64[] (const)
+  callee +8:3 copyRun<f64> -> @nish.copyRun$f64
+  local +9:7 lo: i32 (let)
+  local +11:11 hi: i32 (const)
+  callee +11:16 stepTo -> @nish.stepTo
+  callee +12:5 insertionRun<f64, (a, b) => ...> -> @nish.insertionRun$f64$fn.16.nish_main$arrow1
+  local +15:7 inTmp: boolean (let)
+  local +16:7 width: i32 (let)
+  callee +19:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow1
+  callee +21:7 mergePass<f64, (a, b) => ...> -> @nish.mergePass$f64$fn.16.nish_main$arrow1
+  callee +24:13 stepTo -> @nish.stepTo
+  callee +27:5 copyRun<f64> -> @nish.copyRun$f64
 function sortWith<Item, byKey>(xs: Item[], cmp: void): Item[] -> @nish.sortWith$$Item$fn.5.byKey [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.copyRun$$Item
@@ -67,18 +67,18 @@ function sortWith<Item, byKey>(xs: Item[], cmp: void): Item[] -> @nish.sortWith$
   pointer xs: size=0 writesThrough=true captured=true passedTo=nish.copyRun$$Item#0 nish.insertionRun$$Item$fn.5.byKey#1 nish.mergePass$$Item$fn.5.byKey#1 nish.mergePass$$Item$fn.5.byKey#0 nish.copyRun$$Item#1
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +6:9 tmp: Item[] (const)
-  callee +7:3 copyRun<Item> -> @nish.copyRun$$Item
-  local +8:7 lo: i32 (let)
-  local +10:11 hi: i32 (const)
-  callee +10:16 stepTo -> @nish.stepTo
-  callee +11:5 insertionRun<Item, byKey> -> @nish.insertionRun$$Item$fn.5.byKey
-  local +14:7 inTmp: boolean (let)
-  local +15:7 width: i32 (let)
-  callee +18:7 mergePass<Item, byKey> -> @nish.mergePass$$Item$fn.5.byKey
-  callee +20:7 mergePass<Item, byKey> -> @nish.mergePass$$Item$fn.5.byKey
-  callee +23:13 stepTo -> @nish.stepTo
-  callee +26:5 copyRun<Item> -> @nish.copyRun$$Item
+  local +7:9 tmp: Item[] (const)
+  callee +8:3 copyRun<Item> -> @nish.copyRun$$Item
+  local +9:7 lo: i32 (let)
+  local +11:11 hi: i32 (const)
+  callee +11:16 stepTo -> @nish.stepTo
+  callee +12:5 insertionRun<Item, byKey> -> @nish.insertionRun$$Item$fn.5.byKey
+  local +15:7 inTmp: boolean (let)
+  local +16:7 width: i32 (let)
+  callee +19:7 mergePass<Item, byKey> -> @nish.mergePass$$Item$fn.5.byKey
+  callee +21:7 mergePass<Item, byKey> -> @nish.mergePass$$Item$fn.5.byKey
+  callee +24:13 stepTo -> @nish.stepTo
+  callee +27:5 copyRun<Item> -> @nish.copyRun$$Item
 function copyRun<f64>(src: f64[], dst: f64[], lo: i32, hi: i32): void -> @nish.copyRun$f64 [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

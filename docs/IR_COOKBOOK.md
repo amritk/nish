@@ -17117,7 +17117,6 @@ export const sortScores = (xs: i32[]): i32[] => xs.sort(ascending)
 @.str.0 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noundef i64 @nish_arena_mark() #3
 declare void @nish_arena_release(i64 noundef) #3
@@ -17228,7 +17227,6 @@ len.ok:
   store i64 %6, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %12 = mul i64 %6, 4
   %13 = call i8* @nish_alloc_struct(i64 %12)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %13, i8 0, i64 %12, i1 false), !alias.scope !4, !noalias !3
   %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
   store i8* %13, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   store %struct.nish_array* %9, %struct.nish_array** %tmp.addr, align 8
