@@ -81,7 +81,7 @@ function fieldAlign(table: TypeTable, field: FieldInfo): i32 -> @fieldAlign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
-  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=72 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee +0:8 FieldInfo.inline -> @FieldInfo.inline
   callee +1:12 TypeTable.alignOf -> @TypeTable.alignOf
@@ -92,7 +92,7 @@ function fieldWidth(table: TypeTable, field: FieldInfo): i32 -> @fieldWidth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf fieldAlign nish_panic_overflow roundUpTo
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 fieldAlign#0 TypeTable.alignOf#0 TypeTable.refOf#0
-  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
+  pointer field: size=72 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
   stackSites=0 stackLocals=0
   callee +0:8 FieldInfo.inline -> @FieldInfo.inline
   callee +1:12 TypeTable.alignOf -> @TypeTable.alignOf
@@ -277,7 +277,7 @@ function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, w
   sharedWrite: +0:3
   calls: CheckContext.error CheckContext.errorAtProperty CheckedProgram.enumNamed EnumInfo.hasMember EnumInfo.memberValue TypeTable.assignable TypeTable.isEnumMemberType TypeTable.memberValue TypeTable.refOf TypeTable.typeName memberSlotMessage nish_panic_index nish_str_concat
   pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtProperty#0 CheckContext.error#0 memberSlotMessage#0 CheckContext.error#0
-  pointer field: size=64 writesThrough=true captured=false
+  pointer field: size=72 writesThrough=true captured=false
   pointer init: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.errorAtProperty#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   local -11:9 receiver: Node (const)
@@ -516,7 +516,7 @@ function describeField(ctx: CheckContext, field: FieldInfo): string -> @describe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_str_concat
   pointer ctx: size=280 writesThrough=false captured=false
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:23 TypeTable.typeName -> @TypeTable.typeName
 function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @noteStructNames [exported]

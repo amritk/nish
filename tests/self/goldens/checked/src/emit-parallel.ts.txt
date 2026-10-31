@@ -475,7 +475,7 @@ function taskFinish(emitter: Emitter, name: string, store: FunctionSig | null, p
   callee +11:3 IRFunction.emit -> @IRFunction.emit
   callee +12:3 IRFunction.emit -> @IRFunction.emit
 function lockWord(emitter: Emitter, info: StructInfo, name: string): FieldInfo -> @lockWord
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=72
   sharedWrite: via nish_exit
   escaping: name
   calls: StructInfo.field internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat

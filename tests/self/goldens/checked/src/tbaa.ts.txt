@@ -52,7 +52,7 @@ function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string
   calls: Emitter.metadata nish_str_concat nish_str_from_i32 scalarNode structNode
   pointer emitter: size=280 writesThrough=false captured=false passedTo=structNode#0 scalarNode#0 Emitter.metadata#0
   pointer info: size=168 writesThrough=false captured=false passedTo=structNode#1
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 base: string (const)
   callee +0:16 structNode -> @structNode
