@@ -860,7 +860,11 @@ const hmacMidstates = (key: u8[], hash: i32): u64[] => {
     const inner = new Sha256()
     const outer = new Sha256()
     hmacKeySha256(inner, outer, key)
-    for (let i: i32 = 0; i < HMAC_WORDS && i < toI32(inner.state.length) && i < toI32(outer.state.length); i += 1) {
+    for (
+      let i: i32 = 0;
+      i < HMAC_WORDS && i < toI32(inner.state.length) && i < toI32(outer.state.length);
+      i += 1
+    ) {
       const j: i32 = i + HMAC_WORDS
       if (i < toI32(out.length) && j < toI32(out.length)) {
         out[i] = toU64(inner.state[i])
@@ -1064,7 +1068,14 @@ export const hmacKeyedInto = (key: HmacKey, data: u8[], off: i32, len: i32, out:
  * that does not fit answers `false`; a message window outside its array
  * panics. It runs in an arena block of its own and stores nothing.
  */
-export const hmacKeyedVerify = (key: HmacKey, data: u8[], off: i32, len: i32, tag: u8[], tagAt: i32): boolean => {
+export const hmacKeyedVerify = (
+  key: HmacKey,
+  data: u8[],
+  off: i32,
+  len: i32,
+  tag: u8[],
+  tagAt: i32
+): boolean => {
   const size: i32 = key.size()
   if (!hmacWindowFits(toI32(data.length), off, len)) {
     panic("hmacKeyedVerify: the message window is outside its array")

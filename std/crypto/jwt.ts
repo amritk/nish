@@ -92,7 +92,13 @@ import {
   rsaParsePublicKey,
   rsaVerifyPkcs1v15,
 } from "nish/crypto/rsa"
-import { P256_POINT_SIZE, P256_SIGNATURE_SIZE, p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256"
+import {
+  P256_POINT_SIZE,
+  P256_SIGNATURE_SIZE,
+  p256PublicKey,
+  p256SignSha256,
+  p256VerifySha256,
+} from "nish/crypto/p256"
 import { P384_POINT_SIZE, P384_SIGNATURE_SIZE, p384VerifySha384 } from "nish/crypto/p384"
 import { ed25519PublicKey, ed25519Sign, ed25519Verify } from "nish/crypto/ed25519"
 import { base64urlEncode } from "nish/crypto/base64url"
@@ -399,7 +405,12 @@ export const jwtRsaKeyParts = (alg: i32, n: u8[], e: u8[]): JwtKey | null => {
  * off the curve makes every verification fail.
  */
 export const jwtEcKey = (alg: i32, point: u8[]): JwtKey | null => {
-  const size: i32 = alg === JWT_ALG_ES256 ? P256_POINT_SIZE : alg === JWT_ALG_ES384 ? P384_POINT_SIZE : 0
+  let size: i32 = 0
+  if (alg === JWT_ALG_ES256) {
+    size = P256_POINT_SIZE
+  } else if (alg === JWT_ALG_ES384) {
+    size = P384_POINT_SIZE
+  }
   if (size === 0 || toI32(point.length) !== size || toI32(point[0]) !== 4) {
     return null
   }
@@ -502,7 +513,12 @@ const jwtDecode = (src: u8[], off: i32, len: i32, out: u8[]): i32 => {
 // ---- verify -----------------------------------------------------------------
 
 /** `v` held to `[lo, hi]`. */
-const jwtClamp = (v: i64, lo: i64, hi: i64): i64 => (v < lo ? lo : v > hi ? hi : v)
+const jwtClamp = (v: i64, lo: i64, hi: i64): i64 => {
+  if (v < lo) {
+    return lo
+  }
+  return v > hi ? hi : v
+}
 
 /** The bytes `[off, off + len)` of `src` as a fresh array. */
 const jwtSlice = (src: u8[], off: i32, len: i32): u8[] => {
@@ -527,8 +543,12 @@ const jwtVerifyPublic = (key: JwtKey, src: u8[], off: i32, len: i32, sig: u8[], 
   const alg: i32 = key.alg
   const rsa: RsaPublicKey | null = key.rsa
   if (rsa !== null) {
-    const hash: i32 =
-      alg === JWT_ALG_RS256 ? RSA_HASH_SHA256 : alg === JWT_ALG_RS384 ? RSA_HASH_SHA384 : RSA_HASH_SHA512
+    let hash: i32 = RSA_HASH_SHA512
+    if (alg === JWT_ALG_RS256) {
+      hash = RSA_HASH_SHA256
+    } else if (alg === JWT_ALG_RS384) {
+      hash = RSA_HASH_SHA384
+    }
     return rsaVerifyPkcs1v15(rsa, hash, msg, s)
   }
   if (alg === JWT_ALG_ES256) {
@@ -780,8 +800,15 @@ export class JwtVerifier {
         return JWT_ERR_CLAIMS
       }
       if (tok.keyEquals("exp") || tok.keyEquals("nbf") || tok.keyEquals("iat")) {
-        const which: i32 = tok.keyEquals("exp") ? 0 : tok.keyEquals("nbf") ? 1 : 2
-        const seen: boolean = which === 0 ? this.hasExp : which === 1 ? this.hasNbf : this.hasIat
+        let which: i32 = 2
+        let seen: boolean = this.hasIat
+        if (tok.keyEquals("exp")) {
+          which = 0
+          seen = this.hasExp
+        } else if (tok.keyEquals("nbf")) {
+          which = 1
+          seen = this.hasNbf
+        }
         if (seen || tok.next() !== JSON_TOK_NUMBER || !tok.isInteger()) {
           return JWT_ERR_CLAIMS
         }
@@ -925,7 +952,7 @@ const jwtIsObject = (src: u8[]): boolean => {
 
 /** Whether `kid` is 1 to 256 printable ASCII characters without `"` or `\`, so it needs no JSON escape. */
 const jwtKidFits = (kid: string): boolean => {
-  if (kid.length < 1 || kid.length > 256) {
+  if (kid.length === 0 || kid.length > 256) {
     return false
   }
   for (let i: i32 = 0; i < toI32(kid.length); i += 1) {

@@ -18447,26 +18447,26 @@ function hmacMidstates(key: u8[], hash: i32): u64[] -> @nish.hmacMidstates
   local +3:11 outer: Sha256 (const)
   callee +3:19 new Sha256 -> @nish.Sha256.constructor
   callee +4:5 hmacKeySha256 -> @nish.hmacKeySha256
-  local +5:14 i: i32 (let)
-  local +6:13 j: i32 (const)
-  callee +12:5 hmacWipeSha256 -> @nish.hmacWipeSha256
-  callee +13:5 hmacWipeSha256 -> @nish.hmacWipeSha256
-  local +15:11 inner: Sha384 (const)
-  callee +15:19 new Sha384 -> @nish.Sha384.constructor
-  local +16:11 outer: Sha384 (const)
-  callee +16:19 new Sha384 -> @nish.Sha384.constructor
-  callee +17:5 hmacKeySha384 -> @nish.hmacKeySha384
-  callee +18:5 hmacMidstates512 -> @nish.hmacMidstates512
-  callee +19:5 hmacWipeSha384 -> @nish.hmacWipeSha384
-  callee +20:5 hmacWipeSha384 -> @nish.hmacWipeSha384
-  local +22:11 inner: Sha512 (const)
-  callee +22:19 new Sha512 -> @nish.Sha512.constructor
-  local +23:11 outer: Sha512 (const)
-  callee +23:19 new Sha512 -> @nish.Sha512.constructor
-  callee +24:5 hmacKeySha512 -> @nish.hmacKeySha512
-  callee +25:5 hmacMidstates512 -> @nish.hmacMidstates512
-  callee +26:5 hmacWipeSha512 -> @nish.hmacWipeSha512
-  callee +27:5 hmacWipeSha512 -> @nish.hmacWipeSha512
+  local +6:11 i: i32 (let)
+  local +10:13 j: i32 (const)
+  callee +16:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +17:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  local +19:11 inner: Sha384 (const)
+  callee +19:19 new Sha384 -> @nish.Sha384.constructor
+  local +20:11 outer: Sha384 (const)
+  callee +20:19 new Sha384 -> @nish.Sha384.constructor
+  callee +21:5 hmacKeySha384 -> @nish.hmacKeySha384
+  callee +22:5 hmacMidstates512 -> @nish.hmacMidstates512
+  callee +23:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  callee +24:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+  local +26:11 inner: Sha512 (const)
+  callee +26:19 new Sha512 -> @nish.Sha512.constructor
+  local +27:11 outer: Sha512 (const)
+  callee +27:19 new Sha512 -> @nish.Sha512.constructor
+  callee +28:5 hmacKeySha512 -> @nish.hmacKeySha512
+  callee +29:5 hmacMidstates512 -> @nish.hmacMidstates512
+  callee +30:5 hmacWipeSha512 -> @nish.hmacWipeSha512
+  callee +31:5 hmacWipeSha512 -> @nish.hmacWipeSha512
 function hmacMidstates512(out: u64[], inner: u64[], outer: u64[]): void -> @nish.hmacMidstates512
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
