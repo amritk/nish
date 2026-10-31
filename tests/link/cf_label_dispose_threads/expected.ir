@@ -1,0 +1,2 @@
+call void @nish_scope_join(
+store atomic i32 0, i32* %6 release, align 4

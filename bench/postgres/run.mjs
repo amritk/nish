@@ -4,11 +4,13 @@
 // same PostgreSQL 18, and how much of a difference this machine can see at all.
 //
 //   bash bench/postgres/setup.sh   # once: the cluster and its seed
-//   npm run build && node bench/postgres/run.mjs [--validate] [--rounds N] [--compiler <nish>]
+//   npm run build && node bench/postgres/run.mjs [--unix] [--validate] [--rounds N] [--compiler <nish>]
+//     --unix      the module over TCP against the module over the server's
+//                 Unix socket, instead of the module against libpq (below)
 //     --validate  one run of each side at small counts: rows, checksums and
 //                 failures must agree, nothing is timed
-//     --rounds N  timed rounds, rounded up to a multiple of 3 (default 12),
-//                 after one uncounted warm-up round
+//     --rounds N  timed rounds, rounded up to a multiple of the sides (3, or
+//                 4 with --unix; default 12), after one uncounted warm-up round
 //
 // The cluster is setup.sh's, in $PG_BENCH_DIR (else $TMPDIR/nish-bench-postgres,
 // /tmp without TMPDIR); run.mjs starts it on a free port on 127.0.0.1 and stops
@@ -37,6 +39,20 @@
 // copy less the twin beside it; the noise band is the build against its byte-identical copy. The verdict is the
 // medians: a difference is one this machine can see only when it exceeds the
 // noise band and both sides' IQRs.
+//
+// --unix runs two workloads with one query in flight, `one` (`SELECT 1`) and
+// `rows` (100 users from a random id), on the build and its copy, each over
+// TCP to 127.0.0.1 (TCP_NODELAY) and over `unixConnect` to the cluster's
+// `sock/.s.PGSQL.<port>`, the same rotation over the four sides. It needs the
+// cluster's `local all all scram-sha-256` line, which setup.sh writes. Each
+// run also reports the server backend's CPU over its timed loop, from
+// `/proc/<pid>/schedstat` (time on a CPU, in nanoseconds) for the pid
+// `pg_backend_pid()` answers, checked against `/proc/<pid>/stat`'s utime +
+// stime, whose 10 ms ticks are too coarse to report. The report is µs per
+// query (wall), client CPU and server CPU per query, min, median and IQR; the
+// noise band is the build against its copy on the same transport, the larger
+// of the two; Unix against TCP is a difference this machine can see only
+// outside it and both IQRs.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import { createServer } from "node:net"
@@ -59,10 +75,13 @@ const fail = (msg) => {
 
 let rounds = 12
 let validate = false
+let unix = false
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--rounds") {
     rounds = Number(argv[++i])
+  } else if (argv[i] === "--unix") {
+    unix = true
   } else if (argv[i] === "--validate") {
     validate = true
   } else {
@@ -77,11 +96,16 @@ if (!(rounds >= 2)) {
 // spent waiting on the server.
 // `rows` is what one query answers, checked on every run, so a short seed
 // cannot time empty results.
-const WORKLOADS = [
-  { name: "pk", count: validate ? 2000 : 50000, rows: 1 },
-  { name: "list", count: validate ? 200 : 3000, rows: 20 },
-  { name: "insert", count: validate ? 500 : 5000, rows: 1 },
-]
+const WORKLOADS = unix
+  ? [
+      { name: "one", count: validate ? 500 : 20000, rows: 1 },
+      { name: "rows", count: validate ? 100 : 5000, rows: 100 },
+    ]
+  : [
+      { name: "pk", count: validate ? 2000 : 50000, rows: 1 },
+      { name: "list", count: validate ? 200 : 3000, rows: 20 },
+      { name: "insert", count: validate ? 500 : 5000, rows: 1 },
+    ]
 
 // scripts/build.sh: the speed profile's `optimise` less -flto (twin.c calls
 // nothing it could inline: libpq is a shared library) and `elf`.
@@ -141,14 +165,29 @@ const run = (cmd, args, what) => {
   return r.stdout
 }
 
+// The server, as setup.sh made it: as postgres when run as root.
+const asPostgres = (cmd, args) =>
+  process.getuid?.() === 0 ? ["runuser", ["-u", "postgres", "--", cmd, ...args]] : [cmd, args]
+
 const pgConfig = (flag) => run("pg_config", [flag], `pg_config ${flag}`).trim()
-const libpq = Number(/^PostgreSQL (\d+)/.exec(pgConfig("--version"))?.[1])
-if (!(libpq >= 17)) {
+const libpq = unix ? 0 : Number(/^PostgreSQL (\d+)/.exec(pgConfig("--version"))?.[1])
+if (!unix && !(libpq >= 17)) {
   fail(`libpq ${libpq}: twin.c needs 17 or later (PQsendPipelineSync); run bench/postgres/setup.sh`)
 }
 const data = path.join(pgDir, "data")
 if (!fs.existsSync(path.join(pgDir, "seeded"))) {
   fail(`no seeded cluster in ${pgDir}: run bash bench/postgres/setup.sh`)
+}
+const sock = path.join(pgDir, "sock")
+if (unix) {
+  // data/ is the postgres account's, mode 0700, when setup.sh ran as root.
+  const hba =
+    spawnSync(...asPostgres("cat", [path.join(data, "pg_hba.conf")]), {
+      encoding: "utf8",
+    }).stdout ?? ""
+  if (!/^local\s+all\s+all\s+scram-sha-256\s*$/m.test(hba)) {
+    fail(`${data}/pg_hba.conf lets conduit in over TCP only: re-run bash bench/postgres/setup.sh`)
+  }
 }
 
 fs.mkdirSync(outDir, { recursive: true })
@@ -175,28 +214,27 @@ fs.copyFileSync(exe, copy)
 if (!fs.readFileSync(exe).equals(fs.readFileSync(copy))) {
   fail("the copy is not byte-identical to the build")
 }
-run(
-  cc,
-  [
-    ...CFLAGS,
-    ...HARDEN,
-    ...LDFLAGS,
-    "-I",
-    pgConfig("--includedir"),
-    path.join(here, "twin.c"),
-    "-L",
-    pgConfig("--libdir"),
-    "-lpq",
-    "-o",
-    twin,
-  ],
-  `${cc} twin`
-)
+if (!unix) {
+  run(
+    cc,
+    [
+      ...CFLAGS,
+      ...HARDEN,
+      ...LDFLAGS,
+      "-I",
+      pgConfig("--includedir"),
+      path.join(here, "twin.c"),
+      "-L",
+      pgConfig("--libdir"),
+      "-lpq",
+      "-o",
+      twin,
+    ],
+    `${cc} twin`
+  )
+}
 
-// The server, as setup.sh made it: as postgres when run as root.
-const as = (cmd, args) =>
-  process.getuid?.() === 0 ? ["runuser", ["-u", "postgres", "--", cmd, ...args]] : [cmd, args]
-const pgCtl = (args, what) => run(...as(path.join(pgBin, "pg_ctl"), ["-D", data, ...args]), what)
+const pgCtl = (args, what) => run(...asPostgres(path.join(pgBin, "pg_ctl"), ["-D", data, ...args]), what)
 const port = await new Promise((resolve) => {
   const s = createServer().listen(0, "127.0.0.1", () => {
     const free = s.address().port
@@ -204,46 +242,60 @@ const port = await new Promise((resolve) => {
   })
 })
 pgCtl(["-l", path.join(data, "bench.log"), "-o", `-c port=${port}`, "-w", "start"], "pg_ctl start")
-const stop = () => spawnSync(...as(path.join(pgBin, "pg_ctl"), ["-D", data, "-m", "fast", "-w", "stop"]))
+const stop = () =>
+  spawnSync(...asPostgres(path.join(pgBin, "pg_ctl"), ["-D", data, "-m", "fast", "-w", "stop"]))
 process.on("exit", stop)
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => process.exit(130))
 }
 
-const LINE = /^rows (\d+) checksum (\d+) failed (-?\d+) count (\d+) ns (\d+) user (\d+) sys (\d+)$/
+const LINE =
+  /^rows (\d+) checksum (\d+) failed (-?\d+) count (\d+) ns (\d+) user (\d+) sys (\d+)(?: server_ticks (\d+) server_ns (\d+))?$/
 
 /**
- * One run of `bin` on workload `w`: what it read, its client CPU µs per query
- * (user and system, and the system part alone) and its queries per second.
+ * One run of `bin` on workload `w`, over the socket in `dir` when there is
+ * one: what it read, its client CPU µs per query (user and system, and the
+ * system part alone), its queries per second, and with --unix its µs per query
+ * and the server backend's CPU µs per query.
  */
-const runOnce = (bin, w) => {
+const runOnce = (bin, w, dir) => {
   const out = run(
     bin,
-    [w.name, String(port), "conduit", "conduit", "conduit_dev", String(w.count)],
+    [w.name, String(port), "conduit", "conduit", "conduit_dev", String(w.count), ...(dir ? [dir] : [])],
     `${path.basename(bin)} ${w.name}`
   )
   const m = LINE.exec(out.trim())
   if (m === null || m[3] !== "0" || Number(m[1]) !== w.rows * w.count) {
     fail(`${bin} ${w.name} printed ${JSON.stringify(out)}, not ${w.rows * w.count} rows`)
   }
+  // The two clocks of the backend's CPU: stat's utime + stime in ticks of
+  // 1/CLK_TCK (100 on Linux) and schedstat's nanoseconds must agree to a tick
+  // or two, or one of them is not the backend's.
+  if (m[8] !== undefined && Math.abs(Number(m[8]) * 1e7 - Number(m[9])) > 2e7 + Number(m[9]) / 10) {
+    fail(`${bin} ${w.name}: the backend's stat says ${m[8]} ticks, its schedstat ${m[9]} ns`)
+  }
   return {
     answer: `rows ${m[1]} checksum ${m[2]} count ${m[4]}`,
     cpu: (Number(m[6]) + Number(m[7])) / w.count,
     sys: Number(m[7]) / w.count,
     qps: (w.count * 1e9) / Number(m[5]),
+    wall: Number(m[5]) / 1000 / w.count,
+    server: Number(m[9]) / 1000 / w.count,
   }
 }
 
-const bins = [exe, copy, twin]
-const labels = ["nish", "nish copy", "C"]
+// --unix: the build and its copy, over TCP and over the socket.
+const bins = unix ? [exe, copy, exe, copy] : [exe, copy, twin]
+const dirs = unix ? [null, null, sock, sock] : [null, null, null]
+const labels = unix ? ["nish tcp", "copy tcp", "nish unix", "copy unix"] : ["nish", "nish copy", "C"]
 
 if (validate) {
   for (const w of WORKLOADS) {
-    const answers = bins.map((b) => runOnce(b, w).answer)
+    const answers = bins.map((b, k) => runOnce(b, w, dirs[k]).answer)
     if (answers.some((a) => a !== answers[0])) {
       fail(`${w.name}: the sides disagree\n${answers.map((a, k) => `  ${labels[k]}: ${a}`).join("\n")}`)
     }
-    console.log(`${w.name}: ${answers[0]}, the same on both sides`)
+    console.log(`${w.name}: ${answers[0]}, the same on every side`)
   }
   console.log("bench/postgres: valid")
   process.exit(0)
@@ -268,6 +320,8 @@ const iqr = (xs) => {
 }
 
 const cpus = WORKLOADS.map(() => bins.map(() => []))
+const walls = WORKLOADS.map(() => bins.map(() => []))
+const servers = WORKLOADS.map(() => bins.map(() => []))
 const syss = WORKLOADS.map(() => bins.map(() => []))
 const qpss = WORKLOADS.map(() => bins.map(() => []))
 const answers = WORKLOADS.map(() => null)
@@ -277,7 +331,7 @@ for (let round = 0; round <= timed; round++) {
   for (let w = 0; w < WORKLOADS.length; w++) {
     for (let j = 0; j < bins.length; j++) {
       const k = (j + round) % bins.length
-      const r = runOnce(bins[k], WORKLOADS[w])
+      const r = runOnce(bins[k], WORKLOADS[w], dirs[k])
       if (answers[w] !== null && r.answer !== answers[w]) {
         fail(`round ${round}: ${labels[k]} ${WORKLOADS[w].name} printed ${r.answer}, not ${answers[w]}`)
       }
@@ -286,6 +340,8 @@ for (let round = 0; round <= timed; round++) {
         cpus[w][k].push(r.cpu)
         syss[w][k].push(r.sys)
         qpss[w][k].push(r.qps)
+        walls[w][k].push(r.wall)
+        servers[w][k].push(r.server)
       }
     }
   }
@@ -294,14 +350,53 @@ for (let round = 0; round <= timed; round++) {
 const us = (v) => `${v.toFixed(2)} µs`
 const signed = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(2)} µs`
 const whole = (v) => v.toFixed(0)
-console.log(
-  `postgres: ${timed} rounds; PostgreSQL ${run(
-    path.join(pgBin, "postgres"),
-    ["--version"],
-    "postgres --version"
+const server = run(path.join(pgBin, "postgres"), ["--version"], "postgres --version")
+  .trim()
+  .replace(/^postgres \(PostgreSQL\) /, "")
+if (unix) {
+  console.log(
+    `postgres --unix: ${timed} rounds; PostgreSQL ${server}, one query in flight;` +
+      ` ${os.cpus()[0]?.model.trim()}, ${os.cpus().length} CPUs, ${os.type()} ${os.release()}`
   )
-    .trim()
-    .replace(/^postgres \(PostgreSQL\) /, "")},` +
+  const FIGURES = [
+    { what: "wall", of: walls },
+    { what: "client cpu", of: cpus },
+    { what: "server cpu", of: servers },
+  ]
+  for (let w = 0; w < WORKLOADS.length; w++) {
+    console.log(`${WORKLOADS[w].name}: ${answers[w]}`)
+    // A transport's samples are its build's and its copy's runs together.
+    const both = (f, t) => [...f.of[w][2 * t], ...f.of[w][2 * t + 1]]
+    for (const [t, name] of ["tcp", "unix"].entries()) {
+      console.log(
+        `  ${name.padEnd(5)}` +
+          FIGURES.map((f) => {
+            const x = both(f, t)
+            return ` ${f.what} min ${us(min(x))}, median ${us(median(x))}, IQR ${us(iqr(x))}`
+          }).join(";") +
+          "/query"
+      )
+    }
+    const band = (f) =>
+      Math.max(...[0, 1].map((t) => Math.abs(median(f.of[w][2 * t]) - median(f.of[w][2 * t + 1]))))
+    console.log(
+      `  noise band (build against its copy):${FIGURES.map((f) => ` ${f.what} ${us(band(f))}`).join(";")}`
+    )
+    console.log(
+      "  unix - tcp:" +
+        FIGURES.map((f) => {
+          const x = both(f, 1)
+          const y = both(f, 0)
+          const diff = median(x) - median(y)
+          const seen = Math.abs(diff) > band(f) && Math.abs(diff) > iqr(x) && Math.abs(diff) > iqr(y)
+          return ` ${f.what} ${signed(diff)} (${((diff / median(y)) * 100).toFixed(1)}%, ${seen ? "outside the noise" : "inside the noise"})`
+        }).join(";")
+    )
+  }
+  process.exit(0)
+}
+console.log(
+  `postgres: ${timed} rounds; PostgreSQL ${server},` +
     ` libpq ${pgConfig("--version").replace(/^PostgreSQL /, "")}; ${os.cpus().length} cores`
 )
 for (let w = 0; w < WORKLOADS.length; w++) {

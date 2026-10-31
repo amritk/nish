@@ -25,6 +25,7 @@ import {
   N_FOR,
   N_FOR_OF,
   N_IF,
+  N_LABELED,
   N_MEMBER,
   N_PAREN,
   N_RETURN,
@@ -191,6 +192,12 @@ const walkStatement = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned:
       return terminated()
     case N_CONTINUE:
       return terminated()
+    case N_LABELED: {
+      // A `break` that names the label goes on after the statement with only
+      // what was assigned before it, as a loop body's assignments do not count.
+      const after = walkStatement(ctx, cls, stmt.children[0], assigned.copy())
+      return breaksTo(stmt.children[0], stmt.text) ? assigned : after
+    }
     case N_WHILE:
       return walkLoop(ctx, cls, stmt.children[0], stmt.children[1], assigned)
     case N_DO:
@@ -212,6 +219,22 @@ const walkStatement = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned:
 }
 
 const terminated = (): Assigned => new Assigned(true)
+
+/**
+ * Whether a `break` inside `node` names `label`. One in a nested function names
+ * that function's own label, and counting it only keeps the answer safe.
+ */
+const breaksTo = (node: Node, label: string): boolean => {
+  if (node.kind === N_BREAK) {
+    return node.text === label
+  }
+  for (const child of node.children) {
+    if (breaksTo(child, label)) {
+      return true
+    }
+  }
+  return false
+}
 
 const walkIf = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned => {
   checkReads(ctx, cls, stmt.children[0], assigned, false)

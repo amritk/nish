@@ -1139,8 +1139,11 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try`, a labelled statement, destructuring and an arrow that captures a
-local are refused by Nish on their own, so no loop that compiles holds them.
+`try`, destructuring and an arrow that captures a local are refused by Nish
+on their own, so no loop that compiles holds them. A loop that holds a
+labelled statement or a labelled `break` or `continue` anywhere in its body,
+or whose `switch` has a clause that falls into the next, is one the pass
+gives up on: it keeps the checker's widened state.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
@@ -4681,6 +4684,85 @@ cases):
 | NL2500, the same in a `parallelMap` | the same | the same |
 | NL2484, an arrow that uses a `Channel` | the arrow moves to a `const` above the top-level statement it is written in, named for the function and `Task` (`mainTask`), and the call names it | an arrow that captures, or leaves a parameter's or its result's type out, which would not check at the top level |
 
+### Shared memory between processes: `nish/sync/shm` and `nish/sync/ring`
+
+Threads share an address space; processes share nothing unless they map the
+same memory. `nish/sync/shm` maps a **named region** that every process of
+the same user can open, and `nish/sync/ring` builds lock-free queues of byte
+records in one, so prefork workers can hand work to an owner process without a
+socket:
+
+```typescript
+import { ACQ_REL, ACQUIRE, createRegion, unlinkRegion } from "nish/sync/shm";
+import { initSpscRing, spscRingBytes } from "nish/sync/ring";
+
+export const main = (): i32 => {
+  const region = createRegion("lang-demo", 64 + spscRingBytes(4096)).expect("create");
+  region.addI64(0, toI64(1), ACQ_REL); // a counter every process may bump
+  const ring = initSpscRing(region, 64, 4096, true); // a ring after it
+  const job: u8[] = [1, 2, 3];
+  ring.tryPush(job, 0, job.length); // false when full
+  const got: u8[] = new Array<u8>(16);
+  const n: i32 = ring.tryPop(got, 0); // 3, or RING_EMPTY
+  console.log(`${region.loadI64(0, ACQUIRE)} ${n}`);
+  unlinkRegion("lang-demo").expect("unlink");
+  return 0;
+};
+```
+
+- **A region is named, never inherited.** A Nish program has no `fork`, and
+  every descriptor is close-on-exec, so an anonymous mapping or a `memfd`
+  cannot reach a child; a name can. `createRegion(name, bytes)` makes one,
+  zeroed, mode 0600, and refuses a name that exists (`SHM_EXISTS`), so a name
+  another user planted is never adopted. `openRegion(name)` maps one this
+  user made, and refuses one owned by someone else, open to group or others,
+  reached through a symbolic link, or (on Linux) not a regular file or with a
+  second hard link (`SHM_ACCESS`). A name is 1 to 30 of `A-Z a-z 0-9 . _ -`,
+  not starting with `.`; a size is 1 byte to 1 GiB. Errors are a `Result`
+  with the errno (`SHM_NOT_FOUND`, `SHM_INVALID`, `SHM_TOO_MANY`, ...).
+- **Lifetime.** The name lasts until `unlinkRegion`, even past every process
+  that mapped it, which is how a process started later finds it. A mapping
+  lasts until `close()` or the process's exit, when the kernel unmaps it. A
+  thread may hold 63 regions at once.
+- **Every access is checked, as an array index is.** `loadI32`, `storeI32`,
+  `addI32`, `exchangeI32`, `compareExchangeI32` and their `I64` twins take an
+  `i32` byte offset; a slot must lie wholly inside the region and at a multiple
+  of its width, or the access panics naming the offset (`nish/sync/shm: slot
+  offset 4 is not a multiple of 8, the slot's width`). `read` and `write` copy
+  a byte window, checked against both the region and the buffer. No offset
+  reaches outside the mapping, whatever a peer wrote into it.
+- **Orderings are C11's**: `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL`,
+  `SEQ_CST`, plus `fence(order)`. Each access is one LLVM `load atomic`,
+  `store atomic`, `atomicrmw` or `cmpxchg` with that ordering; an ordering an
+  access cannot take (a load with `RELEASE`) panics. A compare-exchange
+  answers the value it found, so it succeeded when that equals `expected`.
+- **Waking.** `waitI32(at, expected, timeoutMs)` sleeps while the slot holds
+  `expected` and `wake(at, count)` wakes sleepers, in any process: Linux's
+  shared futex. Darwin and wasi answer `SHM_UNSUPPORTED` (-95) from both, and
+  a program there polls.
+- **Rings.** `SpscRing` (one producer, one consumer, records of any length
+  up to its capacity) and `MpscRing` (any number of producers, fixed slots)
+  live at a 64-byte-aligned `base` in a region: `initSpscRing` /
+  `initMpscRing` write the header once, `attachSpscRing` / `attachMpscRing`
+  read it in another process. `tryPush` answers `false` when full; `tryPop`
+  answers the record's length, `RING_EMPTY` or `RING_TOO_SMALL`; `popBatch`
+  takes every record ready. A ring made with the doorbell lets `popWait`
+  sleep, and a push rings it only when the consumer is asleep, so a busy ring
+  makes no system call. Two consumers, or two producers on an `SpscRing`, lose
+  or repeat records but never leave the region; a length no record can have
+  panics as `the ring is corrupt`.
+- **What a program reaches.** The modules call C, so a program that imports
+  them reaches [`ffi`](#capabilities) (and `clock`, for `popWait`'s deadline)
+  and `--deny ffi` refuses it; under `--sandbox` a region, being a file in
+  `/dev/shm`, needs `fs.read` and `fs.write` as well. They are native only:
+  `--emit-ts` refuses them, since Node's `SharedArrayBuffer` is shared between
+  threads of one process, not between processes. A region belongs to the
+  thread that mapped it. A program that imports neither module is unchanged.
+  Tested by `tests/link/sync_shm`, `tests/link/sync_ring` and
+  `tests/link/sync_shm_deny_ffi`; the design, its measurements and the threads
+  it was weighed against are `docs/wp47-shared-memory.md`, and the threat model
+  is [`docs/security/shm.md`](security/shm.md).
+
 ### Random numbers: `Rng` in `nish/random`
 
 `new Rng(seed)` is a generator of pseudo-random numbers whose every answer
@@ -5673,13 +5755,15 @@ switch (node.kind) {
   `tests/cases/reject_switch_duplicate_case`), and there is at most one
   `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
   which may appear anywhere among the clauses.
-- **There is no implicit fallthrough.** A clause with statements ends in
-  `break`, `return`, `continue` or `process.exit`, unless it is the
-  last clause (``A `case` clause with statements must end in `break`,
-  `return`, `continue` or `process.exit` ``,
-  `tests/cases/reject_switch_fallthrough`). An **empty** clause does fall
-  through, which is how `case 1: case 2:` gives several labels one body
-  (`tests/cases/cf_switch`).
+- **A clause falls through, as in TypeScript.** A clause whose statements do
+  not end in `break`, `return`, `continue` or `process.exit` runs on into the
+  next clause's statements; the IR branches into the next clause's block, with
+  no flag (`tests/cases/cf_switch_fallthrough`, `cf_label_walks`). An **empty**
+  clause falls through the same way, which is how `case 1: case 2:` gives
+  several labels one body (`tests/cases/cf_switch`). A clause reached by
+  falling into it is reached with either label's value: a tag test does not
+  narrow there (`reject_switch_fall_narrow`), and a local the clauses above it
+  assigned holds its declared type.
 - A clause cannot declare a variable directly; wrap its body in a block
   (``A `case` clause cannot declare a variable directly ``,
   `tests/cases/reject_switch_case_declaration`). Clauses share one scope in
@@ -5687,7 +5771,8 @@ switch (node.kind) {
   ones below it.
 - `break` inside a `switch` leaves the switch, not an enclosing loop;
   `continue` looks past the switch to the loop
-  (`tests/cases/cf_switch_break`).
+  (`tests/cases/cf_switch_break`). A labelled `break` or `continue` names
+  the loop instead (see below, `cf_label_switch`).
 - A `switch` terminates (see Termination) when no `break` targets it, its
   last clause terminates, and it has a `default` or is a complete `switch` on a
   union's tag, whose labels name every variant
@@ -5697,10 +5782,28 @@ switch (node.kind) {
 
 ### `break` / `continue`
 
-Unlabelled only: labeled statements are forbidden outright
-(`tests/cases/reject_labeled_statement`), and a `break` or `continue` that names
-one is part of that one refusal. A label nothing declares is a syntax error, as
-it is in TypeScript. `break` needs an
+A label goes on a loop, a block or a `switch` (`outer: for (...)`,
+`check: { ... }`, `sw: switch (...)`); on any other statement it is refused
+(`` Labeled statements are forbidden in Nish except on a loop, a block or a
+`switch` ``, `tests/cases/reject_label_if`). `break label` leaves the statement
+the label names, from any depth inside it; `continue label` starts the next turn
+of the loop it names. Each lowers to the branch a hand-kept `done` flag would
+take — to that statement's exit block or its loop's step block — with no flag
+(`tests/cases/cf_label_loops`, `cf_label_block`, `cf_label_switch`,
+`cf_label_walks`). Leaving a scoped pass or a `Map` walk this way releases it
+as an unlabelled exit would, and a `Secret` local a labelled exit skips past
+must be wiped first (`reject_label_secret_break`, `reject_label_secret_block`).
+
+- A label is not reused inside the statement it names (``Duplicate label
+  'outer'``, `reject_label_duplicate`).
+- `continue label` names a loop (`` A `continue` can only jump to a label of
+  an enclosing loop ``, `reject_label_continue_block`), and `break label` a
+  statement around it (`` A `break` can only jump to a label of an enclosing
+  statement ``, `reject_label_unknown`).
+- A jump does not leave an arrow for a label outside it (``Jump target cannot
+  cross function boundary``, `reject_label_crosses_arrow`).
+
+Unlabelled, `break` needs an
 enclosing loop or `switch` (`` `break` outside of a loop or `switch` ``,
 `tests/cases/reject_cf_break_outside`) and `continue` an enclosing loop
 (`` `continue` outside of a loop ``, `reject_cf_continue_outside`), which it
@@ -5735,8 +5838,11 @@ A statement *terminates* when control cannot fall out of it: `return`,
 `break`, `continue`, `process.exit(...)`, `panic(...)`; an `if` whose branches
 both terminate; a `switch` with a `default` or one complete on a union's tag,
 no `break` aimed at it and a terminating last clause; a loop with no condition or the condition `true` and
-no `break` aimed at it. Any other loop may run zero times and does not
-terminate. Rules (`src/statements.ts`, `checker.ts`):
+no `break` aimed at it; a labelled block whose statements terminate and no
+`break` names. A `break` aimed at a statement is an unlabelled one directly
+inside it or a labelled one that names it from any depth, so a `break outer`
+in an inner loop makes `outer: while (true)` one that may finish. Any other
+loop may run zero times and does not terminate. Rules (`src/statements.ts`, `checker.ts`):
 
 - A non-`void` function's body must terminate
   (`must return a value of type i32 on every path`,
@@ -5752,7 +5858,8 @@ terminate. Rules (`src/statements.ts`, `checker.ts`):
 ### Rejected statements
 
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
-`debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
+`debugger` (`reject_debugger`), a label on a statement other than a loop, a
+block or a `switch` (`reject_label_if`),
 `var` (`reject_var_keyword`), `for...in` (`` `for...in` is forbidden in Nish
 (it enumerates property names, and object layout is fixed at compile time); use
 `for...of` ``, NL1056, `reject_for_in`), nested `function`, `enum`, `type`,
@@ -11173,7 +11280,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
 | `throw` | `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
 | `debugger` | `` `debugger` is forbidden in Nish (no debugger hook) `` | `reject_debugger` |
-| labeled statements | `` Labeled statements are forbidden in Nish (use structured loops) `` | `reject_labeled_statement` |
+| a label on another statement | `` Labeled statements are forbidden in Nish except on a loop, a block or a `switch` `` | `reject_label_if` |
 | `for...in` | `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` `` | `reject_for_in`, `reject_map_iter_for_in` |
 
 ### Expressions

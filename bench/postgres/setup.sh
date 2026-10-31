@@ -11,7 +11,9 @@
 #   challenge/  the challenge at COMMIT, cloned for box/pg-conf.sh and
 #               seed/make-seed.sh, which run from it unchanged
 #   data/       the cluster: box/pg-conf.sh --print's settings for this
-#               machine's cores and memory, scram-sha-256 on 127.0.0.1 only
+#               machine's cores and memory, scram-sha-256 on 127.0.0.1 and
+#               on the local Unix socket (run.mjs --unix); over the socket the
+#               postgres account alone signs in by trust, for setup itself
 #   seeded      written last, once make-seed.sh's own check printed OK
 #
 # PG_BENCH_SEED=full also loads the full seed (database conduit_seed, about
@@ -82,7 +84,9 @@ ${AS[@]+"${AS[@]}"} "$PG_BIN/initdb" -D "$DIR/data" -U postgres --auth=trust -E 
   echo "unix_socket_directories = '$DIR/sock'"
   echo "password_encryption = 'scram-sha-256'"
 } | ${AS[@]+"${AS[@]}"} tee -a "$DIR/data/postgresql.conf" > /dev/null
-printf 'local all postgres trust\nhost all all 127.0.0.1/32 scram-sha-256\n' | ${AS[@]+"${AS[@]}"} tee "$DIR/data/pg_hba.conf" > /dev/null
+# The seed loads as postgres over the socket; the bench's role, conduit, signs
+# in with SCRAM over TCP and, for run.mjs --unix, over the socket.
+printf 'local all postgres trust\nlocal all all scram-sha-256\nhost all all 127.0.0.1/32 scram-sha-256\n' | ${AS[@]+"${AS[@]}"} tee "$DIR/data/pg_hba.conf" > /dev/null
 
 # The seed loads through the socket, so the setup's port is any free one.
 PORT="$(node -e 'const s = require("net").createServer().listen(0, "127.0.0.1", () => { console.log(s.address().port); s.close() })')"
