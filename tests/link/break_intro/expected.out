@@ -1,0 +1,38 @@
+PASS  the name is a piece
+PASS  the name takes the escape's bold magenta
+PASS  the word after the reset is a piece
+PASS  the reset brings back plain text
+PASS  the escape takes no column
+PASS  the flag is cyan
+PASS  the flag is on the third line
+PASS  the rule's gap is found
+PASS  the missing brick is the gold one
+PASS  the missing brick is four columns wide
+PASS  the missing brick is on the rule's line
+PASS  the missing brick lands between the second and third
+PASS  a rule with no gap has no missing brick
+PASS  an empty help has no pieces
+PASS  an empty help has no gap
+PASS  an empty help still ends
+PASS  the real help's rule has its gap
+PASS  the real help is cut into many pieces
+PASS  a quiet step plays on
+PASS  space skips
+PASS  a letter skips
+PASS  q quits
+PASS  Q quits
+PASS  Esc quits
+PASS  a release plays on
+PASS  the intro ends on its own
+PASS  the intro ends before its longest
+PASS  the intro lasts over two seconds
+PASS  the missing brick rings as it lands
+PASS  each course laid knocks
+PASS  the courses come after the brick lands
+PASS  the wall's last brick chimes after the courses
+PASS  the intro reaches its end
+PASS  the last frame is the title's first but for the ball
+PASS  a frame mid-collapse draws text over the dark
+PASS  framebuffers too small to draw in never panic
+PASS  low effects run and draw to the end
+break-intro: 37 passed, 0 failed, 0 skipped
