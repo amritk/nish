@@ -79,7 +79,7 @@ const climb = (n: Node, round: i32): i32 => {
     let s: i32 = 0
     let at: Node | null = n
     while (at !== null) {
-      s = wrappingAdd(s, (at.kind ^ round))
+      s = wrappingAdd(s, at.kind ^ round)
       at = at.parent
     }
     return s

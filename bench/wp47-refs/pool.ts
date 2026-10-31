@@ -90,7 +90,7 @@ const climb = (t: Tree, n: i32, round: i32): i32 => {
     let at: i32 = n
     while (at >= 0) {
       const p: Rec = t.nodes[at]
-      s = wrappingAdd(s, (p.kind ^ round))
+      s = wrappingAdd(s, p.kind ^ round)
       at = p.parent
     }
     return s

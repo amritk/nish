@@ -96,7 +96,7 @@ const climb = (t: Tree, n: i32, round: i32): i32 => {
     let s: i32 = 0
     let at: i32 = n
     while (at >= 0) {
-      s = wrappingAdd(s, (uncheckedGet(t.kind, at) ^ round))
+      s = wrappingAdd(s, uncheckedGet(t.kind, at) ^ round)
       at = uncheckedGet(t.parent, at)
     }
     return s
