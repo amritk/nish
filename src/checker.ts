@@ -104,7 +104,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER } from "./std-modules"
+import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER, SORT_LOCAL, SORT_SPECIFIER } from "./std-modules"
 import {
   AliasInfo,
   CheckedProgram,
@@ -237,6 +237,7 @@ export class Checker {
     // names has to be loaded with the rest.
     this.importCollections()
     this.importMath()
+    this.importSort()
     this.ctx.errored = false
   }
 
@@ -403,6 +404,26 @@ export class Checker {
         this.program.imports.push(new ImportBinding(MATH_SPECIFIER, `${name}F64`, local, call, call))
       }
     }
+  }
+
+  /**
+   * `xs.sort(cmp)` is `std/sort.ts`'s `sortWith`: a module that makes a
+   * `.sort(...)` call is given an import of it from `nish/sort` under
+   * `SORT_LOCAL`, a dotted name no declaration can take, and `checkArrayMethod`
+   * checks the call as one to that template. The scan is syntax, so a `sort`
+   * method of a class loads the module too; it costs nothing, because a
+   * template nothing instantiates emits nothing.
+   */
+  importSort(): void {
+    if (this.program.source.text.indexOf("sort") < 0 || !hasSortCall(this.program.file)) {
+      return
+    }
+    for (const imp of this.program.imports) {
+      if (imp.localName === SORT_LOCAL) {
+        return
+      }
+    }
+    this.program.imports.push(new ImportBinding(SORT_SPECIFIER, "sortWith", SORT_LOCAL, this.program.file, this.program.file))
   }
 
   /**
@@ -3068,6 +3089,19 @@ class CollectionNames {
       this.set = at
     }
   }
+}
+
+/** Whether a `.sort(...)` call is under `node` (`importSort`). */
+const hasSortCall = (node: Node): boolean => {
+  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER && node.children[0].text === "sort") {
+    return true
+  }
+  for (const child of node.children) {
+    if (hasSortCall(child)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** The `Math.atan2`, `Math.tan` and `Math.hypot` calls under `node`, in source order (`importMath`). */

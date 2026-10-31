@@ -21,7 +21,7 @@ import {
   WANT_INFERRED,
 } from "./expressions"
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
-import { genericCallSpelling, indexOfName } from "./generics"
+import { checkGenericCall, genericCallSpelling, indexOfName } from "./generics"
 import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
 import {
   N_ARRAY,
@@ -67,11 +67,12 @@ import {
   PAR_MAP_NEW,
   PAR_SPAWN,
 } from "./program"
+import { SORT_LOCAL } from "./std-modules"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The method set, in the order the "supported:" message lists them. */
-const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill"
+const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill, sort"
 
 /**
  * `[a, b]`. An empty literal takes its type from context, since there is
@@ -453,6 +454,41 @@ const levelled = (name: string, levels: string[]): string => {
   return parts.join("")
 }
 
+/**
+ * `xs.sort(cmp)`: a call of `nish/sort`'s `sortWith(xs, cmp)`, which the
+ * checker's `importSort` brings in under `SORT_LOCAL`. The call is rewritten
+ * in place into that free call — the member access becomes the name, the
+ * receiver the first argument — so every later pass and the emitter see an
+ * ordinary instantiation of a template with a compile-time function parameter,
+ * and a second check of the same node takes the plain call path. A sort
+ * without a comparator would compare the elements as strings, as JavaScript
+ * does, which is never what a typed array means, so it is refused.
+ */
+const checkSort = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {
+  if (args.children.length !== 1) {
+    const what = args.children.length === 0 ? "needs a comparator" : "takes one comparator"
+    ctx.errorAtProperty(
+      access,
+      `\`sort\` ${what}: write \`xs.sort((a, b) => a - b)\`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)`
+    )
+    return T_ERROR
+  }
+  const template = ctx.template(SORT_LOCAL)
+  if (template === null) {
+    return ctx.errorType(call, "internal: `nish/sort` was not loaded for this `sort` call")
+  }
+  const name = new Node(N_IDENT, access.start, access.end)
+  name.id = access.id
+  name.text = SORT_LOCAL
+  const moved: Node[] = [access.children[0]]
+  for (const arg of args.children) {
+    moved.push(arg)
+  }
+  args.children = moved
+  call.children[0] = name
+  return checkGenericCall(ctx, call, template, scope)
+}
+
 /** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`, `a.set(b, at)`, `a.fill(v, from, to)`. */
 export const checkArrayMethod = (
   ctx: CheckContext,
@@ -466,8 +502,11 @@ export const checkArrayMethod = (
   if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
     return ctx.errorType(unwrapParens(access.children[0]), "`process.argv` is read-only")
   }
-  if (isArrayWriteMethod(name) && ctx.table.isReadonlyArray(receiver)) {
+  if ((isArrayWriteMethod(name) || name === "sort") && ctx.table.isReadonlyArray(receiver)) {
     return ctx.errorType(call, readonlyWriteMessage(ctx, receiver, `\`${name}\` through`))
+  }
+  if (name === "sort") {
+    return checkSort(ctx, call, access, args, scope)
   }
   if (name === "push" || name === "pop") {
     const alias = typedArraySpelling(ctx, access.children[0], scope)
