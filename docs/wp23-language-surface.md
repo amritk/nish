@@ -15,6 +15,13 @@ a string `switch` (§8) and `?.` (§9, since reversed for a chain that ends in
 for each rule that landed. This note keeps the reasoning. The full text,
 including the evidence traced line by line, is this file at commit `2b2eb95c`.
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). §6's compile-time function parameters gain it; a function is
+still never a value.
+
 ## 1. Where these came from, and the rule they are judged by
 
 The evidence is `src/`'s own sentences about its workarounds. Every item is

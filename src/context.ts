@@ -211,16 +211,16 @@ export class CheckContext {
   pathIndexCount: i32
   /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
-   * parameter scope, and whether it may read its function's `const` locals:
-   * an arrow passed to a data-parallel form may (`captureOuter` in
-   * `src/generics.ts`), and each one it reads becomes a parameter declared in
-   * that scope.
+   * parameter scope, and what it may read of its function's names, one of the
+   * `CAPTURE_*` modes (`src/parallel.ts`): every arrow argument but one given
+   * to `expose` or `exposeWith` may read the `const` locals and the parameters
+   * (`captureOuter` in `src/generics.ts`), each one it reads becoming a
+   * parameter declared in that scope, and the mode says whose rules hold of
+   * it: an ordinary call's, a data-parallel form's or a scope's task's.
    */
   arrowFns: FunctionSig[]
   arrowScopes: Scope[]
-  arrowCaptures: boolean[]
-  /** WP29: parallel to `arrowCaptures`, whether the arrow is a scope's task, whose captures run at the join. */
-  arrowTasks: boolean[]
+  arrowModes: i32[]
   /** The instantiation whose body is being checked, so a request from it records its parent. */
   currentInstance: Instantiation | null
   /**
@@ -332,8 +332,7 @@ export class CheckContext {
     this.pathIndexCount = 0
     this.arrowFns = []
     this.arrowScopes = []
-    this.arrowCaptures = []
-    this.arrowTasks = []
+    this.arrowModes = []
     this.currentInstance = null
     this.currentStructInstance = null
     this.constraintsDeferred = true
@@ -557,6 +556,12 @@ export class CheckContext {
       }
     }
     return false
+  }
+
+  /** The `CAPTURE_*` mode of the innermost arrow being checked, or `CAPTURE_NONE` (0) outside any. */
+  arrowMode(): i32 {
+    const depth = this.arrowModes.length
+    return depth === 0 ? 0 : this.arrowModes[depth - 1]
   }
 
   /** Report and answer the sentinel type, for the many callers that want both. */
