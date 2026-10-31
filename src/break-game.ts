@@ -1830,7 +1830,7 @@ const drawCapsules = (game: BreakGame, view: View, alpha: f64): void => {
   }
 }
 
-/** The paddle: a bevelled bar with rounded ends, glowing under catch or fire; in the intro it rises into place. */
+/** The paddle: a bevelled bar with rounded ends, tinted under catch or fire; in the intro it rises into place. */
 const drawPaddle = (game: BreakGame, view: View, alpha: f64): void => {
   const x: f64 = lerp(game.prevPaddleX, game.paddleX, alpha)
   const w: f64 = game.tuning.paddleWidth * lerp(game.prevWidthScale, game.widthScale, alpha)
@@ -1843,9 +1843,6 @@ const drawPaddle = (game: BreakGame, view: View, alpha: f64): void => {
     colour = gfxRgb(255, 150, 80)
   } else if (game.catchSteps > 0) {
     colour = gfxRgb(200, 150, 255)
-  }
-  if (game.effects > 0) {
-    glow(view, x, y + PADDLE_H / 2.0, w * 0.6, colour, 0.25)
   }
   const r: f64 = PADDLE_H / 2.0
   disc(view, x - w / 2.0 + r, y + r, r, dim(colour, 0.8))
