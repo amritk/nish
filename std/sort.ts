@@ -150,7 +150,8 @@ export const sortWith = <T>(xs: T[], cmp: (a: T, b: T) => number): T[] => {
     return xs
   }
   // One allocation at full size, every slot written before any is read: the
-  // checker lets this `new Array<T>(n)` zero-fill any `T` (`isSortScratch`).
+  // checker lets this `new Array<T>(n)` hold any `T`, and neither emitter
+  // zero-fills it (`isSortInstance`).
   const tmp = new Array<T>(n)
   copyRun(xs, tmp, 0, n)
   let lo: i32 = 0

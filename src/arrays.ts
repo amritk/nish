@@ -809,8 +809,14 @@ const checkArrayLength = (ctx: CheckContext, args: Node, scope: Scope, elem: i32
  * slot before one is read, and the array never leaves the function, so no
  * zeroed string, array, range or member is ever seen.
  */
-const isSortScratch = (ctx: CheckContext): boolean => {
-  const instance = ctx.currentInstance
+const isSortScratch = (ctx: CheckContext): boolean => isSortInstance(ctx.currentInstance)
+
+/**
+ * Whether `instance` is one of `std/sort.ts`'s `sortWith`, whose one
+ * `new Array<T>(n)` is a scratch every slot of which is written before one is
+ * read. The checker lets it hold any `T`, and the emitters need not zero it.
+ */
+export const isSortInstance = (instance: Instantiation | null): boolean => {
   if (instance === null) {
     return false
   }

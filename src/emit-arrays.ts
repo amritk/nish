@@ -26,6 +26,7 @@
 // that calls `nish_panic_index` and never returns. Comparing *unsigned* makes a
 // negative index fail too.
 
+import { isSortInstance } from "./arrays"
 import { HoistedHeader, isResizeCall } from "./attributes"
 import { NO_RECORD, recordReaches, recordStoreType } from "./bounds"
 import { numericLiteralValue, parseIntegerLiteral } from "./constants"
@@ -1178,11 +1179,15 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
     process.exit(internalErrorFor("emitter: a stack array whose length is not a literal", emitter.opts.json))
   }
   const data = emitData(emitter, expr, elem, count, bytes)
-  emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
-  const dataArg = emitter.opts.optimizeAttributes ? `i8* align 8 ${data}` : `i8* ${data}`
-  // The zero fill is element traffic like any other store, and saying so keeps
-  // it from being read as a clobber of the `len`/`cap` written just above.
-  emitter.fn.emit(`call void @${MEMSET}(${dataArg}, i8 0, i64 ${bytes}, i1 false)${elementAccess(emitter)}`)
+  // `sortWith`'s scratch is copied over whole before it is read, and no
+  // optimizer pass drops a fill the copy loop then overwrites.
+  if (!isSortInstance(emitter.program.activeInstance)) {
+    emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
+    const dataArg = emitter.opts.optimizeAttributes ? `i8* align 8 ${data}` : `i8* ${data}`
+    // The zero fill is element traffic like any other store, and saying so keeps
+    // it from being read as a clobber of the `len`/`cap` written just above.
+    emitter.fn.emit(`call void @${MEMSET}(${dataArg}, i8 0, i64 ${bytes}, i1 false)${elementAccess(emitter)}`)
+  }
   storeData(emitter, arr, data)
   return arr
 }

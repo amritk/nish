@@ -17546,6 +17546,29 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
   }
 }
 
+// ---- A sort comparator's overflow ---------------------------------------------
+// `xs.sort(cmp)` calls the comparator directly, so its `a - b` is checked like any
+// other: [2147483647, -2] panics before the second line prints, and the
+// overflow-free comparator the docs give sorts the full range first.
+if (!only || "sort".includes(only) || "arr_sort_overflow".includes(only)) {
+  const name = "arr_sort_overflow"
+  const ll = path.join(buildDir, `${name}.ll`)
+  if (fs.existsSync(ll)) {
+    const exe = path.join(buildDir, name)
+    const cc = linkNative(exe, ll, { libm: true })
+    const run = cc.status === 0 ? spawnSync(exe) : null
+    const needle = "attempt to subtract with overflow"
+    check(
+      `${name}: the overflow-free comparator sorts, then \`a - b\` exits 1 with "${needle}"`,
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes(needle) &&
+        String(run.stdout).trim() === "-2147483648,-1,0,2147483647",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    )
+  }
+}
+
 // ---- Checked signed arithmetic ---------------------------------------------------
 // A signed `+ - *`, negation or step that leaves its type panics (exit 1) with Rust's
 // words instead of wrapping or being undefined. ovf_matrix pushes one operation over

@@ -22,6 +22,7 @@ corpus/modules_basic       # math.ts's cube past INT_MAX: "attempt to multiply w
 corpus/parse_argv_sum      # `ints += p` past INT_MAX: "attempt to add with overflow"
 corpus/str_large           # an i32 sum past INT_MAX: "attempt to add with overflow"
 corpus/str_template        # `2147483647 + 1`: "attempt to add with overflow"
+cases/arr_sort_overflow    # a comparator's `2147483647 - -2`: "attempt to subtract with overflow"
 # By design (WP31 §6): a value leaving `integer<Lo, Hi>` at an entry panics with exit 1;
 # under Node the type is a `number` alias and nothing is checked
 cases/rng_entry_panic      # the last i++ leaves integer<0, 255> (exit 1); JS finishes the loop
