@@ -14,6 +14,7 @@ const JSON_TYPED_SPECIFIER: string = "nish/json-typed"
 const SECRET_STD_SPECIFIER: string = "nish/secret" [exported]
 const TEXT_SPECIFIER: string = "nish/text"
 const BYTES_SPECIFIER: string = "nish/bytes"
+const JSON_SPECIFIER: string = "nish/json"
 const CRYPTO_AES_SPECIFIER: string = "nish/crypto/aes"
 const COMPRESS_CHECKSUM_SPECIFIER: string = "nish/compress/checksum"
 const REGEX_SPECIFIER: string = "nish/regex"
@@ -63,6 +64,11 @@ function isTextModule(packageName: string, name: string): boolean -> @isTextModu
   stackSites=0 stackLocals=0
   callee +0:35 stdModuleName -> @stdModuleName
 function isBytesModule(packageName: string, name: string): boolean -> @isBytesModule [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
+  stackSites=0 stackLocals=0
+  callee +0:35 stdModuleName -> @stdModuleName
+function isJsonModule(packageName: string, name: string): boolean -> @isJsonModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   stackSites=0 stackLocals=0

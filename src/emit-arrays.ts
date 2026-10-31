@@ -45,7 +45,7 @@ import { isChannelReader, isGuardedAccess } from "./parallel"
 import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
-import { BYTES_WALK_COPY, bytesKernelOf } from "./kernels"
+import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
 import {
   N_ARRAY,
   N_ARROW,
@@ -1853,6 +1853,22 @@ export const emitBytesKernel = (emitter: Emitter, walk: i32, values: string[]): 
     `call i64 ${emitter.useRuntime(bytesKernelOf(walk))}(i8* ${data}, i64 ${from}, i64 ${to})`
   )
   return fn.emitValue(`trunc i64 ${stop} to i32`)
+}
+
+/**
+ * `JsonWriter.f64`'s walk in `nish/json`, lowered to its kernel
+ * (`src/kernels.ts`): `values` are the `u8[]`, the cursor and the `f64`. The
+ * length is handed over as the walk's `toI32` reads it, which is never more
+ * than the array holds, and the kernel checks the cursor and the room itself,
+ * so nothing here is trusted to a caller.
+ */
+export const emitJsonPutF64Kernel = (emitter: Emitter, values: string[]): string => {
+  const fn = emitter.fn
+  const data = loadData(emitter, values[0])
+  const length = fn.emitValue(`trunc i64 ${loadLength(emitter, values[0])} to i32`)
+  return fn.emitValue(
+    `call i32 ${emitter.useRuntime(JSON_PUT_F64_KERNEL)}(i8* ${data}, i32 ${length}, i32 ${values[1]}, double ${values[2]})`
+  )
 }
 
 /** The address of byte `at`, an `i32` already checked to lie in `arr`, of a `u8[]`. */

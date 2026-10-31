@@ -695,13 +695,24 @@ function jsonWriterPutDigits64(w: JsonWriter, v: i64): boolean -> @nish.jsonWrit
   local -2:9 width: i32 (const)
   local +7:12 k: i32 (let)
   local +8:11 digit: i32 (const)
-function jsonWriterPutF64(w: JsonWriter, v: f64): boolean -> @nish.jsonWriterPutF64
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.jsonWriterPutText
-  calls: nish.jsonWriterPutText nish_arena_mark nish_arena_release nish_str_from_f64
-  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterPutText#0
+function jsonPutF64Walk(buf: u8[], at: i32, v: f64): i32 -> @nish.jsonPutF64Walk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_from_f64
+  pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +0:62 jsonWriterPutText -> @nish.jsonWriterPutText
+  local -6:9 text: string (const)
+  local -5:9 n: i32 (const)
+  local -1:12 k: i32 (let)
+function jsonWriterPutF64(w: JsonWriter, v: f64): boolean -> @nish.jsonWriterPutF64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: v
+  calls: nish.jsonPutF64Walk
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 stop: i32 (const)
+  callee -2:21 jsonPutF64Walk -> @nish.jsonPutF64Walk
 function jsonStringifyString(s: string): string -> @nish.jsonStringifyString [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.constructor
@@ -1013,25 +1024,37 @@ import JsonWriter from "nish/json" -> struct JsonWriter
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
-  calls: llvm.fptosi.sat.i32.f64 nish.JsonWriter.beginObject nish.JsonWriter.constructor nish.JsonWriter.endObject nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.setIndent nish.JsonWriter.string nish_array_grow nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_from_u64
-  stackSites=2 stackLocals=2
+  calls: llvm.fptosi.sat.i32.f64 llvm.sqrt.f64 nish.JsonWriter.beginArray nish.JsonWriter.beginObject nish.JsonWriter.constructor nish.JsonWriter.endArray nish.JsonWriter.endObject nish.JsonWriter.f64 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.setIndent nish.JsonWriter.string nish_array_grow nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_from_u64
+  stackSites=3 stackLocals=3
   local +0:9 count: i32 (const)
   local +1:9 messages: string[] (const)
   local +2:12 k: i32 (let)
-  local +5:9 out: u8[] (const)
-  local +6:9 w: JsonWriter (const)
-  callee +6:13 new JsonWriter -> @nish.JsonWriter.constructor
-  callee +8:5 JsonWriter.setIndent -> @nish.JsonWriter.setIndent
-  local +10:7 sum: u32 (let)
-  local +11:9 factor: u32 (const)
-  local +12:9 t0: i64 (const)
-  local +13:12 i: i32 (let)
-  local +14:11 pick: i32 (const)
-  callee +15:5 JsonWriter.reset -> @nish.JsonWriter.reset
-  callee +16:5 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
-  callee +17:5 JsonWriter.key -> @nish.JsonWriter.key
-  callee +18:5 JsonWriter.string -> @nish.JsonWriter.string
-  callee +19:5 JsonWriter.endObject -> @nish.JsonWriter.endObject
-  local +20:11 end: i32 (const)
-  local +21:14 k: i32 (let)
-  local +25:9 elapsed: i64 (const)
+  local +5:9 numbers: f64[] (const)
+  local +6:12 k: i32 (let)
+  local +7:11 x: f64 (const)
+  local +8:11 shape: i32 (const)
+  local +9:11 sign: f64 (const)
+  local +28:9 mode: string (const)
+  local +33:9 doubles: boolean (const)
+  local +34:9 out: u8[] (const)
+  local +35:9 w: JsonWriter (const)
+  callee +35:13 new JsonWriter -> @nish.JsonWriter.constructor
+  callee +37:5 JsonWriter.setIndent -> @nish.JsonWriter.setIndent
+  local +39:7 sum: u32 (let)
+  local +40:9 factor: u32 (const)
+  local +41:9 t0: i64 (const)
+  local +42:12 i: i32 (let)
+  local +43:11 pick: i32 (const)
+  callee +44:5 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee +46:7 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local +47:16 j: i32 (let)
+  local +48:15 at: i32 (const)
+  callee +49:9 JsonWriter.f64 -> @nish.JsonWriter.f64
+  callee +51:7 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee +53:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee +54:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee +55:7 JsonWriter.string -> @nish.JsonWriter.string
+  callee +56:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  local +58:11 end: i32 (const)
+  local +59:14 k: i32 (let)
+  local +63:9 elapsed: i64 (const)
