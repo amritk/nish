@@ -1485,7 +1485,7 @@ export const checkGenericCall = (
     const deferred =
       (functional && isFunctionParameter(parameters.children[i])) ||
       isContextualLiteral(args.children[i]) ||
-      (args.children[i].flags & FLAG_GATHERED) !== 0
+      ((args.children[i].flags & FLAG_GATHERED) !== 0 && args.children[i].kind === N_ARRAY)
     // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
     const type = deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE)
     const constant =

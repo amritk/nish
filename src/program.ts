@@ -155,7 +155,7 @@ export class FunctionSig {
   /**
    * The position of a final rest parameter `...xs: T[]`, or -1. A call
    * gathers the arguments from there on into one array literal
-   * (`gatherRestArguments` in `src/expressions.ts`), so from the checker on
+   * (`gatherRest` in `src/declarations.ts`), so from the checker on
    * every pass sees a call that passes the array.
    */
   restIndex: i32

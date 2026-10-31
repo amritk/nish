@@ -1686,7 +1686,7 @@ export class Emitter {
       passed.push(value)
       i = i + 1
     }
-    // The parameters the call leaves out pass their defaults (`defaultValues`).
+    // The parameters the call leaves out pass their defaults (`defaultValue`).
     for (let k = args.children.length; k < sig.writtenArity(); k = k + 1) {
       const value = defaultValue(this, sig, k, passed)
       const type = this.llvmAbi(sig.paramTypes[k], calleePrivate)

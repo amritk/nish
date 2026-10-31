@@ -1895,6 +1895,7 @@ export class Parser {
     } else {
       node.children.push(this.empty())
       this.expectSemicolon()
+      this.bodiless(node.children[1])
     }
     node.children.push(typeParams)
     node.end = this.previousEnd
@@ -2123,6 +2124,17 @@ export class Parser {
     this.noIn = outerNoIn
     this.expect(TOK_RPAREN)
     return this.closeList(list)
+  }
+
+  /**
+   * A function, method or constructor with no body (an overload signature,
+   * `abstract`, `declare`) gives no parameter a default and ends in no rest
+   * parameter, as TypeScript reads it: only an implementation has them.
+   */
+  bodiless(params: Node): void {
+    for (const param of params.children) {
+      param.flags = param.flags & ~FLAG_SIGNATURE
+    }
   }
 
   /**
@@ -2571,6 +2583,9 @@ export class Parser {
       // a missing body (NL2091) an EMPTY one: the checker refuses both.
       const returnType: Node | null = this.eat(TOK_COLON) ? this.parseType() : null
       ctor.children.push(this.parseBody())
+      if (ctor.children[1].kind === N_EMPTY) {
+        this.bodiless(ctor.children[0])
+      }
       if (returnType !== null) {
         ctor.children.push(returnType)
       }
@@ -2631,12 +2646,8 @@ export class Parser {
       method.children.push(this.parseParameters(plain, plain))
       method.children.push(this.parseReturnType())
       method.children.push(this.parseBody())
-      // A method with no body (`abstract`, `declare`) gives no parameter a
-      // default and ends in no rest parameter, as TypeScript reads it.
       if (method.children[3].kind === N_EMPTY) {
-        for (const param of method.children[1].children) {
-          param.flags = param.flags & ~FLAG_SIGNATURE
-        }
+        this.bodiless(method.children[1])
       }
       // The fifth child, where an `N_FUNCTION` keeps its list, and only when
       // there is one: a method without type parameters keeps exactly the tree

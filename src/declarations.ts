@@ -31,6 +31,7 @@ import {
   N_EMPTY,
   N_IDENT,
   N_LIST,
+  N_NUMBER,
   N_UNARY,
   Node,
 } from "./nodes"
@@ -88,6 +89,8 @@ export const collectParams = (
         // Reported, and the parameter kept, so the signature still lines up
         // with the arguments each call is matched against.
         ctx.error(param, functionParameterFormMessage(name))
+      } else if ((param.flags & FLAG_SIGNATURE) !== 0 && sig.defaults.length > 0) {
+        ctx.error(param, followsDefaultMessage(name))
       }
       // One method may take one: `ThreadScope.spawn` in `nish/threads`, whose
       // task is named at the call like a data-parallel body (WP29 P2).
@@ -163,10 +166,7 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
   }
   if ((param.flags & FLAG_DEFAULT) === 0) {
     if (sig.defaults.length > 0 && type !== T_ERROR) {
-      ctx.error(
-        param,
-        `Parameter \`${name}\` follows a parameter with a default, so it needs a default too: a call leaves out arguments only from the end`
-      )
+      ctx.error(param, followsDefaultMessage(name))
     }
     return
   }
@@ -220,6 +220,15 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
     } else {
       value.index = source
     }
+    return
+  }
+  // A number is a value of a number type only: the literal check takes a
+  // number as the type it is written for, which a field's own check relies on.
+  const numeral =
+    init.kind === N_NUMBER ||
+    (init.kind === N_UNARY && init.children.length > 0 && init.children[0].kind === N_NUMBER)
+  if (numeral && !isNumeric(type) && !ctx.table.isRanged(type)) {
+    ctx.error(init, `Parameter \`${name}\` is ${ctx.table.typeName(type)} but its initializer is a number`)
     return
   }
   checkLiteralInitializer(ctx, value, init, `Parameter \`${name}\``, notLiteral, true)
@@ -294,7 +303,7 @@ export const fitArguments = (
       ctx.error(call, `\`${shown}\` expects at least ${fixed} argument(s), got ${got}`)
       return false
     }
-    gatherRest(args, fixed)
+    gatherRest(call, args, fixed)
     return true
   }
   const least = sig.requiredArity() - skip
@@ -328,7 +337,7 @@ export const fitTemplateArguments = (
       ctx.error(call, `\`${shown}\` expects at least ${written - 1} argument(s), got ${got}`)
       return false
     }
-    gatherRest(args, written - 1)
+    gatherRest(call, args, written - 1)
     return true
   }
   let least = 0
@@ -349,10 +358,11 @@ export const fitTemplateArguments = (
 /**
  * Move the arguments from `from` on into one array literal, the call's last
  * argument, under the id the parser reserved after the list's
- * (`parseArguments`). Asked again for the same call — a generic body is
- * checked once per instance — it finds the literal already there.
+ * (`parseArguments`). An empty one sits on the call's `)`. Asked again for
+ * the same call — a generic body is checked once per instance — it finds the
+ * literal already there.
  */
-export const gatherRest = (args: Node, from: i32): void => {
+const gatherRest = (call: Node, args: Node, from: i32): void => {
   if (args.children.length === from + 1 && args.children[from].id === args.id + 1) {
     return
   }
@@ -365,8 +375,8 @@ export const gatherRest = (args: Node, from: i32): void => {
       elements.push(arg)
     }
   }
-  const start = elements.length > 0 ? elements[0].start : args.end - 1
-  const end = elements.length > 0 ? elements[elements.length - 1].end : args.end - 1
+  const start = elements.length > 0 ? elements[0].start : call.end - 1
+  const end = elements.length > 0 ? elements[elements.length - 1].end : call.end - 1
   const array = new Node(N_ARRAY, start, end)
   array.id = args.id + 1
   array.flags = FLAG_GATHERED
@@ -377,6 +387,10 @@ export const gatherRest = (args: Node, from: i32): void => {
 
 /** The source text of `node`, for a message that shows the fix. */
 const spellingOf = (ctx: CheckContext, node: Node): string => ctx.source.text.slice(node.start, node.end)
+
+/** A parameter with no default after one with a default. */
+const followsDefaultMessage = (name: string): string =>
+  `Parameter \`${name}\` follows a parameter with a default, so it needs a default too: a call leaves out arguments only from the end`
 
 /** A function-typed parameter with a default or `...`. */
 const functionParameterFormMessage = (name: string): string =>
