@@ -34,6 +34,10 @@
 // A field's key is its name, or the one its class's `static readonly json`
 // gives it (`FieldInfo.wireName`), and a field the options make optional
 // stores its initializer where any other missing field calls `missingField`.
+// A field the options record (`FieldInfo.jsonPresence`) has its `seen` flag
+// stored into its presence field once the object closes, one `store i1` per
+// recorded field and nothing for a class that records none; a presence field
+// is off the wire (`jsonOffWire`), so neither route reads or writes it.
 // `JsonNumber` is not decoded field by field: its parts are one call of
 // `d.number` and of `jsonEncodeNumber` (`emitJsonNumberBody`).
 //
@@ -244,10 +248,13 @@ const jsonHelper = (emitter: Emitter, part: JsonPart, name: string): FunctionSig
   return home.functions[0]
 }
 
-/** Every field of `info` as the checker's rule classifies it. */
+/** Every field of `info` on the wire as the checker's rule classifies it; a presence field is not. */
 const jsonFieldsOf = (emitter: Emitter, info: StructInfo): JsonField[] => {
   const out: JsonField[] = []
   for (const field of info.fields) {
+    if (field.jsonOffWire) {
+      continue
+    }
     const f = jsonFieldOf(emitter.program, emitter.table, field)
     if (f === null || field.inline()) {
       jsonFail(emitter, `\`${info.name}.${field.name}\` is not a field the route can handle`)
@@ -854,7 +861,8 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
 
   // The object has closed, or the decoding failed and the calls below do
   // nothing. A missing optional field is set to its initializer, so an object
-  // decoded into again does not keep what an earlier input gave it.
+  // decoded into again does not keep what an earlier input gave it, and a
+  // recorded field's presence field is set to whether its key was given.
   fn.placeBlock(check)
   const missing = fn.newBlock("json.missing")
   k = 0
@@ -863,6 +871,10 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
     const slot = seen[k]
     const field = fields[k].field
     const given = fn.emitValue(`load i1, i1* ${slot}, align 1`)
+    const flag: FieldInfo | null = field !== null ? field.jsonPresence : null
+    if (flag !== null) {
+      storeField(emitter, info, "%v", flag, given)
+    }
     const next = fn.newBlock("json.given")
     if (field !== null && field.jsonOptional) {
       const absent = fn.newBlock("json.default")
