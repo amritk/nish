@@ -382,7 +382,9 @@ static void nish_jobs_run_sized(nish_job *jobs, int64_t stack) {
   long sys = sysconf(_SC_PAGESIZE);
   size_t page = sys > 0 ? (size_t)sys : 4096;
   size_t size = ((size_t)stack + page - 1) / page * page;
-  if (size < (size_t)PTHREAD_STACK_MIN) size = (size_t)PTHREAD_STACK_MIN;
+  /* sysconf, not PTHREAD_STACK_MIN: a strict -std=c11 build hides the macro. */
+  long min = sysconf(_SC_THREAD_STACK_MIN);
+  if (min > 0 && size < (size_t)min) size = (size_t)min;
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_attr_setguardsize(&attr, page);
