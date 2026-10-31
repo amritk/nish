@@ -18,6 +18,12 @@
 //   - an object given for an object member is merged into it, by the same
 //     rules, one level down.
 //
+// A patch that is not an object (`[1]`, `"x"`) replaces the whole target in
+// RFC 7396; here it fails the decode with `JSON_DECODE_TYPE`, and nothing is
+// applied. Each patch decodes into a patch object of its own: a decode
+// refills arrays and maps in place, so a reused one shares them with the
+// target.
+//
 // It prints the record before and after each patch and exits 0 when every
 // result is the one RFC 7396 gives.
 import { JsonWriter } from "nish/json"

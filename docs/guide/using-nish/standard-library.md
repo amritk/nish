@@ -733,7 +733,11 @@ its own, with every field optional and recorded, then copy across the fields
 that were given. `null` on a `| null` field removes the member. `null` on a
 field that is not `| null` fails the decode with `JSON_DECODE_TYPE`, so you
 apply nothing. An object field merges one level down by the same steps, and
-an array is replaced whole. `examples/merge-patch.ts` is the whole recipe.
+an array is replaced whole. A patch that is not an object (`[1]`, `"x"`)
+replaces the whole target in RFC 7396; here it fails the decode with
+`JSON_DECODE_TYPE`, and you apply nothing. Decode each patch into a fresh
+patch object: a decode refills arrays and maps in place, so a reused one
+shares them with the target. `examples/merge-patch.ts` is the whole recipe.
 
 ```ts nish:ok
 import { JsonLimits } from "nish/json-tokenizer";
