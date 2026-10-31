@@ -273,6 +273,8 @@ const type: u8[] = [];
 if (found !== null) { for (const b of found) { type.push(b) } }
 ```
 
-The same table and the same `switch` then serve all three. The
+The same table and the same `switch` then serve all three. Over HTTP/1.1,
+[`nish/net/handler`](api-server.md) does this routing for you and hands
+over each request with its route already matched. The
 [standard library page](standard-library.md#nishnet) lists the carriers, and
 the [library's README](../../../std/README.md) every export.

@@ -1,7 +1,9 @@
 # WP43: The HTTP application layer — the router first
 
-**Status: in progress.** Stage 1, the router (`std/net/router.ts`), is built.
-The handler interface, static files and compression are planned and unbuilt.
+**Status: in progress.** Stage 1, the router (`std/net/router.ts`), and
+stage 2's HTTP/1.1 half, the handler (`std/net/handler.ts`) with the example
+server `examples/http-app`, are built. The handler over HTTP/2 and HTTP/3,
+static files and compression are planned and unbuilt.
 
 Issue #485 asks for the pieces every HTTP server on `nish/net` would otherwise
 rebuild: one handler interface across HTTP/1.1, 2 and 3, routing, static
@@ -16,9 +18,10 @@ depend on how a program is laid out:
 
 1. **The router** (`nish/net/router`), now. Method and path to a route index,
    with parameters as byte ranges.
-2. **The handler interface**, later. One request view (method, path, query,
-   fields, a body reader) and one response writer over `http1-server`,
-   `http2-tls` and `http3-server`, with Alt-Svc advertising h3.
+2. **The handler interface**, now, over HTTP/1.1 only (§5). One request view
+   (method, path, query, fields, a body reader) and one response writer over
+   `http1-server`; `http2-tls` and `http3-server`, with Alt-Svc advertising
+   h3, come after it.
 3. **Static files**, later. MIME types, `ETag` and `Last-Modified`, `Range`,
    and a path normalisation that refuses traversal, on WP36's `fs.read` policy.
 4. **Compression**, later. gzip and deflate for responses, and a
@@ -147,10 +150,116 @@ both runs.
 
 ## 4. Later stages of #485
 
-- **Stage 2, the handler interface:** `nish/net/handler`, one request and
-  response pair over the three carriers, with `bench/http1-server.ts` routing
-  through the router.
+- **Stage 2, the handler interface:** `nish/net/handler`. Its HTTP/1.1 half
+  is built (§5); the same `HttpRequest` and answers over `http2-tls` and
+  `http3-server`, with Alt-Svc advertising h3, are the follow-up §5 explains.
 - **Stage 3, static files:** `nish/net/static`.
 - **Stage 4, compression:** `nish/net/compress`.
 - **The example server:** `examples/http-app`, with logging, configuration and
-  graceful shutdown.
+  graceful shutdown, is built (§5).
+
+## 5. The handler over HTTP/1.1
+
+`nish/net/handler` turns `Http1Server`'s events into whole requests and takes
+their answers back. A program builds a `Router`, hands it and a listener to
+`HttpHandler`, and loops on `wait`, `ready` and `take`, switching on
+`req.route`. The user guide is
+[An API server](guide/using-nish/api-server.md); the security record is
+[handler.md](security/handler.md).
+
+### Decisions
+
+- **The program pulls.** Nish has no function values, so there is no handler
+  callback per route. `wait` runs one turn of the readiness loop and queues
+  the requests it made whole; the program takes them and dispatches on the
+  route index the router answered, exactly as stage 1 describes.
+- **A request is whole before it is handed over.** The handler gathers the
+  body, up to `http.maxBody`, which `HandlerLimits` lowers to one MiB from the
+  carrier's default because it holds a body whole. A program that streams
+  large uploads drives `Http1Server` itself. Streaming *responses* are
+  provided (`start`, `write`, `end`).
+- **An answer may come later, and a late one is dropped.** A taken request
+  is the program's until it answers, in that turn or a later one. Each slot
+  carries a generation bumped on close, so an answer whose connection has gone
+  answers `HANDLER_DROPPED` and never reaches a new connection on the same
+  slot.
+- **Order and back-pressure are the carrier's.** It reads a connection's
+  next request only once the one before is answered, and the handler parks a
+  whole request while more than half an output of the answer before it is
+  unsent, so pipelined answers go out in order and a peer that never reads
+  holds one answer in flight.
+- **Nothing is allocated per request once warm.** The head is copied into
+  the request's own buffer at `H1_REQUEST`, bodies and the free list grow to
+  the largest seen, and JSON goes into one scratch writer.
+- **Refusals are problems.** `refuse` answers 404, or 405 with an `Allow`
+  built once per set of methods, as RFC 9457 `application/problem+json`; a
+  `HEAD` that only a `GET` route matches takes that route.
+- **A graceful stop is a drain, not a policy.** `watch` adds the program's
+  own descriptors to the loop (`signalFd()` among them), and `drain` stops
+  accepting, closes idle connections and closes busy ones once answered.
+  Deadlines, logging and configuration stay in `examples/http-app`, as §1
+  says.
+
+### Why HTTP/2 and HTTP/3 are a follow-up
+
+The request view and the answers are written against nothing HTTP/1-specific
+except where the bytes come from, but the two other carriers differ in what
+the handler would own. `http2-tls` multiplexes streams over one TLS
+connection, so a request's lifetime is a stream's, flow control decides when
+a body may be read and written, and its decoded fields live in the
+connection's HPACK state only until the next header block
+([HTTP routing](guide/using-nish/http-router.md#from-http11-http2-and-http3)).
+`http3-server` runs over QUIC on UDP, with its own readiness loop and timers.
+Each needs its own copy-out point, its own back-pressure rule and its own
+late-answer test, and each is a security-relevant change to its own record.
+Landing HTTP/1.1 first gives the API a real user (`examples/http-app`) before
+it is fixed across three carriers.
+
+### Measured
+
+`bench/http1-server.ts` answers the bench contract — plaintext, JSON, echo,
+query, a JSON body, deep parameters and the same 342-route table, which it
+shares with the carrier bench through `bench/http-app-routes.ts` — through
+`HttpHandler`. `bench/http-app-carrier.ts` answers the same contract by
+driving `Http1Server` by hand; `bench/http.mjs`, given both builds, reads
+what the request and response layer costs on top. A byte-identical copy of
+the carrier gives the noise band.
+
+`node bench/http.mjs --rounds 5 --duration 3 carrier=… copy=… handler=…`,
+server on one CPU, `wrk -t3` on three more, in a 4-core cloud session. Each
+cell is the median of five rounds and its change against the carrier; user
+time and sys (kernel) time are CPU microseconds a request; RSS is peak
+resident megabytes.
+
+| Scenario | carrier req/s | copy (noise) | handler | user µs (carrier / handler) | sys µs (carrier / handler) | RSS MB (carrier / handler) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ping, c=500 | 99,909 | −23.1% | −1.3% | 1.62 / 1.55 | 8.04 / 8.35 | 4 / 3 |
+| query, c=500 | 108,989 | −2.3% | −2.5% | 1.92 / 1.75 | 7.02 / 7.42 | 4 / 3 |
+| body, c=500 | 87,446 | +9.2% | +23.8% | 2.24 / 2.25 | 8.92 / 6.71 | 6 / 3 |
+| plaintext, c=256 | 161,645 | −5.8% | +0.1% | 1.21 / 1.50 | 4.78 / 4.59 | 3 / 3 |
+| json, c=256 | 158,452 | −13.5% | −5.9% | 1.40 / 1.49 | 4.84 / 5.14 | 3 / 3 |
+| post-json, c=256 | 60,799 | −1.1% | +11.7% | 7.91 / 6.36 | 8.68 / 8.12 | 4 / 3 |
+| post-json-doc, c=256 | 44,432 | +13.7% | +20.0% | 10.12 / 9.32 | 11.50 / 8.75 | 7 / 6 |
+| deep-route, c=256 | 139,875 | −1.3% | +3.1% | 1.83 / 1.80 | 5.07 / 4.85 | 3 / 3 |
+| plaintext, c=4096 | 86,311 | −7.3% | +17.1% | 2.19 / 2.49 | 8.93 / 7.08 | 12 / 11 |
+| plaintext close, c=64 | 49,753 | +7.4% | +8.3% | 2.68 / 3.02 | 16.32 / 14.90 | 3 / 2 |
+| close, c=64 + 8000 idle | 53,594 | −8.3% | −1.3% | 2.47 / 2.58 | 15.37 / 15.10 | 10 / 10 |
+
+The copy, the same bytes as the carrier, moves −23% to +14%, so no loss
+here is outside the noise band; the two gains past it (`body`, +24%, and
+c=4096, +17%) are not claimed as wins of the handler, since its user time
+there is the carrier's or above it. What the handler does cost shows in user
+time on the small requests: up to 0.35 µs a request more than the carrier
+driven by hand (the head copy, the routing before the body and the queue),
+against 4.6 to 16.3 µs of kernel time. On a JSON body it spends 0.8 to 1.6 µs
+less; the cause is not measured.
+Its peak RSS matches the carrier's or is below it in every scenario. From
+spawn to first answer, over 20 starts each:
+
+| Build | ms (median) | spread | RSS MB then |
+| --- | ---: | ---: | ---: |
+| carrier | 6.0 | 5.0–21.6 | 2.7 |
+| handler | 5.4 | 4.4–7.2 | 2.2 |
+
+The handler's median sits inside the carrier's spread, so it starts no
+slower; it is not claimed as faster.
