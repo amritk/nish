@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 724
+export const RULE_COUNT: i32 = 725
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -349,6 +349,8 @@ const diagnosticRules = (): string[] => [
   "NL2358",
   ", and this analysis cannot see what it does with memory, so nothing proves that what the block allocated is gone when it releases",
   "NL2425",
+  "` bytes: no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least ",
+  "NL2584",
   "`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds",
   "NL2392",
   ": the block releases to the mark it took when it opened, which a release or a reset in between has already moved the arena below",

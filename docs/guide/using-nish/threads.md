@@ -502,6 +502,42 @@ the calling thread. It never raises the count. A map's or a reduce's answer
 is the same at any count; what a scope's tasks do under a lock can come out
 in a different order, as the lock section below says.
 
+### A task that recurses deeply: `scopeWithStack`
+
+A thread starts with a fixed stack, 8 MiB on Linux, and a task that recurses
+deeper than that faults. A type checker walking a deep tree is the usual
+case. `scopeWithStack(bytes)` is a scope whose tasks each run on a thread with
+at least `bytes` of stack:
+
+```ts nish:ok
+import { scopeWithStack } from "nish/threads";
+
+const depth = (n: i32): i32 => (n === 0 ? 0 : depth(n - 1) + 1);
+
+export const main = (): i32 => {
+  const out: i32[] = [0];
+  {
+    using s = scopeWithStack(64 * 1024 * 1024); // 64 MiB for each task
+    s.spawn(depth, 1000, out, 0);
+  }
+  console.log(`${out[0]}`); // 1000
+  return 0;
+};
+```
+
+Everything else about it is a scope's. Its tasks all run on new threads, none
+on the thread that opened the scope. The size is rounded up to the page, and a
+guard page sits below it, so a task that still overflows faults instead of
+writing past the stack. The smallest size is 131072 bytes (128 KiB). Below it,
+a number written at the call is refused ([below](#a-stack-below-the-minimum))
+and a computed one panics with
+`scopeWithStack: a stack of 65536 bytes is below the minimum of 131072`.
+
+Under Node, on WASI and in a build without `--threads`, the size is checked
+and then ignored. Every task runs on the one thread there, so a program that
+recurses that deep also needs a large stack from Node: run it with
+`node --stack-size=…`, under a raised `ulimit -s`.
+
 ## Sharing a value: `Mutex<T>`
 
 When tasks must update one value, put it in a `Mutex`. The value lives inside
@@ -1030,6 +1066,7 @@ with an example on this page that compiles.
 | NL2503 | a parallel arrow writes a local of its function | answer the value from the body instead, and fold the answers with `parallelReduce`, `const sumTotal = parallelReduce([1, 2, 3], (a, b) => a + b, 0)`: [below the rule](#reading-the-functions-constants) |
 | NL2500 | a parallel arrow reads a `let` | a `const` snapshot before the call, `const kNow = k`: [below](#a-let-read-by-a-parallel-arrow) |
 | NL2388 | `scope()` bound without `using` | `using s = scope()`: [below](#a-scope-bound-without-using) |
+| NL2584 | `scopeWithStack` given a number below 131072 | at least the minimum, `scopeWithStack(64 * 1024 * 1024)`: [below](#a-stack-below-the-minimum) |
 | NL2506 | an arrow task reads a `let` | a `const` snapshot before the `spawn`, `const kNow = k`: [`nish --fix`](#letting-nish---fix-write-it) |
 | NL2511 | a task that answers a value has no destination | `const answer = new Array<i32>(1)` above the scope and `s.spawn(twice, 21, answer, 0)`: [below](#a-task-answer-with-nowhere-to-go) |
 | NL2465 | `m.lock()` bound without `using` | `using g = total.lock()`: [`Mutex<T>`](#sharing-a-value-mutext) |
@@ -1088,6 +1125,27 @@ export const main = (): i32 => {
 
 Declare it with `using`, so the block's end joins it, as `nish --fix` does:
 `using s = scope()`, as in [the first scope example](#different-tasks-at-once-using-s--scope).
+
+### A stack below the minimum
+
+```ts nish:err NL2584
+import { scopeWithStack } from "nish/threads";
+
+const twice = (n: i32): i32 => n * 2;
+
+export const main = (): i32 => {
+  const out: i32[] = [0];
+  {
+    using s = scopeWithStack(4096); // no thread starts on 4 KiB
+    s.spawn(twice, 21, out, 0);
+  }
+  return out[0];
+};
+```
+
+Ask for at least 131072 bytes. A program that needs a larger stack asks for
+megabytes: `using s = scopeWithStack(64 * 1024 * 1024)`, as in
+[the deep-recursion example](#a-task-that-recurses-deeply-scopewithstack).
 
 ### A task answer with nowhere to go
 

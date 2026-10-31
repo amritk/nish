@@ -360,6 +360,93 @@ static void *nish_job_thread(void *p) {
   return 0;
 }
 
+/* What the threads of one `nish_jobs_run_sized` share: the jobs not yet
+ * taken, oldest first. */
+typedef struct {
+  pthread_mutex_t mu;
+  nish_job *next;
+} nish_sized_run;
+
+/* A sized thread: takes jobs off the front of its run's list until none is
+ * left, as a worker does -- the arena rewound between them, freed at the end
+ * -- so a job only ever waits on jobs queued before it, which another thread
+ * has already taken. */
+static void *nish_sized_thread(void *p) {
+  nish_sized_run *r = (nish_sized_run *)p;
+  nish_par_depth = 1;
+  nish_pool_thread = 1;
+  for (;;) {
+    pthread_mutex_lock(&r->mu);
+    nish_job *j = r->next;
+    if (j) r->next = j->next;
+    pthread_mutex_unlock(&r->mu);
+    if (!j) break;
+    j->run(j);
+    nish_reset_arena();
+    if (nish_arena.cap > 65536) nish_free_arena();
+  }
+  nish_free_arena();
+  return 0;
+}
+
+/* The end of the program when not one thread with the stack a scope asked for
+ * can be started: running its tasks on a smaller one would trade the panic
+ * for an overflow nobody can read. */
+static void nish_stack_fail(int64_t bytes) {
+  char msg[96];
+  char digits[24];
+  int n = 0;
+  uint64_t v = (uint64_t)bytes;
+  do {
+    digits[n++] = (char)('0' + v % 10);
+    v /= 10;
+  } while (v);
+  static const char head[] = "nish: cannot start a thread with a stack of ";
+  static const char tail[] = " bytes\n";
+  size_t len = sizeof head - 1;
+  memcpy(msg, head, len);
+  while (n) msg[len++] = digits[--n];
+  memcpy(msg + len, tail, sizeof tail - 1);
+  len += sizeof tail - 1;
+  nish_panic_claim();
+  (void)!write(2, msg, len);
+  nish_fatal_exit();
+}
+
+/* Runs the list `jobs`, `count` long, on up to `count` new threads, each with
+ * a stack of `stack` bytes, and returns once every one has finished; the
+ * calling thread runs none of them, since its own stack is the one that was
+ * too small. The size is rounded up to the page and to the platform's minimum,
+ * a page is added for what the C library keeps at the top of a thread's stack,
+ * and a guard page sits below it, so a task that overflows faults. As many
+ * threads as there are jobs, up to the CPU count: one that cannot be started
+ * leaves the others more jobs, and none is a panic. A job runs at depth 1, as
+ * on a worker, so anything it divides runs inline. */
+static void nish_jobs_run_sized(nish_job *jobs, int64_t count, int64_t stack) {
+  nish_sized_run r;
+  pthread_mutex_init(&r.mu, 0);
+  r.next = jobs;
+  long page = sysconf(_SC_PAGESIZE);
+  if (page <= 0) page = 4096;
+  size_t size = ((size_t)stack + (size_t)page - 1) / (size_t)page * (size_t)page;
+  if (size < (size_t)PTHREAD_STACK_MIN) size = (size_t)PTHREAD_STACK_MIN;
+  size += (size_t)page;
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setguardsize(&attr, (size_t)page);
+  int sized = pthread_attr_setstacksize(&attr, size) == 0;
+  int64_t k = nish_cpu_count();
+  if (k > NISH_PAR_MAX) k = NISH_PAR_MAX;
+  if (count < k) k = count;
+  pthread_t th[NISH_PAR_MAX];
+  int64_t started = 0;
+  while (sized && started < k && pthread_create(&th[started], &attr, nish_sized_thread, &r) == 0) started++;
+  pthread_attr_destroy(&attr);
+  if (started == 0) nish_stack_fail(stack);
+  for (int64_t i = 0; i < started; i++) pthread_join(th[i], 0);
+  pthread_mutex_destroy(&r.mu);
+}
+
 /* Runs `lead` on this thread and the list `rest` elsewhere, oldest first, and
  * returns once every one of them has finished. The caller runs `lead` itself,
  * so N jobs keep N-1 other threads busy and this one is not idle, and then
@@ -608,11 +695,22 @@ void nish_scope_join(void *scope) {
   }
   if (!mine) return;
 #ifdef NISH_PAR_REAL
-  /* The first task on this thread and the rest on the pool, in the order they
-   * were spawned, which is the order a task no worker is free for runs in here,
-   * and the order every task runs in when the scope is joined inside another
-   * job (`nish_jobs_run`). */
-  nish_jobs_run(&mine->job, mine->job.next);
+  /* The stack `scopeWithStack` asked for, `ThreadScope`'s first and only field
+   * (std/threads.ts), or 0 for `scope()`. A scope with one runs every task on
+   * threads that have it, in the order they were spawned; the checker refuses
+   * a scope inside a task, so this thread is never one of those. */
+  int64_t stack = *(const int32_t *)scope;
+  if (stack > 0) {
+    int64_t count = 0;
+    for (nish_task *t = mine; t; t = t->next) count++;
+    nish_jobs_run_sized(&mine->job, count, stack);
+  } else {
+    /* The first task on this thread and the rest on the pool, in the order
+     * they were spawned, which is the order a task no worker is free for runs
+     * in here, and the order every task runs in when the scope is joined
+     * inside another job (`nish_jobs_run`). */
+    nish_jobs_run(&mine->job, mine->job.next);
+  }
 #else
   for (nish_task *t = mine; t; t = t->next) t->run(t->payload);
 #endif

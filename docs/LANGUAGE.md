@@ -3613,6 +3613,27 @@ export const main = (): i32 => {
   waiting for them, the tasks write nothing another can see (below), and every
   store into the program's memory is made after the last task has finished. So
   a task may be handed any argument — an array, an object.
+- **`scopeWithStack(bytes)` is a scope whose tasks have a stack of at least
+  `bytes` bytes**, for a task that recurses deeper than a thread's default
+  stack allows (8 MiB on Linux): `using s = scopeWithStack(64 * 1024 * 1024)`
+  (`tests/link/thread_stack_deep`, a million calls deep on 256 MiB, which faults
+  with `scope()`). It is a scope in every other rule. Its tasks all run on new
+  threads, none on the thread that opened it, as many as there are tasks up to
+  the core count; each thread's stack is `bytes` rounded up to the page, with
+  a guard page below it, so a task that still overflows faults rather than
+  writing past it. If not one such thread can be started the program ends with
+  `nish: cannot start a thread with a stack of 268435456 bytes` and exit 1. The
+  smallest size is 131072 (128 KiB, the largest `PTHREAD_STACK_MIN` among the
+  targets): a number written at the call below it is refused,
+  `` `scopeWithStack(4096)` asks for a stack below the minimum of 131072 bytes: no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least 131072 ``
+  (NL2584, `tests/cases/reject_thread_stack_small`, `_negative`), and a
+  computed one panics when the scope is made,
+  `scopeWithStack: a stack of 65536 bytes is below the minimum of 131072`
+  and exit 1 (`tests/link/thread_stack_computed_small`). Under Node, on WASI
+  and wasm32 (no threads: every task runs on the one thread, in spawn order)
+  and in a build without `--threads`, the size is checked the same way and has
+  no other effect, so a program that needs the stack needs it from Node too
+  (`node --stack-size`).
 - **A destination is a fresh `const` array that is never handed on, and until
   the block ends the scope's thread neither reads a destination nor writes
   what a task may read.** Natively a task runs, and its answer is stored, when

@@ -2,7 +2,7 @@
  * `std/threads` — data parallelism, a scope for heterogeneous tasks, and a
  * lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
  *
- *     import { AtomicI32, Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope } from "nish/threads";
+ *     import { AtomicI32, Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope, scopeWithStack } from "nish/threads";
  *
  *     parallelMapInto(src, dst, (x) => x * 3);
  *     const ys = parallelMap(src, (x) => x * k + b); // k, b: `const` locals, read by the body
@@ -13,6 +13,10 @@
  *       s.spawn(sumOf, xs, out, 0);
  *       s.spawn(maxOf, ys, out, 1);
  *     } // both tasks have run, and `out` holds both answers
+ *     {
+ *       using s = scopeWithStack(64 * 1024 * 1024); // each task's thread has a 64 MiB stack
+ *       s.spawn(checkModule, ast, out, 0);
+ *     }
  *
  * **What is written here is the meaning, not the implementation.** Each body
  * below is the sequential program, and it is what runs under Node, what
@@ -280,10 +284,13 @@ const slotWritten = (at: i32): boolean => at < 0 || at >= 0
  */
 export class ThreadScope {
   /**
-   * Nothing reads or writes it. It is here so that each scope is an object of
-   * its own, whose address is what the runtime files the scope's tasks under.
+   * The stack, in bytes, of each thread the scope's tasks run on, or 0 for the
+   * platform's default. Only `scopeWithStack` writes it, and only
+   * `nish_scope_join` (runtime/runtime-parallel.c) reads it, as the scope's
+   * first word. It also makes each scope an object of its own, whose address is
+   * what the runtime files the scope's tasks under.
    */
-  tag: i32 = 0
+  stack: i32 = 0
 
   /**
    * Run `entry(arg)` on a thread of its own and store its answer in `dst[at]`
@@ -337,6 +344,31 @@ export class ThreadScope {
 
 /** A new scope, for a `using` declaration: `using s = scope()`. */
 export const scope = (): ThreadScope => new ThreadScope()
+
+/**
+ * The smallest stack `scopeWithStack` takes: 128 KiB, the largest
+ * `PTHREAD_STACK_MIN` among the targets (aarch64 Linux). A constant below it
+ * is refused at compile time (NL2584); a computed one panics here, under Node
+ * as natively.
+ */
+const MIN_STACK: i32 = 131072
+
+/**
+ * A new scope whose tasks each run on a thread with a stack of at least
+ * `bytes` bytes, for a `using` declaration: `using s = scopeWithStack(n)`.
+ * The tasks run on new threads, never on the one that joins. The runtime
+ * rounds `bytes` up to the page size and adds a guard page below it, so a task
+ * that overflows it faults instead of writing past it. Under Node, and on a
+ * target without threads, the size is checked and has no other effect.
+ */
+export const scopeWithStack = (bytes: i32): ThreadScope => {
+  if (bytes < MIN_STACK) {
+    panic(`scopeWithStack: a stack of ${bytes} bytes is below the minimum of ${MIN_STACK}`)
+  }
+  const s = scope()
+  s.stack = bytes
+  return s
+}
 
 /**
  * What a `Mutex` hands out: its data, as `value`, for as long as the block of

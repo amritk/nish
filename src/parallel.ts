@@ -2003,6 +2003,11 @@ const scopeNotUsingMessage = (name: string): string =>
   "declares it ends, so a scope bound any other way would be one nobody joins; " +
   `declare it as \`using ${name} = scope()\``
 
+const stackBelowMinimumMessage = (bytes: f64): string =>
+  `\`scopeWithStack(${bytes})\` asks for a stack below the minimum of ${MIN_STACK} bytes: no target can start a ` +
+  "thread on less, and a task that ran on it would overflow before it did any work; ask for at least " +
+  `${MIN_STACK}`
+
 const scopeEscapesMessage = (): string =>
   `A \`${THREAD_SCOPE}\` can only be the receiver of a \`spawn\` statement: passed, stored, returned or copied, ` +
   "it could be given a task after its block has joined it"
@@ -2617,13 +2622,44 @@ const scopeSymbol = (programs: CheckedProgram[]): string => {
   return ""
 }
 
-/** Whether `call` is `scope()` from `nish/threads`: a call of a free function answering a `ThreadScope`. */
+/**
+ * Whether `call` is `scope()` or `scopeWithStack(bytes)` from `nish/threads`:
+ * a call of a free function answering a `ThreadScope`.
+ */
 const isScopeCall = (program: CheckedProgram, call: Node, scopeType: i32): boolean => {
   if (call.kind !== N_CALL || program.nodeTypes[call.id] !== scopeType) {
     return false
   }
   const callee = program.nodeCallees[call.id]
-  return callee !== null && callee.sourceName === "scope" && callee.instance === null
+  return (
+    callee !== null &&
+    (callee.sourceName === "scope" || callee.sourceName === "scopeWithStack") &&
+    callee.instance === null
+  )
+}
+
+/** `std/threads`'s `MIN_STACK`: the smallest stack `scopeWithStack` takes. */
+const MIN_STACK: f64 = 131072
+
+/**
+ * The stack a `scopeWithStack(bytes)` call asks for when `bytes` is a number
+ * written at the call, negated or not, or `MIN_STACK`, which is allowed, when
+ * it is not one or the call is `scope()`.
+ */
+const constantStack = (program: CheckedProgram, call: Node): f64 => {
+  const callee = program.nodeCallees[call.id]
+  const args = call.children[1].children
+  if (callee === null || callee.sourceName !== "scopeWithStack" || args.length !== 1) {
+    return MIN_STACK
+  }
+  const arg = unwrapParens(args[0])
+  if (arg.kind === N_NUMBER) {
+    return numericLiteralValue(arg.text)
+  }
+  if (arg.kind === N_UNARY && arg.text === "-" && unwrapParens(arg.children[0]).kind === N_NUMBER) {
+    return -numericLiteralValue(unwrapParens(arg.children[0]).text)
+  }
+  return MIN_STACK
 }
 
 /**
@@ -2715,6 +2751,10 @@ const walkScopes = (
   }
   if (!declaresName && node.kind !== N_PAREN && program.nodeTypes[node.id] === scopeType) {
     if (node.kind === N_CALL && isScopeCall(program, node, scopeType)) {
+      const stack = constantStack(program, node)
+      if (stack < MIN_STACK) {
+        out.push(new ScopeFinding(node, stackBelowMinimumMessage(stack)))
+      }
       if (!isUsingInitialiser(at, parents, depth)) {
         out.push(
           fixedFinding(
