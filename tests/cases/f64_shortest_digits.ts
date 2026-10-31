@@ -2,7 +2,7 @@
 // and "fewest" is not the same as "correctly rounded to that many digits". For
 // these values the correctly-rounded 16-digit string does not round-trip but a
 // neighbouring 16-digit string does, so the old snprintf/strtod search gave up
-// and printed all seventeen. Ryu finds the shortest one, which is what Node
+// and printed all seventeen. Zmij finds the shortest one, which is what Node
 // prints and what this pins.
 export function main(): i32 {
   const a: f64 = 7.120236347223045e-307;
