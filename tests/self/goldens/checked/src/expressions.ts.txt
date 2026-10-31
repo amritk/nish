@@ -524,7 +524,7 @@ function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: 
   callee +42:14 CheckContext.errorType -> @CheckContext.errorType
   callee +45:34 numericLiteralValue -> @numericLiteralValue
   callee +46:12 CheckContext.errorType -> @CheckContext.errorType
-function checkRangedLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 -> @checkRangedLiteral [exported]
+function checkRangedLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 -> @checkRangedLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: negated want

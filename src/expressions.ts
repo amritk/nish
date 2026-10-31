@@ -800,13 +800,7 @@ export const checkNumericLiteral = (
  * literal first, so a fraction or a value past `i32` is refused in the words
  * those already have.
  */
-export const checkRangedLiteral = (
-  ctx: CheckContext,
-  expr: Node,
-  want: i32,
-  negated: boolean,
-  at: Node
-): i32 => {
+const checkRangedLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 => {
   const text = expr.text
   if (isFractional(text)) {
     return ctx.errorType(
