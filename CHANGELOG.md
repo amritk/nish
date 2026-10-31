@@ -26,6 +26,59 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-31
+
+### Breaking changes
+
+- checker: Capability grants with arguments, and fs gated for dependencies ([#1122](https://github.com/amritk/nish/pull/1122))
+
+### Added
+
+- net: Read a connected socket's MSS from nish:net ([#1096](https://github.com/amritk/nish/pull/1096))
+- runtime: Start the adaptive frame rate at the best tier on a local terminal ([#1100](https://github.com/amritk/nish/pull/1100))
+- net: Http1Server reads each connection's MSS from the socket ([#1103](https://github.com/amritk/nish/pull/1103))
+- runtime: Unix stream sockets and socketpair in nish:net ([#1093](https://github.com/amritk/nish/pull/1093))
+- runtime: A stack size for scope tasks, with scopeWithStack ([#1102](https://github.com/amritk/nish/pull/1102))
+- runtime: Hand, pass and identify descriptors over Unix sockets ([#1112](https://github.com/amritk/nish/pull/1112))
+- checker: Arrows passed to function parameters may read the caller's const locals ([#1115](https://github.com/amritk/nish/pull/1115))
+- cli: Keep nish break's settings between runs ([#1105](https://github.com/amritk/nish/pull/1105))
+- checker: Labelled break/continue and switch fallthrough ([#1106](https://github.com/amritk/nish/pull/1106))
+- runtime: Share memory and hand work between processes ([#1121](https://github.com/amritk/nish/pull/1121))
+- interop: Supervisor and service channels in nish/net/prefork ([#1119](https://github.com/amritk/nish/pull/1119))
+- checker: Typed JSON decode reports which fields were present ([#1125](https://github.com/amritk/nish/pull/1125))
+- interop: Nish/net/handler, a request and response layer over the HTTP/1 carrier ([#1123](https://github.com/amritk/nish/pull/1123))
+- interop: Nish/crypto/jwt, compact JWS verify and sign with claims checks ([#1134](https://github.com/amritk/nish/pull/1134))
+- cli: Nish run --watch rebuilds and swaps the running program ([#1131](https://github.com/amritk/nish/pull/1131))
+- interop: An outbound policy for the HTTP client ([#1135](https://github.com/amritk/nish/pull/1135))
+- checker: Default parameters and rest parameters ([#1133](https://github.com/amritk/nish/pull/1133))
+
+### Fixed
+
+- runtime: Refuse peerCredentials without a peer, and correct the descriptor-passing docs and records ([#1116](https://github.com/amritk/nish/pull/1116))
+- runtime: Keyed integer Map hashes, and a composite-key idiom ([#1107](https://github.com/amritk/nish/pull/1107))
+
+### Performance
+
+- net: Skip gzip when the response already fits one segment ([#1097](https://github.com/amritk/nish/pull/1097))
+- runtime: Measure Unix sockets against loopback TCP ([#1117](https://github.com/amritk/nish/pull/1117))
+- runtime: Shortest digits from Żmij, written two at a time ([#1124](https://github.com/amritk/nish/pull/1124))
+- cli: Fast rebuilds for nish run ([#1126](https://github.com/amritk/nish/pull/1126))
+- checker: Compile unions of 200+ variants 5-17% faster ([#1127](https://github.com/amritk/nish/pull/1127))
+- runtime: JsonWriter writes an f64 without building a string ([#1128](https://github.com/amritk/nish/pull/1128))
+
+### Documentation
+
+- Compressed 32-bit references, designed and measured ([#1113](https://github.com/amritk/nish/pull/1113))
+
+### Build
+
+- Regenerate package-lock.json for v0.28.0 ([#1099](https://github.com/amritk/nish/pull/1099))
+
+### CI
+
+- Wait half an hour for the registry before giving up on the lockfile ([#1110](https://github.com/amritk/nish/pull/1110))
+
+
 ## [0.28.0] - 2026-10-30
 
 ### Added
@@ -1419,3 +1472,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.27.1]: https://github.com/amritk/nish/releases/tag/v0.27.1
 [0.27.2]: https://github.com/amritk/nish/releases/tag/v0.27.2
 [0.28.0]: https://github.com/amritk/nish/releases/tag/v0.28.0
+[0.29.0]: https://github.com/amritk/nish/releases/tag/v0.29.0
