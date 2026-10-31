@@ -409,48 +409,60 @@ function memberSetName(ctx: CheckContext, members: i32[]): string -> @memberSetN
   callee +2:16 TypeTable.typeName -> @TypeTable.typeName
 function variantsGiven(ctx: CheckContext, node: Node, union: i32, out: i32[]): void -> @variantsGiven
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:5
   escaping: union
   calls: TypeTable.hasVariant TypeTable.isUnion TypeTable.stripNull TypeTable.variantsOf nish_array_grow nish_panic_index nish_str_eq variantsGiven
   pointer ctx: size=288 writesThrough=false captured=false passedTo=variantsGiven#0 variantsGiven#0 variantsGiven#0 variantsGiven#0 variantsGiven#0
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=variantsGiven#3 variantsGiven#3 variantsGiven#3 variantsGiven#3 variantsGiven#3
   stackSites=0 stackLocals=0
-  callee -17:5 variantsGiven -> @variantsGiven
+  callee -18:5 variantsGiven -> @variantsGiven
+  callee -14:5 variantsGiven -> @variantsGiven
   callee -13:5 variantsGiven -> @variantsGiven
-  callee -12:5 variantsGiven -> @variantsGiven
+  callee -9:5 variantsGiven -> @variantsGiven
   callee -8:5 variantsGiven -> @variantsGiven
-  callee -7:5 variantsGiven -> @variantsGiven
-  local -4:9 from: i32 (const)
-  local -3:9 type: i32 (const)
-  callee -3:16 TypeTable.stripNull -> @TypeTable.stripNull
-  callee -2:7 TypeTable.isUnion -> @TypeTable.isUnion
-  local -1:16 variant: i32 (const)
-  callee -1:27 TypeTable.variantsOf -> @TypeTable.variantsOf
-  callee +2:14 TypeTable.hasVariant -> @TypeTable.hasVariant
+  local -5:9 from: i32 (const)
+  local -4:9 type: i32 (const)
+  callee -4:16 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +1:14 TypeTable.isUnion -> @TypeTable.isUnion
+  local +2:16 variant: i32 (const)
+  callee +2:27 TypeTable.variantsOf -> @TypeTable.variantsOf
+  callee +5:14 TypeTable.hasVariant -> @TypeTable.hasVariant
+function variantPlace(variants: i32[], variant: i32): i32 -> @variantPlace
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer variants: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 lo: i32 (let)
+  local +1:7 hi: i32 (let)
+  local +3:11 mid: i32 (const)
+  local +9:11 at: i32 (const)
 function refuseNarrowingStore(ctx: CheckContext, value: Node, slot: i32, place: string): boolean -> @refuseNarrowingStore [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   escaping: slot
-  calls: CheckContext.error TypeTable.isUnion TypeTable.stripNull TypeTable.typeName TypeTable.variantsOf nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq variantsGiven
+  calls: CheckContext.error TypeTable.isUnion TypeTable.stripNull TypeTable.typeName TypeTable.variantsOf nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq variantPlace variantsGiven
   pointer ctx: size=288 writesThrough=true captured=false passedTo=variantsGiven#0 CheckContext.error#0
   pointer value: size=40 writesThrough=false captured=false passedTo=variantsGiven#1 CheckContext.error#1
-  stackSites=2 stackLocals=2
+  stackSites=3 stackLocals=3
   local +0:9 union: i32 (const)
   callee +0:17 TypeTable.stripNull -> @TypeTable.stripNull
   callee +1:8 TypeTable.isUnion -> @TypeTable.isUnion
   local +4:9 given: i32[] (const)
   callee +5:3 variantsGiven -> @variantsGiven
-  local +9:7 missing: boolean (let)
-  local +10:14 variant: i32 (const)
-  callee +10:25 TypeTable.variantsOf -> @TypeTable.variantsOf
-  local +18:9 named: string[] (const)
-  local +19:14 each: i32 (const)
-  local +20:11 name: string (const)
-  callee +20:18 TypeTable.typeName -> @TypeTable.typeName
-  local +25:9 shown: string (const)
-  callee +26:3 CheckContext.error -> @CheckContext.error
-  callee +28:22 TypeTable.typeName -> @TypeTable.typeName
+  local +11:9 variants: i32[] (const)
+  callee +11:20 TypeTable.variantsOf -> @TypeTable.variantsOf
+  local +12:9 covered: boolean[] (const)
+  local +16:14 each: i32 (const)
+  local +17:11 at: i32 (const)
+  callee +17:16 variantPlace -> @variantPlace
+  local +25:9 named: string[] (const)
+  local +26:14 each: i32 (const)
+  local +27:11 name: string (const)
+  callee +27:18 TypeTable.typeName -> @TypeTable.typeName
+  local +32:9 shown: string (const)
+  callee +33:3 CheckContext.error -> @CheckContext.error
+  callee +35:22 TypeTable.typeName -> @TypeTable.typeName
 function readAsBase(ctx: CheckContext, type: i32, keepsRange: boolean): i32 -> @readAsBase
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -907,28 +919,33 @@ function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node
   callee +9:12 checkExpression -> @checkExpression
   callee +13:13 checkExpression -> @checkExpression
   callee +17:37 literalHint -> @literalHint
-  local +23:9 a: string (const)
-  callee +23:13 TypeTable.typeName -> @TypeTable.typeName
-  local +24:9 b: string (const)
-  callee +24:13 TypeTable.typeName -> @TypeTable.typeName
-  callee +30:10 isNumeric -> @isNumeric
-  local +31:13 hint: string (const)
-  callee +35:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +43:12 checkEquality -> @checkEquality
-  callee +46:27 TypeTable.isVector -> @TypeTable.isVector
-  callee +47:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +47:34 simdCompareMessage -> @simdCompareMessage
-  callee +49:28 isNumeric -> @isNumeric
-  callee +50:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +54:7 isShift -> @isShift
-  callee +56:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +56:83 booleanAlternative -> @booleanAlternative
-  callee +58:10 isInteger -> @isInteger
-  callee +59:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +61:96 f64Hint -> @f64Hint
-  callee +67:10 isNumeric -> @isNumeric
-  callee +68:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +75:10 CheckContext.errorType -> @CheckContext.errorType
+  callee +29:10 isNumeric -> @isNumeric
+  local +30:13 hint: string (const)
+  callee +34:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +36:94 TypeTable.typeName -> @TypeTable.typeName
+  callee +36:126 TypeTable.typeName -> @TypeTable.typeName
+  callee +42:12 checkEquality -> @checkEquality
+  callee +45:27 TypeTable.isVector -> @TypeTable.isVector
+  callee +46:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +46:34 simdCompareMessage -> @simdCompareMessage
+  callee +46:57 TypeTable.typeName -> @TypeTable.typeName
+  callee +48:28 isNumeric -> @isNumeric
+  callee +49:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +51:66 TypeTable.typeName -> @TypeTable.typeName
+  callee +51:98 TypeTable.typeName -> @TypeTable.typeName
+  callee +56:7 isShift -> @isShift
+  callee +58:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +58:83 booleanAlternative -> @booleanAlternative
+  callee +60:10 isInteger -> @isInteger
+  callee +61:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +63:83 TypeTable.typeName -> @TypeTable.typeName
+  callee +63:115 TypeTable.typeName -> @TypeTable.typeName
+  callee +63:143 f64Hint -> @f64Hint
+  callee +69:10 isNumeric -> @isNumeric
+  callee +70:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +72:83 TypeTable.typeName -> @TypeTable.typeName
+  callee +72:115 TypeTable.typeName -> @TypeTable.typeName
+  callee +77:10 CheckContext.errorType -> @CheckContext.errorType
 function booleanAlternative(op: string): string -> @booleanAlternative
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -960,29 +977,31 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   callee +1:23 TypeTable.isSecret -> @TypeTable.isSecret
   callee +3:12 CheckContext.errorType -> @CheckContext.errorType
   callee +3:32 equalityMessage -> @equalityMessage
-  local +5:9 a: string (const)
-  callee +5:13 TypeTable.typeName -> @TypeTable.typeName
-  local +6:9 b: string (const)
-  callee +6:13 TypeTable.typeName -> @TypeTable.typeName
-  callee +8:9 TypeTable.isNullable -> @TypeTable.isNullable
-  callee +8:39 TypeTable.isNullable -> @TypeTable.isNullable
-  callee +9:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +14:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +16:7 TypeTable.isVector -> @TypeTable.isVector
-  callee +17:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +17:32 simdCompareMessage -> @simdCompareMessage
-  local +19:9 leftSet: i32[] (const)
-  callee +19:19 memberSetOf -> @memberSetOf
-  local +20:9 rightSet: i32[] (const)
-  callee +20:20 memberSetOf -> @memberSetOf
-  callee +21:7 membersDisjoint -> @membersDisjoint
-  callee +22:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +24:73 CheckContext.textOf -> @CheckContext.textOf
-  callee +24:104 memberSetName -> @memberSetName
-  callee +24:143 CheckContext.textOf -> @CheckContext.textOf
-  callee +24:175 memberSetName -> @memberSetName
-  callee +29:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee +30:12 CheckContext.errorType -> @CheckContext.errorType
+  local +8:11 a: string (const)
+  callee +8:15 TypeTable.typeName -> @TypeTable.typeName
+  local +9:11 b: string (const)
+  callee +9:15 TypeTable.typeName -> @TypeTable.typeName
+  callee +10:9 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +10:39 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +11:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +16:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +18:7 TypeTable.isVector -> @TypeTable.isVector
+  callee +19:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +19:32 simdCompareMessage -> @simdCompareMessage
+  callee +19:55 TypeTable.typeName -> @TypeTable.typeName
+  local +21:9 leftSet: i32[] (const)
+  callee +21:19 memberSetOf -> @memberSetOf
+  local +22:9 rightSet: i32[] (const)
+  callee +22:20 memberSetOf -> @memberSetOf
+  callee +23:7 membersDisjoint -> @membersDisjoint
+  callee +24:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +26:73 CheckContext.textOf -> @CheckContext.textOf
+  callee +26:104 memberSetName -> @memberSetName
+  callee +26:143 CheckContext.textOf -> @CheckContext.textOf
+  callee +26:175 memberSetName -> @memberSetName
+  callee +31:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +32:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +34:31 TypeTable.typeName -> @TypeTable.typeName
 function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkLogical
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -1591,12 +1610,12 @@ function tagVariable(ctx: CheckContext, node: Node, scope: Scope): Local | null 
 function narrowToTags(ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void -> @narrowToTags [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via narrowToVariants
-  calls: Scope.typeOf TypeTable.hasVariant TypeTable.isUnion TypeTable.memberValue TypeTable.stripNull TypeTable.tagsOf TypeTable.variantsOf narrowToVariants nish_array_grow nish_panic_overflow
+  calls: Scope.typeOf TypeTable.isUnion TypeTable.memberValue TypeTable.stripNull TypeTable.tagsOf TypeTable.variantsOf narrowToVariants nish_array_grow nish_panic_overflow
   pointer ctx: size=288 writesThrough=false captured=false passedTo=narrowToVariants#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.typeOf#0 narrowToVariants#1
   pointer local: size=64 writesThrough=true captured=true passedTo=Scope.typeOf#1 narrowToVariants#2
   pointer members: size=0 writesThrough=false captured=false
-  stackSites=2 stackLocals=2
+  stackSites=3 stackLocals=2
   local +0:9 union: i32 (const)
   callee +0:17 TypeTable.stripNull -> @TypeTable.stripNull
   local +1:9 current: i32 (const)
@@ -1607,18 +1626,20 @@ function narrowToTags(ctx: CheckContext, scope: Scope, local: Local, members: i3
   callee +3:16 TypeTable.tagsOf -> @TypeTable.tagsOf
   local +4:9 keptVariants: i32[] (const)
   local +5:9 keptTags: i32[] (const)
-  local +6:7 possible: i32 (let)
-  local +7:7 i: i32 (let)
-  local +9:11 variant: i32 (const)
-  local +10:11 tag: i32 (const)
-  local +11:11 left: boolean (const)
-  callee +11:18 TypeTable.isUnion -> @TypeTable.isUnion
-  callee +11:47 TypeTable.hasVariant -> @TypeTable.hasVariant
-  local +14:11 named: boolean (let)
-  local +15:18 member: i32 (const)
-  callee +16:13 TypeTable.memberValue -> @TypeTable.memberValue
-  callee +16:47 TypeTable.memberValue -> @TypeTable.memberValue
-  callee +30:3 narrowToVariants -> @narrowToVariants
+  local +8:9 still: i32[] (const)
+  callee +8:24 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +8:53 TypeTable.variantsOf -> @TypeTable.variantsOf
+  local +9:7 possible: i32 (let)
+  local +10:7 i: i32 (let)
+  local +11:7 at: i32 (let)
+  local +13:11 variant: i32 (const)
+  local +14:11 tag: i32 (const)
+  local +20:13 value: i32 (const)
+  callee +20:21 TypeTable.memberValue -> @TypeTable.memberValue
+  local +21:11 named: boolean (let)
+  local +22:18 member: i32 (const)
+  callee +23:13 TypeTable.memberValue -> @TypeTable.memberValue
+  callee +37:3 narrowToVariants -> @narrowToVariants
 function narrowToVariants(ctx: CheckContext, scope: Scope, local: Local, keptVariants: i32[], keptTags: i32[]): void -> @narrowToVariants [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Scope.narrow

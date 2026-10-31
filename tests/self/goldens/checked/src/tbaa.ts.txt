@@ -6,7 +6,7 @@ import FieldInfo from "./program" -> struct FieldInfo
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
 import StructInfo from "./program" -> struct StructInfo
 function charNode(emitter: Emitter): string -> @charNode
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.metadata
   calls: Emitter.metadata nish_str_concat
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.metadata#0 Emitter.metadata#0

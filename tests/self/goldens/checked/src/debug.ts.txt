@@ -108,7 +108,7 @@ function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: Check
   escaping: module program table
   calls: DebugInfo.fileOf IRModule.addModuleFlag IRModule.addNamedMetadata IRModule.reserveMetadata IRModule.setMetadata StringMap.constructor nish_alloc_struct nish_str_concat quote
   pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.fileOf#0
-  pointer module: size=96 writesThrough=true captured=true passedTo=IRModule.reserveMetadata#0 IRModule.setMetadata#0 IRModule.addNamedMetadata#0 IRModule.addModuleFlag#0 IRModule.addModuleFlag#0
+  pointer module: size=104 writesThrough=true captured=true passedTo=IRModule.reserveMetadata#0 IRModule.setMetadata#0 IRModule.addNamedMetadata#0 IRModule.addModuleFlag#0 IRModule.addModuleFlag#0
   pointer program: size=656 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -221,21 +221,21 @@ function DebugInfo.setTypeRef(this: DebugInfo, key: string, ref: string): void -
   callee -2:19 StringMap.get -> @StringMap.get
   callee +3:5 StringMap.set -> @StringMap.set
 function DebugInfo.foreignPointer(this: DebugInfo): string -> @DebugInfo.foreignPointer [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: DebugInfo.pointerTo nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.pointerTo#0
   stackSites=0 stackLocals=0
   callee +0:19 DebugInfo.pointerTo -> @DebugInfo.pointerTo
 function DebugInfo.pointerTo(this: DebugInfo, base: string): string -> @DebugInfo.pointerTo [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addMetadata
   calls: IRModule.addMetadata nish_str_concat
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 IRModule.addMetadata -> @IRModule.addMetadata
 function DebugInfo.member(this: DebugInfo, name: string, scope: string, type: string, sizeBits: i32, offsetBits: i32, file: string, line: i32): string -> @DebugInfo.member [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addMetadata
   escaping: name
   calls: IRModule.addMetadata nish_str_concat nish_str_from_i32 quote
