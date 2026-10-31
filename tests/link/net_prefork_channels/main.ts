@@ -224,11 +224,12 @@ const worker = (mode: string, index: i32, argv: string[]): number => {
     say(vc, "p");
     servicePid = parseInt(hear(vc, 5000));
   }
-  tell(port, `w ${index} ${selfPid()} ${ok ? 1 : 0} ${servicePid}`);
   if (mode === "sup" && index === 1) {
     // A copy of the end outlives this worker, so its death is no hang-up.
-    spawnWithFds([selfPath(), "hold", `${port}`], [sc]);
+    // Before the report: the driver kills this worker once it has it.
+    ok = spawnWithFds([selfPath(), "hold", `${port}`], [sc]) > 0 && ok;
   }
+  tell(port, `w ${index} ${selfPid()} ${ok ? 1 : 0} ${servicePid}`);
 
   const loop = pollCreate();
   if (index === service) {

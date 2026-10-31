@@ -629,7 +629,7 @@ const preforkInvalid = (config: PreforkConfig): string => {
 }
 
 /** Read and drop what a channel holds: `preforkWith`'s callback. */
-const preforkDiscard = (state: i32, index: i32, fd: i32, events: i32): void => {
+const preforkDiscard = (_state: i32, _index: i32, fd: i32, _events: i32): void => {
   const buf: u8[] = new Array<u8>(512)
   while (netRead(fd, buf, 0, buf.length) > 0) {
     // Dropped.
