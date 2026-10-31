@@ -112,6 +112,8 @@ const escapes = (t: Suite): void => {
   t.eqI32("in a query value", pgTargetUrl("postgres://db/app?host=%2").failure, PG_TARGET_BAD_ESCAPE);
   t.eqI32("in an ignored value", pgTargetUrl("postgres://db/app?sslmode=%zz").failure, PG_TARGET_BAD_ESCAPE);
   t.eqStr("an encoded port", show(pgTargetUrl("postgres://db:%36000/app")), "0 tcp db 6000 ");
+  t.eqI32("an escape that is not UTF-8 is refused", pgTargetUrl("postgres://%2Ftmp%FF/app").failure, PG_TARGET_BAD_ESCAPE);
+  t.eqStr("escaped UTF-8 decodes", show(pgTargetUrl("postgres://%2Ftmp%C3%A9/app")), "0 unix /tmpé 5432 /tmpé/.s.PGSQL.5432");
 };
 
 /**

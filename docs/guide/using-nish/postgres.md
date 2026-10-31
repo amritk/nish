@@ -358,8 +358,9 @@ export const main = (): i32 => {
   `?host=/var/run/postgresql`. A `host` or `port` in the query overrides the
   one before the path; other keys are ignored. No port means 5432.
 - Refused, with `failure` saying why: another scheme or a query key with no
-  `=` (`PG_TARGET_BAD_URL`); a `%` without two hex digits after it, or `%00`,
-  anywhere in the URL (`PG_TARGET_BAD_ESCAPE`); no host, more than one (a
+  `=` (`PG_TARGET_BAD_URL`); a `%` without two hex digits after it, `%00`, or
+  escapes that decode to bytes that are not UTF-8, anywhere in the URL
+  (`PG_TARGET_BAD_ESCAPE`); no host, more than one (a
   `,`) or a NUL byte (`PG_TARGET_BAD_HOST`); a port that is not 1 to 65535
   (`PG_TARGET_BAD_PORT`); and a socket path longer than the 107 bytes Linux
   holds, which is never cut short (`PG_TARGET_TOO_LONG`). macOS holds 103:

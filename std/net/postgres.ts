@@ -162,6 +162,7 @@ import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
 import { Sha256 } from "nish/crypto/sha256"
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
+import { urlDecode } from "nish/net/url"
 
 /** `next()` needs more input before it can say anything. */
 export const PG_NEED_MORE: i32 = 0
@@ -3963,7 +3964,7 @@ export class PgBatchTurns {
 export const PG_TARGET_OK: i32 = 0
 /** `PgTarget.failure`: not a `postgres://` or `postgresql://` URL, or a query parameter with no `=`. */
 export const PG_TARGET_BAD_URL: i32 = 1
-/** `PgTarget.failure`: a `%` not followed by two hex digits, or `%00`. */
+/** `PgTarget.failure`: a `%` not followed by two hex digits, `%00`, or escapes that decode to bytes that are not UTF-8. */
 export const PG_TARGET_BAD_ESCAPE: i32 = 2
 /** `PgTarget.failure`: no host, more than one (a `,`), an unclosed `[`, or a NUL byte. */
 export const PG_TARGET_BAD_HOST: i32 = 3
@@ -4048,44 +4049,8 @@ export const pgTarget = (host: string, port: i32): PgTarget => {
   return t
 }
 
-/** The value of hex digit `c`, or -1. */
-const pgHexValue = (c: i32): i32 => {
-  if (c >= 48 && c <= 57) {
-    return c - 48
-  }
-  if (c >= 65 && c <= 70) {
-    return c - 55
-  }
-  if (c >= 97 && c <= 102) {
-    return c - 87
-  }
-  return -1
-}
-
-/** `text[start, end)` percent-decoded, or null for a `%` without two hex digits after it, or `%00`. */
-const pgDecoded = (text: string, start: i32, end: i32): string | null => {
-  const out: u8[] = []
-  let i: i32 = start
-  while (i < end) {
-    const c: i32 = toI32(text.charCodeAt(i))
-    if (c !== 37) {
-      out.push(toU8(c))
-      i += 1
-    } else {
-      if (i + 2 >= end) {
-        return null
-      }
-      const hi: i32 = pgHexValue(toI32(text.charCodeAt(i + 1)))
-      const lo: i32 = pgHexValue(toI32(text.charCodeAt(i + 2)))
-      if (hi < 0 || lo < 0 || (hi === 0 && lo === 0)) {
-        return null
-      }
-      out.push(toU8(hi * 16 + lo))
-      i += 3
-    }
-  }
-  return String.fromBytes(out, 0, toI32(out.length))
-}
+/** `text[start, end)` percent-decoded, or null for a `%` without two hex digits after it, `%00`, or bytes that are not UTF-8. */
+const pgDecoded = (text: string, start: i32, end: i32): string | null => urlDecode(text.substring(start, end), 0)
 
 /** The port `text` spells, 1 to 5 decimal digits naming 1 to 65535, or -1. */
 const pgPortValue = (text: string): i32 => {
@@ -4114,9 +4079,10 @@ const pgPortValue = (text: string): i32 => {
  * socket directory is written `%2Ftmp` or passed as `?host=/tmp`; a `host` or
  * `port` in the query overrides the authority's, and other keys are ignored.
  * The user, password and database are not read here, but a bad escape in them
- * still refuses the URL. A `%` without two hex digits after it, or `%00`, is
- * `PG_TARGET_BAD_ESCAPE`; with no host anywhere the URL is
- * `PG_TARGET_BAD_HOST`, where libpq would use its default socket directory.
+ * still refuses the URL. A `%` without two hex digits after it, `%00`, or a
+ * part that decodes to bytes that are not UTF-8 is `PG_TARGET_BAD_ESCAPE`;
+ * with no host anywhere the URL is `PG_TARGET_BAD_HOST`, where libpq would
+ * use its default socket directory.
  * The decoded host is then resolved as `pgTarget` resolves one.
  */
 export const pgTargetUrl = (url: string): PgTarget => {
