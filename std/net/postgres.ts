@@ -162,6 +162,7 @@ import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
 import { Sha256 } from "nish/crypto/sha256"
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
+import { urlDecode } from "nish/net/url"
 
 /** `next()` needs more input before it can say anything. */
 export const PG_NEED_MORE: i32 = 0
@@ -3957,4 +3958,274 @@ export class PgBatchTurns {
       panic("nish/net/postgres: PgBatchTurns slot out of range or holding a batch")
     }
   }
+}
+
+/** `PgTarget.failure`: none; connect as `unix` says. */
+export const PG_TARGET_OK: i32 = 0
+/** `PgTarget.failure`: not a `postgres://` or `postgresql://` URL, or a query parameter with no `=`. */
+export const PG_TARGET_BAD_URL: i32 = 1
+/** `PgTarget.failure`: a `%` not followed by two hex digits, `%00`, or escapes that decode to bytes that are not UTF-8. */
+export const PG_TARGET_BAD_ESCAPE: i32 = 2
+/** `PgTarget.failure`: no host, more than one (a `,`), an unclosed `[` or text after its `]`, a raw `@` past the user information, or a NUL byte. */
+export const PG_TARGET_BAD_HOST: i32 = 3
+/** `PgTarget.failure`: a port that is not 1 to 65535 in decimal digits. */
+export const PG_TARGET_BAD_PORT: i32 = 4
+/** `PgTarget.failure`: a socket path longer than Linux's `sun_path` holds. */
+export const PG_TARGET_TOO_LONG: i32 = 5
+
+/** The port a target names when nothing else does. */
+const PG_DEFAULT_PORT: i32 = 5432
+/** The longest socket path, NUL excluded: Linux's 108-byte `sun_path`, less its NUL; an `@` name has no NUL, so its `@` takes that byte. */
+const PG_SOCKET_PATH_MAX: i32 = 107
+
+/**
+ * Where a connection goes, from libpq's `host` and `port` or a
+ * `postgres://` URL: `pgTarget` and `pgTargetUrl` make one, reading no
+ * socket and no file. When `failure` is `PG_TARGET_OK`, a `unix` target is
+ * `unixConnect(path)`, and any other is `host` and `port`, for
+ * `netAddress` and `tcpConnect`.
+ *
+ * A host starting with `/` is a socket directory, and one starting with `@`
+ * a Linux abstract name, as in libpq: the socket is
+ * `<host>/.s.PGSQL.<port>`. The host is always the directory, never the
+ * socket file itself. Any other host is TCP.
+ */
+export class PgTarget {
+  /** `PG_TARGET_OK`, or the `PG_TARGET_*` reason the input was refused. */
+  failure: i32 = 0
+  /** Whether the target is a Unix socket, at `path`. */
+  unix: boolean = false
+  /** The host as given (a URL's decoded, without an IPv6 address's brackets); for a socket, its directory or `@` name. */
+  host: string = ""
+  /** The port: the TCP port, or the number in the socket's name. */
+  port: i32 = 5432
+  /** The socket's path, `<host>/.s.PGSQL.<port>`, when `unix`; otherwise "". */
+  path: string = ""
+}
+
+/** A target refused for `failure`. */
+const pgTargetFailed = (failure: i32): PgTarget => {
+  const t = new PgTarget()
+  t.failure = failure
+  return t
+}
+
+/**
+ * The target `host` and `port` name, as libpq's `host` and `port` do: a host
+ * starting with `/` or `@` is the socket `<host>/.s.PGSQL.<port>`, any other
+ * a TCP host. The host is not percent-decoded. A port outside 1 to 65535, an
+ * empty host, a `,` (more than one host) or a NUL byte is refused, and so is
+ * a socket path over 107 bytes (an `@` name over 107 after its `@`), never
+ * cut short.
+ */
+export const pgTarget = (host: string, port: i32): PgTarget => {
+  if (port < 1 || port > 65535) {
+    return pgTargetFailed(PG_TARGET_BAD_PORT)
+  }
+  const n: i32 = toI32(host.length)
+  if (n === 0) {
+    return pgTargetFailed(PG_TARGET_BAD_HOST)
+  }
+  for (let i: i32 = 0; i < n; i++) {
+    const c: i32 = toI32(host.charCodeAt(i))
+    if (c === 0 || c === 44) {
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
+    }
+  }
+  const t = new PgTarget()
+  t.host = host
+  t.port = port
+  const first: i32 = toI32(host.charCodeAt(0))
+  if (first === 47 || first === 64) {
+    const path: string = `${host}/.s.PGSQL.${port}`
+    // An `@` name's NUL-free bytes after the `@` fill what a path's NUL would.
+    const limit: i32 = first === 64 ? PG_SOCKET_PATH_MAX + 1 : PG_SOCKET_PATH_MAX
+    if (toI32(path.length) > limit) {
+      return pgTargetFailed(PG_TARGET_TOO_LONG)
+    }
+    t.unix = true
+    t.path = path
+  }
+  return t
+}
+
+/** `text[start, end)` percent-decoded, or null for a `%` without two hex digits after it, `%00`, or bytes that are not UTF-8. */
+const pgDecoded = (text: string, start: i32, end: i32): string | null =>
+  urlDecode(text.substring(start, end), 0)
+
+/** The port `text` spells, 1 to 5 decimal digits naming 1 to 65535, or -1. */
+const pgPortValue = (text: string): i32 => {
+  const n: i32 = toI32(text.length)
+  if (n === 0 || n > 5) {
+    return -1
+  }
+  let v: i32 = 0
+  for (let i: i32 = 0; i < n; i++) {
+    const c: i32 = toI32(text.charCodeAt(i))
+    if (c < 48 || c > 57) {
+      return -1
+    }
+    v = v * 10 + (c - 48)
+  }
+  if (v < 1 || v > 65535) {
+    return -1
+  }
+  return v
+}
+
+/**
+ * The target a `postgres://` or `postgresql://` URL names, as libpq reads
+ * one: `postgres://[user[:password]@][host][:port][/dbname][?key=value&...]`.
+ * The host, the port and every query key and value are percent-decoded, so a
+ * socket directory is written `%2Ftmp` or passed as `?host=/tmp`; a `host` or
+ * `port` in the query overrides the authority's, and other keys are ignored.
+ * The user, password and database are not read here, but a bad escape in them
+ * still refuses the URL. A `%` without two hex digits after it, `%00`, or a
+ * part that decodes to bytes that are not UTF-8 is `PG_TARGET_BAD_ESCAPE`.
+ * The user information ends at the first `@`, as in libpq; a raw `@` after a
+ * `?` or after that first `@` in the authority, or a raw NUL byte anywhere,
+ * is `PG_TARGET_BAD_HOST`, as is a URL with no host anywhere, where libpq
+ * would use its default socket directory. An empty port or query value is
+ * refused, where libpq would take it as unset.
+ * The decoded host is then resolved as `pgTarget` resolves one.
+ */
+export const pgTargetUrl = (url: string): PgTarget => {
+  let at: i32 = 0
+  if (url.startsWith("postgresql://")) {
+    at = 13
+  } else if (url.startsWith("postgres://")) {
+    at = 11
+  } else {
+    return pgTargetFailed(PG_TARGET_BAD_URL)
+  }
+  const n: i32 = toI32(url.length)
+  // The authority runs to the first `/` or `?`; the path to the `?`.
+  let authorityEnd: i32 = at
+  while (authorityEnd < n) {
+    const c: i32 = toI32(url.charCodeAt(authorityEnd))
+    if (c === 47 || c === 63) {
+      break
+    }
+    authorityEnd += 1
+  }
+  let queryStart: i32 = authorityEnd
+  while (queryStart < n && toI32(url.charCodeAt(queryStart)) !== 63) {
+    queryStart += 1
+  }
+  // A raw NUL byte anywhere is refused: no part may carry one past here.
+  for (let i: i32 = at; i < n; i++) {
+    if (toI32(url.charCodeAt(i)) === 0) {
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
+    }
+  }
+  // libpq ends the user information at the first `@` before a `/`, a `?`
+  // included. One after a `?`, or a second in the host and port, reads
+  // differently by other parsers, so either is refused. The loops below also
+  // test `>= 0` and `< n`, always true as `authorityEnd <= n`, so the prover
+  // drops each access's bounds check.
+  let firstAt: i32 = at
+  while (firstAt >= 0 && firstAt < n) {
+    const c: i32 = toI32(url.charCodeAt(firstAt))
+    if (c === 64 || c === 47) {
+      break
+    }
+    firstAt += 1
+  }
+  let hostStart: i32 = at
+  if (firstAt < n && toI32(url.charCodeAt(firstAt)) === 64) {
+    if (firstAt > authorityEnd) {
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
+    }
+    hostStart = firstAt + 1
+  }
+  for (let i: i32 = hostStart; i >= 0 && i < authorityEnd && i < n; i++) {
+    if (toI32(url.charCodeAt(i)) === 64) {
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
+    }
+  }
+  if (hostStart > at && pgDecoded(url, at, hostStart - 1) === null) {
+    return pgTargetFailed(PG_TARGET_BAD_ESCAPE)
+  }
+  if (authorityEnd < queryStart && pgDecoded(url, authorityEnd, queryStart) === null) {
+    return pgTargetFailed(PG_TARGET_BAD_ESCAPE)
+  }
+  // The host ends at a `:` before the port, after an IPv6 address's `]`.
+  let hostEnd: i32 = authorityEnd
+  let portStart: i32 = -1
+  let bracketed: boolean = false
+  if (hostStart < authorityEnd && toI32(url.charCodeAt(hostStart)) === 91) {
+    let close: i32 = hostStart + 1
+    while (close >= 0 && close < authorityEnd && close < n && toI32(url.charCodeAt(close)) !== 93) {
+      close += 1
+    }
+    if (close === authorityEnd) {
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
+    }
+    bracketed = true
+    hostEnd = close + 1
+    if (hostEnd < authorityEnd) {
+      if (toI32(url.charCodeAt(hostEnd)) !== 58) {
+        return pgTargetFailed(PG_TARGET_BAD_HOST)
+      }
+      portStart = hostEnd + 1
+    }
+  } else {
+    for (let i: i32 = hostStart; i >= 0 && i < authorityEnd && i < n; i++) {
+      if (toI32(url.charCodeAt(i)) === 58) {
+        hostEnd = i
+        portStart = i + 1
+        break
+      }
+    }
+  }
+  const decodedHost: string | null = bracketed
+    ? pgDecoded(url, hostStart + 1, hostEnd - 1)
+    : pgDecoded(url, hostStart, hostEnd)
+  if (decodedHost === null) {
+    return pgTargetFailed(PG_TARGET_BAD_ESCAPE)
+  }
+  let host: string = decodedHost
+  let port: i32 = PG_DEFAULT_PORT
+  if (portStart >= 0) {
+    const decodedPort: string | null = pgDecoded(url, portStart, authorityEnd)
+    if (decodedPort === null) {
+      return pgTargetFailed(PG_TARGET_BAD_ESCAPE)
+    }
+    port = pgPortValue(decodedPort)
+    if (port < 0) {
+      return pgTargetFailed(PG_TARGET_BAD_PORT)
+    }
+  }
+  // The query: `key=value` pairs split at `&`.
+  let i: i32 = queryStart + 1
+  while (i >= 0 && i < n) {
+    let end: i32 = i
+    let eq: i32 = -1
+    while (end < n && toI32(url.charCodeAt(end)) !== 38) {
+      if (eq < 0 && toI32(url.charCodeAt(end)) === 61) {
+        eq = end
+      }
+      end += 1
+    }
+    if (end > i) {
+      if (eq < 0) {
+        return pgTargetFailed(PG_TARGET_BAD_URL)
+      }
+      const key: string | null = pgDecoded(url, i, eq)
+      const value: string | null = pgDecoded(url, eq + 1, end)
+      if (key === null || value === null) {
+        return pgTargetFailed(PG_TARGET_BAD_ESCAPE)
+      }
+      if (key === "host") {
+        host = value
+      } else if (key === "port") {
+        port = pgPortValue(value)
+        if (port < 0) {
+          return pgTargetFailed(PG_TARGET_BAD_PORT)
+        }
+      }
+    }
+    i = end + 1
+  }
+  return pgTarget(host, port)
 }

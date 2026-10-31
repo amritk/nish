@@ -1525,6 +1525,11 @@ jobs:
           POSTGRES_DB: nish_live
         ports:
           - 5432:5432
+        # The server's socket directory, on the runner too: the live suite's
+        # `unix` scenario connects through it, trusted as the image's
+        # pg_hba.conf trusts local connections.
+        volumes:
+          - /tmp/nish-pg-socket:/var/run/postgresql
         options: >-
           --health-cmd "pg_isready -U nish_live"
           --health-interval 2s
@@ -1569,6 +1574,7 @@ jobs:
         timeout-minutes: 5
         env:
           PG_TEST_URL: postgres://nish_live:nish-live@127.0.0.1:5432/nish_live
+          PG_TEST_SOCKET_DIR: /tmp/nish-pg-socket
         run: |
           set -o pipefail
           node tests/postgres/live/run.mjs | tee "$RUNNER_TEMP/postgres-live.log"
