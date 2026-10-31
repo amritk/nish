@@ -52,8 +52,8 @@ import T_I64 from "./types" -> const T_I64
 import T_STRING from "./types" -> const T_STRING
 import TypeTable from "./types" -> struct TypeTable
 const INT_HASH_KEY: string = "@nish_int_hash_key"
-const STRING_HASH_KEY: string = "@nish_hash_key"
 const INT_HASH_KEY_GLOBAL: string = "@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8"
+const STRING_HASH_KEY: string = "@nish_hash_key"
 struct MaybeParts (class) size=40 align=8 exported
   field found: string index=0 offset=0
   field value: string index=1 offset=8
@@ -352,61 +352,65 @@ function seedHashKey(emitter: Emitter, key: string): void -> @seedHashKey
   local +7:9 ctor: string (const)
   callee +8:3 Emitter.addConstructor -> @Emitter.addConstructor
   callee +9:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+function loadIntKey(emitter: Emitter): string[] -> @loadIntKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via seedHashKey
+  calls: Emitter.alignSuffix IRFunction.emitValue hashKeyWord nish_str_concat seedHashKey
+  pointer emitter: size=280 writesThrough=true captured=false passedTo=seedHashKey#0 Emitter.alignSuffix#0
+  stackSites=0 stackLocals=0
+  callee +0:3 seedHashKey -> @seedHashKey
+  local +1:9 a64: string (const)
+  callee +1:15 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +2:9 fn: IRFunction (const)
+  callee +4:5 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:36 hashKeyWord -> @hashKeyWord
+  callee +5:5 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:36 hashKeyWord -> @hashKeyWord
 function multiplyAddShift(emitter: Emitter, x: string): string -> @multiplyAddShift
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via seedHashKey
-  calls: Emitter.alignSuffix IRFunction.emitValue hashKeyWord nish_str_concat seedHashKey
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=seedHashKey#0 Emitter.alignSuffix#0
+  sharedWrite: via loadIntKey
+  calls: IRFunction.emitValue loadIntKey nish_str_concat
+  pointer emitter: size=280 writesThrough=true captured=false passedTo=loadIntKey#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
-  callee +1:3 seedHashKey -> @seedHashKey
-  local +2:9 a64: string (const)
-  callee +2:15 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +3:9 a: string (const)
-  callee +3:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +3:44 hashKeyWord -> @hashKeyWord
-  local +4:9 b: string (const)
+  local +1:9 key: string[] (const)
+  callee +1:15 loadIntKey -> @loadIntKey
+  local +2:9 a: string (const)
+  local +3:9 b: string (const)
+  local +4:9 h: string (const)
   callee +4:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +4:44 hashKeyWord -> @hashKeyWord
-  local +5:9 h: string (const)
-  callee +5:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +5:37 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +6:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +6:36 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:37 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:36 IRFunction.emitValue -> @IRFunction.emitValue
 function foldedMultiply(emitter: Emitter, x: string): string -> @foldedMultiply
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via seedHashKey
-  calls: Emitter.alignSuffix IRFunction.emitValue hashKeyWord nish_str_concat seedHashKey
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=seedHashKey#0 Emitter.alignSuffix#0
+  sharedWrite: via loadIntKey
+  calls: IRFunction.emitValue loadIntKey nish_str_concat
+  pointer emitter: size=280 writesThrough=true captured=false passedTo=loadIntKey#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
-  callee +1:3 seedHashKey -> @seedHashKey
-  local +2:9 a64: string (const)
-  callee +2:15 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +3:9 a: string (const)
-  callee +3:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +3:44 hashKeyWord -> @hashKeyWord
-  local +4:9 b: string (const)
-  callee +4:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +4:44 hashKeyWord -> @hashKeyWord
-  local +5:9 wideX: string (const)
-  callee +5:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +5:42 IRFunction.emitValue -> @IRFunction.emitValue
-  local +6:9 wide: string (const)
-  callee +6:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +6:51 IRFunction.emitValue -> @IRFunction.emitValue
-  local +7:9 low: string (const)
-  callee +7:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local +8:9 high: string (const)
-  callee +8:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +8:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local +9:9 folded: string (const)
-  callee +9:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local +10:9 top: string (const)
-  callee +10:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +10:41 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +11:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +11:34 IRFunction.emitValue -> @IRFunction.emitValue
+  local +1:9 key: string[] (const)
+  callee +1:15 loadIntKey -> @loadIntKey
+  local +2:9 a: string (const)
+  local +3:9 b: string (const)
+  local +4:9 wideX: string (const)
+  callee +4:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:42 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 wide: string (const)
+  callee +5:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:51 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:9 low: string (const)
+  callee +6:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local +7:9 high: string (const)
+  callee +7:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:43 IRFunction.emitValue -> @IRFunction.emitValue
+  local +8:9 folded: string (const)
+  callee +8:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +9:9 top: string (const)
+  callee +9:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +9:41 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:34 IRFunction.emitValue -> @IRFunction.emitValue
 function fmix64(emitter: Emitter, x: string): string -> @fmix64
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue

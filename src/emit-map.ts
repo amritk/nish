@@ -239,7 +239,7 @@ const emitStringHash = (emitter: Emitter, str: string): string => {
   return fn.emitValue(`xor i32 ${low}, ${high}`)
 }
 
-/** Word `i` of the hash key `key` (`@nish_hash_key` or `INT_HASH_KEY`), as an `i64*` constant. */
+/** Word `i` of the hash key `key` (`STRING_HASH_KEY` or `INT_HASH_KEY`), as an `i64*` constant. */
 const hashKeyWord = (i: i32, key: string): string =>
   `getelementptr inbounds ([2 x i64], [2 x i64]* ${key}, i64 0, i64 ${i})`
 
@@ -253,10 +253,10 @@ const hashKeyWord = (i: i32, key: string): string =>
  * exists, for the reason `@nish_hash_key` is not thread-local.
  */
 const INT_HASH_KEY: string = "@nish_int_hash_key"
-/** SipHash's key, `HASH_KEY_GLOBAL`, which only strings use. */
-const STRING_HASH_KEY: string = "@nish_hash_key"
 const INT_HASH_KEY_GLOBAL: string =
   "@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8"
+/** SipHash's key, `HASH_KEY_GLOBAL`, which only strings use; the runtime defines it. */
+const STRING_HASH_KEY: string = "@nish_hash_key"
 
 /** One SipHash compression of the word `m`: `v3 ^= m`, `rounds` rounds, `v0 ^= m`. */
 const compress = (emitter: Emitter, slots: string[], m: string, rounds: i32): void => {
@@ -306,14 +306,14 @@ const rotl = (emitter: Emitter, x: string, by: i32): string => {
  * Declare the hash key `key` and register the constructor that fills it, once
  * per module: an `internal` function in `@llvm.global_ctors`, which `appending`
  * linkage merges across the modules of a program, so every module that hashes
- * a string seeds `@nish_hash_key`, every one that hashes an integer seeds
- * `INT_HASH_KEY`, each from its own `getentropy` call, and the first to run does it. A key
- * already filled is left alone — bit 0 of word 0 is set so a filled one never
- * reads as zero — and the priority, 101, is the first an ordinary constructor
- * may take, so a host's own constructor that fills a table finds the key in
- * place. There is no weaker source to fall back to when `getentropy` fails, so
- * it panics before `main` instead. `size_t` is 32 bits on wasm32, which reaches `getentropy`
- * through WASI's `random_get`.
+ * a string seeds `STRING_HASH_KEY` and every one that hashes an integer seeds
+ * `INT_HASH_KEY`, each from its own `getentropy` call, and the first to run
+ * does it. A key already filled is left alone — bit 0 of word 0 is set so a
+ * filled one never reads as zero — and the priority, 101, is the first an
+ * ordinary constructor may take, so a host's own constructor that fills a
+ * table finds the key in place. There is no weaker source to fall back to when
+ * `getentropy` fails, so it panics before `main` instead. `size_t` is 32 bits
+ * on wasm32, which reaches `getentropy` through WASI's `random_get`.
  */
 const seedHashKey = (emitter: Emitter, key: string): void => {
   const integer = key === INT_HASH_KEY
@@ -347,6 +347,17 @@ done:
 }`)
 }
 
+/** Seeds `INT_HASH_KEY` (`seedHashKey`) and loads its two words, `a` and `b`. */
+const loadIntKey = (emitter: Emitter): string[] => {
+  seedHashKey(emitter, INT_HASH_KEY)
+  const a64 = emitter.alignSuffix(T_I64)
+  const fn = emitter.fn
+  return [
+    fn.emitValue(`load i64, i64* ${hashKeyWord(0, INT_HASH_KEY)}${a64}`),
+    fn.emitValue(`load i64, i64* ${hashKeyWord(1, INT_HASH_KEY)}${a64}`),
+  ]
+}
+
 /**
  * Dietzfelbinger's multiply-add-shift of a key below 2^32 under the process's
  * key: `((a * x + b) mod 2^64) >> 32`, with `a` and `b` the two words of
@@ -359,10 +370,9 @@ done:
  */
 const multiplyAddShift = (emitter: Emitter, x: string): string => {
   const fn = emitter.fn
-  seedHashKey(emitter, INT_HASH_KEY)
-  const a64 = emitter.alignSuffix(T_I64)
-  const a = fn.emitValue(`load i64, i64* ${hashKeyWord(0, INT_HASH_KEY)}${a64}`)
-  const b = fn.emitValue(`load i64, i64* ${hashKeyWord(1, INT_HASH_KEY)}${a64}`)
+  const key = loadIntKey(emitter)
+  const a = key[0]
+  const b = key[1]
   const h = fn.emitValue(`add i64 ${fn.emitValue(`mul i64 ${x}, ${a}`)}, ${b}`)
   return fn.emitValue(`trunc i64 ${fn.emitValue(`lshr i64 ${h}, 32`)} to i32`)
 }
@@ -376,10 +386,9 @@ const multiplyAddShift = (emitter: Emitter, x: string): string => {
  */
 const foldedMultiply = (emitter: Emitter, x: string): string => {
   const fn = emitter.fn
-  seedHashKey(emitter, INT_HASH_KEY)
-  const a64 = emitter.alignSuffix(T_I64)
-  const a = fn.emitValue(`load i64, i64* ${hashKeyWord(0, INT_HASH_KEY)}${a64}`)
-  const b = fn.emitValue(`load i64, i64* ${hashKeyWord(1, INT_HASH_KEY)}${a64}`)
+  const key = loadIntKey(emitter)
+  const a = key[0]
+  const b = key[1]
   const wideX = fn.emitValue(`zext i64 ${fn.emitValue(`xor i64 ${x}, ${a}`)} to i128`)
   const wide = fn.emitValue(`mul i128 ${wideX}, ${fn.emitValue(`zext i64 ${b} to i128`)}`)
   const low = fn.emitValue(`trunc i128 ${wide} to i64`)
