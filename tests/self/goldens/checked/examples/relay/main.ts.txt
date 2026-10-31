@@ -4093,12 +4093,13 @@ struct Pbkdf2Request (interface) size=16 align=8
   field iterations: i32 index=1 offset=8
   field length: i32 index=2 offset=12
 struct HmacKey (class) size=48 align=8 exported
-  field hash: i32 index=0 offset=0 readonly
-  field pads: Secret<u64[]> index=1 offset=8 readonly
-  field inner256: Sha256 index=2 offset=16 readonly
-  field outer256: Sha256 index=3 offset=24 readonly
-  field inner512: Sha512 index=4 offset=32 readonly
-  field outer512: Sha512 index=5 offset=40 readonly
+  field pads: Secret<u64[]> index=0 offset=0 readonly
+  field inner256: Sha256 index=1 offset=8 readonly
+  field outer256: Sha256 index=2 offset=16 readonly
+  field inner512: Sha512 index=3 offset=24 readonly
+  field outer512: Sha512 index=4 offset=32 readonly
+  field hash: i32 index=5 offset=40 readonly
+  field live: boolean index=6 offset=44
   constructor -> @nish.HmacKey.constructor
   method size -> @nish.HmacKey.size
   method wipe -> @nish.HmacKey.wipe
@@ -4748,15 +4749,15 @@ function HmacKey.size(this: HmacKey): i32 -> @nish.HmacKey.size [exported method
   callee +0:12 hmacTagSize -> @nish.hmacTagSize
 function HmacKey.wipe(this: HmacKey): void -> @nish.HmacKey.wipe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.wipe$$Secret$arr.u64
+  sharedWrite: +0:5
   calls: nish.hmacWipeSha256 nish.hmacWipeSha512 nish.wipe$$Secret$arr.u64
-  pointer this: size=48 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +0:5 wipe<Secret<u64[]>> -> @nish.wipe$$Secret$arr.u64
-  callee +1:5 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +1:5 wipe<Secret<u64[]>> -> @nish.wipe$$Secret$arr.u64
   callee +2:5 hmacWipeSha256 -> @nish.hmacWipeSha256
-  callee +3:5 hmacWipeSha512 -> @nish.hmacWipeSha512
+  callee +3:5 hmacWipeSha256 -> @nish.hmacWipeSha256
   callee +4:5 hmacWipeSha512 -> @nish.hmacWipeSha512
+  callee +5:5 hmacWipeSha512 -> @nish.hmacWipeSha512
 function hmacCopyWords(pads: u64[]): u64[] -> @nish.hmacCopyWords
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
@@ -4832,8 +4833,8 @@ function hmacKeyedInto(key: HmacKey, data: u8[], off: i32, len: i32, out: u8[], 
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.hmacKeyedTag#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -10:9 size: i32 (const)
-  callee -10:21 HmacKey.size -> @nish.HmacKey.size
+  local -13:9 size: i32 (const)
+  callee -13:21 HmacKey.size -> @nish.HmacKey.size
   callee -9:8 hmacWindowFits -> @nish.hmacWindowFits
   callee -6:8 hmacWindowFits -> @nish.hmacWindowFits
   local -3:9 _scope: i64 (const)
@@ -4853,7 +4854,7 @@ function hmacKeyedVerify(key: HmacKey, data: u8[], off: i32, len: i32, tag: u8[]
   local +0:9 size: i32 (const)
   callee +0:21 HmacKey.size -> @nish.HmacKey.size
   callee +1:8 hmacWindowFits -> @nish.hmacWindowFits
-  callee +4:8 hmacWindowFits -> @nish.hmacWindowFits
+  callee +4:21 hmacWindowFits -> @nish.hmacWindowFits
   local +7:9 _scope: i64 (const)
   local +8:9 mine: u8[] (const)
   callee +8:22 hmacKeyedTag -> @nish.hmacKeyedTag
