@@ -159,28 +159,20 @@ export const initializerConstant = (emitter: Emitter, field: FieldInfo): string 
 }
 
 /**
- * The values a call passes for the parameters of `sig` it leaves out, from
- * parameter `from` on: each default's constant, or, for a default that names
- * an earlier parameter, the value the call passed for that one, which
- * `passed` holds by parameter index. No branch in the callee: a call that
- * writes every argument is the call it always was.
+ * The value a call passes for parameter `p` of `sig`, which it leaves out:
+ * the default's constant, or, for a default that names an earlier parameter,
+ * the value the call passed for that one, which `passed` holds by parameter
+ * index. No branch in the callee: a call that writes every argument is the
+ * call it always was.
  */
-export const defaultValues = (emitter: Emitter, sig: FunctionSig, from: i32, passed: string[]): string[] => {
-  const values: string[] = []
-  let p = from
-  while (p < sig.writtenArity()) {
-    const field = sig.defaultOf(p)
-    if (field === null) {
-      process.exit(
-        internalErrorFor(`emitter: no default for parameter ${p} of \`${sig.name}\``, emitter.opts.json)
-      )
-    }
-    const value = field.index >= 0 ? passed[field.index] : initializerConstant(emitter, field)
-    values.push(value)
-    passed.push(value)
-    p = p + 1
+export const defaultValue = (emitter: Emitter, sig: FunctionSig, p: i32, passed: string[]): string => {
+  const field = sig.defaultOf(p)
+  if (field === null) {
+    process.exit(
+      internalErrorFor(`emitter: no default for parameter ${p} of \`${sig.name}\``, emitter.opts.json)
+    )
   }
-  return values
+  return field.index >= 0 ? passed[field.index] : initializerConstant(emitter, field)
 }
 
 /** Store the literal initializers of the fields `info` declares itself. */
@@ -313,28 +305,29 @@ const emitCall = (
   const calleePrivate = privateAbi(emitter.opts, callee.visibleOutside())
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`]
   const passed: string[] = [receiver]
+  // The parameters the call leaves out pass their defaults (`defaultValue`).
+  const written = callee.writtenArity() - 1
   let i = 0
-  while (i < args.length) {
+  while (i < written) {
     // WP29 P2: `spawn`'s task is a function argument, which chose the method
     // this call reaches and is no value to pass.
-    if (callee.isCompileTime(i + 1)) {
+    if (i < args.length && callee.isCompileTime(i + 1)) {
       passed.push("")
       i = i + 1
       continue
     }
     // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
     const want = callee.paramTypes[i + 1]
-    const value = emitter.table.resultByValue(want)
-      ? emitPackedResult(emitter, args[i], want, calleePrivate)
-      : emitter.emitArgument(args[i], callee, i + 1)
+    let value = ""
+    if (i >= args.length) {
+      value = defaultValue(emitter, callee, i + 1, passed)
+    } else if (emitter.table.resultByValue(want)) {
+      value = emitPackedResult(emitter, args[i], want, calleePrivate)
+    } else {
+      value = emitter.emitArgument(args[i], callee, i + 1)
+    }
     operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${value}`)
     passed.push(value)
-    i = i + 1
-  }
-  const defaults = defaultValues(emitter, callee, args.length + 1, passed)
-  i = 0
-  while (i < defaults.length) {
-    operands.push(`${emitter.llvmAbi(callee.paramTypes[args.length + 1 + i], calleePrivate)} ${defaults[i]}`)
     i = i + 1
   }
   // WP29: an arrow task's captures, after everything written (`capturesOf`).

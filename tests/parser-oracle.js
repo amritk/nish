@@ -589,8 +589,8 @@ const printTypeScriptTree = (source, sf) => {
 
   /**
    * A parameter. A default, `...` and `?` are flags stage1 reads for the
-   * checker to refuse (NL2233, NL2235), in `kindWithFlags`'s order, and the
-   * default's value is dropped; a destructuring pattern is the name's
+   * checker, in `kindWithFlags`'s order, and a default's value is the third
+   * child, after the annotation; a destructuring pattern is the name's
    * BINDING_PATTERN (NL2192). None of those needs its annotation, and an
    * arrow argument's parameter may leave its type out (WP29).
    */
@@ -608,6 +608,9 @@ const printTypeScriptTree = (source, sf) => {
       unsupported(node)
     }
     optional(depth + 1, node.type, type)
+    if (node.initializer !== undefined) {
+      expression(node.initializer, depth + 1)
+    }
   }
   const arrowParameter = (node, depth) => parameter(node, depth, false)
 

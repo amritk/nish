@@ -68,7 +68,7 @@ import {
   emitWhile,
 } from "./emit-control"
 import {
-  defaultValues,
+  defaultValue,
   emitConstructorPrologue,
   emitMethodCall,
   emitNew,
@@ -1687,13 +1687,13 @@ export class Emitter {
       i = i + 1
     }
     // The parameters the call leaves out pass their defaults (`defaultValues`).
-    const defaults = defaultValues(this, sig, args.children.length, passed)
-    for (let k = 0; k < defaults.length; k = k + 1) {
-      const value = defaults[k]
-      const type = this.llvmAbi(sig.paramTypes[args.children.length + k], calleePrivate)
+    for (let k = args.children.length; k < sig.writtenArity(); k = k + 1) {
+      const value = defaultValue(this, sig, k, passed)
+      const type = this.llvmAbi(sig.paramTypes[k], calleePrivate)
       operands.push(`${type} ${value}`)
       operandTypes.push(type)
       operandValues.push(value)
+      passed.push(value)
     }
     // WP29: the values of the arrow's captures, after everything written.
     const captures = capturesOf(sig)

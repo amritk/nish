@@ -301,7 +301,7 @@ function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, w
   callee +9:5 CheckContext.error -> @CheckContext.error
   callee +11:21 TypeTable.typeName -> @TypeTable.typeName
   callee +11:72 TypeTable.typeName -> @TypeTable.typeName
-function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node, what: string, notLiteral: string): void -> @checkLiteralInitializer [exported]
+function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node, what: string, notLiteral: string, exact: boolean): void -> @checkLiteralInitializer [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkEnumInitializer
   escaping: notLiteral what
@@ -320,8 +320,8 @@ function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node
   callee +9:17 TypeTable.typeName -> @TypeTable.typeName
   callee +10:5 CheckContext.error -> @CheckContext.error
   callee +10:35 TypeTable.typeName -> @TypeTable.typeName
-  callee +11:36 isNumeric -> @isNumeric
-  callee +11:55 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +11:46 isNumeric -> @isNumeric
+  callee +11:66 TypeTable.isRanged -> @TypeTable.isRanged
   local +14:11 negated: boolean (const)
   callee +15:5 checkNumericLiteral -> @checkNumericLiteral
 function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectField
