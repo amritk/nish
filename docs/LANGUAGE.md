@@ -4684,6 +4684,85 @@ cases):
 | NL2500, the same in a `parallelMap` | the same | the same |
 | NL2484, an arrow that uses a `Channel` | the arrow moves to a `const` above the top-level statement it is written in, named for the function and `Task` (`mainTask`), and the call names it | an arrow that captures, or leaves a parameter's or its result's type out, which would not check at the top level |
 
+### Shared memory between processes: `nish/sync/shm` and `nish/sync/ring`
+
+Threads share an address space; processes share nothing unless they map the
+same memory. `nish/sync/shm` maps a **named region** that every process of
+the same user can open, and `nish/sync/ring` builds lock-free queues of byte
+records in one, so prefork workers can hand work to an owner process without a
+socket:
+
+```typescript
+import { ACQ_REL, ACQUIRE, createRegion, unlinkRegion } from "nish/sync/shm";
+import { initSpscRing, spscRingBytes } from "nish/sync/ring";
+
+export const main = (): i32 => {
+  const region = createRegion("lang-demo", 64 + spscRingBytes(4096)).expect("create");
+  region.addI64(0, toI64(1), ACQ_REL); // a counter every process may bump
+  const ring = initSpscRing(region, 64, 4096, true); // a ring after it
+  const job: u8[] = [1, 2, 3];
+  ring.tryPush(job, 0, job.length); // false when full
+  const got: u8[] = new Array<u8>(16);
+  const n: i32 = ring.tryPop(got, 0); // 3, or RING_EMPTY
+  console.log(`${region.loadI64(0, ACQUIRE)} ${n}`);
+  unlinkRegion("lang-demo").expect("unlink");
+  return 0;
+};
+```
+
+- **A region is named, never inherited.** A Nish program has no `fork`, and
+  every descriptor is close-on-exec, so an anonymous mapping or a `memfd`
+  cannot reach a child; a name can. `createRegion(name, bytes)` makes one,
+  zeroed, mode 0600, and refuses a name that exists (`SHM_EXISTS`), so a name
+  another user planted is never adopted. `openRegion(name)` maps one this
+  user made, and refuses one owned by someone else, open to group or others,
+  reached through a symbolic link, or (on Linux) not a regular file or with a
+  second hard link (`SHM_ACCESS`). A name is 1 to 30 of `A-Z a-z 0-9 . _ -`,
+  not starting with `.`; a size is 1 byte to 1 GiB. Errors are a `Result`
+  with the errno (`SHM_NOT_FOUND`, `SHM_INVALID`, `SHM_TOO_MANY`, ...).
+- **Lifetime.** The name lasts until `unlinkRegion`, even past every process
+  that mapped it, which is how a process started later finds it. A mapping
+  lasts until `close()` or the process's exit, when the kernel unmaps it. A
+  thread may hold 63 regions at once.
+- **Every access is checked, as an array index is.** `loadI32`, `storeI32`,
+  `addI32`, `exchangeI32`, `compareExchangeI32` and their `I64` twins take an
+  `i32` byte offset; a slot must lie wholly inside the region and at a multiple
+  of its width, or the access panics naming the offset (`nish/sync/shm: slot
+  offset 4 is not a multiple of 8, the slot's width`). `read` and `write` copy
+  a byte window, checked against both the region and the buffer. No offset
+  reaches outside the mapping, whatever a peer wrote into it.
+- **Orderings are C11's**: `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL`,
+  `SEQ_CST`, plus `fence(order)`. Each access is one LLVM `load atomic`,
+  `store atomic`, `atomicrmw` or `cmpxchg` with that ordering; an ordering an
+  access cannot take (a load with `RELEASE`) panics. A compare-exchange
+  answers the value it found, so it succeeded when that equals `expected`.
+- **Waking.** `waitI32(at, expected, timeoutMs)` sleeps while the slot holds
+  `expected` and `wake(at, count)` wakes sleepers, in any process: Linux's
+  shared futex. Darwin and wasi answer `SHM_UNSUPPORTED` (-95) from both, and
+  a program there polls.
+- **Rings.** `SpscRing` (one producer, one consumer, records of any length
+  up to its capacity) and `MpscRing` (any number of producers, fixed slots)
+  live at a 64-byte-aligned `base` in a region: `initSpscRing` /
+  `initMpscRing` write the header once, `attachSpscRing` / `attachMpscRing`
+  read it in another process. `tryPush` answers `false` when full; `tryPop`
+  answers the record's length, `RING_EMPTY` or `RING_TOO_SMALL`; `popBatch`
+  takes every record ready. A ring made with the doorbell lets `popWait`
+  sleep, and a push rings it only when the consumer is asleep, so a busy ring
+  makes no system call. Two consumers, or two producers on an `SpscRing`, lose
+  or repeat records but never leave the region; a length no record can have
+  panics as `the ring is corrupt`.
+- **What a program reaches.** The modules call C, so a program that imports
+  them reaches [`ffi`](#capabilities) (and `clock`, for `popWait`'s deadline)
+  and `--deny ffi` refuses it; under `--sandbox` a region, being a file in
+  `/dev/shm`, needs `fs.read` and `fs.write` as well. They are native only:
+  `--emit-ts` refuses them, since Node's `SharedArrayBuffer` is shared between
+  threads of one process, not between processes. A region belongs to the
+  thread that mapped it. A program that imports neither module is unchanged.
+  Tested by `tests/link/sync_shm`, `tests/link/sync_ring` and
+  `tests/link/sync_shm_deny_ffi`; the design, its measurements and the threads
+  it was weighed against are `docs/wp47-shared-memory.md`, and the threat model
+  is [`docs/security/shm.md`](security/shm.md).
+
 ### Random numbers: `Rng` in `nish/random`
 
 `new Rng(seed)` is a generator of pseudo-random numbers whose every answer

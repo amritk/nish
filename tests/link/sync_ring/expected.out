@@ -1,0 +1,47 @@
+PASS  an SPSC ring of 4096 takes
+PASS  an SPSC ring wraps, with records of 0 to 40 bytes
+PASS  an empty ring answers RING_EMPTY
+PASS  a ring of 64 holds two 24-byte records
+PASS  a buffer too small is RING_TOO_SMALL
+PASS  which leaves the record
+PASS  at the offset asked for
+PASS  so a push fits again
+PASS  and a short one beside it
+PASS  a batch takes every record
+PASS  of the lengths pushed
+PASS  back to back in the buffer
+PASS  leaving none
+PASS  attaching an SPSC ring as MPSC is refused
+PASS  as is attaching where no ring was made
+PASS  an MPSC ring of 4 slots takes
+PASS  a full MPSC ring refuses a push
+PASS  and gives its records back in order
+PASS  an MPSC ring wraps
+PASS  attaching an MPSC ring as SPSC is refused
+PASS  a ring without a doorbell refuses popWait
+PASS  the consumer starts
+PASS  the producer pushed every record
+PASS  the consumer exits 0
+PASS  the consumer took every record
+PASS  in order, each its length
+PASS  a producer exits 0
+PASS  a producer exits 0
+PASS  a producer exits 0
+PASS  every record arrives
+PASS  each producer's in its order
+PASS  the sleeper starts
+PASS  the late push fits
+PASS  the sleeper wakes with it
+PASS  long before its ten-second timeout
+PASS  misplaced: the child exits 1
+PASS  misplaced: and says why
+PASS  too-big: the child exits 1
+PASS  too-big: and says why
+PASS  long-record: the child exits 1
+PASS  long-record: and says why
+PASS  long-slot: the child exits 1
+PASS  long-slot: and says why
+PASS  corrupt: the child exits 1
+PASS  corrupt: and says why
+PASS  unlink the region
+nish/sync/ring: 46 passed, 0 failed, 0 skipped
