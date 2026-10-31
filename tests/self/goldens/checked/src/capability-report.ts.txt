@@ -4,6 +4,8 @@ entry: src/capability-report.ts src/attributes.ts src/emit-secret.ts src/emit.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import CLI from "./branding" -> const CLI
+import argumentCapabilities from "./capabilities" -> function @argumentCapabilities
+import builtinCapability from "./capabilities" -> function @builtinCapability
 import CAPABILITY_COUNT from "./capabilities" -> const CAPABILITY_COUNT
 import capabilityIndex from "./capabilities" -> function @capabilityIndex
 import capabilityName from "./capabilities" -> function @capabilityName
@@ -16,6 +18,11 @@ import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import isStdModule from "./std-modules" -> function @isStdModule
 import dirname from "./paths" -> function @dirname
 import relativePath from "./paths" -> function @relativePath
+import resolvePath from "./paths" -> function @resolvePath
+import N_ARRAY from "./nodes" -> const N_ARRAY
+import N_CALL from "./nodes" -> const N_CALL
+import N_IDENT from "./nodes" -> const N_IDENT
+import N_STRING from "./nodes" -> const N_STRING
 import Node from "./nodes" -> struct Node
 import SourceFile from "./diagnostics" -> struct SourceFile
 import CheckedProgram from "./program" -> struct CheckedProgram
@@ -24,6 +31,7 @@ import siteReportEntry from "./panics" -> function @siteReportEntry
 import sitesOf from "./panics" -> function @sitesOf
 import compareStrings from "./strings" -> function @compareStrings
 import jsonQuote from "./strings" -> function @jsonQuote
+import splitByte from "./strings" -> function @splitByte
 const ROOT_NAME: string = "<root>"
 struct FunctionIndex (class) size=48 align=8 exported
   field bySymbol: StringMap index=0 offset=0
@@ -45,10 +53,17 @@ struct DependencyReach (class) size=24 align=8 exported
   field masks: i32[] index=1 offset=8
   field packageOf: i32[] index=2 offset=16
   constructor -> @DependencyReach.constructor
+struct LiteralReach (class) size=40 align=8 exported
+  field cap: i32 index=0 offset=0
+  field value: string index=1 offset=8
+  field builtin: string index=2 offset=16
+  field module: i32 index=3 offset=24
+  field site: Node index=4 offset=32
+  constructor -> @LiteralReach.constructor
 function isLibrary(compilation: Compilation, unit: ModuleUnit): boolean -> @isLibrary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.libraryRoot isStdModule
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=Compilation.libraryRoot#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=Compilation.libraryRoot#0
   pointer unit: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isStdModule -> @isStdModule
@@ -57,7 +72,7 @@ function modulePath(compilation: Compilation, root: string, unit: ModuleUnit): s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: root
   calls: isLibrary relativePath
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=isLibrary#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=isLibrary#0
   pointer unit: size=88 writesThrough=false captured=false passedTo=isLibrary#1
   stackSites=0 stackLocals=0
   callee +0:3 isLibrary -> @isLibrary
@@ -73,7 +88,7 @@ function capsOf(facts: FactsTable, sig: FunctionSig): i32 -> @capsOf
 function programCapabilities(compilation: Compilation, facts: FactsTable): i32 -> @programCapabilities
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.entry FunctionSig.definedIn capsOf
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=Compilation.entry#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=Compilation.entry#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=capsOf#0 capsOf#0
   stackSites=0 stackLocals=0
   local +0:9 entry: ModuleUnit (const)
@@ -118,7 +133,7 @@ function FunctionIndex.constructor(this: FunctionIndex): void -> @FunctionIndex.
 function functionIndex(compilation: Compilation, facts: FactsTable): FunctionIndex -> @functionIndex [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
   calls: Compilation.entry FunctionIndex.constructor FunctionSig.definedIn StringMap.get StringMap.set capsOf dirname modulePath nish_alloc_struct nish_array_grow nish_panic_overflow
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=Compilation.entry#0 modulePath#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=Compilation.entry#0 modulePath#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=capsOf#0
   stackSites=0 stackLocals=0
   local +0:9 index: FunctionIndex (const)
@@ -182,6 +197,8 @@ function gatedCapabilities(): i32 -> @gatedCapabilities [exported]
   callee +1:9 capabilityIndex -> @capabilityIndex
   callee +2:9 capabilityIndex -> @capabilityIndex
   callee +3:9 capabilityIndex -> @capabilityIndex
+  callee +4:9 capabilityIndex -> @capabilityIndex
+  callee +5:9 capabilityIndex -> @capabilityIndex
 function DependencyReach.constructor(this: DependencyReach): void -> @DependencyReach.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=24 writesThrough=true captured=false
@@ -189,7 +206,7 @@ function DependencyReach.constructor(this: DependencyReach): void -> @Dependency
 function dependencyPackages(compilation: Compilation): DependencyReach -> @dependencyPackages [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: DependencyReach.constructor isLibrary nish_alloc_struct nish_array_grow nish_str_eq sortTogether
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=isLibrary#0 isLibrary#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=isLibrary#0 isLibrary#0
   stackSites=2 stackLocals=2
   local +0:9 reach: DependencyReach (const)
   callee +0:17 new DependencyReach -> @DependencyReach.constructor
@@ -226,12 +243,142 @@ function dependencyWitness(index: FunctionIndex, facts: FactsTable, reach: Depen
   local +15:11 end: i32 (const)
   local +17:13 chain: WitnessHop[] (const)
   callee +17:21 witnessChain -> @witnessChain
+function LiteralReach.constructor(this: LiteralReach, cap: i32, value: string, builtin: string, module: i32, site: Node): void -> @LiteralReach.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: builtin cap module site value
+  pointer this: size=40 writesThrough=true captured=false
+  pointer site: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function reachArguments(name: string, c: i32): i32 -> @reachArguments
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: capabilityIndex nish_str_eq
+  stackSites=0 stackLocals=0
+  callee +0:13 capabilityIndex -> @capabilityIndex
+  callee +0:49 capabilityIndex -> @capabilityIndex
+  callee +3:13 capabilityIndex -> @capabilityIndex
+  callee +12:13 capabilityIndex -> @capabilityIndex
+function literalReaches(compilation: Compilation, reach: DependencyReach): LiteralReach[] -> @literalReaches [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: LiteralReach.constructor argumentCapabilities builtinCapability capabilityIndex nish_alloc_struct nish_array_grow nish_panic_index reachArguments
+  pointer compilation: size=200 writesThrough=false captured=false
+  pointer reach: size=24 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 out: LiteralReach[] (const)
+  local +1:9 args: i32 (const)
+  callee +1:16 argumentCapabilities -> @argumentCapabilities
+  local +2:7 m: i32 (let)
+  local +5:13 unit: ModuleUnit (const)
+  local +6:13 program: CheckedProgram (const)
+  local +7:13 stack: Node[] (const)
+  local +9:15 node: Node (const)
+  local +11:13 k: i32 (let)
+  local +21:17 imported: string (const)
+  local +22:17 name: string (const)
+  local +23:17 c: i32 (const)
+  callee +23:21 builtinCapability -> @builtinCapability
+  local +24:17 positions: i32 (const)
+  callee +24:65 reachArguments -> @reachArguments
+  local +25:17 given: Node[] (const)
+  local +26:15 a: i32 (let)
+  local +29:19 literal: Node (let)
+  callee +30:25 capabilityIndex -> @capabilityIndex
+  callee +35:26 new LiteralReach -> @LiteralReach.constructor
+function numericHost(host: string): boolean -> @numericHost [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: host
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_index_of nish_str_index_of_from splitByte
+  stackSites=0 stackLocals=0
+  local +0:9 colons: i32 (let)
+  local +1:9 i: i32 (let)
+  local +3:13 code: i32 (const)
+  local +4:13 hex: boolean (const)
+  local +13:9 parts: string[] (const)
+  callee +13:17 splitByte -> @splitByte
+  local +17:14 part: string (const)
+  local +21:9 value: i32 (let)
+  local +22:9 i: i32 (let)
+  local +24:13 code: i32 (const)
+function findProgram(name: string, base: string): string | null -> @findProgram [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via executableFile
+  escaping: base name
+  calls: executableFile nish_getenv nish_str_concat nish_str_index_of nish_str_index_of_from resolvePath splitByte
+  stackSites=0 stackLocals=0
+  callee +0:12 executableFile -> @executableFile
+  callee +0:27 resolvePath -> @resolvePath
+  local +2:9 path: string | null (const)
+  local +3:14 dir: string (const)
+  callee +3:21 splitByte -> @splitByte
+  local +5:13 found: string | null (const)
+  callee +5:21 executableFile -> @executableFile
+function executableFile(path: string): string | null -> @executableFile
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_realpath
+  calls: nish_is_dir nish_is_executable nish_realpath
+  stackSites=0 stackLocals=0
+  local +0:9 real: string | null (const)
+function littleEndian(bytes: u8[], at: i32, count: i32): i32 -> @littleEndian
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 value: i32 (let)
+  local +1:7 k: i32 (let)
+function programInterpreter(program: string): string | null -> @programInterpreter [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file_bytes
+  calls: executableFile littleEndian nish_panic_index nish_panic_overflow nish_panic_slice nish_read_file_bytes nish_realpath nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:9 bytes: u8[] | null (const)
+  local +5:9 at: i32 (let)
+  local +9:11 from: i32 (const)
+  callee +13:24 executableFile -> @executableFile
+  callee +20:5 littleEndian -> @littleEndian
+  local +24:9 table: i32 (const)
+  callee +24:17 littleEndian -> @littleEndian
+  local +25:9 size: i32 (const)
+  callee +25:16 littleEndian -> @littleEndian
+  local +26:9 count: i32 (const)
+  callee +26:17 littleEndian -> @littleEndian
+  local +27:7 k: i32 (let)
+  local +29:11 header: i32 (const)
+  callee +30:9 littleEndian -> @littleEndian
+  local +31:13 from: i32 (const)
+  callee +31:20 littleEndian -> @littleEndian
+  local +32:13 length: i32 (const)
+  callee +32:22 littleEndian -> @littleEndian
+function rootReach(compilation: Compilation, facts: FactsTable, index: FunctionIndex, reach: DependencyReach): i32 -> @rootReach [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: FactsTable.get StringMap.constructor StringMap.get StringMap.set isLibrary nish_array_grow nish_panic_index nish_str_eq
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=isLibrary#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer index: size=48 writesThrough=false captured=false
+  pointer reach: size=24 writesThrough=false captured=false
+  stackSites=2 stackLocals=2
+  local +0:9 seen: StringMap (const)
+  callee +0:16 new StringMap -> @StringMap.constructor
+  local +1:9 todo: FunctionSig[] (const)
+  local +2:7 k: i32 (let)
+  local +4:11 m: i32 (const)
+  callee +10:12 isLibrary -> @isLibrary
+  callee +11:9 StringMap.set -> @StringMap.set
+  local +17:7 mask: i32 (let)
+  local +19:11 sig: FunctionSig (const)
+  local +21:11 f: FunctionFacts | null (const)
+  callee +21:15 FactsTable.get -> @FactsTable.get
+  local +25:9 c: i32 (let)
+  local +32:16 callee: string (const)
+  local +33:13 at: i32 (const)
+  callee +33:18 StringMap.get -> @StringMap.get
+  callee +34:80 StringMap.get -> @StringMap.get
+  local +35:15 m: i32 (const)
+  callee +37:11 StringMap.set -> @StringMap.set
 function writeCapabilityReport(compilation: Compilation, file: string, cpu: string): void -> @writeCapabilityReport [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
   escaping: cpu
   calls: Compilation.analyze Compilation.entry FactsTable.get FunctionSig.definedIn capabilityName dirname functionIndex isDeterministic isLibrary jsonQuote modulePath nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_write_file programCapabilities pushNames pushPanics sortTogether witnessChain
-  pointer compilation: size=160 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.entry#0 functionIndex#0 isLibrary#0 programCapabilities#0 modulePath#0 Compilation.entry#0
+  pointer compilation: size=200 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.entry#0 functionIndex#0 isLibrary#0 programCapabilities#0 modulePath#0 Compilation.entry#0
   stackSites=16 stackLocals=16
   local +0:9 facts: FactsTable (const)
   callee +0:17 Compilation.analyze -> @Compilation.analyze
@@ -334,7 +481,7 @@ function capabilitySummary(compilation: Compilation): string -> @capabilitySumma
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
   calls: Compilation.analyze capabilityNames isDeterministic nish_alloc_struct nish_str_concat programCapabilities
-  pointer compilation: size=160 writesThrough=true captured=false passedTo=programCapabilities#0 Compilation.analyze#0
+  pointer compilation: size=200 writesThrough=true captured=false passedTo=programCapabilities#0 Compilation.analyze#0
   stackSites=0 stackLocals=0
   local +0:9 program: i32 (const)
   callee +0:19 programCapabilities -> @programCapabilities

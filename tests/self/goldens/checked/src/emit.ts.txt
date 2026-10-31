@@ -331,7 +331,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer this: size=280 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=96 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=184 writesThrough=true captured=true passedTo=isWasmBuild#0
+  pointer opts: size=192 writesThrough=true captured=true passedTo=isWasmBuild#0
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
@@ -590,7 +590,7 @@ function Emitter.emitSandboxApply(this: Emitter): void -> @Emitter.emitSandboxAp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.useRuntime
   calls: Emitter.sandboxDirs Emitter.useRuntime IRFunction.constructor IRFunction.emit IRModule.addFunction IRModule.addGlobal nish_alloc_struct nish_str_concat nish_str_from_i32
-  pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.sandboxDirs#0 Emitter.sandboxDirs#0
+  pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.sandboxDirs#0 Emitter.sandboxDirs#0 Emitter.sandboxDirs#0
   stackSites=0 stackLocals=0
   local +0:11 sandbox: string (const)
   callee +0:21 Emitter.useRuntime -> @Emitter.useRuntime
@@ -601,11 +601,13 @@ function Emitter.emitSandboxApply(this: Emitter): void -> @Emitter.emitSandboxAp
   callee +8:18 Emitter.sandboxDirs -> @Emitter.sandboxDirs
   local +9:11 write: string (const)
   callee +9:19 Emitter.sandboxDirs -> @Emitter.sandboxDirs
-  local +10:11 apply: IRFunction (const)
-  callee +10:19 new IRFunction -> @IRFunction.constructor
-  callee +12:5 IRFunction.emit -> @IRFunction.emit
+  local +10:11 exec: string (const)
+  callee +10:18 Emitter.sandboxDirs -> @Emitter.sandboxDirs
+  local +11:11 apply: IRFunction (const)
+  callee +11:19 new IRFunction -> @IRFunction.constructor
   callee +13:5 IRFunction.emit -> @IRFunction.emit
-  callee +14:5 IRModule.addFunction -> @IRModule.addFunction
+  callee +16:5 IRFunction.emit -> @IRFunction.emit
+  callee +17:5 IRModule.addFunction -> @IRModule.addFunction
 function Emitter.sandboxDirs(this: Emitter, name: string, dirs: string[], caps: i32, capability: string): string -> @Emitter.sandboxDirs [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addGlobal
@@ -1471,7 +1473,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   calls: Emitter.constructor Emitter.emitModule
   pointer unit: size=16 writesThrough=false captured=false passedTo=Emitter.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=Emitter.constructor#2
-  pointer opts: size=184 writesThrough=true captured=true passedTo=Emitter.constructor#3
+  pointer opts: size=192 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=24 writesThrough=true captured=true passedTo=Emitter.constructor#5
   pointer libraries: size=0 writesThrough=false captured=false passedTo=Emitter.constructor#6
