@@ -11,7 +11,7 @@
 // and a child of the same binary fetches, since a blocking client and its
 // server cannot share a thread.
 
-import { HTTP_E_BLOCKED, HTTP_E_BODY_TOO_LARGE, HTTP_E_NONE, HTTP_E_REFUSED, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_TOTAL_TIMEOUT, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName, httpFetch } from "nish/net/http-client";
+import { HTTP_E_BLOCKED, HTTP_E_BODY_TOO_LARGE, HTTP_E_NONE, HTTP_E_REFUSED, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_TOTAL_TIMEOUT, HTTP_E_URL, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName, httpFetch } from "nish/net/http-client";
 import { OutboundPolicy, outboundAddressAllowed, outboundAddressPublic, outboundAddressText, outboundFilter, outboundHostAllowed } from "nish/net/outbound";
 import { dnsParseAddress } from "nish/net/dns-config";
 import { netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollRemove, pollWait, tcpAccept, tcpListen } from "nish:net";
@@ -133,6 +133,10 @@ class Server {
       }
     } else if (path === "/big") {
       this.respond(c, "200 OK", "", "0123456789012345678901234567890123456789");
+    } else if (path === "/big-chunked") {
+      // The same 40 bytes in chunks, so no length is declared: only the
+      // reader's running count can stop it.
+      this.send(c, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n8\r\n01234567\r\n8\r\n89012345\r\n18\r\n678901234567890123456789\r\n0\r\n\r\n");
     } else if (path === "/drip") {
       this.send(c, "HTTP/1.1 200 OK\r\nContent-Length: 40\r\n\r\n");
       c.drip = 40;
@@ -449,6 +453,35 @@ const fetchChecks = (t: Tally, port: i32): void => {
   beforeAfter(t, base, `http://localhost:${port}/hello`, "ok hello", policy(), "resolves to", 0, "localhost");
   beforeAfter(t, base, `http://[::ffff:127.0.0.1]:${port}/hello`, "ok hello", policy(), "127.0.0.1", 0, "an IPv4-mapped loopback literal");
 
+  // `localhost` is answered by the resolver itself, 127.0.0.1 and ::1 (RFC
+  // 6761), with no /etc/hosts: a mixed answer. The server listens on
+  // 127.0.0.1 alone, so with only ::1 permitted nothing kept can reach it,
+  // while a dial over the unfiltered answer would.
+  const v6only: OutboundPolicy = policy();
+  v6only.permit("::1/128");
+  const beforeMixed: i32 = acceptsOf(base);
+  const mixed: HttpClient = client(v6only);
+  const mixedGot: string = fetchText(mixed, `http://localhost:${port}/hello`);
+  const afterMixed: i32 = acceptsOf(base);
+  t.check(mixedGot !== "ok hello" && mixed.error !== HTTP_E_NONE && mixed.error !== HTTP_E_BLOCKED && afterMixed === beforeMixed + 1, "on a mixed answer only the addresses kept are dialled: ::1 permitted, 127.0.0.1 is never connected to");
+  if (afterMixed !== beforeMixed + 1 || mixed.error === HTTP_E_NONE || mixed.error === HTTP_E_BLOCKED) {
+    console.log(`  got: ${mixedGot}`);
+  }
+  t.check(fetchText(client(own()), `http://localhost:${port}/hello`) === "ok hello", "and with 127.0.0.1 permitted instead, the same answer is fetched");
+
+  // A number that spells loopback without dots, in octal, in hex or short is
+  // not a host the URL parser takes, policy or not: it never reaches a lookup.
+  const spellings: string[] = ["2130706433", "0177.0.0.1", "0x7f.0.0.1", "0x7f.1", "127.1"];
+  for (let i: i32 = 0; i < toI32(spellings.length); i++) {
+    const was: i32 = acceptsOf(base);
+    const open: HttpClient = client(null);
+    fetchText(open, `http://${spellings[i]}:${port}/hello`);
+    const odd: HttpClient = client(policy());
+    fetchText(odd, `http://${spellings[i]}:${port}/hello`);
+    const now: i32 = acceptsOf(base);
+    t.check(open.error === HTTP_E_URL && odd.error === HTTP_E_URL && now === was + 1, `${spellings[i]} is HTTP_E_URL with a policy or without, and never connected to`);
+  }
+
   // From here the server's own address is permitted, and the redirects it
   // answers point elsewhere on the host.
   const permitted: HttpClient = client(own());
@@ -499,6 +532,10 @@ const fetchChecks = (t: Tally, port: i32): void => {
   const tight: HttpClient = client(small);
   fetchText(tight, `${base}/big`);
   t.check(tight.error === HTTP_E_BODY_TOO_LARGE, "under a policy capping bodies at 10 bytes, it is HTTP_E_BODY_TOO_LARGE");
+  t.check(fetchText(client(null), `${base}/big-chunked`) === "ok 0123456789012345678901234567890123456789", "without a policy, the same body in chunks is read");
+  const tightChunked: HttpClient = client(small);
+  fetchText(tightChunked, `${base}/big-chunked`);
+  t.check(tightChunked.error === HTTP_E_BODY_TOO_LARGE, "and under the 10-byte cap, chunks declaring no total length are HTTP_E_BODY_TOO_LARGE as they stream");
   const quick: OutboundPolicy = own();
   quick.totalTimeoutMs = 200;
   t.check(fetchText(client(null), `${base}/drip`).length === 43, "without a policy, a body dripped over most of a second is read");

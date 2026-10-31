@@ -46,7 +46,9 @@ The attacker chooses the URL, and may run the server it names and the DNS
 zone its name is in. They want the program to reach an address it can reach
 and they cannot: a loopback service, a host on a private network, a cloud
 metadata endpoint. Their tools are a literal address in any of its spellings
-(dotted IPv4, IPv4-mapped or NAT64 IPv6, `[::1]`), a name that resolves to
+(dotted IPv4, IPv4-mapped or NAT64 IPv6, `[::1]`, or a number written
+without dots, in octal or hex, or short, which the URL parser refuses before
+any lookup), a name that resolves to
 one, a name whose answer changes between two lookups (DNS rebinding), a
 public URL that redirects to one, the proxy a program was configured with,
 and a URL whose userinfo or host only resembles an allowed name. The
@@ -56,7 +58,11 @@ second-guess what they say a name is.
 
 Not in the model: what the attacker learns from the response (that is the
 program's to decide), and timing that tells a refused address from an
-unreachable one.
+unreachable one. The same goes for a refusal's `errorText`, which names the
+address a name resolved to (`db.internal resolves to 10.0.0.5, which the
+outbound policy does not allow`) so the operator can see why: a program that
+passes that text back to whoever supplied the URL tells them its internal
+addresses, and should answer them with a fixed message instead.
 
 ## Findings
 
@@ -91,7 +97,9 @@ expected.out` in `tests/run.js`), and again under `--number-mode f64` as
 is its own server on a loopback port and fetches it with and without a
 policy, so each refusal has a `without a policy, … is reached` twin showing
 the URL would otherwise connect, and a count of accepted connections showing
-the refused one made none.
+the refused one made none. The `localhost` checks need no `/etc/hosts`: the
+resolver answers `localhost` itself, with 127.0.0.1 and then ::1 (RFC 6761
+§6.3).
 
 - **Every special-purpose range is refused, and only those.** IPv4: `this
   network, 10/8, CGNAT's 100.64/10 and loopback 127/8 are not`, `link-local
@@ -113,16 +121,30 @@ the refused one made none.
   `with one, localhost is HTTP_E_BLOCKED, naming resolves to` and its `and no
   connection was made`; `outboundFilter keeps a lookup's public addresses, in
   order, and drops the rest`; `and keeps none of an answer with no public
-  address, which is left in place to be named`. `dial` passes `tcpConnect`
-  only the bytes `outboundFilter` kept, with no second lookup.
+  address, which is left in place to be named`. That `dial` connects only to
+  what was kept is pinned on a mixed answer: `localhost` answers 127.0.0.1 and
+  ::1, the server listens on 127.0.0.1 alone, and with only ::1 permitted
+  `on a mixed answer only the addresses kept are dialled: ::1 permitted,
+  127.0.0.1 is never connected to` (dialling the whole answer reaches the
+  server and fails it), with `and with 127.0.0.1 permitted instead, the same
+  answer is fetched` as its twin. That there is no second lookup is read from
+  the code, not tested: no hermetic name answers differently on its second
+  lookup.
 - **Literals in every spelling are refused before a connect.** `with one, a
   loopback address is HTTP_E_BLOCKED, naming 127.0.0.1`, `with one, an
   IPv4-mapped loopback literal is HTTP_E_BLOCKED, naming 127.0.0.1`, each
-  with `and no connection was made`.
+  with `and no connection was made`. A number spelling loopback otherwise is
+  not a host at all: `2130706433 is HTTP_E_URL with a policy or without, and
+  never connected to`, and the same for `0177.0.0.1`, `0x7f.0.0.1`, `0x7f.1`
+  and `127.1`.
 - **Every redirect hop is checked again.** `a redirect to another loopback
   address is blocked at the hop`, `and so is one to it written as an
   IPv4-mapped IPv6 literal`, `and one to [::1]`, `and one to the metadata
   address, before any connect is tried`; and for the allowlist, OB-2's checks.
+  A hop to a name is judged by the same `dial` as a URL's name, whose check
+  is the `localhost` one above; no hop to a name answering only refused
+  addresses is tested, since the server must stay reachable for the first
+  hop and the one hermetic name, `localhost`, answers its address too.
 - **`permit` lets exactly its prefix through.** `permit lets one IPv4
   address through, in either form, and nothing beside it`, `a prefix ending
   inside a byte matches on its bits`, `an IPv6 prefix`, `an address without a
@@ -142,7 +164,9 @@ the refused one made none.
 - **The caps are the stricter of the policy's and the options'.** `a new
   policy caps a fetch at 5 redirects, 30 s and 8 MiB`, `under a policy of
   two, two are` and `and three are HTTP_E_TOO_MANY_REDIRECTS`, `under a policy
-  capping bodies at 10 bytes, it is HTTP_E_BODY_TOO_LARGE`, `under a policy
+  capping bodies at 10 bytes, it is HTTP_E_BODY_TOO_LARGE` against a declared
+  length and `and under the 10-byte cap, chunks declaring no total length are
+  HTTP_E_BODY_TOO_LARGE as they stream` against none, `under a policy
   of 200 ms with no total timeout of the options', it is
   HTTP_E_TOTAL_TIMEOUT`.
 - **No policy changes nothing.** `a client has no outbound policy unless

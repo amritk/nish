@@ -176,7 +176,10 @@ export const main = (): i32 => {
 ```
 
 It prints `blocked: 127.0.0.1 resolves to 127.0.0.1, which the outbound policy does
-not allow`, and no connection was opened. Under a policy:
+not allow`, and no connection was opened. That text names the address a name
+resolved to, so log it, but do not hand it back to whoever supplied the URL:
+it would tell them your internal addresses. Answer them with a fixed message.
+Under a policy:
 
 - **Only public addresses are reached.** The name is looked up first, every
   address that is loopback, private (`10/8`, `172.16/12`, `192.168/16`,

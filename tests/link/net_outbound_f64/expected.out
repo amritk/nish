@@ -39,6 +39,13 @@ PASS    and no connection was made
 PASS  without a policy, an IPv4-mapped loopback literal is reached
 PASS  with one, an IPv4-mapped loopback literal is HTTP_E_BLOCKED, naming 127.0.0.1
 PASS    and no connection was made
+PASS  on a mixed answer only the addresses kept are dialled: ::1 permitted, 127.0.0.1 is never connected to
+PASS  and with 127.0.0.1 permitted instead, the same answer is fetched
+PASS  2130706433 is HTTP_E_URL with a policy or without, and never connected to
+PASS  0177.0.0.1 is HTTP_E_URL with a policy or without, and never connected to
+PASS  0x7f.0.0.1 is HTTP_E_URL with a policy or without, and never connected to
+PASS  0x7f.1 is HTTP_E_URL with a policy or without, and never connected to
+PASS  127.1 is HTTP_E_URL with a policy or without, and never connected to
 PASS  a permitted address is reached, a redirect to it too
 PASS  a redirect to a name is followed when an address it resolves to is permitted
 PASS  a redirect to another loopback address is blocked at the hop
@@ -62,6 +69,8 @@ PASS  under a policy of two, two are
 PASS  and three are HTTP_E_TOO_MANY_REDIRECTS
 PASS  without a policy, a 40-byte body is read
 PASS  under a policy capping bodies at 10 bytes, it is HTTP_E_BODY_TOO_LARGE
+PASS  without a policy, the same body in chunks is read
+PASS  and under the 10-byte cap, chunks declaring no total length are HTTP_E_BODY_TOO_LARGE as they stream
 PASS  without a policy, a body dripped over most of a second is read
 PASS  under a policy of 200 ms with no total timeout of the options', it is HTTP_E_TOTAL_TIMEOUT
-outbound: 66 passed, 0 failed, 0 skipped
+outbound: 75 passed, 0 failed, 0 skipped
