@@ -824,17 +824,27 @@ export class TypeTable {
     return this.isUnion(this.stripNull(element)) ? `(${name})` : name
   }
 
-  /**
-   * The variant names joined as the source joins them, ascending by id, in one
-   * `join`: a concatenation per variant copies the tail each time, quadratic in
-   * a union of hundreds that `checkOperator` names for every `!== null`.
-   */
+  /** The variant names joined as the source joins them, ascending by id. */
   unionName(type: i32): string {
-    const names: string[] = []
-    for (const variant of this.variantsOf(type)) {
-      names.push(this.typeName(variant))
+    const variants = this.variantsOf(type)
+    return this.joinedNames(variants, 0, variants.length)
+  }
+
+  /**
+   * The names in `[from, to)`, joined by ` | `, recursively so that nothing is
+   * written. Halving keeps the copying to O(n log n): peeling one name at a
+   * time copied the tail once per variant, quadratic in a union of hundreds
+   * that `checkOperator` names for every `!== null` (`union_scale`).
+   */
+  joinedNames(variants: i32[], from: i32, to: i32): string {
+    if (from < 0 || to > variants.length || from >= to) {
+      return ""
     }
-    return names.join(" | ")
+    if (to - from === 1) {
+      return this.typeName(variants[from])
+    }
+    const mid = from + ((to - from) >> 1)
+    return `${this.joinedNames(variants, from, mid)} | ${this.joinedNames(variants, mid, to)}`
   }
 
   /** The LLVM struct name (without the `%struct.` prefix) backing a `Result`. */
