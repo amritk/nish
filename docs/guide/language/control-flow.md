@@ -57,7 +57,7 @@ Both arms of `c ? a : b` must have the same type.
 ## Loops
 
 `while`, `do … while`, `for (init; cond; update)` and `for (const x of xs)`
-are all there, with unlabelled `break` and `continue`:
+are all there, with `break` and `continue`:
 
 ```ts nish:ok
 export const main = (): i32 => {
@@ -88,16 +88,59 @@ export const main = (): i32 => {
 
 `for...of` walks an array (and a `Map`'s or `Set`'s keys or values — see
 [Maps and sets](maps-and-sets.md)); it does not walk a string. `for...in`
-and labelled statements are refused.
+is refused.
+
+### Labels
+
+A label on a loop lets `break` and `continue` reach past an inner loop:
+`break outer` leaves the loop named `outer`, and `continue outer` starts its
+next turn. A label can also name a block, which `break` leaves early, or a
+`switch`. Each jump compiles to a plain branch, with no flag:
+
+```ts nish:ok
+const firstPair = (limit: i32, target: i32): i32 => {
+  let found: i32 = -1;
+  outer: for (let i: i32 = 0; i < limit; i++) {
+    for (let j: i32 = 0; j < limit; j++) {
+      if (i * j === target) {
+        found = i * 100 + j;
+        break outer;
+      }
+    }
+  }
+  return found;
+};
+
+const sign = (n: i32): string => {
+  let out = "positive";
+  check: {
+    if (n < 0) {
+      out = "negative";
+      break check;
+    }
+    if (n === 0) {
+      out = "zero";
+    }
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  console.log(`${firstPair(10, 12)} ${sign(-3)} ${sign(0)}`);   // 206 negative zero
+  return 0;
+};
+```
+
+A label on any other statement is refused, `continue` must name a loop, and a
+jump cannot leave an arrow function for a label outside it.
 
 ## `switch`
 
 A `switch` takes an integer or an [enum](../../LANGUAGE.md#enums), and every
 `case` label is a constant: a literal, a module constant or an enum member.
-**There is no implicit fallthrough** — a clause with statements must end in
-`break`, `return`, `continue` or `process.exit`, unless it is the last
-clause. An *empty* clause still
-falls through, which is how several labels share one body:
+A clause falls through into the next one, as in TypeScript, unless it ends in
+`break`, `return`, `continue` or `process.exit`. An empty clause falls through
+too, which is how several labels share one body:
 
 ```ts nish:ok
 const kind = (day: i32): string => {
@@ -116,20 +159,34 @@ export const main = (): i32 => {
 };
 ```
 
-Forgetting the `break` is a compile error, not a bug to find later:
+A clause with statements falls through the same way, so leaving out a
+`break` runs the next clause as well:
 
-```ts nish:err NL2166
-const classify = (n: i32): string => {
-  switch (n) {
-    case 0:
-      console.log("zero");
+```ts nish:ok
+const points = (stars: i32): i32 => {
+  let total = 0;
+  switch (stars) {
+    case 3:
+      total += 100;
+    case 2:
+      total += 10;
     case 1:
-      return "one";
+      total += 1;
+      break;
     default:
-      return "many";
+      total = -1;
   }
+  return total;
+};
+
+export const main = (): i32 => {
+  console.log(`${points(3)} ${points(1)} ${points(7)}`);   // 111 1 -1
+  return 0;
 };
 ```
+
+A clause reached by falling into it can be reached with either label's value,
+so a `case` on a union's tag does not narrow there.
 
 To declare a variable inside a clause, wrap its body in a block. A `switch`
 on a string is refused; write an `if` / `else if` chain.
