@@ -133,6 +133,56 @@ export const CLEAR_HOLD_STEPS: i32 = 90
 /** Steps the game-over and victory screens wait before a key dismisses them, so a held Space cannot skip them. */
 export const DISMISS_STEPS: i32 = 120
 
+// ---- Sounds -----------------------------------------------------------------
+
+/** The ball met the paddle. */
+export const SOUND_PADDLE: i32 = 0
+
+/** The ball met a side or the top. */
+export const SOUND_WALL: i32 = 1
+
+/** A strong brick took a hit and held. */
+export const SOUND_CRACK: i32 = 2
+
+/** Steel rang. */
+export const SOUND_STEEL: i32 = 3
+
+/** An explosive brick went off. */
+export const SOUND_EXPLODE: i32 = 4
+
+/** The paddle caught a capsule. */
+export const SOUND_CAPSULE: i32 = 5
+
+/** A ball left the paddle. */
+export const SOUND_LAUNCH: i32 = 6
+
+/** The last ball fell and a life went. */
+export const SOUND_LOSE: i32 = 7
+
+/** The wall came down a row. */
+export const SOUND_ADVANCE: i32 = 8
+
+/** The level is clear. */
+export const SOUND_CLEAR: i32 = 9
+
+/** The game is over. */
+export const SOUND_OVER: i32 = 10
+
+/** A firework burst on the victory screen. */
+export const SOUND_FIREWORK: i32 = 11
+
+/** A brick broke: this, plus one step of pitch for each brick of the combo up to `BREAK_PITCHES` - 1. */
+export const SOUND_BREAK: i32 = 12
+
+/** The pitches a breaking brick climbs through as the combo grows. */
+export const BREAK_PITCHES: i32 = 6
+
+/** One past the last sound. */
+export const SOUND_COUNT: i32 = 18
+
+/** The most sounds one step asks for; past it a busy step, a fireball through a row, is heard in part. */
+const MAX_STEP_SOUNDS: i32 = 6
+
 // ---- Power-ups --------------------------------------------------------------
 
 /** Capsule W: a paddle half as wide again, for 15 s. */
@@ -348,6 +398,8 @@ export class BreakGame {
   particles: Particles
   /** Where the world sits in the framebuffer, refitted each draw. */
   view: View
+  /** The `SOUND_*` the last step asked for, each once; the director plays them or not. */
+  sounds: i32[]
   /** Each cell's `BRICK_*`, row by row, `LEVEL_COLS` wide. */
   kinds: i32[]
   /** Each cell's hits left. */
@@ -438,6 +490,7 @@ export class BreakGame {
     }
     this.particles = new Particles(MAX_PARTICLES)
     this.view = new View()
+    this.sounds = []
     const cells: i32 = LEVEL_COLS * LEVEL_MAX_ROWS
     this.kinds = new Array<i32>(cells)
     this.kinds.fill(0)
@@ -580,6 +633,14 @@ const serve = (game: BreakGame): void => {
   game.launched = false
 }
 
+/** Ask for sound `id` this step; a sound already asked for, or one past `MAX_STEP_SOUNDS`, is dropped. */
+const sound = (game: BreakGame, id: i32): void => {
+  if (toI32(game.sounds.length) >= MAX_STEP_SOUNDS || game.sounds.indexOf(id) >= 0) {
+    return
+  }
+  game.sounds.push(id)
+}
+
 const enterPhase = (game: BreakGame, phase: i32): void => {
   game.phase = phase
   game.phaseTime = 0
@@ -674,6 +735,9 @@ const heldDirection = (input: TermInput): i32 => {
  * dismissed or the player quits, and that answer from then on.
  */
 export const stepBreakGame = (game: BreakGame, input: TermInput): i32 => {
+  if (game.sounds.length > 0) {
+    game.sounds = []
+  }
   if (game.result !== GAME_PLAYING) {
     return game.result
   }
@@ -803,6 +867,7 @@ const launch = (game: BreakGame): void => {
       f = (game.rng.nextF64() - 0.5) * 0.5
     }
     aim(b, f * MAX_BOUNCE)
+    sound(game, SOUND_LAUNCH)
   }
   game.launched = true
 }
@@ -954,6 +1019,7 @@ const stepBall = (game: BreakGame, b: Ball): void => {
     rest = rest * (1.0 - best)
     last = id
     if (id === HIT_PADDLE) {
+      sound(game, SOUND_PADDLE)
       if (ny < 0) {
         if (paddleBounce(game, b)) {
           rest = 0.0
@@ -962,6 +1028,7 @@ const stepBall = (game: BreakGame, b: Ball): void => {
         reflect(b, nx, 0)
       }
     } else if (id >= HIT_LEFT) {
+      sound(game, SOUND_WALL)
       reflect(b, nx, ny)
     } else if (game.fireSteps > 0) {
       // A fireball breaks what it touches and carries on through, steel too.
@@ -1114,12 +1181,14 @@ const hitBrick = (game: BreakGame, i: i32): void => {
   }
   game.flashes[i] = 0.15
   if (!breakable(game.kinds[i])) {
+    sound(game, SOUND_STEEL)
     return
   }
   game.hits[i] = game.hits[i] - 1
   if (game.hits[i] <= 0) {
     breakBrick(game, i)
   } else {
+    sound(game, SOUND_CRACK)
     burst(
       game,
       brickX(i % LEVEL_COLS) + BRICK_W / 2.0,
@@ -1159,11 +1228,13 @@ const breakBrick = (game: BreakGame, i: i32): void => {
   game.kinds[i] = BRICK_NONE
   game.hits[i] = 0
   game.bricksLeft = game.bricksLeft - 1
+  sound(game, SOUND_BREAK + Math.min(game.combo, BREAK_PITCHES) - 1)
   floatScore(game, cx, cy, points, game.combo >= 2 ? gfxRgb(255, 220, 90) : gfxRgb(235, 235, 245))
   if (kind === BRICK_MYSTERY || game.rng.nextF64() < game.tuning.dropChance) {
     dropCapsule(game, cx, cy)
   }
   if (kind === BRICK_EXPLOSIVE) {
+    sound(game, SOUND_EXPLODE)
     burst(game, cx, cy, 36, gfxRgb(255, 150, 40))
     burst(game, cx, cy, 12, gfxRgb(255, 240, 180))
     game.shake = Math.min(game.shake + 3.0, 6.0)
@@ -1227,6 +1298,7 @@ const stepCapsules = (game: BreakGame): void => {
       c.x - CAPSULE_W / 2.0 <= game.paddleX + half
     if (caught) {
       c.live = false
+      sound(game, SOUND_CAPSULE)
       applyPower(game, c.kind)
       game.score = game.score + 50
       floatScore(game, c.x, PADDLE_Y - 6.0, 50, capsuleColour(c.kind))
@@ -1311,12 +1383,14 @@ const stepWall = (game: BreakGame): void => {
       game.advanceSteps = 0
       game.wallTarget = game.wallTarget + BRICK_H
       game.shake = Math.min(game.shake + 1.5, 6.0)
+      sound(game, SOUND_ADVANCE)
     }
   }
   game.wallOffset = game.wallOffset + (game.wallTarget - game.wallOffset) * 0.08
   if (wallBottom(game) >= PADDLE_Y) {
     game.lives = 0
     game.shake = 6.0
+    sound(game, SOUND_OVER)
     enterPhase(game, PHASE_OVER)
   }
 }
@@ -1343,9 +1417,11 @@ const loseLife = (game: BreakGame): void => {
     c.live = false
   }
   if (game.lives === 0) {
+    sound(game, SOUND_OVER)
     enterPhase(game, PHASE_OVER)
     return
   }
+  sound(game, SOUND_LOSE)
   serve(game)
 }
 
@@ -1367,6 +1443,7 @@ const enterClear = (game: BreakGame): void => {
     b.live = false
   }
   burst(game, 160.0, 90.0, 60, gfxRgb(255, 230, 120))
+  sound(game, SOUND_CLEAR)
   enterPhase(game, PHASE_CLEAR)
 }
 
@@ -1401,6 +1478,7 @@ const stepLastScreen = (game: BreakGame, input: TermInput): void => {
     const x: f64 = game.fxRng.nextF64() * 240.0 + 40.0
     const y: f64 = game.fxRng.nextF64() * 70.0 + 30.0
     firework(game, x, y, hue(game.fxRng.nextF64()))
+    sound(game, SOUND_FIREWORK)
   }
   if (game.phaseTime >= DISMISS_STEPS && confirmPressed(input)) {
     game.result = game.phase === PHASE_WON ? GAME_WON : GAME_OVER
