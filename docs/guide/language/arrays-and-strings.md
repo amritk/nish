@@ -78,15 +78,16 @@ export const main = (): i32 => {
 ```
 
 Three things are refused where JavaScript would do something surprising or
-Nish cannot yet follow:
+Nish cannot follow:
 
 - `xs.sort()` with no comparator. JavaScript compares the elements as
   strings, so `[10, 9].sort()` is `[10, 9]`; Nish asks you to write
   `xs.sort((a, b) => a - b)`.
 - Sorting a `readonly T[]`, or `process.argv`.
-- A comparator that reads a local variable of the function it is written in.
-  Until closures land, write the comparator as a top-level function, or as an
-  arrow that uses only its two parameters.
+- A comparator that reads a `let` of the function it is written in. It may
+  read that function's `const` locals and parameters, as any arrow argument
+  may ([Functions](functions.md)): `xs.sort((a, b) => rank[a] - rank[b])` with
+  a `const rank`. Bind a `let` to a `const` before the call.
 
 `(a, b) => a - b` is checked `i32` arithmetic: on elements more than
 `2^31 - 1` apart, such as `[2147483647, -1]`, it panics with

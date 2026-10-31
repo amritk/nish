@@ -852,7 +852,8 @@ export const main = (): i32 => {
   (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
   read `this` (bind `const self = this`), or read a function parameter of its
   function. An arrow inside another arrow, or given to a method, a
-  constructor, `expose` or `exposeWith`, captures nothing.
+  constructor, `expose` or `exposeWith`, captures nothing; `xs.sort(cmp)`'s
+  comparator is the exception, and captures as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -2122,8 +2123,8 @@ never panics). Both are statements. `a.sort(cmp)` sorts in place, stably, and
 answers `a` — the same order Node gives; the comparator is required (`a.sort()`
 is refused, since JavaScript would compare strings), a readonly array and
 `process.argv` are refused, `a - b` panics on `i32` values a full range apart
-(compare with `a > b ? 1 : a < b ? -1 : 0` there), and the comparator is a top-level function or an arrow that captures
-nothing (closure capture has not landed). That is every array method there is. A
+(compare with `a > b ? 1 : a < b ? -1 : 0` there), and the comparator may read the caller's `const` locals and parameters but not
+a `let`, as any arrow argument may. That is every array method there is. A
 window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),

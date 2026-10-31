@@ -151,7 +151,9 @@ export const main = (): i32 => {
   first (`nish --fix` does). It may not read `this` (bind `const self = this`),
   or the function's own function parameters. An arrow inside another arrow
   reads only its own parameters, and an arrow given to a method or a
-  constructor, or to `expose`, captures nothing:
+  constructor, or to `expose`, captures nothing. The exception is
+  `xs.sort(cmp)`, whose comparator captures as an arrow argument does
+  ([Sorting](arrays-and-strings.md#sorting)):
 
 ```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
