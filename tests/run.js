@@ -2780,6 +2780,59 @@ if (!only || "net_set_option".includes(only)) {
   )
 }
 
+// `netMss` where there is no socket to ask. Under the prelude it throws, naming
+// itself, as the other `nish:net` calls do; a `wasm32` build compiles it to
+// the constant -1, with no runtime symbol for the freestanding link to miss,
+// and the `--profile wasi` build runs and prints that -1
+// (`tests/cases/net_mss` is the native half).
+if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
+  const mssDir = path.join(buildDir, "net-mss")
+  fs.rmSync(mssDir, { recursive: true, force: true })
+  fs.mkdirSync(mssDir, { recursive: true })
+  const preludeEntry = path.join(mssDir, "prelude.ts")
+  fs.writeFileSync(preludeEntry, "export const main = (): number => netMss(3);\n")
+  const loud = runUnderPrelude(preludeEntry, [])
+  check(
+    "net_mss: under the prelude netMss fails loudly rather than answering -1",
+    loud.status !== 0 && loud.stderr.includes("`netMss` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const entry = path.join(mssDir, "net_mss_wasm.ts")
+  fs.writeFileSync(
+    entry,
+    'import { netMss } from "nish:net";\n\n' +
+      "export const main = (): number => {\n  console.log(netMss(0));\n  return 0;\n};\n"
+  )
+  const ll = path.join(mssDir, "net_mss_wasm.ll")
+  const wasm32 = spawnSync(NISH, [entry, "-o", ll, "--target", "wasm32"], { cwd: root, encoding: "utf8" })
+  const ir = wasm32.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+  check(
+    "net_mss: a wasm32 build compiles netMss to -1, with no call into runtime-net.c",
+    wasm32.status === 0 && !ir.includes("nish_net_mss") && ir.includes("i32 -1"),
+    shown(wasm32)
+  )
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const module = path.join(mssDir, "net_mss_wasm.wasm")
+    const built = spawnSync(NISH, [entry, "-o", mssDir + path.sep, "--link", module, "--profile", "wasi"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+        : built
+    check(
+      `net_mss: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) links and prints -1`,
+      ran.status === 0 && ran.stdout === "-1\n",
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: net_mss: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of netMss is not run`
+    )
+  }
+}
+
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
 //
 // `tests/cases/net_udp_echo` binds, prints its port and echoes each datagram to

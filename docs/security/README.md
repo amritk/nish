@@ -115,7 +115,8 @@ the record that found it. The notes below the table name each such finding.
    (Low), `spawnPiped`'s deadlock, output cap, pipe descriptors and SIGPIPE,
    were found and fixed by the stage that added it, and are counted as
    fixed; RT-30's Darwin window is recorded in the row and is not counted.
-   RT-31, the stdin channel itself, is a decision and is not counted.
+   RT-31, the stdin channel itself, is a decision and is not counted, and so
+   is RT-32, how `netMss` reads the kernel's reply (#1094).
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
