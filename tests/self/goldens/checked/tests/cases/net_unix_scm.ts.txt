@@ -12,7 +12,10 @@ import unixConnect from "nish:net" -> builtin unixConnect
 import unixListen from "nish:net" -> builtin unixListen
 import unixSocketPair from "nish:net" -> builtin unixSocketPair
 import unlinkSync from "nish:fs" -> builtin unlinkSync
-const PATH: string = "build/test/nus-peer.sock"
+function pathOf(pid: i32): string -> @pathOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
 function widowed(): i32 -> @widowed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_unix_socket_pair
@@ -89,13 +92,19 @@ function peer(fd: i32, k: i32): i32 -> @peer [exported]
   stackSites=1 stackLocals=1
   local +0:9 out: i32[] (const)
   local +1:9 answer: i32 (const)
-function connected(k: i32, listener: i32): i32 -> @connected [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+function connected(k: i32, listener: i32, pid: i32): i32 -> @connected [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_unlink
-  calls: nish_unix_accept nish_unix_connect nish_unix_listen nish_unlink
+  escaping: pid
+  calls: nish_arena_mark nish_arena_release nish_unix_accept nish_unix_connect nish_unix_listen nish_unlink pathOf
   stackSites=0 stackLocals=0
-function release(): i32 -> @release [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +0:16 pathOf -> @pathOf
+  callee +1:23 pathOf -> @pathOf
+  callee +3:32 pathOf -> @pathOf
+function release(pid: i32): i32 -> @release [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_unlink
-  calls: nish_unlink
+  escaping: pid
+  calls: nish_arena_mark nish_arena_release nish_unlink pathOf
   stackSites=0 stackLocals=0
+  callee +0:54 pathOf -> @pathOf
