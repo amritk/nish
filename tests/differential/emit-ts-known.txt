@@ -16,7 +16,9 @@
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
+cases/caps_net_peer refused  # refused: NL4011 under --emit-ts
 cases/caps_process_nice host  # differ: exit 0 vs 1: throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`); [setNice]
+cases/caps_process_spawn_fds numbers  # differ: exit 0 vs 1: throw new Error(
 cases/caps_process_wait host  # differ: exit 0 vs 1: throw new Error( [spawn]
 cases/caps_signal refused  # refused: NL4011 under --emit-ts
 cases/ffi_buffer_call_sites ffi  # refused: NL4010 under --emit-ts
