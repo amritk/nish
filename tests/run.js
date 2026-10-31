@@ -13483,6 +13483,74 @@ if (!only || "std_json_writer".includes(only)) {
   }
 }
 
+// The f64 seam: a native `JsonWriter.f64` writes its digits through
+// `nish_json_put_f64` (runtime/runtime.c) straight into the writer's buffer,
+// where the Nish body, `jsonPutF64Walk` in std/json.ts, builds `${v}` first.
+// `tests/link/std_json_writer/seam.ts` prints -0, 1e21, 5e-324 and the longest
+// spelling in an array, a write one byte short of fitting and an exact fit;
+// the native build and the Node prelude must print `seam.out`, and std/json's
+// IR must make the call. The recognition is the package's: `std/json.ts`
+// compiled as a root is an ordinary module and calls its walk.
+if (!only || "json_f64_seam".includes(only)) {
+  const dir = path.join(linkDir, "std_json_writer")
+  const want = fs.readFileSync(path.join(dir, "seam.out"), "utf8")
+  const node = runUnderPrelude(path.join(dir, "seam.ts"), [])
+  check(
+    "json_f64_seam: seam.ts under the Node prelude runs jsonPutF64Walk and prints seam.out",
+    node.status === 0 && node.stdout === want,
+    `--- seam.out\n${want}--- node\n${shown(node)}`
+  )
+  const outDir = path.join(buildDir, "link", "json_f64_seam")
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const exe = path.join(outDir, "app")
+  const link = HAS_CLANG ? ["--link", exe, ...linkProfile("std_json_writer")] : []
+  const built = spawnSync(NISH, [path.join(dir, "seam.ts"), "-o", `${outDir}${path.sep}`, ...link], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const jsonLl = path.join(outDir, "json.ll")
+  const ir = built.status === 0 ? fs.readFileSync(jsonLl, "utf8") : ""
+  const writer = ir.match(/^define [^\n]*@nish\.jsonWriterPutF64\([^]*?^}/m)?.[0] ?? ""
+  check(
+    "json_f64_seam: std/json's jsonWriterPutF64 calls nish_json_put_f64 on the buffer and builds no string",
+    built.status === 0 &&
+      writer.includes("call i32 @nish_json_put_f64(i8* ") &&
+      !writer.includes("jsonPutF64Walk") &&
+      !writer.includes("nish_str_from_f64") &&
+      ir.includes(
+        "declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef)"
+      ),
+    built.status === 0 ? writer || ir : built.stderr
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [jsonLl, "-o", "/dev/null"], { encoding: "utf8" })
+    check("json_f64_seam: std/json's IR passes llvm-as", built.status === 0 && as.status === 0, as.stderr)
+  } else {
+    skip("skipped: json_f64_seam: no llvm-as")
+  }
+  if (HAS_CLANG) {
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "json_f64_seam: seam.ts built natively writes through the kernel and prints seam.out",
+      native.status === 0 && native.stdout === want,
+      `--- seam.out\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: json_f64_seam: no clang, so seam.ts is not built natively")
+  }
+  const rootDir = path.join(buildDir, "json_f64_seam_root")
+  fs.rmSync(rootDir, { recursive: true, force: true })
+  const asRoot = spawnSync(NISH, ["std/json.ts", "-o", `${rootDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(path.join(rootDir, "json.ll"), "utf8") : ""
+  check(
+    "json_f64_seam: std/json.ts compiled as a root is an ordinary module, so JsonWriter.f64 calls its walk and not the kernel",
+    asRoot.status === 0 &&
+      rootIr.includes("call i32 @jsonPutF64Walk(") &&
+      !rootIr.includes("nish_json_put_f64"),
+    asRoot.status === 0 ? rootIr : asRoot.stderr
+  )
+}
+
 // Typed JSON (`nish/json-typed`) against Node's own parser and writer: each
 // line of `round-trip.txt` decoded into a `Match` and encoded back by the
 // native program must be `JSON.stringify(JSON.parse(line))`, computed here.

@@ -163,6 +163,16 @@ export const isBytesModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(BYTES_SPECIFIER)
 
 /**
+ * `nish/json`: ordinary Nish but for one call, the writer's f64 walk, which
+ * the emitter replaces with a runtime kernel (`src/kernels.ts`).
+ */
+const JSON_SPECIFIER: string = "nish/json"
+
+/** Whether a module is the standard library's `std/json.ts`: the package is part of the test, as for `isTextModule`. */
+export const isJsonModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(JSON_SPECIFIER)
+
+/**
  * `nish/crypto/aes`: ordinary Nish but for four calls, the seams the emitter
  * puts behind a branch to the runtime's AES kernels (`src/kernels.ts`).
  */
