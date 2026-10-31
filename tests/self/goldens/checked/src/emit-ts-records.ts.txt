@@ -23,6 +23,7 @@ import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
+import isSortModule from "./std-modules" -> function @isSortModule
 import K_ARRAY from "./types" -> const K_ARRAY
 import T_BOOL from "./types" -> const T_BOOL
 import T_CPTR from "./types" -> const T_CPTR
@@ -277,7 +278,7 @@ function vectorZero(walk: Walk, node: Node): string -> @vectorZero
 function newRow(walk: Walk, node: Node, operands: Operands): string | null -> @newRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via vectorZero
-  calls: Operands.at StringSet.add Walk.helperName Walk.spanOf fillZero nish_panic_index nish_str_concat nish_str_eq typedArrayWidth typedArrayZero vectorZero
+  calls: Operands.at StringSet.add Walk.helperName Walk.spanOf fillZero isSortModule nish_panic_index nish_str_concat nish_str_eq typedArrayWidth typedArrayZero vectorZero
   pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.spanOf#0 vectorZero#0 Walk.helperName#0 fillZero#0 Walk.helperName#0
   pointer node: size=40 writesThrough=false captured=false passedTo=vectorZero#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0
@@ -291,12 +292,14 @@ function newRow(walk: Walk, node: Node, operands: Operands): string | null -> @n
   callee +9:20 vectorZero -> @vectorZero
   callee +12:17 Walk.helperName -> @Walk.helperName
   callee +12:60 Operands.at -> @Operands.at
-  callee +14:12 fillZero -> @fillZero
-  callee +16:12 typedArrayZero -> @typedArrayZero
-  callee +17:15 typedArrayWidth -> @typedArrayWidth
-  callee +23:5 StringSet.add -> @StringSet.add
-  callee +27:13 Walk.helperName -> @Walk.helperName
-  callee +27:56 Operands.at -> @Operands.at
+  local +16:11 program: CheckedProgram (const)
+  callee +17:12 isSortModule -> @isSortModule
+  callee +17:83 fillZero -> @fillZero
+  callee +19:12 typedArrayZero -> @typedArrayZero
+  callee +20:15 typedArrayWidth -> @typedArrayWidth
+  callee +26:5 StringSet.add -> @StringSet.add
+  callee +30:13 Walk.helperName -> @Walk.helperName
+  callee +30:56 Operands.at -> @Operands.at
 function processArgv(walk: Walk, node: Node): string | null -> @processArgv
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.missType
