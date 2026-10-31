@@ -59,7 +59,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
-| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 1 ¹⁰ |
+| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts`; the global `Map`'s key hashes: `std/collections.ts`, `src/emit-map.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 0 / 2 ¹⁰ |
 | Percent-decoding, query strings and URL parsing | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | YAML into a JsonDocument | [yaml.md](yaml.md) | `std/yaml-json.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 1 / 0 |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
@@ -166,7 +166,10 @@ the record that found it. The notes below the table name each such finding.
     bytes written raw. JSON-2 is open. JSON-13 (Medium), the map keys a body
     can make collide, was bounded by `jsonDecode` (#622, `maxMapKeys`) and
     closed by #900, which seeds the global `Map`'s string hash; it is counted
-    as a fixed Medium. JSON-3, duplicate keys
+    as a fixed Medium. JSON-15 (Medium), the same flood through integer, `boolean`
+    and enum keys, was closed by #1107, which keys the integer hash; it is
+    counted as a fixed Medium. JSON-16 (Low), float keys still hashed unkeyed,
+    is open, beside JSON-2. JSON-3, duplicate keys
     reported as tokens, was left open by the tokenizer stage and is fixed for
     `jsonDecode` callers by the typed layer (#573), which refuses a duplicate
     of a field; it is counted as a fixed Low. The tokenizer is unchanged, a

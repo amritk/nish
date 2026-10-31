@@ -6,7 +6,7 @@ a cleared table, its capacity kept), `hit` (`get` of a present key) and `miss`
 
 - a `Map<i32, i32>` with keys spread by a multiply (`i * 7919`);
 - a `Map<i64, i32>` over a grid 1024 wide, keyed by two `i32`s packed into one
-  `i64` (`(toI64(hi) << toI64(32)) + toI64(lo)`, the composite-key idiom in
+  `i64` (`(toI64(hi) << toI64(32)) | (toI64(lo) & toI64(0xffffffff))`, the composite-key idiom in
   [the user guide](../../docs/guide/language/maps-and-sets.md));
 - a `Map<Op, i32>` over a 16-member enum (`miss` probes a table of 8);
 - a `Map<string, i32>`, its keys built before any clock starts, to show the

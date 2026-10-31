@@ -4,13 +4,17 @@
 // unkeyed baseline run.mjs measures the Nish tables against.
 //
 //   fx [scale]
+//
+// FxHasher reproduced from rustc-hash 1.1.0 (https://github.com/rust-lang/rustc-hash), src/lib.rs.
+// Copyright 2015 The Rust Project Developers. Used under the MIT License; see
+// bench/map-keys/LICENSE-rustc-hash.md.
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::hint::black_box;
 use std::time::Instant;
 
-/// rustc-hash's `FxHasher`: a rotate, an XOR and a multiply per word.
+/// rustc-hash 1.1.0's `FxHasher` (its 64-bit `K`): a rotate, an XOR and a multiply per word.
 #[derive(Default, Clone, Copy)]
 struct FxHasher {
     hash: u64,
@@ -79,7 +83,7 @@ fn key_i32(i: i32) -> i32 {
 #[inline]
 fn key_i64(i: i32, miss: bool) -> i64 {
     let hi = if miss { -1 - (i >> 10) } else { i >> 10 };
-    ((hi as i64) << 32) + ((i & 1023) - 512) as i64
+    ((hi as i64) << 32) | (((i & 1023) - 512) as u32 as i64)
 }
 
 fn report(row: String, ns: u128, ops: i32, sum: i32) {

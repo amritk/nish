@@ -58,11 +58,12 @@ make it a class.
 
 A map keyed by a pair — a grid cell, an edge between two nodes — needs no
 string and no class: pack the two `i32`s into one `i64`, the first shifted
-into the high half. Write both operands of the shift as `i64`s, because under
-Node an `i64` is a `BigInt`, which will not shift by a plain number:
+into the high half and the second masked into the low half. Write every
+operand as an `i64`, because under Node an `i64` is a `BigInt`, which will not
+mix with a plain number:
 
 ```ts nish:ok
-const cell = (row: i32, col: i32): i64 => (toI64(row) << toI64(32)) + toI64(col);
+const cell = (row: i32, col: i32): i64 => (toI64(row) << toI64(32)) | (toI64(col) & toI64(0xffffffff));
 
 export const main = (): i32 => {
   const grid = new Map<i64, string>();
@@ -74,8 +75,10 @@ export const main = (): i32 => {
 ```
 
 This prints `wall door false`. The key is exact for every pair of `i32`s,
-negative ones and the extremes included, since `row * 2^32 + col` never leaves
-the `i64` range, and two different pairs never give the same key. It is also
+negative ones and the extremes included: the mask keeps the low half from
+reaching the high one, so nothing is added and nothing overflows, and two
+different pairs never give the same key. Write `|`, not `+`: `row * 2^32 + col`
+leaves the `i64` range at `row = -2^31` with a negative `col`. It is also
 cheaper than a string key like `` `${row},${col}` ``, which builds and hashes a
 string on every lookup.
 
