@@ -339,6 +339,19 @@ export class RuntimeTable {
         EFFECT_READ
       )
     )
+    // `nish/json`'s f64 writer, in runtime.c (`src/kernels.ts`): the digits
+    // go into the array's data at the cursor and nowhere else, and nothing of
+    // the pointer is kept. The data is null while the array is empty, so it is
+    // not `nonnull`. No `memory(...)`: the formatter's tables are static, and
+    // the call's one effect, the store, must never make it look droppable.
+    this.add(
+      new RuntimeFunction(
+        "nish_json_put_f64",
+        "declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef)",
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
     // #943: `Math.floor`, `ceil` and `trunc` on x86-64, beside them in
     // runtime-simd.c (`roundingCallee` in src/emit-builtins.ts). Each answers
     // what the `llvm.*.f64` it stands in for answers, for every operand: the

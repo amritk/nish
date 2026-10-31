@@ -78,6 +78,14 @@
 // build run the slicing-by-8 tables as written. The kernel reads the bytes the
 // walker reads and nothing else; it ignores the walker's tables, which hold
 // the one polynomial it computes.
+//
+// `nish/json`'s `JsonWriter.f64` hands its digits to one private walk,
+// `jsonPutF64Walk(buf, at, v)`, lowered S1's way (`isJsonPutF64Walk`): the
+// call becomes `nish_json_put_f64` (runtime.c), which formats into its own
+// stack with the formatter `${v}` uses and copies into the array, so no
+// string is built. The kernel checks `at` and the room itself, as the walk
+// does, and answers what the walk answers: the new end, or -1 with nothing
+// written.
 
 import { CheckedProgram, FunctionSig } from "./program"
 import { CLI } from "./branding"
@@ -85,6 +93,7 @@ import {
   isBytesModule,
   isCompressChecksumModule,
   isCryptoAesModule,
+  isJsonModule,
   isRegexModule,
   isTextModule,
   stdModuleName,
@@ -275,3 +284,17 @@ export const bytesKernelOf = (walk: i32): string => {
   }
   return "nish_bytes_skip_json_text"
 }
+
+/** The runtime kernel `jsonPutF64Walk`'s call becomes. */
+export const JSON_PUT_F64_KERNEL: string = "nish_json_put_f64"
+
+/**
+ * Whether a call in `program` to `sig` is `JsonWriter.f64`'s walk, tested as
+ * `isIndexOfAnyWalk` tests its walk: a root-package file that happens to sit
+ * at `std/json.ts` is an ordinary module, and its walk runs as written.
+ */
+export const isJsonPutF64Walk = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.sourceName === "jsonPutF64Walk" &&
+  isJsonModule(program.packageName, program.source.path)
