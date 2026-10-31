@@ -135,7 +135,7 @@ stops being able to prove, which is what the `performance` warning will say.
 | `?.`, and `??` on a nullable | wp23 §9: a second spelling of a narrowing (strict accepts `??` on a `Map.get` result only) | the narrowing it already compiles to | nothing |
 | string `switch` | wp23 §8 | a chain of content comparisons, or a length-bucketed tree | nothing the `if` chain does not cost |
 | `for...of` over a string | wp23 §7 | the byte loop, with the UTF-8 rule stated | nothing |
-| labelled `break` / `continue` | no rule; nobody asked | a branch to a named block | nothing |
+| ~~labelled `break` / `continue`~~ | no rule; nobody asked | **Built in strict**: a branch to a named block (docs/LANGUAGE.md, "Labels") | nothing |
 | overload signatures | one signature per name | monomorphised per implementation | nothing at run time |
 | `try` / `catch` / `throw` | WP16: a failure is a `Result`, and nothing unwinds | landing pads, or a desugaring to `Result` with implicit propagation | **large** — `nounwind` comes off every function in the module; §7.1 S6 must choose the lowering by measurement |
 | **function values and closures** | a function is never a value: the fixpoint cannot see through an unknown callee | an indirect call, and closures as a captured-environment struct with fixed layout | **the big one** — up to 8.76x per object the call makes unprovable (§7.4) |
@@ -452,8 +452,9 @@ S1 and S2 were the two that could stop the package. S1 did not; S2 is unrun.
 | | Stage | Contents | Size |
 | ---: | --- | --- | --- |
 | **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign |
-| **C1** | the free tier | optional and default parameters, `?.`, `??` on nullables, string `switch`, `for...of` over a string, labelled break/continue, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M |
+| **C1** | the free tier | optional and default parameters, `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M |
 | **C-lib** | the library tier | `Date` objects, `JSON`, `RegExp`, `Buffer`, under WP26's rules. `Map` and `Set` are strict already | L, and per §4.1 it outranks most of what follows |
+| ~~C1, labels~~ | labelled `break`/`continue`, once a C1 entry | **Built in strict**, as direct branches with no flag; it left C1 | — |
 | ~~C2a~~ | callbacks whose callee is statically known | **Built in strict**, as function-typed parameters: free at run time, as §7.4 predicted | — |
 | **C2b** | function values proper | a value whose target the checker cannot name: the indirect call, the captured-environment struct, and the escape proof it forfeits | L, and the expensive one — 1.26x for the call and up to 8.76x for what it does to WP6 (§7.4) |
 | **C3** | `async`/`await`, `--async-model sync` | §6.3's two rules, the erasure, §6.4's admission, and the unmodified-Node cases that hold it | M. S2 may yet retire it in favour of C4 alone |

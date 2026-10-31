@@ -4958,6 +4958,7 @@ import pollCreate from "nish:net" -> builtin pollCreate
 import pollModify from "nish:net" -> builtin pollModify
 import pollWait from "nish:net" -> builtin pollWait
 import tcpConnect from "nish:net" -> builtin tcpConnect
+import unixConnect from "nish:net" -> builtin unixConnect
 import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
 import PG_ARRAY_ELEMENT from "nish/net/postgres" -> const PG_ARRAY_ELEMENT
@@ -4978,16 +4979,25 @@ const PK_SQL: string = "SELECT id, username, email, bio, image FROM users WHERE 
 const LIST_SQL: string = "SELECT a.id, a.slug, a.title, a.description, a.created_at, a.updated_at, ARRAY(SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id WHERE at.article_id = a.id ORDER BY t.name) AS tag_list, (SELECT count(*) FROM favorites f WHERE f.article_id = a.id) AS favorites_count, EXISTS (SELECT 1 FROM favorites f WHERE f.article_id = a.id AND f.user_id = $1) AS favorited, u.username, u.bio, u.image, EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = a.author_id) AS following FROM articles a JOIN users u ON u.id = a.author_id ORDER BY a.id DESC LIMIT $2 OFFSET $3"
 const INSERT_SQL: string = "INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
 const RESET_SQL: string = "DELETE FROM follows WHERE follower_id = followee_id"
+const ONE_SQL: string = "SELECT 1"
+const ROWS_SQL: string = "SELECT id, username, email, bio, image FROM users WHERE id > $1 ORDER BY id LIMIT 100"
+const PID_SQL: string = "SELECT pg_backend_pid()"
 const PK: i32 = 0
 const LIST: i32 = 1
 const INSERT: i32 = 2
 const RESET: i32 = 3
+const ONE: i32 = 4
+const ROWS: i32 = 5
+const PID: i32 = 6
 const INT8: i32 = 20
 const USERS: i64 = 100000
+const ROWS_READ: i64 = 100
 const AGAIN: i32 = -11
 const WANT_READ: i32 = 1
 const WANT_WRITE: i32 = 2
 const NULL_FOLD: i32 = -1
+const O_RDONLY_CLOEXEC: i32 = 524288
+const PROC_BYTES: i32 = 1024
 struct Fold (class) size=32 align=8
   field rows: i64 index=0 offset=0 initialized
   field buf: u8[] index=1 offset=8 readonly
@@ -5003,16 +5013,18 @@ struct Fold (class) size=32 align=8
   method timestamp -> @Fold.timestamp
   method array -> @Fold.array
   method row -> @Fold.row
-struct Bench (class) size=56 align=8
+struct Bench (class) size=72 align=8
   field pool: PgPool index=0 offset=0 readonly
   field address: u8[] index=1 offset=8 readonly
-  field loop: i32 index=2 offset=16 readonly
-  field ready: i32[] index=3 offset=24 readonly
-  field fold: Fold index=4 offset=32 readonly
-  field fd: i32 index=5 offset=40 initialized
-  field connected: boolean index=6 offset=44 initialized
-  field mask: i32 index=7 offset=48 initialized
-  field x: u32 index=8 offset=52 initialized
+  field socket: string index=2 offset=16 readonly
+  field loop: i32 index=3 offset=24 readonly
+  field ready: i32[] index=4 offset=32 readonly
+  field fold: Fold index=5 offset=40 readonly
+  field fd: i32 index=6 offset=48 initialized
+  field connected: boolean index=7 offset=52 initialized
+  field mask: i32 index=8 offset=56 initialized
+  field x: u32 index=9 offset=60 initialized
+  field backend: i64 index=10 offset=64 initialized
   constructor -> @Bench.constructor
   method id -> @Bench.id
   method bind -> @Bench.bind
@@ -5062,6 +5074,51 @@ function word(b: u8[], at: i32): i64 -> @word
   stackSites=0 stackLocals=0
   local +0:7 v: i64 (let)
   local +1:12 k: i32 (let)
+function open(path: string, flags: i32): i32 -> @open
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function read(fd: i32, buf: u8[], n: u64): i64 -> @read
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function close(fd: i32): i32 -> @close
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function procNumber(path: string, field: i32): i64 -> @procNumber
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via open
+  escaping: path
+  calls: close nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_str_index_of open read
+  stackSites=0 stackLocals=0
+  local +0:9 fd: i32 (const)
+  callee +0:19 open -> @open
+  local +4:9 b: u8[] (const)
+  local +5:9 got: i64 (const)
+  callee +5:20 read -> @read
+  callee +6:3 close -> @close
+  local +10:9 end: i32 (const)
+  local +11:7 at: i32 (let)
+  local +12:12 k: i32 (let)
+  local +17:7 seen: i32 (let)
+  local +24:7 v: i64 (let)
+  local +25:7 digits: i32 (let)
+function serverTicks(pid: i64): i64 -> @serverTicks
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via procNumber
+  calls: nish_panic_overflow nish_str_concat nish_str_from_i64 procNumber
+  stackSites=0 stackLocals=0
+  local +0:9 path: string (const)
+  callee +1:10 procNumber -> @procNumber
+  callee +1:33 procNumber -> @procNumber
+function serverNanos(pid: i64): i64 -> @serverNanos
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via procNumber
+  calls: nish_str_concat nish_str_from_i64 procNumber
+  stackSites=0 stackLocals=0
+  callee +0:40 procNumber -> @procNumber
 function Fold.constructor(this: Fold): void -> @Fold.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.PgArrayWalker.constructor nish_alloc_struct
@@ -5161,32 +5218,33 @@ function Fold.row(this: Fold, conn: PgConnection, mode: i32): void -> @Fold.row 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: Fold.array Fold.bool Fold.int Fold.text Fold.timestamp nish.PgText.reset nish_panic_overflow
-  pointer this: size=32 writesThrough=true captured=false passedTo=Fold.int#0 Fold.text#0 Fold.int#0 Fold.text#0 Fold.text#0 Fold.text#0 Fold.timestamp#0 Fold.timestamp#0 Fold.array#0 Fold.int#0 Fold.bool#0 Fold.text#0 Fold.text#0 Fold.text#0 Fold.bool#0
-  pointer conn: size=192 writesThrough=false captured=false passedTo=Fold.int#1 Fold.text#1 Fold.int#1 Fold.text#1 Fold.text#1 Fold.text#1 Fold.timestamp#1 Fold.timestamp#1 Fold.array#1 Fold.int#1 Fold.bool#1 Fold.text#1 Fold.text#1 Fold.text#1 Fold.bool#1
+  pointer this: size=32 writesThrough=true captured=false passedTo=Fold.int#0 Fold.text#0 Fold.int#0 Fold.text#0 Fold.text#0 Fold.text#0 Fold.timestamp#0 Fold.timestamp#0 Fold.array#0 Fold.int#0 Fold.bool#0 Fold.text#0 Fold.text#0 Fold.text#0 Fold.bool#0 Fold.int#0
+  pointer conn: size=192 writesThrough=false captured=false passedTo=Fold.int#1 Fold.text#1 Fold.int#1 Fold.text#1 Fold.text#1 Fold.text#1 Fold.timestamp#1 Fold.timestamp#1 Fold.array#1 Fold.int#1 Fold.bool#1 Fold.text#1 Fold.text#1 Fold.text#1 Fold.bool#1 Fold.int#1
   stackSites=0 stackLocals=0
-  callee -19:7 Fold.int -> @Fold.int
-  local -18:16 c: i32 (let)
-  callee -17:9 Fold.text -> @Fold.text
-  callee -14:7 Fold.int -> @Fold.int
+  callee -21:7 Fold.int -> @Fold.int
+  local -20:16 c: i32 (let)
+  callee -19:9 Fold.text -> @Fold.text
+  callee -16:7 Fold.int -> @Fold.int
+  callee -15:7 Fold.text -> @Fold.text
+  callee -14:7 Fold.text -> @Fold.text
   callee -13:7 Fold.text -> @Fold.text
-  callee -12:7 Fold.text -> @Fold.text
-  callee -11:7 Fold.text -> @Fold.text
-  callee -10:7 Fold.timestamp -> @Fold.timestamp
-  callee -9:7 Fold.timestamp -> @Fold.timestamp
-  callee -8:7 Fold.array -> @Fold.array
-  callee -7:7 Fold.int -> @Fold.int
-  callee -6:7 Fold.bool -> @Fold.bool
+  callee -12:7 Fold.timestamp -> @Fold.timestamp
+  callee -11:7 Fold.timestamp -> @Fold.timestamp
+  callee -10:7 Fold.array -> @Fold.array
+  callee -9:7 Fold.int -> @Fold.int
+  callee -8:7 Fold.bool -> @Fold.bool
+  callee -7:7 Fold.text -> @Fold.text
+  callee -6:7 Fold.text -> @Fold.text
   callee -5:7 Fold.text -> @Fold.text
-  callee -4:7 Fold.text -> @Fold.text
-  callee -3:7 Fold.text -> @Fold.text
-  callee -2:7 Fold.bool -> @Fold.bool
+  callee -4:7 Fold.bool -> @Fold.bool
+  callee -2:7 Fold.int -> @Fold.int
   callee +3:7 PgText.reset -> @nish.PgText.reset
-function Bench.constructor(this: Bench, pool: PgPool, address: u8[]): void -> @Bench.constructor [constructor]
+function Bench.constructor(this: Bench, pool: PgPool, address: u8[], socket: string): void -> @Bench.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish_poll_create
-  escaping: address pool
+  escaping: address pool socket
   calls: Fold.constructor nish_alloc_struct nish_poll_create
-  pointer this: size=56 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   pointer pool: size=88 writesThrough=true captured=true
   pointer address: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -5195,15 +5253,15 @@ function Bench.id(this: Bench): i64 -> @Bench.id [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:9 x: u32 (let)
 function Bench.bind(this: Bench, conn: PgConnection, mode: i32, i: i32): void -> @Bench.bind [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.bindStart
-  calls: Bench.id nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.paramInt nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false passedTo=Bench.id#0 Bench.id#0
-  pointer conn: size=192 writesThrough=true captured=false passedTo=nish.PgConnection.bindStart#0 nish.PgConnection.paramInt#0 nish.PgConnection.bindStart#0 nish.PgConnection.paramInt#0 nish.PgConnection.paramInt#0 nish.PgConnection.paramInt#0 nish.PgConnection.bindStart#0 nish.PgConnection.paramInt#0 nish.PgConnection.paramInt#0 nish.PgConnection.bindStart#0 nish.PgConnection.bindEnd#0
+  calls: Bench.id nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.paramInt nish_panic_div nish_panic_overflow
+  pointer this: size=72 writesThrough=true captured=false passedTo=Bench.id#0 Bench.id#0 Bench.id#0
+  pointer conn: size=192 writesThrough=true captured=false passedTo=nish.PgConnection.bindStart#0 nish.PgConnection.paramInt#0 nish.PgConnection.bindStart#0 nish.PgConnection.paramInt#0 nish.PgConnection.paramInt#0 nish.PgConnection.paramInt#0 nish.PgConnection.bindStart#0 nish.PgConnection.bindStart#0 nish.PgConnection.paramInt#0 nish.PgConnection.bindStart#0 nish.PgConnection.bindStart#0 nish.PgConnection.paramInt#0 nish.PgConnection.paramInt#0 nish.PgConnection.bindStart#0 nish.PgConnection.bindEnd#0
   stackSites=0 stackLocals=0
   callee +0:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
   callee +1:7 PgConnection.paramInt -> @nish.PgConnection.paramInt
@@ -5213,17 +5271,22 @@ function Bench.bind(this: Bench, conn: PgConnection, mode: i32, i: i32): void ->
   callee +4:21 Bench.id -> @Bench.id
   callee +5:7 PgConnection.paramInt -> @nish.PgConnection.paramInt
   callee +6:7 PgConnection.paramInt -> @nish.PgConnection.paramInt
-  local +8:13 u: i64 (const)
-  callee +9:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
-  callee +10:7 PgConnection.paramInt -> @nish.PgConnection.paramInt
+  callee +8:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
+  callee +10:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
   callee +11:7 PgConnection.paramInt -> @nish.PgConnection.paramInt
+  callee +11:21 Bench.id -> @Bench.id
   callee +13:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
-  callee +15:5 PgConnection.bindEnd -> @nish.PgConnection.bindEnd
+  local +15:13 u: i64 (const)
+  callee +16:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
+  callee +17:7 PgConnection.paramInt -> @nish.PgConnection.paramInt
+  callee +18:7 PgConnection.paramInt -> @nish.PgConnection.paramInt
+  callee +20:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
+  callee +22:5 PgConnection.bindEnd -> @nish.PgConnection.bindEnd
 function Bench.flush(this: Bench, conn: PgConnection): boolean -> @Bench.flush [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_net_write
   calls: nish.PgConnection.outputBuffer nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.sent nish_net_write nish_panic_overflow nish_panic_slice
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer conn: size=192 writesThrough=true captured=false passedTo=nish.PgConnection.outputEnd#0 nish.PgConnection.outputStart#0 nish.PgConnection.outputBuffer#0 nish.PgConnection.outputStart#0 nish.PgConnection.outputEnd#0 nish.PgConnection.outputStart#0 nish.PgConnection.sent#0
   stackSites=0 stackLocals=0
   callee +0:12 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
@@ -5238,8 +5301,8 @@ function Bench.run(this: Bench, mode: i32, n: i32, depth: i32, fold: boolean): b
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: mode
-  calls: Bench.bind Bench.flush Fold.add Fold.row nish.PgConnection.closed nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.received nish.PgConnection.tagRows nish.PgPool.connect nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.next nish.PgPool.request nish.PgPool.send nish.PgPool.wanted nish_connect_result nish_net_read nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_modify nish_poll_wait nish_print nish_random_fill nish_str_concat nish_str_from_i32 nish_tcp_connect
-  pointer this: size=56 writesThrough=true captured=false passedTo=Bench.bind#0 Bench.flush#0
+  calls: Bench.bind Bench.flush Fold.add Fold.row nish.PgConnection.closed nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.int nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.received nish.PgConnection.tagRows nish.PgPool.connect nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.next nish.PgPool.request nish.PgPool.send nish.PgPool.wanted nish_connect_result nish_net_read nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_modify nish_poll_wait nish_print nish_random_fill nish_str_concat nish_str_eq nish_str_from_i32 nish_tcp_connect nish_unix_connect
+  pointer this: size=72 writesThrough=true captured=false passedTo=Bench.bind#0 Bench.flush#0
   stackSites=1 stackLocals=1
   local -1:11 pool: PgPool (const)
   local +1:9 requested: i32 (let)
@@ -5248,83 +5311,101 @@ function Bench.run(this: Bench, mode: i32, n: i32, depth: i32, fold: boolean): b
   local +4:9 pending: boolean (let)
   local +8:13 event: i32 (let)
   callee +8:26 PgPool.next -> @nish.PgPool.next
-  callee +12:15 Fold.row -> @Fold.row
-  callee +12:29 PgPool.connection -> @nish.PgPool.connection
-  local +16:21 rows: i64 (const)
-  callee +16:33 PgConnection.tagRows -> @nish.PgConnection.tagRows
-  callee +16:33 PgPool.connection -> @nish.PgPool.connection
-  callee +18:15 Fold.add -> @Fold.add
-  callee +27:47 PgPool.connection -> @nish.PgPool.connection
-  callee +30:19 PgPool.next -> @nish.PgPool.next
-  callee +36:59 PgPool.request -> @nish.PgPool.request
-  local +39:11 slot: i32 (let)
-  callee +39:23 PgPool.dispatch -> @nish.PgPool.dispatch
-  callee +41:9 Bench.bind -> @Bench.bind
-  callee +41:19 PgPool.connection -> @nish.PgPool.connection
-  callee +42:9 PgPool.send -> @nish.PgPool.send
-  callee +44:16 PgPool.dispatch -> @nish.PgPool.dispatch
-  callee +46:11 PgPool.wanted -> @nish.PgPool.wanted
-  local +47:15 nonce: u8[] (const)
-  callee +49:9 PgPool.connect -> @nish.PgPool.connect
-  local +59:15 conn: PgConnection (const)
-  callee +59:22 PgPool.connection -> @nish.PgPool.connection
-  callee +60:14 Bench.flush -> @Bench.flush
-  callee +61:11 PgConnection.closed -> @nish.PgConnection.closed
-  local +65:15 wants: i32 (const)
-  callee +65:28 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
-  callee +65:47 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  local +71:13 got: i32 (const)
-  local +76:13 conn: PgConnection (const)
-  callee +76:20 PgPool.connection -> @nish.PgPool.connection
-  callee +82:11 PgConnection.closed -> @nish.PgConnection.closed
-  local +85:15 read: i32 (const)
-  callee +85:44 PgConnection.inputBuffer -> @nish.PgConnection.inputBuffer
-  callee +85:64 PgConnection.inputEnd -> @nish.PgConnection.inputEnd
-  callee +85:81 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
-  callee +87:11 PgConnection.closed -> @nish.PgConnection.closed
-  callee +89:11 PgConnection.received -> @nish.PgConnection.received
+  callee +12:30 PgConnection.int -> @nish.PgConnection.int
+  callee +12:30 PgPool.connection -> @nish.PgPool.connection
+  callee +14:15 Fold.row -> @Fold.row
+  callee +14:29 PgPool.connection -> @nish.PgPool.connection
+  local +18:21 rows: i64 (const)
+  callee +18:33 PgConnection.tagRows -> @nish.PgConnection.tagRows
+  callee +18:33 PgPool.connection -> @nish.PgPool.connection
+  callee +20:15 Fold.add -> @Fold.add
+  callee +29:47 PgPool.connection -> @nish.PgPool.connection
+  callee +32:19 PgPool.next -> @nish.PgPool.next
+  callee +38:59 PgPool.request -> @nish.PgPool.request
+  local +41:11 slot: i32 (let)
+  callee +41:23 PgPool.dispatch -> @nish.PgPool.dispatch
+  callee +43:9 Bench.bind -> @Bench.bind
+  callee +43:19 PgPool.connection -> @nish.PgPool.connection
+  callee +44:9 PgPool.send -> @nish.PgPool.send
+  callee +46:16 PgPool.dispatch -> @nish.PgPool.dispatch
+  callee +48:11 PgPool.wanted -> @nish.PgPool.wanted
+  local +49:15 nonce: u8[] (const)
+  callee +51:9 PgPool.connect -> @nish.PgPool.connect
+  local +61:15 conn: PgConnection (const)
+  callee +61:22 PgPool.connection -> @nish.PgPool.connection
+  callee +62:14 Bench.flush -> @Bench.flush
+  callee +63:11 PgConnection.closed -> @nish.PgConnection.closed
+  local +67:15 wants: i32 (const)
+  callee +67:28 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
+  callee +67:47 PgConnection.outputStart -> @nish.PgConnection.outputStart
+  local +73:13 got: i32 (const)
+  local +78:13 conn: PgConnection (const)
+  callee +78:20 PgPool.connection -> @nish.PgPool.connection
+  callee +84:11 PgConnection.closed -> @nish.PgConnection.closed
+  local +87:15 arrived: i32 (const)
+  callee +87:47 PgConnection.inputBuffer -> @nish.PgConnection.inputBuffer
+  callee +87:67 PgConnection.inputEnd -> @nish.PgConnection.inputEnd
+  callee +87:84 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
+  callee +89:11 PgConnection.closed -> @nish.PgConnection.closed
+  callee +91:11 PgConnection.received -> @nish.PgConnection.received
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: Bench.constructor Bench.flush Bench.run bytesOf cpuMicros llvm.fptosi.sat.i32.f64 nish.PgConnection.terminate nish.PgPool.connection nish.PgPool.constructor nish.PgPool.dispose nish.PgPool.register nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_alloc_struct nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_address nish_net_close nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_from_u64
-  stackSites=5 stackLocals=2
-  local -32:9 name: string (const)
-  local -31:7 mode: i32 (let)
-  local -19:9 count: i32 (const)
-  local -18:9 depth: i32 (const)
-  local -17:9 config: PgConfig (const)
-  local -13:9 password: Secret<u8[]> (const)
-  callee -13:20 secret<u8[]> -> @nish.secret$arr.u8
-  callee -13:27 bytesOf -> @bytesOf
-  local -12:9 pool: PgPool (const)
-  callee -12:16 new PgPool -> @nish.PgPool.constructor
-  callee -11:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  calls: Bench.constructor Bench.flush Bench.run bytesOf cpuMicros llvm.fptosi.sat.i32.f64 nish.PgConnection.terminate nish.PgPool.connection nish.PgPool.constructor nish.PgPool.dispose nish.PgPool.register nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_alloc_struct nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_address nish_net_close nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_from_u64 serverNanos serverTicks
+  stackSites=7 stackLocals=3
+  local -41:9 name: string (const)
+  local -40:7 mode: i32 (let)
+  local -24:9 count: i32 (const)
+  local -23:9 depth: i32 (const)
+  local -22:9 config: PgConfig (const)
+  local -18:9 password: Secret<u8[]> (const)
+  callee -18:20 secret<u8[]> -> @nish.secret$arr.u8
+  callee -18:27 bytesOf -> @bytesOf
+  local -17:9 pool: PgPool (const)
+  callee -17:16 new PgPool -> @nish.PgPool.constructor
+  callee -16:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee -14:5 PgPool.register -> @nish.PgPool.register
+  callee -12:5 PgPool.register -> @nish.PgPool.register
+  local -10:11 none: i32[] (const)
   callee -9:5 PgPool.register -> @nish.PgPool.register
+  callee -8:5 PgPool.register -> @nish.PgPool.register
   callee -7:5 PgPool.register -> @nish.PgPool.register
   callee -5:5 PgPool.register -> @nish.PgPool.register
   local -4:11 none: i32[] (const)
   callee -3:5 PgPool.register -> @nish.PgPool.register
   local -1:9 address: u8[] (const)
-  local +1:9 bench: Bench (const)
-  callee +1:17 new Bench -> @Bench.constructor
-  callee +3:8 Bench.run -> @Bench.run
-  callee +3:69 Bench.run -> @Bench.run
-  local +6:9 user0: i64 (const)
-  callee +6:22 cpuMicros -> @cpuMicros
-  local +7:9 sys0: i64 (const)
-  callee +7:21 cpuMicros -> @cpuMicros
-  local +8:9 t0: i64 (const)
-  local +9:9 ok: boolean (const)
-  callee +9:23 Bench.run -> @Bench.run
-  local +10:9 ns: i64 (const)
-  local +11:9 user: i64 (const)
-  callee +11:21 cpuMicros -> @cpuMicros
-  local +12:9 sys: i64 (const)
-  callee +12:20 cpuMicros -> @cpuMicros
-  callee +13:35 Bench.run -> @Bench.run
-  local +16:9 fold: Fold (const)
-  local +20:9 conn: PgConnection (const)
-  callee +20:16 PgPool.connection -> @nish.PgPool.connection
-  callee +21:3 PgConnection.terminate -> @nish.PgConnection.terminate
-  callee +22:3 Bench.flush -> @Bench.flush
-  callee +24:3 PgPool.dispose -> @nish.PgPool.dispose
+  local +1:9 socket: string (const)
+  local +2:9 bench: Bench (const)
+  callee +2:17 new Bench -> @Bench.constructor
+  local +3:9 server: boolean (const)
+  callee +5:8 Bench.run -> @Bench.run
+  callee +5:69 Bench.run -> @Bench.run
+  callee +8:19 Bench.run -> @Bench.run
+  local +12:9 ticks0: i64 (const)
+  callee +12:32 serverTicks -> @serverTicks
+  local +13:9 nanos0: i64 (const)
+  callee +13:32 serverNanos -> @serverNanos
+  local +14:9 user0: i64 (const)
+  callee +14:22 cpuMicros -> @cpuMicros
+  local +15:9 sys0: i64 (const)
+  callee +15:21 cpuMicros -> @cpuMicros
+  local +16:9 t0: i64 (const)
+  local +17:9 ok: boolean (const)
+  callee +17:23 Bench.run -> @Bench.run
+  local +18:9 ns: i64 (const)
+  local +19:9 user: i64 (const)
+  callee +19:21 cpuMicros -> @cpuMicros
+  local +20:9 sys: i64 (const)
+  callee +20:20 cpuMicros -> @cpuMicros
+  local +21:9 ticks: i64 (const)
+  callee +21:31 serverTicks -> @serverTicks
+  local +22:9 nanos: i64 (const)
+  callee +22:31 serverNanos -> @serverNanos
+  callee +23:35 Bench.run -> @Bench.run
+  local +30:9 fold: Fold (const)
+  local +31:9 suffix: string (const)
+  local +35:9 conn: PgConnection (const)
+  callee +35:16 PgPool.connection -> @nish.PgPool.connection
+  callee +36:3 PgConnection.terminate -> @nish.PgConnection.terminate
+  callee +37:3 Bench.flush -> @Bench.flush
+  callee +39:3 PgPool.dispose -> @nish.PgPool.dispose
