@@ -73,7 +73,7 @@ function App.constructor(this: App, h: HttpHandler, config: Config): void -> @Ap
   escaping: h
   calls: Notes.constructor nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
-  pointer h: size=216 writesThrough=true captured=true
+  pointer h: size=208 writesThrough=true captured=true
   pointer config: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new Notes -> @Notes.constructor

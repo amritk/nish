@@ -377,6 +377,12 @@ export class HttpHandler {
   jsonType: u8[]
   problemType: u8[]
   noFields: u8[][]
+  /**
+   * When an accept failed for want of a resource (EMFILE, ENFILE, ENOMEM):
+   * the listener is out of the loop until then, which it would otherwise wake
+   * every turn while its connection waits. 0 while it is in the loop.
+   */
+  acceptRestUntil: i64 = 0
   listener: i32 = 0
   loop: i32 = 0
   queueStart: i32 = 0
@@ -384,12 +390,8 @@ export class HttpHandler {
   outputSize: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   draining: boolean = false
-  /**
-   * When an accept failed for want of a resource (EMFILE, ENFILE, ENOMEM):
-   * the listener is out of the loop until then, which it would otherwise wake
-   * every turn while its connection waits. 0 while it is in the loop.
-   */
-  acceptRestUntil: i64 = 0
+  /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
+  jsonBegun: boolean = false
 
   /**
    * A handler over `listener`, a listening socket the program made
@@ -1055,9 +1057,6 @@ export class HttpHandler {
     return this.writer
   }
 
-  /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
-  jsonBegun: boolean = false
-
   /**
    * Answers `r` with `status` and the value `json`'s writer holds, as
    * `application/json`. A value the writer refused or did not finish — it
@@ -1203,7 +1202,9 @@ const handlerAllowAppend = (value: u8[], bytes: u8[], start: i32, end: i32): voi
     value.push(toU8(32))
   }
   for (let k: i32 = start; k < end; k++) {
-    value.push(bytes[k])
+    if (k >= 0 && k < toI32(bytes.length)) {
+      value.push(bytes[k])
+    }
   }
 }
 
