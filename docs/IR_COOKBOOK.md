@@ -1729,6 +1729,27 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end thread-scope -->
 
+`using s = scopeWithStack(256 * 1024 * 1024)` lowers as `scope()` does, but
+the scope comes from `nish/threads`'s own `scopeWithStack`, which checks the
+size and stores it in `ThreadScope`'s one field, the word `nish_scope_join`
+reads first (`tests/link/thread_stack_deep`):
+
+```llvm
+; main
+%11 = call %struct.ThreadScope* @nish.scopeWithStack(i32 %10)
+; nish/threads
+%0 = icmp slt i32 %bytes, 131072
+br i1 %0, label %if.then, label %if.end   ; if.then: nish_panic
+if.end:
+  %6 = call %struct.ThreadScope* @nish.scope()
+  %8 = getelementptr inbounds %struct.ThreadScope, %struct.ThreadScope* %7, i32 0, i32 0
+  store i32 %bytes, i32* %8, align 4
+```
+
+A nonzero word sends every task to a new thread of its own made with
+`pthread_attr_setstacksize` (the size rounded up to the page, one page more)
+and `pthread_attr_setguardsize` of a page, none on the joining thread.
+
 ### `nish/threads`: an arrow task, with no destination
 
 `s.spawn(() => addTo(tally, a))` is the whole spelling of a task that answers

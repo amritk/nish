@@ -1,0 +1,1 @@
+`scopeWithStack(4096)` asks for a stack below the minimum of 131072 bytes

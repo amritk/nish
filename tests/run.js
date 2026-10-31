@@ -10858,6 +10858,80 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
   }
 }
 
+// `scopeWithStack` gives a scope's tasks the stack it names, and the default it
+// replaces is the one that fails. Each of thread_stack_deep's million-deep
+// chains needs at least 16 MB. Under `ulimit -s 8192`, which fixes glibc's
+// default thread stack and main's at 8 MiB on any host, the program written
+// with `scope()` (tests/link/thread_stack_fixtures/default.ts) faults on one
+// thread and on eight; with a 256 MiB stack it prints its two sums; with
+// 128 KiB (guard.ts) it faults on the guard page below the stack; under a
+// 128 MiB `ulimit -v` the 256 MiB stack cannot be mapped, and the program ends
+// with nish_stack_fail's out-of-memory message before any task runs. The link
+// harness counts a death by signal as a failure, so the faults are read here,
+// as `spawnSync`'s signal.
+if (!only || "thread_stack".includes(only)) {
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("thread_stack: the faults are read under a Linux ulimit, and this host is not Linux with clang")
+  } else {
+    const dir = path.join(buildDir, "thread_stack")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const programs = [
+      ["deep", path.join(linkDir, "thread_stack_deep", "main.ts")],
+      ["default", path.join(linkDir, "thread_stack_fixtures", "default.ts")],
+      ["guard", path.join(linkDir, "thread_stack_fixtures", "guard.ts")],
+    ]
+    const exes = new Map()
+    for (const [name, src] of programs) {
+      const exe = path.join(dir, name)
+      const c = spawnSync(NISH, [src, "--link", exe], { cwd: root, encoding: "utf8" })
+      if (c.status !== 0) check(`thread_stack: ${path.relative(root, src)} compiles and links`, false, shown(c))
+      exes.set(name, c.status === 0 ? exe : null)
+    }
+    const run = (name, threads, limit = "") => {
+      const exe = exes.get(name)
+      return exe === null
+        ? null
+        : spawnSync("bash", ["-c", `ulimit -S -s 8192 ${limit}&& exec "$0"`, exe], {
+            encoding: "utf8",
+            timeout: 60000,
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+    }
+    const said = (r) => (r === null ? "not built" : `signal ${r.signal}\n${shown(r)}`)
+    for (const threads of ["1", "8"]) {
+      const deep = run("deep", threads)
+      check(
+        `thread_stack: a 256 MiB scopeWithStack runs two million-deep chains on ${threads} thread(s)`,
+        deep !== null && deep.status === 0 && deep.stdout === "960218 256782\n",
+        said(deep)
+      )
+      const dflt = run("default", threads)
+      check(
+        `thread_stack: the same chains on scope()'s default 8 MiB stack fault on ${threads} thread(s)`,
+        dflt !== null && dflt.signal === "SIGSEGV",
+        said(dflt)
+      )
+      const guard = run("guard", threads)
+      check(
+        `thread_stack: a 128 KiB scopeWithStack faults on its guard page on ${threads} thread(s)`,
+        guard !== null && guard.signal === "SIGSEGV",
+        said(guard)
+      )
+      const room = run("deep", threads, "&& ulimit -S -v 131072 ")
+      check(
+        `thread_stack: a 256 MiB stack under a 128 MiB address space ends with the out-of-memory message on ${threads} thread(s)`,
+        room !== null &&
+          room.status === 1 &&
+          room.stdout === "" &&
+          room.stderr ===
+            "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n",
+        said(room)
+      )
+    }
+  }
+}
+
 // WP37 stage 1: `--sandbox` confines a native program to main's capability set
 // (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
 // Nish programs whose main reaches a chosen set of capabilities and hands its

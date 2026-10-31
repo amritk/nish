@@ -834,6 +834,13 @@ __attribute__((constructor)) static void nish_napi_unpooled(void) { nish_pool_di
  * calling thread, so running short of threads costs speed and never an
  * answer.
  *
+ * `scope` points at a `ThreadScope` (std/threads.ts), whose first `int32_t` is
+ * the stack `scopeWithStack` asked for, or 0. A nonzero one runs every task on
+ * a new thread of its own started with that stack, rounded up to the page,
+ * plus a guard page, none on the calling thread; if one cannot be started the
+ * program ends, saying whether the system was out of threads or memory or
+ * refused the size (`nish_stack_fail`). Without threads the word is ignored.
+ *
  * The preconditions are the language's (docs/LANGUAGE.md, "Scoped tasks"):
  * `run` writes nothing another task or the caller can see, its result is a
  * scalar it writes into its own payload, and only `finish`, on the calling

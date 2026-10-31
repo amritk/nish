@@ -976,6 +976,11 @@ export const main = (): i32 => {
   (NL2388): `using s = scope()`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
+- **A task that recurses deeply gets a bigger stack from `scopeWithStack`.**
+  `using s = scopeWithStack(64 * 1024 * 1024)` is a scope whose tasks each run
+  on a new thread with a 64 MiB stack; a thread's default is 8 MiB. Ask for at
+  least 131072 bytes: a number below it is refused (NL2584). Under Node the size
+  is ignored, so run Node with `--stack-size` too.
 - **The task is a top-level function named in the `spawn`, or an arrow written
   there.** `s.spawn(entry, arg)` with no destination runs an entry that
   answers `void`; `s.spawn(() => work(a, b))` runs an arrow that reads the
