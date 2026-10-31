@@ -392,7 +392,12 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
       return
     }
     if (flag.jsonPresence !== null) {
-      jsonPresenceMisuse(ctx, info, to, `gives \`${field.name}\` the field \`${flag.name}\`, which is recorded itself`)
+      jsonPresenceMisuse(
+        ctx,
+        info,
+        to,
+        `gives \`${field.name}\` the field \`${flag.name}\`, which is recorded itself`
+      )
       return
     }
     if (flag.type !== T_BOOL) {
@@ -405,7 +410,12 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
       return
     }
     if (flag.readonly) {
-      jsonPresenceMisuse(ctx, info, to, `gives \`${field.name}\` the field \`${flag.name}\`, which is \`readonly\``)
+      jsonPresenceMisuse(
+        ctx,
+        info,
+        to,
+        `gives \`${field.name}\` the field \`${flag.name}\`, which is \`readonly\``
+      )
       return
     }
     field.jsonPresence = flag
@@ -479,7 +489,12 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
   for (const field of info.fields) {
     if (field.jsonOffWire && (field.jsonOptional || field.wireName !== field.name)) {
       const what = field.jsonOptional ? "make it optional" : "rename it"
-      jsonPresenceMisuse(ctx, info, decl, `names \`${field.name}\` as a presence field, and the class's options also ${what}`)
+      jsonPresenceMisuse(
+        ctx,
+        info,
+        decl,
+        `names \`${field.name}\` as a presence field, and the class's options also ${what}`
+      )
       return
     }
   }
