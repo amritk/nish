@@ -27,6 +27,11 @@
 // percentile round trip in nanoseconds (10 ns buckets), U and K its own user
 // and system CPU over the loop in microseconds, V and L the peer's, which the
 // peer measures over its own timed loop with getrusage and sends back.
+//
+// The client's U and K include making each message and checking every byte of
+// the reply, inside the timed loop: the same cost on every transport, which
+// the peer, echoing only, does not pay. So the client's CPU is above the
+// peer's at 4 KB, and V and L are the transport's cost alone.
 import {
   NET_UNIX_SEQPACKET,
   NET_UNIX_STREAM,
@@ -45,7 +50,7 @@ import {
   tcpListenFlags,
   unixSocketPair,
 } from "nish:net"
-import { monotonicNanos, spawnWithFds, waitPid } from "nish:process"
+import { kill, monotonicNanos, spawnWithFds, waitPid } from "nish:process"
 
 declare function calloc(count: u64, size: u64): CPtr | null
 declare function free(p: CPtr): void
@@ -244,6 +249,13 @@ const quantile = (hist: readonly i32[], total: i32, q: f64): i64 => {
   return toI64(BUCKETS) * BUCKET_NS
 }
 
+/** Ends a peer the client gives up on: SIGKILL, then reap it, so no run leaves one behind. */
+const stopPeer = (pid: i32): i32 => {
+  kill(pid, 9)
+  waitPid(pid, 0)
+  return 1
+}
+
 /** The client: starts the peer, times `count` round trips after `warm`, prints the line. */
 const client = (transport: string, size: i32, warm: i32, count: i32, childCpu: string): i32 => {
   const self: string = process.argv[0]
@@ -296,7 +308,7 @@ const client = (transport: string, size: i32, warm: i32, count: i32, childCpu: s
     netClose(listener)
     if (fd < 0) {
       console.log(`accept failed: ${fd}`)
-      return 1
+      return stopPeer(pid)
     }
   } else {
     netClose(handed[0])
@@ -309,7 +321,8 @@ const client = (transport: string, size: i32, warm: i32, count: i32, childCpu: s
     fill(msg, size, i)
     if (!wire.writeAll(msg, size) || !wire.readExact(reply, size) || !same(msg, reply, size)) {
       console.log(`warm-up round trip ${i} failed`)
-      return 1
+      netClose(fd)
+      return stopPeer(pid)
     }
   }
   const hist: i32[] = new Array<i32>(BUCKETS)
@@ -321,12 +334,14 @@ const client = (transport: string, size: i32, warm: i32, count: i32, childCpu: s
     const start: i64 = monotonicNanos()
     if (!wire.writeAll(msg, size) || !wire.readExact(reply, size)) {
       console.log(`round trip ${i} failed`)
-      return 1
+      netClose(fd)
+      return stopPeer(pid)
     }
     const took: i64 = monotonicNanos() - start
     if (!same(msg, reply, size)) {
       console.log(`round trip ${i}: the reply is not what was sent`)
-      return 1
+      netClose(fd)
+      return stopPeer(pid)
     }
     const b: i64 = took / BUCKET_NS
     const at: i32 = b < toI64(BUCKETS) ? toI32(b) : BUCKETS - 1
@@ -338,10 +353,15 @@ const client = (transport: string, size: i32, warm: i32, count: i32, childCpu: s
   const report: u8[] = new Array<u8>(REPORT + 1)
   if (!wire.readExact(report, REPORT)) {
     console.log("no report from the peer")
-    return 1
+    netClose(fd)
+    return stopPeer(pid)
   }
   netClose(fd)
   const status: i32[] = waitPid(pid, 0)
+  if (status[0] < 0) {
+    console.log(`waiting for the peer failed: ${status[0]}`)
+    return 1
+  }
   if (status[1] !== 0) {
     console.log(`the peer exited ${status[1]}`)
     return 1

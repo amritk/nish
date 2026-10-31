@@ -1106,8 +1106,10 @@ node bench/unix-ipc.mjs --cpus none     # unpinned
   CPU per round trip, `getrusage` over its own timed loop (the peer sends its
   figure back over the socket).
 - **The protocol.** Each round runs every transport and size twice, run a and
-  run b, the transports in an order that rotates by round. The report is the
-  median of every figure over all runs, its min-max and IQR. The noise band is
+  run b, the transports in a fixed cyclic order (tcp, stream, seqpacket) that
+  rotates by round, so each always follows the same one and the a/b band cannot
+  show what one leaves the next. The report is the median of every figure over
+  all runs, its min-max and IQR. The noise band is
   |median(a) − median(b)|, two runs of the very same thing, the largest of the
   three transports at that size. A transport differs from TCP in a figure only
   when the medians differ by more than the band and both IQRs; the script
@@ -1129,8 +1131,13 @@ client pinned to CPU 1 and peer to CPU 2 (median, IQR, µs):
 
 A Unix socket saves each side 4 to 7 µs of CPU a round trip (11 to 24 %), and
 the median round trip 5 to 9 µs (10 to 17 %); every one of those is outside
-the noise band and both IQRs. The p99 is 6 to 12 µs lower too, but inside
+the noise band and both IQRs. The p99 is 7.5 to 12 µs lower too, but inside
 TCP's IQR at both sizes, so it is not a difference this machine shows.
+The client's CPU per round trip includes making each message and checking the
+reply byte by byte, inside the timed loop: the same cost on every transport,
+which the peer, echoing only, does not pay. That is why the client's figure is
+above the peer's at 4 KB (by 7 to 8 µs), and why its percentages are the
+smaller; the peer's column is the transport alone.
 Stream against seqpacket is inside the noise in every figure. Most of a round
 trip here is the wakeup of the other CPU: the VM's 40 to 50 µs is far above
 bare metal's, so the absolute figures are this box's, and the savings are the

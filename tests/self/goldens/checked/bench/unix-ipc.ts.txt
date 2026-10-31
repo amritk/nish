@@ -17,6 +17,7 @@ import tcpAccept from "nish:net" -> builtin tcpAccept
 import tcpConnect from "nish:net" -> builtin tcpConnect
 import tcpListenFlags from "nish:net" -> builtin tcpListenFlags
 import unixSocketPair from "nish:net" -> builtin unixSocketPair
+import kill from "nish:process" -> builtin kill
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
 import spawnWithFds from "nish:process" -> builtin spawnWithFds
 import waitPid from "nish:process" -> builtin waitPid
@@ -178,11 +179,16 @@ function quantile(hist: readonly i32[], total: i32, q: f64): i64 -> @quantile
   local +0:9 want: i64 (const)
   local +1:7 seen: i64 (let)
   local +2:12 b: i32 (let)
+function stopPeer(pid: i32): i32 -> @stopPeer
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_kill
+  calls: nish_arena_mark nish_arena_release nish_kill nish_wait_pid
+  stackSites=0 stackLocals=0
 function client(transport: string, size: i32, warm: i32, count: i32, childCpu: string): i32 -> @client
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_tcp_listen_flags
   escaping: childCpu count size transport
-  calls: Wire.constructor Wire.readExact Wire.wait Wire.writeAll cpuMicros fill nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_net_close nish_net_local_port nish_panic nish_panic_index nish_panic_overflow nish_print nish_spawn_with_fds nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_tcp_accept nish_tcp_listen_flags nish_unix_socket_pair nish_wait_pid quantile same word
+  calls: Wire.constructor Wire.readExact Wire.wait Wire.writeAll cpuMicros fill nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_net_close nish_net_local_port nish_panic nish_panic_index nish_panic_overflow nish_print nish_spawn_with_fds nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_tcp_accept nish_tcp_listen_flags nish_unix_socket_pair nish_wait_pid quantile same stopPeer word
   stackSites=4 stackLocals=4
   local +0:9 self: string (const)
   local +1:7 fd: i32 (let)
@@ -197,6 +203,7 @@ function client(transport: string, size: i32, warm: i32, count: i32, childCpu: s
   callee +41:18 new Wire -> @Wire.constructor
   local +42:11 peerAddress: u8[] (const)
   callee +43:9 Wire.wait -> @Wire.wait
+  callee +50:14 stopPeer -> @stopPeer
   local +56:9 wire: Wire (const)
   callee +56:16 new Wire -> @Wire.constructor
   local +57:9 msg: u8[] (const)
@@ -206,33 +213,37 @@ function client(transport: string, size: i32, warm: i32, count: i32, childCpu: s
   callee +61:10 Wire.writeAll -> @Wire.writeAll
   callee +61:39 Wire.readExact -> @Wire.readExact
   callee +61:71 same -> @same
-  local +66:9 hist: i32[] (const)
-  local +67:9 user0: i64 (const)
-  callee +67:22 cpuMicros -> @cpuMicros
-  local +68:9 sys0: i64 (const)
-  callee +68:21 cpuMicros -> @cpuMicros
-  local +69:9 t0: i64 (const)
-  local +70:12 i: i32 (let)
-  callee +71:5 fill -> @fill
-  local +72:11 start: i64 (const)
-  callee +73:10 Wire.writeAll -> @Wire.writeAll
-  callee +73:39 Wire.readExact -> @Wire.readExact
-  local +77:11 took: i64 (const)
-  callee +78:10 same -> @same
-  local +82:11 b: i64 (const)
-  local +83:11 at: i32 (const)
-  local +86:9 ns: i64 (const)
-  local +87:9 user: i64 (const)
-  callee +87:21 cpuMicros -> @cpuMicros
-  local +88:9 sys: i64 (const)
-  callee +88:20 cpuMicros -> @cpuMicros
-  local +89:9 report: u8[] (const)
-  callee +90:8 Wire.readExact -> @Wire.readExact
-  local +95:9 status: i32[] (const)
-  callee +101:72 quantile -> @quantile
-  callee +102:15 quantile -> @quantile
-  callee +103:21 word -> @word
-  callee +103:49 word -> @word
+  callee +64:14 stopPeer -> @stopPeer
+  local +67:9 hist: i32[] (const)
+  local +68:9 user0: i64 (const)
+  callee +68:22 cpuMicros -> @cpuMicros
+  local +69:9 sys0: i64 (const)
+  callee +69:21 cpuMicros -> @cpuMicros
+  local +70:9 t0: i64 (const)
+  local +71:12 i: i32 (let)
+  callee +72:5 fill -> @fill
+  local +73:11 start: i64 (const)
+  callee +74:10 Wire.writeAll -> @Wire.writeAll
+  callee +74:39 Wire.readExact -> @Wire.readExact
+  callee +77:14 stopPeer -> @stopPeer
+  local +79:11 took: i64 (const)
+  callee +80:10 same -> @same
+  callee +83:14 stopPeer -> @stopPeer
+  local +85:11 b: i64 (const)
+  local +86:11 at: i32 (const)
+  local +89:9 ns: i64 (const)
+  local +90:9 user: i64 (const)
+  callee +90:21 cpuMicros -> @cpuMicros
+  local +91:9 sys: i64 (const)
+  callee +91:20 cpuMicros -> @cpuMicros
+  local +92:9 report: u8[] (const)
+  callee +93:8 Wire.readExact -> @Wire.readExact
+  callee +96:12 stopPeer -> @stopPeer
+  local +99:9 status: i32[] (const)
+  callee +109:72 quantile -> @quantile
+  callee +110:15 quantile -> @quantile
+  callee +111:21 word -> @word
+  callee +111:49 word -> @word
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print

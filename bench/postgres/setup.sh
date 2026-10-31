@@ -11,7 +11,9 @@
 #   challenge/  the challenge at COMMIT, cloned for box/pg-conf.sh and
 #               seed/make-seed.sh, which run from it unchanged
 #   data/       the cluster: box/pg-conf.sh --print's settings for this
-#               machine's cores and memory, scram-sha-256 on 127.0.0.1 only
+#               machine's cores and memory, scram-sha-256 on 127.0.0.1 and
+#               on the local Unix socket (run.mjs --unix); over the socket the
+#               postgres account alone signs in by trust, for setup itself
 #   seeded      written last, once make-seed.sh's own check printed OK
 #
 # PG_BENCH_SEED=full also loads the full seed (database conduit_seed, about

@@ -8,12 +8,18 @@
 //     --rounds N    timed rounds, rounded up to a multiple of 3 (default 12),
 //                   after one uncounted warm-up round
 //     --cpus a,b    pin the client to CPU a and the peer to CPU b with taskset
-//                   (default 1,2 with three or more CPUs and taskset; else none)
+//                   (default 1,2 when taskset is there and this process may
+//                   run on both, by /proc/self/status's Cpus_allowed_list;
+//                   else none)
 //
 // unix-ipc.ts is the program, client and peer in one; it is built once with
 // `--link` (the speed profile). Each round runs every transport and size twice,
-// as run a and run b, in an order that rotates by round, so over a multiple of
-// 3 rounds each transport goes first equally often. A run is `WARM` untimed
+// as run a and run b, in a fixed cyclic order (tcp, stream, seqpacket) that
+// rotates by round, so over a multiple of 3 rounds each transport goes first
+// equally often. Each transport still always follows the same one (stream after
+// tcp, seqpacket after stream, tcp after seqpacket), and a and b share that
+// predecessor, so the a/b band cannot show an effect one transport has on the
+// next. A run is `WARM` untimed
 // round trips, then `COUNT` timed ones; it prints its median and 99th
 // percentile round trip and both sides' getrusage over the timed loop.
 //
@@ -24,6 +30,13 @@
 // transport differs from TCP in a figure only when the medians differ by more
 // than the band and by more than both IQRs; anything else is noise, and
 // printed as such.
+//
+// The client's CPU per round trip includes making each message and checking
+// the reply byte by byte (fill and compare, inside the timed loop): a cost that
+// is the same on every transport and that the peer, which only echoes, does
+// not pay. It is why the client's figure is above the peer's at 4 KB, and it
+// dilutes the client's percentage differences; the peer's figure is the
+// transport alone.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -42,7 +55,29 @@ const fail = (msg) => {
 
 const hasTaskset = spawnSync("taskset", ["-p", String(process.pid)]).status === 0
 let rounds = 12
-let cpus = hasTaskset && os.cpus().length >= 3 ? [1, 2] : null
+/** The CPUs this process may run on, from Cpus_allowed_list ("0-3,6"); null when unreadable. */
+const allowedCpus = () => {
+  let status
+  try {
+    status = fs.readFileSync("/proc/self/status", "utf8")
+  } catch {
+    return null
+  }
+  const list = /^Cpus_allowed_list:\s*(\S+)/m.exec(status)?.[1]
+  if (list === undefined) {
+    return null
+  }
+  const allowed = new Set()
+  for (const part of list.split(",")) {
+    const [lo, hi = lo] = part.split("-").map(Number)
+    for (let c = lo; c <= hi; c++) {
+      allowed.add(c)
+    }
+  }
+  return allowed
+}
+const allowed = allowedCpus()
+let cpus = hasTaskset && allowed?.has(1) && allowed.has(2) ? [1, 2] : null
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--rounds") {
