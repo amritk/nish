@@ -24,6 +24,13 @@
 //
 // Sound is off unless Settings, F9 or NISH_BREAK_SOUND=1 turns it on; the
 // game asks for its sounds each step and `break-sound.ts` plays them.
+//
+// The settings are kept between runs in `$XDG_CONFIG_HOME/nish/break`, or
+// `$HOME/.config/nish/break` (`breakSettingsPath`): read before the terminal
+// opens, written when Settings is left and when the game ends. A file that is
+// missing, unreadable or wrong in any line gives the defaults for what it
+// does not say, and one that cannot be written is let go: neither stops the
+// game. NISH_BREAK_SOUND=1 is an override, not a choice, so it is not saved.
 
 import {
   ACTION_PRESS,
@@ -77,14 +84,19 @@ import {
   MENU_APPLY,
   MENU_QUIT,
   MENU_STAY,
+  SCREEN_SETTINGS,
   cycleSetting,
   drawBreakMenu,
+  formatBreakSettings,
   fpsChoice,
   newBreakMenuWith,
+  parseBreakSettings,
   resolutionChoice,
   stepBreakMenu,
 } from "./break-menu"
+import { CLI } from "./branding"
 import { helpText } from "./cli-style"
+import { dirname } from "./paths"
 import { Style } from "../std/cli"
 
 /** The least screen, in cells, the scenes are drawn on; a smaller one gets a prompt. */
@@ -120,6 +132,10 @@ class WallRun {
   game: BreakGame
   /** The settings the menu edits; every menu after the first edits the same ones. */
   settings: BreakSettings
+  /** Where the settings are kept between runs, "" for nowhere. */
+  settingsPath: string
+  /** The sound setting to keep: the one read, until the player changes sound, so NISH_BREAK_SOUND=1 is never saved. */
+  keptSound: boolean
   seed: i64
   toast: string
   /** The view the director's own text is drawn through. */
@@ -149,8 +165,10 @@ class WallRun {
   /** Whether the screen is too small to play on, which holds the scene still. */
   small: boolean
 
-  constructor(seed: i64) {
-    this.settings = new BreakSettings()
+  constructor(seed: i64, settingsPath: string) {
+    this.settingsPath = settingsPath
+    this.settings = loadBreakSettings(settingsPath)
+    this.keptSound = this.settings.sound
     this.seed = seed
     // The help in its colours, as `--help` paints it on a terminal that has them, without an agent's section.
     this.intro = newBreakIntro(helpText(new Style(true, true), ""), seed)
@@ -173,6 +191,57 @@ class WallRun {
     this.slowSince = toI64(0)
     this.settleUntil = toI64(0)
   }
+}
+
+/**
+ * Where `nish break` keeps its settings: `${xdg}/nish/break` when `xdg` is
+ * absolute, else `${home}/.config/nish/break` when `home` is, else "" for
+ * nowhere — `runCacheRoot`'s rules, given the two variables' values.
+ */
+export const breakSettingsPath = (xdg: string, home: string): string => {
+  if (xdg.startsWith("/")) {
+    return `${xdg}/${CLI}/break`
+  }
+  return home.startsWith("/") ? `${home}/.config/${CLI}/break` : ""
+}
+
+/** The settings kept at `path`; the defaults when `path` is "" or cannot be read as a file. */
+export const loadBreakSettings = (path: string): BreakSettings => {
+  const text: string | null = path === "" ? null : readFileSyncOrNull(path)
+  if (text === null) {
+    return new BreakSettings()
+  }
+  return parseBreakSettings(text)
+}
+
+/**
+ * Keep `s` at `path`, making its directory and that directory's parent when
+ * they are missing. It is written beside `path` and renamed over it, so a
+ * failed write leaves the old file. Answers whether it was kept; a failure
+ * anywhere answers false and says nothing.
+ */
+export const saveBreakSettings = (path: string, s: BreakSettings): boolean => {
+  if (path === "") {
+    return false
+  }
+  const dir: string = dirname(path)
+  if (!mkdirSync(dirname(dir)) || !mkdirSync(dir)) {
+    return false
+  }
+  const temp: string = `${path}.tmp`
+  if (writeFileSyncMode(temp, formatBreakSettings(s), 0o644) < 0 || renameSync(temp, path) < 0) {
+    unlinkSync(temp)
+    return false
+  }
+  return true
+}
+
+/** Keep the run's settings, with the sound the player chose rather than one an override set. */
+const wallSaveSettings = (run: WallRun): void => {
+  const sound: boolean = run.settings.sound
+  run.settings.sound = run.keptSound
+  saveBreakSettings(run.settingsPath, run.settings)
+  run.settings.sound = sound
 }
 
 /** Show `text` as a toast from now on. */
@@ -276,6 +345,7 @@ const wallApplyKey = (run: WallRun, key: i32): void => {
     wallResetAuto(run)
     wallToast(run, wallResolutionToast(s.resolution))
   } else if (key === KEY_F9) {
+    run.keptSound = s.sound
     wallToast(run, wallSoundToast(run))
   } else if (key === KEY_F6) {
     run.openGraphics = s.graphics
@@ -369,7 +439,14 @@ const wallUpdate = (run: WallRun, input: TermInput): boolean => {
     return true
   }
   if (run.scene === WALL_SCENE_MENU) {
+    const inSettings: boolean = run.menu.screen === SCREEN_SETTINGS
     const answer: i32 = stepBreakMenu(run.menu, input)
+    if (run.settings.sound !== sound) {
+      run.keptSound = run.settings.sound
+    }
+    if (inSettings && run.menu.screen !== SCREEN_SETTINGS) {
+      wallSaveSettings(run)
+    }
     if (answer === MENU_QUIT) {
       return false
     }
@@ -590,11 +667,13 @@ const wallOptions = (s: BreakSettings): TerminalOptions => {
 
 /**
  * Play until the menu quits or Ctrl-C, opening the terminal again whenever a
- * setting needs it. Answers the exit code: 1, with a sentence on stderr, when
- * the terminal cannot be opened (a pipe, say) before anything was drawn.
+ * setting needs it, and keep the settings however it ends. Answers the exit
+ * code: 1, with a sentence on stderr, when the terminal cannot be opened (a
+ * pipe, say) before anything was drawn.
  */
 export const playBreak = (): i32 => {
-  const run: WallRun = new WallRun(monotonicNanos())
+  const path: string = breakSettingsPath(wallGetenv("XDG_CONFIG_HOME"), wallGetenv("HOME"))
+  const run: WallRun = new WallRun(monotonicNanos(), path)
   if (wallGetenv("NISH_BREAK_SOUND") === "1") {
     run.settings.sound = true
     wallToast(run, wallSoundToast(run))
@@ -614,6 +693,7 @@ export const playBreak = (): i32 => {
       run.reopened = run.reopen
     }
   }
+  wallSaveSettings(run)
   closeSound(run.sound)
   return code
 }

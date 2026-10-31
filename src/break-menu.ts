@@ -155,6 +155,74 @@ export class BreakSettings {
   }
 }
 
+/** `s` as the director keeps it between runs: one `name=value` a line, in field order. */
+export const formatBreakSettings = (s: BreakSettings): string =>
+  `fps=${s.fps}\nresolution=${s.resolution}\ngraphics=${s.graphics}\neffects=${s.effects}\nsmoothing=${s.smoothing}\nstats=${s.stats}\nsound=${s.sound}\n`
+
+/**
+ * `v` as one of the whole numbers `lo` to `hi` written plainly, or `lo - 1`.
+ * It is compared against each of them rather than parsed, so no value can
+ * overflow.
+ */
+const settingInt = (v: string, lo: i32, hi: i32): i32 => {
+  for (let i: i32 = lo; i <= hi; i++) {
+    if (v === `${i}`) {
+      return i
+    }
+  }
+  return lo - 1
+}
+
+/** Apply one line of a settings file to `s`, when its name is a field and its value one that field takes. */
+const applySettingLine = (s: BreakSettings, line: string): void => {
+  const eq: i32 = toI32(line.indexOf("="))
+  if (eq < 0) {
+    return
+  }
+  const name: string = line.slice(0, eq)
+  const v: string = line.slice(eq + 1)
+  const yes: boolean = v === "true"
+  const flag: boolean = yes || v === "false"
+  if (name === "fps") {
+    const n: i32 = settingInt(v, 0, FPS_CHOICE_COUNT - 1)
+    s.fps = n >= 0 ? n : s.fps
+  } else if (name === "resolution") {
+    const n: i32 = settingInt(v, 0, RESOLUTION_CHOICE_COUNT - 1)
+    s.resolution = n >= 0 ? n : s.resolution
+  } else if (name === "graphics") {
+    const n: i32 = settingInt(v, -1, 3)
+    s.graphics = n >= -1 ? n : s.graphics
+  } else if (name === "effects") {
+    const n: i32 = settingInt(v, 0, 1)
+    s.effects = n >= 0 ? n : s.effects
+  } else if (name === "smoothing") {
+    s.smoothing = flag ? yes : s.smoothing
+  } else if (name === "stats") {
+    s.stats = flag ? yes : s.stats
+  } else if (name === "sound") {
+    s.sound = flag ? yes : s.sound
+  }
+}
+
+/**
+ * The settings a file of `formatBreakSettings` holds. Any line it does not
+ * take (no `=`, an unknown name, a value out of range, a `\r` left on it) is
+ * skipped and its field keeps the default, so no text is an error; a name
+ * given twice takes the last value accepted.
+ */
+export const parseBreakSettings = (text: string): BreakSettings => {
+  const s: BreakSettings = new BreakSettings()
+  let start: i32 = 0
+  for (let i: i32 = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) {
+      applySettingLine(s, text.slice(start, i))
+      start = i + 1
+    }
+  }
+  applySettingLine(s, text.slice(start))
+  return s
+}
+
 // ---- Screens and layout -----------------------------------------------------
 
 /** The title screen and its five items. */
