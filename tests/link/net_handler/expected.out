@@ -39,3 +39,12 @@ PASS  a warm connection answers two thousand more requests, two pipelined at a t
 PASS  and the arena stays flat
 PASS  and the pool makes no request past its warm size
 PASS  the warm client is gone
+PASS  before the drain a keep-alive client is answered
+PASS  and a request the program holds is taken
+PASS  a drain closes the idle connection at once
+PASS  and keeps the busy one
+PASS  a draining handler accepts no new connection
+PASS  the held request is still answered
+PASS  and its client reads the answer
+PASS  then that connection closes too
+PASS  and none are left

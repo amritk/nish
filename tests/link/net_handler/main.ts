@@ -12,6 +12,8 @@
 //      new connection is answered as if nothing happened.
 //   5. The flat arena: a warm connection serves two thousand requests with
 //      `Arena.used()` unchanged and no request made past the pool.
+//   6. The drain: an idle connection closes at once, no new one is accepted,
+//      and a held request is still answered before its connection closes.
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { HTTP1_CHUNKED } from "nish/net/http1"
@@ -492,6 +494,30 @@ const flat = (app: App): void => {
   check(app, "the warm client is gone", awaitConnections(app, toI32(0)))
 }
 
+const draining = (app: App): void => {
+  const idle = connect(app)
+  send(app, idle, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  check(app, "before the drain a keep-alive client is answered", response(app, idle, false) && bodyIs(idle, "hello"))
+  const busy = connect(app)
+  send(app, busy, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
+  check(app, "and a request the program holds is taken", awaitHeld(app, toI32(1)))
+  app.h.drain()
+  check(app, "a drain closes the idle connection at once", awaitClose(app, idle))
+  check(app, "and keeps the busy one", app.h.connections() === 1)
+  const late = connect(app)
+  app.turn()
+  check(app, "a draining handler accepts no new connection", app.h.connections() === 1)
+  const r: HttpRequest = app.held[0]
+  app.heldCount = 0
+  check(app, "the held request is still answered", app.h.send(r, 200, app.text, app.hello, ZERO, toI32(app.hello.length)) === HANDLER_SENT)
+  check(app, "and its client reads the answer", response(app, busy, false) && bodyIs(busy, "hello"))
+  check(app, "then that connection closes too", awaitClose(app, busy))
+  check(app, "and none are left", app.h.connections() === 0)
+  netClose(idle.fd)
+  netClose(busy.fd)
+  netClose(late.fd)
+}
+
 export const main = (): i32 => {
   const app = new App(toI32(60000))
   check(app, "the handler answers its codes as named", HANDLER_SENT === 0 && HANDLER_DROPPED < 0 && HANDLER_ABSENT < 0)
@@ -503,5 +529,6 @@ export const main = (): i32 => {
   // a short one here.
   lateAnswer(new App(toI32(300)))
   flat(app)
+  draining(new App(toI32(60000)))
   return app.failures === 0 ? 0 : 1
 }

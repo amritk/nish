@@ -103,7 +103,7 @@ import {
   Router,
   routerDecode,
 } from "nish/net/router"
-import { pollAdd, pollCreate, pollModify, pollWait } from "nish:net"
+import { pollAdd, pollCreate, pollModify, pollRemove, pollWait } from "nish:net"
 
 /** An answer sent, or queued to be sent. */
 export const HANDLER_SENT: i32 = 0
@@ -377,6 +377,8 @@ export class HttpHandler {
   outputSize: i32 = 0
   /** The request `json` was last asked for, so `sendJson` can tell a writer reset under it. */
   served: i32 = 0
+  /** Set by `drain`: accept nothing more and close each connection once it is idle. */
+  draining: boolean = false
 
   /**
    * A handler over `listener`, a listening socket the program made
@@ -479,8 +481,31 @@ export class HttpHandler {
     return this.queueCount
   }
 
+  /**
+   * Begins a graceful stop: the handler accepts no more connections, closes
+   * each idle one now, and closes each other one once the request on it is
+   * answered and sent, so `connections()` falls to 0 as the program answers
+   * what it holds. A request already read on a draining connection is still
+   * handed over and answered. The listener is the program's to close.
+   */
+  drain(): void {
+    if (this.draining) {
+      return
+    }
+    this.draining = true
+    pollRemove(this.loop, this.listener)
+    for (let s: i32 = 0; s < toI32(this.open.length) && s < toI32(this.current.length); s++) {
+      if (this.open[s] && this.server.holds(s) && this.current[s] === -1 && !this.server.connection(s).wantsWrite()) {
+        this.closeSlot(s)
+      }
+    }
+  }
+
   /** Takes every waiting connection. */
   acceptAll(): void {
+    if (this.draining) {
+      return
+    }
     let slot: i32 = this.server.accept()
     while (slot >= 0 || slot === H1_POOL_FULL) {
       if (slot >= 0) {
@@ -518,6 +543,10 @@ export class HttpHandler {
     }
     const wants: i32 = this.server.flush(slot)
     if ((wants & H1_DONE) !== 0) {
+      this.closeSlot(slot)
+      return
+    }
+    if (this.draining && this.current[slot] === -1 && !conn.wantsWrite()) {
       this.closeSlot(slot)
       return
     }
