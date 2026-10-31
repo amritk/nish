@@ -54,12 +54,12 @@ struct DependencyReach (class) size=24 align=8 exported
   field masks: i32[] index=1 offset=8
   field packageOf: i32[] index=2 offset=16
   constructor -> @DependencyReach.constructor
-struct LiteralReach (class) size=40 align=8 exported
-  field cap: i32 index=0 offset=0
-  field value: string index=1 offset=8
-  field builtin: string index=2 offset=16
-  field module: i32 index=3 offset=24
-  field site: Node index=4 offset=32
+struct LiteralReach (class) size=32 align=8 exported
+  field value: string index=0 offset=0
+  field builtin: string index=1 offset=8
+  field site: Node index=2 offset=16
+  field cap: i32 index=3 offset=24
+  field module: i32 index=4 offset=28
   constructor -> @LiteralReach.constructor
 function isLibrary(compilation: Compilation, unit: ModuleUnit): boolean -> @isLibrary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -247,7 +247,7 @@ function dependencyWitness(index: FunctionIndex, facts: FactsTable, reach: Depen
 function LiteralReach.constructor(this: LiteralReach, cap: i32, value: string, builtin: string, module: i32, site: Node): void -> @LiteralReach.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: builtin cap module site value
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=32 writesThrough=true captured=false
   pointer site: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function reachArguments(name: string, c: i32): i32 -> @reachArguments

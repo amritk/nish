@@ -84,19 +84,21 @@ import {
   optInCapabilities,
 } from "./capabilities"
 import {
+  DependencyReach,
   dependencyMasks,
   dependencyPackages,
   dependencyWitness,
   findProgram,
   functionIndex,
   gatedCapabilities,
+  LiteralReach,
   literalReaches,
   numericHost,
   programInterpreter,
   rootReach,
   witnessChain,
 } from "./capability-report"
-import { capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
+import { CapabilityLock, capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -1506,7 +1508,7 @@ export class Compilation {
           scoped = scoped | (1 << index)
           const text =
             index === capabilityIndex("fs.read") || index === capabilityIndex("fs.write")
-              ? `${name}=${normalizePath(arg)}`
+              ? normalizedGrant(name, arg)
               : entry
           let known = false
           let j = 0
@@ -1808,47 +1810,57 @@ export class Compilation {
     if (reach.names.length === 0) {
       return
     }
+    for (const literal of literalReaches(this, reach)) {
+      this.refuseNarrowLiteral(reach, literal)
+    }
+  }
+
+  /**
+   * `refuseNarrowGrants` for one literal, a method of its own so that what
+   * the check allocates (the grant's arguments, the normalised and resolved
+   * paths) is this call's, released when it returns, and not left behind by
+   * every pass of the loop over the literals (NL9011).
+   */
+  refuseNarrowLiteral(reach: DependencyReach, literal: LiteralReach): void {
     const spawn = capabilityIndex("process.spawn")
     const net = capabilityIndex("net")
-    for (const literal of literalReaches(this, reach)) {
-      const p = literal.module < reach.packageOf.length ? reach.packageOf[literal.module] : -1
-      const name = p >= 0 && p < reach.names.length ? reach.names[p] : ""
-      const g = this.grantNames.indexOf(name)
-      const values = this.grantArguments(g, literal.cap, false)
-      const texts = this.grantArguments(g, literal.cap, true)
-      let covered = values.length === 0
-      if (!covered && literal.cap === net) {
-        covered = values.indexOf(literal.value) >= 0
-      } else if (!covered && literal.cap === spawn) {
-        const relative = literal.value.indexOf("/") > 0
-        let found: string | null = null
-        if (!relative) {
-          found = findProgram(literal.value, this.rootPackageDir)
-        }
+    const p = literal.module < reach.packageOf.length ? reach.packageOf[literal.module] : -1
+    const name = p >= 0 && p < reach.names.length ? reach.names[p] : ""
+    const g = this.grantNames.indexOf(name)
+    const values = this.grantArguments(g, literal.cap, false)
+    const texts = this.grantArguments(g, literal.cap, true)
+    let covered = values.length === 0
+    if (!covered && literal.cap === net) {
+      covered = values.indexOf(literal.value) >= 0
+    } else if (!covered && literal.cap === spawn) {
+      const relative = literal.value.indexOf("/") > 0
+      let found: string | null = null
+      if (!relative) {
+        found = findProgram(literal.value, this.rootPackageDir)
+      }
+      covered =
+        relative ||
+        texts.indexOf(`process.spawn=${literal.value}`) >= 0 ||
+        (found !== null && values.indexOf(found) >= 0)
+    } else if (!covered) {
+      covered = !literal.value.startsWith("/") || beneathAny(normalizePath(literal.value), values)
+      if (!covered) {
+        const real = realpathSync(literal.value)
+        const parent = realpathSync(dirname(normalizePath(literal.value)))
         covered =
-          relative ||
-          texts.indexOf(`process.spawn=${literal.value}`) >= 0 ||
-          (found !== null && values.indexOf(found) >= 0)
-      } else if (!covered) {
-        covered = !literal.value.startsWith("/") || beneathAny(normalizePath(literal.value), values)
-        if (!covered) {
-          const real = realpathSync(literal.value)
-          const parent = realpathSync(dirname(normalizePath(literal.value)))
-          covered =
-            (real !== null && beneathAny(real, values)) || (parent !== null && beneathAny(parent, values))
-        }
+          (real !== null && beneathAny(real, values)) || (parent !== null && beneathAny(parent, values))
       }
-      if (!covered && literal.module < this.modules.length) {
-        this.reportNarrowGrant(
-          this.modules[literal.module].source,
-          literal.site,
-          name,
-          literal.builtin,
-          literal.value,
-          literal.cap,
-          texts
-        )
-      }
+    }
+    if (!covered && literal.module < this.modules.length) {
+      this.reportNarrowGrant(
+        this.modules[literal.module].source,
+        literal.site,
+        name,
+        literal.builtin,
+        literal.value,
+        literal.cap,
+        texts
+      )
     }
   }
 
@@ -1958,7 +1970,7 @@ export class Compilation {
           row >= 0 &&
           row < lock.scoped.length &&
           (reach.masks[p] & lock.scoped[row] & (1 << c)) !== 0
-            ? this.widenedArguments(lock.recorded(row, c), g, c)
+            ? this.widenedArguments(lock, row, g, c)
             : ""
         if ((grown & (1 << c)) !== 0 || widened.length > 0) {
           const chain = dependencyWitness(index, facts, reach, p, c)
@@ -1970,7 +1982,7 @@ export class Compilation {
               hops.push(`${hop.at} calls ${hop.calls}`)
             }
             if (widened.length > 0) {
-              this.reportArgumentGrowth(at, site, name, c, widened, lock.recorded(row, c))
+              this.reportArgumentGrowth(at, site, name, c, widened, lock, row)
             } else {
               this.reportLockGrowth(at, site, name, chain[0].caller, c, hops)
             }
@@ -1983,18 +1995,18 @@ export class Compilation {
   }
 
   /**
-   * What grant `g` gives capability `c` past the arguments `recorded`, which
-   * the lockfile records for it, as the message names it, or "" when it gives
+   * What grant `g` gives capability `c` past the arguments row `row` of
+   * `lock` records for it, as the message names it, or "" when it gives
    * nothing more: `whole` when it now grants `c` whole, else the `cap=arg`
    * entries the lockfile lacks.
    */
-  widenedArguments(recorded: string[], g: i32, c: i32): string {
+  widenedArguments(lock: CapabilityLock, row: i32, g: i32, c: i32): string {
     if (g < 0 || g >= this.grantScoped.length || (this.grantScoped[g] & (1 << c)) === 0) {
       return "whole"
     }
     const extra: string[] = []
     for (const text of this.grantArguments(g, c, true)) {
-      if (recorded.indexOf(text) < 0) {
+      if (!lock.holds(row, text)) {
         extra.push(`\`${text}\``)
       }
     }
@@ -2008,9 +2020,11 @@ export class Compilation {
     name: string,
     c: i32,
     widened: string,
-    recorded: string[]
+    lock: CapabilityLock,
+    row: i32
   ): void {
     const cap = capabilityName(c)
+    const recorded = lock.recorded(row, c)
     const now = widened === "whole" ? `\`${cap}\` whole` : widened
     this.sink.report(
       source,
@@ -3008,13 +3022,26 @@ export class Compilation {
       while (p < reach.names.length && p < reach.masks.length) {
         if ((reach.masks[p] & bit) !== 0) {
           reached = true
+          // `grantArguments` inlined: the values go straight into `values`,
+          // so the pass allocates nothing that dies with it.
           const g = this.grantNames.indexOf(reach.names[p])
-          const args = this.grantArguments(g, c, false)
-          if (args.length === 0) {
-            scoped = false
+          let named = false
+          if (g >= 0 && g < this.grantScoped.length && (this.grantScoped[g] & bit) !== 0) {
+            let j = 0
+            while (
+              j < this.grantArgOwners.length &&
+              j < this.grantArgCaps.length &&
+              j < this.grantArgValues.length
+            ) {
+              if (this.grantArgOwners[j] === g && this.grantArgCaps[j] === c) {
+                named = true
+                addOnce(values, this.grantArgValues[j])
+              }
+              j = j + 1
+            }
           }
-          for (const value of args) {
-            addOnce(values, value)
+          if (!named) {
+            scoped = false
           }
         }
         p = p + 1
@@ -3152,6 +3179,13 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
   const declared = program.ownEnum(name)
   return declared === null ? null : declared.decl.children[0]
 }
+
+/**
+ * A directory grant's `cap=arg` entry with its argument normalised: a call of
+ * its own so that the normalised path, garbage once spliced, is not left
+ * behind by every pass of `grantMask`'s loop (NL9011).
+ */
+const normalizedGrant = (name: string, arg: string): string => `${name}=${normalizePath(arg)}`
 
 /** Push `value` onto `list` unless it is there already. */
 const addOnce = (list: string[], value: string): void => {

@@ -384,10 +384,7 @@ export class CapabilityLock {
         this.fail(`\`${entry}\` in the row of \`${name}\` is no capability`, entryAt, this.at)
         return 0
       }
-      if (
-        (equals < 0 && (mask & (1 << c)) !== 0) ||
-        (equals >= 0 && this.recorded(row, c).indexOf(entry) >= 0)
-      ) {
+      if ((equals < 0 && (mask & (1 << c)) !== 0) || (equals >= 0 && this.holds(row, entry))) {
         this.fail(`\`${entry}\` is written twice in the row of \`${name}\``, entryAt, this.at)
         return 0
       }
@@ -405,6 +402,18 @@ export class CapabilityLock {
     }
     this.scoped.push(scoped & ~mask)
     return mask
+  }
+
+  /** Whether row `row` already records the `cap=arg` entry `entry`, without allocating. */
+  holds(row: i32, entry: string): boolean {
+    let j = 0
+    while (j < this.argRows.length && j < this.argTexts.length) {
+      if (this.argRows[j] === row && this.argTexts[j] === entry) {
+        return true
+      }
+      j = j + 1
+    }
+    return false
   }
 
   /** The arguments row `row` records for capability `c`, as `cap=arg` entries. */
@@ -426,7 +435,7 @@ const argumentsOf = (rows: i32[], texts: string[], row: i32, cap: string): strin
     if (rows[j] === row && texts[j].startsWith(prefix)) {
       let at = out.length
       out.push(texts[j])
-      while (at > 0 && compareStrings(out[at - 1], out[at]) > 0) {
+      while (at > 0 && at < out.length && compareStrings(out[at - 1], out[at]) > 0) {
         const held = out[at]
         out[at] = out[at - 1]
         out[at - 1] = held
@@ -493,8 +502,33 @@ export const capabilityLockText = (
       if ((narrow & (1 << capabilityIndex(cap))) === 0) {
         entries.push(cap)
       } else {
-        for (const text of argumentsOf(argRows, argTexts, p, cap)) {
-          entries.push(text)
+        // `argumentsOf` inlined: the entries are pushed and sorted in place,
+        // so the loop allocates nothing of its own.
+        const from = entries.length
+        let j = 0
+        while (j < argRows.length && j < argTexts.length) {
+          const text = argTexts[j]
+          if (
+            argRows[j] === p &&
+            text.startsWith(cap) &&
+            text.length > cap.length &&
+            text.charCodeAt(cap.length) === 61
+          ) {
+            let at = entries.length
+            entries.push(text)
+            while (
+              at > 0 &&
+              at > from &&
+              at < entries.length &&
+              compareStrings(entries[at - 1], entries[at]) > 0
+            ) {
+              const held = entries[at]
+              entries[at] = entries[at - 1]
+              entries[at - 1] = held
+              at = at - 1
+            }
+          }
+          j = j + 1
         }
       }
     }

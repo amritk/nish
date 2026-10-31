@@ -44,17 +44,20 @@ import capabilityName from "./capabilities" -> function @capabilityName
 import capabilityNames from "./capabilities" -> function @capabilityNames
 import everyCapabilityName from "./capabilities" -> function @everyCapabilityName
 import optInCapabilities from "./capabilities" -> function @optInCapabilities
+import DependencyReach from "./capability-report" -> struct DependencyReach
 import dependencyMasks from "./capability-report" -> function @dependencyMasks
 import dependencyPackages from "./capability-report" -> function @dependencyPackages
 import dependencyWitness from "./capability-report" -> function @dependencyWitness
 import findProgram from "./capability-report" -> function @findProgram
 import functionIndex from "./capability-report" -> function @functionIndex
 import gatedCapabilities from "./capability-report" -> function @gatedCapabilities
+import LiteralReach from "./capability-report" -> struct LiteralReach
 import literalReaches from "./capability-report" -> function @literalReaches
 import numericHost from "./capability-report" -> function @numericHost
 import programInterpreter from "./capability-report" -> function @programInterpreter
 import rootReach from "./capability-report" -> function @rootReach
 import witnessChain from "./capability-report" -> function @witnessChain
+import CapabilityLock from "./capability-lock" -> struct CapabilityLock
 import capabilityLockName from "./capability-lock" -> function @capabilityLockName
 import capabilityLockText from "./capability-lock" -> function @capabilityLockText
 import readCapabilityLock from "./capability-lock" -> function @readCapabilityLock
@@ -232,6 +235,7 @@ struct Compilation (class) size=200 align=8 exported
   method refuseDependencyCapabilities -> @Compilation.refuseDependencyCapabilities
   method reportDependencyRefusal -> @Compilation.reportDependencyRefusal
   method refuseNarrowGrants -> @Compilation.refuseNarrowGrants
+  method refuseNarrowLiteral -> @Compilation.refuseNarrowLiteral
   method anyGrantScoped -> @Compilation.anyGrantScoped
   method reportNarrowGrant -> @Compilation.reportNarrowGrant
   method checkCapabilityLock -> @Compilation.checkCapabilityLock
@@ -722,7 +726,7 @@ function Compilation.grantMask(this: Compilation, source: SourceFile, list: Mani
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
   escaping: owner
-  calls: Compilation.grantArgument DiagnosticSink.report argumentCapabilities capabilityIndex dirname everyCapabilityName gatedCapabilities nish_array_grow nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new normalizePath
+  calls: Compilation.grantArgument DiagnosticSink.report argumentCapabilities capabilityIndex dirname everyCapabilityName gatedCapabilities nish_array_grow nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new normalizedGrant
   pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.grantArgument#0
   pointer source: size=24 writesThrough=true captured=true passedTo=DiagnosticSink.report#1 DiagnosticSink.report#1 DiagnosticSink.report#1 Compilation.grantArgument#1
   pointer list: size=24 writesThrough=false captured=false
@@ -754,7 +758,7 @@ function Compilation.grantMask(this: Compilation, source: SourceFile, list: Mani
   local -11:17 text: string (const)
   callee -10:23 capabilityIndex -> @capabilityIndex
   callee -10:63 capabilityIndex -> @capabilityIndex
-  callee -9:28 normalizePath -> @normalizePath
+  callee -9:17 normalizedGrant -> @normalizedGrant
   local -7:15 known: boolean (let)
   local -6:15 j: i32 (let)
 function Compilation.grantArgument(this: Compilation, source: SourceFile, at: i32, end: i32, entry: string, c: i32, arg: string, base: string): string | null -> @Compilation.grantArgument [exported method]
@@ -899,39 +903,48 @@ function Compilation.reportDependencyRefusal(this: Compilation, source: SourceFi
   callee +5:197 jsonQuote -> @jsonQuote
 function Compilation.refuseNarrowGrants(this: Compilation): void -> @Compilation.refuseNarrowGrants [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via findProgram
-  calls: Compilation.anyGrantScoped Compilation.grantArguments Compilation.reportNarrowGrant beneathAny capabilityIndex dependencyPackages dirname findProgram literalReaches nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from normalizePath
-  pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.anyGrantScoped#0 dependencyPackages#0 literalReaches#0 Compilation.grantArguments#0 Compilation.grantArguments#0 Compilation.reportNarrowGrant#0
+  sharedWrite: via Compilation.refuseNarrowLiteral
+  calls: Compilation.anyGrantScoped Compilation.refuseNarrowLiteral dependencyPackages literalReaches
+  pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.anyGrantScoped#0 dependencyPackages#0 literalReaches#0 Compilation.refuseNarrowLiteral#0
   stackSites=0 stackLocals=0
   callee +0:10 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
   local +3:11 reach: DependencyReach (const)
   callee +3:19 dependencyPackages -> @dependencyPackages
-  local +7:11 spawn: i32 (const)
-  callee +7:19 capabilityIndex -> @capabilityIndex
-  local +8:11 net: i32 (const)
-  callee +8:17 capabilityIndex -> @capabilityIndex
-  local +9:16 literal: LiteralReach (const)
-  callee +9:27 literalReaches -> @literalReaches
-  local +10:13 p: i32 (const)
-  local +11:13 name: string (const)
-  local +12:13 g: i32 (const)
-  local +13:13 values: string[] (const)
-  callee +13:22 Compilation.grantArguments -> @Compilation.grantArguments
-  local +14:13 texts: string[] (const)
-  callee +14:21 Compilation.grantArguments -> @Compilation.grantArguments
-  local +15:11 covered: boolean (let)
-  local +19:15 relative: boolean (const)
-  local +20:13 found: string | null (let)
-  callee +22:19 findProgram -> @findProgram
-  callee +29:53 beneathAny -> @beneathAny
-  callee +29:64 normalizePath -> @normalizePath
-  local +31:17 real: string | null (const)
-  local +32:17 parent: string | null (const)
-  callee +32:39 dirname -> @dirname
-  callee +32:47 normalizePath -> @normalizePath
-  callee +34:31 beneathAny -> @beneathAny
-  callee +34:80 beneathAny -> @beneathAny
-  callee +38:9 Compilation.reportNarrowGrant -> @Compilation.reportNarrowGrant
+  local +7:16 literal: LiteralReach (const)
+  callee +7:27 literalReaches -> @literalReaches
+  callee +8:7 Compilation.refuseNarrowLiteral -> @Compilation.refuseNarrowLiteral
+function Compilation.refuseNarrowLiteral(this: Compilation, reach: DependencyReach, literal: LiteralReach): void -> @Compilation.refuseNarrowLiteral [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via findProgram
+  calls: Compilation.grantArguments Compilation.reportNarrowGrant beneathAny capabilityIndex dirname findProgram nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from normalizePath
+  pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.grantArguments#0 Compilation.grantArguments#0 Compilation.reportNarrowGrant#0
+  pointer reach: size=24 writesThrough=false captured=false
+  pointer literal: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 spawn: i32 (const)
+  callee +0:19 capabilityIndex -> @capabilityIndex
+  local +1:11 net: i32 (const)
+  callee +1:17 capabilityIndex -> @capabilityIndex
+  local +2:11 p: i32 (const)
+  local +3:11 name: string (const)
+  local +4:11 g: i32 (const)
+  local +5:11 values: string[] (const)
+  callee +5:20 Compilation.grantArguments -> @Compilation.grantArguments
+  local +6:11 texts: string[] (const)
+  callee +6:19 Compilation.grantArguments -> @Compilation.grantArguments
+  local +7:9 covered: boolean (let)
+  local +11:13 relative: boolean (const)
+  local +12:11 found: string | null (let)
+  callee +14:17 findProgram -> @findProgram
+  callee +21:51 beneathAny -> @beneathAny
+  callee +21:62 normalizePath -> @normalizePath
+  local +23:15 real: string | null (const)
+  local +24:15 parent: string | null (const)
+  callee +24:37 dirname -> @dirname
+  callee +24:45 normalizePath -> @normalizePath
+  callee +26:29 beneathAny -> @beneathAny
+  callee +26:78 beneathAny -> @beneathAny
+  callee +30:7 Compilation.reportNarrowGrant -> @Compilation.reportNarrowGrant
 function Compilation.anyGrantScoped(this: Compilation): boolean -> @Compilation.anyGrantScoped [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=200 writesThrough=false captured=false
@@ -954,7 +967,7 @@ function Compilation.reportNarrowGrant(this: Compilation, source: SourceFile, si
 function Compilation.checkCapabilityLock(this: Compilation): void -> @Compilation.checkCapabilityLock [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: CapabilityLock.recorded Compilation.analyze Compilation.entry Compilation.manifestDirAbove Compilation.reportArgumentGrowth Compilation.reportLockGrowth Compilation.widenedArguments DiagnosticSink.report SourceFile.constructor capabilityLockName capabilityLockText dependencyMasks dependencyPackages dependencyWitness dirname functionIndex joinPath nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_str_concat nish_str_eq normalizePath readCapabilityLock
+  calls: Compilation.analyze Compilation.entry Compilation.manifestDirAbove Compilation.reportArgumentGrowth Compilation.reportLockGrowth Compilation.widenedArguments DiagnosticSink.report SourceFile.constructor capabilityLockName capabilityLockText dependencyMasks dependencyPackages dependencyWitness dirname functionIndex joinPath nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_str_concat nish_str_eq normalizePath readCapabilityLock
   pointer this: size=200 writesThrough=true captured=false passedTo=Compilation.entry#0 Compilation.manifestDirAbove#0 dependencyPackages#0 Compilation.analyze#0 functionIndex#0 Compilation.widenedArguments#0 Compilation.reportArgumentGrowth#0 Compilation.reportLockGrowth#0
   stackSites=5 stackLocals=4
   local -3:11 entryPath: string (const)
@@ -995,7 +1008,6 @@ function Compilation.checkCapabilityLock(this: Compilation): void -> @Compilatio
   local +50:11 c: i32 (let)
   local +52:15 widened: string (const)
   callee +57:15 Compilation.widenedArguments -> @Compilation.widenedArguments
-  callee +57:37 CapabilityLock.recorded -> @CapabilityLock.recorded
   local +60:17 chain: WitnessHop[] (const)
   callee +60:25 dependencyWitness -> @dependencyWitness
   local +61:17 at: SourceFile | null (const)
@@ -1003,33 +1015,35 @@ function Compilation.checkCapabilityLock(this: Compilation): void -> @Compilatio
   local +64:19 hops: string[] (const)
   local +65:24 hop: WitnessHop (const)
   callee +69:15 Compilation.reportArgumentGrowth -> @Compilation.reportArgumentGrowth
-  callee +69:69 CapabilityLock.recorded -> @CapabilityLock.recorded
   callee +71:15 Compilation.reportLockGrowth -> @Compilation.reportLockGrowth
-function Compilation.widenedArguments(this: Compilation, recorded: string[], g: i32, c: i32): string -> @Compilation.widenedArguments [exported method]
+function Compilation.widenedArguments(this: Compilation, lock: CapabilityLock, row: i32, g: i32, c: i32): string -> @Compilation.widenedArguments [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: c g
-  calls: Compilation.grantArguments nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq
+  escaping: c g row
+  calls: CapabilityLock.holds Compilation.grantArguments nish_alloc_struct nish_array_grow nish_str_concat
   pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.grantArguments#0
-  pointer recorded: size=0 writesThrough=false captured=false
+  pointer lock: size=72 writesThrough=false captured=false passedTo=CapabilityLock.holds#0
   stackSites=1 stackLocals=1
   local +0:11 extra: string[] (const)
   local +1:16 text: string (const)
   callee +1:24 Compilation.grantArguments -> @Compilation.grantArguments
-function Compilation.reportArgumentGrowth(this: Compilation, source: SourceFile, site: Node, name: string, c: i32, widened: string, recorded: string[]): void -> @Compilation.reportArgumentGrowth [exported method]
+  callee +2:12 CapabilityLock.holds -> @CapabilityLock.holds
+function Compilation.reportArgumentGrowth(this: Compilation, source: SourceFile, site: Node, name: string, c: i32, widened: string, lock: CapabilityLock, row: i32): void -> @Compilation.reportArgumentGrowth [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
-  escaping: c widened
-  calls: DiagnosticSink.report capabilityLockName capabilityName nish_alloc_struct nish_str_concat nish_str_eq
+  escaping: c row widened
+  calls: CapabilityLock.recorded DiagnosticSink.report capabilityLockName capabilityName nish_alloc_struct nish_str_concat nish_str_eq
   pointer this: size=200 writesThrough=false captured=false
   pointer source: size=24 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
   pointer site: size=40 writesThrough=false captured=false
-  pointer recorded: size=0 writesThrough=false captured=false
+  pointer lock: size=72 writesThrough=false captured=false passedTo=CapabilityLock.recorded#0
   stackSites=0 stackLocals=0
   local +0:11 cap: string (const)
   callee +0:17 capabilityName -> @capabilityName
-  local +1:11 now: string (const)
-  callee +2:5 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +6:77 capabilityLockName -> @capabilityLockName
+  local +1:11 recorded: string[] (const)
+  callee +1:22 CapabilityLock.recorded -> @CapabilityLock.recorded
+  local +2:11 now: string (const)
+  callee +3:5 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +7:77 capabilityLockName -> @capabilityLockName
 function Compilation.reportLockGrowth(this: Compilation, source: SourceFile, site: Node, name: string, caller: string, c: i32, hops: string[]): void -> @Compilation.reportLockGrowth [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
@@ -1534,37 +1548,36 @@ function Compilation.sandboxWidened(this: Compilation, caps: i32): i32 -> @Compi
 function Compilation.narrowSandbox(this: Compilation, facts: FactsTable): void -> @Compilation.narrowSandbox [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: Compilation.anyGrantScoped Compilation.grantArguments addOnce capabilityIndex dependencyMasks dependencyPackages functionIndex nish_array_grow nish_str_eq programInterpreter rootReach
-  pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.anyGrantScoped#0 dependencyPackages#0 functionIndex#0 rootReach#0 Compilation.grantArguments#0
+  calls: Compilation.anyGrantScoped addOnce capabilityIndex dependencyMasks dependencyPackages functionIndex nish_array_grow nish_str_eq programInterpreter rootReach
+  pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.anyGrantScoped#0 dependencyPackages#0 functionIndex#0 rootReach#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=functionIndex#1 rootReach#1
   stackSites=2 stackLocals=1
-  local -58:11 caps: i32 (const)
-  callee -57:23 capabilityIndex -> @capabilityIndex
-  callee -57:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
-  local -54:11 reach: DependencyReach (const)
-  callee -54:19 dependencyPackages -> @dependencyPackages
-  local -50:11 index: FunctionIndex (const)
-  callee -50:19 functionIndex -> @functionIndex
-  callee -49:5 dependencyMasks -> @dependencyMasks
-  local -48:11 root: i32 (const)
-  callee -48:18 rootReach -> @rootReach
-  local -47:16 c: i32 (const)
-  callee -46:7 capabilityIndex -> @capabilityIndex
-  callee -45:7 capabilityIndex -> @capabilityIndex
-  callee -44:7 capabilityIndex -> @capabilityIndex
-  local -42:13 bit: i32 (const)
-  local -41:11 cli: string[] (let)
-  callee -40:17 capabilityIndex -> @capabilityIndex
-  callee -38:24 capabilityIndex -> @capabilityIndex
-  local -32:13 values: string[] (const)
-  local -31:11 reached: boolean (let)
-  local -30:11 scoped: boolean (let)
-  local -29:11 p: i32 (let)
-  local -25:17 g: i32 (const)
-  local -24:17 args: string[] (const)
-  callee -24:24 Compilation.grantArguments -> @Compilation.grantArguments
-  local -20:22 value: string (const)
-  callee -19:13 addOnce -> @addOnce
+  local -71:11 caps: i32 (const)
+  callee -70:23 capabilityIndex -> @capabilityIndex
+  callee -70:58 Compilation.anyGrantScoped -> @Compilation.anyGrantScoped
+  local -67:11 reach: DependencyReach (const)
+  callee -67:19 dependencyPackages -> @dependencyPackages
+  local -63:11 index: FunctionIndex (const)
+  callee -63:19 functionIndex -> @functionIndex
+  callee -62:5 dependencyMasks -> @dependencyMasks
+  local -61:11 root: i32 (const)
+  callee -61:18 rootReach -> @rootReach
+  local -60:16 c: i32 (const)
+  callee -59:7 capabilityIndex -> @capabilityIndex
+  callee -58:7 capabilityIndex -> @capabilityIndex
+  callee -57:7 capabilityIndex -> @capabilityIndex
+  local -55:13 bit: i32 (const)
+  local -54:11 cli: string[] (let)
+  callee -53:17 capabilityIndex -> @capabilityIndex
+  callee -51:24 capabilityIndex -> @capabilityIndex
+  local -45:13 values: string[] (const)
+  local -44:11 reached: boolean (let)
+  local -43:11 scoped: boolean (let)
+  local -42:11 p: i32 (let)
+  local -36:17 g: i32 (const)
+  local -35:15 named: boolean (let)
+  local -33:17 j: i32 (let)
+  callee -25:17 addOnce -> @addOnce
   callee -11:17 capabilityIndex -> @capabilityIndex
   local -10:13 k: i32 (let)
   local -8:17 interpreter: string | null (const)
@@ -1648,6 +1661,12 @@ function declarationNameOf(program: CheckedProgram, name: string): Node | null -
   callee +8:17 CheckedProgram.ownAlias -> @CheckedProgram.ownAlias
   local +12:9 declared: EnumInfo | null (const)
   callee +12:20 CheckedProgram.ownEnum -> @CheckedProgram.ownEnum
+function normalizedGrant(name: string, arg: string): string -> @normalizedGrant
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: arg
+  calls: nish_str_concat normalizePath
+  stackSites=0 stackLocals=0
+  callee +0:75 normalizePath -> @normalizePath
 function addOnce(list: string[], value: string): void -> @addOnce
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

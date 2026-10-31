@@ -374,11 +374,11 @@ export const dependencyWitness = (
  * the literal, which a refusal is spanned at.
  */
 export class LiteralReach {
-  cap: i32
   value: string
   builtin: string
-  module: i32
   site: Node
+  cap: i32
+  module: i32
 
   constructor(cap: i32, value: string, builtin: string, module: i32, site: Node) {
     this.cap = cap

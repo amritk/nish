@@ -58,6 +58,7 @@ struct CapabilityLock (class) size=72 align=8 exported
   method readVersion -> @CapabilityLock.readVersion
   method readPackages -> @CapabilityLock.readPackages
   method readRow -> @CapabilityLock.readRow
+  method holds -> @CapabilityLock.holds
   method recorded -> @CapabilityLock.recorded
 function capabilityLockName(): string -> @capabilityLockName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -222,8 +223,8 @@ function CapabilityLock.readRow(this: CapabilityLock, name: string, row: i32): i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: row
-  calls: CapabilityLock.fail CapabilityLock.failed CapabilityLock.peek CapabilityLock.recorded CapabilityLock.separator CapabilityLock.skipBlank CapabilityLock.string argumentCapabilities capabilityIndex nish_array_grow nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=72 writesThrough=true captured=false passedTo=CapabilityLock.peek#0 CapabilityLock.fail#0 CapabilityLock.skipBlank#0 CapabilityLock.peek#0 CapabilityLock.failed#0 CapabilityLock.skipBlank#0 CapabilityLock.peek#0 CapabilityLock.fail#0 CapabilityLock.string#0 CapabilityLock.fail#0 CapabilityLock.recorded#0 CapabilityLock.fail#0 CapabilityLock.separator#0 CapabilityLock.failed#0
+  calls: CapabilityLock.fail CapabilityLock.failed CapabilityLock.holds CapabilityLock.peek CapabilityLock.separator CapabilityLock.skipBlank CapabilityLock.string argumentCapabilities capabilityIndex nish_array_grow nish_panic_overflow nish_panic_slice nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
+  pointer this: size=72 writesThrough=true captured=false passedTo=CapabilityLock.peek#0 CapabilityLock.fail#0 CapabilityLock.skipBlank#0 CapabilityLock.peek#0 CapabilityLock.failed#0 CapabilityLock.skipBlank#0 CapabilityLock.peek#0 CapabilityLock.fail#0 CapabilityLock.string#0 CapabilityLock.fail#0 CapabilityLock.holds#0 CapabilityLock.fail#0 CapabilityLock.separator#0 CapabilityLock.failed#0
   stackSites=0 stackLocals=0
   callee -4:9 CapabilityLock.peek -> @CapabilityLock.peek
   callee -3:7 CapabilityLock.fail -> @CapabilityLock.fail
@@ -244,10 +245,16 @@ function CapabilityLock.readRow(this: CapabilityLock, name: string, row: i32): i
   callee +21:17 capabilityIndex -> @capabilityIndex
   callee +24:27 argumentCapabilities -> @argumentCapabilities
   callee +26:9 CapabilityLock.fail -> @CapabilityLock.fail
-  callee +31:25 CapabilityLock.recorded -> @CapabilityLock.recorded
-  callee +33:9 CapabilityLock.fail -> @CapabilityLock.fail
-  callee +43:14 CapabilityLock.separator -> @CapabilityLock.separator
-  callee +45:10 CapabilityLock.failed -> @CapabilityLock.failed
+  callee +29:70 CapabilityLock.holds -> @CapabilityLock.holds
+  callee +30:9 CapabilityLock.fail -> @CapabilityLock.fail
+  callee +40:14 CapabilityLock.separator -> @CapabilityLock.separator
+  callee +42:10 CapabilityLock.failed -> @CapabilityLock.failed
+function CapabilityLock.holds(this: CapabilityLock, row: i32, entry: string): boolean -> @CapabilityLock.holds [exported method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer this: size=72 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 j: i32 (let)
 function CapabilityLock.recorded(this: CapabilityLock, row: i32, c: i32): string[] -> @CapabilityLock.recorded [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: c row
@@ -266,7 +273,7 @@ function argumentsOf(rows: i32[], texts: string[], row: i32, cap: string): strin
   local +1:9 prefix: string (const)
   local +2:7 j: i32 (let)
   local +5:11 at: i32 (let)
-  callee +7:24 compareStrings -> @compareStrings
+  callee +7:43 compareStrings -> @compareStrings
   local +8:15 held: string (const)
 function lockNumberByte(code: i32): boolean -> @lockNumberByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -284,12 +291,12 @@ function readCapabilityLock(text: string): CapabilityLock -> @readCapabilityLock
   callee +1:3 CapabilityLock.read -> @CapabilityLock.read
 function capabilityLockText(names: string[], masks: i32[], scoped: i32[], argRows: i32[], argTexts: string[]): string -> @capabilityLockText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText argumentsOf capabilityIndex capabilityNames jsonQuote nish_array_grow nish_panic_overflow nish_str_concat
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText capabilityIndex capabilityNames compareStrings jsonQuote nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat
   pointer names: size=0 writesThrough=false captured=false
   pointer masks: size=0 writesThrough=false captured=false
   pointer scoped: size=0 writesThrough=false captured=false
-  pointer argRows: size=0 writesThrough=false captured=false passedTo=argumentsOf#0
-  pointer argTexts: size=0 writesThrough=true captured=false passedTo=argumentsOf#1
+  pointer argRows: size=0 writesThrough=false captured=false
+  pointer argTexts: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local +0:9 out: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
@@ -306,13 +313,17 @@ function capabilityLockText(names: string[], masks: i32[], scoped: i32[], argRow
   local +10:16 cap: string (const)
   callee +10:23 capabilityNames -> @capabilityNames
   callee +11:27 capabilityIndex -> @capabilityIndex
-  local +14:20 text: string (const)
-  callee +14:28 argumentsOf -> @argumentsOf
-  local +19:9 c: i32 (let)
-  local +20:16 entry: string (const)
-  callee +22:9 StringBuilder.add -> @StringBuilder.add
-  callee +24:7 StringBuilder.add -> @StringBuilder.add
-  callee +24:15 jsonQuote -> @jsonQuote
-  callee +27:5 StringBuilder.add -> @StringBuilder.add
-  callee +30:3 StringBuilder.add -> @StringBuilder.add
-  callee +31:10 StringBuilder.toText -> @StringBuilder.toText
+  local +16:15 from: i32 (const)
+  local +17:13 j: i32 (let)
+  local +19:17 text: string (const)
+  local +26:17 at: i32 (let)
+  callee +32:15 compareStrings -> @compareStrings
+  local +34:21 held: string (const)
+  local +44:9 c: i32 (let)
+  local +45:16 entry: string (const)
+  callee +47:9 StringBuilder.add -> @StringBuilder.add
+  callee +49:7 StringBuilder.add -> @StringBuilder.add
+  callee +49:15 jsonQuote -> @jsonQuote
+  callee +52:5 StringBuilder.add -> @StringBuilder.add
+  callee +55:3 StringBuilder.add -> @StringBuilder.add
+  callee +56:10 StringBuilder.toText -> @StringBuilder.toText
