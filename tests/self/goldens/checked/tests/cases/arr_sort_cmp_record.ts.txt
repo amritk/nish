@@ -8,8 +8,6 @@ unsafe import 41:10 wrappingAdd from "nish:unsafe"
 unsafe import 41:23 wrappingSub from "nish:unsafe"
 unsafe call 50:54 wrappingSub (node 34)
 unsafe call 50:82 wrappingAdd (node 42)
-unsafe call 170:13 wrappingSub (node 939)
-unsafe call 170:45 wrappingAdd (node 947)
 unsafe call 122:11 wrappingAdd (node 641)
 unsafe call 128:11 wrappingAdd (node 680)
 const RUN: i32 = 32
@@ -19,42 +17,44 @@ function stepTo(lo: i32, step: i32, n: i32): i32 -> @nish.stepTo
   stackSites=0 stackLocals=0
 function sortWith<Row, byKey>(xs: Row[], cmp: void): Row[] -> @nish.sortWith$$Row$fn.5.byKey [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: via nish.insertionRun$$Row$fn.5.byKey
   escaping: xs
-  calls: nish.insertionRun$$Row$fn.5.byKey nish.mergePass$$Row$fn.5.byKey nish.stepTo nish_arena_mark nish_arena_release nish_array_grow
-  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.insertionRun$$Row$fn.5.byKey#1 nish.mergePass$$Row$fn.5.byKey#1 nish.mergePass$$Row$fn.5.byKey#0
+  calls: nish.copyRun$$Row nish.insertionRun$$Row$fn.5.byKey nish.mergePass$$Row$fn.5.byKey nish.stepTo nish_arena_mark nish_arena_release nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.insertionRun$$Row$fn.5.byKey#1 nish.mergePass$$Row$fn.5.byKey#1 nish.mergePass$$Row$fn.5.byKey#0 nish.copyRun$$Row#1
   stackSites=1 stackLocals=1
-  local -28:9 n: i32 (const)
-  local -24:9 tmp: Row[] (const)
-  local -23:14 x: Row (const)
-  local -20:7 lo: i32 (let)
-  local -18:11 hi: i32 (const)
-  callee -18:16 stepTo -> @nish.stepTo
-  callee -17:5 insertionRun<Row, byKey> -> @nish.insertionRun$$Row$fn.5.byKey
-  local -14:7 inTmp: boolean (let)
-  local -13:7 width: i32 (let)
-  callee -10:7 mergePass<Row, byKey> -> @nish.mergePass$$Row$fn.5.byKey
-  callee -8:7 mergePass<Row, byKey> -> @nish.mergePass$$Row$fn.5.byKey
-  local -1:14 k: i32 (let)
+  local +0:9 n: i32 (const)
+  local +4:9 tmp: Row[] (const)
+  local +5:14 x: Row (const)
+  local +8:7 lo: i32 (let)
+  local +10:11 hi: i32 (const)
+  callee +10:16 stepTo -> @nish.stepTo
+  callee +11:5 insertionRun<Row, byKey> -> @nish.insertionRun$$Row$fn.5.byKey
+  local +14:7 inTmp: boolean (let)
+  local +15:7 width: i32 (let)
+  callee +18:7 mergePass<Row, byKey> -> @nish.mergePass$$Row$fn.5.byKey
+  callee +20:7 mergePass<Row, byKey> -> @nish.mergePass$$Row$fn.5.byKey
+  callee +23:13 stepTo -> @nish.stepTo
+  callee +26:5 copyRun<Row> -> @nish.copyRun$$Row
 function sortWith<string, byLength>(xs: string[], cmp: void): string[] -> @nish.sortWith$str$fn.8.byLength [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: via nish.insertionRun$str$fn.8.byLength
   escaping: xs
-  calls: nish.insertionRun$str$fn.8.byLength nish.mergePass$str$fn.8.byLength nish.stepTo nish_arena_mark nish_arena_release nish_array_grow
-  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.insertionRun$str$fn.8.byLength#1 nish.mergePass$str$fn.8.byLength#1 nish.mergePass$str$fn.8.byLength#0
+  calls: nish.copyRun$str nish.insertionRun$str$fn.8.byLength nish.mergePass$str$fn.8.byLength nish.stepTo nish_arena_mark nish_arena_release nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.insertionRun$str$fn.8.byLength#1 nish.mergePass$str$fn.8.byLength#1 nish.mergePass$str$fn.8.byLength#0 nish.copyRun$str#1
   stackSites=1 stackLocals=1
-  local -28:9 n: i32 (const)
-  local -24:9 tmp: string[] (const)
-  local -23:14 x: string (const)
-  local -20:7 lo: i32 (let)
-  local -18:11 hi: i32 (const)
-  callee -18:16 stepTo -> @nish.stepTo
-  callee -17:5 insertionRun<string, byLength> -> @nish.insertionRun$str$fn.8.byLength
-  local -14:7 inTmp: boolean (let)
-  local -13:7 width: i32 (let)
-  callee -10:7 mergePass<string, byLength> -> @nish.mergePass$str$fn.8.byLength
-  callee -8:7 mergePass<string, byLength> -> @nish.mergePass$str$fn.8.byLength
-  local -1:14 k: i32 (let)
+  local +0:9 n: i32 (const)
+  local +4:9 tmp: string[] (const)
+  local +5:14 x: string (const)
+  local +8:7 lo: i32 (let)
+  local +10:11 hi: i32 (const)
+  callee +10:16 stepTo -> @nish.stepTo
+  callee +11:5 insertionRun<string, byLength> -> @nish.insertionRun$str$fn.8.byLength
+  local +14:7 inTmp: boolean (let)
+  local +15:7 width: i32 (let)
+  callee +18:7 mergePass<string, byLength> -> @nish.mergePass$str$fn.8.byLength
+  callee +20:7 mergePass<string, byLength> -> @nish.mergePass$str$fn.8.byLength
+  callee +23:13 stepTo -> @nish.stepTo
+  callee +26:5 copyRun<string> -> @nish.copyRun$str
 function insertionRun<Row, byKey>(src: Row[], dst: Row[], cmp: void, lo: i32, hi: i32): void -> @nish.insertionRun$$Row$fn.5.byKey [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -86,6 +86,14 @@ function mergePass<Row, byKey>(src: Row[], dst: Row[], cmp: void, n: i32, width:
   local +3:11 hi: i32 (const)
   callee +3:16 stepTo -> @nish.stepTo
   callee +4:5 mergeRuns<Row, byKey> -> @nish.mergeRuns$$Row$fn.5.byKey
+function copyRun<Row>(src: Row[], dst: Row[], lo: i32, hi: i32): void -> @nish.copyRun$$Row [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: lo
+  pointer src: size=0 writesThrough=false captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 k: i32 (let)
 function insertionRun<string, byLength>(src: string[], dst: string[], cmp: void, lo: i32, hi: i32): void -> @nish.insertionRun$str$fn.8.byLength [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -117,6 +125,14 @@ function mergePass<string, byLength>(src: string[], dst: string[], cmp: void, n:
   local +3:11 hi: i32 (const)
   callee +3:16 stepTo -> @nish.stepTo
   callee +4:5 mergeRuns<string, byLength> -> @nish.mergeRuns$str$fn.8.byLength
+function copyRun<string>(src: string[], dst: string[], lo: i32, hi: i32): void -> @nish.copyRun$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: lo
+  pointer src: size=0 writesThrough=false captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 k: i32 (let)
 function mergeRuns<Row, byKey>(src: Row[], dst: Row[], cmp: void, lo: i32, mid: i32, hi: i32): void -> @nish.mergeRuns$$Row$fn.5.byKey [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -149,22 +165,6 @@ function mergeRuns<string, byLength>(src: string[], dst: string[], cmp: void, lo
   local -7:12 k: i32 (let)
   local -6:9 right: boolean (let)
   callee -4:15 byLength -> @byLength$
-function copyRun<Row>(src: Row[], dst: Row[], lo: i32, hi: i32): void -> @nish.copyRun$$Row [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  escaping: lo
-  pointer src: size=0 writesThrough=false captured=false
-  pointer dst: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -1:12 k: i32 (let)
-function copyRun<string>(src: string[], dst: string[], lo: i32, hi: i32): void -> @nish.copyRun$str [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  escaping: lo
-  pointer src: size=0 writesThrough=false captured=false
-  pointer dst: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -1:12 k: i32 (let)
 import Array.prototype.sort from "nish/sort" -> generic function sortWith
 struct Row (interface) size=12 align=4
   field key: i32 index=0 offset=0

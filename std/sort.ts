@@ -166,13 +166,10 @@ export const sortWith = <T>(xs: T[], cmp: (a: T, b: T) => number): T[] => {
       mergePass(xs, tmp, cmp, n, width)
     }
     inTmp = !inTmp
-    // `0 < width < n` here, so neither the difference nor the sum wraps.
-    width = wrappingSub(n, width) > width ? wrappingAdd(width, width) : n
+    width = stepTo(width, width, n)
   }
   if (inTmp) {
-    for (let k: i32 = 0; k < n && k < toI32(xs.length) && k < toI32(tmp.length); k++) {
-      xs[k] = tmp[k]
-    }
+    copyRun(tmp, xs, 0, n)
   }
   return xs
 }

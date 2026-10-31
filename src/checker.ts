@@ -415,13 +415,12 @@ export class Checker {
    * template nothing instantiates emits nothing.
    */
   importSort(): void {
-    if (this.program.source.text.indexOf("sort") < 0 || !hasSortCall(this.program.file)) {
+    if (
+      this.program.isMathLibrary() ||
+      this.program.source.text.indexOf("sort") < 0 ||
+      !hasSortCall(this.program.file)
+    ) {
       return
-    }
-    for (const imp of this.program.imports) {
-      if (imp.localName === SORT_LOCAL) {
-        return
-      }
     }
     this.program.imports.push(
       new ImportBinding(SORT_SPECIFIER, "sortWith", SORT_LOCAL, this.program.file, this.program.file)
