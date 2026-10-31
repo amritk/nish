@@ -2004,8 +2004,8 @@ const scopeNotUsingMessage = (name: string): string =>
   `declare it as \`using ${name} = scope()\``
 
 const stackBelowMinimumMessage = (bytes: f64): string =>
-  `\`scopeWithStack(${bytes})\` asks for a stack below the minimum of ${MIN_STACK} bytes: no target can start a ` +
-  "thread on less, and a task that ran on it would overflow before it did any work; ask for at least " +
+  `\`scopeWithStack(${bytes})\` asks for a stack below the minimum of ${MIN_STACK} bytes` +
+  ": no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least " +
   `${MIN_STACK}`
 
 const scopeEscapesMessage = (): string =>
