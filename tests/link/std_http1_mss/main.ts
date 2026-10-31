@@ -140,6 +140,15 @@ export const main = (): i32 => {
   server.close(again)
   netClose(second)
 
+  // restart() alone clears both, which the accept above cannot show: on a
+  // loopback socket it writes socketMss over whatever restart left there.
+  conn.mss = 600
+  conn.socketMss = 7
+  conn.restart()
+  t.eqI32("restart: socketMss back to 0", conn.socketMss, 0)
+  t.eqI32("restart: the program's mss back to 0", conn.mss, 0)
+  t.eqI32("restart: segmentMss falls to the default", conn.segmentMss(enc), HTTP_DEFAULT_MSS)
+
   // A connection no socket accepted: nothing read, so the default.
   const bare = new Http1Connection(new Http1Config())
   t.eqI32("bare: socketMss 0", bare.socketMss, 0)

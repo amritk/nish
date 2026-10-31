@@ -16,6 +16,9 @@ PASS  kept alive: at the set enc.mss, gzipped
 PASS  reuse: the slot is taken again, its connection kept
 PASS  reuse: socketMss is the new socket's
 PASS  reuse: the program's mss is back to 0
+PASS  restart: socketMss back to 0
+PASS  restart: the program's mss back to 0
+PASS  restart: segmentMss falls to the default
 PASS  bare: socketMss 0
 PASS  bare: HTTP_DEFAULT_MSS
-std_http1_mss: 20 passed, 0 failed, 0 skipped
+std_http1_mss: 23 passed, 0 failed, 0 skipped
