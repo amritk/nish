@@ -18,6 +18,15 @@
  * never unmap a page another thread is reading, and why the table needs no
  * lock. A thread that wants the region opens it again by name.
  *
+ * Only a pointer to the table is thread-local. The table itself is one
+ * anonymous page, mapped by the thread's first create or open. Under
+ * --threads the runtime's TLS is initial-exec, and a Node addon is loaded
+ * with dlopen, where glibc has only a small surplus of static TLS to give it
+ * (about 1.6 KiB). A 1.5 KiB table there made `--emit-napi-async` addons fail
+ * to load with "cannot allocate memory in static TLS block". A thread that
+ * exits keeps its page mapped; one page per thread that ever mapped a region
+ * is the whole cost.
+ *
  * **Every access is checked.** An offset is an `int32_t` byte offset into the
  * region (a region is at most 1 GiB), widened before any sum; a 32-bit
  * slot must sit at a multiple of 4 and a 64-bit one at a multiple of 8, wholly
@@ -87,22 +96,24 @@ typedef struct nishshm_region {
   int32_t gen;    /* the high bits of the slot's handle: 0 never used, 32767 retired */
 } nishshm_region;
 
-/* at[0] is never used, so no handle is 0. */
-static NISH_TLS nishshm_region nishshm_table[NISHSHM_SLOTS];
+/* NULL until this thread first maps a region. Slot 0 is never used, so no
+   handle is 0. */
+static NISH_TLS nishshm_region *nishshm_table;
 
 /* -- panics ---------------------------------------------------------------- */
 
-/* The text of a panic, built in place: `nish_panic` takes a `nish_str`. */
-static NISH_TLS struct {
+/* The text of a panic, built in place on the failing call's stack:
+   `nish_panic` takes a `nish_str` and does not return. */
+typedef struct shm_msg {
   uint64_t len;
   char data[192];
 } shm_msg;
 
-static void shm_put(const char *s) {
-  while (*s && shm_msg.len < sizeof shm_msg.data - 1) shm_msg.data[shm_msg.len++] = *s++;
+static void shm_put(shm_msg *msg, const char *s) {
+  while (*s && msg->len < sizeof msg->data - 1) msg->data[msg->len++] = *s++;
 }
 
-static void shm_put_i64(int64_t v) {
+static void shm_put_i64(shm_msg *msg, int64_t v) {
   char tmp[21], *p = tmp + sizeof tmp;
   uint64_t u = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
   *--p = 0;
@@ -111,30 +122,31 @@ static void shm_put_i64(int64_t v) {
     u /= 10;
   } while (u);
   if (v < 0) *--p = '-';
-  shm_put(p);
+  shm_put(msg, p);
 }
 
 /* "nish/sync/shm: <what> <n><rest>", and exit 1. */
 __attribute__((noreturn, cold)) static void shm_fail(const char *what, int64_t n, const char *rest,
                                                      int64_t m, const char *tail) {
-  shm_msg.len = 0;
-  shm_put("nish/sync/shm: ");
-  shm_put(what);
-  shm_put_i64(n);
-  shm_put(rest);
+  shm_msg msg;
+  msg.len = 0;
+  shm_put(&msg, "nish/sync/shm: ");
+  shm_put(&msg, what);
+  shm_put_i64(&msg, n);
+  shm_put(&msg, rest);
   if (tail) {
-    shm_put_i64(m);
-    shm_put(tail);
+    shm_put_i64(&msg, m);
+    shm_put(&msg, tail);
   }
-  shm_msg.data[shm_msg.len] = 0;
-  nish_panic((const nish_str *)&shm_msg);
+  msg.data[msg.len] = 0;
+  nish_panic((const nish_str *)&msg);
 }
 
 /* -- the table ------------------------------------------------------------- */
 
 static inline nishshm_region *region_of(int32_t h) {
   int32_t i = h & NISHSHM_INDEX;
-  if (h <= 0 || i == 0 || i >= NISHSHM_SLOTS) return NULL;
+  if (h <= 0 || i == 0 || i >= NISHSHM_SLOTS || nishshm_table == NULL) return NULL;
   nishshm_region *r = &nishshm_table[i];
   if (r->base == NULL || r->gen != (h >> 16)) return NULL;
   return r;
@@ -359,8 +371,15 @@ static int shm_open_path(const char *path, int flags, mode_t mode) {
 #endif
 }
 
-/* A free slot of the table, or 0 when all are in use or retired. */
+/* A free slot of the table, or 0 when all are in use or retired, or when
+   this thread's table could not be mapped. */
 static int32_t slot_take(void) {
+  if (nishshm_table == NULL) {
+    void *t = mmap(NULL, sizeof(nishshm_region) * NISHSHM_SLOTS, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (t == MAP_FAILED) return 0;
+    nishshm_table = (nishshm_region *)t; /* the kernel gives it zeroed */
+  }
   for (int32_t i = 1; i < NISHSHM_SLOTS; i++) {
     nishshm_region *r = &nishshm_table[i];
     if (r->base != NULL) continue;
