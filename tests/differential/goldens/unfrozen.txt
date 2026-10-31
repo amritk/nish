@@ -252,6 +252,7 @@ cases/map_iter_set_new added after R6: no rewriter to freeze it with
 cases/map_iter_values added after R6: no rewriter to freeze it with
 cases/map_key_bool added after R6: no rewriter to freeze it with
 cases/map_key_class added after R6: no rewriter to freeze it with
+cases/map_key_composite added after R6: no rewriter to freeze it with
 cases/map_key_enum added after R6: no rewriter to freeze it with
 cases/map_key_f32 added after R6: no rewriter to freeze it with
 cases/map_key_f32_negzero added after R6: no rewriter to freeze it with
