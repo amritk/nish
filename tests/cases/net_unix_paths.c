@@ -7,7 +7,7 @@
    it changes the mode it connects to the path, and counts a connect that
    succeeds, which is a listener already taking connections at the umask's
    mode. `listenedFirst` answers that count: 0 while the chmod comes between
-   the bind and the listen (RT-34). */
+   the bind and the listen (RT-35). */
 #include <fcntl.h>
 #include <stdint.h>
 #include <string.h>

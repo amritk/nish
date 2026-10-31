@@ -22132,6 +22132,75 @@ attributes #1 = { nounwind "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-net-unix -->
 
+### `nish:net`: `netMss`
+
+A connected TCP socket's send MSS, the payload that fits one segment, to size
+a write batch by. It is one call into `runtime/runtime-net.c`: a
+`getpeername` that turns away anything unconnected, then `TCP_INFO`'s
+`tcpi_snd_mss` on Linux and `TCP_MAXSEG` where that is missing or zero. None of
+them waits, so it keeps `willreturn`; it is a write, as `netLocalPort` is,
+because the kernel's answer changes as the path does and two calls must not
+fold into one. Every failure is a plain `-1`, never an errno, so the IR carries
+no check, and a wasm build, with no socket to ask, compiles the call to that
+`-1` ([LANGUAGE.md](LANGUAGE.md#socket-options)).
+
+<!-- cookbook:begin builtin-net-mss -->
+```ts
+// `netMss`, a connected TCP socket's send MSS: one call into runtime-net.c,
+// `nounwind willreturn` since its two or three syscalls never wait, and a
+// write, so two calls never fold into one: the kernel's answer moves as the
+// path does. Anything but a connected TCP socket answers `-1`.
+import { netMss } from "nish:net"
+
+export const segment = (fd: i32): i32 => netMss(fd)
+
+export const batch = (fd: i32, fallback: i32): i32 => {
+  const mss = netMss(fd)
+  return mss > 0 ? mss : fallback
+}
+```
+
+```llvm
+declare noundef i32 @nish_net_mss(i32 noundef) #0
+
+define noundef i32 @segment(i32 noundef %fd) #0 {
+entry:
+  %0 = call i32 @nish_net_mss(i32 %fd)
+  ret i32 %0
+}
+
+define noundef i32 @batch(i32 noundef %fd, i32 noundef %fallback) #0 {
+entry:
+  %mss.addr = alloca i32, align 4
+  %0 = call i32 @nish_net_mss(i32 %fd)
+  store i32 %0, i32* %mss.addr, align 4
+  %1 = load i32, i32* %mss.addr, align 4
+  %2 = icmp sgt i32 %1, 0
+  br i1 %2, label %cond.true, label %cond.false
+
+cond.true:
+  %3 = load i32, i32* %mss.addr, align 4
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %4 = phi i32 [ %3, %cond.true ], [ %fallback, %cond.false ]
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-mss -->
+
 ### `nish:net`: `pollCreate`, `pollAdd` and `pollWait`
 
 The readiness loop (WP34 N5), one call into `runtime/runtime-net.c` each,
@@ -24786,6 +24855,7 @@ declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonn
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_set_option(i32 noundef, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_net_mss(i32 noundef) #2
 declare noundef i32 @nish_net_close(i32 noundef) #3
 declare noundef i32 @nish_tcp_connect(%struct.nish_array* noundef nonnull align 8 nocapture readonly) #2
 declare noundef i32 @nish_connect_result(i32 noundef) #2

@@ -1,4 +1,4 @@
-// No Unix-domain call leaves a descriptor or a file behind (RT-35): not the
+// No Unix-domain call leaves a descriptor or a file behind (RT-36): not the
 // socket a bind or a connect failed on, not the one the stale-socket probe
 // made, and not the socket and file of a bind whose chmod failed after it.
 // `net_unix_fds.c` counts the open descriptors around each call `attempt`

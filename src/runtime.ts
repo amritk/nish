@@ -851,6 +851,10 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `netMss`: a `getpeername` and up to two `getsockopt`s, none of which
+    // waits. A write, as `netLocalPort` is, because the kernel changes the
+    // answer between two calls.
+    this.add(plain("nish_net_mss", "declare noundef i32 @nish_net_mss(i32 noundef)", EFFECT_WRITE))
     this.add(
       new RuntimeFunction(
         "nish_net_close",

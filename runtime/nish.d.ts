@@ -460,6 +460,11 @@ declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
  * a negative errno (-9 a closed descriptor, -88 not a socket).
  */
 declare function netSetOption(fd: i32, option: i32, value: i32): i32;
+/**
+ * A connected TCP socket's send MSS, the payload bytes one segment carries;
+ * -1, never an errno, for anything else, and always on wasm.
+ */
+declare function netMss(fd: i32): i32;
 /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
 declare const NET_TCP_NODELAY: i32;
 /**
@@ -691,6 +696,11 @@ declare module "nish:net" {
    * a negative errno (-9 a closed descriptor, -88 not a socket).
    */
   export function netSetOption(fd: i32, option: i32, value: i32): i32;
+  /**
+   * A connected TCP socket's send MSS, the payload bytes one segment carries;
+   * -1, never an errno, for anything else, and always on wasm.
+   */
+  export function netMss(fd: i32): i32;
   /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
   export const NET_TCP_NODELAY: i32;
   /**

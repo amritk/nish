@@ -9,7 +9,7 @@
 // to 107 bytes appears, a connect to a missing path -2 and one to a dead
 // socket -111. `net_unix_paths.c` runs it under umask 0, reads each file's
 // mode, size and presence back with `lstat`, and counts the chmods that found
-// the socket already listening, which must be none (RT-34).
+// the socket already listening, which must be none (RT-35).
 import { NET_UNIX_UNLINK_STALE, netClose, unixConnect, unixListen, unixListenMode } from "nish:net";
 import { unlinkSync, writeFileSync } from "nish:fs";
 
