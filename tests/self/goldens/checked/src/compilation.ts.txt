@@ -1531,7 +1531,7 @@ function signatureText(table: TypeTable, sig: FunctionSig): string -> @signature
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.edit#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0

@@ -49,6 +49,7 @@ import N_FUNCTION from "./nodes" -> const N_FUNCTION
 import N_IDENT from "./nodes" -> const N_IDENT
 import N_IF from "./nodes" -> const N_IF
 import N_INDEX from "./nodes" -> const N_INDEX
+import N_LABELED from "./nodes" -> const N_LABELED
 import N_LIST from "./nodes" -> const N_LIST
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import N_NEW from "./nodes" -> const N_NEW
@@ -1227,10 +1228,10 @@ function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFact
   callee -2:39 loopBody -> @loopBody
   callee -1:5 decidePass -> @decidePass
   callee +1:5 collectLoopScopes -> @collectLoopScopes
-  local +9:16 child: Node (const)
-  callee +10:7 collectLoopScopes -> @collectLoopScopes
-  callee +13:5 collectLoopScopes -> @collectLoopScopes
+  local +10:16 child: Node (const)
+  callee +11:7 collectLoopScopes -> @collectLoopScopes
   callee +14:5 collectLoopScopes -> @collectLoopScopes
+  callee +15:5 collectLoopScopes -> @collectLoopScopes
 function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, scope: LoopScope): void -> @decidePass
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

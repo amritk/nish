@@ -44,7 +44,7 @@ function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i
   sharedWrite: +0:5
   escaping: owner
   calls: CheckContext.error functionTypeHereMessage isFunctionParameter isThreadsSource nish_array_grow nish_panic_index nish_str_concat nish_str_eq rejectForeignPointer resolveType
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0
   pointer sig: size=136 writesThrough=false captured=false
   pointer list: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -66,7 +66,7 @@ function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=136
   sharedWrite: via CheckContext.error
   calls: CheckContext.error FunctionSig.constructor FunctionSig.foreign annotationSpelling checkForeignSignature collectParams isExported nish_alloc_struct nish_panic_index nish_str_at rejectForeignPointer resolveType
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.error#0 collectParams#0 resolveType#1 annotationSpelling#0 checkForeignSignature#0 rejectForeignPointer#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.error#0 collectParams#0 resolveType#1 annotationSpelling#0 checkForeignSignature#0 rejectForeignPointer#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=FunctionSig.constructor#3 isExported#0 checkForeignSignature#2
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -87,7 +87,7 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   sharedWrite: via CheckContext.error
   escaping: name
   calls: CheckContext.error FunctionSig.body TypeTable.isRanged TypeTable.kindOf TypeTable.stripNull TypeTable.typeName isForeignBuffer isForeignType nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.body#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -122,7 +122,7 @@ function refuseForeignRange(ctx: CheckContext, at: Node, name: string, what: str
   sharedWrite: via CheckContext.error
   escaping: type
   calls: CheckContext.error TypeTable.typeName nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
@@ -132,7 +132,7 @@ function markEntryMain(ctx: CheckContext, sig: FunctionSig): void -> @markEntryM
   sharedWrite: +0:3
   escaping: sig
   calls: CheckContext.error TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer sig: size=136 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -21:5 CheckContext.error -> @CheckContext.error
@@ -144,7 +144,7 @@ function markEntryMain(ctx: CheckContext, sig: FunctionSig): void -> @markEntryM
 function typeOnlyImportFix(ctx: CheckContext, decl: Node, defaultName: Node | null): Edit[] -> @typeOnlyImportFix
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit Lexer.constructor Lexer.skipTrivia nish_array_grow nish_panic_overflow nish_str_eq nish_str_new skipBlanks
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.edit#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer decl: size=40 writesThrough=false captured=false
   pointer defaultName: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -160,7 +160,7 @@ function collectImports(ctx: CheckContext, decl: Node): void -> @collectImports 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error CheckContext.errorAtSpecifier CheckContext.errorFix ImportBinding.constructor StringSet.add isExported isNishSpecifier nishModuleNames nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq parseBareSpecifier refuseDefaultImport refuseTopLevelForm typeOnlyImportFix
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=refuseTopLevelForm#0 CheckContext.error#0 CheckContext.errorAtSpecifier#0 CheckContext.error#0 CheckContext.errorFix#0 typeOnlyImportFix#0 refuseDefaultImport#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseDefaultImport#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=refuseTopLevelForm#0 CheckContext.error#0 CheckContext.errorAtSpecifier#0 CheckContext.error#0 CheckContext.errorFix#0 typeOnlyImportFix#0 refuseDefaultImport#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseDefaultImport#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=isExported#0 refuseTopLevelForm#1 CheckContext.error#1 CheckContext.errorAtSpecifier#1 CheckContext.error#1 CheckContext.errorFix#1 typeOnlyImportFix#1 CheckContext.error#1 ImportBinding.constructor#5
   stackSites=0 stackLocals=0
   callee -72:7 isExported -> @isExported
@@ -190,7 +190,7 @@ function refuseDefaultImport(ctx: CheckContext, at: Node, name: string, specifie
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
