@@ -6411,7 +6411,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 | `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors)) |
@@ -7662,7 +7662,7 @@ would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All twenty functions
+so a child that `spawnSync` starts inherits none of them. All twenty-one functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -7682,6 +7682,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
 | `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one socket option from a whitelist, named by the ids below: `0`, or the failure, such as `-9` for a closed descriptor and `-88` for one that is not a socket. Any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `value` is `0` or `1` for the switches and a byte count for the buffer sizes. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
+| `netMss(fd: i32): i32` | the maximum segment size a connected TCP socket sends, the payload bytes one segment carries: Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above `0` and on Darwin. **A plain `-1`, never an errno,** for anything else: a descriptor that is not open, a socket with no peer (a listener, or one never connected, though the kernel answers its default `536` for those), a socket that is not TCP, and every call on wasm. It never panics. The answer moves as the path does, so read it when it is needed rather than once | write | `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`; `net_mss` in `tests/run.js` for wasm32 and WASI |
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -7730,6 +7731,25 @@ An id is read as a value, as `platform` is: it folds to its number in the IR,
 cannot be assigned, and is not a [module constant](#module-constants), so a
 module constant cannot be initialised from one. A local of the same name
 shadows the global spelling.
+
+`netMss` reads the size a sender cuts its writes to, so that one write fills
+whole segments rather than leaving a short one behind each:
+
+```ts nish:ok
+import { netMss } from "nish:net";
+
+// A batch of whole segments, or the caller's own size where there is no MSS.
+export const batch = (conn: i32, fallback: i32): i32 => {
+  const mss = netMss(conn);
+  return mss > 0 ? mss * 8 : fallback;
+};
+```
+
+Its `-1` is one answer, not an errno, because a program does the same thing
+for every reason there is no MSS: it uses a size of its own. That is also why
+it compiles on wasm when `netSetOption` is refused there: a socket option a
+program sets is an effect a wasm build cannot have, while a size it reads has
+an honest answer everywhere, "none".
 
 ```ts nish:ok
 import { NET_TCP_QUICKACK, netSetOption } from "nish:net";
@@ -7951,6 +7971,9 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   `reject_net_reuseport_wasm`, `reject_net_set_option_wasm`). The freestanding `--profile wasm` link, which
   takes IR compiled for the host, has no `runtime-net.c` either, so a program
   that calls one fails there at the link, on the undefined `nish_` symbol.
+  The one exception is `netMss`, which compiles under a `wasm32` target and
+  the `wasi` profile to the constant `-1`, its descriptor still evaluated,
+  with no runtime call (`net_mss` in `tests/run.js`).
 - **Not yet.** No `nish:net` call resolves a name (`reject_net_unknown_export`):
   the stub resolver is the library module `nish/net/dns`, which drives these
   calls on the program's own loop. There is no
@@ -7969,8 +7992,10 @@ is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
 `net_` block of `tests/run.js`, for `netAddress`, `tcpConnect`, `udpBind` and
 `pollCreate`). The option ids are plain numbers, so they read the same
-under Node as natively, and only `netSetOption` throws (`net_set_option` in
-`tests/run.js`).
+under Node as natively, and `netSetOption` throws rather than set one
+(`net_set_option` in `tests/run.js`). `netMss` throws too rather than answer `-1`: Node's
+`net.Socket` has no MSS to read, and a `-1` would be a guess that the program
+keeps (`net_mss` in `tests/run.js`). In a browser there are no sockets at all.
 A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.

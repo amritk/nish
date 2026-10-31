@@ -667,7 +667,7 @@ function checkNet(ctx: CheckContext, call: Node, scope: Scope, name: string): i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   escaping: name
-  calls: checkArgumentType checkBuffer checkBuiltinArity isNetBufferLetter isNetWrittenLetter netSignature refuseOnWasm
+  calls: checkArgumentType checkBuffer checkBuiltinArity isNetBufferLetter isNetWrittenLetter netSignature nish_str_eq refuseOnWasm
   pointer ctx: size=296 writesThrough=true captured=true passedTo=checkBuiltinArity#0 refuseOnWasm#0 checkBuffer#0 checkArgumentType#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 refuseOnWasm#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkBuffer#2 checkArgumentType#2
@@ -675,15 +675,15 @@ function checkNet(ctx: CheckContext, call: Node, scope: Scope, name: string): i3
   local +0:9 params: string (const)
   callee +0:18 netSignature -> @netSignature
   local +1:9 args: Node (const)
-  callee +2:7 checkBuiltinArity -> @checkBuiltinArity
-  callee +2:67 refuseOnWasm -> @refuseOnWasm
-  local +3:14 i: i32 (let)
-  local +4:13 param: i32 (const)
-  local +5:13 arg: Node (const)
-  callee +6:11 isNetBufferLetter -> @isNetBufferLetter
-  callee +7:9 checkBuffer -> @checkBuffer
-  callee +7:80 isNetWrittenLetter -> @isNetWrittenLetter
-  callee +9:9 checkArgumentType -> @checkArgumentType
+  callee +3:5 checkBuiltinArity -> @checkBuiltinArity
+  callee +4:28 refuseOnWasm -> @refuseOnWasm
+  local +6:14 i: i32 (let)
+  local +7:13 param: i32 (const)
+  local +8:13 arg: Node (const)
+  callee +9:11 isNetBufferLetter -> @isNetBufferLetter
+  callee +10:9 checkBuffer -> @checkBuffer
+  callee +10:80 isNetWrittenLetter -> @isNetWrittenLetter
+  callee +12:9 checkArgumentType -> @checkArgumentType
 function checkBuffer(ctx: CheckContext, arg: Node, scope: Scope, name: string, element: i32, written: boolean): void -> @checkBuffer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.arrayOf

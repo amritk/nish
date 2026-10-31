@@ -1267,12 +1267,16 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
  * an `i32` answer in either number mode, as `signalFd`'s is. A descriptor, an
  * offset and a length are `i32` because they are one: an `f64` is refused
  * rather than converted. `runtime-net.c` is empty on wasm, so every call is
- * refused there as the host builtins are.
+ * refused there as the host builtins are, but `netMss`: it answers a fact
+ * whose absence is `-1` anywhere, so a wasm build compiles it to that.
  */
 const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i32 => {
   const params = netSignature(name)
   const args = call.children[1]
-  if (checkBuiltinArity(ctx, call, name, args, params.length) && !refuseOnWasm(ctx, call, name)) {
+  if (
+    checkBuiltinArity(ctx, call, name, args, params.length) &&
+    (name === "netMss" || !refuseOnWasm(ctx, call, name))
+  ) {
     for (let i = 0; i < params.length && i < args.children.length; i++) {
       const param = params.charCodeAt(i)
       const arg = args.children[i]

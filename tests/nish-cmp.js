@@ -685,6 +685,16 @@ const DECLARED = [
     why: "a new cookbook entry: it calls `Math.clz32`, which the reference compiler refuses as an unknown builtin",
   },
   {
+    program: "tests/cases/net_mss.ts",
+    changelog: "Read a connected socket's MSS from nish:net",
+    why: "a new program: it calls `netMss`, which the reference compiler refuses as an unknown export of `nish:net`",
+  },
+  {
+    program: "docs/cookbook/builtin-net-mss.ts",
+    changelog: "Read a connected socket's MSS from nish:net",
+    why: "a new cookbook entry: it calls `netMss`, which the reference compiler refuses as an unknown export of `nish:net`",
+  },
+  {
     program: "tests/link/net_hpack/main.ts",
     changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
     why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
