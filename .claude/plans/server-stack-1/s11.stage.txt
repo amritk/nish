@@ -1,0 +1,10 @@
+Give std's HTTP client an opt-in outbound policy for servers that fetch URLs they did not
+choose (webhooks, link previews, avatars by URL): only public addresses after DNS
+resolution (no loopback, private, link-local, CGNAT or metadata ranges, checked on the
+resolved address, with the connection made to that same address so DNS rebinding cannot
+switch it), an optional host allowlist, redirect limits that re-check every hop, timeouts,
+and response size caps.
+
+Attacker-facing: the docs/security/ record for the policy (SSRF, DNS rebinding, redirect
+tricks, IPv6 and IPv4-mapped forms) with before/after tests, and a section in the HTTP
+client guide page.

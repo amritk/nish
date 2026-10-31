@@ -1,0 +1,17 @@
+You are working in amritk/nish. Read CLAUDE.md and .claude/orientation.md first and follow
+them: one deliverable per session, the definition of done, security records for
+attacker-facing code, the user guide moving with the language, the rolling freeze for src/,
+generated goldens regenerated never hand-edited, commit messages as the changelog.
+Before starting, search open issues and pull requests for this work and link any you find.
+
+This is part of Nish's API server story: making Nish the fastest, most robust way to write
+an HTTP API server, with a great development loop. Frame everything (code, docs, commit
+messages, PR text) on its own merits as a general Nish feature.
+
+Reference implementation: the hand-written Nish entry in the multicore server challenge,
+https://github.com/amritk/multicore-server-challenge (submissions/nish-std-amritk), which
+holds 91,000 users on an 8-core box. Read only the files the prompt names. Its code is the
+user's own; check .claude/licensing.md before copying any of it into std/.
+
+Ship it as a finished PR, watch CI, fix what is red, and squash-merge when the five
+conditions in AGENTS.md hold.

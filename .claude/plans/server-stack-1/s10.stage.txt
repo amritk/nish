@@ -1,0 +1,15 @@
+bcrypt at cost 10 takes tens of milliseconds of CPU, which stalls a single-threaded event
+loop. The challenge entry solves it with a separate service process that batches four
+hashes or verifies into one four-lane call (four cost about 1.4 hashes of time), with a
+queue limit, a client limit, and retry when the service is lost (src/bcrypt-service.ts and
+its use in src/worker.ts).
+
+Make this a std module next to std/crypto/bcrypt.ts: a bcrypt pool a server can call from
+its event loop without blocking, answered through the loop (a descriptor the loop polls),
+with batching across lanes, a bounded queue that refuses with a clear error when full, and
+recovery when a worker is lost. Choose processes or threads by measurement and say why.
+Passwords and intermediates are Secret and wiped (CLAUDE.md's rule for std/crypto).
+
+Done when: the module has its security record, tests cover batching, the full queue,
+worker loss and wiping, a benchmark shows throughput against serial bcrypt (Measured:
+trailer), and the password-hashing guide page gains a "in a server" section.

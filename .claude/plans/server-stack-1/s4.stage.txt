@@ -1,0 +1,21 @@
+Add hot reloading to nish run: `nish run --watch program.ts [args]` builds and runs the
+program, watches every source file in its module graph (std files excluded unless changed
+in a checkout), and on a change rebuilds and swaps the running process.
+
+Behaviour:
+- A failed build prints its diagnostics (and, with --json, the --json contract objects) and
+  keeps the old process running.
+- A good build starts the new process before stopping the old one. For a server, both bind
+  the same port with SO_REUSEPORT, so connections are never refused; the old process gets
+  SIGTERM and drains (prompt 2's shutdown) before it exits. For a program that is not a
+  server, the old process is stopped and the new one started.
+- Changes are debounced; a burst of saves is one rebuild. A rebuild started while another is
+  running cancels the older one.
+- The program can tell it is running under --watch (an environment variable) so a server
+  can log or skip one-time setup, and --watch prints how long each rebuild took.
+- Signals: Ctrl-C stops the watcher and the program cleanly.
+
+This is a CLI surface change: it gets its --help entry, its guide section in
+docs/guide/using-nish/cli.md, an AGENTS.md table row if it adds an exit code, and
+end-to-end tests in tests/run.js that edit a file and see the new behaviour served,
+including the failed-build case and a server that loses no request across a swap.

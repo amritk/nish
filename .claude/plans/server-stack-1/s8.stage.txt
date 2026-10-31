@@ -1,0 +1,14 @@
+Add std/crypto/jwt.ts: compact JWS verify and sign over the algorithms std/crypto already
+has — RS256 (rsa.ts), ES256 and ES384 (p256.ts, p384.ts), EdDSA (ed25519.ts), HS256/384/512
+(hmac.ts) — with claims checks (exp, nbf, iat with a configurable leeway, iss, aud, sub).
+
+Requirements: refuse alg "none" and algorithm confusion (the key decides the algorithm, not
+the header); constant-time signature comparison; a token size cap; for HMAC, key the pads
+once and copy the state per token (the challenge entry's src/jwt.ts does this and verifies
+on every request without caching); no allocation per verify after warm-up where the
+algorithm allows it.
+
+This is attacker-facing crypto: it ships with its docs/security/ record (scope, threat
+model, findings with before/after tests) and index row, test vectors from RFC 7515/7518/
+8037 and known-bad tokens, a fuzz target in the fuzz section of tests/run.js, and a guide
+section (an auth page under docs/guide/using-nish/ or the closest existing page).

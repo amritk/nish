@@ -1,0 +1,20 @@
+Give std/net/postgres.ts what a high-throughput server needs, taking the patterns from the
+challenge entry (src/worker.ts, src/sql.ts; its README explains the measurements) into
+general, documented std APIs:
+- Per-worker pools split into read and write connections, with statements prepared on every
+  connection at startup and pipelining of several groups per connection.
+- Startup session options settable in PgConfig, with server-friendly defaults documented:
+  plan_cache_mode=force_generic_plan, jit=off, max_parallel_workers_per_gather=0 (the top
+  challenge entry measured 16% of Postgres CPU lost without generic plans).
+- Durable group commit: writes queue while a group is in flight, then up to N writes or
+  M bytes of binds go as one group with one commit; each caller's answer waits for its
+  commit (ReadyForQuery). If a group fails, each write is retried alone so only the bad one
+  fails. A write on a lost connection is never retried (it may have committed).
+- Lost connections: in-flight requests fail with a clear error, the slot is rebuilt on
+  demand, and reconnects back off with jitter (the entry reconnects immediately; do better).
+- Binary result rows where the current code reads text, if a measurement shows it helps.
+
+Done when: each piece has tests against a real Postgres in the existing postgres test
+setup (see how tests/run.js runs the postgres cases), docs/guide/using-nish/postgres.md
+gains a "for servers" section, the module's security record covers the new failure modes,
+and a benchmark shows group commit's effect with a Measured: trailer.
