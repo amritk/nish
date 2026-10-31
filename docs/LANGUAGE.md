@@ -9296,7 +9296,7 @@ export const main = (): i32 => {
   | a rename to a key that is not valid UTF-8, a lone surrogate such as `"\ud800"` included, which no input could give | NL2499 | `json_reject_options_surrogate` |
   | `presence` or one of its entries not written as an object literal of string literals | NL2493 | `json_reject_presence_not_object`, `json_reject_presence_not_literal` |
   | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
-  | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded itself or is renamed or made optional; a field recorded twice | NL2585 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `json_reject_presence_twice` |
+  | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2585 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `json_reject_presence_twice` |
 
   A spread or a computed key in the literal is refused by Phase 0 as it is
   anywhere (NL1061, NL1041; `reject_json_options_spread`,
@@ -9339,10 +9339,9 @@ export const main = (): i32 => {
   per recorded field, no allocation, and a class that records nothing compiles
   to the code it did before. Each object decoded sets its own, so a nested
   class, an array element and a map's value answer for their own keys, and a
-  second decoding into one object answers for its own input. When the input is
-  not an object, decoding fails before the object closes and leaves the
-  presence fields as they were, so they are read only after
-  `JSON_DECODE_OK`. A JSON Merge Patch (RFC 7396) is applied with it: the patch
+  second decoding into one object answers for its own input. A decoding that
+  fails may have set some presence fields and not others (none, when the input
+  is not an object), so they are read only after `JSON_DECODE_OK`. A JSON Merge Patch (RFC 7396) is applied with it: the patch
   is a class whose fields are all optional and recorded, and `null` on a field
   that is not `| null` is `JSON_DECODE_TYPE`, so the patch is refused before
   any of it is applied (`examples/merge-patch.ts`,

@@ -75,8 +75,8 @@
  * duplicate or a missing key, so recording costs one store per recorded field
  * and allocates nothing, and a class that records nothing compiles to the code
  * it did before. Each object sets its own, so a nested class or an array
- * element answers for its own keys. When the input is not an object at all the
- * decoding stops before the object closes and sets none of them; read them
+ * element answers for its own keys. A decoding that fails may set some of
+ * them and not others (when the input is not an object, none), so read them
  * only when `jsonDecode` answered `JSON_DECODE_OK`.
  *
  * **A merge patch (RFC 7396)** is that option's use: a patch class whose

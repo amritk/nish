@@ -14,7 +14,7 @@
 //   - a key given `null` removes the member, which a typed record says as
 //     `null` on a `| null` field; on a field that is not `| null` the
 //     decoding refuses the patch (`JSON_DECODE_TYPE`) before anything is
-//     applied;
+//     applied, and `tags`, an array, is removed by being emptied;
 //   - an object given for an object member is merged into it, by the same
 //     rules, one level down.
 //
@@ -53,7 +53,11 @@ class AddressPatch {
   hasCity: boolean = false
 }
 
-/** `Profile` as a patch. `name` and `age` are not `| null`, so a patch cannot remove them. */
+/**
+ * `Profile` as a patch. `name` and `age` are not `| null`, so a patch cannot
+ * remove them. `tags` is `| null` here because an array field's initializer
+ * cannot be a literal, so `"tags": null` decodes and empties the list.
+ */
 class ProfilePatch {
   static readonly json = {
     optional: ["name", "email", "address", "tags", "age"],

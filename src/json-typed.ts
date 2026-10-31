@@ -397,12 +397,12 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
       jsonPresenceMisuse(ctx, info, prop, `records \`${field.name}\` twice`)
       return
     }
-    if (flag.jsonOffWire) {
-      jsonPresenceMisuse(ctx, info, to, `gives \`${flag.name}\` to two fields`)
-      return
-    }
     if (flag === field) {
       jsonPresenceMisuse(ctx, info, to, `gives \`${field.name}\` itself as its presence field`)
+      return
+    }
+    if (flag.jsonOffWire) {
+      jsonPresenceMisuse(ctx, info, to, `gives \`${flag.name}\` to two fields`)
       return
     }
     if (field.jsonOffWire) {
@@ -410,7 +410,7 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
       return
     }
     if (flag.jsonPresence !== null) {
-      jsonPresenceFlagIs(ctx, info, to, field, flag, "recorded itself")
+      jsonPresenceFlagIs(ctx, info, to, field, flag, "recorded by a presence field of its own")
       return
     }
     if (flag.type !== T_BOOL) {
