@@ -331,7 +331,7 @@ function Checker.importSort(this: Checker): void -> @Checker.importSort [exporte
   stackSites=0 stackLocals=0
   callee -8:58 hasSortCall -> @hasSortCall
   local -5:16 imp: ImportBinding (const)
-  callee +0:31 new ImportBinding -> @ImportBinding.constructor
+  callee +1:7 new ImportBinding -> @ImportBinding.constructor
 function Checker.qualifySymbols(this: Checker): void -> @Checker.qualifySymbols [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9

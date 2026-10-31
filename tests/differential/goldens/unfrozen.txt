@@ -96,6 +96,7 @@ cases/arr_ref_alias_dead added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_replace added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp_f64 added after R6: no rewriter to freeze it with
+cases/arr_sort_cmp_record added after R6: no rewriter to freeze it with
 cases/arr_sum stale since R6: tests/cases/arr_sum.ts changed since the rewrite was frozen (db9b79bf0f0b86e7 -> dc44f5bae14ee81d)
 cases/arr_typed_push_pop added after R6: no rewriter to freeze it with
 cases/asi_continuation added after R6: no rewriter to freeze it with
