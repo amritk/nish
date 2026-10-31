@@ -151,23 +151,19 @@ function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @ini
   callee +27:12 floatText -> @floatText
   local +29:7 value: i64 (let)
   callee +29:15 parseIntegerLiteral -> @parseIntegerLiteral
-function defaultValues(emitter: Emitter, sig: FunctionSig, from: i32, passed: string[]): string[] -> @defaultValues [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  escaping: from
-  calls: FunctionSig.defaultOf FunctionSig.writtenArity initializerConstant internalErrorFor nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_from_i32
+function defaultValue(emitter: Emitter, sig: FunctionSig, p: i32, passed: string[]): string -> @defaultValue [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_exit
+  escaping: p
+  calls: FunctionSig.defaultOf initializerConstant internalErrorFor nish_exit nish_panic_index nish_str_concat nish_str_from_i32
   pointer emitter: size=296 writesThrough=false captured=false passedTo=initializerConstant#0
-  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0 FunctionSig.defaultOf#0
-  pointer passed: size=0 writesThrough=true captured=false
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.defaultOf#0
+  pointer passed: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -11:9 values: string[] (const)
-  local -10:7 p: i32 (let)
-  callee -9:14 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  local -8:11 field: FieldInfo | null (const)
-  callee -8:19 FunctionSig.defaultOf -> @FunctionSig.defaultOf
-  callee -5:9 internalErrorFor -> @internalErrorFor
-  local -2:11 value: string (const)
-  callee -2:60 initializerConstant -> @initializerConstant
+  local +0:9 field: FieldInfo | null (const)
+  callee +0:17 FunctionSig.defaultOf -> @FunctionSig.defaultOf
+  callee +3:7 internalErrorFor -> @internalErrorFor
+  callee +6:51 initializerConstant -> @initializerConstant
 function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: string): void -> @emitFieldInitializers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storeField
@@ -282,9 +278,9 @@ function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   escaping: receiver
-  calls: Emitter.beginReclaim Emitter.captureOperands Emitter.emitArgument Emitter.endReclaim Emitter.llvm Emitter.llvmAbi FunctionSig.isCompileTime FunctionSig.visibleOutside IRFunction.emit IRFunction.emitValue TypeTable.resultByValue defaultValues emitPackedResult emitResultReturningCall nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat privateAbi
-  pointer emitter: size=296 writesThrough=true captured=false passedTo=Emitter.llvm#0 emitPackedResult#0 Emitter.emitArgument#0 Emitter.llvmAbi#0 defaultValues#0 Emitter.llvmAbi#0 Emitter.captureOperands#0 Emitter.beginReclaim#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.endReclaim#0
-  pointer callee: size=160 writesThrough=true captured=true passedTo=FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.emitArgument#2 defaultValues#1 Emitter.captureOperands#1 Emitter.beginReclaim#1
+  calls: Emitter.beginReclaim Emitter.captureOperands Emitter.emitArgument Emitter.endReclaim Emitter.llvm Emitter.llvmAbi FunctionSig.isCompileTime FunctionSig.visibleOutside FunctionSig.writtenArity IRFunction.emit IRFunction.emitValue TypeTable.resultByValue defaultValue emitPackedResult emitResultReturningCall nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat privateAbi
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=Emitter.llvm#0 defaultValue#0 emitPackedResult#0 Emitter.emitArgument#0 Emitter.llvmAbi#0 Emitter.captureOperands#0 Emitter.beginReclaim#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.endReclaim#0
+  pointer callee: size=160 writesThrough=true captured=true passedTo=FunctionSig.visibleOutside#0 FunctionSig.writtenArity#0 FunctionSig.isCompileTime#0 defaultValue#1 Emitter.emitArgument#2 Emitter.captureOperands#1 Emitter.beginReclaim#1
   pointer args: size=0 writesThrough=true captured=false
   pointer site: size=40 writesThrough=false captured=false passedTo=emitResultReturningCall#3
   stackSites=2 stackLocals=2
@@ -294,28 +290,28 @@ function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args:
   local +1:9 operands: string[] (const)
   callee +1:34 Emitter.llvm -> @Emitter.llvm
   local +2:9 passed: string[] (const)
-  local +3:7 i: i32 (let)
-  callee +7:9 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  local +13:11 want: i32 (const)
-  local +14:11 value: string (const)
-  callee +14:19 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +15:9 emitPackedResult -> @emitPackedResult
-  callee +16:9 Emitter.emitArgument -> @Emitter.emitArgument
-  callee +17:22 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local +21:9 defaults: string[] (const)
-  callee +21:20 defaultValues -> @defaultValues
+  local +4:9 written: i32 (const)
+  callee +4:19 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  local +5:7 i: i32 (let)
+  callee +9:28 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  local +15:11 want: i32 (const)
+  local +16:9 value: string (let)
+  callee +18:15 defaultValue -> @defaultValue
+  callee +19:16 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +20:15 emitPackedResult -> @emitPackedResult
+  callee +22:15 Emitter.emitArgument -> @Emitter.emitArgument
   callee +24:22 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local +28:14 operand: string (const)
-  callee +28:25 Emitter.captureOperands -> @Emitter.captureOperands
-  local +33:9 mark: string (const)
-  callee +33:16 Emitter.beginReclaim -> @Emitter.beginReclaim
-  local +34:9 call: string (const)
-  callee +34:24 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +36:5 IRFunction.emit -> @IRFunction.emit
-  callee +41:7 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +42:12 emitResultReturningCall -> @emitResultReturningCall
-  callee +44:10 Emitter.endReclaim -> @Emitter.endReclaim
-  callee +44:35 IRFunction.emitValue -> @IRFunction.emitValue
+  local +29:14 operand: string (const)
+  callee +29:25 Emitter.captureOperands -> @Emitter.captureOperands
+  local +34:9 mark: string (const)
+  callee +34:16 Emitter.beginReclaim -> @Emitter.beginReclaim
+  local +35:9 call: string (const)
+  callee +35:24 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +37:5 IRFunction.emit -> @IRFunction.emit
+  callee +42:7 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +43:12 emitResultReturningCall -> @emitResultReturningCall
+  callee +45:10 Emitter.endReclaim -> @Emitter.endReclaim
+  callee +45:35 IRFunction.emitValue -> @IRFunction.emitValue
 function emitMethodCall(emitter: Emitter, expr: Node): string -> @emitMethodCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
