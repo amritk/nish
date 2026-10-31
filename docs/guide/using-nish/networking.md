@@ -5,7 +5,8 @@ whichever of them is ready. It is a thin layer: every socket is non-blocking,
 there is no `async` and no callback, and your `main` is the loop. The protocol
 stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 [standard library](standard-library.md); this page is about the sockets
-themselves. The rules are in the reference,
+themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
+listeners, connections and pairs. The rules are in the reference,
 [`nish:net`](../../LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
 
 Every function is also a global, as every `nish:` export is, but importing them

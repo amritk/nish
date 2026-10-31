@@ -61,8 +61,11 @@ typedef int nish_net_unused;
 #include <netinet/tcp.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
 #if defined(__linux__)
 #include <netinet/udp.h>
@@ -105,6 +108,8 @@ static int32_t nish_net_err(int e) {
   if (e == ECONNREFUSED) return -111;
   if (e == ETIMEDOUT) return -110;
   if (e == ENOTSOCK) return -88;
+  if (e == ENAMETOOLONG) return -36;
+  if (e == ELOOP) return -40;
 #endif
   return -e;
 }
@@ -719,5 +724,177 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   }
   return n;
 #endif
+}
+
+/* The Unix-domain address `path` names into `s`, its length into `n`, and 1
+   or 0 for whether it is abstract; or the failure, before any socket exists.
+   An empty path or one with a NUL inside is -22, and so is a bare `@`. A path
+   too long for `sun_path` with its NUL is -36: the kernel would cut it short
+   or refuse it, and a cut one binds a file the program never named
+   (docs/security/runtime.md, RT-33). A leading `@` is Linux's abstract
+   namespace: the rest, at most `sizeof sun_path - 1` bytes, follows a NUL,
+   and the length is exact, because the name is every byte the length covers.
+   Darwin has no abstract namespace, so there `@` is -95. */
+static int32_t nish_unix_addr(const nish_str *path, struct sockaddr_un *s, socklen_t *n) {
+  const char *p = path->data;
+  uint64_t len = path->len;
+  memset(s, 0, sizeof *s);
+  s->sun_family = AF_UNIX;
+  if (len == 0 || strlen(p) != len || (len == 1 && p[0] == '@')) return -22;
+  int abstract = p[0] == '@';
+#if !defined(__linux__)
+  if (abstract) return -95;
+#endif
+  if (len + !abstract > sizeof s->sun_path) return -36;
+  memcpy(s->sun_path, p, len);
+  if (abstract) s->sun_path[0] = 0;
+  *n = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + len + !abstract);
+#if !defined(__linux__)
+  s->sun_len = (unsigned char)*n;
+#endif
+  return abstract;
+}
+
+/* Whether the socket file at `s` (`n` bytes) is stale, for `unixListen` flag
+   1 after a bind found the path taken: 0 once it is unlinked, else the
+   failure. Anything but a socket is -17 and left alone. A probe connects to
+   it: a refusal means nothing listens, and only then is the file unlinked; a
+   connect that succeeds or would wait (a full backlog) is a live listener,
+   -98. The probe is a connection the live listener sees and that closes at
+   once. Between the probe and the unlink another process may bind the path,
+   and that file is the one unlinked: the socket's directory is the trust
+   boundary (RT-34). Darwin refuses a connect to a listener whose backlog is
+   full with the same `ECONNREFUSED` as one to a dead file, so the probe
+   cannot tell them apart there, and a socket file in the way is -95 and left
+   alone: the flag never removes a live listener's file. */
+static int32_t nish_unix_stale(const struct sockaddr_un *s, socklen_t n) {
+  struct stat st;
+  if (lstat(s->sun_path, &st) != 0) return errno == ENOENT ? 0 : nish_net_fail();
+  if (!S_ISSOCK(st.st_mode)) return -17;
+#if !defined(__linux__)
+  (void)n;
+  return -95;
+#else
+  int probe = nish_net_socket(AF_UNIX, SOCK_STREAM);
+  if (probe < 0) return nish_net_fail();
+  int e = connect(probe, (const struct sockaddr *)s, n) == 0 ? 0 : errno;
+  close(probe);
+  if (e != ECONNREFUSED) return e == 0 || e == EAGAIN || e == EINPROGRESS ? -98 : nish_net_err(e);
+  return unlink(s->sun_path) != 0 && errno != ENOENT ? nish_net_fail() : 0;
+#endif
+}
+
+/* A listening Unix stream socket at `path`, or the failure. A path that
+   exists is -98, unless flag 1 asks `nish_unix_stale` to clear a socket file
+   nothing listens on, after which the bind is tried once more; any other bit
+   is -22, and an abstract name ignores the flag, since no file is left
+   behind. A pathname socket's file gets `mode` between the bind and the
+   listen: a connect needs write permission on it, and until the listen every
+   connect is refused, so the umask's mode the bind gave it never admits
+   anyone (RT-35; `tests/cases/net_unix_paths` checks the order under umask
+   0). A failure after the bind closes the socket and unlinks the
+   file it made, so no failure leaves a descriptor or a file behind
+   (RT-36). */
+static int32_t nish_unix_bound(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode) {
+  if ((uint32_t)flags > 1) return -22;
+  struct sockaddr_un s;
+  socklen_t n;
+  int32_t abstract = nish_unix_addr(path, &s, &n);
+  if (abstract < 0) return abstract;
+  int fd = nish_net_socket(AF_UNIX, SOCK_STREAM);
+  if (fd < 0) return nish_net_fail();
+  int bound = bind(fd, (struct sockaddr *)&s, n);
+  if (bound != 0 && errno == EADDRINUSE && (flags & 1) && !abstract) {
+    int32_t stale = nish_unix_stale(&s, n);
+    if (stale != 0) {
+      close(fd);
+      return stale;
+    }
+    bound = bind(fd, (struct sockaddr *)&s, n);
+  }
+  if (bound != 0) {
+    int e = errno;
+    close(fd);
+    return nish_net_err(e);
+  }
+  if ((!abstract && chmod(s.sun_path, (mode_t)mode) != 0) || listen(fd, backlog) != 0) {
+    int e = errno;
+    close(fd);
+    if (!abstract) unlink(s.sun_path);
+    return nish_net_err(e);
+  }
+  return fd;
+}
+
+/* `unixListen(path, backlog, flags)`: a listening Unix stream socket whose
+   file only its owner may connect to (0600). */
+int32_t nish_unix_listen(const nish_str *path, int32_t backlog, int32_t flags) {
+  return nish_unix_bound(path, backlog, flags, 0600);
+}
+
+/* `unixListenMode(path, backlog, flags, mode)`: the same with the file's mode
+   chosen, 0 to 0o777 and no other bits; an abstract name has no file to give
+   one, so it is -22, as a mode outside the range is. */
+int32_t nish_unix_listen_mode(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode) {
+  if ((uint32_t)mode > 0777) return -22;
+  if (path->len > 0 && path->data[0] == '@') return -22;
+  return nish_unix_bound(path, backlog, flags, mode);
+}
+
+/* `unixConnect(path)`: a new socket, non-blocking and close-on-exec,
+   connecting to the listener at `path`. A Unix connect finishes at once or
+   fails; a full backlog is -11 on Linux (`EAGAIN`) and -111 on Darwin, which
+   answers it as it answers a dead file, and either closes the socket, so the
+   caller tries again later. `EINPROGRESS` is answered as `tcpConnect`
+   answers it: the descriptor, with `connectResult` to say how it went once it
+   is writable. Any other failure closes the socket and is answered. */
+int32_t nish_unix_connect(const nish_str *path) {
+  struct sockaddr_un s;
+  socklen_t n;
+  int32_t abstract = nish_unix_addr(path, &s, &n);
+  if (abstract < 0) return abstract;
+  int fd = nish_net_socket(AF_UNIX, SOCK_STREAM);
+  if (fd < 0) return nish_net_fail();
+  if (connect(fd, (struct sockaddr *)&s, n) != 0 && errno != EINPROGRESS) {
+    int e = errno;
+    close(fd);
+    return nish_net_err(e);
+  }
+  return fd;
+}
+
+/* `unixAccept(fd)`: the next connection, non-blocking and close-on-exec; -11
+   when none is waiting. A Unix peer has no address worth the name (a client
+   is seldom bound), so none is written. */
+int32_t nish_unix_accept(int32_t fd) {
+#if defined(__linux__)
+  int c = accept4(fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+#else
+  int c = nish_net_setup(accept(fd, NULL, NULL));
+#endif
+  return c < 0 ? nish_net_fail() : c;
+}
+
+/* `unixSocketPair(kind, fds)`: two connected sockets into `fds[0]` and
+   `fds[1]`, non-blocking and close-on-exec, and 0. Kind 1 is a byte stream,
+   kind 2 keeps each write one message (`SOCK_SEQPACKET`), and any other kind,
+   or an `fds` shorter than two, is -22 before any socket exists. Darwin has
+   no Unix `SOCK_SEQPACKET`, so kind 2 there is -95. */
+int32_t nish_unix_socket_pair(int32_t kind, nish_array *fds) {
+  if ((kind != 1 && kind != 2) || fds->len < 2) return -22;
+  int sv[2];
+#if defined(__linux__)
+  if (socketpair(AF_UNIX, (kind == 1 ? SOCK_STREAM : SOCK_SEQPACKET) | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, sv) != 0)
+    return nish_net_fail();
+#else
+  if (socketpair(AF_UNIX, kind == 1 ? SOCK_STREAM : SOCK_SEQPACKET, 0, sv) != 0)
+    return errno == EPROTONOSUPPORT || errno == EPROTOTYPE ? -95 : nish_net_fail();
+  nish_net_setup(sv[0]);
+  nish_net_setup(sv[1]);
+#endif
+  int32_t *out = (int32_t *)fds->data;
+  out[0] = sv[0];
+  out[1] = sv[1];
+  return 0;
 }
 #endif
