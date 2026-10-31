@@ -12,7 +12,6 @@
 // carry on instead (D1). The cost is visible — every caller of a checker that
 // can fail has to decide what to do next rather than being unwound past.
 
-import { LANGUAGE } from "./branding"
 import {
   addLocals,
   assignsVariable,
@@ -44,7 +43,7 @@ import {
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
 import { syntaxKindName } from "./checker"
-import { CheckContext, LOOP_ITERATION, LOOP_SWITCH, SwitchFrame } from "./context"
+import { CheckContext, LOOP_BLOCK, LOOP_ITERATION, LOOP_SWITCH, SwitchFrame } from "./context"
 import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
@@ -90,6 +89,7 @@ import {
   N_IF,
   N_INDEX_SIGNATURE,
   N_INTERFACE,
+  N_LABELED,
   N_MEMBER,
   N_METHOD,
   N_MODULE_CONST,
@@ -146,6 +146,50 @@ const terminatorName = (stmt: Node): string => {
     default:
       return "an infinite loop"
   }
+}
+
+/**
+ * A labelled loop or `switch` is checked as one, its label naming it to the
+ * `break` and `continue` inside. A labelled block has a way out besides its
+ * end — each `break` to its label — so what holds after it is what holds at
+ * every one of those, joined as a `switch`'s exits are (`joinExits`).
+ */
+const checkLabeled = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const target = stmt.children[0]
+  const label = stmt.text
+  switch (target.kind) {
+    case N_WHILE:
+      return checkWhile(ctx, target, scope, label)
+    case N_DO:
+      return checkDo(ctx, target, scope, label)
+    case N_FOR:
+      return checkFor(ctx, target, scope, label)
+    case N_FOR_OF:
+      return checkForOf(ctx, target, scope, label)
+    case N_SWITCH:
+      return checkSwitch(ctx, target, scope, label)
+    default:
+      break
+  }
+  // Phase 0 lets a label on nothing else through.
+  const assigned: Local[] = []
+  localsAssignedIn(ctx, target, scope, assigned)
+  const frame = new SwitchFrame(assigned, scope)
+  ctx.switchFrames.push(frame)
+  ctx.pushLoop(LOOP_BLOCK, label)
+  const inner = scope.child()
+  const terminates = checkStatements(ctx, target.children, inner)
+  const broke = ctx.popLoop()
+  ctx.switchFrames.pop()
+  if (!broke) {
+    scope.adopt(inner)
+    return terminates
+  }
+  if (!terminates) {
+    snapshotExit(ctx, frame, inner)
+  }
+  joinExits(ctx, target, scope, frame, [])
+  return false
 }
 
 /** A statement list in its own scope; true when the list terminates the path. */
@@ -252,15 +296,17 @@ const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean =>
     case N_IF:
       return checkIf(ctx, stmt, scope)
     case N_WHILE:
-      return checkWhile(ctx, stmt, scope)
+      return checkWhile(ctx, stmt, scope, "")
     case N_DO:
-      return checkDo(ctx, stmt, scope)
+      return checkDo(ctx, stmt, scope, "")
     case N_FOR:
-      return checkFor(ctx, stmt, scope)
+      return checkFor(ctx, stmt, scope, "")
     case N_FOR_OF:
-      return checkForOf(ctx, stmt, scope)
+      return checkForOf(ctx, stmt, scope, "")
     case N_SWITCH:
-      return checkSwitch(ctx, stmt, scope)
+      return checkSwitch(ctx, stmt, scope, "")
+    case N_LABELED:
+      return checkLabeled(ctx, stmt, scope)
     case N_BREAK:
       return checkBreak(ctx, stmt, scope)
     case N_CONTINUE:
@@ -566,7 +612,7 @@ const takeArm = (locals: Local[], end: Scope, scope: Scope): void => {
   captureNarrowings(locals, end, scope)
 }
 
-const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
   const flow = flowBegin(ctx, stmt, scope, "while")
   const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
@@ -575,7 +621,7 @@ const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   checkCondition(ctx, stmt.children[0], scope)
   const body = scope.child()
   narrow(ctx, stmt.children[0], body, true)
-  ctx.pushLoop(LOOP_ITERATION)
+  ctx.pushLoop(LOOP_ITERATION, label)
   if (!checkStatement(ctx, stmt.children[1], body)) {
     flowNoteBack(ctx, body)
   }
@@ -587,13 +633,13 @@ const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   return stmt.children[0].kind === N_TRUE && !broke
 }
 
-const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
   const flow = flowBegin(ctx, stmt, scope, "do")
   const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
   scope.adopt(held)
   flowHead(ctx, flow, scope, scope)
-  ctx.pushLoop(LOOP_ITERATION)
+  ctx.pushLoop(LOOP_ITERATION, label)
   const inner = scope.child()
   if (!checkStatement(ctx, stmt.children[0], inner)) {
     flowNoteBack(ctx, inner)
@@ -606,7 +652,7 @@ const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   return stmt.children[1].kind === N_TRUE && !broke
 }
 
-const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
   const flow = flowBegin(ctx, stmt, scope, "for")
   const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
@@ -633,7 +679,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // A body that is one statement, not a block, leaves `errored` set when it
   // is refused; the update is checked after it, but is no part of it.
   const headErrored = ctx.errored
-  ctx.pushLoop(LOOP_ITERATION)
+  ctx.pushLoop(LOOP_ITERATION, label)
   if (!checkStatement(ctx, stmt.children[3], body)) {
     flowNoteBack(ctx, body)
   }
@@ -653,7 +699,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   return condition.kind === N_EMPTY && !broke
 }
 
-const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
   // `for await` and a head that is not a declaration never get here: pass 1
   // refuses them (`refuseUnsupportedForms`), so the head is a VAR.
   const flow = flowBegin(ctx, stmt, scope, "for-of")
@@ -717,7 +763,7 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   }
   keySteadyVariables(ctx, list, [stmt.children[2]])
   flowHead(ctx, flow, scope, outer)
-  ctx.pushLoop(LOOP_ITERATION)
+  ctx.pushLoop(LOOP_ITERATION, label)
   const inner = outer.child()
   if (!checkStatement(ctx, stmt.children[2], inner)) {
     flowNoteBack(ctx, inner)
@@ -1122,18 +1168,19 @@ const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): bool
  * `nish_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
  * honestly (docs/wp14-selfhost.md §5).
  *
- * There is no implicit fallthrough: a clause with statements ends in `break`,
- * `return`, `continue` or `process.exit`, and only the last clause
- * may fall out. An *empty* clause does fall through, which is how
- * `case 1: case 2:` gives a group of labels one body.
+ * A clause that does not end in `break`, `return`, `continue` or
+ * `process.exit` falls through into the next clause's body, as in
+ * TypeScript; an empty one is how `case 1: case 2:` gives a group of labels
+ * one body.
  */
-const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string): boolean => {
   const discriminant = checkExpression(ctx, stmt.children[0], scope, -1)
   // What a clause assigns holds, after the `switch`, what one of the ways
   // out of it left it (`SwitchFrame`).
   const assigned: Local[] = []
   localsAssignedIn(ctx, stmt.children[1], scope, assigned)
-  ctx.switchFrames.push(new SwitchFrame(assigned, scope))
+  const switchFrame = new SwitchFrame(assigned, scope)
+  ctx.switchFrames.push(switchFrame)
   // A clause's store drops the narrowing from the whole chain, so what held
   // before the `switch` is kept aside and put back before each clause and
   // before the case no label matches, as `checkIf` does between its arms.
@@ -1177,6 +1224,11 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // that breaks or falls out of the bottom, and whether a `default` does.
   const reaching: i32[] = []
   let defaultReaches = false
+  // A body that falls out of its bottom runs on into the next one, so that
+  // one is entered by the labels of both groups, and with what the bodies
+  // before it assigned joined to what held before the `switch`.
+  let fell = false
+  let fallen: Local[] = []
   let i = 0
   while (i < clauses.length) {
     const clause = clauses[i]
@@ -1206,16 +1258,22 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     let terminates = false
     if (body.children.length > 0 || i === clauses.length - 1) {
       captureNarrowings(kept, before, scope)
+      if (fell) {
+        for (const local of kept) {
+          scope.clearNarrowing(local)
+        }
+      }
       const clauseScope = scope.child()
-      if (tagged !== null || held !== null) {
+      const steers = (tagged !== null && fallen.indexOf(tagged) < 0) || (held !== null && fallen.indexOf(held) < 0)
+      if (steers) {
         narrowClause(ctx, clauseScope, tagged, held, clauses, group, groupDefault)
       }
-      ctx.pushLoop(LOOP_SWITCH)
+      ctx.pushLoop(LOOP_SWITCH, label)
       terminates = body.children.length > 0 ? checkStatements(ctx, body.children, clauseScope) : false
       const clauseBroke = ctx.popLoop()
       broke = broke || clauseBroke
       if (i === clauses.length - 1 && !terminates) {
-        snapshotExit(ctx, clauseScope)
+        snapshotExit(ctx, switchFrame, clauseScope)
       }
       if (clauseBroke || (i === clauses.length - 1 && !terminates)) {
         for (const member of group) {
@@ -1223,16 +1281,14 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
         }
         defaultReaches = defaultReaches || groupDefault
       }
-      group = []
-      groupDefault = false
-    }
-    if (body.children.length > 0 && !terminates && i < clauses.length - 1) {
-      ctx.error(
-        body.children[body.children.length - 1],
-        "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (" +
-          LANGUAGE +
-          " has no implicit fallthrough; leave a clause empty to give several labels one body)"
-      )
+      fell = !terminates
+      if (fell) {
+        localsAssignedIn(ctx, body, scope, fallen)
+      } else {
+        group = []
+        groupDefault = false
+        fallen = []
+      }
     }
     lastTerminates = terminates
     i = i + 1
@@ -1255,7 +1311,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
         withoutMembers(ctx, membersOfSet(ctx, union), labelledMembers(ctx, clauses)).length === 0
     }
     if (!covered) {
-      snapshotExit(ctx, unmatched)
+      snapshotExit(ctx, switchFrame, unmatched)
     }
   }
   const coverage = ctx.program.switchCoverage[stmt.id]
@@ -1272,7 +1328,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (held !== null) {
     steered.push(held)
   }
-  joinExits(ctx, stmt, scope, frame, steered)
+  joinExits(ctx, stmt.children[1], scope, frame, steered)
   // Anything no clause names reaches the statement after the `switch` unless
   // a `default` catches it, or the discriminant is a union's tag and the
   // labels name every tag it can hold; a `break` or a last clause that falls
@@ -1476,13 +1532,28 @@ const checkCaseLabel = (
 }
 
 const checkBreak = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
-  if (ctx.loopKinds.length === 0) {
+  // A plain `break` leaves the innermost loop or `switch`, a labelled one the
+  // statement its label names, which the parser has found.
+  let at = ctx.loopKinds.length - 1
+  while (at >= 0 && (stmt.text === "" ? ctx.loopKinds[at] === LOOP_BLOCK : ctx.loopLabels[at] !== stmt.text)) {
+    at = at - 1
+  }
+  if (at < 0) {
     ctx.error(stmt, "`break` outside of a loop or `switch`")
     return true
   }
-  ctx.loopBreaks[ctx.loopBreaks.length - 1] = true
-  if (ctx.loopKinds[ctx.loopKinds.length - 1] === LOOP_SWITCH) {
-    snapshotExit(ctx, scope)
+  ctx.loopBreaks[at] = true
+  if (ctx.loopKinds[at] !== LOOP_ITERATION) {
+    // A `switch` and a labelled block each have a frame, innermost last.
+    let frame = ctx.switchFrames.length - 1
+    let inner = at + 1
+    while (inner < ctx.loopKinds.length) {
+      if (ctx.loopKinds[inner] !== LOOP_ITERATION) {
+        frame = frame - 1
+      }
+      inner = inner + 1
+    }
+    snapshotExit(ctx, ctx.switchFrames[frame], scope)
   } else if (stmt.text === "") {
     flowNoteBreak(ctx, scope)
   }
@@ -1490,15 +1561,11 @@ const checkBreak = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 }
 
 /**
- * Record, for the innermost `switch`, what its assigned variables and every
- * path read as in `scope`, one way out of it. A path first named later is
+ * Record, for a `switch` or labelled block, what its assigned variables and
+ * every path read as in `scope`, one way out of it. A path first named later is
  * missing here, which reads as having no narrowing, as it had none.
  */
-const snapshotExit = (ctx: CheckContext, scope: Scope): void => {
-  if (ctx.switchFrames.length === 0) {
-    return
-  }
-  const frame = ctx.switchFrames[ctx.switchFrames.length - 1]
+const snapshotExit = (ctx: CheckContext, frame: SwitchFrame, scope: Scope): void => {
   // The clause's own scopes, up to the `switch`'s, hold what its tests narrowed.
   let at = scope
   while (at !== frame.outer) {
@@ -1527,7 +1594,7 @@ const snapshotExit = (ctx: CheckContext, scope: Scope): void => {
  */
 const joinExits = (
   ctx: CheckContext,
-  stmt: Node,
+  body: Node,
   scope: Scope,
   frame: SwitchFrame,
   steered: Local[]
@@ -1537,7 +1604,7 @@ const joinExits = (
   }
   const after: Local[] = []
   addLocals(after, frame.locals)
-  localsAssignedIn(ctx, stmt.children[1], scope, after)
+  localsAssignedIn(ctx, body, scope, after)
   let joined = frame.exits[0]
   let i = 1
   while (i < frame.exits.length) {
@@ -1568,12 +1635,15 @@ const joinExits = (
 
 const checkContinue = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // A `switch` on the stack is a `break` target only: `continue` inside one
-  // belongs to the enclosing loop, as it does in JavaScript.
+  // belongs to the enclosing loop, as it does in JavaScript. A labelled one
+  // names its loop, which the parser has found.
   let inLoop = false
-  for (const kind of ctx.loopKinds) {
-    if (kind === LOOP_ITERATION) {
+  let at = 0
+  while (at < ctx.loopKinds.length) {
+    if (ctx.loopKinds[at] === LOOP_ITERATION && (stmt.text === "" || ctx.loopLabels[at] === stmt.text)) {
       inLoop = true
     }
+    at = at + 1
   }
   if (!inLoop) {
     ctx.error(stmt, "`continue` outside of a loop")
