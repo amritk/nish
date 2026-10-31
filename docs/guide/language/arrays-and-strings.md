@@ -89,7 +89,9 @@ Nish cannot yet follow:
   arrow that uses only its two parameters.
 
 Each comparator compiles to its own copy of the sort, with the comparator
-called directly in the inner loop.
+called directly in the inner loop. A sort uses one temporary copy of the
+array, given back before `sort` returns, so sorting in a loop does not grow
+memory.
 
 ### Walking an array
 
