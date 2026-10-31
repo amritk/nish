@@ -121,6 +121,10 @@ struct Node (class) size=40 align=8 exported
   field flags: i32 index=5 offset=24
   field children: Node[] index=6 offset=32
   constructor -> @Node.constructor
+function isGatheredRest(node: Node): boolean -> @isGatheredRest [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function Node.constructor(this: Node, kind: i32, start: i32, end: i32): void -> @Node.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: end kind start

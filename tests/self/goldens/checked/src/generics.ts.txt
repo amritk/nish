@@ -67,7 +67,7 @@ import collectStructMembers from "./structs" -> function @collectStructMembers
 import noteStructNames from "./structs" -> function @noteStructNames
 import referencedStructNames from "./structs" -> function @referencedStructNames
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
-import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
+import isGatheredRest from "./nodes" -> function @isGatheredRest
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BIGINT from "./nodes" -> const N_BIGINT
@@ -817,7 +817,7 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: expr
-  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isParallelEntry isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry reduceElementMessage resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
+  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry reduceElementMessage resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
   pointer ctx: size=288 writesThrough=true captured=true passedTo=fitTemplateArguments#0 checkExpression#0 unifyAnnotation#0 checkExpression#0 unifyAnnotation#0 resolveFunctionArgument#0 CheckContext.errorType#0 matchFunctionArguments#0 CheckContext.errorType#0 CheckContext.errorType#0 secretArgumentShapeMessage#0 CheckContext.errorType#0 instantiate#0 CheckContext.errorType#0 noteJsonRoute#0 recordRangeEntry#0 recordMemberEntry#0 enterMember#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=fitTemplateArguments#1 reduceElementMessage#5 CheckContext.errorType#1 CheckContext.errorType#1 instantiate#4 recordParallelCall#1 recordExposeCall#1
   pointer template: size=64 writesThrough=true captured=true passedTo=isSpawnTemplate#0 typeParamSet#0 resolveInTemplate#0 resolveFunctionArgument#1 matchFunctionArguments#1 reduceElementMessage#2 secretArgumentShapeMessage#1 instantiate#1
@@ -838,6 +838,7 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   local -9:11 deferred: boolean (const)
   callee -8:22 isFunctionParameter -> @isFunctionParameter
   callee -7:7 isContextualLiteral -> @isContextualLiteral
+  callee -6:7 isGatheredRest -> @isGatheredRest
   local -4:11 type: i32 (const)
   callee -4:38 checkExpression -> @checkExpression
   local -3:11 constant: boolean (const)
@@ -1210,7 +1211,7 @@ function captureMode(template: TemplateInfo): i32 -> @captureMode
   local +0:9 role: i32 (const)
   callee +0:16 parallelRole -> @parallelRole
   callee +7:31 isExposeTemplate -> @isExposeTemplate
-function isContextualLiteral(arg: Node): boolean -> @isContextualLiteral
+function isContextualLiteral(arg: Node): boolean -> @isContextualLiteral [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
   pointer arg: size=40 writesThrough=false captured=false

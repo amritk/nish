@@ -36,7 +36,7 @@ import linkedParent from "./expressions" -> function @linkedParent
 import templateFix from "./expressions" -> function @templateFix
 import recordUpdateFusion from "./fusion" -> function @recordUpdateFusion
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
-import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
+import isGatheredRest from "./nodes" -> function @isGatheredRest
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -419,7 +419,7 @@ function checkMethodArguments(ctx: CheckContext, call: Node, callee: FunctionSig
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fitArguments
   escaping: what
-  calls: CheckContext.error TypeTable.assignable TypeTable.typeName checkExpression fitArguments nish_panic_index nish_str_concat nish_str_from_i32 takesDeclaredContext
+  calls: CheckContext.error TypeTable.assignable TypeTable.typeName checkExpression fitArguments isGatheredRest nish_panic_index nish_str_concat nish_str_from_i32 takesDeclaredContext
   pointer ctx: size=288 writesThrough=true captured=true passedTo=fitArguments#0 checkExpression#0 CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=fitArguments#1
   pointer callee: size=160 writesThrough=false captured=false passedTo=fitArguments#3
@@ -431,6 +431,7 @@ function checkMethodArguments(ctx: CheckContext, call: Node, callee: FunctionSig
   local +5:11 arg: Node (const)
   local +6:11 want: i32 (const)
   local +9:11 gathered: boolean (const)
+  callee +9:22 isGatheredRest -> @isGatheredRest
   local +10:11 context: i32 (const)
   callee +10:51 takesDeclaredContext -> @takesDeclaredContext
   local +11:11 got: i32 (const)

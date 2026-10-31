@@ -14,7 +14,9 @@ import rejectForeignPointer from "./annotations" -> function @rejectForeignPoint
 import resolveType from "./annotations" -> function @resolveType
 import annotationSpelling from "./arrays" -> function @annotationSpelling
 import functionTypeHereMessage from "./generics" -> function @functionTypeHereMessage
+import isContextualLiteral from "./generics" -> function @isContextualLiteral
 import isFunctionParameter from "./generics" -> function @isFunctionParameter
+import isScalarArgument from "./escape" -> function @isScalarArgument
 import isThreadsSource from "./parallel" -> function @isThreadsSource
 import FLAG_COMPUTED from "./nodes" -> const FLAG_COMPUTED
 import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
@@ -27,7 +29,6 @@ import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_EMPTY from "./nodes" -> const N_EMPTY
 import N_IDENT from "./nodes" -> const N_IDENT
 import N_LIST from "./nodes" -> const N_LIST
-import N_NUMBER from "./nodes" -> const N_NUMBER
 import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import FieldInfo from "./program" -> struct FieldInfo
@@ -39,7 +40,6 @@ import isForeignBuffer from "./types" -> function @isForeignBuffer
 import isForeignType from "./types" -> function @isForeignType
 import isNumeric from "./types" -> function @isNumeric
 import K_ARRAY from "./types" -> const K_ARRAY
-import T_BOOL from "./types" -> const T_BOOL
 import T_ERROR from "./types" -> const T_ERROR
 import T_I32 from "./types" -> const T_I32
 import T_STRING from "./types" -> const T_STRING
@@ -84,7 +84,7 @@ function collectParamForm(ctx: CheckContext, sig: FunctionSig, param: Node, type
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: type
-  calls: CheckContext.error FieldInfo.constructor FunctionSig.isCompileTime TypeTable.isArray TypeTable.isRanged TypeTable.typeName checkLiteralInitializer followsDefaultMessage isNumeric isScalarDefault mentionsBound nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq spellingOf
+  calls: CheckContext.error FieldInfo.constructor FunctionSig.isCompileTime TypeTable.isArray TypeTable.isRanged TypeTable.typeName checkLiteralInitializer followsDefaultMessage isContextualLiteral isNumeric isScalarDefault mentionsBound nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq spellingOf
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 spellingOf#0 mentionsBound#0 CheckContext.error#0 isScalarDefault#0 CheckContext.error#0 spellingOf#0 CheckContext.error#0 isScalarDefault#0 CheckContext.error#0 CheckContext.error#0 checkLiteralInitializer#0
   pointer sig: size=160 writesThrough=true captured=false passedTo=FunctionSig.isCompileTime#0
   pointer param: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 FieldInfo.constructor#3
@@ -115,22 +115,20 @@ function collectParamForm(ctx: CheckContext, sig: FunctionSig, param: Node, type
   callee +54:7 CheckContext.error -> @CheckContext.error
   callee +55:52 isScalarDefault -> @isScalarDefault
   callee +56:7 CheckContext.error -> @CheckContext.error
-  local +64:9 numeral: boolean (const)
-  callee +67:19 isNumeric -> @isNumeric
-  callee +67:39 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +68:5 CheckContext.error -> @CheckContext.error
-  callee +68:49 TypeTable.typeName -> @TypeTable.typeName
-  callee +71:3 checkLiteralInitializer -> @checkLiteralInitializer
+  callee +64:7 isContextualLiteral -> @isContextualLiteral
+  callee +64:37 isNumeric -> @isNumeric
+  callee +64:57 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +65:5 CheckContext.error -> @CheckContext.error
+  callee +65:49 TypeTable.typeName -> @TypeTable.typeName
+  callee +68:3 checkLiteralInitializer -> @checkLiteralInitializer
 function isScalarDefault(ctx: CheckContext, type: i32): boolean -> @isScalarDefault
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isRanged isNumeric
+  calls: TypeTable.isRanged isScalarArgument
   pointer ctx: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:3 isNumeric -> @isNumeric
-  callee +2:3 TypeTable.isEnum -> @TypeTable.isEnum
-  callee +3:3 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +4:3 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +0:3 isScalarArgument -> @isScalarArgument
+  callee +0:40 TypeTable.isRanged -> @TypeTable.isRanged
 function refuseMixedForms(ctx: CheckContext, sig: FunctionSig, list: Node): void -> @refuseMixedForms
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -154,9 +152,9 @@ function fitArguments(ctx: CheckContext, call: Node, args: Node, sig: FunctionSi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error FunctionSig.requiredArity FunctionSig.writtenArity gatherRest nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 gatherRest#0 CheckContext.error#1
-  pointer args: size=40 writesThrough=true captured=false passedTo=gatherRest#1
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 gatherRest#0 CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 gatherRest#1 CheckContext.error#1
+  pointer args: size=40 writesThrough=true captured=false passedTo=gatherRest#2
   pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0 FunctionSig.requiredArity#0
   stackSites=0 stackLocals=0
   local +0:9 written: i32 (const)
@@ -173,9 +171,9 @@ function fitTemplateArguments(ctx: CheckContext, call: Node, args: Node, paramet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error gatherRest nish_panic_index nish_str_concat nish_str_from_i32
-  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 gatherRest#0 CheckContext.error#1
-  pointer args: size=40 writesThrough=true captured=false passedTo=gatherRest#1
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 gatherRest#0 CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 gatherRest#1 CheckContext.error#1
+  pointer args: size=40 writesThrough=true captured=false passedTo=gatherRest#2
   pointer parameters: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 written: i32 (const)
@@ -185,21 +183,22 @@ function fitTemplateArguments(ctx: CheckContext, call: Node, args: Node, paramet
   local +13:7 least: i32 (let)
   local +23:9 count: string (const)
   callee +24:3 CheckContext.error -> @CheckContext.error
-function gatherRest(call: Node, args: Node, from: i32): void -> @gatherRest
+function gatherRest(ctx: CheckContext, call: Node, args: Node, from: i32): void -> @gatherRest
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: from
   calls: Node.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   pointer args: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -16:9 elements: Node[] (const)
-  local -15:9 kept: Node[] (const)
-  local -14:14 arg: Node (const)
-  local -7:9 start: i32 (const)
-  local -6:9 end: i32 (const)
-  local -5:9 array: Node (const)
-  callee -5:17 new Node -> @Node.constructor
+  local +1:9 elements: Node[] (const)
+  local +2:9 kept: Node[] (const)
+  local +3:14 arg: Node (const)
+  local +10:9 start: i32 (const)
+  local +11:9 end: i32 (const)
+  local +12:9 array: Node (const)
+  callee +12:17 new Node -> @Node.constructor
 function spellingOf(ctx: CheckContext, node: Node): string -> @spellingOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_slice nish_str_new
