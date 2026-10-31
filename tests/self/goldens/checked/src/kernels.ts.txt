@@ -37,21 +37,21 @@ function isIndexOfAnyWalk(program: CheckedProgram, sig: FunctionSig): boolean ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isTextModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isTextModule -> @isTextModule
 function isRegexScanWalk(program: CheckedProgram, sig: FunctionSig): boolean -> @isRegexScanWalk [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isRegexModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isRegexModule -> @isRegexModule
 function isAesSeam(program: CheckedProgram, sig: FunctionSig): i32 -> @isAesSeam [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isCryptoAesModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   local +1:7 seam: i32 (let)
@@ -63,21 +63,21 @@ function isSha256Seam(program: CheckedProgram, sig: FunctionSig): boolean -> @is
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:27 stdModuleName -> @stdModuleName
 function isCrc32Seam(program: CheckedProgram, sig: FunctionSig): boolean -> @isCrc32Seam [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isCompressChecksumModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isCompressChecksumModule -> @isCompressChecksumModule
 function bytesWalkOf(program: CheckedProgram, sig: FunctionSig): i32 -> @bytesWalkOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isBytesModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   local +1:7 walk: i32 (let)
@@ -89,6 +89,6 @@ function isJsonPutF64Walk(program: CheckedProgram, sig: FunctionSig): boolean ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isJsonModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isJsonModule -> @isJsonModule

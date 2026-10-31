@@ -74,6 +74,7 @@ import {
   emitWhile,
 } from "./emit-control"
 import {
+  defaultValue,
   emitConstructorPrologue,
   emitMethodCall,
   emitNew,
@@ -1669,11 +1670,13 @@ export class Emitter {
     const operandValues: string[] = []
     // A non-exported callee takes and answers one slot per arm (WP15).
     const calleePrivate = privateAbi(this.opts, sig.visibleOutside())
+    const passed: string[] = []
     let i = 0
     while (i < args.children.length) {
       // WP29: a function argument chose which function this call reaches, and
       // that is the whole of it: there is no value to pass.
       if (sig.isCompileTime(i)) {
+        passed.push("")
         i = i + 1
         continue
       }
@@ -1691,7 +1694,18 @@ export class Emitter {
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)
+      passed.push(value)
       i = i + 1
+    }
+    // The parameters the call leaves out pass their defaults (`defaultValue`).
+    const written = sig.writtenArity()
+    for (let k = args.children.length; k < written; k = k + 1) {
+      const value = defaultValue(this, sig, k, passed)
+      const type = this.llvmAbi(sig.paramTypes[k], calleePrivate)
+      operands.push(`${type} ${value}`)
+      operandTypes.push(type)
+      operandValues.push(value)
+      passed.push(value)
     }
     // WP29: the values of the arrow's captures, after everything written.
     const captures = capturesOf(sig)

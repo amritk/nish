@@ -142,6 +142,43 @@ export class FunctionSig {
    * 2 not. Only an answer that rested on no assumption is written.
    */
   keepsLength: i32[]
+  /**
+   * Per parameter, parallel to `paramNames` (`this` included for a member),
+   * the default a call that omits the argument passes, or `null`; empty when
+   * no parameter has one. A default is a literal or an enum member, kept as
+   * a field initializer is so that the caller's emitter writes it as the same
+   * constant (`initializerConstant` in `src/emit-classes.ts`), or the name of
+   * an earlier parameter of the same scalar type, whose position is the
+   * entry's `index`. Every parameter after the first with a default has one.
+   */
+  defaults: (FieldInfo | null)[]
+  /**
+   * The position of a final rest parameter `...xs: T[]`, or -1. A call
+   * gathers the arguments from there on into one array literal
+   * (`gatherRest` in `src/declarations.ts`), so from the checker on
+   * every pass sees a call that passes the array.
+   */
+  restIndex: i32
+
+  /**
+   * How many arguments a call must write: up to the first default, or the
+   * rest parameter; every written parameter when there is neither.
+   */
+  requiredArity(): i32 {
+    let i = 0
+    while (i < this.defaults.length) {
+      if (this.defaults[i] !== null) {
+        return i
+      }
+      i = i + 1
+    }
+    return this.restIndex >= 0 ? this.restIndex : this.writtenArity()
+  }
+
+  /** Whether parameter `index` has a default (`defaults`). */
+  defaultOf(index: i32): FieldInfo | null {
+    return index < this.defaults.length ? this.defaults[index] : null
+  }
 
   /** The parameters a call writes: every one but the captures an arrow appended (WP29). */
   writtenArity(): i32 {
@@ -230,6 +267,8 @@ export class FunctionSig {
     this.capturesForCall = false
     this.returnSpelling = ""
     this.keepsLength = []
+    this.defaults = []
+    this.restIndex = -1
   }
 }
 
@@ -1317,6 +1356,12 @@ export class CheckedProgram {
   file: Node
   isEntry: boolean
   /**
+   * A call checked in this module gathered a rest parameter's arguments into
+   * a new array node (`gatherRest` in `src/declarations.ts`), so the
+   * module's parent links are taken again after checking.
+   */
+  gathered: boolean
+  /**
    * The package this module belongs to (WP21 S1, `src/packages.ts`). `""` is
    * the root package — the program being compiled — which is where every
    * module of a single-package build lives.
@@ -1646,6 +1691,7 @@ export class CheckedProgram {
     this.functions = []
     this.exports = new StringMap()
     this.imports = []
+    this.gathered = false
     this.structs = new StringMap()
     this.structList = []
     this.reachableStructs = []

@@ -44,6 +44,7 @@ import { assignInto, checkExpression, linkedParent, templateFix } from "./expres
 import { recordUpdateFusion } from "./fusion"
 import {
   FLAG_OPTIONAL,
+  isGatheredRest,
   N_ARRAY,
   N_ARROW,
   N_BINARY,
@@ -64,6 +65,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
+import { fitArguments } from "./declarations"
 import { ParentTable } from "./parents"
 import { channelCapacityMessage, isChannelClass, isThreadsStruct, spawnFormFor } from "./parallel"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
@@ -548,16 +550,17 @@ const checkMethodArguments = (
   scope: Scope,
   literalContext: boolean
 ): void => {
-  const arity = callee.paramTypes.length - 1
-  if (args.children.length !== arity) {
-    ctx.error(call, `\`${what}\` expects ${arity} argument(s), got ${args.children.length}`)
+  if (!fitArguments(ctx, call, args, callee, 1, what)) {
     return
   }
   let i = 0
-  while (i < arity) {
+  while (i < args.children.length) {
     const arg = args.children[i]
     const want = callee.paramTypes[i + 1]
-    const context = literalContext || takesDeclaredContext(arg) ? want : -1
+    // A rest parameter's gathered arguments are its array's elements, which
+    // take its element type as a function's do.
+    const gathered = isGatheredRest(arg)
+    const context = literalContext || gathered || takesDeclaredContext(arg) ? want : -1
     const got = checkExpression(ctx, arg, scope, context)
     if (got !== T_ERROR && !ctx.table.assignable(got, want)) {
       const spelled = ctx.table.typeName(want)

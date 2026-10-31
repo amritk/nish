@@ -1226,6 +1226,19 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // A call to a rest parameter gathers its trailing arguments into an array
+    // node while it is checked (`gatherRest`), so the links are taken again.
+    // A generic body is checked from the module that instantiates it, so one
+    // gathering module relinks every module.
+    let gathered = false
+    for (const unit of this.modules) {
+      gathered = gathered || unit.checker.program.gathered
+    }
+    if (gathered) {
+      for (const unit of this.modules) {
+        unit.parents.link(unit.file)
+      }
+    }
     // WP40 §4: the handle rules read the checked tables, so they run once
     // every body, every instance's included, has checked clean.
     for (const unit of this.modules) {

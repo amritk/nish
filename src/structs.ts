@@ -34,7 +34,7 @@ import {
   isGenericFunction,
 } from "./generics"
 import { isExported, collectParams } from "./declarations"
-import { checkRangedLiteral, memberSlotMessage } from "./expressions"
+import { checkNumericLiteral, memberSlotMessage } from "./expressions"
 import {
   FLAG_DEFINITE,
   FLAG_OPTIONAL,
@@ -68,7 +68,7 @@ import {
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
-import { T_BOOL, T_CPTR, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
+import { isNumeric, T_BOOL, T_CPTR, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 import {
   handleFieldMessage,
   handleHeaderMessage,
@@ -506,11 +506,17 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
  * field is typed with the enum or one of its member types; a member type
  * holds only its own member.
  */
-const checkEnumInitializer = (ctx: CheckContext, field: FieldInfo, init: Node, what: string): void => {
+const checkEnumInitializer = (
+  ctx: CheckContext,
+  field: FieldInfo,
+  init: Node,
+  what: string,
+  notLiteral: string
+): void => {
   const receiver = init.children[0]
   const info = ctx.program.enumNamed(receiver.kind === N_IDENT ? receiver.text : "")
   if (info === null) {
-    ctx.error(init, `${what}: initializers must be literals (assign other values in the constructor)`)
+    ctx.error(init, notLiteral)
     return
   }
   if (!info.hasMember(init.text)) {
@@ -531,6 +537,44 @@ const checkEnumInitializer = (ctx: CheckContext, field: FieldInfo, init: Node, w
       init,
       `${what} is ${ctx.table.typeName(type)} but its initializer is ${ctx.table.typeName(info.type)}`
     )
+  }
+}
+
+/**
+ * `init` as the constant `field` starts as: a literal of its type, or an enum
+ * member, whose integer is folded into `field.initializerValue`. A field's
+ * initializer and a parameter's default (`collectParams` in
+ * `src/declarations.ts`) are both this, because both are written by an
+ * emitter that has only the syntax and the type (`initializerConstant`).
+ * `what` names the slot in a type mismatch, and `notLiteral` is the refusal
+ * of anything else. A literal outside its type is refused for a ranged type,
+ * and for any numeric type when `exact` (a default, which has no history of
+ * wrapping the way a field's `i32 = 2463534242` does).
+ */
+export const checkLiteralInitializer = (
+  ctx: CheckContext,
+  field: FieldInfo,
+  init: Node,
+  what: string,
+  notLiteral: string,
+  exact: boolean
+): void => {
+  const type = field.type
+  if (init.kind === N_MEMBER) {
+    checkEnumInitializer(ctx, field, init, what, notLiteral)
+    return
+  }
+  const initType = literalInitializerType(ctx, init, type)
+  if (initType < 0) {
+    ctx.error(init, notLiteral)
+  } else if (!ctx.table.assignable(initType, type)) {
+    const got = ctx.table.typeName(initType)
+    ctx.error(init, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`)
+  } else if (initType === type && ((exact && isNumeric(type)) || ctx.table.isRanged(type))) {
+    // The literal is stored as written, so it has to be one of the type's
+    // values: a whole number for an integer, inside a range's bounds (WP31 §6).
+    const negated = init.kind === N_UNARY
+    checkNumericLiteral(ctx, negated ? init.children[0] : init, type, negated, init)
   }
 }
 
@@ -616,24 +660,9 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   field.readonly = (decl.flags & FLAG_READONLY) !== 0
   field.spelling = annotationSpelling(ctx, true, decl.children[1])
   const initializer = decl.children[2]
-  if (initializer.kind === N_MEMBER) {
-    checkEnumInitializer(ctx, field, initializer, what)
-    field.initializer = initializer
-  } else if (initializer.kind !== N_EMPTY) {
-    const initType = literalInitializerType(ctx, initializer, type)
-    if (initType < 0) {
-      ctx.error(
-        initializer,
-        `${what}: initializers must be literals (assign other values in the constructor)`
-      )
-    } else if (!ctx.table.assignable(initType, type)) {
-      const got = ctx.table.typeName(initType)
-      ctx.error(initializer, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`)
-    } else if (ctx.table.isRanged(type) && initType === type) {
-      // WP31 §6: the literal is stored with no check, so it has to be inside.
-      const negated = initializer.kind === N_UNARY
-      checkRangedLiteral(ctx, negated ? initializer.children[0] : initializer, type, negated, initializer)
-    }
+  if (initializer.kind !== N_EMPTY) {
+    const notLiteral = `${what}: initializers must be literals (assign other values in the constructor)`
+    checkLiteralInitializer(ctx, field, initializer, what, notLiteral, false)
     // The field keeps its initializer even when that initializer was refused.
     // What it is worth is nothing; what it *says* is that the programmer wrote
     // one, and the definite-assignment pass would otherwise follow the first

@@ -1,0 +1,1 @@
+Parameter `ys` is `i32[]` and cannot have a default in this version: a default is a number, a `boolean`, a `string` or an enum member

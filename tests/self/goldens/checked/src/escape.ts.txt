@@ -289,7 +289,7 @@ function EscapeAnalysis.constructor(this: EscapeAnalysis, unit: AnalysisUnit, ta
   pointer table: size=96 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
   pointer opts: size=192 writesThrough=true captured=true
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:19 new EscapeResult -> @EscapeResult.constructor
 function EscapeAnalysis.paramLocal(this: EscapeAnalysis, name: string): Local | null -> @EscapeAnalysis.paramLocal [method]
@@ -464,7 +464,7 @@ function EscapeAnalysis.calleeCaptures(this: EscapeAnalysis, callee: FunctionSig
   escaping: index
   calls: FactsTable.get FunctionFacts.pointerParam StringSet.has nish_panic_index
   pointer this: size=136 writesThrough=false captured=false
-  pointer callee: size=144 writesThrough=false captured=false
+  pointer callee: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 g: FunctionFacts | null (const)
   callee +0:15 FactsTable.get -> @FactsTable.get
@@ -477,7 +477,7 @@ function EscapeAnalysis.spawnCaptures(this: EscapeAnalysis, callee: FunctionSig,
   escaping: index
   calls: FactsTable.get FunctionFacts.pointerParam StringSet.has nish_panic_index
   pointer this: size=136 writesThrough=false captured=false
-  pointer callee: size=144 writesThrough=false captured=false
+  pointer callee: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 g: FunctionFacts | null (const)
   callee +0:15 FactsTable.get -> @FactsTable.get
@@ -928,27 +928,30 @@ function EscapeAnalysis.declarationOf(this: EscapeAnalysis, v: Local): Node | nu
 function reclaimsReturnedString(callee: FunctionSig, facts: FactsTable): boolean -> @reclaimsReturnedString [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get FunctionSig.foreign
-  pointer callee: size=144 writesThrough=false captured=false passedTo=FunctionSig.foreign#0
+  pointer callee: size=160 writesThrough=false captured=false passedTo=FunctionSig.foreign#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
   callee +0:41 FunctionSig.foreign -> @FunctionSig.foreign
   local +3:9 g: FunctionFacts | null (const)
   callee +3:13 FactsTable.get -> @FactsTable.get
 function marksTailCall(table: TypeTable, caller: FunctionFacts, callee: FunctionSig, argTypes: i32[], facts: FactsTable): boolean -> @marksTailCall [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get TypeTable.resultByValue isScalarArgument reclaimsReturnedString
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 isScalarArgument#0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FactsTable.get FunctionSig.defaultOf TypeTable.resultByValue isScalarArgument reclaimsReturnedString
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 isScalarArgument#0 isScalarArgument#0
   pointer caller: size=408 writesThrough=false captured=false
-  pointer callee: size=144 writesThrough=false captured=false passedTo=reclaimsReturnedString#0
+  pointer callee: size=160 writesThrough=false captured=false passedTo=reclaimsReturnedString#0 FunctionSig.defaultOf#0
   pointer argTypes: size=0 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=reclaimsReturnedString#1 FactsTable.get#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.resultByValue -> @TypeTable.resultByValue
   callee +0:49 reclaimsReturnedString -> @reclaimsReturnedString
-  local +6:14 type: i32 (const)
-  callee +7:10 isScalarArgument -> @isScalarArgument
-  local +11:9 g: FunctionFacts | null (const)
-  callee +11:13 FactsTable.get -> @FactsTable.get
+  local +8:12 k: i32 (let)
+  callee +9:9 FunctionSig.defaultOf -> @FunctionSig.defaultOf
+  callee +9:42 isScalarArgument -> @isScalarArgument
+  local +13:14 type: i32 (const)
+  callee +14:10 isScalarArgument -> @isScalarArgument
+  local +18:9 g: FunctionFacts | null (const)
+  callee +18:13 FactsTable.get -> @FactsTable.get
 function isScalarArgument(table: TypeTable, type: i32): boolean -> @isScalarArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -962,7 +965,7 @@ function rootsHoldNoPointer(program: CheckedProgram, table: TypeTable, sig: Func
   calls: holdsNoPointerSlot
   pointer program: size=656 writesThrough=false captured=false passedTo=holdsNoPointerSlot#0
   pointer table: size=96 writesThrough=false captured=false passedTo=holdsNoPointerSlot#1
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 type: i32 (const)
   callee +1:10 holdsNoPointerSlot -> @holdsNoPointerSlot
@@ -1020,7 +1023,7 @@ function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, 
   calls: EscapeAnalysis.constructor EscapeAnalysis.decide EscapeAnalysis.decideElementParams EscapeAnalysis.visit FunctionSig.body TypeTable.resultByValue namesNestedFunction
   pointer unit: size=16 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#2 TypeTable.resultByValue#0
-  pointer sig: size=144 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#6 FunctionSig.body#0
+  pointer sig: size=160 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#6 FunctionSig.body#0
   pointer facts: size=24 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#3
   pointer opts: size=192 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#4
   stackSites=1 stackLocals=1
@@ -1120,7 +1123,7 @@ function PassWalk.visitCallee(this: PassWalk, callee: FunctionSig, node: Node): 
   sharedWrite: +0:7
   calls: FactsTable.get PassWalk.declaredInPass PassWalk.isOld PassWalk.refuse holdsLocal isSpawnEntry nish_panic_index unwrapParens
   pointer this: size=80 writesThrough=true captured=false passedTo=PassWalk.refuse#0 PassWalk.refuse#0 PassWalk.declaredInPass#0 PassWalk.isOld#0 PassWalk.refuse#0
-  pointer callee: size=144 writesThrough=false captured=false passedTo=isSpawnEntry#0
+  pointer callee: size=160 writesThrough=false captured=false passedTo=isSpawnEntry#0
   pointer node: size=40 writesThrough=true captured=true passedTo=PassWalk.refuse#2 PassWalk.refuse#2 PassWalk.refuse#2
   stackSites=0 stackLocals=0
   local -9:11 g: FunctionFacts | null (const)
@@ -1232,7 +1235,7 @@ function decideLoopScopes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig
   calls: FunctionSig.body collectLoopScopes
   pointer unit: size=16 writesThrough=true captured=true passedTo=collectLoopScopes#0
   pointer table: size=96 writesThrough=true captured=true passedTo=collectLoopScopes#1
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.body#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.body#0
   pointer f: size=408 writesThrough=false captured=false passedTo=collectLoopScopes#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=collectLoopScopes#3
   stackSites=0 stackLocals=0
@@ -1297,7 +1300,7 @@ function decideArenaBlock(unit: AnalysisUnit, table: TypeTable, facts: FactsTabl
   pointer unit: size=16 writesThrough=true captured=true passedTo=PassWalk.constructor#1 initialisesUsing#0
   pointer table: size=96 writesThrough=true captured=true passedTo=PassWalk.constructor#2 TypeTable.resultByValue#0
   pointer facts: size=24 writesThrough=true captured=true passedTo=PassWalk.constructor#3
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   pointer f: size=408 writesThrough=false captured=false passedTo=PassWalk.refuseCarriedStores#1
   pointer block: size=40 writesThrough=true captured=true passedTo=LoopScope.constructor#1 LoopScope.constructor#2
   stackSites=1 stackLocals=1
@@ -1374,7 +1377,7 @@ function findArenaBlocks(unit: AnalysisUnit, table: TypeTable, facts: FactsTable
   pointer unit: size=16 writesThrough=true captured=true passedTo=decideArenaBlock#0 arenaBlockMessage#0 findArenaBlocks#0
   pointer table: size=96 writesThrough=true captured=true passedTo=decideArenaBlock#1 findArenaBlocks#1
   pointer facts: size=24 writesThrough=true captured=true passedTo=decideArenaBlock#2 findArenaBlocks#2
-  pointer sig: size=144 writesThrough=false captured=false passedTo=decideArenaBlock#3 findArenaBlocks#3
+  pointer sig: size=160 writesThrough=false captured=false passedTo=decideArenaBlock#3 findArenaBlocks#3
   pointer f: size=408 writesThrough=false captured=false passedTo=decideArenaBlock#4 findArenaBlocks#4
   pointer node: size=40 writesThrough=true captured=true passedTo=decideArenaBlock#5
   pointer out: size=0 writesThrough=true captured=false passedTo=findArenaBlocks#6

@@ -8,12 +8,12 @@ unsafe import 8:10 wrappingAdd from "nish:unsafe"
 unsafe import 8:23 wrappingMul from "nish:unsafe"
 unsafe import 8:36 wrappingSub from "nish:unsafe"
 unsafe call 10:22 wrappingAdd (node 16)
-unsafe call 12:48 wrappingAdd (node 35)
-unsafe call 14:48 wrappingSub (node 54)
-unsafe call 16:48 wrappingMul (node 73)
-unsafe call 18:48 wrappingAdd (node 92)
-unsafe call 20:48 wrappingSub (node 111)
-unsafe call 22:48 wrappingMul (node 130)
+unsafe call 12:48 wrappingAdd (node 36)
+unsafe call 14:48 wrappingSub (node 56)
+unsafe call 16:48 wrappingMul (node 76)
+unsafe call 18:48 wrappingAdd (node 96)
+unsafe call 20:48 wrappingSub (node 116)
+unsafe call 22:48 wrappingMul (node 136)
 const WRAPPED: i32 = -2147483648
 function addI32(a: i32, b: i32): i32 -> @addI32 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false

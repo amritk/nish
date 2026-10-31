@@ -1,0 +1,1 @@
+Argument 1 of `apply`: `total` has a rest parameter, which a call through a function parameter does not gather; declare it `xs: T[]` to pass it here

@@ -45,6 +45,7 @@ import N_INDEX from "./nodes" -> const N_INDEX
 import N_LIST from "./nodes" -> const N_LIST
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import N_NEW from "./nodes" -> const N_NEW
+import N_OBJECT from "./nodes" -> const N_OBJECT
 import N_PAREN from "./nodes" -> const N_PAREN
 import N_THIS from "./nodes" -> const N_THIS
 import N_TYPE_ARRAY from "./nodes" -> const N_TYPE_ARRAY
@@ -56,6 +57,7 @@ import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
 import N_VAR from "./nodes" -> const N_VAR
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import N_WHILE from "./nodes" -> const N_WHILE
+import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import FLAG_USING from "./nodes" -> const FLAG_USING
 import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
@@ -137,9 +139,9 @@ function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: want
-  calls: CheckContext.error CheckContext.errorType TypeTable.arrayOf TypeTable.holdsSecret TypeTable.isArray TypeTable.refOf TypeTable.typeName TypeTable.unionWithin checkExpression containerMessage holdsMember mixedMemberMessage nish_str_concat unproven
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 unproven#0 checkExpression#0 CheckContext.error#0 holdsMember#0 holdsMember#0 CheckContext.error#0 mixedMemberMessage#0 CheckContext.error#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
+  calls: CheckContext.error CheckContext.errorType TypeTable.arrayOf TypeTable.holdsSecret TypeTable.isArray TypeTable.refOf TypeTable.typeName TypeTable.unionWithin checkExpression containerMessage holdsMember mixedMemberMessage nish_str_concat refuseGatheredRecord unproven
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 unproven#0 checkExpression#0 CheckContext.error#0 holdsMember#0 holdsMember#0 CheckContext.error#0 mixedMemberMessage#0 CheckContext.error#0 CheckContext.errorType#0 refuseGatheredRecord#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 refuseGatheredRecord#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
   callee +0:22 TypeTable.isArray -> @TypeTable.isArray
@@ -169,7 +171,21 @@ function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i3
   callee +49:12 CheckContext.errorType -> @CheckContext.errorType
   callee +49:36 containerMessage -> @containerMessage
   callee +49:62 TypeTable.typeName -> @TypeTable.typeName
-  callee +51:31 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee +51:58 refuseGatheredRecord -> @refuseGatheredRecord
+  callee +54:31 TypeTable.arrayOf -> @TypeTable.arrayOf
+function refuseGatheredRecord(ctx: CheckContext, expr: Node, elem: i32): boolean -> @refuseGatheredRecord
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: elem
+  calls: CheckContext.error inlineElementStruct nish_str_concat unwrapParens
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer expr: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 record: StructInfo | null (const)
+  callee +0:18 inlineElementStruct -> @inlineElementStruct
+  local +4:14 element: Node (const)
+  callee +5:9 unwrapParens -> @unwrapParens
+  callee +6:7 CheckContext.error -> @CheckContext.error
 function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkIndex [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression

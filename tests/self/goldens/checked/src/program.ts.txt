@@ -51,7 +51,7 @@ const FUSE_USE: i32 = 2 [exported]
 const FUSE_UPDATE: i32 = 3 [exported]
 const FUSE_WRITE_FOUND: i32 = 4 [exported]
 const FUSE_WRITE_ABSENT: i32 = 5 [exported]
-struct FunctionSig (class) size=144 align=8 exported
+struct FunctionSig (class) size=160 align=8 exported
   field name: string index=0 offset=0
   field sourceName: string index=1 offset=8
   field paramNames: string[] index=2 offset=16
@@ -73,7 +73,11 @@ struct FunctionSig (class) size=144 align=8 exported
   field capturesForCall: boolean index=18 offset=120
   field returnSpelling: string index=19 offset=128
   field keepsLength: i32[] index=20 offset=136
+  field defaults: FieldInfo | null[] index=21 offset=144
+  field restIndex: i32 index=22 offset=152
   constructor -> @FunctionSig.constructor
+  method requiredArity -> @FunctionSig.requiredArity
+  method defaultOf -> @FunctionSig.defaultOf
   method writtenArity -> @FunctionSig.writtenArity
   method isCompileTime -> @FunctionSig.isCompileTime
   method compileTimeOnly -> @FunctionSig.compileTimeOnly
@@ -301,90 +305,91 @@ struct CheckedProgram (class) size=656 align=8 exported
   field source: SourceFile index=0 offset=0
   field file: Node index=1 offset=8
   field isEntry: boolean index=2 offset=16
-  field packageName: string index=3 offset=24
-  field symbolPrefix: string index=4 offset=32
-  field functions: FunctionSig[] index=5 offset=40
-  field exports: StringMap index=6 offset=48
-  field imports: ImportBinding[] index=7 offset=56
-  field structs: StringMap index=8 offset=64
-  field structList: StructInfo[] index=9 offset=72
-  field reachableStructs: i32[] index=10 offset=80
-  field externalInstances: FunctionSig[] index=11 offset=88
-  field externalInstanceNames: StringSet index=12 offset=96
-  field deferredInstances: DeferredInstance[] index=13 offset=104
-  field typeNames: StringSet index=14 offset=112
-  field importsUsedAsTypes: StringSet index=15 offset=120
-  field constants: StringMap index=16 offset=128
-  field constantList: ConstInfo[] index=17 offset=136
-  field builtinImports: StringMap index=18 offset=144
-  field builtinImportList: BuiltinExport[] index=19 offset=152
-  field aliases: StringMap index=20 offset=160
-  field aliasList: AliasInfo[] index=21 offset=168
-  field templates: StringMap index=22 offset=176
-  field templateList: TemplateInfo[] index=23 offset=184
-  field instantiations: StringMap index=24 offset=192
-  field instantiationList: Instantiation[] index=25 offset=200
-  field structTemplates: StringMap index=26 offset=208
-  field structTemplateList: StructTemplateInfo[] index=27 offset=216
-  field structInstantiations: StringMap index=28 offset=224
-  field structInstantiationList: StructInstantiation[] index=29 offset=232
-  field methodTemplateList: TemplateInfo[] index=30 offset=240
-  field methodConstraints: StringMap index=31 offset=248
-  field methodConstraintLists: ConstraintList[] index=32 offset=256
-  field activeInstance: Instantiation | null index=33 offset=264
-  field savedNodeTypes: i32[] index=34 offset=272
-  field savedNodeLocals: Local | null[] index=35 offset=280
-  field savedNodeConstants: ConstInfo | null[] index=36 offset=288
-  field savedNodeCallees: FunctionSig | null[] index=37 offset=296
-  field savedNodeCoercions: i32[] index=38 offset=304
-  field savedNodeCaseValues: i64[] index=39 offset=312
-  field savedNodeProvenIndex: boolean[] index=40 offset=320
-  field savedNodeProvenClamp: boolean[] index=41 offset=328
-  field savedNodeProvenRange: boolean[] index=42 offset=336
-  field savedNodeProvenNoOverflow: boolean[] index=43 offset=344
-  field savedNodeDisjointCopy: boolean[] index=44 offset=352
-  field savedFusion: FusionTable index=45 offset=360
-  field enums: StringMap index=46 offset=368
-  field enumList: EnumInfo[] index=47 offset=376
-  field typeImports: ImportBinding[] index=48 offset=384
-  field entryMain: FunctionSig | null index=49 offset=392
-  field usesArgv: boolean index=50 offset=400
-  field f64Mode: boolean index=51 offset=401
-  field unsafeImports: ImportBinding[] index=52 offset=408
-  field unsafeCalls: UnsafeCall[] index=53 offset=416
-  field parallelCalls: ParallelCall[] index=54 offset=424
-  field spawnCalls: ParallelCall[] index=55 offset=432
-  field scopeChannels: ScopeChannels[] index=56 offset=440
-  field exposeCalls: ParallelCall[] index=57 offset=448
-  field secretNeeds: SecretNeed[] index=58 offset=456
-  field panicSites: PanicSite[] index=59 offset=464
-  field inlineAssignNodes: Node[] index=60 offset=472
-  field inlineAssignLengths: i32[] index=61 offset=480
-  field newTypeArgumentIds: StringMap index=62 offset=488
-  field newTypeArguments: Node[] index=63 offset=496
-  field memberSets: i32[] index=64 offset=504
-  field memberLists: i32[][] index=65 offset=512
-  field collectionsLibrary: boolean index=66 offset=520
-  field secretLibrary: boolean index=67 offset=521
-  field mapExtrasLibrary: boolean index=68 offset=522
-  field jsonTypedLibrary: boolean index=69 offset=523
-  field mathLibrary: boolean index=70 offset=524
-  field nodeTypes: i32[] index=71 offset=528
-  field nodeLocals: Local | null[] index=72 offset=536
-  field nodeConstants: ConstInfo | null[] index=73 offset=544
-  field nodeCallees: FunctionSig | null[] index=74 offset=552
-  field nodeBuiltins: string[] index=75 offset=560
-  field nodeCoercions: i32[] index=76 offset=568
-  field nodeCaseValues: i64[] index=77 offset=576
-  field nodeEnumValues: i32[] index=78 offset=584
-  field nodeProvenIndex: boolean[] index=79 offset=592
-  field nodeNullTests: boolean[] index=80 offset=600
-  field switchCoverage: i32[] index=81 offset=608
-  field nodeProvenClamp: boolean[] index=82 offset=616
-  field nodeProvenRange: boolean[] index=83 offset=624
-  field nodeProvenNoOverflow: boolean[] index=84 offset=632
-  field nodeDisjointCopy: boolean[] index=85 offset=640
-  field fusion: FusionTable index=86 offset=648
+  field gathered: boolean index=3 offset=17
+  field packageName: string index=4 offset=24
+  field symbolPrefix: string index=5 offset=32
+  field functions: FunctionSig[] index=6 offset=40
+  field exports: StringMap index=7 offset=48
+  field imports: ImportBinding[] index=8 offset=56
+  field structs: StringMap index=9 offset=64
+  field structList: StructInfo[] index=10 offset=72
+  field reachableStructs: i32[] index=11 offset=80
+  field externalInstances: FunctionSig[] index=12 offset=88
+  field externalInstanceNames: StringSet index=13 offset=96
+  field deferredInstances: DeferredInstance[] index=14 offset=104
+  field typeNames: StringSet index=15 offset=112
+  field importsUsedAsTypes: StringSet index=16 offset=120
+  field constants: StringMap index=17 offset=128
+  field constantList: ConstInfo[] index=18 offset=136
+  field builtinImports: StringMap index=19 offset=144
+  field builtinImportList: BuiltinExport[] index=20 offset=152
+  field aliases: StringMap index=21 offset=160
+  field aliasList: AliasInfo[] index=22 offset=168
+  field templates: StringMap index=23 offset=176
+  field templateList: TemplateInfo[] index=24 offset=184
+  field instantiations: StringMap index=25 offset=192
+  field instantiationList: Instantiation[] index=26 offset=200
+  field structTemplates: StringMap index=27 offset=208
+  field structTemplateList: StructTemplateInfo[] index=28 offset=216
+  field structInstantiations: StringMap index=29 offset=224
+  field structInstantiationList: StructInstantiation[] index=30 offset=232
+  field methodTemplateList: TemplateInfo[] index=31 offset=240
+  field methodConstraints: StringMap index=32 offset=248
+  field methodConstraintLists: ConstraintList[] index=33 offset=256
+  field activeInstance: Instantiation | null index=34 offset=264
+  field savedNodeTypes: i32[] index=35 offset=272
+  field savedNodeLocals: Local | null[] index=36 offset=280
+  field savedNodeConstants: ConstInfo | null[] index=37 offset=288
+  field savedNodeCallees: FunctionSig | null[] index=38 offset=296
+  field savedNodeCoercions: i32[] index=39 offset=304
+  field savedNodeCaseValues: i64[] index=40 offset=312
+  field savedNodeProvenIndex: boolean[] index=41 offset=320
+  field savedNodeProvenClamp: boolean[] index=42 offset=328
+  field savedNodeProvenRange: boolean[] index=43 offset=336
+  field savedNodeProvenNoOverflow: boolean[] index=44 offset=344
+  field savedNodeDisjointCopy: boolean[] index=45 offset=352
+  field savedFusion: FusionTable index=46 offset=360
+  field enums: StringMap index=47 offset=368
+  field enumList: EnumInfo[] index=48 offset=376
+  field typeImports: ImportBinding[] index=49 offset=384
+  field entryMain: FunctionSig | null index=50 offset=392
+  field usesArgv: boolean index=51 offset=400
+  field f64Mode: boolean index=52 offset=401
+  field unsafeImports: ImportBinding[] index=53 offset=408
+  field unsafeCalls: UnsafeCall[] index=54 offset=416
+  field parallelCalls: ParallelCall[] index=55 offset=424
+  field spawnCalls: ParallelCall[] index=56 offset=432
+  field scopeChannels: ScopeChannels[] index=57 offset=440
+  field exposeCalls: ParallelCall[] index=58 offset=448
+  field secretNeeds: SecretNeed[] index=59 offset=456
+  field panicSites: PanicSite[] index=60 offset=464
+  field inlineAssignNodes: Node[] index=61 offset=472
+  field inlineAssignLengths: i32[] index=62 offset=480
+  field newTypeArgumentIds: StringMap index=63 offset=488
+  field newTypeArguments: Node[] index=64 offset=496
+  field memberSets: i32[] index=65 offset=504
+  field memberLists: i32[][] index=66 offset=512
+  field collectionsLibrary: boolean index=67 offset=520
+  field secretLibrary: boolean index=68 offset=521
+  field mapExtrasLibrary: boolean index=69 offset=522
+  field jsonTypedLibrary: boolean index=70 offset=523
+  field mathLibrary: boolean index=71 offset=524
+  field nodeTypes: i32[] index=72 offset=528
+  field nodeLocals: Local | null[] index=73 offset=536
+  field nodeConstants: ConstInfo | null[] index=74 offset=544
+  field nodeCallees: FunctionSig | null[] index=75 offset=552
+  field nodeBuiltins: string[] index=76 offset=560
+  field nodeCoercions: i32[] index=77 offset=568
+  field nodeCaseValues: i64[] index=78 offset=576
+  field nodeEnumValues: i32[] index=79 offset=584
+  field nodeProvenIndex: boolean[] index=80 offset=592
+  field nodeNullTests: boolean[] index=81 offset=600
+  field switchCoverage: i32[] index=82 offset=608
+  field nodeProvenClamp: boolean[] index=83 offset=616
+  field nodeProvenRange: boolean[] index=84 offset=624
+  field nodeProvenNoOverflow: boolean[] index=85 offset=632
+  field nodeDisjointCopy: boolean[] index=86 offset=640
+  field fusion: FusionTable index=87 offset=648
   constructor -> @CheckedProgram.constructor
   method newTypeArgumentsOf -> @CheckedProgram.newTypeArgumentsOf
   method isCollections -> @CheckedProgram.isCollections
@@ -427,44 +432,57 @@ struct CheckedProgram (class) size=656 align=8 exported
   method addEnum -> @CheckedProgram.addEnum
   method addEnumAs -> @CheckedProgram.addEnumAs
   method exported -> @CheckedProgram.exported
+function FunctionSig.requiredArity(this: FunctionSig): i32 -> @FunctionSig.requiredArity [exported method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FunctionSig.writtenArity
+  pointer this: size=160 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
+  stackSites=0 stackLocals=0
+  local +0:9 i: i32 (let)
+  callee +7:51 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+function FunctionSig.defaultOf(this: FunctionSig, index: i32): FieldInfo | null -> @FunctionSig.defaultOf [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: index
+  calls: nish_panic_index
+  pointer this: size=160 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function FunctionSig.writtenArity(this: FunctionSig): i32 -> @FunctionSig.writtenArity [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=144 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.isCompileTime(this: FunctionSig, index: i32): boolean -> @FunctionSig.isCompileTime [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: nish_panic_index
-  pointer this: size=144 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.compileTimeOnly(this: FunctionSig): boolean -> @FunctionSig.compileTimeOnly [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=144 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.visibleOutside(this: FunctionSig): boolean -> @FunctionSig.visibleOutside [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=144 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.body(this: FunctionSig): Node | null -> @FunctionSig.body [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=144 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 node: Node (const)
 function FunctionSig.foreign(this: FunctionSig): boolean -> @FunctionSig.foreign [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=144 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.definedIn(this: FunctionSig, source: SourceFile): boolean -> @FunctionSig.definedIn [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=144 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   pointer source: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 origin: SourceFile | null (const)
 function FunctionSig.constructor(this: FunctionSig, name: string, sourceName: string, decl: Node): void -> @FunctionSig.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: decl name sourceName
-  pointer this: size=144 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FusionTable.constructor(this: FusionTable): void -> @FusionTable.constructor [exported constructor]
@@ -506,7 +524,7 @@ function ParallelCall.constructor(this: ParallelCall, node: Node, sig: FunctionS
   escaping: dst node sig
   pointer this: size=24 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   pointer dst: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function capturedReads(program: CheckedProgram, node: Node, out: Node[]): void -> @capturedReads [exported]
@@ -526,7 +544,7 @@ function SecretNeed.constructor(this: SecretNeed, site: Node, sig: FunctionSig, 
   escaping: copy param sig site via what
   pointer this: size=48 writesThrough=true captured=false
   pointer site: size=40 writesThrough=true captured=true
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ScopeChannels.constructor(this: ScopeChannels, scope: Node): void -> @ScopeChannels.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -544,7 +562,7 @@ function FunctionBindings.add(this: FunctionBindings, name: string, sig: Functio
   escaping: name sig
   calls: nish_array_grow
   pointer this: size=16 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FunctionBindings.get(this: FunctionBindings, name: string): FunctionSig | null -> @FunctionBindings.get [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -597,7 +615,7 @@ function Instantiation.constructor(this: Instantiation, template: TemplateInfo |
   pointer this: size=184 writesThrough=true captured=false
   pointer template: size=64 writesThrough=true captured=true
   pointer typeArgs: size=0 writesThrough=true captured=true
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   pointer bindings: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:29 new FunctionBindings -> @FunctionBindings.constructor
@@ -777,27 +795,27 @@ function CheckedProgram.constructor(this: CheckedProgram, source: SourceFile, fi
   stackSites=0 stackLocals=0
   callee +0:25 packageSymbolPrefix -> @packageSymbolPrefix
   callee +2:20 new StringMap -> @StringMap.constructor
-  callee +4:20 new StringMap -> @StringMap.constructor
-  callee +8:34 new StringSet -> @StringSet.constructor
-  callee +10:22 new StringSet -> @StringSet.constructor
-  callee +11:31 new StringSet -> @StringSet.constructor
-  callee +12:22 new StringMap -> @StringMap.constructor
-  callee +14:20 new StringMap -> @StringMap.constructor
-  callee +16:22 new StringMap -> @StringMap.constructor
-  callee +18:27 new StringMap -> @StringMap.constructor
-  callee +20:28 new StringMap -> @StringMap.constructor
-  callee +22:33 new StringMap -> @StringMap.constructor
-  callee +25:30 new StringMap -> @StringMap.constructor
-  callee +39:19 new FusionTable -> @FusionTable.constructor
-  callee +41:18 new StringMap -> @StringMap.constructor
-  callee +53:31 new StringMap -> @StringMap.constructor
-  callee +55:31 isCollectionsModule -> @isCollectionsModule
-  callee +56:29 isMapExtrasModule -> @isMapExtrasModule
-  callee +57:29 isJsonTypedModule -> @isJsonTypedModule
-  callee +58:26 isSecretModule -> @isSecretModule
-  callee +59:24 isMathModule -> @isMathModule
-  callee +69:27 new StringMap -> @StringMap.constructor
-  local +83:9 i: i32 (let)
+  callee +5:20 new StringMap -> @StringMap.constructor
+  callee +9:34 new StringSet -> @StringSet.constructor
+  callee +11:22 new StringSet -> @StringSet.constructor
+  callee +12:31 new StringSet -> @StringSet.constructor
+  callee +13:22 new StringMap -> @StringMap.constructor
+  callee +15:20 new StringMap -> @StringMap.constructor
+  callee +17:22 new StringMap -> @StringMap.constructor
+  callee +19:27 new StringMap -> @StringMap.constructor
+  callee +21:28 new StringMap -> @StringMap.constructor
+  callee +23:33 new StringMap -> @StringMap.constructor
+  callee +26:30 new StringMap -> @StringMap.constructor
+  callee +40:19 new FusionTable -> @FusionTable.constructor
+  callee +42:18 new StringMap -> @StringMap.constructor
+  callee +54:31 new StringMap -> @StringMap.constructor
+  callee +56:31 isCollectionsModule -> @isCollectionsModule
+  callee +57:29 isMapExtrasModule -> @isMapExtrasModule
+  callee +58:29 isJsonTypedModule -> @isJsonTypedModule
+  callee +59:26 isSecretModule -> @isSecretModule
+  callee +60:24 isMathModule -> @isMathModule
+  callee +70:27 new StringMap -> @StringMap.constructor
+  local +84:9 i: i32 (let)
 function CheckedProgram.newTypeArgumentsOf(this: CheckedProgram, expr: Node): Node | null -> @CheckedProgram.newTypeArgumentsOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.get nish_str_from_i32

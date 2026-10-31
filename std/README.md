@@ -445,7 +445,8 @@ that are *not* this package.
   exempt — `NEWLINE` and `SPACE` fold at their uses.
 - **It is an Nish program**, so the constraints are the language's: a function is
   an arrow bound to a module-level `const`, a function is never a value, there
-  is no `try` / `catch`, and there are no optional or default parameters. Those
+  is no `try` / `catch`, and there are no optional parameters (a default is a
+  constant or an earlier parameter only). Those
   three are what shape an API here more than any style preference — see the
   header of `testing.ts` for what they did to that one, which was written before
   WP18 added generic functions and classes

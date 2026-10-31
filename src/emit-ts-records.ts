@@ -41,6 +41,7 @@
 
 import { Operands, Walk } from "./emit-ts-edits"
 import {
+  FLAG_GATHERED,
   FLAG_OPTIONAL,
   N_ARRAY,
   N_BIGINT,
@@ -360,7 +361,11 @@ const literalRow = (walk: Walk, node: Node, operands: Operands): string | null =
     parts.push(part)
     i = i + 1
   }
-  return copies ? `[${parts.join(", ")}]` : null
+  if (!copies) {
+    return null
+  }
+  // A rest's gathered arguments are still written one by one at the call.
+  return (node.flags & FLAG_GATHERED) !== 0 ? parts.join(", ") : `[${parts.join(", ")}]`
 }
 
 /** The zero of a primitive or nullable type id, or the empty string for any other type. */

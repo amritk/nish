@@ -742,7 +742,7 @@ function CalleeEffects.parameter(this: CalleeEffects, sig: FunctionSig, k: i32):
   escaping: k
   calls: CalleeEffects.uses FunctionSig.body FunctionSig.definedIn FunctionSig.foreign StringMap.get StringMap.set nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 redeclares
   pointer this: size=40 writesThrough=true captured=false passedTo=CalleeEffects.uses#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.body#0 FunctionSig.definedIn#0 FunctionSig.foreign#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.body#0 FunctionSig.definedIn#0 FunctionSig.foreign#0
   stackSites=0 stackLocals=0
   local -18:11 program: CheckedProgram (const)
   local -17:11 body: Node | null (const)

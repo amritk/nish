@@ -1,0 +1,1 @@
+Parameter `y` has a type parameter's type, so a default cannot be one value: the type is the caller's, and TypeScript refuses a constant for it too

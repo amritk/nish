@@ -8,8 +8,8 @@ unsafe import 4:10 wrappingAdd from "nish:unsafe"
 unsafe import 4:23 wrappingMul from "nish:unsafe"
 unsafe import 4:36 wrappingSub from "nish:unsafe"
 unsafe call 6:38 wrappingAdd (node 24)
-unsafe call 6:50 wrappingMul (node 27)
-unsafe call 6:70 wrappingSub (node 32)
+unsafe call 6:50 wrappingMul (node 28)
+unsafe call 6:70 wrappingSub (node 34)
 function mix(a: i32, b: i32): i32 -> @mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

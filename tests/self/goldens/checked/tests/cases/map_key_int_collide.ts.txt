@@ -414,9 +414,9 @@ import Map from "nish/collections" -> generic class Map
 import Set from "nish/collections" -> generic class Set
 unsafe import 10:10 wrappingMul from "nish:unsafe"
 unsafe call 17:7 wrappingMul (node 38)
-unsafe call 19:7 wrappingMul (node 60)
-unsafe call 24:38 wrappingMul (node 86)
-unsafe call 27:32 wrappingMul (node 101)
+unsafe call 19:7 wrappingMul (node 61)
+unsafe call 24:38 wrappingMul (node 89)
+unsafe call 27:32 wrappingMul (node 105)
 const N: i32 = 8192
 function unmix(h: i32): i32 -> @unmix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false

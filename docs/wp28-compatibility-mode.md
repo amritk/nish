@@ -144,6 +144,10 @@ stops being able to prove, which is what the `performance` warning will say.
 | `extends` with virtual dispatch | wp25: dispatch is static | a vtable | exactly the function-value cost, so it lands after it |
 | mutable module-level state | wp23 §4 | a module-private global | `readnone`/`readonly` on anything that touches it |
 
+> **Status:** strict mode now takes default parameters (a constant the call
+> passes) and rest parameters; only `x?: T` and a default that is not a
+> constant remain for this row.
+
 A callee the checker can name — an arrow written at the call, or a top-level
 function passed by name — is no longer on this list: strict accepts it as a
 function-typed parameter of a top-level function, specialised per callee with
@@ -452,7 +456,7 @@ S1 and S2 were the two that could stop the package. S1 did not; S2 is unrun.
 | | Stage | Contents | Size |
 | ---: | --- | --- | --- |
 | **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign |
-| **C1** | the free tier | optional and default parameters, `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M |
+| **C1** | the free tier | optional parameters and non-constant defaults (constant defaults are in strict mode), `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M |
 | **C-lib** | the library tier | `Date` objects, `JSON`, `RegExp`, `Buffer`, under WP26's rules. `Map` and `Set` are strict already | L, and per §4.1 it outranks most of what follows |
 | ~~C1, labels~~ | labelled `break`/`continue`, once a C1 entry | **Built in strict**, as direct branches with no flag; it left C1 | — |
 | ~~C2a~~ | callbacks whose callee is statically known | **Built in strict**, as function-typed parameters: free at run time, as §7.4 predicted | — |

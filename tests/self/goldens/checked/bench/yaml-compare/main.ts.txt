@@ -9,10 +9,10 @@ import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 unsafe import 51:10 wrappingAdd from "nish:unsafe"
 unsafe import 51:23 wrappingMul from "nish:unsafe"
 unsafe import 51:36 wrappingSub from "nish:unsafe"
-unsafe call 1394:13 wrappingAdd (node 6934)
-unsafe call 1394:25 wrappingMul (node 6937)
-unsafe call 1397:31 wrappingSub (node 6962)
-unsafe call 4188:12 wrappingMul (node 20825)
+unsafe call 1394:13 wrappingAdd (node 7256)
+unsafe call 1394:25 wrappingMul (node 7260)
+unsafe call 1397:31 wrappingSub (node 7289)
+unsafe call 4188:12 wrappingMul (node 22023)
 const YAML_SCALAR: i32 = 1 [exported]
 const YAML_MAP: i32 = 2 [exported]
 const YAML_SEQ: i32 = 3 [exported]

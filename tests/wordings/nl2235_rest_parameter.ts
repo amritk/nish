@@ -1,2 +1,5 @@
-// NL2235: A rest parameter is a runtime-sized argument list, which has no ABI here.
-const add = (...xs: i32[]): i32 => 0;
+// NL2235: An arrow written as a value ends in no rest: only a declaration's own list does.
+export function main(): void {
+  const xs = [1, 2]
+  console.log(xs.map((x: i32, ...r: i32[]): i32 => x + r.length).length)
+}

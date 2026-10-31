@@ -17,11 +17,37 @@ import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
-import { functionTypeHereMessage, isFunctionParameter } from "./generics"
+import { functionTypeHereMessage, isContextualLiteral, isFunctionParameter } from "./generics"
+import { isScalarArgument } from "./escape"
 import { isThreadsSource } from "./parallel"
-import { FLAG_COMPUTED, FLAG_EXPORTED, FLAG_TYPE_ONLY, N_EMPTY, N_IDENT, N_LIST, Node } from "./nodes"
-import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
-import { isForeignBuffer, isForeignType, K_ARRAY, T_ERROR, T_I32, T_STRING, T_U64, T_VOID } from "./types"
+import {
+  FLAG_COMPUTED,
+  FLAG_DEFAULT,
+  FLAG_EXPORTED,
+  FLAG_GATHERED,
+  FLAG_REST,
+  FLAG_SIGNATURE,
+  FLAG_TYPE_ONLY,
+  N_ARRAY,
+  N_EMPTY,
+  N_IDENT,
+  N_LIST,
+  N_UNARY,
+  Node,
+} from "./nodes"
+import { FieldInfo, FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
+import { checkLiteralInitializer } from "./structs"
+import {
+  isForeignBuffer,
+  isForeignType,
+  isNumeric,
+  K_ARRAY,
+  T_ERROR,
+  T_I32,
+  T_STRING,
+  T_U64,
+  T_VOID,
+} from "./types"
 
 /** Symbol the entry module's `export function main` is emitted under. */
 const ENTRY_MAIN_SYMBOL: string = "nish_main"
@@ -58,6 +84,13 @@ export const collectParams = (
     // more. Only a top-level function may have one; everywhere else the
     // parameter is refused by what it belongs to.
     if (isFunctionParameter(param)) {
+      if ((param.flags & (FLAG_DEFAULT | FLAG_REST)) !== 0 && (param.flags & FLAG_SIGNATURE) !== 0) {
+        // Reported, and the parameter kept, so the signature still lines up
+        // with the arguments each call is matched against.
+        ctx.error(param, functionParameterFormMessage(name))
+      } else if ((param.flags & FLAG_SIGNATURE) !== 0 && sig.defaults.length > 0) {
+        ctx.error(param, followsDefaultMessage(name))
+      }
       // One method may take one: `ThreadScope.spawn` in `nish/threads`, whose
       // task is named at the call like a data-parallel body (WP29 P2).
       if ((owner >= 0 && !isThreadsSource(ctx.program)) || foreign) {
@@ -77,7 +110,12 @@ export const collectParams = (
       sig.paramTypes.push(T_VOID)
       continue
     }
-    const type = resolveType(param.children[1], ctx)
+    // A default without an annotation is refused by `collectParamForm`, which
+    // names the form to write; the empty annotation is no type to resolve.
+    const untypedDefault =
+      param.children[1].kind === N_EMPTY &&
+      (param.flags & (FLAG_DEFAULT | FLAG_SIGNATURE)) === (FLAG_DEFAULT | FLAG_SIGNATURE)
+    const type = untypedDefault ? T_ERROR : resolveType(param.children[1], ctx)
     let duplicate = false
     for (const seen of sig.paramNames) {
       if (seen === name) {
@@ -93,8 +131,280 @@ export const collectParams = (
     }
     sig.paramNames.push(name)
     sig.paramTypes.push(type)
+    if ((param.flags & FLAG_SIGNATURE) !== 0) {
+      collectParamForm(ctx, sig, param, type, list)
+    }
   }
+  refuseMixedForms(ctx, sig, list)
 }
+
+/**
+ * What a parameter of a declaration that may have them says beyond its name
+ * and type: a default, recorded in `sig.defaults` for each call that omits
+ * the argument to pass, or `...`, recorded as `sig.restIndex` for each call
+ * to gather its trailing arguments into an array (`docs/LANGUAGE.md`,
+ * "Default and rest parameters"). `type` is the one just pushed.
+ */
+const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type: i32, list: Node): void => {
+  const name = param.children[0].text
+  const position = sig.paramNames.length - 1
+  if ((param.flags & FLAG_REST) !== 0) {
+    if (param !== list.children[list.children.length - 1]) {
+      ctx.error(param, `Rest parameter \`${name}\` must be the last parameter`)
+    } else if ((param.flags & FLAG_DEFAULT) !== 0) {
+      ctx.error(
+        param.children[2],
+        `Rest parameter \`${name}\` cannot have a default: a call that passes nothing for it passes \`[]\``
+      )
+    } else if (type !== T_ERROR && !ctx.table.isArray(type)) {
+      ctx.error(param.children[1], `Rest parameter \`${name}\` must have an array type, \`...${name}: T[]\``)
+    } else {
+      sig.restIndex = position
+    }
+    return
+  }
+  if ((param.flags & FLAG_DEFAULT) === 0) {
+    if (sig.defaults.length > 0 && type !== T_ERROR) {
+      ctx.error(param, followsDefaultMessage(name))
+    }
+    return
+  }
+  const init = param.children[2]
+  if (param.children[1].kind === N_EMPTY) {
+    ctx.error(
+      param,
+      `Parameter \`${name}\` has a default and no type annotation; write its type before the default, \`${name}: T = ${spellingOf(ctx, init)}\``
+    )
+    return
+  }
+  if (type === T_ERROR) {
+    return
+  }
+  if (mentionsBound(ctx, param.children[1])) {
+    ctx.error(
+      init,
+      `Parameter \`${name}\` has a type parameter's type, so a default cannot be one value: the type is the caller's, and TypeScript refuses a constant for it too`
+    )
+    return
+  }
+  if (!isScalarDefault(ctx, type) && type !== T_STRING) {
+    ctx.error(
+      init,
+      `Parameter \`${name}\` is \`${spellingOf(ctx, param.children[1])}\` and cannot have a default in this version: a default is a number, a \`boolean\`, a \`string\` or an enum member`
+    )
+    return
+  }
+  while (sig.defaults.length < position) {
+    const none: FieldInfo | null = null
+    sig.defaults.push(none)
+  }
+  const value = new FieldInfo(name, type, param)
+  value.initializer = init
+  value.index = -1
+  sig.defaults.push(value)
+  // A default is checked here and not by `checkExpression`, so its type is
+  // recorded here for the walks that read it (`--emit-ts` writes `5` at
+  // `i64` as `5n`).
+  ctx.program.nodeTypes[init.id] = type
+  if (init.kind === N_UNARY && init.children.length > 0) {
+    ctx.program.nodeTypes[init.children[0].id] = type
+  }
+  const notLiteral = `Default of parameter \`${name}\`: a default is a literal, an enum member or the name of an earlier parameter of the same number, \`boolean\` or enum type, because each call that leaves the argument out passes it as a constant`
+  if (init.kind === N_IDENT) {
+    const source = sig.paramNames.indexOf(init.text)
+    if (source < 0 || source >= position || init.text === "this" || sig.isCompileTime(source)) {
+      ctx.error(init, notLiteral)
+    } else if (sig.paramTypes[source] !== type || !isScalarDefault(ctx, type)) {
+      ctx.error(init, notLiteral)
+    } else {
+      value.index = source
+    }
+    return
+  }
+  // A number is a value of a number type only: the literal check takes a
+  // number as the type it is written for, which a field's own check relies on.
+  if (isContextualLiteral(init) && !isNumeric(type) && !ctx.table.isRanged(type)) {
+    ctx.error(init, `Parameter \`${name}\` is ${ctx.table.typeName(type)} but its initializer is a number`)
+    return
+  }
+  checkLiteralInitializer(ctx, value, init, `Parameter \`${name}\``, notLiteral, true)
+}
+
+/**
+ * Whether an earlier parameter of `type` may be another's default: a number,
+ * a `boolean` or an enum, a value the call passes twice with no second name
+ * for anything the callee could write through.
+ */
+const isScalarDefault = (ctx: CheckContext, type: i32): boolean =>
+  isScalarArgument(ctx.table, type) || ctx.table.isRanged(type)
+
+/**
+ * A signature with both a default and a rest parameter: a call that writes
+ * fewer arguments than there are parameters could mean either, and the
+ * checker that gathers the rest and the emitter that fills the defaults each
+ * read the arguments as one or the other.
+ */
+const refuseMixedForms = (ctx: CheckContext, sig: FunctionSig, list: Node): void => {
+  if (sig.restIndex < 0 || sig.defaults.length === 0) {
+    return
+  }
+  ctx.error(
+    list.children[list.children.length - 1],
+    `\`${sig.sourceName}\` has both a parameter with a default and a rest parameter, which this version does not combine: write every argument before the rest, or pass the rest as an array`
+  )
+  sig.restIndex = -1
+}
+
+/** Whether an annotation names a type parameter bound for the instance being collected. */
+const mentionsBound = (ctx: CheckContext, annotation: Node): boolean => {
+  if (ctx.typeBindings.size() === 0) {
+    return false
+  }
+  if (annotation.text !== "" && ctx.typeBindings.has(annotation.text)) {
+    return true
+  }
+  for (const child of annotation.children) {
+    if (mentionsBound(ctx, child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Hold a call's arguments to `sig`'s parameters, whose first `skip` (`this`)
+ * the call does not write: from the parameters before the first default to
+ * all of them, and with a rest parameter any number from it on, which are
+ * gathered here into the array literal the call passes (`gatherRest`). The
+ * message is the one an exact count always had when the signature has
+ * neither. `false` when it reported.
+ */
+export const fitArguments = (
+  ctx: CheckContext,
+  call: Node,
+  args: Node,
+  sig: FunctionSig,
+  skip: i32,
+  shown: string
+): boolean => {
+  const written = sig.writtenArity() - skip
+  const got = args.children.length
+  if (sig.restIndex >= 0) {
+    const fixed = sig.restIndex - skip
+    if (got < fixed) {
+      ctx.error(call, `\`${shown}\` expects at least ${fixed} argument(s), got ${got}`)
+      return false
+    }
+    gatherRest(ctx, call, args, fixed)
+    return true
+  }
+  const least = sig.requiredArity() - skip
+  if (got >= least && got <= written) {
+    return true
+  }
+  const count = least === written ? `${written}` : `${least} to ${written}`
+  ctx.error(call, `\`${shown}\` expects ${count} argument(s), got ${got}`)
+  return false
+}
+
+/**
+ * `fitArguments` for a call to a generic template, read from its parameter
+ * list, since the signature with the defaults and the rest is the instance's
+ * and the instance is chosen from the arguments.
+ */
+export const fitTemplateArguments = (
+  ctx: CheckContext,
+  call: Node,
+  args: Node,
+  parameters: Node,
+  shown: string
+): boolean => {
+  const written = parameters.children.length
+  const got = args.children.length
+  if (
+    written > 0 &&
+    (parameters.children[written - 1].flags & (FLAG_REST | FLAG_SIGNATURE)) === (FLAG_REST | FLAG_SIGNATURE)
+  ) {
+    if (got < written - 1) {
+      ctx.error(call, `\`${shown}\` expects at least ${written - 1} argument(s), got ${got}`)
+      return false
+    }
+    gatherRest(ctx, call, args, written - 1)
+    return true
+  }
+  let least = 0
+  while (
+    least < written &&
+    (parameters.children[least].flags & (FLAG_DEFAULT | FLAG_SIGNATURE)) !== (FLAG_DEFAULT | FLAG_SIGNATURE)
+  ) {
+    least = least + 1
+  }
+  if (got >= least && got <= written) {
+    return true
+  }
+  const count = least === written ? `${written}` : `${least} to ${written}`
+  ctx.error(call, `\`${shown}\` expects ${count} argument(s), got ${got}`)
+  return false
+}
+
+/**
+ * Move the arguments from `from` on into one array literal, the call's last
+ * argument, under the id the parser reserved after the list's
+ * (`parseArguments`). An empty one sits on the call's `)`. Asked again for
+ * the same call — a generic body is checked once per instance — it finds the
+ * literal already there.
+ */
+const gatherRest = (ctx: CheckContext, call: Node, args: Node, from: i32): void => {
+  if (args.children.length === from + 1 && args.children[from].id === args.id + 1) {
+    return
+  }
+  ctx.program.gathered = true
+  const elements: Node[] = []
+  const kept: Node[] = []
+  for (const arg of args.children) {
+    if (kept.length < from) {
+      kept.push(arg)
+    } else {
+      elements.push(arg)
+    }
+  }
+  const start = elements.length > 0 ? elements[0].start : call.end - 1
+  const end = elements.length > 0 ? elements[elements.length - 1].end : call.end - 1
+  const array = new Node(N_ARRAY, start, end)
+  array.id = args.id + 1
+  array.flags = FLAG_GATHERED
+  array.children = elements
+  kept.push(array)
+  args.children = kept
+}
+
+/** The source text of `node`, for a message that shows the fix. */
+const spellingOf = (ctx: CheckContext, node: Node): string => ctx.source.text.slice(node.start, node.end)
+
+/** A parameter with no default after one with a default. */
+const followsDefaultMessage = (name: string): string =>
+  `Parameter \`${name}\` follows a parameter with a default, so it needs a default too: a call leaves out arguments only from the end`
+
+/** A function-typed parameter with a default or `...`. */
+const functionParameterFormMessage = (name: string): string =>
+  `Function parameter \`${name}\` cannot have a default or be a rest parameter: a call names the function it passes, and that is what instantiates the callee`
+
+/**
+ * `x?: T` on a parameter that could have a default (NL2233's form with a
+ * fix): the language has no `undefined`, so an argument a call may leave out
+ * is one with a value to stand in for it.
+ */
+export const optionalParameterMessage = (ctx: CheckContext, param: Node): string => {
+  const name = param.children[0].text
+  const type = param.children[1].kind === N_EMPTY ? "T" : spellingOf(ctx, param.children[1])
+  return `Optional parameters are not supported: give \`${name}\` a default instead, \`${name}: ${type} = <default>\`, which a call that leaves it out passes`
+}
+
+/** A default or `...` where the parameter list is not a declaration's own (NL2233, NL2235). */
+export const parameterFormHereMessage = (rest: boolean): string =>
+  rest
+    ? "Rest parameters are not supported here: only a function, a method with a body or a constructor ends in one, not an arrow passed as an argument, a function type, an interface or object method, an accessor or a `declare function`"
+    : "Optional/default parameters are not supported here: only a function, a method with a body or a constructor gives a parameter a default, not an arrow passed as an argument, a function type, an interface or object method, an accessor or a `declare function`"
 
 /**
  * One `function` declaration's signature. The body is not looked at: pass 2

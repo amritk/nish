@@ -8,14 +8,14 @@ unsafe import 2:10 wrappingAdd from "nish:unsafe"
 unsafe import 2:23 wrappingMul from "nish:unsafe"
 unsafe import 2:36 wrappingSub from "nish:unsafe"
 unsafe call 5:10 wrappingMul (node 22)
-unsafe call 11:9 wrappingMul (node 61)
-unsafe call 20:15 wrappingMul (node 102)
-unsafe call 33:15 wrappingAdd (node 223)
-unsafe call 34:15 wrappingSub (node 233)
-unsafe call 35:15 wrappingMul (node 243)
-unsafe call 45:23 wrappingAdd (node 345)
-unsafe call 56:15 wrappingMul (node 455)
-unsafe call 64:9 wrappingMul (node 535)
+unsafe call 11:9 wrappingMul (node 62)
+unsafe call 20:15 wrappingMul (node 108)
+unsafe call 33:15 wrappingAdd (node 246)
+unsafe call 34:15 wrappingSub (node 258)
+unsafe call 35:15 wrappingMul (node 270)
+unsafe call 45:23 wrappingAdd (node 389)
+unsafe call 56:15 wrappingMul (node 519)
+unsafe call 64:9 wrappingMul (node 610)
 function square(x: i64): i64 -> @square
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

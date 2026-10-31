@@ -1358,7 +1358,7 @@ function KeepScan.constructor(this: KeepScan, ctx: CheckContext, sig: FunctionSi
   escaping: body ctx sig trail
   pointer this: size=32 writesThrough=true captured=false
   pointer ctx: size=288 writesThrough=true captured=true
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   pointer trail: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -1414,7 +1414,7 @@ function keepsParameter(ctx: CheckContext, sig: FunctionSig, k: i32, trail: Keep
   escaping: k
   calls: FunctionSig.body FunctionSig.compileTimeOnly KeepScan.constructor TypeTable.isArray declarationsOf gatherReturns nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 usesKeepLength
   pointer ctx: size=288 writesThrough=true captured=true passedTo=KeepScan.constructor#1
-  pointer sig: size=144 writesThrough=true captured=true passedTo=FunctionSig.compileTimeOnly#0 FunctionSig.body#0 KeepScan.constructor#2
+  pointer sig: size=160 writesThrough=true captured=true passedTo=FunctionSig.compileTimeOnly#0 FunctionSig.body#0 KeepScan.constructor#2
   pointer trail: size=16 writesThrough=true captured=true passedTo=KeepScan.constructor#4
   stackSites=2 stackLocals=1
   local -16:9 home: SourceFile | null (const)
@@ -1463,7 +1463,7 @@ function sizeAtCall(ctx: CheckContext, sig: FunctionSig, body: Node, size: Node,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: CheckedProgram.constant FunctionSig.isCompileTime TypeTable.baseOf declarationsOf declaredValueRange isInteger literalValue nish_arena_mark nish_arena_release nish_panic_index nish_str_eq unwrapBoundsParens writesName
   pointer ctx: size=288 writesThrough=false captured=false passedTo=declaredValueRange#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.isCompileTime#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.isCompileTime#0
   pointer body: size=40 writesThrough=false captured=false passedTo=declarationsOf#0 writesName#0
   pointer size: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer call: size=40 writesThrough=false captured=false
@@ -1490,7 +1490,7 @@ function builtLength(ctx: CheckContext, sig: FunctionSig, body: Node, value: Nod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq sizeAtCall typedArrayElement unwrapBoundsParens
   pointer ctx: size=288 writesThrough=false captured=false passedTo=sizeAtCall#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=sizeAtCall#1
+  pointer sig: size=160 writesThrough=false captured=false passedTo=sizeAtCall#1
   pointer body: size=40 writesThrough=false captured=false passedTo=sizeAtCall#2
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer call: size=40 writesThrough=false captured=false passedTo=sizeAtCall#4
@@ -1831,7 +1831,7 @@ function walkArgument(walk: BoundsWalk, state: State, arg: Node, callee: Functio
   pointer walk: size=184 writesThrough=true captured=false passedTo=walkExpression#0
   pointer state: size=120 writesThrough=true captured=false passedTo=walkExpression#1
   pointer arg: size=40 writesThrough=true captured=true passedTo=walkExpression#2
-  pointer callee: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  pointer callee: size=160 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   callee -14:3 walkExpression -> @walkExpression
   local -13:9 count: i32 (const)
@@ -3179,7 +3179,7 @@ function RangeTables.at(this: RangeTables, known: i32[], call: Node, sig: Functi
   pointer this: size=64 writesThrough=false captured=false
   pointer known: size=0 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 cached: i32 (const)
   callee +1:38 StringMap.get -> @StringMap.get
@@ -3189,7 +3189,7 @@ function RangeTables.add(this: RangeTables, sig: FunctionSig, candidate: boolean
   escaping: candidate
   calls: StringMap.set nish_array_grow
   pointer this: size=64 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -2:5 StringMap.set -> @StringMap.set
   local -1:11 unknown: CallSummary | null (const)
@@ -3425,7 +3425,7 @@ function RangeSite.constructor(this: RangeSite, call: Node, callee: FunctionSig,
   escaping: at call callee facts
   pointer this: size=32 writesThrough=true captured=false
   pointer call: size=40 writesThrough=true captured=true
-  pointer callee: size=144 writesThrough=true captured=true
+  pointer callee: size=160 writesThrough=true captured=true
   pointer facts: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function noteCallSite(walk: BoundsWalk, state: State, call: Node): void -> @noteCallSite
@@ -3461,7 +3461,7 @@ function siteFacts(walk: BoundsWalk, state: State, call: Node, callee: FunctionS
   pointer walk: size=184 writesThrough=false captured=false passedTo=laterEffects#0 arithmeticSiteFacts#0 argumentRoot#0 laterEffects#0 mapHolderFacts#0
   pointer state: size=120 writesThrough=false captured=false passedTo=minValueOf#0 maxIndexOf#0 arithmeticSiteFacts#1 mapHolderFacts#1
   pointer call: size=40 writesThrough=false captured=false
-  pointer callee: size=144 writesThrough=false captured=false
+  pointer callee: size=160 writesThrough=false captured=false
   stackSites=5 stackLocals=5
   local +0:9 count: i32 (const)
   local +1:9 out: EntryFacts (const)
@@ -3605,7 +3605,7 @@ function parameterLocals(program: CheckedProgram, sig: FunctionSig, body: Node):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: findParameters nish_array_grow
   pointer program: size=656 writesThrough=false captured=false passedTo=findParameters#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   pointer body: size=40 writesThrough=false captured=false passedTo=findParameters#1
   stackSites=0 stackLocals=0
   local +0:9 out: Local | null[] (const)

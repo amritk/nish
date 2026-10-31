@@ -54,6 +54,7 @@ import isValueReceiver from "./members" -> function @isValueReceiver
 import neverNullMessage from "./members" -> function @neverNullMessage
 import structOf from "./members" -> function @structOf
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
+import FLAG_SPREAD_ARGUMENT from "./nodes" -> const FLAG_SPREAD_ARGUMENT
 import FLAG_ANGLE from "./nodes" -> const FLAG_ANGLE
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
@@ -98,6 +99,7 @@ import N_VAR from "./nodes" -> const N_VAR
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
+import fitArguments from "./declarations" -> function @fitArguments
 import ParentTable from "./parents" -> struct ParentTable
 import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import unwrapParens from "./emit-util" -> function @unwrapParens
@@ -148,19 +150,20 @@ function refuseExpressionForm(ctx: CheckContext, node: Node): void -> @refuseExp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_panic_index nish_str_eq refusePropertyForm
-  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refusePropertyForm#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 refusePropertyForm#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refusePropertyForm#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 refusePropertyForm#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:9 CheckContext.error -> @CheckContext.error
   callee +2:9 CheckContext.error -> @CheckContext.error
   local +6:18 element: Node (const)
   callee +8:11 CheckContext.error -> @CheckContext.error
-  callee +14:7 CheckContext.error -> @CheckContext.error
-  callee +18:9 CheckContext.error -> @CheckContext.error
-  callee +22:7 refusePropertyForm -> @refusePropertyForm
-  callee +27:9 CheckContext.error -> @CheckContext.error
-  callee +29:9 CheckContext.error -> @CheckContext.error
-  callee +31:9 CheckContext.error -> @CheckContext.error
+  callee +15:9 CheckContext.error -> @CheckContext.error
+  callee +20:9 CheckContext.error -> @CheckContext.error
+  callee +25:9 CheckContext.error -> @CheckContext.error
+  callee +29:7 refusePropertyForm -> @refusePropertyForm
+  callee +34:9 CheckContext.error -> @CheckContext.error
+  callee +36:9 CheckContext.error -> @CheckContext.error
+  callee +38:9 CheckContext.error -> @CheckContext.error
 function refusePropertyForm(ctx: CheckContext, node: Node): void -> @refusePropertyForm
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -485,7 +488,7 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   callee +57:14 CheckContext.errorType -> @CheckContext.errorType
   callee +62:14 CheckContext.errorType -> @CheckContext.errorType
   callee +62:62 CheckContext.textOf -> @CheckContext.textOf
-function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 -> @checkNumericLiteral
+function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 -> @checkNumericLiteral [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkRangedLiteral
   escaping: negated want
@@ -521,7 +524,7 @@ function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: 
   callee +42:14 CheckContext.errorType -> @CheckContext.errorType
   callee +45:34 numericLiteralValue -> @numericLiteralValue
   callee +46:12 CheckContext.errorType -> @CheckContext.errorType
-function checkRangedLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 -> @checkRangedLiteral [exported]
+function checkRangedLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 -> @checkRangedLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: negated want
@@ -2075,53 +2078,53 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: want
-  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckedProgram.builtinImport FunctionBindings.get Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.typeName checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkResultConstructor dateRefusal isBuiltinFunction isResultConstructor isSimdExport isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 outerFunctionMessage refuseForeignNullable refuseOnce refuseSecretArguments simdImportMessage stringCallFix
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 CheckContext.errorType#0 CheckContext.capturesOuter#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 CheckContext.errorType#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 CheckContext.errorType#1 checkDirectCall#1 checkGenericCall#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 CheckContext.errorType#1 stringCallFix#1 CheckContext.errorType#1
+  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckedProgram.builtinImport FunctionBindings.get Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.typeName checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkResultConstructor dateRefusal fitArguments isBuiltinFunction isResultConstructor isSimdExport isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 outerFunctionMessage refuseForeignNullable refuseOnce refuseSecretArguments simdImportMessage stringCallFix
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 CheckContext.errorType#0 CheckContext.capturesOuter#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 CheckContext.errorType#1 checkDirectCall#1 checkGenericCall#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 CheckContext.errorType#1 stringCallFix#1 fitArguments#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 isValueReceiver#2 checkMethodCall#2 refuseSecretArguments#2 checkBuiltinCall#2 Scope.lookup#0 checkDirectCall#4 checkGenericCall#3 refuseSecretArguments#2 checkImportedBuiltin#2 checkResultConstructor#2 refuseSecretArguments#2 checkBuiltinFunction#2 Scope.typeOf#0 stringCallFix#3 checkExpression#2
   stackSites=0 stackLocals=0
-  local -110:9 callee: Node (const)
-  callee -108:12 checkExpression -> @checkExpression
-  callee -103:9 isValueReceiver -> @isValueReceiver
-  callee -102:14 checkMethodCall -> @checkMethodCall
-  callee -99:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -99:35 neverNullMessage -> @neverNullMessage
-  local -94:11 receiver: Node (const)
-  callee -91:7 refuseSecretArguments -> @refuseSecretArguments
-  callee -87:12 checkBuiltinCall -> @checkBuiltinCall
-  callee -84:12 CheckContext.errorType -> @CheckContext.errorType
-  local -79:9 local: Local | null (const)
-  callee -79:17 Scope.lookup -> @Scope.lookup
-  callee -77:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  callee -76:7 refuseOnce -> @refuseOnce
-  callee -76:31 outerFunctionMessage -> @outerFunctionMessage
-  local -73:11 bound: FunctionSig | null (const)
-  callee -73:19 FunctionBindings.get -> @FunctionBindings.get
-  callee -71:14 checkDirectCall -> @checkDirectCall
-  local -68:9 template: TemplateInfo | null (const)
-  callee -68:20 CheckContext.template -> @CheckContext.template
-  callee -66:12 checkGenericCall -> @checkGenericCall
-  local -64:9 sig: FunctionSig | null (const)
-  callee -64:15 CheckContext.signature -> @CheckContext.signature
-  local -60:11 imported: BuiltinExport | null (const)
-  callee -60:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee -58:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -55:14 checkImportedBuiltin -> @checkImportedBuiltin
-  callee -53:9 isResultConstructor -> @isResultConstructor
-  callee -49:14 checkResultConstructor -> @checkResultConstructor
-  callee -47:9 isBuiltinFunction -> @isBuiltinFunction
-  callee -46:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -43:14 checkBuiltinFunction -> @checkBuiltinFunction
-  callee -39:27 Scope.typeOf -> @Scope.typeOf
-  callee -33:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -33:34 dateRefusal -> @dateRefusal
-  callee -31:27 isSimdExport -> @isSimdExport
+  local -107:9 callee: Node (const)
+  callee -105:12 checkExpression -> @checkExpression
+  callee -100:9 isValueReceiver -> @isValueReceiver
+  callee -99:14 checkMethodCall -> @checkMethodCall
+  callee -96:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -96:35 neverNullMessage -> @neverNullMessage
+  local -91:11 receiver: Node (const)
+  callee -88:7 refuseSecretArguments -> @refuseSecretArguments
+  callee -84:12 checkBuiltinCall -> @checkBuiltinCall
+  callee -81:12 CheckContext.errorType -> @CheckContext.errorType
+  local -76:9 local: Local | null (const)
+  callee -76:17 Scope.lookup -> @Scope.lookup
+  callee -74:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  callee -73:7 refuseOnce -> @refuseOnce
+  callee -73:31 outerFunctionMessage -> @outerFunctionMessage
+  local -70:11 bound: FunctionSig | null (const)
+  callee -70:19 FunctionBindings.get -> @FunctionBindings.get
+  callee -68:14 checkDirectCall -> @checkDirectCall
+  local -65:9 template: TemplateInfo | null (const)
+  callee -65:20 CheckContext.template -> @CheckContext.template
+  callee -63:12 checkGenericCall -> @checkGenericCall
+  local -61:9 sig: FunctionSig | null (const)
+  callee -61:15 CheckContext.signature -> @CheckContext.signature
+  local -57:11 imported: BuiltinExport | null (const)
+  callee -57:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee -55:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -52:14 checkImportedBuiltin -> @checkImportedBuiltin
+  callee -50:9 isResultConstructor -> @isResultConstructor
+  callee -46:14 checkResultConstructor -> @checkResultConstructor
+  callee -44:9 isBuiltinFunction -> @isBuiltinFunction
+  callee -43:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -40:14 checkBuiltinFunction -> @checkBuiltinFunction
+  callee -36:27 Scope.typeOf -> @Scope.typeOf
   callee -30:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -30:36 simdImportMessage -> @simdImportMessage
-  callee -28:5 CheckContext.errorFix -> @CheckContext.errorFix
-  callee -25:7 stringCallFix -> @stringCallFix
-  local -21:9 args: Node (const)
-  callee -19:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -30:34 dateRefusal -> @dateRefusal
+  callee -28:27 isSimdExport -> @isSimdExport
+  callee -27:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -27:36 simdImportMessage -> @simdImportMessage
+  callee -25:5 CheckContext.errorFix -> @CheckContext.errorFix
+  callee -22:7 stringCallFix -> @stringCallFix
+  local -18:9 args: Node (const)
+  callee -17:8 fitArguments -> @fitArguments
   local -14:7 i: i32 (let)
   local -12:11 arg: Node (const)
   local -11:11 got: i32 (const)
@@ -2139,7 +2142,7 @@ function refuseForeignNullable(ctx: CheckContext, sig: FunctionSig, i: i32, arg:
   escaping: got i
   calls: CheckContext.error FunctionSig.foreign TypeTable.isNullable TypeTable.stripNull nish_str_concat nish_str_from_i32 unwrapParens
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.foreign#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.foreign#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:8 FunctionSig.foreign -> @FunctionSig.foreign
@@ -2156,7 +2159,7 @@ function checkDirectCall(ctx: CheckContext, expr: Node, sig: FunctionSig, shown:
   calls: CheckContext.error CheckContext.errorType FunctionSig.writtenArity TypeTable.assignable TypeTable.typeName checkExpression nish_panic_index nish_str_concat nish_str_from_i32 refuseForeignNullable
   pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
-  pointer sig: size=144 writesThrough=true captured=true passedTo=FunctionSig.writtenArity#0 refuseForeignNullable#1
+  pointer sig: size=160 writesThrough=true captured=true passedTo=FunctionSig.writtenArity#0 refuseForeignNullable#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
   local -29:9 args: Node (const)
