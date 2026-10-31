@@ -41,6 +41,7 @@
 
 #if defined(NISH_THREADS) && !defined(__wasi__) && !defined(__wasm__)
 #define NISH_PAR_REAL 1
+#include <errno.h>
 #include <pthread.h>
 #include <sched.h>
 #ifdef __GLIBC__
@@ -362,11 +363,17 @@ static void *nish_job_thread(void *p) {
 
 /* The end of the program when a thread with the stack a scope asked for
  * cannot be started: running the task on a smaller one would trade the panic
- * for an overflow nobody can read. */
-static void nish_stack_fail(void) {
-  static const char msg[] = "nish: cannot start a thread with the stack scopeWithStack asked for\n";
+ * for an overflow nobody can read. `limit` is pthread's EAGAIN, the system out
+ * of threads or of memory for the stack; anything else is the size refused. */
+__attribute__((noinline, cold)) static void nish_stack_fail(int limit) {
+  static const char size[] = "nish: cannot start a thread with the stack scopeWithStack asked for\n";
+  static const char room[] =
+      "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n";
   nish_panic_claim();
-  (void)!write(2, msg, sizeof msg - 1);
+  if (limit)
+    (void)!write(2, room, sizeof room - 1);
+  else
+    (void)!write(2, size, sizeof size - 1);
   nish_fatal_exit();
 }
 
@@ -377,8 +384,9 @@ static void nish_stack_fail(void) {
  * platform's minimum, a page is added for what the C library keeps at the top
  * of a thread's stack, and a guard page sits below it, so a task that
  * overflows faults. A job runs at depth 1, as on a worker, so anything it
- * divides runs inline. */
-static void nish_jobs_run_sized(nish_job *jobs, int64_t stack) {
+ * divides runs inline. Out of line and cold, so `nish_scope_join` keeps the
+ * body it had before the option, plus one load and a branch. */
+__attribute__((noinline, cold)) static void nish_jobs_run_sized(nish_job *jobs, int64_t stack) {
   long sys = sysconf(_SC_PAGESIZE);
   size_t page = sys > 0 ? (size_t)sys : 4096;
   size_t size = ((size_t)stack + page - 1) / page * page;
@@ -386,11 +394,14 @@ static void nish_jobs_run_sized(nish_job *jobs, int64_t stack) {
   long min = sysconf(_SC_THREAD_STACK_MIN);
   if (min > 0 && size < (size_t)min) size = (size_t)min;
   pthread_attr_t attr;
-  pthread_attr_init(&attr);
-  pthread_attr_setguardsize(&attr, page);
-  if (pthread_attr_setstacksize(&attr, size + page) != 0) nish_stack_fail();
-  for (nish_job *j = jobs; j; j = j->next)
-    if (pthread_create(&j->th, &attr, nish_job_thread, j) != 0) nish_stack_fail();
+  int rc = pthread_attr_init(&attr);
+  if (rc != 0) nish_stack_fail(rc == EAGAIN || rc == ENOMEM);
+  if (pthread_attr_setguardsize(&attr, page) != 0 || pthread_attr_setstacksize(&attr, size + page) != 0)
+    nish_stack_fail(0);
+  for (nish_job *j = jobs; j; j = j->next) {
+    rc = pthread_create(&j->th, &attr, nish_job_thread, j);
+    if (rc != 0) nish_stack_fail(rc == EAGAIN);
+  }
   pthread_attr_destroy(&attr);
   for (nish_job *j = jobs; j; j = j->next) pthread_join(j->th, 0);
 }
@@ -647,8 +658,8 @@ void nish_scope_join(void *scope) {
    * (std/threads.ts), or 0 for `scope()`. A scope with one runs every task on
    * a thread of its own that has it; the checker refuses a scope inside a
    * task, so this thread is never one of those. */
-  int64_t stack = *(const int32_t *)scope;
-  if (stack > 0) {
+  int32_t stack = *(const int32_t *)scope;
+  if (__builtin_expect(stack > 0, 0)) {
     nish_jobs_run_sized(&mine->job, stack);
   } else {
     /* The first task on this thread and the rest on the pool, in the order

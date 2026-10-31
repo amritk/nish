@@ -290,7 +290,7 @@ export class ThreadScope {
    * first word. It also makes each scope an object of its own, whose address is
    * what the runtime files the scope's tasks under.
    */
-  stack: i32 = 0
+  tag: i32 = 0
 
   /**
    * Run `entry(arg)` on a thread of its own and store its answer in `dst[at]`
@@ -366,7 +366,7 @@ export const scopeWithStack = (bytes: i32): ThreadScope => {
     panic(`scopeWithStack: a stack of ${bytes} bytes is below the minimum of ${MIN_STACK}`)
   }
   const s = scope()
-  s.stack = bytes
+  s.tag = bytes
   return s
 }
 

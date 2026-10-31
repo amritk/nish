@@ -3616,13 +3616,19 @@ export const main = (): i32 => {
 - **`scopeWithStack(bytes)` is a scope whose tasks have a stack of at least
   `bytes` bytes**, for a task that recurses deeper than a thread's default
   stack allows (8 MiB on Linux): `using s = scopeWithStack(64 * 1024 * 1024)`
-  (`tests/link/thread_stack_deep`, a million calls deep on 256 MiB, which faults
-  with `scope()`). It is a scope in every other rule. Its tasks all run on new
+  (`tests/link/thread_stack_deep`, a million calls deep on 256 MiB; under an
+  8 MiB `ulimit -s` the same program faults with `scope()`, and with
+  `scopeWithStack(131072)` on its guard page, `tests/link/thread_stack_fixtures`).
+  It covers a scope's tasks only: `parallelMap`, `parallelFrom` and the other
+  data-parallel calls run on the pool's workers, whose stack is the platform's
+  default. It is a scope in every other rule. Its tasks all run on new
   threads, a thread each, none on the thread that opened it; each thread's
   stack is `bytes` rounded up to the page, with a guard page below it, so a task that still overflows faults rather than
-  writing past it. If one cannot be started the program ends with
-  `nish: cannot start a thread with the stack scopeWithStack asked for` and
-  exit 1. The
+  writing past it. If one cannot be started the program ends with exit 1 and
+  `nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack`
+  when the system is out of either, or
+  `nish: cannot start a thread with the stack scopeWithStack asked for` when
+  it refuses the size. The
   smallest size is 131072 (128 KiB, the largest `PTHREAD_STACK_MIN` among the
   targets): a number written at the call below it is refused,
   `` `scopeWithStack(4096)` asks for a stack below the minimum of 131072 bytes: no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least 131072, `scopeWithStack(131072)` ``

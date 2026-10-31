@@ -12,7 +12,7 @@ const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 const MIN_STACK: i32 = 131072
 struct ThreadScope (class) size=4 align=4 exported
-  field stack: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 struct AtomicI32 (class) size=4 align=4 exported
   field value: i32 index=0 offset=0
   constructor -> @nish.AtomicI32.constructor

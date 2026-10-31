@@ -528,10 +528,17 @@ export const main = (): i32 => {
 Everything else about it is a scope's. Its tasks all run on new threads, none
 on the thread that opened the scope. The size is rounded up to the page, and a
 guard page sits below it, so a task that still overflows faults instead of
-writing past the stack. The smallest size is 131072 bytes (128 KiB). Below it,
+writing past the stack. If the system cannot start one, out of threads or of
+memory for the stack, the program ends with exit 1 and
+`nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack`.
+The smallest size is 131072 bytes (128 KiB). Below it,
 a number written at the call is refused ([below](#a-stack-below-the-minimum))
 and a computed one panics with
 `scopeWithStack: a stack of 65536 bytes is below the minimum of 131072`.
+
+The size is for a scope's tasks only. `parallelMap`, `parallelFrom` and the
+other data-parallel calls run on the pool's workers, which keep the
+platform's default stack.
 
 Under Node, on WASI and in a build without `--threads`, the size is checked
 and then ignored. Every task runs on the one thread there, so a program that
