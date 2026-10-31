@@ -30,6 +30,8 @@ export const NUMBER_MODE_F64: i32 = 1
 
 export const LOOP_ITERATION: i32 = 0
 export const LOOP_SWITCH: i32 = 1
+/** A labelled block: a target of `break` with its label only. */
+export const LOOP_BLOCK: i32 = 2
 
 /**
  * A `switch` being checked: the variables a clause assigns, read before the
@@ -211,16 +213,16 @@ export class CheckContext {
   pathIndexCount: i32
   /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
-   * parameter scope, and whether it may read its function's `const` locals:
-   * an arrow passed to a data-parallel form may (`captureOuter` in
-   * `src/generics.ts`), and each one it reads becomes a parameter declared in
-   * that scope.
+   * parameter scope, and what it may read of its function's names, one of the
+   * `CAPTURE_*` modes (`src/parallel.ts`): every arrow argument but one given
+   * to `expose` or `exposeWith` may read the `const` locals and the parameters
+   * (`captureOuter` in `src/generics.ts`), each one it reads becoming a
+   * parameter declared in that scope, and the mode says whose rules hold of
+   * it: an ordinary call's, a data-parallel form's or a scope's task's.
    */
   arrowFns: FunctionSig[]
   arrowScopes: Scope[]
-  arrowCaptures: boolean[]
-  /** WP29: parallel to `arrowCaptures`, whether the arrow is a scope's task, whose captures run at the join. */
-  arrowTasks: boolean[]
+  arrowModes: i32[]
   /** The instantiation whose body is being checked, so a request from it records its parent. */
   currentInstance: Instantiation | null
   /**
@@ -256,12 +258,17 @@ export class CheckContext {
    */
   pendingFinish: StructInfo[]
   /**
-   * The loops and `switch`es enclosing the statement being checked, innermost
-   * last. `break` marks the innermost; `continue` needs a real loop, because a
-   * `switch` on the stack is a `break` target only, as it is in JavaScript.
+   * The loops, `switch`es and labelled blocks enclosing the statement being
+   * checked, innermost last, each with its label or `""`. A plain `break`
+   * marks the innermost loop or `switch`, a labelled one the statement its
+   * label names; `continue` needs a real loop, because a `switch` on the stack
+   * is a `break` target only, as it is in JavaScript.
    */
   loopKinds: i32[]
   loopBreaks: boolean[]
+  loopLabels: string[]
+  /** Each one's frame in `switchFrames`, or -1 for a loop, which has none. */
+  loopFrames: i32[]
   /** The `switch`es enclosing the statement being checked, innermost last. */
   switchFrames: SwitchFrame[]
   /** The loops enclosing the statement being checked, innermost last, each with its pre-pass. */
@@ -316,6 +323,8 @@ export class CheckContext {
     this.current = null
     this.loopKinds = []
     this.loopBreaks = []
+    this.loopLabels = []
+    this.loopFrames = []
     this.switchFrames = []
     this.flowFrames = []
     this.statementExpression = null
@@ -332,8 +341,7 @@ export class CheckContext {
     this.pathIndexCount = 0
     this.arrowFns = []
     this.arrowScopes = []
-    this.arrowCaptures = []
-    this.arrowTasks = []
+    this.arrowModes = []
     this.currentInstance = null
     this.currentStructInstance = null
     this.constraintsDeferred = true
@@ -559,6 +567,12 @@ export class CheckContext {
     return false
   }
 
+  /** The `CAPTURE_*` mode of the innermost arrow being checked, or `CAPTURE_NONE` (0) outside any. */
+  arrowMode(): i32 {
+    const depth = this.arrowModes.length
+    return depth === 0 ? 0 : this.arrowModes[depth - 1]
+  }
+
   /** Report and answer the sentinel type, for the many callers that want both. */
   errorType(node: Node, message: string): i32 {
     this.error(node, message)
@@ -592,10 +606,12 @@ export class CheckContext {
     this.program.functions.push(sig)
   }
 
-  /** Enter a loop (`LOOP_ITERATION`) or a `switch` (`LOOP_SWITCH`). */
-  pushLoop(kind: i32): void {
+  /** Enter a loop (`LOOP_ITERATION`), a `switch` (`LOOP_SWITCH`) or a labelled block (`LOOP_BLOCK`). */
+  pushLoop(kind: i32, label: string): void {
     this.loopKinds.push(kind)
     this.loopBreaks.push(false)
+    this.loopLabels.push(label)
+    this.loopFrames.push(kind === LOOP_ITERATION ? -1 : this.switchFrames.length - 1)
   }
 
   /** Leave it, answering whether a `break` targeted it. */
@@ -603,6 +619,8 @@ export class CheckContext {
     const broke = this.loopBreaks[this.loopBreaks.length - 1]
     this.loopKinds.pop()
     this.loopBreaks.pop()
+    this.loopLabels.pop()
+    this.loopFrames.pop()
     return broke
   }
 }

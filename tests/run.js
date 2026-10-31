@@ -2413,26 +2413,33 @@ if (dealtHere("termIo")) {
     // run pauses before F4 so the reopened stage can be held to the one it left;
     // 120 frames is past the title's outro at any rate the relay draws. The play and
     // stage runs skip the opening (the help falling apart) with a space at frame 2,
-    // so the title is up by frame 5.
+    // so the title is up by frame 5. Each run keeps its settings in a config
+    // directory of its own, never the real `~/.config/nish/break`.
+    const configs = [0, 1, 2].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-")))
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
+        env: { XDG_CONFIG_HOME: configs[0] },
         keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-reopen"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[1] },
         keys: wallKeys([3, "\x1b[17~"], [10, "\x1bOS"], [30, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-stage"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[2] },
         keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
-    ])
+    ]).finally(() => {
+      for (const config of configs) {
+        fs.rmSync(config, { recursive: true, force: true })
+      }
+    })
     const restored = (r) => r.status === 0 && r.sameStty && r.out.endsWith("\x1b[?1049l") && r.err === ""
     check(
       "nish break on a terminal: draws kitty images, and q quits with the screen restored, exit 0",
@@ -23221,11 +23228,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
     riddle.stderr
   )
-  const secret = inSecret(["break"])
+  // The refused run gets a config directory of its own, so it can be shown to
+  // write no settings, and never touches the real `~/.config/nish/break`.
+  const secretConfig = fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-"))
+  const secret = spawnSync(NISH, ["break"], {
+    cwd: secretDir,
+    encoding: "utf8",
+    env: { ...process.env, ...plainEnv, XDG_CONFIG_HOME: secretConfig },
+  })
+  const secretWrote = fs.readdirSync(secretConfig)
+  fs.rmSync(secretConfig, { recursive: true, force: true })
   check(
     "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
     secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
+  )
+  check(
+    "nish break, refused on a pipe: writes no settings file",
+    secretWrote.length === 0,
+    secretWrote.join(", ")
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
   const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])
@@ -24663,7 +24684,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
    * Type-check `files` against the ambient declarations with a project of their
    * own: `tsc -p` on the config written here, in this process (tests/typecheck.js).
    */
-  const typeCheck = (name, files) => {
+  const typeCheck = (name, files, fallthrough = false) => {
     const config = path.join(ambientDir, `tsconfig.${name}.json`)
     fs.writeFileSync(
       config,
@@ -24671,9 +24692,16 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // `include: []` drops its file list for this project's own. The two
       // unused-name checks are lint for the compiler's own source, not typing:
       // a golden case declares a function it never calls on purpose.
+      // `fallthrough` lifts the fallthrough check for the cases that pin a
+      // clause running on into the next, which TypeScript the language
+      // accepts (docs/LANGUAGE.md, `switch`); every other case keeps it.
       JSON.stringify({
         extends: path.join(root, "tsconfig.json"),
-        compilerOptions: { noUnusedLocals: false, noUnusedParameters: false },
+        compilerOptions: {
+          noUnusedLocals: false,
+          noUnusedParameters: false,
+          ...(fallthrough ? { noFallthroughCasesInSwitch: false } : {}),
+        },
         include: [],
         files: [declarations, ...files],
       })
@@ -24764,17 +24792,27 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
   ])
+  // The cases whose clauses fall through on purpose, checked in a project
+  // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
+  // that falls through is added here on purpose and every other keeps the check.
+  const FALLTHROUGH_CASES = new Set(["cf_switch_fallthrough.ts", "cf_label_walks.ts"])
   const acceptedCases = fs
     .readdirSync(casesDir)
     .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f))
   const everyCase = typeCheck(
     "accepted",
-    acceptedCases.map((f) => path.join(casesDir, f))
+    acceptedCases.filter((f) => !FALLTHROUGH_CASES.has(f)).map((f) => path.join(casesDir, f))
+  )
+  const fallthroughCases = acceptedCases.filter((f) => FALLTHROUGH_CASES.has(f))
+  const fallingThrough = typeCheck(
+    "fallthrough",
+    fallthroughCases.map((f) => path.join(casesDir, f)),
+    true
   )
   check(
-    `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences)`,
-    everyCase.ok,
-    everyCase.output
+    `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences, ${fallthroughCases.length} without the fallthrough check)`,
+    everyCase.ok && fallingThrough.ok && fallthroughCases.length === FALLTHROUGH_CASES.size,
+    everyCase.output + fallingThrough.output
   )
 
   // And on the largest Nish program there is: the compiler itself.

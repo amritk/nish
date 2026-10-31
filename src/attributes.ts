@@ -107,6 +107,7 @@ import {
   N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
+  N_FUNCTION,
   N_IDENT,
   N_PARAM,
   N_IF,
@@ -1554,7 +1555,18 @@ export const isJoinedParts = (
   decl: Node | null,
   refs: Node[]
 ): boolean => {
-  if (!isFreshArrayLocal(table, parts, decl) || table.refOf(parts.type) !== T_STRING) {
+  if (decl === null || !isFreshArrayLocal(table, parts, decl) || table.refOf(parts.type) !== T_STRING) {
+    return false
+  }
+  // `refs` skips lifted arrow bodies, but an arrow argument that captures
+  // `parts` reads it when the call runs, later than the join may release it.
+  let body: Node = decl
+  let above = unit.parents.parentOf(body)
+  while (above !== null && above.kind !== N_ARROW && above.kind !== N_FUNCTION) {
+    body = above
+    above = unit.parents.parentOf(body)
+  }
+  if (namedInArrow(unit.program, body, parts, false)) {
     return false
   }
   for (const ref of refs) {
@@ -1908,6 +1920,50 @@ class FactCollector {
     )
   }
 
+  /**
+   * What an arrow argument captures from this function (WP29) is handed, at
+   * the call, to a parameter of the instantiation that no fact describes, and
+   * the arrow may store it or write through it. So each capture is an escape
+   * of what it names here: a parameter loses `readonly` and `nocapture`, and
+   * an object of this call's own is dirt below it, as an escape is anywhere.
+   */
+  noteCaptures(node: Node): void {
+    if (node.kind === N_IDENT) {
+      const local: Local | null = this.unit.program.nodeLocals[node.id]
+      const source: Local | null = local === null || local.captureOf === null ? null : sourceLocal(local)
+      if (source !== null) {
+        this.noteCaptured(source)
+      }
+    }
+    for (const child of node.children) {
+      this.noteCaptures(child)
+    }
+  }
+
+  noteCaptured(source: Local): void {
+    if (source.storage === STORAGE_PARAM) {
+      this.escapeParam(source.name)
+      return
+    }
+    const path = this.localPathAt(source, 0)
+    if (path.kind === ROOT_OWN) {
+      this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
+    } else if (path.kind === ROOT_PARAM) {
+      this.escapeParam(path.name)
+    }
+  }
+
+  escapeParam(name: string): void {
+    this.facts.escaping.add(name)
+    const pointer = this.facts.pointerParam(name)
+    if (pointer !== null) {
+      pointer.captured = true
+      pointer.outlives = true
+      pointer.writesThrough = true // an alias may be written through later
+      pointer.writesShared = true
+    }
+  }
+
   noteUse(name: string, ref: Node): void {
     const found = classifyUse(this.unit, this.table, ref)
     const pointer = this.facts.pointerParam(name)
@@ -1915,13 +1971,7 @@ class FactCollector {
       if (this.pushedOntoJoinedParts(ref)) {
         return
       }
-      this.facts.escaping.add(name)
-      if (pointer !== null) {
-        pointer.captured = true
-        pointer.outlives = true
-        pointer.writesThrough = true // an alias may be written through later
-        pointer.writesShared = true
-      }
+      this.escapeParam(name)
       return
     }
     if (found.kind === USE_ARGUMENT) {
@@ -2117,6 +2167,11 @@ class FactCollector {
     if (local.storage === STORAGE_PARAM) {
       return new MemPath(ROOT_NONE, "", "") // a number, a `boolean` or a string
     }
+    return this.localPathAt(local, depth)
+  }
+
+  /** What the `const` or `let` `local` resolves to (`resolveLocal`), cached. */
+  localPathAt(local: Local, depth: i32): MemPath {
     for (const seen of this.facts.localPaths) {
       if (seen.local === local) {
         return seen.path
@@ -2817,8 +2872,14 @@ class FactCollector {
     const program = this.unit.program
     // WP29: an arrow argument is lifted into a function of its own, which has
     // facts of its own; its body is not this function's, and neither it nor a
-    // function named as an argument is a value this function holds.
+    // function named as an argument is a value this function holds. What an
+    // arrow given to an ordinary function parameter captures escapes; a
+    // data-parallel form's or a task's captures stay read-only inside the call.
     if (node.kind === N_ARROW) {
+      const lifted = program.nodeCallees[node.id]
+      if (lifted !== null && lifted.capturesForCall) {
+        this.noteCaptures(node)
+      }
       return
     }
     if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {

@@ -54,6 +54,7 @@ import {
   N_IDENT,
   N_IF,
   N_INDEX,
+  N_LABELED,
   N_LIST,
   N_MEMBER,
   N_NEW,
@@ -86,6 +87,7 @@ import {
   TemplateInfo,
   capturedReads,
 } from "./program"
+import { capturesOf } from "./parallel"
 import { RuntimeTable } from "./runtime"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { methodReceiver } from "./emit-util"
@@ -144,6 +146,12 @@ const secretRole = (template: TemplateInfo): i32 => {
     return SECRET_EXPOSE_WITH
   }
   return name === "wipe" ? SECRET_WIPE : SECRET_NONE
+}
+
+/** Whether `template` is `expose` or `exposeWith`, whose arrow captures nothing (`captureMode` in `src/generics.ts`). */
+export const isExposeTemplate = (template: TemplateInfo): boolean => {
+  const role = secretRole(template)
+  return role === SECRET_EXPOSE || role === SECRET_EXPOSE_WITH
 }
 
 /** The role of the function `sig` is, or `SECRET_NONE` when it is no instance of `nish:secret`'s. */
@@ -615,14 +623,20 @@ const sameState = (a: FlowState, b: FlowState): boolean => {
 
 /** One loop or `switch` a `break` or a `continue` can leave, and what reached its exits. */
 class SecretExitTarget {
-  isSwitch: boolean
-  /** How many targets enclose it: a variable declared deeper than this is inside it. */
-  depth: i32
+  /** The label written on the statement, or "" for none. */
+  label: string
   breaks: FlowState
   continues: FlowState
+  /** How many targets enclose it: a variable declared deeper than this is inside it. */
+  depth: i32
+  isSwitch: boolean
+  /** A labelled block: only a `break` that names it leaves it. */
+  isBlock: boolean
 
   constructor(isSwitch: boolean, depth: i32, vars: i32, movable: i32) {
     this.isSwitch = isSwitch
+    this.isBlock = false
+    this.label = ""
     this.depth = depth
     this.breaks = new FlowState(vars, movable)
     this.breaks.reachable = false
@@ -658,6 +672,8 @@ class SecretFlow {
   /** Every `secret(...)` call in the body, which the sole-reference rule judges. */
   sites: Node[]
   targets: SecretExitTarget[]
+  /** The label of the loop or `switch` about to be walked, which it takes. */
+  label: string
   /** The body is a holder's constructor, whose slots are set rather than ended. */
   building: boolean
   report: boolean
@@ -676,6 +692,7 @@ class SecretFlow {
     this.movable = []
     this.sites = []
     this.targets = []
+    this.label = ""
     this.report = true
     this.reported = []
   }
@@ -860,6 +877,9 @@ class SecretFlow {
       case N_CONTINUE:
         this.leave(stmt, state, true)
         return
+      case N_LABELED:
+        this.labeled(stmt, state, block)
+        return
       default:
         return
     }
@@ -915,6 +935,27 @@ class SecretFlow {
       merged.reachable = false
     }
     assign(state, merged)
+  }
+
+  /**
+   * A labelled loop or `switch` is walked as one with its label on its target;
+   * a labelled block is a target of its own, which only a `break` that names
+   * it leaves, to the statement after it.
+   */
+  labeled(stmt: Node, state: FlowState, block: Node): void {
+    const body = stmt.children[0]
+    if (body.kind !== N_BLOCK) {
+      this.label = stmt.text
+      this.statement(body, state, block)
+      return
+    }
+    const target = new SecretExitTarget(true, this.targets.length, this.vars.length, this.movable.length)
+    target.isBlock = true
+    target.label = stmt.text
+    this.targets.push(target)
+    this.statement(body, state, block)
+    this.targets.pop()
+    mergeInto(state, target.breaks)
   }
 
   /** `k === null` holds no secret in its true branch, `k !== null` in its false one. */
@@ -976,13 +1017,15 @@ class SecretFlow {
     state: FlowState,
     block: Node
   ): void {
+    const label = this.label
+    this.label = ""
     const saved = this.report
     this.report = false
     let head = copyState(state)
     let rounds = 0
     while (rounds < 8) {
       const next = copyState(state)
-      mergeInto(next, this.pass(stmt, cond, body, step, once, copyState(head), block).continues)
+      mergeInto(next, this.pass(stmt, cond, body, step, once, copyState(head), block, label).continues)
       if (sameState(next, head)) {
         break
       }
@@ -990,7 +1033,7 @@ class SecretFlow {
       rounds = rounds + 1
     }
     this.report = saved
-    const target = this.pass(stmt, cond, body, step, once, head, block)
+    const target = this.pass(stmt, cond, body, step, once, head, block, label)
     // Where the loop exits: its test failing (never for `while (true)`), and every `break`.
     const out = target.breaks
     if (target.exits.reachable) {
@@ -1007,9 +1050,11 @@ class SecretFlow {
     step: Node | null,
     once: boolean,
     head: FlowState,
-    block: Node
+    block: Node,
+    label: string
   ): LoopPass {
     const target = new SecretExitTarget(false, this.targets.length, this.vars.length, this.movable.length)
+    target.label = label
     const exits = this.fresh()
     exits.reachable = false
     const state = head
@@ -1043,8 +1088,13 @@ class SecretFlow {
   }
 
   switchStatement(stmt: Node, state: FlowState): void {
+    // The label is taken before the discriminant is walked, as a loop takes
+    // it before its condition, so nothing walked there can see it.
+    const label = this.label
+    this.label = ""
     this.expression(stmt.children[0], ROLE_READ, state)
     const target = new SecretExitTarget(true, this.targets.length, this.vars.length, this.movable.length)
+    target.label = label
     this.targets.push(target)
     const entry = copyState(state)
     let fall = this.fresh()
@@ -1077,10 +1127,13 @@ class SecretFlow {
     assign(state, out)
   }
 
-  /** `break` (or `continue`): the innermost target it leaves, and the secrets declared inside it. */
+  /**
+   * `break` (or `continue`): the target it leaves — the one its label names,
+   * else the innermost it can leave — and the secrets declared inside it.
+   */
   leave(stmt: Node, state: FlowState, isContinue: boolean): void {
     let i = this.targets.length - 1
-    while (i >= 0 && isContinue && this.targets[i].isSwitch) {
+    while (i >= 0 && !this.leaves(this.targets[i], stmt.text, isContinue)) {
       i = i - 1
     }
     if (i < 0) {
@@ -1099,6 +1152,14 @@ class SecretFlow {
     }
     mergeInto(isContinue ? target.continues : target.breaks, state)
     state.reachable = false
+  }
+
+  /** Whether a jump naming `label` ("" for none) leaves at `target`. */
+  leaves(target: SecretExitTarget, label: string, isContinue: boolean): boolean {
+    if (label !== "") {
+      return target.label === label
+    }
+    return isContinue ? !target.isSwitch : !target.isBlock
   }
 
   // ---- Expressions ----
@@ -2511,6 +2572,16 @@ const keepsMessage = (fn: string, intrinsic: string): string =>
   `\`${fn}\` keeps the value \`${intrinsic}\` hands it — returns it, stores it or passes it where it is kept — ` +
   "and the key would outlive the `Secret` unwiped; return a value computed from it instead"
 
+/**
+ * What `expose` runs carries a capture: an arrow given to an ordinary
+ * function's parameter, which captured a name of the function it is written
+ * in, and which that function handed on to `expose` or `exposeWith`.
+ */
+const exposeCaptureMessage = (fn: string, intrinsic: string): string =>
+  `\`${fn}\` carries a value an arrow captured from the function it is written in, and what \`${intrinsic}\` ` +
+  "runs captures nothing: a capture it could write through would be a channel out of it that its result type " +
+  "does not name; pass the value as `exposeWith`'s argument instead"
+
 /** What `exposeWith` runs writes the argument it is handed. */
 const writesArgMessage = (fn: string): string =>
   `\`${fn}\` writes the argument \`exposeWith\` hands it, a channel out of \`expose\` its result type does ` +
@@ -2648,6 +2719,9 @@ export const exposeMessages = (
   }
   if (fn.lifted && fn.decl.children.length > 2 && fn.decl.children[2].kind === N_EMPTY) {
     out.push(undeclaredMessage(intrinsic))
+  }
+  if (capturesOf(fn).length > 0) {
+    out.push(exposeCaptureMessage(name, intrinsic))
   }
   const own = facts.get(fn.name)
   if (own === null) {

@@ -14,6 +14,7 @@ import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
 import N_FOR from "./nodes" -> const N_FOR
 import N_FOR_OF from "./nodes" -> const N_FOR_OF
 import N_IF from "./nodes" -> const N_IF
+import N_LABELED from "./nodes" -> const N_LABELED
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import N_PAREN from "./nodes" -> const N_PAREN
 import N_RETURN from "./nodes" -> const N_RETURN
@@ -77,7 +78,7 @@ function checkReads(ctx: CheckContext, cls: StructInfo, node: Node, assigned: As
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error StringSet.has StructInfo.field TypeTable.typeName checkReads missingField nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq thisAccess
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 checkReads#0 CheckContext.error#0 checkReads#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 checkReads#0 CheckContext.error#0 checkReads#0
   pointer cls: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0 missingField#0 checkReads#1 missingField#0 checkReads#1
   pointer node: size=40 writesThrough=false captured=false passedTo=thisAccess#0 CheckContext.error#1 CheckContext.error#1
   pointer assigned: size=16 writesThrough=false captured=false passedTo=missingField#1 checkReads#3 missingField#1 checkReads#3
@@ -107,7 +108,7 @@ function requireAll(ctx: CheckContext, cls: StructInfo, assigned: Assigned, at: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error TypeTable.typeName missingField nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer cls: size=168 writesThrough=false captured=false passedTo=missingField#0
   pointer assigned: size=16 writesThrough=false captured=false passedTo=missingField#1
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
@@ -121,7 +122,7 @@ function walkStatements(ctx: CheckContext, cls: StructInfo, stmts: Node[], assig
   sharedWrite: via walkStatement
   escaping: assigned
   calls: walkStatement
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=walkStatement#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=walkStatement#0
   pointer cls: size=168 writesThrough=false captured=false passedTo=walkStatement#1
   pointer stmts: size=0 writesThrough=false captured=false
   pointer assigned: size=16 writesThrough=true captured=true
@@ -133,11 +134,11 @@ function walkStatement(ctx: CheckContext, cls: StructInfo, stmt: Node, assigned:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via walkStatements
   escaping: assigned
-  calls: Assigned.copy assignedBy checkReads nish_panic_index requireAll terminated walkIf walkLoop walkStatement walkStatements
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=walkStatements#0 checkReads#0 checkReads#0 walkIf#0 checkReads#0 requireAll#0 checkReads#0 walkLoop#0 walkLoop#0 walkLoop#0 checkReads#0 walkStatement#0 checkReads#0
-  pointer cls: size=168 writesThrough=false captured=false passedTo=walkStatements#1 checkReads#1 checkReads#1 walkIf#1 checkReads#1 requireAll#1 checkReads#1 walkLoop#1 walkLoop#1 walkLoop#1 checkReads#1 walkStatement#1 checkReads#1
+  calls: Assigned.copy assignedBy breaksTo checkReads nish_panic_index requireAll terminated walkIf walkLoop walkStatement walkStatements
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=walkStatements#0 checkReads#0 checkReads#0 walkIf#0 checkReads#0 requireAll#0 checkReads#0 walkStatement#0 walkLoop#0 walkLoop#0 walkLoop#0 checkReads#0 walkStatement#0 checkReads#0
+  pointer cls: size=168 writesThrough=false captured=false passedTo=walkStatements#1 checkReads#1 checkReads#1 walkIf#1 checkReads#1 requireAll#1 checkReads#1 walkStatement#1 walkLoop#1 walkLoop#1 walkLoop#1 checkReads#1 walkStatement#1 checkReads#1
   pointer stmt: size=40 writesThrough=false captured=false passedTo=walkIf#2 requireAll#3 checkReads#2
-  pointer assigned: size=16 writesThrough=true captured=true passedTo=walkStatements#3 checkReads#3 assignedBy#1 checkReads#3 assignedBy#1 walkIf#3 checkReads#3 requireAll#2 checkReads#3 walkLoop#4 walkLoop#4 walkLoop#4 checkReads#3 Assigned.copy#0 checkReads#3
+  pointer assigned: size=16 writesThrough=true captured=true passedTo=walkStatements#3 checkReads#3 assignedBy#1 checkReads#3 assignedBy#1 walkIf#3 checkReads#3 requireAll#2 checkReads#3 Assigned.copy#0 walkLoop#4 walkLoop#4 walkLoop#4 checkReads#3 Assigned.copy#0 checkReads#3
   stackSites=0 stackLocals=0
   callee +0:14 walkStatements -> @walkStatements
   callee +2:7 checkReads -> @checkReads
@@ -153,24 +154,36 @@ function walkStatement(ctx: CheckContext, cls: StructInfo, stmt: Node, assigned:
   callee +23:14 terminated -> @terminated
   callee +25:14 terminated -> @terminated
   callee +27:14 terminated -> @terminated
-  callee +29:14 walkLoop -> @walkLoop
-  callee +31:14 walkLoop -> @walkLoop
-  callee +33:14 walkLoop -> @walkLoop
-  local +35:18 part: Node (const)
-  callee +37:11 checkReads -> @checkReads
-  callee +40:7 walkStatement -> @walkStatement
-  callee +40:49 Assigned.copy -> @Assigned.copy
-  callee +43:7 checkReads -> @checkReads
+  local +31:13 after: Assigned (const)
+  callee +31:21 walkStatement -> @walkStatement
+  callee +31:63 Assigned.copy -> @Assigned.copy
+  callee +32:14 breaksTo -> @breaksTo
+  callee +35:14 walkLoop -> @walkLoop
+  callee +37:14 walkLoop -> @walkLoop
+  callee +39:14 walkLoop -> @walkLoop
+  local +41:18 part: Node (const)
+  callee +43:11 checkReads -> @checkReads
+  callee +46:7 walkStatement -> @walkStatement
+  callee +46:49 Assigned.copy -> @Assigned.copy
+  callee +49:7 checkReads -> @checkReads
 function terminated(): Assigned -> @terminated
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: Assigned.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
   callee +0:36 new Assigned -> @Assigned.constructor
+function breaksTo(node: Node, label: string): boolean -> @breaksTo
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: label
+  calls: breaksTo nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 child: Node (const)
+  callee +1:9 breaksTo -> @breaksTo
 function walkIf(ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned -> @walkIf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via checkReads
   calls: Assigned.constructor Assigned.copy StringSet.add StringSet.at StringSet.has StringSet.size checkReads nish_alloc_struct nish_panic_index walkStatement
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=checkReads#0 walkStatement#0 walkStatement#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=checkReads#0 walkStatement#0 walkStatement#0
   pointer cls: size=168 writesThrough=false captured=false passedTo=checkReads#1 walkStatement#1 walkStatement#1
   pointer stmt: size=40 writesThrough=false captured=false
   pointer assigned: size=16 writesThrough=false captured=false passedTo=checkReads#3 Assigned.copy#0 Assigned.copy#0 Assigned.copy#0
@@ -196,7 +209,7 @@ function walkLoop(ctx: CheckContext, cls: StructInfo, head: Node, body: Node, as
   sharedWrite: via checkReads
   escaping: assigned
   calls: Assigned.copy checkReads walkStatement
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=checkReads#0 walkStatement#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=checkReads#0 walkStatement#0
   pointer cls: size=168 writesThrough=false captured=false passedTo=checkReads#1 walkStatement#1
   pointer head: size=40 writesThrough=false captured=false passedTo=checkReads#2
   pointer body: size=40 writesThrough=false captured=false passedTo=walkStatement#2
@@ -209,7 +222,7 @@ function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void -> @c
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
   calls: Assigned.constructor CheckContext.error StringSet.add StringSet.has TypeTable.typeName missingField nish_alloc_struct nish_panic_index nish_str_concat walkStatements
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0 walkStatements#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 walkStatements#0 CheckContext.error#0
   pointer cls: size=168 writesThrough=false captured=false passedTo=walkStatements#1 missingField#0
   stackSites=0 stackLocals=0
   local +0:9 assigned: Assigned (const)

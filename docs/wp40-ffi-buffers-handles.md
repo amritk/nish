@@ -32,6 +32,14 @@ H, so they collide with neither WP27's S4 (struct layout) nor its S5 (errno).
 The design sits on top of WP27 §8, the S3 string borrow, which is built:
 S3.1 (#695), S3.2 (#701) and S3.3 (#704). This document does not change it.
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). A handle, a `CPtr` and `this` of a handle class are still
+refused as captures (`reject_ffi_handle_closure_capture`,
+`reject_ffi_handle_field_capture`), so the rules below are unchanged.
+
 Every claim about today's compiler is anchored at commit `8790ea3`
 (`8790ea338464432dafb88ca381872626389538a1`), on `main` after S3.3. The tests
 §2 cites exist, as do those marked existing. Every other test named here is
@@ -831,7 +839,7 @@ the list. "Value" is a handle object, "field" its `CPtr` field.
 | Modules: `export`, `import`, re-export | `export class C`, a re-export, and an exported function or class whose method takes `C` are refused (row 19). A non-exported class cannot be imported, so a handle class and every function that takes one live in one module | — |
 | `const`, `let`, `using` | Only H1. `const g = f`, `let g: File`, `using g = f`, a ternary or `as` initialiser, and a second declarator `b = a` are refused (rows 2, 15) | R2 only, each declarator alone |
 | Expression statement | `f.m();` is U1. A bare `f;` is refused | `this.f;` is refused |
-| `if`, `while`, `for`, `for…of`, `switch` (labelled statements are refused for every program, `reject_labeled_statement`) | A handle as a condition, a `switch` subject or a `for…of` source (`for (const g of [f])`) is refused; U1 and U2 inside them are allowed, and a `using` in a loop body opens and closes once per iteration | F outside the constructor body's top level is refused |
+| `if`, `while`, `for`, `for…of`, `switch` (a label on a loop, a block or a `switch` is accepted, `cf_label_loops`) | A handle as a condition, a `switch` subject or a `for…of` source (`for (const g of [f])`) is refused; U1 and U2 inside them are allowed, and a `using` in a loop body opens and closes once per iteration | F outside the constructor body's top level is refused |
 | `return`, `break`, `continue` | `return f` is refused; `return f.m()` is U1, with the close after it (§4b, §4e) | `return this.f` and `return p` are refused (S2 keeps `CPtr` out of a return) |
 | `throw`, `try`/`catch` | Both are refused for every program (`reject_throw`, `reject_try_catch`, docs/LANGUAGE.md:4819-4832), so neither is a position or an exit | — |
 | Assignment, as a statement or used as an expression, either side, and compound assignment | `g = f`, `f = g`, `x.h = f` and `const q = (g = f)` are refused (row 15) | Every write but F is refused, including `const q = this.f = fopen(…)` (row 17); `x = this.f` and `x = p` are refused (row 16b) |
