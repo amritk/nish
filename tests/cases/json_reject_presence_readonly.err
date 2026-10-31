@@ -1,0 +1,1 @@
+`Patch.json`'s `presence` gives `a` the field `hasA`, which is `readonly`: a presence field is a `boolean` that is not `readonly` and records whether one other field's key was given; it is off the wire, so no option renames it, makes it optional or records it
