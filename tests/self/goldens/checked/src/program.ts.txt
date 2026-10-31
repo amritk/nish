@@ -18,6 +18,7 @@ import isCollectionsModule from "./std-modules" -> function @isCollectionsModule
 import isJsonTypedModule from "./std-modules" -> function @isJsonTypedModule
 import isMapExtrasModule from "./std-modules" -> function @isMapExtrasModule
 import isMathModule from "./std-modules" -> function @isMathModule
+import isSortModule from "./std-modules" -> function @isSortModule
 import isSecretModule from "./std-modules" -> function @isSecretModule
 import Local from "./symbols" -> struct Local
 import TypeTable from "./types" -> struct TypeTable
@@ -767,7 +768,7 @@ function StructRegistry.get(this: StructRegistry, name: string): StructInfo | nu
 function CheckedProgram.constructor(this: CheckedProgram, source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string): void -> @CheckedProgram.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: file isEntry nodeCount packageName source
-  calls: FusionTable.constructor StringMap.constructor StringSet.constructor isCollectionsModule isJsonTypedModule isMapExtrasModule isMathModule isSecretModule nish_alloc_struct nish_array_grow nish_panic nish_panic_index packageSymbolPrefix
+  calls: FusionTable.constructor StringMap.constructor StringSet.constructor isCollectionsModule isJsonTypedModule isMapExtrasModule isMathModule isSecretModule isSortModule nish_alloc_struct nish_array_grow nish_panic nish_panic_index packageSymbolPrefix
   pointer this: size=656 writesThrough=true captured=false
   pointer source: size=24 writesThrough=true captured=true
   pointer file: size=40 writesThrough=true captured=true
@@ -792,9 +793,10 @@ function CheckedProgram.constructor(this: CheckedProgram, source: SourceFile, fi
   callee +56:29 isMapExtrasModule -> @isMapExtrasModule
   callee +57:29 isJsonTypedModule -> @isJsonTypedModule
   callee +58:26 isSecretModule -> @isSecretModule
-  callee +59:24 isMathModule -> @isMathModule
-  callee +69:27 new StringMap -> @StringMap.constructor
-  local +83:9 i: i32 (let)
+  callee +61:24 isMathModule -> @isMathModule
+  callee +61:66 isSortModule -> @isSortModule
+  callee +71:27 new StringMap -> @StringMap.constructor
+  local +85:9 i: i32 (let)
 function CheckedProgram.newTypeArgumentsOf(this: CheckedProgram, expr: Node): Node | null -> @CheckedProgram.newTypeArgumentsOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.get nish_str_from_i32
