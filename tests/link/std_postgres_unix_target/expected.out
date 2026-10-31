@@ -1,0 +1,59 @@
+PASS  a directory is its .s.PGSQL socket
+PASS  the port names the socket
+PASS  a full socket path is taken as a directory, as libpq does
+PASS  an @ host is an abstract socket
+PASS  a name is TCP, unchanged
+PASS  an address is TCP, unchanged
+PASS  a relative path is TCP, as in libpq
+PASS  an empty host is refused
+PASS  two hosts are refused
+PASS  a NUL in the host is refused
+PASS  port 0 is refused
+PASS  port 65536 is refused
+PASS  port 65535 is taken
+PASS  a refused target is not unix
+PASS  a 107-byte socket path is taken
+PASS  whole
+PASS  a 108-byte socket path is refused
+PASS  not cut short
+PASS  nor unix
+PASS  an @ name of 107 bytes after the @ is taken
+PASS  one of 108 is refused
+PASS  a longer port counts
+PASS  a long TCP host is no socket path
+PASS  a TCP URL
+PASS  postgresql:// too
+PASS  no port is 5432
+PASS  a percent-encoded directory
+PASS  lower-case escapes
+PASS  an encoded @ is an abstract name
+PASS  ?host= names the directory
+PASS  ?host= overrides the authority, ?port= the port
+PASS  an IPv6 host loses its brackets
+PASS  an @ in the password is not the host
+PASS  a query with no path
+PASS  another scheme is refused
+PASS  the scheme is case-sensitive
+PASS  a key with no = is refused
+PASS  no host is refused
+PASS  an unclosed [ is refused
+PASS  text after ] is refused
+PASS  an encoded , is two hosts
+PASS  an empty port is refused
+PASS  a port of letters is refused
+PASS  a six-digit port is refused
+PASS  ?port=0 is refused
+PASS  a long encoded directory is refused
+PASS  a bare % ends the host
+PASS  a % with one digit
+PASS  %G1 is no hex
+PASS  %1G is no hex
+PASS  %00 is refused
+PASS  in the user too
+PASS  in the database too
+PASS  in the port
+PASS  in a query key
+PASS  in a query value
+PASS  in an ignored value
+PASS  an encoded port
+postgres targets: 58 passed, 0 failed, 0 skipped
