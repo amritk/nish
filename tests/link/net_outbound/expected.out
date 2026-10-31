@@ -1,0 +1,64 @@
+PASS  httpErrorName names HTTP_E_BLOCKED
+PASS  a client has no outbound policy unless given one
+PASS  a new policy caps a fetch at 5 redirects, 30 s and 8 MiB
+PASS  public IPv4 and IPv6 addresses are public
+PASS  this network, 10/8, CGNAT's 100.64/10 and loopback 127/8 are not
+PASS  link-local 169.254/16, the metadata address among it, and 168.63.129.16 are not
+PASS  172.16/12, 192.168/16 and the special and documentation /24s and 198.18/15 are not
+PASS  multicast, the reserved 240/4 and broadcast are not
+PASS  the addresses just outside each range are public
+PASS  unspecified, loopback, IPv4-compatible, discard, link-local, site-local and multicast IPv6 are not
+PASS  unique local fc00::/7, the IPv6 metadata address among it, is not
+PASS  2001::/23 (Teredo among it), 2001:db8::/32 and 3fff::/20 are not
+PASS  an IPv4-mapped address is judged as the IPv4 address it maps
+PASS  NAT64 64:ff9b::/96 is judged by the IPv4 address in it, and the local 64:ff9b:1::/48 is not public
+PASS  6to4 2002::/16 is judged by the IPv4 address in it
+PASS  and each is public when that address, or the address itself, is
+PASS  a policy allows the public addresses alone
+PASS  permit lets one IPv4 address through, in either form, and nothing beside it
+PASS  a prefix ending inside a byte matches on its bits
+PASS  an IPv6 prefix
+PASS  an address without a length is the address alone
+PASS  0.0.0.0/0 is every IPv4 address and no IPv6 one
+PASS  a prefix too long for its address, a bad address or length, or a short IPv4 form, is refused and adds nothing
+PASS  a policy with no allowed hosts allows any
+PASS  an allowed name matches in any case, with or without its trailing dot
+PASS  but only itself
+PASS  a leading dot allows the name and the names under it, nothing that only ends the same way
+PASS  a bracketed IPv6 entry matches the URL's host
+PASS  a dotted entry is never a suffix of an IPv4 literal
+PASS  outboundFilter keeps a lookup's public addresses, in order, and drops the rest
+PASS  and keeps none of an answer with no public address, which is left in place to be named
+PASS  without a policy, a loopback address is reached
+PASS  with one, a loopback address is HTTP_E_BLOCKED, naming 127.0.0.1
+PASS    and no connection was made
+PASS  without a policy, localhost is reached
+PASS  with one, localhost is HTTP_E_BLOCKED, naming resolves to
+PASS    and no connection was made
+PASS  without a policy, an IPv4-mapped loopback literal is reached
+PASS  with one, an IPv4-mapped loopback literal is HTTP_E_BLOCKED, naming 127.0.0.1
+PASS    and no connection was made
+PASS  a permitted address is reached, a redirect to it too
+PASS  a redirect to a name is followed when an address it resolves to is permitted
+PASS  a redirect to another loopback address is blocked at the hop
+PASS  and so is one to it written as an IPv4-mapped IPv6 literal
+PASS  and one to [::1]
+PASS  and one to the metadata address, before any connect is tried
+PASS  an allowed host is fetched
+PASS  without a policy, a redirect to a host not on the allowlist is reached
+PASS  with one, a redirect to a host not on the allowlist is HTTP_E_BLOCKED, naming does not allow
+PASS    and no connection past the first hop
+PASS  a URL naming a host not on it is blocked before the lookup
+PASS  without a policy, an allowed name in the userinfo is reached
+PASS  with one, an allowed name in the userinfo is HTTP_E_BLOCKED, naming does not allow
+PASS    and no connection was made
+PASS  without a policy, a fetch goes to the proxy (here one nothing listens on)
+PASS  with one, the proxy is ignored and the fetch goes direct
+PASS  without a policy, three redirects are followed
+PASS  under a policy of two, two are
+PASS  and three are HTTP_E_TOO_MANY_REDIRECTS
+PASS  without a policy, a 40-byte body is read
+PASS  under a policy capping bodies at 10 bytes, it is HTTP_E_BODY_TOO_LARGE
+PASS  without a policy, a body dripped over most of a second is read
+PASS  under a policy of 200 ms with no total timeout of the options', it is HTTP_E_TOTAL_TIMEOUT
+outbound: 63 passed, 0 failed, 0 skipped

@@ -107,6 +107,7 @@ was never answered, is not sent again.
 | `crossOriginRedirects` | false | Whether a hop may go to another origin |
 | `useEnvProxy` | true | Whether the proxy variables are read |
 | `rootsPemPath` | null | A PEM file of the roots an https server must chain to, in place of the system's |
+| `outbound` | null | The [outbound policy](#fetching-a-url-someone-else-chose) for URLs your program did not choose |
 
 A server that sends its body a byte at a time, each inside `readTimeoutMs`,
 holds a fetch until `totalTimeoutMs`: set it when the server is not yours.
@@ -144,6 +145,74 @@ turns the check off: to talk to a server with its own certificate authority,
 point `rootsPemPath` at that authority's root. A server that does not speak
 TLS, and a body cut off without TLS's `close_notify`, are `HTTP_E_TLS`.
 Revocation is not checked.
+
+## Fetching a URL someone else chose
+
+A program that fetches a URL a user typed, a webhook a customer registered, or
+an image a page links to is a way into its own network for whoever wrote that
+URL. `http://169.254.169.254/` reaches a cloud host's metadata service and the
+credentials in it; `http://127.0.0.1:6379/` reaches a database that trusts
+local callers; a name that resolves to either does the same. Give such a
+client an `OutboundPolicy`, from `nish/net/outbound`:
+
+```ts nish:ok
+import { HTTP_E_BLOCKED, HttpClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/http-client";
+import { OutboundPolicy } from "nish/net/outbound";
+
+export const main = (): i32 => {
+  const policy = new OutboundPolicy();
+  const options = new HttpOptions();
+  options.outbound = policy;
+  options.followRedirects = true;
+  options.crossOriginRedirects = true;
+  const client = new HttpClient(options);
+  const res: HttpResponse | null = client.fetch(new HttpRequest("GET", "http://127.0.0.1/"));
+  if (res === null && client.error === HTTP_E_BLOCKED) {
+    console.log(client.errorText);
+  }
+  client.close();
+  return 0;
+};
+```
+
+It prints `blocked: 127.0.0.1 resolves to 127.0.0.1, which the outbound policy does
+not allow`, and no connection was opened. Under a policy:
+
+- **Only public addresses are reached.** The name is looked up first, every
+  address that is loopback, private (`10/8`, `172.16/12`, `192.168/16`,
+  `fc00::/7`), link-local (`169.254/16`, `fe80::/10`), shared (`100.64/10`),
+  multicast, documentation or otherwise reserved is dropped, and the client
+  connects only to the addresses it kept, without looking the name up again.
+  A name whose answer changes between the check and the connect cannot move
+  the connection. An IPv4 address written inside IPv6 (`::ffff:127.0.0.1`,
+  `64:ff9b::7f00:1`, `2002:7f00:1::`) is judged as the IPv4 address it holds.
+  A name with no public address is `HTTP_E_BLOCKED`.
+- **Every redirect hop is checked the same way**, so a public URL that answers
+  with a redirect to `http://localhost/` fails at the hop.
+- **No proxy is used.** A proxy looks the name up itself, past the check, so
+  the proxy variables and `setProxies` are ignored.
+- **A fetch is capped** at 5 redirects, 30 seconds and an 8 MiB body, or your
+  options' limits where they are lower. Change them on the policy:
+  `maxRedirects`, `totalTimeoutMs` (0 for your options' alone) and
+  `maxBodyBytes`.
+
+Two methods change what gets through. `policy.permit("10.20.0.0/16")` lets
+a prefix you trust through anyway, such as an internal API the program is
+meant to reach; it answers false for text that is not an address and a prefix
+length. `policy.allowHost("api.example.com")` limits the names a URL, or any
+hop, may carry: once one is added, a host that is not on the list is
+`HTTP_E_BLOCKED` before it is looked up. A name is matched exactly, in any
+case and with or without its trailing dot; an entry with a leading dot,
+`.example.com`, also allows every name under it. An allowed host must still
+resolve to an allowed address.
+
+Only this client takes a policy: a connection opened another way, with
+`tcpConnect` or another protocol's client, has no address check. A name you
+did not choose is still looked up, so its nameserver sees the query; an
+allowlist is the way to refuse a name before that.
+
+The policy decides where a fetch may go; it does not make the response safe to
+trust. Read the body under your own limits, as for any server you do not run.
 
 ## The protocol alone
 
