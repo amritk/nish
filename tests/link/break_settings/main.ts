@@ -1,8 +1,9 @@
 // Where `nish break` keeps its settings between runs (`src/break.ts`) and the
 // file it keeps them in (`src/break-menu.ts`): the path's rules, a save into
 // a directory not there yet, a round trip of every field, and the negatives —
-// a missing file, a file of garbage, an unknown name and nowhere to save,
-// each of which gives the defaults for what it cannot say and never panics.
+// a missing file, a file of garbage or of hostile values, an unknown name and
+// nowhere to save, each of which gives the defaults for what it cannot say and
+// never panics.
 // It works in a scratch directory beside its own binary and removes it.
 import { Suite } from "../../../std/testing"
 import { BreakSettings, formatBreakSettings, parseBreakSettings } from "../../../src/break-menu"
@@ -106,6 +107,31 @@ const testCorrupt = (t: Suite, scratch: string): void => {
   sameAs(t, "names are matched exactly", parseBreakSettings("FPS=1\n fps=1\nfps =1\nfps= 1\nstats=TRUE\n"), new BreakSettings())
 }
 
+/**
+ * Values an attacker would write: shell metacharacters, terminal escapes, a
+ * value cut by a newline and `../`. None is a number or a boolean in range, so
+ * each is dropped and the file written back is the defaults' seven lines.
+ */
+const testHostile = (t: Suite, scratch: string): void => {
+  const hostile: string =
+    "fps=1;rm -rf ~\nresolution=$(touch pwned)\ngraphics=`id`\neffects=1|sh\nsmoothing=false&&x\n" +
+    "stats=\u001b[2J\u001b]0;title\u0007\nsound=\u001b[31mtrue\nfps=\n1\nresolution=../../etc/passwd\n" +
+    "graphics=0/../..\n../break=1\nfps=1 \nstats=true\u001b[0m\n"
+  sameAs(t, "hostile values are all dropped", parseBreakSettings(hostile), new BreakSettings())
+  let long: string = "fps="
+  for (let i: i32 = 0; i < 10000; i++) {
+    long = `${long}9`
+  }
+  sameAs(t, "a 10000-digit value is dropped", parseBreakSettings(`${long}\n`), new BreakSettings())
+  // An environment value full of shell syntax is only ever a path, used as one.
+  const odd: string = `${scratch}/-a b;$(x)\`y\``
+  const path: string = breakSettingsPath(odd, "")
+  t.eqStr("a hostile XDG_CONFIG_HOME is joined as text", path, `${odd}/nish/break`)
+  t.ok("and the save lands under it, made without a shell", saveBreakSettings(path, parseBreakSettings(hostile)))
+  const text: string | null = readFileSyncOrNull(path)
+  t.eqStr("holding only the defaults' seven lines", text !== null ? text : "(no file)", DEFAULTS)
+}
+
 const testUnknown = (t: Suite): void => {
   const s: BreakSettings = parseBreakSettings("fps=1\ncolour=red\nstats=true\n")
   t.eqI32("colour=red is ignored and fps=1 before it applies", s.fps, 1)
@@ -122,6 +148,7 @@ export const main = (): number => {
   testSave(t, scratch)
   testLoad(t, scratch)
   testCorrupt(t, scratch)
+  testHostile(t, scratch)
   testUnknown(t)
   remove(scratch)
   t.ok("the scratch directory is removed", !isDirectorySync(scratch))

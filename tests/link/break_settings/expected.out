@@ -33,8 +33,13 @@ PASS  the empty file is the defaults
 PASS  a lone newline is the defaults
 PASS  a lone = is the defaults
 PASS  names are matched exactly
+PASS  hostile values are all dropped
+PASS  a 10000-digit value is dropped
+PASS  a hostile XDG_CONFIG_HOME is joined as text
+PASS  and the save lands under it, made without a shell
+PASS  holding only the defaults' seven lines
 PASS  colour=red is ignored and fps=1 before it applies
 PASS  and stats=true after it
 PASS  and the rest keep their defaults
 PASS  the scratch directory is removed
-break-settings: 39 passed, 0 failed, 0 skipped
+break-settings: 44 passed, 0 failed, 0 skipped
