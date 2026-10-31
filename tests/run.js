@@ -2413,26 +2413,33 @@ if (dealtHere("termIo")) {
     // run pauses before F4 so the reopened stage can be held to the one it left;
     // 120 frames is past the title's outro at any rate the relay draws. The play and
     // stage runs skip the opening (the help falling apart) with a space at frame 2,
-    // so the title is up by frame 5.
+    // so the title is up by frame 5. Each run keeps its settings in a config
+    // directory of its own, never the real `~/.config/nish/break`.
+    const configs = [0, 1, 2].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-")))
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
+        env: { XDG_CONFIG_HOME: configs[0] },
         keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-reopen"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[1] },
         keys: wallKeys([3, "\x1b[17~"], [10, "\x1bOS"], [30, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-stage"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[2] },
         keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
-    ])
+    ]).finally(() => {
+      for (const config of configs) {
+        fs.rmSync(config, { recursive: true, force: true })
+      }
+    })
     const restored = (r) => r.status === 0 && r.sameStty && r.out.endsWith("\x1b[?1049l") && r.err === ""
     check(
       "nish break on a terminal: draws kitty images, and q quits with the screen restored, exit 0",
@@ -23221,11 +23228,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
     riddle.stderr
   )
-  const secret = inSecret(["break"])
+  // The refused run gets a config directory of its own, so it can be shown to
+  // write no settings, and never touches the real `~/.config/nish/break`.
+  const secretConfig = fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-"))
+  const secret = spawnSync(NISH, ["break"], {
+    cwd: secretDir,
+    encoding: "utf8",
+    env: { ...process.env, ...plainEnv, XDG_CONFIG_HOME: secretConfig },
+  })
+  const secretWrote = fs.readdirSync(secretConfig)
+  fs.rmSync(secretConfig, { recursive: true, force: true })
   check(
     "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
     secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
+  )
+  check(
+    "nish break, refused on a pipe: writes no settings file",
+    secretWrote.length === 0,
+    secretWrote.join(", ")
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
   const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])

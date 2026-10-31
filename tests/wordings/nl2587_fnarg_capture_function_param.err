@@ -1,0 +1,1 @@
+The arrow names `g`, a function parameter of the function it is written in: a function parameter is bound when that function is instantiated, not handed over as a value, so an arrow lifted into a function of its own cannot reach it; pass `g` itself where the arrow stands when it fits the parameter, or give the callee a function parameter of its own for it

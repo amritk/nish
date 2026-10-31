@@ -1,0 +1,1 @@
+The arrow reads `k`, a `let` of the function it is written in: an arrow argument is handed what it captures as an argument when the call is made, so it may read only a `const` or a parameter of that function, whose value is the one the arrow is handed; bind the value to a `const` before the call, `const kNow = k`, and read `kNow` in the arrow

@@ -62,7 +62,8 @@ language says it is not.
 - The rule refuses more than it must in three places, each a compile error
   rather than a missed read, and each pinned: a data-parallel arrow that reads
   the local before the move, where the read ends with the call
-  (`reject_secret_alias_capture_*`); a `Result` local copied into another,
+  (`reject_secret_alias_capture_*`), and an arrow given to an ordinary
+  function parameter the same way (`reject_secret_alias_capture_call`); a `Result` local copied into another,
   `const alias = r` (`reject_secret_alias_result_copy`); and a `let` given
   another local after the move, `raw = other`
   (`reject_secret_alias_reassigned_after`). A `let` given a fresh value after
@@ -94,7 +95,7 @@ The checks in `tests/run.js` that hold the above:
   `reject_secret_alias_for_of`, `reject_secret_alias_capture_map`,
   `reject_secret_alias_capture_from`, `reject_secret_alias_capture_map_into`,
   `reject_secret_alias_capture_reduce`, `reject_secret_alias_capture_spawn`,
-  `reject_secret_alias_spawn_arg` and `reject_secret_alias_spawn_with`: one
+  `reject_secret_alias_capture_call`, `reject_secret_alias_spawn_arg` and `reject_secret_alias_spawn_with`: one
   road each.
 - `nish:secret: reverting the sole-reference rule lets every reject_secret_alias_* case compile (${aliasCases.length} cases)`:
   a copy of `src/` without the rule, built by the seed, compiles all of them
@@ -395,3 +396,45 @@ rule above already orders.
   `_call_secret_helper` and `_ctor_param`; and
   `reject_thread_wipe_region_past`.
 - `nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted`.
+
+## Capturing arrows and `expose`
+
+**2026-10-30.** An arrow passed to a function-typed parameter of a top-level
+function may now read the `const` locals and parameters of the function it is
+written in (`docs/LANGUAGE.md`, "Function parameters"). The capture is handed
+to the instance as an extra argument. Three roads this opens were checked.
+
+- **What `expose` runs.** Before, no arrow given to a function parameter
+  captured anything, so the arrow `expose` or `exposeWith` runs could reach
+  only the value it is handed and its own parameters, and a copy of the key
+  bytes could go only where its return value went. With the general rule
+  lifted, `expose(k, (b) => { leak.set(b, 0); return 0 })` would copy the key
+  into `leak`, an array no `wipe` reaches. The arrow `expose` runs still
+  captures nothing: NL2335 refuses it when it is written at the `expose` call
+  (`reject_secret_expose_capture`), and NL2589 when it reaches `expose` through
+  another function's parameter (`reject_secret_expose_capture_forwarded`,
+  `open(k, (b) => ...)` with `open` calling `expose(k, f)`). The two programs
+  are the before/after pair: the same arrow given to a function that is not
+  `expose` compiles and runs (`tests/cases/fnarg_capture_local`).
+- **A moved local read through a capture.** An arrow run after `secret(raw)`
+  that reads `raw` is a read of the moved local, NL2445
+  (`reject_fnarg_capture_secret_moved`), as a data-parallel arrow's is
+  (`reject_par_capture_secret_moved`).
+- **A capture before the move.** An arrow that read `raw` before
+  `secret(raw)` is a second reference, NL2512
+  (`reject_secret_alias_capture_call`), as for a data-parallel arrow. The read
+  ended with the call, so this refuses more than it must; it is the
+  conservative direction, and the sole-reference revert check counts it.
+
+No `std/` caller of `secret`, `expose` or `exposeWith` changed, and no
+finding was opened.
+
+### Tests
+
+- `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, for
+  `reject_secret_expose_capture`, `reject_secret_expose_capture_forwarded`,
+  `reject_fnarg_capture_secret_moved` and `reject_secret_alias_capture_call`.
+- `nish:secret: reverting the sole-reference rule lets every reject_secret_alias_* case compile (${aliasCases.length} cases)`,
+  which now includes `reject_secret_alias_capture_call`.
+- `${name}: IR matches golden` and `${name}: native output matches .out`, for
+  `fnarg_capture_local`.
