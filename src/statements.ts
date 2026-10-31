@@ -1264,7 +1264,8 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
         }
       }
       const clauseScope = scope.child()
-      const steers = (tagged !== null && fallen.indexOf(tagged) < 0) || (held !== null && fallen.indexOf(held) < 0)
+      const steers =
+        (tagged !== null && fallen.indexOf(tagged) < 0) || (held !== null && fallen.indexOf(held) < 0)
       if (steers) {
         narrowClause(ctx, clauseScope, tagged, held, clauses, group, groupDefault)
       }
@@ -1535,7 +1536,10 @@ const checkBreak = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // A plain `break` leaves the innermost loop or `switch`, a labelled one the
   // statement its label names, which the parser has found.
   let at = ctx.loopKinds.length - 1
-  while (at >= 0 && (stmt.text === "" ? ctx.loopKinds[at] === LOOP_BLOCK : ctx.loopLabels[at] !== stmt.text)) {
+  while (
+    at >= 0 &&
+    (stmt.text === "" ? ctx.loopKinds[at] === LOOP_BLOCK : ctx.loopLabels[at] !== stmt.text)
+  ) {
     at = at - 1
   }
   if (at < 0) {

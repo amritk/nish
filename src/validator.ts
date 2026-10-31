@@ -467,7 +467,12 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       // label around it in the same function (`Parser.parseJump`).
       const body = node.children[0].kind
       const named =
-        body === N_WHILE || body === N_DO || body === N_FOR || body === N_FOR_OF || body === N_BLOCK || body === N_SWITCH
+        body === N_WHILE ||
+        body === N_DO ||
+        body === N_FOR ||
+        body === N_FOR_OF ||
+        body === N_BLOCK ||
+        body === N_SWITCH
       if (!named) {
         ctx.error(
           node,
