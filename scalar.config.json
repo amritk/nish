@@ -111,6 +111,7 @@
             "title": "Password hashing",
             "filepath": "docs/guide/using-nish/password-hashing.md"
           },
+          "/auth": { "type": "page", "title": "Authentication tokens (JWT)", "filepath": "docs/guide/using-nish/auth.md" },
           "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" },
           "/api-server": { "type": "page", "title": "An API server", "filepath": "docs/guide/using-nish/api-server.md" },
           "/websocket": { "type": "page", "title": "WebSocket", "filepath": "docs/guide/using-nish/websocket.md" },
