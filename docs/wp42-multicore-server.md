@@ -53,7 +53,7 @@ process per core needs no change to the checker at all: each worker is an
 ordinary single-threaded program.
 
 **The threads there are.** `std/threads` gives scoped, join-bounded tasks and
-nothing else: `scope()` (`std/threads.ts:338`) is a `using` binding, and "a
+nothing else: `scope()` (`std/threads.ts:346`) is a `using` binding, and "a
 task runs when its scope joins, not when it is spawned"
 (`docs/LANGUAGE.md:3234`). A server's accept loop runs until the process is
 told to stop, so it would need a detached, long-lived thread, which the
@@ -68,7 +68,7 @@ pre-forked server it takes one worker's connections, and the supervisor starts
 another.
 
 **Memory and shared state.** Each worker thread of `std/threads` has its own
-arena already (`std/threads.ts:38`; the per-worker arenas at
+arena already (`std/threads.ts:43`; the per-worker arenas at
 `runtime/runtime-parallel.c:249-268`), so threads would save little memory
 over processes: the code pages are shared by the kernel either way. What
 threads would add is state shared between workers, and a server that keeps no
