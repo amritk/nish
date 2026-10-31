@@ -218,8 +218,8 @@ Nish literal cannot spell.
 | `K` | `hashKey` | `sameKey` |
 | --- | --- | --- |
 | `string` | SipHash-1-3 of the UTF-8 bytes under `nish_hash_key`, halves XORed | `nish_str_eq` |
-| ≤ 32-bit integer, `boolean`, enum | multiply-add-shift of the zero-extended value under `nish_hash_key` | `icmp eq` |
-| `i64`, `u64` | a folded 128-bit multiply under `nish_hash_key`, halves XORed | `icmp eq` |
+| ≤ 32-bit integer, `boolean`, enum | multiply-add-shift of the zero-extended value under `nish_int_hash_key` | `icmp eq` |
+| `i64`, `u64` | a folded 128-bit multiply under `nish_int_hash_key`, halves XORed | `icmp eq` |
 | `f64` | normalise, then `fmix64` of its bits, halves XORed | `fcmp oeq`, or both NaN |
 | `f32` | normalise, `fpext`, then as `f64` | as `f64` |
 | a class | `fmix64` of the pointer, halves XORed | pointer `icmp eq` |
@@ -240,7 +240,7 @@ used through 0.28, maps a chosen set of keys to one home bucket as easily as an
 unkeyed string hash did, and a probe then walks all of them. A key below 2^32
 (every integer of 32 bits or fewer, a `boolean`, an enum) now hashes by
 Dietzfelbinger's multiply-add-shift, `((a·x + b) mod 2^64) >> 32`, with `a` and
-`b` the two words of `@nish_hash_key`. For random `a` and `b` that family is
+`b` the two words of `@nish_int_hash_key`. For random `a` and `b` that family is
 strongly universal onto 32 bits (Thorup, "High Speed Hashing for Integers and
 Strings", 2015): any two distinct keys get independent, uniform hashes. The
 home bucket is a bijection of the hash (`h ^ (h >>> 16)`) masked to its low
@@ -251,7 +251,7 @@ would give. Word 0's low bit is forced to 1 (`seedHashKey`), which leaves bits
 
 A 64-bit key has no provable family in two words of key: a strongly universal
 one onto 32 bits needs three (vector multiply-shift, or Thorup's
-pair-multiply-shift), and `@nish_hash_key` is two words in `runtime/runtime.c`.
+pair-multiply-shift), and `@nish_int_hash_key` is two words.
 `i64` and `u64` keys therefore take foldhash's mixer, the 128-bit product of
 `x ^ a` and `b` with its halves XORed: keyed, so which keys share a bucket is
 not known in advance and `fmix64`'s precomputed collisions are gone, but with
@@ -267,9 +267,31 @@ keys 0.924×, on a 16-member enum 1.064×. An unkeyed Fx-style multiply
 most of that is not the cheaper instruction but the structure: it spreads an
 arithmetic sequence of keys over distinct buckets with no collisions, which is
 exactly the predictability a flooding attack exploits, so a keyed hash cannot
-have it. Every program with an integer-keyed map now fills `@nish_hash_key`
-from `getentropy` before `main`, as a program with a string-keyed one already
-did.
+have it.
+
+**The integer key is not the string key.** Multiply-add-shift is linear in its
+key: an attacker who can time probes of an integer-keyed table learns which of
+their keys collide, and each collision is a linear relation on `a` and `b`. A
+key shared with SipHash would let that leak become colliding *strings*, undoing
+JSON-13 for every string-keyed table in the process. So the integer hashes read
+`@nish_int_hash_key`, 16 bytes of their own from a second `getentropy` call in
+a second constructor (`@nish.int.hash.seed`), and what they reveal says nothing
+about `@nish_hash_key`. It is a `linkonce_odr` global each module that hashes
+an integer defines, so the linker keeps one copy and a table built in one module
+is probed in another under the same key; like `nish_hash_key` it is written once
+before any thread exists, and is not thread-local. Every program with an
+integer-keyed map now calls `getentropy` before `main`, as a program with a
+string-keyed one already did.
+
+Two limits carry over from the string key. A wasm32 reactor whose host calls an
+export before `_initialize` runs the constructors probes under an all-zero key,
+which is JSON-13's open caveat in `docs/security/json.md`, now reaching integer
+keys too. And the 64-bit hash's 128-bit multiply is one instruction pair on
+x86-64 and AArch64 but a call to compiler-rt's `__multi3` on wasm32, which
+`bench/map-keys` has not measured there. No test pins the flooding bound
+itself: a collision count depends on the random key, so `tests/cases/map_key_*`
+pin the hash's IR and every key width's behaviour, and the bound rests on the
+proof above.
 
 ## 6. Deletion, iteration and `Set`
 

@@ -51,6 +51,9 @@ import T_I32 from "./types" -> const T_I32
 import T_I64 from "./types" -> const T_I64
 import T_STRING from "./types" -> const T_STRING
 import TypeTable from "./types" -> struct TypeTable
+const INT_HASH_KEY: string = "@nish_int_hash_key"
+const STRING_HASH_KEY: string = "@nish_hash_key"
+const INT_HASH_KEY_GLOBAL: string = "@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8"
 struct MaybeParts (class) size=40 align=8 exported
   field found: string index=0 offset=0
   field value: string index=1 offset=8
@@ -258,7 +261,7 @@ function emitStringHash(emitter: Emitter, str: string): string -> @emitStringHas
   callee +63:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee +63:42 IRFunction.emitValue -> @IRFunction.emitValue
   callee +64:10 IRFunction.emitValue -> @IRFunction.emitValue
-function hashKeyWord(i: i32): string -> @hashKeyWord
+function hashKeyWord(i: i32, key: string): string -> @hashKeyWord
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
@@ -328,24 +331,27 @@ function rotl(emitter: Emitter, x: string, by: i32): string -> @rotl
   callee +1:14 IRFunction.emitValue -> @IRFunction.emitValue
   callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +2:40 IRFunction.emitValue -> @IRFunction.emitValue
-function seedHashKey(emitter: Emitter): void -> @seedHashKey
+function seedHashKey(emitter: Emitter, key: string): void -> @seedHashKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareGlobal
-  calls: Emitter.addConstructor Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat
+  escaping: key
+  calls: Emitter.addConstructor Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat nish_str_eq
   pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.declareGlobal#0 Emitter.declare#0 Emitter.useRuntime#0 Emitter.stringConstant#0 Emitter.addConstructor#0
   stackSites=0 stackLocals=0
-  callee +0:3 Emitter.declareGlobal -> @Emitter.declareGlobal
-  local +1:9 size: string (const)
-  callee +1:16 isWasmBuild -> @isWasmBuild
-  callee +2:3 Emitter.declare -> @Emitter.declare
-  local +3:9 panic: string (const)
-  callee +3:17 Emitter.useRuntime -> @Emitter.useRuntime
-  local +4:9 message: string (const)
-  callee +4:19 Emitter.stringConstant -> @Emitter.stringConstant
-  local +5:9 word0: string (const)
-  callee +5:17 hashKeyWord -> @hashKeyWord
-  callee +6:3 Emitter.addConstructor -> @Emitter.addConstructor
-  callee +7:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  local +0:9 integer: boolean (const)
+  callee +1:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  local +2:9 size: string (const)
+  callee +2:16 isWasmBuild -> @isWasmBuild
+  callee +3:3 Emitter.declare -> @Emitter.declare
+  local +4:9 panic: string (const)
+  callee +4:17 Emitter.useRuntime -> @Emitter.useRuntime
+  local +5:9 message: string (const)
+  callee +5:19 Emitter.stringConstant -> @Emitter.stringConstant
+  local +6:9 word0: string (const)
+  callee +6:17 hashKeyWord -> @hashKeyWord
+  local +7:9 ctor: string (const)
+  callee +8:3 Emitter.addConstructor -> @Emitter.addConstructor
+  callee +9:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
 function multiplyAddShift(emitter: Emitter, x: string): string -> @multiplyAddShift
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via seedHashKey

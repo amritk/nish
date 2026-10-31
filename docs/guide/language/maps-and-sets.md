@@ -132,10 +132,11 @@ the key up once, not twice: the compiler recognises a `set` whose new value
 reads the same key with `get` or `has`, and reuses that first lookup. So does
 `if (!s.has(x)) { s.add(x); … }`.
 
-A string or integer key is hashed under a key the program draws at random when
-it starts, so input from outside — the keys of a JSON body, the words of a
-file, the numbers in a request — cannot be chosen to land in one bucket and
-slow every lookup down. Nothing you can
+A string key, and an integer, boolean or enum key, is hashed under a key the
+program draws at random when it starts, so input from outside — the keys of a
+JSON body, the words of a file, the ids in a request — cannot be chosen to land
+in one bucket and slow every lookup down. A floating-point key is not keyed, so
+key a table of outside input by an integer or a string. Nothing you can
 observe depends on that key: a map still walks in insertion order, run after
 run.
 

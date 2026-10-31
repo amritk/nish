@@ -54,7 +54,7 @@ const INITIAL_SLOTS: i32 = 8
 
 /**
  * The key's hash, never 0: SipHash-1-3 of a string's bytes under the process's
- * random key, folded to 32 bits (docs/security/json.md, JSON-13); under it,
+ * random key, folded to 32 bits (docs/security/json.md, JSON-13); under a 2nd,
  * multiply-add-shift for an int of 32 bits or fewer, a boolean or an enum, a
  * folded 128-bit multiply for a 64-bit int; `fmix64` folded to 32 bits for a
  * float (normalised first, so -0 and +0, and every NaN, hash alike) and a class

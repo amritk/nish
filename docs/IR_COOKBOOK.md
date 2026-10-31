@@ -2809,8 +2809,9 @@ module names one, and that module writes no `.ll` of its own: every function
 of it this module reaches is defined here, `internal`, after the module's own
 code (docs/wp32-map.md §4.1). `s.has(x)` is a call to `Set$i32.has`, which asks
 `probeTable$i32` for the packed probe result. The key's hash is lowered in
-place — here multiply-add-shift under `@nish_hash_key`, the process's random
-key, then 0 moved to 1 — and the loop reads `entryHashes`
+place — here multiply-add-shift under `@nish_int_hash_key`, the process's
+random integer key, apart from the string hash's `@nish_hash_key`, then 0 moved
+to 1 — and the loop reads `entryHashes`
 and `entryKeys` only after the bucket word's top eight bits match the hash's,
 comparing the stored hash before the key (§2). `hashKey` and `sameKey` are
 never called: they are intrinsics `src/emit-map.ts` lowers per key type. So is
@@ -2828,9 +2829,9 @@ export const seen = (s: Set<i32>, x: i32): boolean => s.has(x)
 %struct.Set$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 
-@nish_hash_key = external global [2 x i64], align 8
+@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8
 @.str.0 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"Map: the system's entropy source failed\00" }, align 8
-@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.hash.seed, i8* null }]
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.int.hash.seed, i8* null }]
 @.str.1 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 
 declare i32 @getentropy(i8* noundef, i64 noundef)
@@ -2838,22 +2839,22 @@ declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 
-define internal void @nish.hash.seed() nounwind {
+define internal void @nish.int.hash.seed() nounwind {
 entry:
-  %k = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  %k = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
   %filled = icmp ne i64 %k, 0
   br i1 %filled, label %done, label %fill
 fill:
-  %got = call i32 @getentropy(i8* bitcast ([2 x i64]* @nish_hash_key to i8*), i64 16)
+  %got = call i32 @getentropy(i8* bitcast ([2 x i64]* @nish_int_hash_key to i8*), i64 16)
   %failed = icmp ne i32 %got, 0
   br i1 %failed, label %fail, label %mark
 fail:
   call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.0 to i8*))
   unreachable
 mark:
-  %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
   %set = or i64 %w, 1
-  store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
   br label %done
 done:
   ret void
@@ -2922,8 +2923,8 @@ entry:
   %word.addr = alloca i32, align 4
   %at.addr = alloca i32, align 4
   %0 = zext i32 %key to i64
-  %1 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
-  %2 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 1), align 8
+  %1 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %2 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 1), align 8
   %3 = mul i64 %0, %1
   %4 = add i64 %3, %2
   %5 = lshr i64 %4, 32

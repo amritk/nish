@@ -12,8 +12,9 @@
 @.str.6 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Set maximum size exceeded\00" }, align 8
 @nish_hash_key = external global [2 x i64], align 8
 @.str.7 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"Map: the system's entropy source failed\00" }, align 8
-@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.hash.seed, i8* null }]
+@llvm.global_ctors = appending global [2 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.hash.seed, i8* null }, { i32, void ()*, i8* } { i32 101, void ()* @nish.int.hash.seed, i8* null }]
 @.str.8 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
+@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
@@ -50,6 +51,27 @@ mark:
   %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
   %set = or i64 %w, 1
   store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  br label %done
+done:
+  ret void
+}
+
+define internal void @nish.int.hash.seed() nounwind {
+entry:
+  %k = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %filled = icmp ne i64 %k, 0
+  br i1 %filled, label %done, label %fill
+fill:
+  %got = call i32 @getentropy(i8* bitcast ([2 x i64]* @nish_int_hash_key to i8*), i64 16)
+  %failed = icmp ne i32 %got, 0
+  br i1 %failed, label %fail, label %mark
+fail:
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.7 to i8*))
+  unreachable
+mark:
+  %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %set = or i64 %w, 1
+  store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
   br label %done
 done:
   ret void
@@ -1941,8 +1963,8 @@ entry:
   %word.addr = alloca i32, align 4
   %at.addr = alloca i32, align 4
   %0 = zext i32 %key to i64
-  %1 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
-  %2 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 1), align 8
+  %1 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %2 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 1), align 8
   %3 = mul i64 %0, %1
   %4 = add i64 %3, %2
   %5 = lshr i64 %4, 32

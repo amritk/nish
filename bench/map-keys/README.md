@@ -6,7 +6,8 @@
 - a `Map<i64, i32>` over a 256 by 256 grid, keyed by two `i32`s packed into
   one `i64` (`(toI64(hi) << toI64(32)) + toI64(lo)`, the composite-key
   idiom in [the user guide](../../docs/guide/language/maps-and-sets.md));
-- a `Map<Op, i32>` histogram over a 16-member enum.
+- a `Map<Op, i32>` histogram over a 16-member enum, then probes of a `get` and
+  a `has` each.
 
 Half the `get`s and `has`s find their key. Each pass is fed the last one's
 checksum, so no pass can be hoisted, and a checksum that differs between
@@ -28,7 +29,7 @@ distance from 1.000 is the noise band: about ±6%.
 
 `head` is the HEAD compiler with integer keys on murmur3's `fmix32`/`fmix64`
 (the 0.28 hashes); `keyed` is this change, multiply-add-shift under the
-process's random key for keys of 32 bits or fewer and a keyed folded multiply
+process's random integer key, apart from the string hash's, for keys of 32 bits or fewer and a keyed folded multiply
 for 64-bit ones; `fx` is a throwaway build with rustc's unkeyed `FxHasher`
 multiply, kept only as the floor to measure against.
 
