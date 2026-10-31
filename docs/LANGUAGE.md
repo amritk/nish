@@ -6410,7 +6410,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair` and their constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 | `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors)) |
@@ -7661,7 +7661,7 @@ would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All twenty functions
+so a child that `spawnSync` starts inherits none of them. All twenty-six functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -7681,6 +7681,12 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
 | `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one socket option from a whitelist, named by the ids below: `0`, or the failure, such as `-9` for a closed descriptor and `-88` for one that is not a socket. Any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `value` is `0` or `1` for the switches and a byte count for the buffer sizes. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
+| `netMss(fd: i32): i32` | the maximum segment size a connected TCP socket sends, the payload bytes one segment carries: Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above `0` and on Darwin. **A plain `-1`, never an errno,** for anything else: a descriptor that is not open, a socket with no peer (a listener, or one never connected, though the kernel answers its default `536` for those), a socket that is not TCP, and every call on wasm. It never panics. The answer moves as the path does, so read it when it is needed rather than once | write | `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`; `net_mss` in `tests/run.js` for wasm32 and WASI |
+| `unixListen(path: string, backlog: i32, flags: i32): i32` | a listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose file only its owner may connect to (`0600`); a leading `@` names Linux's abstract namespace, which leaves no file. `-98` when the path exists, unless flag `1` (`NET_UNIX_UNLINK_STALE`) finds a socket file nothing listens on and unlinks it first (on Darwin, which cannot tell, a socket file is `-95` under that flag); `-17` when that flag finds something that is not a socket; `-36` for a path too long for `sun_path`; `-22` for an empty path, a bare `@`, a NUL inside or any other flag bit | write | `net_unix_calls`, `net_unix_paths`, `net_unix_fds`; `reject_net_unix_arity`, `reject_net_unix_wasm` |
+| `unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32` | `unixListen`'s socket with the file's mode chosen, `0` to `0o777` and no other bits, set before the listen so no connect gets in under a wider one; `-22` for a mode outside that range or an abstract name, which has no file to give a mode to | write | `net_unix_paths`, `net_unix_calls` |
+| `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`: the descriptor, `-111` when nothing listens there, `-2` when there is no such file, `-11` on Linux and `-111` on Darwin when the listener's backlog is full (the socket is closed; try again later), and the path refusals `unixListen` has | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
+| `unixAccept(fd: i32): i32` | the next waiting connection, non-blocking and close-on-exec; `-11` when none is waiting. No peer address is written: a Unix client is seldom bound | write | `net_unix_calls` |
+| `unixSocketPair(kind: i32, fds: i32[]): i32` | two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec, and `0`. Kind `1` (`NET_UNIX_STREAM`) is a byte stream, kind `2` (`NET_UNIX_SEQPACKET`) keeps each write one message; any other kind, or an `fds` shorter than 2, is `-22` before a socket exists. Kind `2` is **`-95` on Darwin** | write | `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`, `reject_net_unix_pair_readonly` |
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -7729,6 +7735,25 @@ An id is read as a value, as `platform` is: it folds to its number in the IR,
 cannot be assigned, and is not a [module constant](#module-constants), so a
 module constant cannot be initialised from one. A local of the same name
 shadows the global spelling.
+
+`netMss` reads the size a sender cuts its writes to, so that one write fills
+whole segments rather than leaving a short one behind each:
+
+```ts nish:ok
+import { netMss } from "nish:net";
+
+// A batch of whole segments, or the caller's own size where there is no MSS.
+export const batch = (conn: i32, fallback: i32): i32 => {
+  const mss = netMss(conn);
+  return mss > 0 ? mss * 8 : fallback;
+};
+```
+
+Its `-1` is one answer, not an errno, because a program does the same thing
+for every reason there is no MSS: it uses a size of its own. That is also why
+it compiles on wasm when `netSetOption` is refused there: a socket option a
+program sets is an effect a wasm build cannot have, while a size it reads has
+an honest answer everywhere, "none".
 
 ```ts nish:ok
 import { NET_TCP_QUICKACK, netSetOption } from "nish:net";
@@ -7895,6 +7920,78 @@ hang-up bit only once both directions are shut. CI's
 `runtime-net` (macos-latest) job runs `net_loop_calls` and `net_loop_two` on a
 mac, as it runs every `net_` section.
 
+#### Unix-domain sockets
+
+A Unix-domain socket is named by a path rather than a host and port, and
+reaches only processes on the same machine. Once made, it is a descriptor like
+any other: `netRead`, `netWrite`, `netShutdown`, `netClose` and the readiness
+loop take it as they take a TCP one, and a peer that has gone is `-32` here
+too. There is no address form: `unixAccept` writes no peer.
+
+- **The path.** It is bytes up to the first NUL, so a NUL inside it is `-22`,
+  as an empty path is. It must fit `sun_path` with its NUL: **107 bytes on
+  Linux, 103 on Darwin**, and a longer one is `-36` before a socket exists,
+  rather than the kernel's cut-short name binding a file the program never
+  named. A relative path is the working directory's, and the limit is on the
+  string as written, not the absolute path it resolves to.
+- **Abstract names.** A path that starts with `@` is Linux's abstract
+  namespace: the rest, at most 107 bytes, is the name, nothing is made on the
+  file system and nothing is left behind when the socket closes. A bare `@` is
+  `-22`. Darwin has none, and there every `@` path is **`-95`**. A file whose
+  name starts with `@` is spelled `./@name`, which is a relative path like any
+  other.
+- **The file's mode.** A pathname listener's file is `0600` for `unixListen`,
+  so only its owner may connect, and `unixListenMode`'s `mode` otherwise. The
+  runtime sets it between the bind and the listen, while every connect is
+  still refused, so the umask's mode is never one a client gets in under. A
+  connect needs write permission on the file, and search permission on every
+  directory above it, which is the real boundary: put the socket in a
+  directory only the users who may connect can reach.
+- **A path that exists.** A bind never replaces a file. A path that exists is
+  `-98`, whatever is there, and flag `1`, `NET_UNIX_UNLINK_STALE`, clears only
+  a socket file nothing listens on, the one a server that died left: the
+  runtime connects to it, and only a refusal makes it unlink the file and bind
+  again. On Linux a live listener, even one whose backlog is full, stays
+  `-98`; a regular file, a directory or a link is `-17` and left alone. On
+  Darwin a connect to a listener whose backlog is full is refused just as one
+  to a dead file is, so the probe cannot tell them apart: there a socket file
+  in the way is **`-95`** and left alone, and the flag never unlinks one;
+  remove a file the program knows is its own with `unlinkSync`. The probe is
+  a connection the live listener sees close at once. Between the probe and the
+  unlink another process can bind the path, which is why the directory must
+  be the program's own ([docs/security/runtime.md](security/runtime.md),
+  RT-34).
+- **Cleanup.** Closing a listener does **not** unlink its file: `unlinkSync`
+  it when the server stops, or let the next start's flag `1` clear it. A
+  `unixListen` that fails after its bind closes the socket and unlinks the
+  file it made, so no failure leaves a descriptor or a file behind
+  (`net_unix_fds` counts the descriptors around every failure, a chmod made
+  to fail after the bind among them, and checks that none of the paths it
+  named is left on disk).
+- **Pairs.** `unixSocketPair` makes two sockets already connected to each
+  other, which is the way to give a child process, or one side of a program,
+  a channel without a name. `NET_UNIX_STREAM` is a byte stream, as a
+  connection is; `NET_UNIX_SEQPACKET` keeps each write one message, so a read
+  returns one message, never two run together (`net_unix_calls`). Darwin has
+  no Unix seqpacket, and kind `2` there is `-95`.
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `NET_UNIX_UNLINK_STALE` | `1` | `unixListen`'s flag: clear a socket file nothing listens on |
+| `NET_UNIX_STREAM` | `1` | `unixSocketPair`'s byte-stream kind |
+| `NET_UNIX_SEQPACKET` | `2` | `unixSocketPair`'s message kind; `-95` on Darwin |
+
+`NET_UNIX_UNLINK_STALE` and `NET_UNIX_STREAM` are both `1`, as
+`NET_TCP_NODELAY` is: the constants are plain `i32`s, so the checker cannot
+tell one passed where another belongs. Name the one the call takes.
+
+On Darwin the calls are the same C under `#if`, with five differences: no
+abstract names (`-95`), no seqpacket pair (`-95`), flag `1` meeting a socket
+file is `-95` rather than a probe, a connect to a full backlog is `-111`
+rather than `-11`, and `fcntl` after `accept` and `socketpair` where Linux
+passes `SOCK_NONBLOCK | SOCK_CLOEXEC`. CI does not
+run them on a mac yet.
+
 #### Bounds
 
 `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` check `0 <= off <= off +
@@ -7920,17 +8017,20 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   `` `udpRecvFrom` fills an `i32[]`, got u8[] `` (NL2406;
   `reject_net_udp_meta_element`), and so is `pollWait`'s `ready`, whose tokens
   are the program's own `i32`s (`` `pollWait` fills an `i32[]`, got u8[] ``,
-  `reject_net_poll_element`). A descriptor, an offset, a length, a port, a
+  `reject_net_poll_element`), and so is `unixSocketPair`'s `fds`
+  (`` `unixSocketPair` fills an `i32[]`, got u8[] ``,
+  `reject_net_unix_pair_element`). A path is a `string`, and anything else is
+  refused (`reject_net_unix_path_type`). A descriptor, an offset, a length, a port, a
   backlog, `how`, the flags, a segment size, the ECN bits, a loop, the events,
-  a token, a timeout, a socket option and its value are `i32` in both number modes, and an
+  a token, a timeout, a socket option and its value, a pair kind and a mode are `i32` in both number modes, and an
   `f64` is refused rather than converted (`reject_net_fd_type`).
 - **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer`,
-  `netRead`'s `buf`, `udpRecvFrom`'s `buf`, `from` and `meta`, and `pollWait`'s
-  `ready` are written, so
+  `netRead`'s `buf`, `udpRecvFrom`'s `buf`, `from` and `meta`, `pollWait`'s
+  `ready` and `unixSocketPair`'s `fds` are written, so
   a `readonly` array there is refused as a store through it is
   (`reject_net_readonly`, `reject_net_accept_readonly`,
   `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`,
-  `reject_net_poll_readonly`), a parameter one of
+  `reject_net_poll_readonly`, `reject_net_unix_pair_readonly`), a parameter one of
   them fills is never `readonly` in the IR, and `netWrite`'s `buf` and
   `udpSendTo`'s `buf` and `to` may be `readonly` (`net_udp_calls`).
 - **Threads.** Every call changes the kernel's state of a socket, which is a
@@ -7947,9 +8047,13 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
   `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`,
-  `reject_net_reuseport_wasm`, `reject_net_set_option_wasm`). The freestanding `--profile wasm` link, which
+  `reject_net_reuseport_wasm`, `reject_net_set_option_wasm`,
+  `reject_net_unix_wasm`). The freestanding `--profile wasm` link, which
   takes IR compiled for the host, has no `runtime-net.c` either, so a program
   that calls one fails there at the link, on the undefined `nish_` symbol.
+  The one exception is `netMss`, which compiles under a `wasm32` target and
+  the `wasi` profile to the constant `-1`, its descriptor still evaluated,
+  with no runtime call (`net_mss` in `tests/run.js`).
 - **Not yet.** No `nish:net` call resolves a name (`reject_net_unknown_export`):
   the stub resolver is the library module `nish/net/dns`, which drives these
   calls on the program's own loop. There is no
@@ -7968,8 +8072,12 @@ is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
 `net_` block of `tests/run.js`, for `netAddress`, `tcpConnect`, `udpBind` and
 `pollCreate`). The option ids are plain numbers, so they read the same
-under Node as natively, and only `netSetOption` throws (`net_set_option` in
-`tests/run.js`).
+under Node as natively, and `netSetOption` throws rather than set one
+(`net_set_option` in `tests/run.js`). `netMss` throws too rather than answer `-1`: Node's
+`net.Socket` has no MSS to read, and a `-1` would be a guess that the program
+keeps (`net_mss` in `tests/run.js`). The same holds for the Unix-domain calls: the
+`NET_UNIX_` constants read natively, and each of the five calls throws
+(`net_unix` in `tests/run.js`). In a browser there are no sockets at all.
 A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.
@@ -9538,7 +9646,14 @@ entry:
   child must load its binary and libraries, so a program that reaches
   `process.spawn` can read any file the user can whether or not it reaches
   `fs.read`. Without `net`, `socket`, `socketpair`, `connect`,
-  `bind`, `listen`, `accept` and `accept4` kill it. `ffi`, `unsafe`, `tty`,
+  `bind`, `listen`, `accept` and `accept4` kill it. With `net` but without
+  `fs.write`, a pathname `unixListen` or `unixListenMode` is **`-13`**:
+  Landlock counts making the socket file as a write (`MAKE_SOCK`), while an
+  abstract name binds. The sandbox uses no Landlock right that covers
+  connecting to a pathname socket, so `net` alone still lets `unixConnect`
+  reach any pathname listener whose file and directories the user may
+  reach; only abstract
+  names outside the sandbox are scoped, from ABI 6. `ffi`, `unsafe`, `tty`,
   `clock`, `entropy`, `env`, `exit` and `signal` withhold nothing of their
   own; the ABI 6 scopes under **Always** apply whatever `main` reaches.
 - **Directory scopes.** Under `--sandbox`, `--allow fs.read=<dir>` and

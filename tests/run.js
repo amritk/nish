@@ -2411,11 +2411,13 @@ if (dealtHere("termIo")) {
     // size: the play run looks for the image's deletion at close, and the reopen runs
     // draw in ascii, whose frames are small enough to keep both openings. The stage
     // run pauses before F4 so the reopened stage can be held to the one it left;
-    // 120 frames is past the title's outro at any rate the relay draws.
+    // 120 frames is past the title's outro at any rate the relay draws. The play and
+    // stage runs skip the opening (the help falling apart) with a space at frame 2,
+    // so the title is up by frame 5.
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
-        keys: wallKeys([3, "\r"], [120, " "], [125, "\x1bOR"], [130, "p"], [135, "q"], [150, "q"]),
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
@@ -2427,7 +2429,7 @@ if (dealtHere("termIo")) {
       relay(NISH, "break", {
         dir: at("wall-stage"),
         env: { NISH_TERM_GRAPHICS: "ascii" },
-        keys: wallKeys([3, "\r"], [120, " "], [130, "p"], [140, "\x1bOS"], [170, "q"], [180, "q"], [190, "q"]),
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
     ])
@@ -2444,7 +2446,7 @@ if (dealtHere("termIo")) {
     )
     const opened = staged.out.lastIndexOf("\x1b[?1049h")
     const leftAt = staged.out.slice(0, opened).split("\x1b[5n").length - 1
-    const [title, paused, back] = [2, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
+    const [title, paused, back] = [5, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
     const [asTitle, asPaused] = [wallSame(paused, title, 40), wallSame(paused, back, 40)]
     const seen = `${said(staged)}\nthe paused screen matches the title in ${asTitle.toFixed(3)}, the reopened in ${asPaused.toFixed(3)}`
     check(
@@ -2778,6 +2780,98 @@ if (!only || "net_set_option".includes(only)) {
     loudSet.status !== 0 && loudSet.stderr.includes("`netSetOption` has no synchronous reading under Node"),
     shown(loudSet)
   )
+}
+
+// The Unix-domain calls under the prelude, by their global spellings: each of
+// the five throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls` and
+// `net_unix_paths` are the native half).
+if (!only || "net_unix".includes(only)) {
+  const unixDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(unixDir, { recursive: true })
+  const kindsEntry = path.join(unixDir, "unix-kinds.ts")
+  fs.writeFileSync(
+    kindsEntry,
+    "export const main = (): number => {\n" +
+      "  console.log(`${NET_UNIX_UNLINK_STALE} ${NET_UNIX_STREAM} ${NET_UNIX_SEQPACKET}`);\n" +
+      "  return 0;\n};\n"
+  )
+  const kinds = runUnderPrelude(kindsEntry, [])
+  check(
+    "net_unix: under the prelude the flag and the pair kinds read 1, 1 and 2, as natively",
+    kinds.status === 0 && kinds.stdout === "1 1 2\n",
+    shown(kinds)
+  )
+  const calls = [
+    ["unixListen", 'unixListen("@nish", 4, 0)'],
+    ["unixListenMode", 'unixListenMode("nish.sock", 4, 0, 384)'],
+    ["unixConnect", 'unixConnect("@nish")'],
+    ["unixAccept", "unixAccept(3)"],
+    ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+  ]
+  for (const [name, call] of calls) {
+    const entry = path.join(unixDir, `${name}.ts`)
+    fs.writeFileSync(entry, `export const main = (): number => ${call};\n`)
+    const loud = runUnderPrelude(entry, [])
+    check(
+      `net_unix: under the prelude ${name} fails loudly rather than answering`,
+      loud.status !== 0 && loud.stderr.includes(`\`${name}\` has no synchronous reading under Node`),
+      shown(loud)
+    )
+  }
+}
+
+// `netMss` where there is no socket to ask. Under the prelude it throws, naming
+// itself, as the other `nish:net` calls do; a `wasm32` build compiles it to
+// the constant -1, with no runtime symbol for the freestanding link to miss,
+// and the `--profile wasi` build runs and prints that -1
+// (`tests/cases/net_mss` is the native half).
+if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
+  const mssDir = path.join(buildDir, "net-mss")
+  fs.rmSync(mssDir, { recursive: true, force: true })
+  fs.mkdirSync(mssDir, { recursive: true })
+  const preludeEntry = path.join(mssDir, "prelude.ts")
+  fs.writeFileSync(preludeEntry, "export const main = (): number => netMss(3);\n")
+  const loud = runUnderPrelude(preludeEntry, [])
+  check(
+    "net_mss: under the prelude netMss fails loudly rather than answering -1",
+    loud.status !== 0 && loud.stderr.includes("`netMss` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const entry = path.join(mssDir, "net_mss_wasm.ts")
+  fs.writeFileSync(
+    entry,
+    'import { netMss } from "nish:net";\n\n' +
+      "export const main = (): number => {\n  console.log(netMss(0));\n  return 0;\n};\n"
+  )
+  const ll = path.join(mssDir, "net_mss_wasm.ll")
+  const wasm32 = spawnSync(NISH, [entry, "-o", ll, "--target", "wasm32"], { cwd: root, encoding: "utf8" })
+  const ir = wasm32.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+  check(
+    "net_mss: a wasm32 build compiles netMss to -1, with no call into runtime-net.c",
+    wasm32.status === 0 && !ir.includes("nish_net_mss") && ir.includes("i32 -1"),
+    shown(wasm32)
+  )
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const module = path.join(mssDir, "net_mss_wasm.wasm")
+    const built = spawnSync(NISH, [entry, "-o", mssDir + path.sep, "--link", module, "--profile", "wasi"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+        : built
+    check(
+      `net_mss: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) links and prints -1`,
+      ran.status === 0 && ran.stdout === "-1\n",
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: net_mss: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of netMss is not run`
+    )
+  }
 }
 
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
@@ -11073,6 +11167,48 @@ if (!only || "sandbox".includes(only)) {
         "sandbox: a spawn redirect without fs.write fails in the child",
         to !== null && to.status === 0 && to.stdout === "status -1\n" && !fs.existsSync(redirect),
         said(to)
+      )
+
+      // The Unix-domain calls (tests/link/net_unix_sandbox): granted `net`
+      // alone, abstract names work and a pathname bind is -13, since Landlock
+      // counts making the socket file as a write; granted `fs.write` too, it
+      // binds. On ABI 6 a connect to an abstract listener outside the sandbox
+      // is -1, the scope's EPERM; below it the connect goes through. The
+      // listener outside is the same fixture built without the sandbox,
+      // waiting in `pollWait` until it is killed, under a name with this
+      // run's pid, and the check needs it seen in /proc/net/unix first.
+      const unixBuild = (name, fixture, flags) =>
+        build(name, `../net_unix_sandbox/${fixture}`, flags, { driver: null })
+      const serveExe = unixBuild("unix-net-plain", "net", [])
+      const netExe = unixBuild("unix-net-sandbox", "net", ["--sandbox"])
+      const writeExe = unixBuild("unix-write-sandbox", "write", ["--sandbox"])
+      const outside = `@nish-net-unix-sandbox-outside-${process.pid}`
+      const server = serveExe !== null ? spawn(serveExe, ["serve", outside], { stdio: "ignore" }) : null
+      const pause = new Int32Array(new SharedArrayBuffer(4))
+      let serving = false
+      for (let k = 0; k < 200 && server !== null && !serving; k++) {
+        serving = fs.readFileSync("/proc/net/unix", "utf8").includes(outside)
+        if (!serving) Atomics.wait(pause, 0, 0, 50)
+      }
+      const unixNet = run(netExe, ["probe", outside])
+      if (server !== null) server.kill()
+      check(
+        `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13, and an abstract listener outside is ${abi >= 6 ? "-1" : "reached (ABI <6)"}`,
+        serving &&
+          unixNet !== null &&
+          unixNet.status === 0 &&
+          unixNet.stdout === `abstract true true\npathname -13\noutside ${abi >= 6 ? "-1" : "connected"}\n` &&
+          !fs.existsSync(path.join(W, "net.sock")),
+        `listener outside seen: ${serving}\n${said(unixNet)}`
+      )
+      const unixWrite = run(writeExe, [])
+      check(
+        "sandbox: granted net and fs.write, a pathname Unix listener binds and is unlinked",
+        unixWrite !== null &&
+          unixWrite.status === 0 &&
+          unixWrite.stdout === "pathname true true\nunlink 0\n" &&
+          !fs.existsSync(path.join(W, "write.sock")),
+        said(unixWrite)
       )
 
       // The scopes: `--allow fs.read=<dir>` grants reading beneath the

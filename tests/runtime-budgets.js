@@ -407,9 +407,10 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
  * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
  * `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose` and
- * `netSetOption`, then `udpBind`,
+ * `netSetOption` and `netMss`, then `udpBind`,
  * `udpSendTo` and `udpRecvFrom`, then the readiness loop: `pollCreate`, `pollAdd`,
- * `pollModify`, `pollRemove` and `pollWait`.
+ * `pollModify`, `pollRemove` and `pollWait`, then the Unix-domain calls: `unixListen`,
+ * `unixListenMode`, `unixConnect`, `unixAccept` and `unixSocketPair`.
  *
  * Measured **853 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`,
  * **1,782 bytes** on 2026-09-30 once UDP, its segmentation offload and its ECN
@@ -417,7 +418,10 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * **2,071 bytes** the same day once the epoll loop was added (2,048 to 2,304), and
  * **2,335 bytes** on 2026-10-20 once `tcpListenFlags` and its `SO_REUSEPORT` were
  * added (2,304 to 2,560), and **2,588 bytes** on 2026-10-29 once `netSetOption` and
- * its five-option whitelist were added (2,560 to 2,816).
+ * its five-option whitelist were added (2,560 to 2,816), and **2,797 bytes** on
+ * 2026-10-30 once `netMss` was added, inside the same ceiling, and **3,841 bytes**
+ * on 2026-10-31 once the Unix-domain calls were added (2,816 to 4,096): most of the
+ * growth is the stale-socket probe and the unlink on each failure after a bind.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -425,7 +429,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 2816
+const NET_TEXT_BUDGET = 4096
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`

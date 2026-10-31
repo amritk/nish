@@ -851,6 +851,10 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `netMss`: a `getpeername` and up to two `getsockopt`s, none of which
+    // waits. A write, as `netLocalPort` is, because the kernel changes the
+    // answer between two calls.
+    this.add(plain("nish_net_mss", "declare noundef i32 @nish_net_mss(i32 noundef)", EFFECT_WRITE))
     this.add(
       new RuntimeFunction(
         "nish_net_close",
@@ -930,6 +934,39 @@ export class RuntimeTable {
         "nish_poll_wait",
         `declare noundef i32 @nish_poll_wait(i32 noundef, ${NET_BUFFER}, i32 noundef)`,
         attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    // The Unix-domain calls. Listening, connecting and the pair never wait
+    // (the connect is non-blocking, as `tcpConnect`'s is); the accept is
+    // `nounwind` alone, as `tcpAccept` is.
+    this.add(
+      plain(
+        "nish_unix_listen",
+        `declare noundef i32 @nish_unix_listen(${STR_NOCAP}, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_unix_listen_mode",
+        `declare noundef i32 @nish_unix_listen_mode(${STR_NOCAP}, i32 noundef, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(plain("nish_unix_connect", `declare noundef i32 @nish_unix_connect(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(
+      new RuntimeFunction(
+        "nish_unix_accept",
+        "declare noundef i32 @nish_unix_accept(i32 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_unix_socket_pair",
+        `declare noundef i32 @nish_unix_socket_pair(i32 noundef, ${NET_BUFFER})`,
         EFFECT_WRITE
       )
     )

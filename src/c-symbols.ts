@@ -438,6 +438,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "getpayload" ||
   name === "getpayloadf" ||
   name === "getpayloadl" ||
+  name === "getpeername" ||
   name === "getpid" ||
   // `setNice` reads the current nice value before it may lower it (runtime-os.c).
   name === "getpriority" ||
@@ -703,6 +704,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sinpil" ||
   name === "snprintf" ||
   name === "socket" ||
+  name === "socketpair" ||
   name === "sprintf" ||
   name === "sqrt" ||
   name === "sqrtf" ||

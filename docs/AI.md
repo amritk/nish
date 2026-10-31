@@ -2235,8 +2235,30 @@ unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM.
 `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF` and `NET_SO_RCVBUF`, `i32` ids exported
 beside it; any other id is `-22`. Linux drops quick-ACK mode on its own, so set
 it again after each response. The ids are not module constants: pass them
-directly. None
-exists on a wasm target, and under Node each throws.
+directly. `netMss(fd)` answers a connected TCP socket's send MSS, the payload
+bytes one segment carries, and `-1` for anything else (never an errno), so size
+writes by it with a fallback. None but `netMss` exists on a wasm target (there
+it is always `-1`), and under Node each throws.
+
+Unix-domain stream sockets: `unixListen(path, backlog, flags)` listens on a
+socket file left at 0600 (`unixListenMode(path, backlog, flags, mode)` for
+another mode), `unixConnect(path)` and `unixAccept(fd)` answer descriptors
+that `netRead`, `netWrite`, `netShutdown`, `netClose` and the loop take as
+they are, and `unixSocketPair(NET_UNIX_STREAM, fds)` fills `fds: i32[]` with
+two connected ends (`NET_UNIX_SEQPACKET` keeps message boundaries; Linux
+only, `-95` on Darwin). A path starting with `@` is Linux's abstract
+namespace and makes no file (`-95` on Darwin); write `./@name` for a socket
+file so named. A path that exists is `-98`; flag `NET_UNIX_UNLINK_STALE`
+first removes a socket file nobody listens on (Linux; on Darwin it is `-95`
+at a socket file, since a full backlog and a dead file both refuse there).
+`NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM` and `NET_TCP_NODELAY` are all `1`,
+so pass the constant each call names. A path as written is at most 107
+bytes (103 on Darwin) and an abstract name at most 107 after its `@`; longer
+is `-36`. A full backlog makes `unixConnect`
+`-11` on Linux and `-111` on Darwin. Under `--sandbox`, a listener on a path
+also needs `fs.write` (`-13` without it); an abstract name does not, and a
+connect to a path is not confined. The Unix calls are refused on a wasm
+target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write

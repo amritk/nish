@@ -192,7 +192,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -214,7 +214,7 @@ export const nishModuleExports = (specifier: string): string => {
  * which.
  *
  * Each name is a global too, as every `nish:` export is, and each carries a
- * `net`, `tcp`, `udp`, `poll` or `connect` prefix so that none of them
+ * `net`, `tcp`, `udp`, `unix`, `poll` or `connect` prefix so that none of them
  * collides with a global that already exists (`write`). `pollCreate` takes
  * nothing, so its signature is the one empty answer that is an export
  * (`isNetExport`).
@@ -223,7 +223,7 @@ export const netSignature = (name: string): string => {
   if (name === "netAddress") {
     return "wsi"
   }
-  if (name === "netLocalPort" || name === "netClose" || name === "connectResult") {
+  if (name === "netLocalPort" || name === "netClose" || name === "connectResult" || name === "netMss") {
     return "i"
   }
   if (name === "tcpListen") {
@@ -267,6 +267,21 @@ export const netSignature = (name: string): string => {
   }
   if (name === "netSetOption") {
     return "iii"
+  }
+  if (name === "unixListen") {
+    return "sii"
+  }
+  if (name === "unixListenMode") {
+    return "siii"
+  }
+  if (name === "unixConnect") {
+    return "s"
+  }
+  if (name === "unixAccept") {
+    return "i"
+  }
+  if (name === "unixSocketPair") {
+    return "im"
   }
   return ""
 }
@@ -342,10 +357,12 @@ export const netSymbol = (name: string): string => {
 }
 
 /**
- * The id `netSetOption` takes for the socket option `name` names, or 0 for a
- * name that is not one. The ids are the runtime's own, not the kernel's
- * level and option pair, so that runtime-net.c's switch over them is the
- * whole of what a program can set: there is no raw `setsockopt`.
+ * The number an integer constant of `nish:net` folds to, or 0 for a name
+ * that is not one. Most are the ids `netSetOption` takes for a socket
+ * option: the runtime's own, not the kernel's level and option pair, so that
+ * runtime-net.c's switch over them is the whole of what a program can set,
+ * with no raw `setsockopt`. The `NET_UNIX_` ones are `unixListen`'s flag and
+ * `unixSocketPair`'s two kinds, which share 1 because no call takes both.
  */
 export const netOption = (name: string): i32 => {
   if (name === "NET_TCP_NODELAY") {
@@ -362,6 +379,12 @@ export const netOption = (name: string): i32 => {
   }
   if (name === "NET_SO_RCVBUF") {
     return 5
+  }
+  if (name === "NET_UNIX_UNLINK_STALE" || name === "NET_UNIX_STREAM") {
+    return 1
+  }
+  if (name === "NET_UNIX_SEQPACKET") {
+    return 2
   }
   return 0
 }

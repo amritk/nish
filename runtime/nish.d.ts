@@ -460,6 +460,11 @@ declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
  * a negative errno (-9 a closed descriptor, -88 not a socket).
  */
 declare function netSetOption(fd: i32, option: i32, value: i32): i32;
+/**
+ * A connected TCP socket's send MSS, the payload bytes one segment carries;
+ * -1, never an errno, for anything else, and always on wasm.
+ */
+declare function netMss(fd: i32): i32;
 /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
 declare const NET_TCP_NODELAY: i32;
 /**
@@ -474,6 +479,30 @@ declare const NET_SO_KEEPALIVE: i32;
 declare const NET_SO_SNDBUF: i32;
 /** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
 declare const NET_SO_RCVBUF: i32;
+/**
+ * A listening Unix stream socket at `path` (`@name`: Linux's abstract
+ * namespace), its file mode 0600. A path that exists is -98, unless `flags`
+ * holds `NET_UNIX_UNLINK_STALE`; -36 a path too long, -22 an empty one.
+ */
+declare function unixListen(path: string, backlog: i32, flags: i32): i32;
+/** `unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`. */
+declare function unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32;
+/** A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening. */
+declare function unixConnect(path: string): i32;
+/** The next connection on a Unix listener, non-blocking; -11 when none is waiting. */
+declare function unixAccept(fd: i32): i32;
+/**
+ * Two connected sockets into `fds[0]` and `fds[1]`, and 0: `kind` is
+ * `NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin); -22 another kind
+ * or an `fds` shorter than 2.
+ */
+declare function unixSocketPair(kind: i32, fds: i32[]): i32;
+/** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
+declare const NET_UNIX_UNLINK_STALE: i32;
+/** `unixSocketPair` kind: a byte stream. */
+declare const NET_UNIX_STREAM: i32;
+/** `unixSocketPair` kind: each write one message (`SOCK_SEQPACKET`). */
+declare const NET_UNIX_SEQPACKET: i32;
 
 // ---- `nish:term` ------------------------------------------------------------------
 //
@@ -667,6 +696,11 @@ declare module "nish:net" {
    * a negative errno (-9 a closed descriptor, -88 not a socket).
    */
   export function netSetOption(fd: i32, option: i32, value: i32): i32;
+  /**
+   * A connected TCP socket's send MSS, the payload bytes one segment carries;
+   * -1, never an errno, for anything else, and always on wasm.
+   */
+  export function netMss(fd: i32): i32;
   /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
   export const NET_TCP_NODELAY: i32;
   /**
@@ -681,6 +715,30 @@ declare module "nish:net" {
   export const NET_SO_SNDBUF: i32;
   /** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
   export const NET_SO_RCVBUF: i32;
+  /**
+   * A listening Unix stream socket at `path` (`@name`: Linux's abstract
+   * namespace), its file mode 0600. A path that exists is -98, unless `flags`
+   * holds `NET_UNIX_UNLINK_STALE`; -36 a path too long, -22 an empty one.
+   */
+  export function unixListen(path: string, backlog: i32, flags: i32): i32;
+  /** `unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`. */
+  export function unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32;
+  /** A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening. */
+  export function unixConnect(path: string): i32;
+  /** The next connection on a Unix listener, non-blocking; -11 when none is waiting. */
+  export function unixAccept(fd: i32): i32;
+  /**
+   * Two connected sockets into `fds[0]` and `fds[1]`, and 0: `kind` is
+   * `NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin); -22 another kind
+   * or an `fds` shorter than 2.
+   */
+  export function unixSocketPair(kind: i32, fds: i32[]): i32;
+  /** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
+  export const NET_UNIX_UNLINK_STALE: i32;
+  /** `unixSocketPair` kind: a byte stream. */
+  export const NET_UNIX_STREAM: i32;
+  /** `unixSocketPair` kind: each write one message (`SOCK_SEQPACKET`). */
+  export const NET_UNIX_SEQPACKET: i32;
 }
 
 declare module "nish:unsafe" {

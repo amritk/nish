@@ -177,6 +177,11 @@ const enc = new HttpCompressor(DEFLATE_FAST, 1024, 65536); // once per thread
 conn.respondEncoded(200, names, values, body, 0, n, enc, conn.acceptEncoding());
 ```
 
+`acceptEncoding()` and the rest of the request's head (`targetIs`, its fields)
+read as this request's from `H1_REQUEST` through its `H1_END`, so you can
+answer at `H1_END` even when the client has pipelined the next request behind
+it; the next request's head replaces it only when you ask for that request.
+
 `respondEncoded` writes the whole response or nothing: `H1_AGAIN` when the
 output has no room for it yet (`H1_WRITE` says when to call again) and
 `H1_INVALID` for one larger than the connection's `outputSize` could ever
@@ -223,9 +228,18 @@ compressed form only when it is worth it:
   that many bytes, and that percentage, smaller. By default any saving counts.
 - `segmentMode`: `respondEncoded` sends the compressed response only when,
   head included, it takes fewer TCP segments than the plain one. Segments
-  are `mss` bytes: the connection's own `mss` if you set it, otherwise the
-  compressor's, which defaults to `HTTP_DEFAULT_MSS` (1448, an Ethernet
-  path's).
+  are this many bytes, the first of these that is set: the connection's own
+  `mss`, if you set it after accepting it; the compressor's `mss`, if you
+  set it to other than its default `HTTP_DEFAULT_MSS`; the MSS
+  `Http1Server` read from the connection's socket when it accepted it,
+  where the platform reports one (`TCP_INFO` on Linux, `TCP_MAXSEG` on
+  macOS; `Http1TlsServer` reads none); otherwise `HTTP_DEFAULT_MSS` (1448,
+  an Ethernet path's). `segmentMss(enc)` on the connection answers which.
+  Each accept starts a connection with neither of its own set, so one
+  peer's MSS never reaches the next. A response that already fits in one
+  segment as it is, head and body, is sent as it is without running the
+  encoder at all, and carries no `Vary`: gzip could not make it arrive any
+  sooner. Larger responses are compressed first and then compared.
 
 When a body does not pay, it goes out as it is and the compressed bytes are
 dropped. After each call, `decision` says what happened and why:

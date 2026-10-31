@@ -1489,6 +1489,11 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
     const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
     emitSliceCheck(emitter, values[at + 1], end, size, true, "net")
   }
+  // A wasm build has no socket to ask, so its answer is the "no MSS" `-1`,
+  // once the descriptor has been evaluated for its effects.
+  if (name === "netMss" && isWasmBuild(emitter.opts)) {
+    return "-1"
+  }
   return fn.emitValue(`call i32 ${emitter.useRuntime(netSymbol(name))}(${parts.join(", ")})`)
 }
 
