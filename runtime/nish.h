@@ -376,6 +376,24 @@ int32_t nish_sha256_hw(void);
    guard, so the caller's fallback panics as the Nish function does. `w` (u32[],
    the message schedule the Nish code fills) is neither read nor written. */
 int32_t nish_sha256_compress(nish_array *h, const nish_array *w, const nish_array *src, int32_t at);
+/* ---- bcrypt's cost loop on x86-64 BMI1 and BMI2 ---------------------------
+ * runtime/runtime-bcrypt.c: generated assembly kernels, x86-64 only. The
+ * compiler calls the kernel in place of std/crypto/bcrypt.ts's private
+ * `bcryptBodyN`, behind `nish_bcrypt_hw`, and calls the Nish function itself
+ * when either answers 0. Not constant time: its S-box loads are indexed by the
+ * secret state, as bcrypt's are by design. Before it returns it zeroes its
+ * stack frame and the caller-saved registers it wrote. */
+/* 1 when this process runs the kernel, 0 when it runs the Nish code. Resolved
+   on the first call and fixed from then on: `NISH_BCRYPT=soft` pins 0; unset,
+   `hw` or any other value is 1 when CPUID leaf 7 reports BMI1 and BMI2. Always
+   0 on other targets, wasm32 and AArch64 among them. */
+int32_t nish_bcrypt_hw(void);
+/* Blowfish's expand0 body on `width` lanes of st (u32[]), lane k at words
+   [k * 1042, k * 1042 + 1042): P[18] then S[4][256], each overwritten by the
+   521 chained encryptions of a zero block; 1 when it ran. Answers 0 and writes
+   nothing unless 2 <= width <= 6 and st.len >= width * 1042, so the caller's
+   fallback does what the Nish function does. */
+int32_t nish_bcrypt_body_n(nish_array *st, int32_t width);
 /* ---- CRC-32 on the CPU's carry-less multiply or CRC instructions ---------
  * runtime/runtime-checksum.c: PCLMULQDQ folding on x86-64, the ARMv8 CRC32
  * instructions on AArch64. The compiler calls the kernel in

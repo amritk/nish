@@ -148,7 +148,10 @@ import {
   bytesWalkOf,
   CRC32_HW,
   CRC32_KERNEL,
+  BCRYPT_HW,
+  BCRYPT_KERNEL,
   isAesSeam,
+  isBcryptSeam,
   isCrc32Seam,
   isIndexOfAnyWalk,
   isRegexScanWalk,
@@ -1755,10 +1758,11 @@ export class Emitter {
     if (isRegexScanWalk(this.program, sig)) {
       return emitRegexScanKernel(this, operandValues)
     }
-    // WP38 S5: a seam of `nish/crypto/aes`, or `nish/crypto/sha256`'s block
-    // function, runs the runtime kernel when its resolver says so and the
-    // walker below when not (`src/kernels.ts`). Never on wasm32, which has no
-    // kernel to branch to.
+    // WP38 S5: a seam of `nish/crypto/aes`, `nish/crypto/sha256`'s block
+    // function or `nish/crypto/bcrypt`'s cost loop body runs the runtime
+    // kernel when its resolver says so and the walker below when not
+    // (`src/kernels.ts`). Never on wasm32, which has no kernel to branch to,
+    // and bcrypt's only where the triple is x86-64 or unnamed.
     let kernelJoin: IRBlock | null = null
     if (!isWasmBuild(this.opts)) {
       const aesSeam = isAesSeam(this.program, sig)
@@ -1766,6 +1770,11 @@ export class Emitter {
         kernelJoin = this.emitKernelArm(AES_HW, aesKernelOf(aesSeam), "aes", operands, false)
       } else if (isSha256Seam(this.program, sig)) {
         kernelJoin = this.emitKernelArm(SHA256_HW, SHA256_KERNEL, "sha256", operands, true)
+      } else if (
+        isBcryptSeam(this.program, sig) &&
+        (this.opts.target.length === 0 || this.opts.target.startsWith("x86_64"))
+      ) {
+        kernelJoin = this.emitKernelArm(BCRYPT_HW, BCRYPT_KERNEL, "bcrypt", operands, true)
       }
     }
     // WP38 CRC: `nish/compress/checksum`'s walk, the same branch, whose arms

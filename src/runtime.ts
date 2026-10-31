@@ -1384,6 +1384,25 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // bcrypt's cost loop on generated x86-64 kernels, runtime-bcrypt.c
+    // (`src/kernels.ts`): a resolver of `nish_sha256_hw`'s kind, and a kernel
+    // that writes the state array it is handed.
+    this.add(
+      new RuntimeFunction(
+        "nish_bcrypt_hw",
+        "declare i32 @nish_bcrypt_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_bcrypt_body_n",
+        `declare noundef i32 @nish_bcrypt_body_n(${AES_ARRAY}, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
     // WP38 CRC: CRC-32 on PCLMULQDQ or the ARMv8 CRC32 instructions,
     // runtime-checksum.c (`src/kernels.ts`). `nish_crc32_hw` is
     // `nish_aes_hw`'s kind of resolver, and the kernel only reads the one

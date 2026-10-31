@@ -59,6 +59,14 @@
 // own message, when it did not. The schedule array it is handed is the Nish
 // code's scratch, which the kernel keeps in registers instead.
 //
+// `std/crypto/bcrypt.ts`'s batch cost loop body, `bcryptBodyN`, is a third
+// seam of that kind (`isBcryptSeam`), on the generated x86-64 kernels in
+// `runtime/runtime-bcrypt.c`, behind `nish_bcrypt_hw` and `NISH_BCRYPT`. It is
+// emitted as written on wasm32 and on any other target a triple names, since
+// the kernels are x86-64 alone; a target-neutral module keeps the branch,
+// because its runtime answers 0 off x86-64. The kernel checks the width and the
+// state's length and answers whether it ran.
+//
 // WP38 S6a: `nish/bytes` has five walks lowered S1's way, the call replaced
 // outright (`bytesWalkOf`). Four are byte-class runs — JSON's blanks, the
 // digits, the bytes a JSON string holds as themselves, and the bytes a JSON
@@ -199,6 +207,24 @@ export const isSha256Seam = (program: CheckedProgram, sig: FunctionSig): boolean
   sig.sourceName === "sha256Compress" &&
   program.packageName === CLI &&
   program.source.path === stdModuleName("nish/crypto/sha256")
+
+/** The runtime's answer to whether this process runs the bcrypt kernels. */
+export const BCRYPT_HW: string = "nish_bcrypt_hw"
+
+/** The runtime kernel `bcryptBodyN`'s call becomes on the hardware arm, which answers whether it ran. */
+export const BCRYPT_KERNEL: string = "nish_bcrypt_body_n"
+
+/**
+ * Whether a call in `program` to `sig` is `nish/crypto/bcrypt`'s batch cost
+ * loop body, tested as `isSha256Seam` tests its seam.
+ */
+export const isBcryptSeam = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.returnType === T_VOID &&
+  sig.sourceName === "bcryptBodyN" &&
+  program.packageName === CLI &&
+  program.source.path === stdModuleName("nish/crypto/bcrypt")
 
 /** The runtime's answer to whether this process runs the CRC-32 kernel. */
 export const CRC32_HW: string = "nish_crc32_hw"
