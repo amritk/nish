@@ -935,20 +935,23 @@ function reclaimsReturnedString(callee: FunctionSig, facts: FactsTable): boolean
   local +3:9 g: FunctionFacts | null (const)
   callee +3:13 FactsTable.get -> @FactsTable.get
 function marksTailCall(table: TypeTable, caller: FunctionFacts, callee: FunctionSig, argTypes: i32[], facts: FactsTable): boolean -> @marksTailCall [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get TypeTable.resultByValue isScalarArgument reclaimsReturnedString
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 isScalarArgument#0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FactsTable.get FunctionSig.defaultOf TypeTable.resultByValue isScalarArgument reclaimsReturnedString
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 isScalarArgument#0 isScalarArgument#0
   pointer caller: size=408 writesThrough=false captured=false
-  pointer callee: size=160 writesThrough=false captured=false passedTo=reclaimsReturnedString#0
+  pointer callee: size=160 writesThrough=false captured=false passedTo=reclaimsReturnedString#0 FunctionSig.defaultOf#0
   pointer argTypes: size=0 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=reclaimsReturnedString#1 FactsTable.get#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.resultByValue -> @TypeTable.resultByValue
   callee +0:49 reclaimsReturnedString -> @reclaimsReturnedString
-  local +6:14 type: i32 (const)
-  callee +7:10 isScalarArgument -> @isScalarArgument
-  local +11:9 g: FunctionFacts | null (const)
-  callee +11:13 FactsTable.get -> @FactsTable.get
+  local +8:12 k: i32 (let)
+  callee +9:9 FunctionSig.defaultOf -> @FunctionSig.defaultOf
+  callee +9:42 isScalarArgument -> @isScalarArgument
+  local +13:14 type: i32 (const)
+  callee +14:10 isScalarArgument -> @isScalarArgument
+  local +18:9 g: FunctionFacts | null (const)
+  callee +18:13 FactsTable.get -> @FactsTable.get
 function isScalarArgument(table: TypeTable, type: i32): boolean -> @isScalarArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
