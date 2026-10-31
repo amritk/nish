@@ -143,6 +143,13 @@ const terminatorName = (stmt: Node): string => {
         }
       }
       return "a `switch` that covers every variant of its union: every path leaves inside it, so the code after it can be deleted"
+    case N_LABELED:
+      // A labelled loop or `switch` ends the path as it would unlabelled; a
+      // labelled block ends it only when every path through it returns.
+      if (stmt.children[0].kind === N_BLOCK) {
+        return "a labelled block whose paths all return"
+      }
+      return terminatorName(stmt.children[0])
     default:
       return "an infinite loop"
   }

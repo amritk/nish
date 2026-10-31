@@ -1140,10 +1140,10 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
   29 members.
 
 `try`, destructuring and an arrow that captures a local are refused by Nish
-on their own, so no loop that compiles holds them. A loop that a labelled
-`break` or `continue` leaves from inside a nested statement, or whose `switch`
-has a clause that falls into the next, is one the pass gives up on: it keeps
-the checker's widened state.
+on their own, so no loop that compiles holds them. A loop that holds a
+labelled statement or a labelled `break` or `continue` anywhere in its body,
+or whose `switch` has a clause that falls into the next, is one the pass
+gives up on: it keeps the checker's widened state.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a

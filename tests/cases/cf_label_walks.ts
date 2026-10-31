@@ -8,7 +8,7 @@ function labelsOverArrays(): string {
     for (const v of row) {
       const tag = `v${v}`
       if (v % 3 === 2) continue rows
-      if (v === 8) break rows
+      if (v === 7) break rows
       out = out + tag
     }
     out = out + "|"

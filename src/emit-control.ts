@@ -332,11 +332,18 @@ export const emitLabeled = (emitter: Emitter, stmt: Node): void => {
   emitter.labelDepths.pop()
 }
 
-/** The index in `loops` of what a jump's label names, which the checker proved is there. */
+/**
+ * The index in `loops` of what a jump's label names, which the checker proved
+ * is there: a label the stack lacks is the compiler's own fault, so it ends the
+ * compile with the exit-70 report rather than read below the stack.
+ */
 const labelled = (emitter: Emitter, label: string): i32 => {
   let i = emitter.labelNames.length - 1
-  while (emitter.labelNames[i] !== label) {
+  while (i >= 0 && emitter.labelNames[i] !== label) {
     i = i - 1
+  }
+  if (i < 0) {
+    process.exit(internalErrorFor(`emitter: no enclosing label \`${label}\``, emitter.opts.json))
   }
   return emitter.labelDepths[i]
 }

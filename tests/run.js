@@ -24477,22 +24477,23 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
    * Type-check `files` against the ambient declarations with a project of their
    * own: `tsc -p` on the config written here, in this process (tests/typecheck.js).
    */
-  const typeCheck = (name, files) => {
+  const typeCheck = (name, files, fallthrough = false) => {
     const config = path.join(ambientDir, `tsconfig.${name}.json`)
     fs.writeFileSync(
       config,
       // The options are `npm run check`'s, so the two cannot drift apart;
       // `include: []` drops its file list for this project's own. The two
       // unused-name checks are lint for the compiler's own source, not typing:
-      // a golden case declares a function it never calls on purpose. So is
-      // the fallthrough check: a clause that runs on into the next is
-      // TypeScript the language accepts (docs/LANGUAGE.md, `switch`).
+      // a golden case declares a function it never calls on purpose.
+      // `fallthrough` lifts the fallthrough check for the cases that pin a
+      // clause running on into the next, which TypeScript the language
+      // accepts (docs/LANGUAGE.md, `switch`); every other case keeps it.
       JSON.stringify({
         extends: path.join(root, "tsconfig.json"),
         compilerOptions: {
           noUnusedLocals: false,
           noUnusedParameters: false,
-          noFallthroughCasesInSwitch: false,
+          ...(fallthrough ? { noFallthroughCasesInSwitch: false } : {}),
         },
         include: [],
         files: [declarations, ...files],
@@ -24584,17 +24585,27 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
   ])
+  // The cases whose clauses fall through on purpose, checked in a project
+  // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
+  // that falls through is added here on purpose and every other keeps the check.
+  const FALLTHROUGH_CASES = new Set(["cf_switch_fallthrough.ts", "cf_label_walks.ts"])
   const acceptedCases = fs
     .readdirSync(casesDir)
     .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f))
   const everyCase = typeCheck(
     "accepted",
-    acceptedCases.map((f) => path.join(casesDir, f))
+    acceptedCases.filter((f) => !FALLTHROUGH_CASES.has(f)).map((f) => path.join(casesDir, f))
+  )
+  const fallthroughCases = acceptedCases.filter((f) => FALLTHROUGH_CASES.has(f))
+  const fallingThrough = typeCheck(
+    "fallthrough",
+    fallthroughCases.map((f) => path.join(casesDir, f)),
+    true
   )
   check(
-    `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences)`,
-    everyCase.ok,
-    everyCase.output
+    `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences, ${fallthroughCases.length} without the fallthrough check)`,
+    everyCase.ok && fallingThrough.ok && fallthroughCases.length === FALLTHROUGH_CASES.size,
+    everyCase.output + fallingThrough.output
   )
 
   // And on the largest Nish program there is: the compiler itself.

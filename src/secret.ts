@@ -1081,10 +1081,13 @@ class SecretFlow {
   }
 
   switchStatement(stmt: Node, state: FlowState): void {
+    // The label is taken before the discriminant is walked, as a loop takes
+    // it before its condition, so nothing walked there can see it.
+    const label = this.label
+    this.label = ""
     this.expression(stmt.children[0], ROLE_READ, state)
     const target = new SecretExitTarget(true, this.targets.length, this.vars.length, this.movable.length)
-    target.label = this.label
-    this.label = ""
+    target.label = label
     this.targets.push(target)
     const entry = copyState(state)
     let fall = this.fresh()
