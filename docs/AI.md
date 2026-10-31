@@ -862,12 +862,13 @@ export const main = (): i32 => {
 - **Only a top-level function** may have one: not a method, a constructor, a
   field, a local, a return type or an alias.
 
-```ts nish:err NL2335
+```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
 export const main = (): i32 => {
-  const k = 3;
-  return apply((x) => x + k, 1);   // captures `k`: pass it to `apply` instead
+  let k = 3;
+  k = k + 1;
+  return apply((x) => x + k, 1);   // reads the `let` `k`: bind `const kNow = k` before the call
 };
 ```
 
