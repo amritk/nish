@@ -169,7 +169,10 @@ export const outboundAddressAllowed = (policy: OutboundPolicy, addr: u8[], off: 
     return true
   }
   const carried: i32 = outboundCarriedV4(addr, off)
-  if (carried >= 0 && toI32(policy.permitted.length) > 0) {
+  if (carried < 0) {
+    return outboundAddressPublic(addr, off)
+  }
+  if (!outboundMapped(addr, off) && toI32(policy.permitted.length) > 0) {
     // A permit names an IPv4 prefix in its ::ffff: form, so try the address a NAT64 or 6to4 one carries in that form too.
     const mapped: u8[] = new Array<u8>(16)
     mapped[10] = toU8(255)
@@ -179,7 +182,7 @@ export const outboundAddressAllowed = (policy: OutboundPolicy, addr: u8[], off: 
       return true
     }
   }
-  return outboundAddressPublic(addr, off)
+  return outboundV4Public(addr, carried)
 }
 
 /**
@@ -191,7 +194,6 @@ export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i
   if (count < 0 || count * DNS_ADDRESS_BYTES > toI32(addresses.length)) {
     panic("outboundFilter: count records do not fit in addresses")
   }
-  const held: u8[] = new Array<u8>(DNS_ADDRESS_BYTES)
   let kept: i32 = 0
   for (let i: i32 = 0; i < count; i += 1) {
     if (!outboundAddressAllowed(policy, addresses, i * DNS_ADDRESS_BYTES)) {
@@ -199,10 +201,10 @@ export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i
     }
     if (i !== kept) {
       // Swap, so the refused record stays in the list for an error to name.
-      for (let k: i32 = 0; k < toI32(held.length); k += 1) {
-        held[k] = addresses[kept * DNS_ADDRESS_BYTES + k]
+      for (let k: i32 = 0; k < DNS_ADDRESS_BYTES; k += 1) {
+        const held: u8 = addresses[kept * DNS_ADDRESS_BYTES + k]
         addresses[kept * DNS_ADDRESS_BYTES + k] = addresses[i * DNS_ADDRESS_BYTES + k]
-        addresses[i * DNS_ADDRESS_BYTES + k] = held[k]
+        addresses[i * DNS_ADDRESS_BYTES + k] = held
       }
     }
     kept += 1
@@ -229,7 +231,7 @@ export const outboundHostAllowed = (policy: OutboundPolicy, host: string): boole
     if (
       !literal &&
       entry.startsWith(".") &&
-      (name === entry.substring(1, toI32(entry.length)) || name.endsWith(entry))
+      (name.endsWith(entry) || (toI32(name.length) + 1 === toI32(entry.length) && entry.endsWith(name)))
     ) {
       return true
     }
@@ -239,7 +241,7 @@ export const outboundHostAllowed = (policy: OutboundPolicy, host: string): boole
 
 /** The sixteen address bytes at `addr[off]` as text: dotted for an IPv4 address, eight hex groups otherwise. */
 export const outboundAddressText = (addr: u8[], off: i32): string => {
-  if (outboundZeros(addr, off, 10) && addr[off + 10] === toU8(255) && addr[off + 11] === toU8(255)) {
+  if (outboundMapped(addr, off)) {
     const at: i32 = off + OUTBOUND_V4_AT
     return `${addr[at]}.${addr[at + 1]}.${addr[at + 2]}.${addr[at + 3]}`
   }
@@ -279,6 +281,10 @@ const outboundPermitted = (policy: OutboundPolicy, addr: u8[], off: i32): boolea
   return false
 }
 
+/** Whether the sixteen address bytes at `addr[off]` are an IPv4-mapped address, `::ffff:0:0/96`. */
+const outboundMapped = (addr: u8[], off: i32): boolean =>
+  outboundZeros(addr, off, 10) && addr[off + 10] === toU8(255) && addr[off + 11] === toU8(255)
+
 /**
  * Where the IPv4 address that the sixteen address bytes at `addr[off]` carry
  * starts, or -1 for none: `::ffff:a.b.c.d`, how nish:net writes every IPv4
@@ -286,7 +292,7 @@ const outboundPermitted = (policy: OutboundPolicy, addr: u8[], off: i32): boolea
  * last four bytes; `2002::/16`, 6to4 (RFC 3056), in the four after the prefix.
  */
 const outboundCarriedV4 = (addr: u8[], off: i32): i32 => {
-  if (outboundZeros(addr, off, 10) && addr[off + 10] === toU8(255) && addr[off + 11] === toU8(255)) {
+  if (outboundMapped(addr, off)) {
     return off + OUTBOUND_V4_AT
   }
   const b0: i32 = toI32(addr[off])

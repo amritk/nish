@@ -373,16 +373,20 @@ const bodyOf = (res: HttpResponse | null): string => {
   return b !== null ? String.fromBytes(b, 0, toI32(b.length)) : "<null>";
 };
 
+/** The decimal number `s` spells: a port, or a count of connections. */
+const decimalOf = (s: string): i32 => {
+  let v: i32 = 0;
+  for (let i: i32 = 0; i < toI32(s.length); i++) {
+    v = v * 10 + toI32(s.charCodeAt(i)) - 48;
+  }
+  return v;
+};
+
 /** How many connections the server has taken, this fetch's own included. */
 const acceptsOf = (base: string): i32 => {
   const options: HttpOptions = new HttpOptions();
   options.useEnvProxy = false;
-  const text: string = bodyOf(httpFetch(new HttpRequest("GET", `${base}/accepts`), options));
-  let v: i32 = 0;
-  for (let i: i32 = 0; i < toI32(text.length); i++) {
-    v = v * 10 + toI32(text.charCodeAt(i)) - 48;
-  }
-  return v;
+  return decimalOf(bodyOf(httpFetch(new HttpRequest("GET", `${base}/accepts`), options)));
 };
 
 /** Fetches `url` on `c`: "ok <body>", or the error's name and text. */
@@ -511,18 +515,11 @@ const runClient = (port: i32): i32 => {
   return t.failed;
 };
 
-const parsePort = (s: string): i32 => {
-  let v: i32 = 0;
-  for (let i: i32 = 0; i < toI32(s.length); i++) {
-    v = v * 10 + toI32(s.charCodeAt(i)) - 48;
-  }
-  return v;
-};
 
 export function outboundChecks(): i32 {
   const argv: string[] = process.argv;
   if (toI32(argv.length) >= 3 && argv[1] === "client") {
-    return runClient(parsePort(argv[2]));
+    return runClient(decimalOf(argv[2]));
   }
   const server: Server = new Server();
   const pid: i32 = spawn([selfPath(), "client", `${server.port}`]);
