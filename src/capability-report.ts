@@ -544,13 +544,21 @@ export const findProgram = (name: string, base: string): string | null => {
   return null
 }
 
-/** The real path of `path` when it is an executable file, or null. */
+/**
+ * The real path of `path` when it is an executable file, or null. The
+ * question goes to `/bin/sh` running `test -x`, as `distrustOf` in compile.ts
+ * asks its own, rather than to `isExecutableSync`: that builtin is refused on
+ * a wasm32 build, and `src/` is also the web compiler. The shell is named by
+ * absolute path and `real` reaches it as an operand, never as script text; a
+ * probe that cannot start answers null.
+ */
 const executableFile = (path: string): string | null => {
   const real = realpathSync(path)
-  if (real === null || isDirectorySync(real) || !isExecutableSync(real)) {
+  if (real === null || isDirectorySync(real)) {
     return null
   }
-  return real
+  const probe: string[] = ["/bin/sh", "-c", 'test -x "$1"', "sh", real]
+  return spawnSyncTo(probe, "/dev/null", "/dev/null") === 0 ? real : null
 }
 
 /** The little-endian unsigned value of `count` bytes of `bytes` at `at`, or -1 past the end. */

@@ -11863,6 +11863,20 @@ if (!only || "sandbox dependency grants".includes(only)) {
       const rTrue = run(allow, ["true"])
       const rEcho = run(allow, ["echo"])
       const rEchoPlain = run(open, ["echo"])
+      // The allowlist holds the real file Landlock is given, which is not
+      // always named `true`: some coreutils install it behind a symbolic link.
+      const trueOnPath = (process.env.PATH ?? "")
+        .split(path.delimiter)
+        .map((dir) => path.join(dir === "" ? "." : dir, "true"))
+        .find((file) => {
+          try {
+            fs.accessSync(file, fs.constants.X_OK)
+            return fs.statSync(file).isFile()
+          } catch {
+            return false
+          }
+        })
+      const trueReal = trueOnPath === undefined ? null : fs.realpathSync(trueOnPath)
       check(
         "sandbox dependency grants: a dependency granted process.spawn=true runs true and cannot exec echo",
         rTrue !== null &&
@@ -11877,8 +11891,8 @@ if (!only || "sandbox dependency grants".includes(only)) {
       )
       check(
         "sandbox dependency grants: the exec allowlist names the granted program by its absolute path",
-        /@\.sandbox\.exec = [^\n]*c"\/[^"]*\/true\\00/.test(ir(runner)),
-        ir(runner)
+        trueReal !== null && ir(runner).includes(`@.sandbox.exec = `) && ir(runner).includes(`c"${trueReal}\\00`),
+        `the first \`true\` on PATH resolves to ${trueReal}\n${ir(runner)}`
       )
     }
   }
