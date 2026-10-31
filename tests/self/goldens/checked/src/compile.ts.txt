@@ -1730,7 +1730,7 @@ function runTerminal<WallRun, wallUpdate, wallRender>(options: TerminalOptions, 
   sharedWrite: +0:5
   calls: nish.FixedStep.advance nish.FixedStep.alpha nish.FixedStep.constructor nish.Frame.constructor nish.RateController.mayDraw nish.RateController.tick nish.TermEvent.constructor nish.TermInput.constructor nish.Terminal.checkResize nish.Terminal.close nish.Terminal.present nish.Terminal.readEvents nish.Terminal.stats nish.openTerminal nish.termIoClear nish.termIoNowMs nish.termIoQuits nish.termIoWait nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_overflow wallRender$ wallUpdate$
   pointer options: size=64 writesThrough=true captured=true passedTo=nish.openTerminal#0
-  pointer state: size=120 writesThrough=true captured=false passedTo=wallUpdate$#0 wallRender$#0
+  pointer state: size=112 writesThrough=true captured=false passedTo=wallUpdate$#0 wallRender$#0
   stackSites=3 stackLocals=3
   local -38:9 opened: Result<Terminal, string> (const)
   callee -38:44 openTerminal -> @nish.openTerminal

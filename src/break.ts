@@ -124,6 +124,11 @@ class WallRun {
   toast: string
   /** The view the director's own text is drawn through. */
   view: View
+  /** The player and the files sounds are played from, found the first time sound is on. */
+  sound: BreakSound
+  /** When the rate fell under 60, 0 while it is not; and the earliest auto resolution may step again. */
+  slowSince: i64
+  settleUntil: i64
   scene: i32
   /** The level the game in play started at, which the menu after it offers again. */
   startLevel: i32
@@ -133,6 +138,8 @@ class WallRun {
   openFps: i32
   openGraphics: i32
   toastSteps: i32
+  /** The most lines auto resolution allows now; it starts at `WALL_AUTO_LINES` and only falls. */
+  autoLines: i32
   /** Whether `update` answered false to have the terminal opened again rather than to quit. */
   reopen: boolean
   /** Whether the first frame after a reopening still has to say what came of it. */
@@ -141,13 +148,6 @@ class WallRun {
   drawn: boolean
   /** Whether the screen is too small to play on, which holds the scene still. */
   small: boolean
-  /** The player and the files sounds are played from, found the first time sound is on. */
-  sound: BreakSound
-  /** The most lines auto resolution allows now; it starts at `WALL_AUTO_LINES` and only falls. */
-  autoLines: i32
-  /** When the rate fell under 60, 0 while it is not; and the earliest auto resolution may step again. */
-  slowSince: i64
-  settleUntil: i64
 
   constructor(seed: i64) {
     this.settings = new BreakSettings()
@@ -293,8 +293,7 @@ const wallApplyKey = (run: WallRun, key: i32): void => {
  */
 const wallTakeHotkeys = (run: WallRun, events: TermEvent[]): void => {
   let kept: i32 = 0
-  const n: i32 = toI32(events.length)
-  for (let i: i32 = 0; i < n; i++) {
+  for (let i: i32 = 0; i < events.length; i++) {
     const e: TermEvent = events[i]
     if (wallHotkey(e)) {
       if (e.action === ACTION_PRESS) {

@@ -3311,21 +3311,28 @@ function makeDir(now: i64): string -> @makeDir
   local +1:12 attempt: i32 (let)
   local +2:11 dir: string (const)
 function prepareSound(s: BreakSound, now: i64): boolean -> @prepareSound [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: now
-  calls: closeSound findPlayer makeDir nish_str_eq nish_write_file_bytes soundFile soundReady soundSamples wavBytes
+  calls: closeSound findPlayer makeDir nish_str_eq soundReady writeSounds
   pointer s: size=40 writesThrough=true captured=false passedTo=soundReady#0 closeSound#0
   stackSites=0 stackLocals=0
   callee -2:12 soundReady -> @soundReady
   callee +1:14 findPlayer -> @findPlayer
   local +5:9 dir: string (const)
   callee +5:23 makeDir -> @makeDir
-  local +11:12 id: i32 (let)
-  callee +12:28 soundFile -> @soundFile
-  callee +12:48 wavBytes -> @wavBytes
-  callee +12:57 soundSamples -> @soundSamples
-  callee +13:7 closeSound -> @closeSound
+  callee +11:8 writeSounds -> @writeSounds
+  callee +12:5 closeSound -> @closeSound
+function writeSounds(dir: string): boolean -> @writeSounds
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write_file_bytes
+  escaping: dir
+  calls: nish_arena_mark nish_arena_release nish_write_file_bytes soundFile soundSamples wavBytes
+  stackSites=0 stackLocals=0
+  local +0:12 id: i32 (let)
+  callee +1:28 soundFile -> @soundFile
+  callee +1:48 wavBytes -> @wavBytes
+  callee +1:57 soundSamples -> @soundSamples
 function soundReady(s: BreakSound): boolean -> @soundReady [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

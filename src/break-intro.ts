@@ -334,7 +334,7 @@ const introCutHelp = (intro: BreakIntro, help: string): void => {
   let column: i32 = 0
   let colour: i32 = PLAIN
   let i: i32 = 0
-  while (i < n && line < INTRO_LINES) {
+  while (i >= 0 && i < help.length && line < INTRO_LINES) {
     const c: i32 = help.charCodeAt(i)
     if (c === 10) {
       line++
@@ -382,7 +382,7 @@ const introCutHelp = (intro: BreakIntro, help: string): void => {
       }
       i++
     }
-    introAddPiece(intro, PIECE_TEXT, help.substring(start, i), colour, line, from, column - from)
+    introAddPiece(intro, PIECE_TEXT, help.slice(start, i), colour, line, from, column - from)
   }
 }
 
@@ -612,7 +612,7 @@ const introDrawWall = (intro: BreakIntro, view: View, alpha: f64, time: f64): vo
  */
 const introDrawPieces = (intro: BreakIntro, view: View, alpha: f64): void => {
   const scale: i32 = Math.max(toI32(Math.floor((COL_W * view.scale) / toF64(GLYPH_ADVANCE) + 0.000001)), 1)
-  const lift: f64 = (LINE_H - toF64(GLYPH_H * scale) / view.scale) / 2.0
+  const lift: f64 = (LINE_H - (toF64(GLYPH_H) * toF64(scale)) / view.scale) / 2.0
   const n: i32 = toI32(intro.kinds.length)
   for (let i: i32 = 0; i < n; i++) {
     const y: f64 = lerp(intro.prevYs[i], intro.ys[i], alpha)

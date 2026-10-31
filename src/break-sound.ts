@@ -379,10 +379,18 @@ export const prepareSound = (s: BreakSound, now: i64): boolean => {
     return false
   }
   s.dir = dir
+  if (!writeSounds(dir)) {
+    closeSound(s)
+    s.player = []
+    return false
+  }
+  return true
+}
+
+/** Write every sound's WAV file into `dir`; false if one could not be written. */
+const writeSounds = (dir: string): boolean => {
   for (let id: i32 = 0; id < SOUND_COUNT; id++) {
     if (writeFileBytesSync(soundFile(dir, id), wavBytes(soundSamples(id))) < 0) {
-      closeSound(s)
-      s.player = []
       return false
     }
   }

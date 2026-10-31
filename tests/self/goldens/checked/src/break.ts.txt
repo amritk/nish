@@ -1730,7 +1730,7 @@ function runTerminal<WallRun, wallUpdate, wallRender>(options: TerminalOptions, 
   sharedWrite: +0:5
   calls: nish.FixedStep.advance nish.FixedStep.alpha nish.FixedStep.constructor nish.Frame.constructor nish.RateController.mayDraw nish.RateController.tick nish.TermEvent.constructor nish.TermInput.constructor nish.Terminal.checkResize nish.Terminal.close nish.Terminal.present nish.Terminal.readEvents nish.Terminal.stats nish.openTerminal nish.termIoClear nish.termIoNowMs nish.termIoQuits nish.termIoWait nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_overflow wallRender$ wallUpdate$
   pointer options: size=64 writesThrough=true captured=true passedTo=nish.openTerminal#0
-  pointer state: size=120 writesThrough=true captured=false passedTo=wallUpdate$#0 wallRender$#0
+  pointer state: size=112 writesThrough=true captured=false passedTo=wallUpdate$#0 wallRender$#0
   stackSites=3 stackLocals=3
   local -38:9 opened: Result<Terminal, string> (const)
   callee -38:44 openTerminal -> @nish.openTerminal
@@ -3206,7 +3206,7 @@ const WALL_FAST_RTT_MS: f64 = 20
 const WALL_SCENE_MENU: i32 = 0
 const WALL_SCENE_GAME: i32 = 1
 const WALL_SCENE_INTRO: i32 = 2
-struct WallRun (class) size=120 align=8
+struct WallRun (class) size=112 align=8
   field intro: BreakIntro index=0 offset=0
   field menu: BreakMenu index=1 offset=8
   field game: BreakGame index=2 offset=16
@@ -3214,27 +3214,27 @@ struct WallRun (class) size=120 align=8
   field seed: i64 index=4 offset=32
   field toast: string index=5 offset=40
   field view: View index=6 offset=48
-  field scene: i32 index=7 offset=56
-  field startLevel: i32 index=8 offset=60
-  field games: i32 index=9 offset=64
-  field openFps: i32 index=10 offset=68
-  field openGraphics: i32 index=11 offset=72
-  field toastSteps: i32 index=12 offset=76
-  field reopen: boolean index=13 offset=80
-  field reopened: boolean index=14 offset=81
-  field drawn: boolean index=15 offset=82
-  field small: boolean index=16 offset=83
-  field sound: BreakSound index=17 offset=88
-  field autoLines: i32 index=18 offset=96
-  field slowSince: i64 index=19 offset=104
-  field settleUntil: i64 index=20 offset=112
+  field sound: BreakSound index=7 offset=56
+  field slowSince: i64 index=8 offset=64
+  field settleUntil: i64 index=9 offset=72
+  field scene: i32 index=10 offset=80
+  field startLevel: i32 index=11 offset=84
+  field games: i32 index=12 offset=88
+  field openFps: i32 index=13 offset=92
+  field openGraphics: i32 index=14 offset=96
+  field toastSteps: i32 index=15 offset=100
+  field autoLines: i32 index=16 offset=104
+  field reopen: boolean index=17 offset=108
+  field reopened: boolean index=18 offset=109
+  field drawn: boolean index=19 offset=110
+  field small: boolean index=20 offset=111
   constructor -> @WallRun.constructor
 function WallRun.constructor(this: WallRun, seed: i64): void -> @WallRun.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via helpText
   escaping: seed
   calls: BreakSettings.constructor BreakSound.constructor Style.constructor View.constructor helpText newBreakGame newBreakIntro newBreakMenuWith nish_alloc_struct
-  pointer this: size=120 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:21 new BreakSettings -> @BreakSettings.constructor
   callee +3:18 newBreakIntro -> @newBreakIntro
@@ -3248,7 +3248,7 @@ function wallToast(run: WallRun, text: string): void -> @wallToast
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: text
-  pointer run: size=120 writesThrough=true captured=false
+  pointer run: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function wallGraphicsLabel(graphics: i32): string -> @wallGraphicsLabel
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -3281,7 +3281,7 @@ function wallKeyRow(key: i32): i32 -> @wallKeyRow
 function wallResetAuto(run: WallRun): void -> @wallResetAuto
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  pointer run: size=120 writesThrough=true captured=false
+  pointer run: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function wallResolutionToast(resolution: i32): string -> @wallResolutionToast
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -3294,7 +3294,7 @@ function wallSoundToast(run: WallRun): string -> @wallSoundToast
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via prepareSound
   calls: nish_monotonic_nanos nish_str_concat playSound prepareSound soundPlayer
-  pointer run: size=120 writesThrough=false captured=false
+  pointer run: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:8 prepareSound -> @prepareSound
   callee +3:3 playSound -> @playSound
@@ -3304,7 +3304,7 @@ function wallApplyKey(run: WallRun, key: i32): void -> @wallApplyKey
   sharedWrite: +0:5
   escaping: key
   calls: cycleSetting wallGraphicsToast wallKeyRow wallResetAuto wallResolutionToast wallSoundToast wallToast
-  pointer run: size=120 writesThrough=true captured=false passedTo=wallToast#0 wallResetAuto#0 wallToast#0 wallToast#0 wallSoundToast#0 wallToast#0 wallToast#0 wallToast#0
+  pointer run: size=112 writesThrough=true captured=false passedTo=wallToast#0 wallResetAuto#0 wallToast#0 wallToast#0 wallSoundToast#0 wallToast#0 wallToast#0 wallToast#0
   stackSites=0 stackLocals=0
   local -5:9 s: BreakSettings (const)
   callee -4:3 cycleSetting -> @cycleSetting
@@ -3323,11 +3323,10 @@ function wallTakeHotkeys(run: WallRun, events: TermEvent[]): void -> @wallTakeHo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_panic_index nish_panic_overflow wallApplyKey wallHotkey
-  pointer run: size=120 writesThrough=true captured=false passedTo=wallApplyKey#0
+  pointer run: size=112 writesThrough=true captured=false passedTo=wallApplyKey#0
   pointer events: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -11:7 kept: i32 (let)
-  local -10:9 n: i32 (const)
+  local -10:7 kept: i32 (let)
   local -9:12 i: i32 (let)
   local -8:11 e: TermEvent (const)
   callee -7:9 wallHotkey -> @wallHotkey
@@ -3336,7 +3335,7 @@ function wallPlaySounds(run: WallRun, sounds: i32[]): void -> @wallPlaySounds
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   calls: nish_monotonic_nanos playSound
-  pointer run: size=120 writesThrough=false captured=false
+  pointer run: size=112 writesThrough=false captured=false
   pointer sounds: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 now: i64 (const)
@@ -3347,21 +3346,21 @@ function wallStartGame(run: WallRun, level: i32): void -> @wallStartGame
   sharedWrite: +0:3
   escaping: level
   calls: newBreakGame nish_panic_overflow
-  pointer run: size=120 writesThrough=true captured=false
+  pointer run: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +2:14 newBreakGame -> @newBreakGame
 function wallBackToMenu(run: WallRun): void -> @wallBackToMenu
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: newBreakMenuWith nish_panic_overflow
-  pointer run: size=120 writesThrough=true captured=false
+  pointer run: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:14 newBreakMenuWith -> @newBreakMenuWith
 function wallUpdate(run: WallRun, input: TermInput): boolean -> @wallUpdate$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_overflow stepBreakGame stepBreakIntro stepBreakMenu wallBackToMenu wallGraphicsToast wallPlaySounds wallQuitPressed wallResetAuto wallSoundToast wallStartGame wallTakeHotkeys wallToast
-  pointer run: size=120 writesThrough=true captured=false passedTo=wallTakeHotkeys#0 wallPlaySounds#0 wallResetAuto#0 wallToast#0 wallSoundToast#0 wallToast#0 wallStartGame#0 wallPlaySounds#0 wallBackToMenu#0
+  pointer run: size=112 writesThrough=true captured=false passedTo=wallTakeHotkeys#0 wallPlaySounds#0 wallResetAuto#0 wallToast#0 wallSoundToast#0 wallToast#0 wallStartGame#0 wallPlaySounds#0 wallBackToMenu#0
   pointer input: size=16 writesThrough=false captured=false passedTo=stepBreakIntro#1 stepBreakMenu#1 stepBreakGame#1
   stackSites=0 stackLocals=0
   callee -5:3 wallTakeHotkeys -> @wallTakeHotkeys
@@ -3396,7 +3395,7 @@ function wallAdaptResolution(run: WallRun, stats: TermStats, height: i32, now: i
   sharedWrite: +0:5
   escaping: now
   calls: llvm.smin.i32 nish_panic_overflow resolutionChoice wallStepDown
-  pointer run: size=120 writesThrough=true captured=false
+  pointer run: size=112 writesThrough=true captured=false
   pointer stats: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -4:7 resolutionChoice -> @resolutionChoice
@@ -3405,7 +3404,7 @@ function wallSizeFramebuffer(run: WallRun, frame: Frame, fb: Framebuffer): void 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Framebuffer.resize
   calls: llvm.smin.i32 nish.Framebuffer.resize nish_panic_overflow resolutionChoice wallCellPx
-  pointer run: size=120 writesThrough=false captured=false
+  pointer run: size=112 writesThrough=false captured=false
   pointer frame: size=40 writesThrough=false captured=false
   pointer fb: size=16 writesThrough=true captured=false passedTo=nish.Framebuffer.resize#0
   stackSites=0 stackLocals=0
@@ -3430,7 +3429,7 @@ function wallDrawText(run: WallRun, fb: Framebuffer, stats: TermStats): void -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via viewFor
   calls: blendRect drawTextCentred drawTextShadow fontScaleFor fpsChoice gfxRgb llvm.smax.i32 nish_str_concat nish_str_eq nish_str_from_i32 viewFor wallGraphicsLabel wallWhole
-  pointer run: size=120 writesThrough=false captured=false
+  pointer run: size=112 writesThrough=false captured=false
   pointer fb: size=16 writesThrough=true captured=true passedTo=viewFor#1
   pointer stats: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -3459,7 +3458,7 @@ function wallReopenToast(run: WallRun): string -> @wallReopenToast
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via wallGetenv
   calls: fpsChoice nish_str_concat nish_str_eq nish_str_from_i32 wallGetenv wallGraphicsToast
-  pointer run: size=120 writesThrough=false captured=false
+  pointer run: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 s: BreakSettings (const)
   local +1:7 said: string (let)
@@ -3481,7 +3480,7 @@ function wallRender(run: WallRun, frame: Frame): void -> @wallRender$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: drawBreakGame drawBreakIntro drawBreakMenu nish.Framebuffer.resize nish.Screen.clear nish_monotonic_nanos nish_str_eq wallAdaptResolution wallCentre wallDrawText wallReopenToast wallSizeFramebuffer wallToast
-  pointer run: size=120 writesThrough=true captured=false passedTo=wallReopenToast#0 wallToast#0 wallAdaptResolution#0 wallSizeFramebuffer#0 wallDrawText#0
+  pointer run: size=112 writesThrough=true captured=false passedTo=wallReopenToast#0 wallToast#0 wallAdaptResolution#0 wallSizeFramebuffer#0 wallDrawText#0
   pointer frame: size=40 writesThrough=false captured=false passedTo=wallSizeFramebuffer#1
   stackSites=0 stackLocals=0
   local -3:9 screen: Screen (const)

@@ -3251,7 +3251,7 @@ function introCutHelp(intro: BreakIntro, help: string): void -> @introCutHelp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via introAddPiece
   escaping: help
-  calls: introAddPiece introSgrColour introUpperHalfAt nish_panic_index nish_panic_overflow nish_str_new
+  calls: introAddPiece introSgrColour introUpperHalfAt nish_panic_overflow nish_panic_slice nish_str_new
   pointer intro: size=200 writesThrough=false captured=false passedTo=introAddPiece#0 introAddPiece#0
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
@@ -3416,7 +3416,7 @@ function introDrawPieces(intro: BreakIntro, view: View, alpha: f64): void -> @in
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via drawText
   escaping: alpha
-  calls: bevelBrick drawText glow lerp llvm.fptosi.sat.i32.f64 llvm.smax.i32 nish_floor nish_panic_index nish_panic_overflow
+  calls: bevelBrick drawText glow lerp llvm.fptosi.sat.i32.f64 llvm.smax.i32 nish_floor nish_panic_index
   pointer intro: size=200 writesThrough=false captured=false
   pointer view: size=64 writesThrough=false captured=false passedTo=drawText#0 glow#0 bevelBrick#0
   stackSites=0 stackLocals=0
