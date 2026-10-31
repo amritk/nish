@@ -127,10 +127,10 @@ function preforkServiceChannel(args: string[]): i32 -> @nish.preforkServiceChann
   callee +0:63 preforkChannel -> @nish.preforkChannel
 function preforkServiceChannelOf(args: string[], index: i32): i32 -> @nish.preforkServiceChannelOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: nish.preforkChannel nish_arena_mark nish_arena_release nish_panic_overflow
+  calls: nish.preforkChannel nish_arena_mark nish_arena_release
   pointer args: size=0 writesThrough=false captured=false passedTo=nish.preforkChannel#0
   stackSites=0 stackLocals=0
-  callee +0:20 preforkChannel -> @nish.preforkChannel
+  callee +0:42 preforkChannel -> @nish.preforkChannel
 function preforkNowMs(): i64 -> @nish.preforkNowMs
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
@@ -292,8 +292,10 @@ function PreforkSupervisor.stop(this: PreforkSupervisor, loop: i32, signals: i32
   callee +9:14 PreforkSupervisor.reap -> @nish.PreforkSupervisor.reap
 function preforkInvalid(config: PreforkConfig): string -> @nish.preforkInvalid
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_platform nish_str_eq
   pointer config: size=36 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:9 channels: boolean (const)
 function preforkDiscard(buf: u8[], _index: i32, fd: i32, _events: i32): void -> @nish.preforkDiscard
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:10

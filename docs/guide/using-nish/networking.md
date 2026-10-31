@@ -331,8 +331,10 @@ processes a Unix socketpair to talk over
 - **`serviceWorker`**, a worker's index: every other worker gets a pair to
   that one. `-1`, the default, gives none.
 - **`channelKind`**: `NET_UNIX_STREAM` (`1`, the default), or
-  `NET_UNIX_SEQPACKET` (`2`) to keep each write one message, which only
-  Linux has.
+  `NET_UNIX_SEQPACKET` (`2`) to keep each write one message. Only Linux has
+  seqpacket pairs, so stream is the default: it works on macOS too. On macOS
+  a seqpacket channel stops the program with a panic, `seqpacket channels
+  need Linux`, before any worker starts.
 
 A worker finds its ends with three calls, each taking `process.argv` and
 answering a descriptor, or `-1` when it has no such end:
@@ -410,8 +412,9 @@ worker restarts on its own with a new pair. With `restart` off nothing is
 signalled: a worker sees its peer's exit as a hang-up on its end.
 
 A `serviceWorker` below `-1` or not below the worker count, more than 64
-workers with a service worker (the most descriptors one child is handed), or
-a `channelKind` that is neither kind stops the program with a panic.
+workers with a service worker (the most descriptors one child is handed), a
+`channelKind` that is neither kind, or seqpacket channels off Linux stop the
+program with a panic.
 
 ## Names: `nish/net/dns`
 

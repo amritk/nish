@@ -267,10 +267,12 @@ runs under a uid of its own. The tcp-reuseport stage records this in
 accepted connections or its signal pipe, since each is close-on-exec
 (§2.1; `runtime/runtime-host.c:186-195`, with Darwin's window between `pipe`
 and `fcntl` noted at `:190-191`), and the files the runtime opens are
-`O_CLOEXEC` (RT-12, fixed). With channels on, each worker also holds exactly its own channel ends from
-descriptor 3, handed through `spawnWithFds` (RT-40); the supervisor closes
-its copies of a worker's ends once it has started, and its own end when the
-worker is reaped. Environment: all of it, because `posix_spawnp` is
+`O_CLOEXEC` (RT-12, fixed). With channels on, each worker also holds exactly
+its own channel ends from descriptor 3, handed through `spawnWithFds`
+(RT-40). The supervisor closes its copy of a worker's supervisor-channel end
+once that worker has started, and its own end when the worker is reaped; it
+holds its copies of the service pairs until the whole group has been started,
+then closes them all. Environment: all of it, because `posix_spawnp` is
 passed `environ` (`runtime/runtime-os.c:258`); a secret in the supervisor's
 environment is in every worker's. Signals: default dispositions, as §2.4
 says.

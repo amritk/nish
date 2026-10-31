@@ -34,21 +34,22 @@
  * but the channel ends below (`docs/security/runtime.md`, RT-17, RT-19).
  *
  * **Channels.** With `supervisorChannels` on, each worker is started with one
- * end of a fresh `unixSocketPair` (`channelKind`) and the supervisor keeps the
- * other; `preforkSupervise` hands each readable end to a callback. With
- * `serviceWorker` set, every other worker gets a pair to that worker. The ends
- * go through `spawnWithFds`, from descriptor 3 in a fixed order: the
- * supervisor channel, then a worker's service channel, or in the service
- * worker its end to each other worker by index, skipping its own. Where they
- * landed rides in `--nish-prefork-channels=` just before the worker flag, and
- * `preforkSupervisorChannel`, `preforkServiceChannel` and
+ * end of a fresh `unixSocketPair` (`channelKind`: stream by default, since a
+ * seqpacket pair needs Linux and the supervisor panics on one elsewhere) and
+ * the supervisor keeps the other; `preforkSupervise` hands each readable end to
+ * a callback. With `serviceWorker` set, every other worker gets a pair to that
+ * worker. The ends go through `spawnWithFds`, from descriptor 3 in a fixed
+ * order: the supervisor channel, then a worker's service channel, or in the
+ * service worker its end to each other worker by index, skipping its own. Where
+ * they landed rides in `--nish-prefork-channels=` just before the worker flag,
+ * and `preforkSupervisorChannel`, `preforkServiceChannel` and
  * `preforkServiceChannelOf` read it back. A pair cannot be handed to a worker
- * already running, so service channels make the workers one group: when any
- * of them exits, the supervisor sends the rest SIGTERM (SIGKILL after
- * `graceMs`), and once none is left, starts them all again on fresh pairs,
- * after the backoff of the one that exited first. No worker keeps an end whose
- * peer is gone longer than that. With `restart` off nothing is signalled; a
- * worker sees its peer's exit as a hang-up.
+ * already running, so service channels make the workers one group: when any of
+ * them exits, the supervisor sends the rest SIGTERM (SIGKILL after `graceMs`),
+ * and once none is left, starts them all again on fresh pairs, after the
+ * backoff of the one that exited first. No worker keeps an end whose peer is
+ * gone longer than that. With `restart` off nothing is signalled; a worker sees
+ * its peer's exit as a hang-up.
  *
  * **How many.** `NISH_WORKERS` when it is a positive whole number, else
  * `PreforkConfig.workers` when that is positive, else
@@ -147,7 +148,11 @@ export class PreforkConfig {
   supervisorChannels: boolean = false
   /** The worker every other worker gets a socketpair to; -1 for none. */
   serviceWorker: i32 = -1
-  /** What every channel is: `NET_UNIX_STREAM` (1), or `NET_UNIX_SEQPACKET` (2) on Linux. */
+  /**
+   * What every channel is: `NET_UNIX_STREAM` (1), or `NET_UNIX_SEQPACKET` (2),
+   * which keeps each write one message but only Linux has. Stream is the
+   * default because it works on Darwin too.
+   */
   channelKind: i32 = 1
 }
 
@@ -251,7 +256,7 @@ export const preforkServiceChannel = (args: string[]): i32 => preforkChannel(arg
 
 /** In the service worker, its end of the channel to worker `index`; -1 for itself or elsewhere. */
 export const preforkServiceChannelOf = (args: string[], index: i32): i32 =>
-  index < 0 ? -1 : preforkChannel(args, 2 + index)
+  index < 0 || index > 2147483645 ? -1 : preforkChannel(args, 2 + index)
 
 /** Milliseconds on the monotonic clock. */
 const preforkNowMs = (): i64 => monotonicNanos() / 1000000
@@ -631,6 +636,10 @@ const preforkInvalid = (config: PreforkConfig): string => {
   }
   if (config.channelKind !== NET_UNIX_STREAM && config.channelKind !== NET_UNIX_SEQPACKET) {
     return "channelKind not NET_UNIX_STREAM or NET_UNIX_SEQPACKET"
+  }
+  const channels = config.supervisorChannels || config.serviceWorker >= 0
+  if (channels && config.channelKind === NET_UNIX_SEQPACKET && platform !== "linux") {
+    return "channelKind NET_UNIX_SEQPACKET: seqpacket channels need Linux"
   }
   if (config.serviceWorker < -1) {
     return "serviceWorker below -1"

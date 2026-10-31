@@ -11,24 +11,32 @@
 //      and `preforkArgs` drops both;
 //   2. `sup`: two workers, each holding exactly descriptors 0 to 3, its
 //      supervisor channel at 3, whose peer is the supervisor, and which the
-//      supervisor's callback answers; a worker killed with SIGKILL comes back
+//      supervisor's callback answers, the answer one seqpacket message whose
+//      unread tail a short read drops; a worker killed with SIGKILL comes back
 //      with a working channel, and the supervisor holds as many descriptors
 //      after the restart as before it. That worker first hands a copy of its
 //      end to a holder process, so its death is no hang-up: the holder sees
 //      the supervisor's end close only because the supervisor reaped it;
 //   3. `svc`: three workers with supervisor channels and worker 0 the service
 //      worker. Workers 1 and 2 hold exactly 0 to 4, the service channel at 4,
-//      and the service worker answers each with its pid; it holds exactly 0 to
-//      5, its end to worker 1 at 4 and to worker 2 at 5. Killing the service
-//      worker restarts all three, each with a new pid and working channels to
-//      the new service worker; killing worker 2 restarts all three again; the
-//      supervisor's descriptor count never moves;
+//      and send their index over it; the service worker answers with its pid
+//      only when the end it heard on is `preforkServiceChannelOf` that index.
+//      It holds exactly 0 to 5, its end to worker 1 at 4 and to worker 2 at 5.
+//      Killing the service worker restarts all three, each with a new pid and
+//      working channels to the new service worker; killing worker 2 restarts
+//      all three again; the supervisor's descriptor count never moves;
 //   4. `solo`: a service worker (1) and no supervisor channels, through
 //      `preforkWith`: worker 0's service channel is 3, the service worker's end
-//      to it 3, and neither has a supervisor channel;
+//      to it 3, neither has a supervisor channel, and the channel is a stream:
+//      a short read leaves the answer's tail for the next;
 //   5. `off`: `restart` off and worker 0 the service worker: killing worker 1
-//      restarts nothing and signals nothing, and the service worker sees the
-//      hang-up on its end to worker 1 and is still running after it.
+//      restarts nothing and signals nothing: no worker reports again within a
+//      second, and the service worker sees the hang-up on its end to worker 1
+//      and is still running after it.
+//
+// Off Linux, steps 2 to 5 are skipped; a `sup` supervisor, seqpacket, must be
+// refused instead: a panic, so exit status 1 within ten seconds, not a loop of
+// failed starts.
 //
 // Every wait is bounded. A worker that finds the driver gone sends the
 // supervisor SIGTERM, as in `net_prefork`, so nothing outlives the driver.
@@ -130,20 +138,39 @@ const say = (fd: i32, text: string): void => {
   netWrite(fd, out, 0, ascii(text, out));
 };
 
-/** The next message on `fd` within `ms`; "" when none comes or it hung up. */
-const hear = (fd: i32, ms: i32): string => {
-  const buf: u8[] = new Array<u8>(64);
-  let n = netRead(fd, buf, 0, 64);
+/** Answer `text` on `fd` in one write, padded with "." to 16 bytes. */
+const answer = (fd: i32, text: string): void => {
+  say(fd, `${text}................`.substring(0, 16));
+};
+
+/**
+ * The answer on `fd` within `ms`, without its padding. It is read 12 bytes
+ * first: a seqpacket channel drops the 4 the read had no room for, a stream
+ * keeps them for the next read. "" when none comes, or the channel does not
+ * behave as `kind`.
+ */
+const hearAnswer = (fd: i32, ms: i32, kind: i32): string => {
+  const buf: u8[] = new Array<u8>(16);
+  let n = netRead(fd, buf, 0, 12);
   if (n === WOULD_BLOCK) {
     const loop = pollCreate();
     pollAdd(loop, fd, 1, 0);
     const ready: i32[] = new Array<i32>(2);
     if (pollWait(loop, ready, ms) > 0) {
-      n = netRead(fd, buf, 0, 64);
+      n = netRead(fd, buf, 0, 12);
     }
     netClose(loop);
   }
-  return n > 0 ? String.fromBytes(buf, 0, n) : "";
+  if (n !== 12) {
+    return "";
+  }
+  const rest = netRead(fd, buf, 12, 4);
+  if (rest !== (kind === NET_UNIX_SEQPACKET ? WOULD_BLOCK : 4)) {
+    return "";
+  }
+  const text = String.fromBytes(buf, 0, 12);
+  const dot = toI32(text.indexOf("."));
+  return dot < 0 ? text : text.substring(0, dot);
 };
 
 /** Send `text` to the driver's UDP `port`. */
@@ -185,6 +212,8 @@ const workerCount = (mode: string): i32 => (mode === "svc" ? 3 : 2);
 const serviceOf = (mode: string): i32 => (mode === "svc" || mode === "off" ? 0 : mode === "solo" ? 1 : -1);
 /** Whether `mode`'s workers have supervisor channels. */
 const toSupervisor = (mode: string): boolean => mode === "sup" || mode === "svc";
+/** What `mode`'s channels are: seqpacket with supervisor channels, else stream. */
+const kindOf = (mode: string): i32 => (toSupervisor(mode) ? NET_UNIX_SEQPACKET : NET_UNIX_STREAM);
 
 /** True when worker `index` of `mode` finds its ends where the docs put them. */
 const laidOut = (mode: string, index: i32, argv: string[]): boolean => {
@@ -233,14 +262,15 @@ const worker = (mode: string, index: i32, argv: string[]): number => {
     const who: i32[] = [0, 0, 0];
     ok = ok && peerCredentials(sc, who) === 0 && who[0] === supervisor;
     say(sc, "h");
-    ok = ok && hear(sc, 5000) === "a";
+    ok = ok && hearAnswer(sc, 5000, kindOf(mode)) === "a";
   }
   const service = serviceOf(mode);
   let servicePid: i32 = index === service ? selfPid() : 0;
   const vc = preforkServiceChannel(argv);
   if (vc >= 0) {
-    say(vc, "p");
-    servicePid = parseInt(hear(vc, 5000));
+    // The service worker answers its pid only on the end it has for `index`.
+    say(vc, `${index}`);
+    servicePid = parseInt(hearAnswer(vc, 5000, kindOf(mode)));
   }
   if (mode === "sup" && index === 1) {
     // A copy of the end outlives this worker, so its death is no hang-up.
@@ -264,8 +294,10 @@ const worker = (mode: string, index: i32, argv: string[]): number => {
     const n = pollWait(loop, ready, 50);
     for (let r: i32 = 0; r < n; r++) {
       const end = ready[2 * r];
-      if (netRead(end, buf, 0, 64) > 0) {
-        say(end, `${selfPid()}`);
+      const n = netRead(end, buf, 0, 64);
+      if (n > 0) {
+        const asker: i32 = parseInt(String.fromBytes(buf, 0, n));
+        answer(end, preforkServiceChannelOf(argv, asker) === end ? `${selfPid()}` : "0");
       } else {
         // The worker at the other end is gone.
         netClose(end);
@@ -303,7 +335,7 @@ const greet = (port: i32, _index: i32, fd: i32, _events: i32): void => {
   const buf: u8[] = new Array<u8>(64);
   while (netRead(fd, buf, 0, 64) > 0) {
     tell(port, `s ${fdCount()}`);
-    say(fd, "a");
+    answer(fd, "a");
   }
 };
 
@@ -316,7 +348,7 @@ const supervise = (mode: string, port: i32): number => {
   config.serviceWorker = serviceOf(mode);
   config.restart = mode !== "off";
   config.supervisorChannels = toSupervisor(mode);
-  config.channelKind = toSupervisor(mode) ? NET_UNIX_SEQPACKET : NET_UNIX_STREAM;
+  config.channelKind = kindOf(mode);
   const argv: string[] = [];
   for (const arg of process.argv) {
     argv.push(arg);
@@ -437,17 +469,17 @@ const steady = (heard: Heard, least: i32): boolean => {
 };
 
 /**
- * True when child `pid` exits 0 within `ms`. A WNOHANG loop; past the deadline
- * the child gets SIGKILL and a second at most to be reaped.
+ * Child `pid`'s exit status when it exits within `ms`, else -1. A WNOHANG loop;
+ * past the deadline the child gets SIGKILL and a second at most to be reaped.
  */
-const exitsZero = (pid: i32, ms: i32): boolean => {
+const exitWithin = (pid: i32, ms: i32): i32 => {
   if (pid <= 0) {
-    return false;
+    return -1;
   }
   for (let k: i32 = 0; k < ms / 10 + 100; k++) {
     const status = waitPid(pid, 1);
     if (status[0] !== 0) {
-      return status[0] === pid && status[1] === 0 && k < ms / 10;
+      return status[0] === pid && k < ms / 10 ? status[1] : -1;
     }
     if (k === ms / 10) {
       console.log(`child ${pid} still running after ${ms} ms`);
@@ -455,8 +487,11 @@ const exitsZero = (pid: i32, ms: i32): boolean => {
     }
     pause(10);
   }
-  return false;
+  return -1;
 };
+
+/** True when child `pid` exits 0 within `ms`. */
+const exitsZero = (pid: i32, ms: i32): boolean => exitWithin(pid, ms) === 0;
 
 /**
  * Run `mode`'s supervisor, wait for every worker, then kill each of `victims`
@@ -523,9 +558,13 @@ const runOff = (): void => {
       hungUp = got === "g 0";
     }
   }
-  // Nothing signals the service worker: it is still there a moment later.
-  pause(300);
-  console.log(hungUp && signal(heard.pids[0], 0));
+  // Nothing restarts worker 1, well past the 100 ms backoff a restart waits,
+  // and nothing signals the service worker: it is still there after.
+  let respawned = false;
+  for (let k: i32 = 0; k < 5 && hungUp; k++) {
+    respawned = message(fd, loop, 200).startsWith("w ") || respawned;
+  }
+  console.log(hungUp && !respawned && signal(heard.pids[0], 0));
   console.log(signal(sup, 15) && exitsZero(sup, 10000));
   netClose(loop);
   netClose(fd);
@@ -535,7 +574,9 @@ const runOff = (): void => {
 const accessors = (): void => {
   const worker: string[] = ["a", "--nish-prefork-channels=3,4", "--nish-prefork-worker=1"];
   console.log(preforkSupervisorChannel(worker) === 3 && preforkServiceChannel(worker) === 4);
-  console.log(preforkServiceChannelOf(worker, 0) === -1 && preforkServiceChannelOf(worker, -1) === -1);
+  // An index past 2147483645 would wrap `2 + index` to a negative field.
+  const outside = preforkServiceChannelOf(worker, -1) === -1 && preforkServiceChannelOf(worker, 2147483646) === -1;
+  console.log(preforkServiceChannelOf(worker, 0) === -1 && outside);
   const service: string[] = ["a", "x", "--nish-prefork-channels=-1,-1,-1,3,4", "--nish-prefork-worker=0"];
   console.log(preforkSupervisorChannel(service) === -1 && preforkServiceChannel(service) === -1);
   console.log(preforkServiceChannelOf(service, 0) === -1 && preforkServiceChannelOf(service, 1) === 3);
@@ -559,8 +600,10 @@ export const main = (): number => {
   }
   accessors();
   if (platform !== "linux") {
-    // Seqpacket channels and `/proc` are Linux's.
-    for (let i: i32 = 0; i < 15; i++) {
+    // Seqpacket channels and `/proc` are Linux's, so steps 2 to 5 are skipped:
+    // a seqpacket supervisor is refused, a panic and a quick exit.
+    console.log(exitWithin(spawn([selfPath(), "sup", "0", "0"]), 10000) === 1);
+    for (let i: i32 = 0; i < 14; i++) {
       console.log(true);
     }
     return 0;
