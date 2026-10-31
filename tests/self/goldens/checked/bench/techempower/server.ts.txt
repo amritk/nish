@@ -89,7 +89,7 @@ function TfbServer.answer(this: TfbServer, slot: i32, conn: Http1Connection): vo
   escaping: slot
   calls: TfbServer.resume TfbServer.tracks nish.Http1Parser.methodIs nish.Http1Parser.targetIs nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish_panic_index nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false passedTo=TfbServer.tracks#0 TfbServer.resume#0
-  pointer conn: size=176 writesThrough=true captured=false passedTo=TfbServer.resume#2
+  pointer conn: size=184 writesThrough=true captured=false passedTo=TfbServer.resume#2
   stackSites=0 stackLocals=0
   local +1:11 p: Http1Parser (const)
   local +2:11 get: boolean (const)
@@ -120,7 +120,7 @@ function TfbServer.resume(this: TfbServer, slot: i32, conn: Http1Connection): vo
   escaping: slot
   calls: TfbServer.body TfbServer.tracks nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic_index nish_panic_overflow
   pointer this: size=120 writesThrough=false captured=false passedTo=TfbServer.tracks#0 TfbServer.body#0
-  pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer conn: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
   callee -23:10 TfbServer.tracks -> @TfbServer.tracks
   local -20:11 owes: i32 (const)
