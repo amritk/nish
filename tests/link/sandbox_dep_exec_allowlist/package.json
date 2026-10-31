@@ -1,0 +1,13 @@
+{
+  "name": "sandbox-dep-exec-allowlist",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_runner": [
+          "process.spawn=true"
+        ]
+      }
+    }
+  }
+}

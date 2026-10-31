@@ -286,9 +286,9 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (3,606 bytes of `.text*` at `-Oz` against a budget of
-3,606, plus 10,279 bytes of `.rodata` that is almost all Ryu's two
-power-of-five tables) and `runtime/runtime-os.c` (the system-call half: 1,530
+`runtime/runtime.c` (3,369 bytes of `.text*` at `-Oz` against a budget of
+3,698, plus 10,570 bytes of `.rodata` that is almost all Zmij's power-of-ten
+table) and `runtime/runtime-os.c` (the system-call half: 1,530
 bytes against 1,536) provide, in the order of the `RuntimeTable` in `src/runtime.ts`, the symbols
 below, with `runtime-parallel.c`, `runtime-cross.c`, `runtime-host.c`, `runtime-net.c`,
 `runtime-simd.c`, `runtime-aes.c`, `runtime-sha256.c`, `runtime-term.c`, `runtime-bytes.c` and `runtime-checksum.c` beside them under budgets of their own;

@@ -83,6 +83,8 @@ import { EmittedProgram, emitTypeScript } from "./emit-ts"
 import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
+import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
 import {
   anyCallsSqlite,
   runBinaryName,
@@ -564,6 +566,10 @@ export const main = (): number => {
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true
+  // `nish run --watch` (`src/watch.ts`), and the state file of the rebuild a
+  // watch starts, which builds into the cache and writes it instead of running.
+  let watch = false
+  let watchStateFile = ""
   let arg = runMode ? 2 : 1
   while (arg < process.argv.length) {
     const value = process.argv[arg]
@@ -833,6 +839,18 @@ export const main = (): number => {
       }
       opts.sandbox = mode
       irFlag = irFlag.length === 0 ? value : irFlag
+    } else if (value === "--watch") {
+      if (!runMode) {
+        console.error(
+          `compile: --watch is a flag of \`${CLI} run\`, which rebuilds and restarts the program when a source changes; ${helpHint()}`
+        )
+        return 2
+      }
+      watch = true
+    } else if (runMode && value.startsWith("--watch-build=")) {
+      // Not for people: the rebuild a watch starts, which builds what this
+      // line names into the run cache and writes `watchState` to the file.
+      watchStateFile = value.substring("--watch-build=".length)
     } else if (value.startsWith("-")) {
       console.error(`compile: unknown flag \`${value}\`; ${helpHint()}`)
       return 2
@@ -1098,6 +1116,9 @@ export const main = (): number => {
     return 3
   }
   opts.packageRoot = pkg.library
+  if (watch) {
+    return runWatch(pkg, roots[0], runArgsFrom, json)
+  }
 
   // The exit-70 path on demand (`src/ice.ts`), at the point stage0 raised
   // its own: the command line is valid and nothing is compiled yet. It is the
@@ -1130,7 +1151,13 @@ export const main = (): number => {
   // The tree is printed from what parsed and validated, so pass 1's refusals
   // do not stop the load — stage0 records them and reaches its dump first.
   compilation.dumpOnly = emitAst
-  if (!loadRoots(compilation, roots, false)) {
+  const loaded = loadRoots(compilation, roots, false)
+  // A watch needs the modules even of a build that fails, so that fixing an
+  // imported one rebuilds; the build that succeeds writes its binary over this.
+  if (runMode && watchStateFile.length > 0) {
+    writeFileSync(watchStateFile, watchState(compilation, "", isCheckout(pkg)))
+  }
+  if (!loaded) {
     reportLoadFailure(compilation, json)
     return 1
   }
@@ -1305,6 +1332,22 @@ export const main = (): number => {
     return 1
   }
   const emitted = compilation.emit()
+  if (runMode && watchStateFile.length > 0) {
+    const cached = cachedBinary(
+      emitted,
+      pkg,
+      basenameWithout(roots[0], ".ts"),
+      profile,
+      cpu,
+      opts.debugInfo,
+      opts.threads,
+      json
+    )
+    if (cached.status === 0) {
+      writeFileSync(watchStateFile, watchState(compilation, cached.binary, isCheckout(pkg)))
+    }
+    return cached.status
+  }
   if (runMode) {
     return runProgram(
       emitted,
@@ -1351,6 +1394,7 @@ export const main = (): number => {
   }
   return linkProgram(
     outputs,
+    [],
     pkg,
     link,
     profile,
@@ -1724,32 +1768,75 @@ const runProgram = (
   json: boolean,
   argsFrom: i32
 ): number => {
+  const cached = cachedBinary(emitted, pkg, name, profile, cpu, debugInfo, threads, json)
+  if (cached.status !== 0) {
+    return cached.status
+  }
+  const argv: string[] = []
+  argv.push(cached.binary)
+  let i = argsFrom
+  while (i < process.argv.length) {
+    argv.push(process.argv[i])
+    i = i + 1
+  }
+  const status = spawnSync(argv)
+  if (status < 0) {
+    reportToolchainFailure(
+      `run: could not start ${cached.binary}; remove ${cached.entry} to build it again`,
+      json
+    )
+    return 3
+  }
+  return status
+}
+
+/** A program in the run cache: its binary and entry, or the status a miss failed with. */
+class CachedBinary {
+  binary: string = ""
+  entry: string = ""
+  status: i32 = 0
+}
+
+/** The binary `emitted` links to, from the run cache, linked into it on a miss. */
+const cachedBinary = (
+  emitted: EmittedModule[],
+  pkg: PackageSearch,
+  name: string,
+  profile: string,
+  cpu: string,
+  debugInfo: boolean,
+  threads: boolean,
+  json: boolean
+): CachedBinary => {
+  const cached = new CachedBinary()
   const cacheRoot = runCacheRoot()
   if (cacheRoot.length === 0) {
     reportToolchainFailure(
       "run: no directory to keep the binary in: set HOME or XDG_CACHE_HOME to an absolute path",
       json
     )
-    return 3
+    cached.status = 3
+    return cached
   }
   if (refuseCacheRoot(cacheRoot, json)) {
-    return 3
+    cached.status = 3
+    return cached
   }
   const file = runBinaryName(name)
   const sqlite = anyCallsSqlite(emitted)
   // Hashed once, for this key and for the SQLite entry's below it.
   const sqliteLines = sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
   const key = runCacheKey(emitted, file, pkg.root, profile, cpu, debugInfo, threads, cCompiler(), sqliteLines)
-  const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
-  const binary = `${cacheEntry}/${file}`
-  const keyFile = `${cacheEntry}/key`
+  cached.entry = `${cacheRoot}/${sha256Hex(key)}`
+  cached.binary = `${cached.entry}/${file}`
+  const keyFile = `${cached.entry}/key`
   const stored = readFileSyncOrNull(keyFile)
   if (stored === null || stored !== key) {
-    const status = buildIntoCache(
+    cached.status = buildIntoCache(
       emitted,
       pkg,
       cacheRoot,
-      cacheEntry,
+      cached.entry,
       keyFile,
       file,
       profile,
@@ -1760,22 +1847,107 @@ const runProgram = (
       sqliteLines,
       json
     )
-    if (status !== 0) {
-      return status
+    if (cached.status !== 0) {
+      return cached
     }
     // Last, so that a key on disk always stands beside a whole binary.
     writeFileSync(keyFile, key)
   }
-  const argv: string[] = []
-  argv.push(binary)
-  let i = argsFrom
-  while (i < process.argv.length) {
+  return cached
+}
+
+/**
+ * Whether the compiler runs from a checkout, where `std/` is source being
+ * worked on, rather than from an install: a checkout has the compiler's own
+ * sources beside its library.
+ */
+const isCheckout = (pkg: PackageSearch): boolean => realpathSync(`${pkg.root}/src/compile.ts`) !== null
+
+/**
+ * `nish run --watch <file.ts> [args ...]`: builds the supervisor (`src/watch.ts`)
+ * into the run cache and runs it, handing it this line as the build command
+ * each rebuild runs — the same flags and file, `--watch` swapped for
+ * `--watch-build=<state>` — and the program's arguments. The supervisor's
+ * status is this one's.
+ *
+ * The supervisor is told this process's pid, and stops when it is gone: a
+ * Ctrl-C reaches both, but a hangup or a kill of this one alone has to stop
+ * the program it started too.
+ */
+const runWatch = (pkg: PackageSearch, entry: string, argsFrom: i32, json: boolean): number => {
+  const cacheRoot = runCacheRoot()
+  if (cacheRoot.length === 0) {
+    reportToolchainFailure(
+      "run: no directory to keep the binary in: set HOME or XDG_CACHE_HOME to an absolute path",
+      json
+    )
+    return 3
+  }
+  if (refuseCacheRoot(cacheRoot, json) || !makePrivateRoot(cacheRoot, json)) {
+    return 3
+  }
+  const self = process.argv[0].indexOf("/") >= 0 ? process.argv[0] : programOnPath(process.argv[0])
+  if (self.length === 0) {
+    reportToolchainFailure(`run: cannot find the compiler (${process.argv[0]}) to rebuild with`, json)
+    return 3
+  }
+  const dir = `${cacheRoot}/watch-${sha256Hex(`${VERSION}\n${WATCH_SUPERVISOR_SOURCE}`)}`
+  const source = `${dir}/watch.ts`
+  if (!makeDirectory(dir)) {
+    reportToolchainFailure(`run: cannot create ${dir}`, json)
+    return 3
+  }
+  const written = readFileSyncOrNull(source)
+  if (written === null || written !== WATCH_SUPERVISOR_SOURCE) {
+    writeFileSync(source, WATCH_SUPERVISOR_SOURCE)
+  }
+  const opts = new Options()
+  opts.packageRoot = pkg.library
+  opts.link = `${CLI} run`
+  opts.profile = "debug"
+  const compilation = new Compilation(opts)
+  if (!loadRoots(compilation, [source], false) || !compilation.check()) {
+    report(compilation, json)
+    return internalErrorFor("the watch supervisor did not compile", json)
+  }
+  const supervisor = cachedBinary(compilation.emit(), pkg, "nish-watch", "debug", "", false, false, json)
+  if (supervisor.status !== 0) {
+    return supervisor.status
+  }
+  const driver = `${dir}/driver-${hexOfI64(monotonicNanos(), 16)}`
+  spawnSyncTo(["sh", "-c", "echo $PPID"], driver, "/dev/null")
+  const pidText = readFileSyncOrNull(driver)
+  const pid = pidText === null ? "" : splitByte(pidText, 10)[0]
+  if (pid.length === 0 || parseInt(pid) <= 1) {
+    reportToolchainFailure(
+      "run: cannot find this process's id to watch it with (sh -c 'echo $PPID' failed)",
+      json
+    )
+    return 3
+  }
+  const state = `${driver}.state`
+  const build: string[] = [self, "run"]
+  for (let i = 2; i < argsFrom - 1; i++) {
+    if (process.argv[i] !== "--watch") {
+      build.push(process.argv[i])
+    }
+  }
+  build.push(`--watch-build=${state}`)
+  build.push(entry)
+  const argv: string[] = [supervisor.binary, pid, state, entry, `${build.length}`]
+  for (const word of build) {
+    argv.push(word)
+  }
+  for (let i = argsFrom; i < process.argv.length; i++) {
     argv.push(process.argv[i])
-    i = i + 1
   }
   const status = spawnSync(argv)
+  spawnSync(["rm", "-f", "--", driver, state])
   if (status < 0) {
-    reportToolchainFailure(`run: could not start ${binary}; remove ${cacheEntry} to build it again`, json)
+    reportToolchainFailure(
+      `run: could not start ${supervisor.binary}; remove ${supervisor.entry} to build it again`,
+      json
+    )
     return 3
   }
   return status
@@ -1806,6 +1978,26 @@ const refuseCacheRoot = (cacheRoot: string, json: boolean): boolean => {
     json
   )
   return true
+}
+
+/**
+ * Makes the cache root, if it is not there, private to this user, and answers
+ * whether it is: `buildIntoCache`'s first step, and a watch's before it writes
+ * its supervisor's source there.
+ */
+const makePrivateRoot = (cacheRoot: string, json: boolean): boolean => {
+  if (!makeDirectory(cacheRoot)) {
+    reportToolchainFailure(`run: cannot create ${cacheRoot}`, json)
+    return false
+  }
+  const privateRoot: string[] = ["chmod", "700", cacheRoot]
+  if (spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
+    reportToolchainFailure(`run: cannot make ${cacheRoot} private to this user (chmod 700 failed)`, json)
+    return false
+  }
+  // Again, now that the root is there: one made by someone else after the
+  // caller looked is refused here, and `chmod` succeeds for root on any.
+  return !refuseCacheRoot(cacheRoot, json)
 }
 
 /**
@@ -1853,18 +2045,7 @@ const buildIntoCache = (
     reportToolchainFailure(problem, json)
     return 3
   }
-  if (!makeDirectory(cacheRoot)) {
-    reportToolchainFailure(`run: cannot create ${cacheRoot}`, json)
-    return 3
-  }
-  const privateRoot: string[] = ["chmod", "700", cacheRoot]
-  if (spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
-    reportToolchainFailure(`run: cannot make ${cacheRoot} private to this user (chmod 700 failed)`, json)
-    return 3
-  }
-  // Again, now that the root is there: one made by someone else after the
-  // caller looked is refused here, and `chmod` succeeds for root on any.
-  if (refuseCacheRoot(cacheRoot, json)) {
+  if (!makePrivateRoot(cacheRoot, json)) {
     return 3
   }
   const work = `${cacheEntry}/tmp-${hexOfI64(monotonicNanos(), 16)}`
@@ -1873,14 +2054,17 @@ const buildIntoCache = (
     return 1
   }
   const outputs: string[] = []
+  const irs: string[] = []
   for (const module of emitted) {
     const file = `${work}/${module.stem}.ll`
     writeFileSync(file, module.ir)
     outputs.push(file)
+    irs.push(module.ir)
   }
   const built = `${work}/${name}`
   let status = linkProgram(
     outputs,
+    irs,
     pkg,
     built,
     profile,
@@ -1918,9 +2102,13 @@ const buildIntoCache = (
  * caller as it happens rather than after the link has finished. `quiet` drops
  * that line for `run`, whose stderr belongs to the program it is about to
  * start.
+ *
+ * `irs` is the IR of each of `outputs`, in their order, when the caller wants
+ * the module cache (`nish run`), and empty otherwise; see `stageModules`.
  */
 const linkProgram = (
   outputs: string[],
+  irs: string[],
   pkg: PackageSearch,
   link: string,
   profile: string,
@@ -1978,6 +2166,16 @@ const linkProgram = (
   } else {
     argv.push(`${root}/runtime/runtime.c`)
   }
+  // The module cache takes build.sh's `--module-objects`, which only a link
+  // against the cached runtime has, and only the debug recipe uses it.
+  let staged: StagedModules | null = null
+  if (profile === "debug" && runtime.length > 0 && irs.length > 0 && irs.length === outputs.length) {
+    staged = stageModules(outputs, irs, cached.key, link)
+  }
+  if (staged !== null) {
+    argv.push("--module-objects")
+    argv.push(staged.dir)
+  }
   if (cached.sqlite.length > 0) {
     argv.push("--sqlite-from")
     argv.push(cached.sqlite)
@@ -1990,6 +2188,9 @@ const linkProgram = (
     const why = status < 0 ? "could not run bash" : `exit ${status}`
     reportToolchainFailure(`--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}`, json)
     return 3
+  }
+  if (staged !== null) {
+    keepModules(staged)
   }
   if (quiet) {
     return 0
@@ -2042,9 +2243,12 @@ const pushRecipeFlags = (
 class CachedObjects {
   runtime: string
   sqlite: string
-  constructor(runtime: string, sqlite: string) {
+  /** The runtime entry's key, which the module cache keys its recipe on; empty with no entry. */
+  key: string
+  constructor(runtime: string, sqlite: string, key: string) {
     this.runtime = runtime
     this.sqlite = sqlite
+    this.key = key
   }
 }
 
@@ -2099,7 +2303,7 @@ const cachedRuntime = (
   sqliteLines: string,
   json: boolean
 ): CachedObjects | null => {
-  const none = new CachedObjects("", "")
+  const none = new CachedObjects("", "", "")
   const cacheRoot = runtimeCacheRoot()
   if (!(profile === "debug" || profile === "speed" || profile === "size") || cacheRoot.length === 0) {
     return none
@@ -2148,11 +2352,11 @@ const cachedRuntime = (
     return null
   }
   if (!sqlite || runtime.length === 0) {
-    return new CachedObjects(runtime, "")
+    return new CachedObjects(runtime, "", key)
   }
   const sqliteDir = realpathSync(`${root}/runtime/sqlite`)
   if (sqliteDir === null) {
-    return new CachedObjects(runtime, "")
+    return new CachedObjects(runtime, "", key)
   }
   const sqliteKey = sqliteCacheKey(
     root,
@@ -2180,7 +2384,156 @@ const cachedRuntime = (
     threads,
     json
   )
-  return objects === null ? null : new CachedObjects(runtime, objects)
+  return objects === null ? null : new CachedObjects(runtime, objects, key)
+}
+
+/**
+ * What `stageModules` left for `keepModules`: the directory build.sh reads
+ * and writes each module's object in, and for every module it found no entry
+ * for, the object build.sh will compile there, the entry it goes to, and the
+ * key that entry gets.
+ */
+class StagedModules {
+  dir: string
+  objects: string[]
+  entries: string[]
+  keys: string[]
+  constructor(dir: string) {
+    this.dir = dir
+    this.objects = []
+    this.entries = []
+    this.keys = []
+  }
+}
+
+/**
+ * One module of `stageModules`: its cached object joins `copy` when its entry
+ * holds this key, and otherwise its object, entry and key join `staged`, to be
+ * kept once the link succeeds.
+ */
+const stageModule = (
+  staged: StagedModules,
+  copy: string[],
+  cacheRoot: string,
+  recipe: string,
+  output: string,
+  ir: string
+): void => {
+  const stem = basenameWithout(output, ".ll")
+  const key = moduleCacheKey(recipe, stem, ir)
+  const entry = `${cacheRoot}/${sha256Hex(key)}`
+  const stored = readFileSyncOrNull(`${entry}/key`)
+  if (stored !== null && stored === key) {
+    copy.push(`${entry}/${stem}.o`)
+  } else {
+    staged.objects.push(`${staged.dir}/${stem}.o`)
+    staged.entries.push(entry)
+    staged.keys.push(key)
+  }
+}
+/**
+ * The module cache's lookup (src/build-cache.ts): each of `outputs` whose IR,
+ * in `irs`, has an entry under this recipe (`recipe`, the runtime entry's key)
+ * gets that entry's object copied beside it as `<stem>.o`, which
+ * `scripts/build.sh --module-objects` links as it stands; every other module
+ * is compiled there by the link, and `keepModules` moves its object into a
+ * new entry once the link succeeded. The outputs are one scratch directory's
+ * `<stem>.ll` files, so the stems differ.
+ *
+ * The root is made, `chmod 700`'d and its owner and mode checked first, as the
+ * runtime cache's is on every link (docs/security/cli.md, CLI-12), because a
+ * hit links whatever object stands beside a matching key. Null, and the link
+ * compiles every module as it did without the cache, when the root is not
+ * there and cannot be made private to this user, when the copies could not be
+ * run, or when `link`, the binary's path, could stand where an object does.
+ */
+const stageModules = (
+  outputs: string[],
+  irs: string[],
+  recipe: string,
+  link: string
+): StagedModules | null => {
+  const cacheRoot = moduleCacheRoot()
+  if (recipe.length === 0 || cacheRoot.length === 0 || !makeDirectory(cacheRoot)) {
+    return null
+  }
+  // A binary named `<stem>.o` in the scratch directory would be linked over a
+  // module's object and then kept as it.
+  const dir = dirname(outputs[0])
+  if (link.endsWith(".o") && dirname(link) === dir) {
+    return null
+  }
+  const privateRoot: string[] = ["chmod", "700", cacheRoot]
+  if (spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
+    return null
+  }
+  if (distrustOf(cacheRoot, false, true).length > 0) {
+    return null
+  }
+  const staged = new StagedModules(dir)
+  // One `sh` copies every hit. An object that will not copy, as when a cache
+  // cleaner took it and left its key, has its key removed and whatever part of
+  // it did copy deleted: this link compiles the module, which finds no object
+  // beside its `.ll`, and the next one keeps it again, rather than a failed
+  // copy turning the cache off for good or a truncated copy being linked.
+  const copy: string[] = [
+    "sh",
+    "-c",
+    'd=$1; shift; for f; do cp -f -- "$f" "$d/" 2>/dev/null || rm -f -- "$d/${f##*/}" "${f%/*}/key"; done',
+    "sh",
+    dir,
+  ]
+  let i = 0
+  while (i < outputs.length && i < irs.length) {
+    stageModule(staged, copy, cacheRoot, recipe, outputs[i], irs[i])
+    i = i + 1
+  }
+  if (copy.length > 5 && spawnSyncTo(copy, "/dev/null", "/dev/null") !== 0) {
+    return null
+  }
+  return staged
+}
+
+/**
+ * After a link that succeeded, each object build.sh compiled for a module
+ * `stageModules` found no entry for is moved into that entry: its key emptied
+ * first, the object moved in by one `mv` (a `rename` inside the cache's
+ * filesystem when the scratch directory shares it), the key written last, so a
+ * key on disk always stands beside a whole object of its own (CLI-5's rule).
+ * The moves are one `sh` running one `mv` each, not one spawn per module, and
+ * when any fails no key is written: those entries are then misses, compiled
+ * again by the next link. A key that cannot be written ends the process, as
+ * the run cache's does, and so never leaves an old key beside a new object.
+ */
+const keepModules = (staged: StagedModules): void => {
+  if (staged.objects.length === 0) {
+    return
+  }
+  const move: string[] = [
+    "sh",
+    "-c",
+    'while [ $# -gt 0 ]; do mv -f -- "$1" "$2" || exit 1; shift 2; done',
+    "sh",
+  ]
+  let i = 0
+  while (i < staged.objects.length) {
+    const entry = staged.entries[i]
+    if (!makeDirectory(entry)) {
+      return
+    }
+    writeFileSync(`${entry}/key`, "")
+    move.push(staged.objects[i])
+    move.push(`${entry}/`)
+    i = i + 1
+  }
+  if (spawnSyncTo(move, "/dev/null", "/dev/null") !== 0) {
+    return
+  }
+  i = 0
+  while (i < staged.entries.length) {
+    writeFileSync(`${staged.entries[i]}/key`, staged.keys[i])
+    i = i + 1
+  }
 }
 
 /**

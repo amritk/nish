@@ -224,7 +224,7 @@ export class RuntimeTable {
     this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE))
     this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE))
     // WP37: the sandbox the `--sandbox` wrapper installs (runtime/runtime-sandbox.c).
-    this.add(plain("nish_sandbox", "declare void @nish_sandbox(i32, i32, i8*, i8*)", EFFECT_WRITE))
+    this.add(plain("nish_sandbox", "declare void @nish_sandbox(i32, i32, i8*, i8*, i8*)", EFFECT_WRITE))
     this.add(plain("nish_sandbox_check", "declare void @nish_sandbox_check()", EFFECT_WRITE))
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
     // `EFFECT_WRITE` so nothing is reordered across it, but it only reads the bump position.
@@ -337,6 +337,19 @@ export class RuntimeTable {
         `declare i64 @nish_regex_scan(${STR_NOCAP}, ${AES_ARRAY}, i64 noundef, i64 noundef, i64 noundef, i64 noundef)`,
         attrs3("nounwind", "willreturn", "memory(read, inaccessiblemem: readwrite)"),
         EFFECT_READ
+      )
+    )
+    // `nish/json`'s f64 writer, in runtime.c (`src/kernels.ts`): the digits
+    // go into the array's data at the cursor and nowhere else, and nothing of
+    // the pointer is kept. The data is null while the array is empty, so it is
+    // not `nonnull`. No `memory(...)`: the formatter's tables are static, and
+    // the call's one effect, the store, must never make it look droppable.
+    this.add(
+      new RuntimeFunction(
+        "nish_json_put_f64",
+        "declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef)",
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
       )
     )
     // #943: `Math.floor`, `ceil` and `trunc` on x86-64, beside them in

@@ -1,0 +1,16 @@
+{
+  "name": "caps-dep-manifest-arg-refused",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_any": [
+          "net=example.com",
+          "process.spawn=nish-no-such-program",
+          "fs.read=./missing",
+          "unsafe=yes"
+        ]
+      }
+    }
+  }
+}

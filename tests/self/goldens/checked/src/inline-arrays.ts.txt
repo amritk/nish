@@ -77,7 +77,7 @@ function Candidate.constructor(this: Candidate, info: StructInfo, field: FieldIn
   escaping: field info
   pointer this: size=64 writesThrough=true captured=false
   pointer info: size=168 writesThrough=true captured=true
-  pointer field: size=64 writesThrough=true captured=true
+  pointer field: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FreshReturn.constructor(this: FreshReturn, param: i32, length: i32): void -> @FreshReturn.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -113,7 +113,7 @@ function InlineWalk.add(this: InlineWalk, info: StructInfo, field: FieldInfo): v
   calls: Candidate.constructor StringMap.set nish_alloc_struct nish_array_grow nish_str_concat
   pointer this: size=80 writesThrough=false captured=false
   pointer info: size=168 writesThrough=true captured=true passedTo=Candidate.constructor#1
-  pointer field: size=64 writesThrough=true captured=true passedTo=Candidate.constructor#2
+  pointer field: size=72 writesThrough=true captured=true passedTo=Candidate.constructor#2
   stackSites=0 stackLocals=0
   callee -2:5 StringMap.set -> @StringMap.set
   callee -1:5 StringMap.set -> @StringMap.set
@@ -139,7 +139,7 @@ function mayInline(table: TypeTable, program: CheckedProgram, mode: BuildMode, i
   pointer program: size=656 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer mode: size=3 writesThrough=false captured=false passedTo=hostVisible#0
   pointer info: size=168 writesThrough=false captured=false
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 hostVisible -> @hostVisible
   callee +0:51 TypeTable.isArray -> @TypeTable.isArray

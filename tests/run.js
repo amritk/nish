@@ -3976,6 +3976,18 @@ if (!only || "diagnostics".includes(only)) {
     codesGen.stdout + codesGen.stderr
   )
 
+  // `tests/cases/union_scale.ts` is 7,891 generated lines, and the generator is
+  // its only author: `--check` fails when the file differs from what it writes.
+  const unionScaleGen = spawnSync("node", [path.join(root, "scripts", "gen-union-scale.mjs"), "--check"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "union_scale: scripts/gen-union-scale.mjs --check matches tests/cases/union_scale.ts",
+    unionScaleGen.status === 0,
+    unionScaleGen.stdout + unionScaleGen.stderr
+  )
+
   // ---- the security records' scope ---------------------------------------
   // Every file of the attacker-facing surface is in a record's scope or on the
   // index's "Not yet audited" list (CLAUDE.md, "Definition of done").
@@ -11751,7 +11763,7 @@ if (!only || "sandbox".includes(only)) {
         `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
       ) &&
       !scopedText.includes("@.sandbox.write") &&
-      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null)`) &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null)`) &&
       (as === null || as.status === 0),
     sc.status === 0
       ? `${scopedText
@@ -11785,6 +11797,190 @@ if (!only || "sandbox".includes(only)) {
       added.every((l) => l === "" || /sandbox|llvm\.used|^entry:$|^ {2}ret void$|^\}$/.test(l)),
     ph.status === 0 ? added.join("\n") : shown(ph)
   )
+}
+
+// WP40 §2a at run time: a dependency's grant with arguments, held by the WP37
+// sandbox where the compiler could not read the value. Each fixture's
+// dependency reaches what the program's first argument names, so the build
+// accepts it (tests/link/caps_dep_arg_*_too_narrow is the same reach written
+// as a literal, refused at build), and `--sandbox` stops the reach the grant
+// does not cover: Landlock scopes `fs.read=<dir>` to the directory and takes
+// EXECUTE everywhere but the programs `process.spawn=<program>` names. The
+// same binaries built without `--sandbox` are the control.
+if (!only || "sandbox dependency grants".includes(only)) {
+  const dir = path.join(buildDir, "sandbox-grants")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("sandbox dependency grants: --sandbox confines through Linux system calls, and this host is not Linux with clang")
+  } else {
+    const abiProbe = path.join(dir, "abi")
+    fs.writeFileSync(
+      `${abiProbe}.c`,
+      "#include <stdio.h>\n#include <unistd.h>\n#include <sys/syscall.h>\n" +
+        'int main(void) { long r = syscall(444, NULL, 0, 1); printf("%ld\\n", r < 0 ? 0 : r); return 0; }\n'
+    )
+    const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root })
+    if (a.status !== 0) check("sandbox dependency grants: the Landlock ABI probe compiles", false, shown(a))
+    const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
+    /** Builds tests/link/<fixture> with `flags` into its own directory: the binary, or null and a FAIL. */
+    const build = (fixture, flags) => {
+      const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
+      const exe = path.join(out, "app")
+      const r = spawnSync(
+        NISH,
+        [path.join(linkDir, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      if (r.status !== 0) check(`sandbox dependency grants: ${fixture} ${flags.join(" ")} builds`, false, shown(r))
+      return r.status === 0 ? exe : null
+    }
+    const run = (exe, args) =>
+      exe === null ? null : spawnSync(exe, args, { cwd: dir, encoding: "utf8", timeout: 60000 })
+    const said = (r) => (r === null ? "not built" : shown(r))
+    const ir = (fixture) => {
+      const f = path.join(dir, `${fixture}-sandbox`, "main.ll")
+      return fs.existsSync(f) ? fs.readFileSync(f, "utf8") : ""
+    }
+    if (abi < 1) {
+      skip(`sandbox dependency grants: this kernel has no Landlock (ABI ${abi}); the checks did not run`)
+    } else {
+      const reader = "sandbox_dep_fs_scoped"
+      const scoped = build(reader, ["--sandbox"])
+      const plain = build(reader, [])
+      const inside = path.join(linkDir, reader, "data", "in.txt")
+      const rIn = run(scoped, [inside])
+      const rOut = run(scoped, ["/etc/passwd"])
+      const rPlain = run(plain, ["/etc/passwd"])
+      check(
+        "sandbox dependency grants: a dependency granted fs.read=<dir> reads inside it and not /etc/passwd",
+        rIn !== null &&
+          rIn.status === 0 &&
+          rIn.stdout === "7\n" &&
+          rOut !== null &&
+          rOut.status !== 0 &&
+          rOut.stderr.includes("cannot read /etc/passwd") &&
+          rPlain !== null &&
+          rPlain.status === 0,
+        `${said(rIn)}\n--- outside\n${said(rOut)}\n--- without --sandbox\n${said(rPlain)}`
+      )
+      check(
+        "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.read scope",
+        ir(reader).includes(`c"${fs.realpathSync(path.join(linkDir, reader, "data"))}\\00\\00"`) &&
+          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null\)/.test(
+            ir(reader)
+          ),
+        ir(reader)
+      )
+      // A write scope under strict `--sandbox` needs TRUNCATE, which Landlock
+      // cannot grant beneath one directory below ABI 3: the program exits 126.
+      if (abi < 3) {
+        skip(`sandbox dependency grants: this kernel's Landlock is ABI ${abi} (<3); the fs.write=<dir> checks did not run`)
+      } else {
+        const writer = "sandbox_dep_fs_write_scoped"
+        const wScoped = build(writer, ["--sandbox"])
+        const wPlain = build(writer, [])
+        const wInside = path.join(linkDir, writer, "out", "mark.txt")
+        const wOutside = path.join(dir, "outside-mark.txt")
+        const wOutsidePlain = path.join(dir, "outside-mark-plain.txt")
+        const rwIn = run(wScoped, [wInside])
+        const wroteIn = fs.existsSync(wInside) && fs.readFileSync(wInside, "utf8") === "x"
+        fs.rmSync(wInside, { force: true })
+        const rwOut = run(wScoped, [wOutside])
+        const rwPlain = run(wPlain, [wOutsidePlain])
+        check(
+          "sandbox dependency grants: a dependency granted fs.write=<dir> writes inside it and not beside it",
+          rwIn !== null &&
+            rwIn.status === 0 &&
+            rwIn.stdout === "1\n" &&
+            wroteIn &&
+            rwOut !== null &&
+            rwOut.status !== 0 &&
+            rwOut.stderr.includes(`cannot write ${wOutside}`) &&
+            !fs.existsSync(wOutside) &&
+            rwPlain !== null &&
+            rwPlain.status === 0 &&
+            fs.existsSync(wOutsidePlain),
+          `${said(rwIn)}\n--- outside\n${said(rwOut)}\n--- without --sandbox\n${said(rwPlain)}`
+        )
+        check(
+          "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
+          ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
+            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
+              ir(writer)
+            ),
+          ir(writer)
+        )
+      }
+      const runner = "sandbox_dep_exec_allowlist"
+      const allow = build(runner, ["--sandbox"])
+      const open = build(runner, [])
+      const rTrue = run(allow, ["true"])
+      const rEcho = run(allow, ["echo"])
+      const rEchoPlain = run(open, ["echo"])
+      // The allowlist holds the real file Landlock is given, which is not
+      // always named `true`: some coreutils install it behind a symbolic link.
+      const realOnPath = (name) => {
+        const found = (process.env.PATH ?? "")
+          .split(path.delimiter)
+          .map((dir) => path.join(dir === "" ? "." : dir, name))
+          .find((file) => {
+            try {
+              fs.accessSync(file, fs.constants.X_OK)
+              return fs.statSync(file).isFile()
+            } catch {
+              return false
+            }
+          })
+        return found === undefined ? null : fs.realpathSync(found)
+      }
+      const trueReal = realOnPath("true")
+      check(
+        "sandbox dependency grants: a dependency granted process.spawn=true runs true and cannot exec echo",
+        rTrue !== null &&
+          rTrue.status === 0 &&
+          rTrue.stdout === "0\n" &&
+          rEcho !== null &&
+          rEcho.status === 0 &&
+          rEcho.stdout === "-1\n" &&
+          rEchoPlain !== null &&
+          rEchoPlain.stdout === "\n0\n",
+        `${said(rTrue)}\n--- echo\n${said(rEcho)}\n--- without --sandbox\n${said(rEchoPlain)}`
+      )
+      check(
+        "sandbox dependency grants: the exec allowlist names the granted program by its absolute path",
+        trueReal !== null && ir(runner).includes(`@.sandbox.exec = `) && ir(runner).includes(`c"${trueReal}\\00`),
+        `the first \`true\` on PATH resolves to ${trueReal}\n${ir(runner)}`
+      )
+      // SBX-1, recorded open in docs/security/sandbox.md: the allowlist grants
+      // EXECUTE on the granted program's ELF loader, and the loader runs any
+      // binary it is handed. This pins that it still does; closing SBX-1
+      // turns this check red, and it then pins the refusal instead.
+      const execList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(runner))
+      const loaders =
+        execList === null ? [] : execList[1].split("\\00").filter((p) => p !== "" && p !== trueReal)
+      // The program the loader is handed is one this check builds, not the
+      // machine's `echo`: a multicall coreutils (uutils, as on CI's runners)
+      // picks its utility from argv[0], which is the loader's path here, and
+      // refuses to run.
+      const ungranted = path.join(dir, "sbx-1-ungranted")
+      const ungrantedSrc = `${ungranted}.c`
+      fs.writeFileSync(ungrantedSrc, '#include <stdio.h>\nint main(void) { puts("sbx-1"); return 0; }\n')
+      const ungrantedCc = spawnSync("clang", ["-O2", ungrantedSrc, "-o", ungranted], { encoding: "utf8" })
+      if (loaders.length === 0 || ungrantedCc.status !== 0) {
+        skip(
+          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not pinned`
+        )
+      } else {
+        const rLoader = run(allow, [loaders[0], ungranted])
+        check(
+          "sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)",
+          rLoader !== null && rLoader.status === 0 && rLoader.stdout === "sbx-1\n0\n",
+          `${loaders[0]} ${ungranted}\n${said(rLoader)}`
+        )
+      }
+    }
+  }
 }
 
 // `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the
@@ -13481,6 +13677,74 @@ if (!only || "std_json_writer".includes(only)) {
   } else {
     skip("skipped: link/std_json_writer: no clang, so node.ts is not built natively")
   }
+}
+
+// The f64 seam: a native `JsonWriter.f64` writes its digits through
+// `nish_json_put_f64` (runtime/runtime.c) straight into the writer's buffer,
+// where the Nish body, `jsonPutF64Walk` in std/json.ts, builds `${v}` first.
+// `tests/link/std_json_writer/seam.ts` prints -0, 1e21, 5e-324 and the longest
+// spelling in an array, a write one byte short of fitting and an exact fit;
+// the native build and the Node prelude must print `seam.out`, and std/json's
+// IR must make the call. The recognition is the package's: `std/json.ts`
+// compiled as a root is an ordinary module and calls its walk.
+if (!only || "json_f64_seam".includes(only)) {
+  const dir = path.join(linkDir, "std_json_writer")
+  const want = fs.readFileSync(path.join(dir, "seam.out"), "utf8")
+  const node = runUnderPrelude(path.join(dir, "seam.ts"), [])
+  check(
+    "json_f64_seam: seam.ts under the Node prelude runs jsonPutF64Walk and prints seam.out",
+    node.status === 0 && node.stdout === want,
+    `--- seam.out\n${want}--- node\n${shown(node)}`
+  )
+  const outDir = path.join(buildDir, "link", "json_f64_seam")
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const exe = path.join(outDir, "app")
+  const link = HAS_CLANG ? ["--link", exe, ...linkProfile("std_json_writer")] : []
+  const built = spawnSync(NISH, [path.join(dir, "seam.ts"), "-o", `${outDir}${path.sep}`, ...link], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const jsonLl = path.join(outDir, "json.ll")
+  const ir = built.status === 0 ? fs.readFileSync(jsonLl, "utf8") : ""
+  const writer = ir.match(/^define [^\n]*@nish\.jsonWriterPutF64\([^]*?^}/m)?.[0] ?? ""
+  check(
+    "json_f64_seam: std/json's jsonWriterPutF64 calls nish_json_put_f64 on the buffer and builds no string",
+    built.status === 0 &&
+      writer.includes("call i32 @nish_json_put_f64(i8* ") &&
+      !writer.includes("jsonPutF64Walk") &&
+      !writer.includes("nish_str_from_f64") &&
+      ir.includes(
+        "declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef)"
+      ),
+    built.status === 0 ? writer || ir : built.stderr
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [jsonLl, "-o", "/dev/null"], { encoding: "utf8" })
+    check("json_f64_seam: std/json's IR passes llvm-as", built.status === 0 && as.status === 0, as.stderr)
+  } else {
+    skip("skipped: json_f64_seam: no llvm-as")
+  }
+  if (HAS_CLANG) {
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "json_f64_seam: seam.ts built natively writes through the kernel and prints seam.out",
+      native.status === 0 && native.stdout === want,
+      `--- seam.out\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: json_f64_seam: no clang, so seam.ts is not built natively")
+  }
+  const rootDir = path.join(buildDir, "json_f64_seam_root")
+  fs.rmSync(rootDir, { recursive: true, force: true })
+  const asRoot = spawnSync(NISH, ["std/json.ts", "-o", `${rootDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(path.join(rootDir, "json.ll"), "utf8") : ""
+  check(
+    "json_f64_seam: std/json.ts compiled as a root is an ordinary module, so JsonWriter.f64 calls its walk and not the kernel",
+    asRoot.status === 0 &&
+      rootIr.includes("call i32 @jsonPutF64Walk(") &&
+      !rootIr.includes("nish_json_put_f64"),
+    asRoot.status === 0 ? rootIr : asRoot.stderr
+  )
 }
 
 // Typed JSON (`nish/json-typed`) against Node's own parser and writer: each
@@ -18034,6 +18298,65 @@ if (!only || "runtime_test".includes(only)) {
     "runtime.c -DNISH_THREADS: every thread gets its own arena and RNG seed, and a parallel range divides",
     rtThreadsRun !== null && rtThreadsRun.status === 0,
     String(rtThreads.stderr) + (rtThreadsRun ? String(rtThreadsRun.stdout) + String(rtThreadsRun.stderr) : "")
+  )
+}
+
+// The f64 formatter against Node: tests/f64-format-oracle.c prints
+// `nish_f64_format` for every edge class a shortest-digits algorithm gets wrong
+// (powers of two, subnormals, exact ties, the 1e21 and 1e-7 layout boundaries)
+// and two million seeded random bit patterns, and every line must be what
+// `String(x)` prints for the same bits. The first difference fails the check
+// and names the bits, which is all it takes to reproduce it. The program
+// itself exits 2 on a length outside 1..25 or a byte written past it, which
+// is runtime-test.c's buffer claim held over the whole stream.
+if (!only || "f64_format_oracle".includes(only)) {
+  const exe = path.join(buildDir, "f64_format_oracle")
+  const cc = spawnSync(
+    "clang",
+    ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-Iruntime", ...RUNTIME_C, "tests/f64-format-oracle.c", "-o", exe, "-lm"],
+    { cwd: root }
+  )
+  const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "latin1", maxBuffer: 512 * 1024 * 1024 }) : null
+  let lines = 0
+  let first = ""
+  if (run !== null && run.status === 0) {
+    const view = new DataView(new ArrayBuffer(8))
+    const out = run.stdout
+    for (let at = 0; at < out.length && first === ""; ) {
+      const end = out.indexOf("\n", at)
+      const hex = out.slice(at, at + 16)
+      const got = out.slice(at + 17, end)
+      view.setBigUint64(0, BigInt(`0x${hex}`))
+      const want = String(view.getFloat64(0))
+      if (got !== want) first = `bits ${hex}: runtime prints ${got}, Node prints ${want}`
+      lines++
+      at = end + 1
+    }
+  }
+  check(
+    "nish_f64_format prints what Node's String(x) prints, over every edge class and two million random doubles",
+    run !== null && run.status === 0 && first === "" && lines > 2000000,
+    String(cc.stderr) + (run ? `exit ${run.status} ${run.signal ?? ""} ${run.stderr}\n${lines} lines\n${first}` : "")
+  )
+  // The power-of-ten table is derived, not transcribed: the generator's output
+  // must appear in runtime.c byte for byte.
+  const gen = spawnSync("python3", ["-I", "scripts/gen-pow10-table.py"], { cwd: root, encoding: "utf8" })
+  const runtimeC = fs.readFileSync(path.join(root, "runtime/runtime.c"), "utf8")
+  check(
+    "runtime.c's NISH_POW10_SIG is what scripts/gen-pow10-table.py prints",
+    gen.status === 0 && gen.stdout.length > 0 && runtimeC.includes(gen.stdout),
+    gen.status === 0 ? "the generated block is not in runtime/runtime.c; paste it over NISH_POW10_SIG" : `${gen.error ?? ""} ${gen.stderr}`
+  )
+  // NISH_F64_MAX is stated three times, in three files no one compile sees
+  // together; they must agree.
+  const sizes = ["runtime/runtime.c", "runtime/nish.h", "tests/runtime-test.c"].map((f) => {
+    const m = /^#define NISH_F64_MAX (\d+)$/m.exec(fs.readFileSync(path.join(root, f), "utf8"))
+    return `${f}: ${m ? m[1] : "missing"}`
+  })
+  check(
+    "runtime.c, nish.h and runtime-test.c state one NISH_F64_MAX",
+    new Set(sizes.map((s) => s.split(": ")[1])).size === 1 && !sizes[0].endsWith("missing"),
+    sizes.join("\n")
   )
 }
 
@@ -22991,8 +23314,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   // Every flag the driver accepts is listed, by one of its spellings, bar
   // --help itself, the test hooks `--range-reference` and `--no-elision`, the
-  // refused `--nsw`, `--wrapping` and `--unchecked-indexing`, and the default `--strict-exports`: a wrapper that reads
-  // --help to learn the surface must not be missing one.
+  // watch's own `--watch-build`, the refused `--nsw`, `--wrapping` and
+  // `--unchecked-indexing`, and the default `--strict-exports`: a wrapper that
+  // reads --help to learn the surface must not be missing one.
   const documented = [
     "--output",
     "-g",
@@ -23027,6 +23351,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--allow",
     "--deny",
     "run [flags] <file.ts> [args ...]",
+    "--watch",
   ]
   // Delimited, so `--deny` is not found inside `--deny-panics`.
   const listed = (f) =>
@@ -24062,8 +24387,8 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     rewritten.status === 0 && fs.readFileSync(path.join(updated, lockName), "utf8") === writtenLock,
     shown(rewritten)
   )
-  // A row is every capability the dependency reaches, not only the four the
-  // dependency policy gates: `fs.read` is written beside the granted `net`.
+  // A row is every capability the dependency reaches, not only the ones the
+  // dependency policy gates: `env` is written beside the granted `net`.
   const ungatedLock = lockCopy("caps_lock_ungated")
   const ungatedRun = lockBuild(ungatedLock, ["--update-capability-lock"])
   const ungatedWritten = fs.existsSync(path.join(ungatedLock, lockName))
@@ -24071,7 +24396,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     : ""
   check(
     "capability lock: --update-capability-lock records a capability the dependency policy does not gate",
-    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"fs\.read"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
+    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"env"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
     `${shown(ungatedRun)}\n--- written\n${ungatedWritten}`
   )
   check(
@@ -25277,10 +25602,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js",
       "bin/packaging.js",
       "runtime/runtime.c",
-      // Ryu's licence, which runtime.c's formatter is adapted under: the Boost
+      // Zmij's licence, which runtime.c's formatter is adapted under: the Boost
       // licence asks for it in every source copy, and the tarball is one
       // (THIRD_PARTY_NOTICES.md).
-      "runtime/LICENSE-ryu",
+      "runtime/LICENSE-zmij",
       // The runtime is two translation units since the operating-system half was
       // split out for its own size budget, and `--link` compiles both. A tarball
       // with only the core would install a compiler that cannot link any program
@@ -27779,7 +28104,7 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- Third-party code keeps its own licence -------------------------------------------
-// Some files are copied, ported or adapted from code written elsewhere: Ryu in
+// Some files are copied, ported or adapted from code written elsewhere: Zmij in
 // runtime/runtime.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
 // Yet ports and the tests that reproduce parts of them. Their licences ask for the
 // upstream notice in every copy, and a copy is easy to make without it, so
@@ -29219,6 +29544,596 @@ if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
     bare !== null && bare.includes("readonly"),
     bare
   )
+}
+
+// ---- `nish run`'s module cache: each module's object, kept between links -------------
+// The debug recipe keeps the object every module compiles to in
+// `$XDG_CACHE_HOME/nish/module/<sha256 of the key>/` beside its key, and a later
+// link copies it rather than compiling that module again (src/build-cache.ts,
+// docs/security/cli.md CLI-12). What a link compiled is read off a `CC` wrapper on
+// PATH that logs every `.ll` it is handed, so "reused" means the module never
+// reached the compiler.
+if (
+  !only ||
+  "nish run".includes(only) ||
+  "nish-run".includes(only) ||
+  "run-command".includes(only) ||
+  "module-cache".includes(only)
+) {
+  if (!HAS_CLANG) {
+    skip("module cache: clang not on PATH, so nothing can be linked")
+  } else {
+    const mcDir = path.join(buildDir, "module-cache")
+    fs.rmSync(mcDir, { recursive: true, force: true })
+    const tools = path.join(mcDir, "tools")
+    const app = path.join(mcDir, "app")
+    fs.mkdirSync(tools, { recursive: true })
+    fs.mkdirSync(app, { recursive: true })
+    const ccLog = path.join(mcDir, "cc.log")
+    fs.writeFileSync(
+      path.join(tools, "cc-log"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.ll) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 },
+    )
+    const compiled = () => {
+      const seen = fs.existsSync(ccLog)
+        ? fs
+            .readFileSync(ccLog, "utf8")
+            .split("\n")
+            .filter((l) => l.length > 0)
+            .map((l) => path.basename(l))
+            .sort()
+        : []
+      fs.rmSync(ccLog, { force: true })
+      return seen
+    }
+    const cache = path.join(mcDir, "cache")
+    const moduleRoot = path.join(cache, "nish", "module")
+    const moduleEntries = () => (fs.existsSync(moduleRoot) ? fs.readdirSync(moduleRoot).sort() : [])
+    const entryOf = (stem) => moduleEntries().find((e) => fs.existsSync(path.join(moduleRoot, e, `${stem}.o`))) ?? ""
+    const main = path.join(app, "main.ts")
+    const writeMain = (n) =>
+      fs.writeFileSync(
+        main,
+        `import { square } from "./math"\n\nexport const main = (): number => {\n  console.log(\`square ${n}: \${square(${n})}\`)\n  return 0\n}\n`,
+      )
+    fs.writeFileSync(path.join(app, "math.ts"), "export const square = (n: number): number => n * n\n")
+    const run = (flags = []) =>
+      spawnSync(NISH, ["run", ...flags, main], {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          XDG_CACHE_HOME: cache,
+          CC: "cc-log",
+          PATH: `${tools}:${process.env.PATH}`,
+        },
+      })
+
+    writeMain(3)
+    const first = run()
+    const firstCompiled = compiled()
+    check(
+      "module cache: the first run prints what the program says",
+      first.status === 0 && first.stdout === "square 3: 9\n",
+      first.stdout + first.stderr,
+    )
+    const afterFirst = moduleEntries()
+    const shaped = afterFirst.every((e) => {
+      const files = fs.readdirSync(path.join(moduleRoot, e)).sort()
+      return (
+        /^[0-9a-f]{64}$/.test(e) &&
+        files.length === 2 &&
+        files[0] === "key" &&
+        files[1].endsWith(".o") &&
+        fs.readFileSync(path.join(moduleRoot, e, "key"), "utf8").length > 0
+      )
+    })
+    check(
+      "module cache: the first link keeps one entry per module it compiled, named by 64 hex digits and holding the object and its key",
+      afterFirst.length > 0 &&
+        afterFirst.length === firstCompiled.length &&
+        shaped &&
+        entryOf("main") !== "" &&
+        entryOf("math") !== "",
+      `${afterFirst.join(",")} / compiled ${firstCompiled.join(",")}`,
+    )
+    check(
+      "module cache: the root is private to its owner (0700)",
+      fs.existsSync(moduleRoot) && (fs.statSync(moduleRoot).mode & 0o777) === 0o700,
+      fs.existsSync(moduleRoot) ? (fs.statSync(moduleRoot).mode & 0o777).toString(8) : "missing",
+    )
+
+    writeMain(4)
+    const edited = run()
+    const editedCompiled = compiled()
+    check(
+      "module cache: a rebuild after an edit to one module compiles that module alone and links the others from the cache",
+      edited.status === 0 && edited.stdout === "square 4: 16\n" && editedCompiled.join(",") === "main.ll",
+      `compiled ${editedCompiled.join(",")}: ${edited.stdout}${edited.stderr}`,
+    )
+
+    // An entry whose key is not this module's is not linked: a planted object
+    // under the right name, beside a wrong key, is compiled over.
+    const mathEntry = path.join(moduleRoot, entryOf("math"))
+    const mathKey = fs.readFileSync(path.join(mathEntry, "key"), "utf8")
+    fs.copyFileSync(path.join(moduleRoot, entryOf("main"), "main.o"), path.join(mathEntry, "math.o"))
+    fs.writeFileSync(path.join(mathEntry, "key"), mathKey.replace("module math", "module mathx"))
+    writeMain(5)
+    const planted = run()
+    const plantedCompiled = compiled()
+    check(
+      "module cache: an entry whose stored key differs is not linked; the module is compiled and the entry rewritten",
+      planted.status === 0 &&
+        planted.stdout === "square 5: 25\n" &&
+        plantedCompiled.join(",") === "main.ll,math.ll" &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey,
+      `compiled ${plantedCompiled.join(",")}: ${planted.stdout}${planted.stderr}`,
+    )
+
+    // An empty key is an entry a link was still writing: compiled again.
+    fs.writeFileSync(path.join(mathEntry, "key"), "")
+    writeMain(6)
+    const torn = run()
+    const tornCompiled = compiled()
+    check(
+      "module cache: an entry with an empty key is compiled again, not linked",
+      torn.status === 0 &&
+        torn.stdout === "square 6: 36\n" &&
+        tornCompiled.join(",") === "main.ll,math.ll" &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey,
+      `compiled ${tornCompiled.join(",")}: ${torn.stdout}${torn.stderr}`,
+    )
+
+    // A key whose object is gone, as a cache cleaner leaves it, does not turn
+    // the cache off: that module is compiled, its key dropped, and the next
+    // link keeps it again, while the other modules come from the cache.
+    fs.rmSync(path.join(mathEntry, "math.o"))
+    writeMain(8)
+    const cleaned = run()
+    const cleanedCompiled = compiled()
+    const keyDropped = !fs.existsSync(path.join(mathEntry, "key"))
+    writeMain(9)
+    const repaired = run()
+    const repairedCompiled = compiled()
+    const settled = run()
+    const settledCompiled = compiled()
+    check(
+      "module cache: an entry whose object is missing is compiled and repaired by the next link, and the other modules still come from the cache",
+      cleaned.status === 0 &&
+        cleaned.stdout === "square 8: 64\n" &&
+        cleanedCompiled.join(",") === "main.ll,math.ll" &&
+        keyDropped &&
+        repaired.stdout === "square 9: 81\n" &&
+        repairedCompiled.join(",") === "main.ll,math.ll" &&
+        fs.existsSync(path.join(mathEntry, "math.o")) &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey &&
+        settled.status === 0 &&
+        settledCompiled.length === 0,
+      `compiled ${cleanedCompiled.join(",")} (key dropped: ${keyDropped}), then ${repairedCompiled.join(",")}, then ${settledCompiled.join(",")}: ${cleaned.stderr}${repaired.stderr}`,
+    )
+
+    // The key names the IR by its SHA-256, so an entry does not hold the module twice.
+    check(
+      "module cache: a key holds the IR's SHA-256, not the IR",
+      /\nir \d+ [0-9a-f]{64}\n$/.test(mathKey) && !mathKey.includes("define ") && mathKey.length < 65536,
+      `${mathKey.length} bytes, ends ${JSON.stringify(mathKey.slice(-90))}`,
+    )
+
+    // The speed recipe compiles to LTO bitcode and keeps no module objects, so
+    // its binary is exactly what scripts/build.sh links without a cache.
+    const beforeSpeed = moduleEntries().join(",")
+    writeMain(7)
+    const speed = run(["--profile", "speed"])
+    const speedCompiled = compiled()
+    check(
+      "module cache: `--profile speed` neither reads nor writes the module cache",
+      speed.status === 0 &&
+        speed.stdout === "square 7: 49\n" &&
+        moduleEntries().join(",") === beforeSpeed &&
+        speedCompiled.includes("main.ll") &&
+        speedCompiled.includes("math.ll"),
+      `compiled ${speedCompiled.join(",")}: ${speed.stdout}${speed.stderr}`,
+    )
+
+    // The recipe is part of the key: the same source under another `CC` is
+    // compiled afresh, module for module, and the first `CC`'s entries still hit.
+    fs.writeFileSync(
+      path.join(tools, "cc-log2"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.ll) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 },
+    )
+    writeMain(9)
+    const otherCc = spawnSync(NISH, ["run", main], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: cache, CC: "cc-log2", PATH: `${tools}:${process.env.PATH}` },
+    })
+    const otherCcCompiled = compiled()
+    const backCc = run(["-g"])
+    const backCcCompiled = compiled()
+    writeMain(10)
+    const backPlain = run()
+    const backPlainCompiled = compiled()
+    check(
+      "module cache: a change to the recipe (another CC, or -g) compiles every module again; the old recipe's entries still hit",
+      otherCc.status === 0 &&
+        otherCc.stdout === "square 9: 81\n" &&
+        otherCcCompiled.join(",") === "main.ll,math.ll" &&
+        backCc.status === 0 &&
+        backCcCompiled.join(",") === "main.ll,math.ll" &&
+        backPlain.stdout === "square 10: 100\n" &&
+        backPlainCompiled.join(",") === "main.ll",
+      `CC: ${otherCcCompiled.join(",")}; -g: ${backCcCompiled.join(",")}; back: ${backPlainCompiled.join(",")}: ${otherCc.stderr}${backCc.stderr}`,
+    )
+
+    // An edit that keeps the IR's length still misses: the digest, not the
+    // length, decides. `square 2` and the earlier `square 9` differ in one digit.
+    const mainKeys = () =>
+      moduleEntries()
+        .filter((e) => fs.existsSync(path.join(moduleRoot, e, "main.o")))
+        .map((e) => fs.readFileSync(path.join(moduleRoot, e, "key"), "utf8"))
+    const keysBefore = new Set(mainKeys())
+    writeMain(2)
+    const sameLength = run()
+    const sameLengthCompiled = compiled()
+    const twoKey = mainKeys().find((k) => !keysBefore.has(k)) ?? ""
+    const irLine = (k) => k.slice(k.lastIndexOf("\nir ") + 1)
+    check(
+      "module cache: an edit that keeps the IR's length is a miss, because the key holds the IR's digest",
+      sameLength.status === 0 &&
+        sameLength.stdout === "square 2: 4\n" &&
+        sameLengthCompiled.join(",") === "main.ll" &&
+        twoKey.length > 0 &&
+        [...keysBefore].some((k) => irLine(k).split(" ")[1] === irLine(twoKey).split(" ")[1]),
+      `compiled ${sameLengthCompiled.join(",")}: ${JSON.stringify(irLine(twoKey))} ${sameLength.stderr}`,
+    )
+
+    // A root someone left open to others is made private again before a link
+    // reads an entry from it.
+    fs.chmodSync(moduleRoot, 0o777)
+    writeMain(1)
+    const reopened = run()
+    const reopenedCompiled = compiled()
+    check(
+      "module cache: a root left group- and world-writable is made 0700 again before it is read",
+      reopened.status === 0 &&
+        reopened.stdout === "square 1: 1\n" &&
+        reopenedCompiled.join(",") === "main.ll" &&
+        (fs.statSync(moduleRoot).mode & 0o777) === 0o700,
+      `${(fs.statSync(moduleRoot).mode & 0o777).toString(8)}, compiled ${reopenedCompiled.join(",")}: ${reopened.stderr}`,
+    )
+
+    const speedObjects = spawnSync(
+      "bash",
+      [
+        path.join(root, "scripts", "build.sh"),
+        "--profile",
+        "speed",
+        "--runtime-from",
+        mcDir,
+        "--module-objects",
+        mcDir,
+        "-o",
+        path.join(mcDir, "x"),
+        path.join(mcDir, "x.ll"),
+      ],
+      { cwd: root, encoding: "utf8" },
+    )
+    check(
+      "module cache: scripts/build.sh refuses --module-objects outside the debug profile (exit 2)",
+      speedObjects.status === 2 && speedObjects.stderr.includes("--module-objects takes the debug profile"),
+      `${speedObjects.status}: ${speedObjects.stderr}`,
+    )
+
+    const lonely = spawnSync(
+      "bash",
+      [
+        path.join(root, "scripts", "build.sh"),
+        "--module-objects",
+        mcDir,
+        "-o",
+        path.join(mcDir, "x"),
+        path.join(mcDir, "x.ll"),
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    )
+    check(
+      "module cache: scripts/build.sh refuses --module-objects without --runtime-from (exit 2)",
+      lonely.status === 2 && lonely.stderr.includes("--module-objects takes --runtime-from"),
+      `${lonely.status}: ${lonely.stderr}`,
+    )
+  }
+}
+
+// `nish run --watch` (src/watch.ts): the program runs, an edit to a file it
+// imports rebuilds and reruns it, a failed build prints its diagnostics and
+// keeps what runs, and Ctrl-C ends it all. A server is swapped under load:
+// the new build starts beside the old one on its SO_REUSEPORT port before the
+// old one is stopped, so every request is answered -- Linux only, where the
+// kernel spreads connections over both listeners.
+if (selects("watch", "nish-run")) {
+  if (!HAS_CLANG) {
+    skip("nish run --watch: clang not on PATH, so no program can be linked")
+  } else {
+    const watchDir = path.join(buildDir, "watch")
+    fs.rmSync(watchDir, { recursive: true, force: true })
+    fs.mkdirSync(watchDir, { recursive: true })
+    const cache = path.join(watchDir, "cache")
+    const startWatch = (args) => {
+      const child = spawn(NISH, ["run", "--watch", ...args], {
+        cwd: watchDir,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, XDG_CACHE_HOME: cache },
+      })
+      const seen = { out: "", err: "", status: null, signal: null, exited: false, waiters: [] }
+      const wake = () => {
+        for (const w of seen.waiters.splice(0)) w()
+      }
+      child.stdout.on("data", (d) => {
+        seen.out += d
+        wake()
+      })
+      child.stderr.on("data", (d) => {
+        seen.err += d
+        wake()
+      })
+      child.on("exit", (status, signal) => {
+        seen.status = status
+        seen.signal = signal
+        seen.exited = true
+        wake()
+      })
+      // Resolves once `ready(seen)` holds, or with false after `ms`.
+      seen.until = (ready, ms = 60000) =>
+        new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(false), ms)
+          const look = () => {
+            if (ready(seen)) {
+              clearTimeout(timer)
+              resolve(true)
+            } else if (seen.exited) {
+              clearTimeout(timer)
+              resolve(false)
+            } else {
+              seen.waiters.push(look)
+            }
+          }
+          look()
+        })
+      // Ctrl-C, as a terminal sends it to the whole process group.
+      seen.interrupt = () => {
+        process.kill(-child.pid, "SIGINT")
+        return seen.until(() => false, 20000)
+      }
+      seen.pgid = child.pid
+      return seen
+    }
+    // Whether every process of the watch's group exits within 10 s; one that
+    // does not is killed, so a failure leaves nothing running.
+    const groupGone = async (pgid) => {
+      for (let at = Date.now(); Date.now() - at < 10000; await pause(20)) {
+        try {
+          process.kill(-pgid, 0)
+        } catch {
+          return true
+        }
+      }
+      process.kill(-pgid, "SIGKILL")
+      return false
+    }
+    const leftovers = () =>
+      fs
+        .readdirSync(path.join(cache, "nish", "run"))
+        .filter((name) => name.startsWith("watch-"))
+        .flatMap((name) => fs.readdirSync(path.join(cache, "nish", "run", name)))
+        .filter((name) => name.startsWith("driver-"))
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    const count = (text, part) => text.split(part).length - 1
+
+    // A program, its library edited under the watch.
+    const lib = path.join(watchDir, "lib.ts")
+    const word = (w) => fs.writeFileSync(lib, `export const word = (): string => ${w}\n`)
+    word(`"one"`)
+    fs.writeFileSync(
+      path.join(watchDir, "app.ts"),
+      'import { word } from "./lib"\n' +
+        "export const main = (): i32 => {\n" +
+        '  const w = getenv("NISH_WATCH")\n' +
+        '  console.log(`${word()} ${w === null ? "unset" : w} ${process.argv.length}`)\n' +
+        "  return 0\n" +
+        "}\n",
+    )
+    const app = startWatch(["app.ts", "a", "b"])
+    const first = await app.until((s) => s.out.includes("one 1 3\n") && s.err.includes("the program exited with status 0"))
+    check(
+      "nish run --watch: the program is built and run with its arguments, NISH_WATCH=1 set, and its build time printed",
+      first && /^watch: built in \d+ ms$/m.test(app.err),
+      app.out + app.err,
+    )
+    word(`"two"`)
+    const second = await app.until((s) => s.out.includes("two 1 3\n"))
+    check(
+      "nish run --watch: an edit to an imported file rebuilds the program and runs it again",
+      second && /^watch: rebuilt in \d+ ms$/m.test(app.err),
+      app.out + app.err,
+    )
+    word("42")
+    const broken = await app.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    check(
+      "nish run --watch: a failed build prints its diagnostics and waits for the next change",
+      broken && app.err.includes("lib.ts:1:") && !app.out.includes("42"),
+      app.out + app.err,
+    )
+    word(`"three"`)
+    const third = await app.until((s) => s.out.includes("three 1 3\n"))
+    check("nish run --watch: the change that fixes the build runs the program again", third, app.out + app.err)
+    // A burst of writes, as an editor's save can be, waits out the debounce and builds once.
+    const rebuildsBefore = count(app.err, "watch: rebuilt in")
+    for (const w of ["four", "five", "six"]) word(`"${w}"`)
+    const burst = await app.until((s) => s.out.includes("six 1 3\n"))
+    await pause(600)
+    check(
+      "nish run --watch: a burst of edits is gathered into one rebuild of the newest files",
+      burst && count(app.err, "watch: rebuilt in") === rebuildsBefore + 1 && !app.out.includes("four 1 3"),
+      app.out + app.err,
+    )
+    await app.interrupt()
+    const appGone = await groupGone(app.pgid)
+    check(
+      "nish run --watch: Ctrl-C ends the watch as SIGINT ends a program, and leaves no process or state file behind",
+      app.signal === "SIGINT" && appGone && leftovers().length === 0,
+      `${app.status} ${app.signal} ${appGone} ${leftovers()}: ${app.err}`,
+    )
+
+    // A first build that fails in an imported module still watches that module.
+    const helper = path.join(watchDir, "helper.ts")
+    fs.writeFileSync(helper, 'export const greeting = (): string => 7\n')
+    fs.writeFileSync(
+      path.join(watchDir, "greet.ts"),
+      'import { greeting } from "./helper"\nexport const main = (): i32 => {\n  console.log(greeting())\n  return 0\n}\n',
+    )
+    const greet = startWatch(["greet.ts"])
+    const greetFailed = await greet.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    fs.writeFileSync(helper, 'export const greeting = (): string => "fixed"\n')
+    const greetFixed = await greet.until((s) => s.out.includes("fixed\n"))
+    await greet.interrupt()
+    await groupGone(greet.pgid)
+    check(
+      "nish run --watch: fixing the imported module a first build failed in rebuilds and runs the program",
+      greetFailed && greetFixed && greet.err.includes("helper.ts:1:"),
+      greet.out + greet.err,
+    )
+
+    // `--json` reaches each build, so a failed one prints its diagnostics as JSON lines.
+    fs.writeFileSync(path.join(watchDir, "bad.ts"), 'export const main = (): i32 => "x"\n')
+    const json = startWatch(["--json", "bad.ts"])
+    const jsonFailed = await json.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    await json.interrupt()
+    await groupGone(json.pgid)
+    check(
+      "nish run --watch --json: a failed build's diagnostics are JSON lines",
+      jsonFailed && json.out.split("\n").some((line) => line.startsWith('{"file":"bad.ts"') && line.includes('"severity":"error"')),
+      json.out + json.err,
+    )
+    const misplaced = spawnSync(NISH, ["--watch", "bad.ts"], { cwd: watchDir, encoding: "utf8" })
+    check(
+      "nish --watch: outside `nish run` the flag is a usage error (exit 2) that names `nish run`",
+      misplaced.status === 2 && misplaced.stderr.includes("--watch is a flag of `nish run`"),
+      `${misplaced.status}: ${misplaced.stderr}`,
+    )
+
+    if (process.platform !== "linux") {
+      skip("nish run --watch: the server swap is checked on Linux, whose SO_REUSEPORT spreads connections over both listeners")
+    } else {
+      const freePort = await new Promise((resolve) => {
+        const s = net.createServer()
+        s.listen(0, "127.0.0.1", () => {
+          const { port } = s.address()
+          s.close(() => resolve(port))
+        })
+      })
+      // A server that answers each connection with its version, `v1` or `v2`,
+      // on a port it shares with SO_REUSEPORT; on SIGTERM it answers what is
+      // queued, then closes.
+      const serverFile = path.join(watchDir, "server.ts")
+      const serverSource = (digit) =>
+        'import { netClose, netWrite, pollAdd, pollCreate, pollWait, tcpAccept, tcpListenFlags } from "nish:net"\n' +
+        "\n" +
+        "const serve = (listener: i32, peer: u8[], reply: u8[]): void => {\n" +
+        "  let fd: i32 = tcpAccept(listener, peer)\n" +
+        "  while (fd >= 0) {\n" +
+        "    netWrite(fd, reply, 0, 3)\n" +
+        "    netClose(fd)\n" +
+        "    fd = tcpAccept(listener, peer)\n" +
+        "  }\n" +
+        "}\n" +
+        "\n" +
+        "export const main = (): number => {\n" +
+        "  const listener: i32 = tcpListenFlags(\"127.0.0.1\", parseInt(process.argv[1]), 128, 1)\n" +
+        "  if (listener < 0) {\n" +
+        "    console.error(`listen: ${listener}`)\n" +
+        "    return 1\n" +
+        "  }\n" +
+        "  const signals: i32 = signalFd()\n" +
+        "  const loop: i32 = pollCreate()\n" +
+        "  pollAdd(loop, listener, 1, 0)\n" +
+        "  pollAdd(loop, signals, 1, 1)\n" +
+        "  const ready: i32[] = new Array<i32>(4)\n" +
+        "  const peer: u8[] = new Array<u8>(18)\n" +
+        `  const reply: u8[] = [118, ${48 + digit}, 10]\n` +
+        "  let running = true\n" +
+        "  while (running) {\n" +
+        "    const n: i32 = pollWait(loop, ready, -1)\n" +
+        "    for (let i: i32 = 0; i < n; i++) {\n" +
+        "      if (ready[2 * i] === 1) {\n" +
+        "        readSignal(signals)\n" +
+        "        running = false\n" +
+        "      }\n" +
+        "    }\n" +
+        "    serve(listener, peer, reply)\n" +
+        "  }\n" +
+        "  return netClose(listener)\n" +
+        "}\n"
+      fs.writeFileSync(serverFile, serverSource(1))
+      const ask = () =>
+        new Promise((resolve) => {
+          const socket = net.connect(freePort, "127.0.0.1")
+          let got = ""
+          socket.setEncoding("utf8")
+          socket.on("data", (d) => (got += d))
+          socket.on("error", (e) => resolve(e.code))
+          socket.on("close", () => resolve(got.trim()))
+        })
+      const server = startWatch(["server.ts", `${freePort}`])
+      // The load starts once the first build answers, so a refusal before it is up is not counted.
+      const up = await server.until((s) => s.err.includes("watch: built in"))
+      for (let tries = 0; up && tries < 200 && (await ask()) !== "v1"; tries++) await pause(50)
+      const answers = []
+      let asking = up
+      const load = (async () => {
+        while (asking) {
+          answers.push(await ask())
+          await pause(2)
+        }
+      })()
+      const answered = (reply) => answers.includes(reply)
+      const waitFor = async (ready, ms = 60000) => {
+        for (let at = Date.now(); !ready() && Date.now() - at < ms && !server.exited; ) await pause(20)
+        return ready()
+      }
+      fs.writeFileSync(serverFile, serverSource(2))
+      const swapped = await waitFor(() => answered("v2"))
+      fs.writeFileSync(serverFile, serverSource(2).replace("return netClose(listener)", "return netClose(listener) + nope"))
+      const keeps = await server.until((s) => s.err.includes("watch: the build failed; the running program keeps running"))
+      const before = answers.length
+      await waitFor(() => answers.length > before + 20)
+      asking = false
+      await load
+      const lost = answers.filter((a) => a !== "v1" && a !== "v2")
+      check(
+        "nish run --watch: a rebuilt server starts beside the old one, so no request across the swap goes unanswered",
+        swapped && lost.length === 0 && answered("v1") && answers.at(-1) === "v2",
+        `${answers.length} answers, lost: ${lost.slice(0, 5).join(" ")}; ${server.err}`,
+      )
+      check(
+        "nish run --watch: a failed build leaves the running server answering",
+        keeps && answers.slice(before).every((a) => a === "v2") && answers.length > before + 20,
+        server.err,
+      )
+      await server.interrupt()
+      const serverGone = await groupGone(server.pgid)
+      check(
+        "nish run --watch: Ctrl-C stops the watch and the server it runs",
+        server.signal === "SIGINT" && serverGone && leftovers().length === 0 && count(server.err, "watch: built in") === 1,
+        `${server.status}: ${server.err}`,
+      )
+    }
+  }
 }
 
 summarise()

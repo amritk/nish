@@ -11,6 +11,7 @@ generation) and followed by the exit codes and a few examples.
 ```
 usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run [flags] <file.ts> [args ...]  build, cache and run it
+       nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
        nish -v, --version | -h, --help
 ```
 
@@ -45,18 +46,86 @@ argument 3: --help
   are not printed under `nish run`, because stderr belongs to the program; run
   `nish tool.ts` without `run` to see them.
 - **Every run compiles, and a link happens only when something changed.**
-  Compiling takes milliseconds. The first run after an edit links the program
-  (with the fast `debug` profile, unless you pass `--profile`), and every run
-  after that starts the binary it already linked.
-- **The cache is safe to delete.** Programs live in `$XDG_CACHE_HOME/nish/run`,
-  or `~/.cache/nish/run` when that is unset, one entry per program. Beside it,
-  `nish/runtime` keeps the C runtime compiled once per profile, so a link only
-  compiles your own modules. Removing either directory costs one rebuild and
-  nothing else.
+  The first run after an edit links the program (with the fast `debug`
+  profile, unless you pass `--profile`), and every run after that starts the
+  binary it already linked. Under `debug`, the link compiles only the modules
+  your edit changed: a one-line edit to a 5,000-line server rebuilds in about
+  a second and a half on a 4-core machine, against about five seconds for the
+  first link.
+- **What `nish run` caches**, under `$XDG_CACHE_HOME/nish`, or `~/.cache/nish`
+  when that is unset:
+
+  | Directory | Holds | Kept for |
+  | --- | --- | --- |
+  | `run` | one linked binary per program | the same program, built the same way |
+  | `runtime` | the C runtime, compiled once per profile | every link with that profile |
+  | `module` | each module's object, `debug` profile only | the same module, unchanged |
+
+  An entry is used only when everything it was built from is unchanged: the
+  compiler, the profile and its flags, the C compiler, and the code itself.
+  The `speed` and `size` profiles do not use `module`, so their binaries are
+  exactly what a build without a cache makes. Without an absolute
+  `XDG_CACHE_HOME` or `HOME`, or when `nish/module` cannot be made private to
+  you (mode 700, owned by you), the link skips `module` and compiles every
+  module, as the first link does.
+- **The cache is safe to delete.** Removing any of these directories costs
+  one rebuild and nothing else. Nothing prunes them, so delete `nish/module`
+  now and then if a program you edit often has grown it.
 
 Flags that write a file the run would keep to itself — `-o`, `--link`,
 `--target`, the `--emit-*` sidecars and `--profile wasi` — are usage errors
 under `nish run`.
+
+### Rebuilding on each edit: `--watch`
+
+`nish run --watch` builds and runs the program as `nish run` does, then
+watches every file the program was built from. When one changes it builds
+again and puts the new program in place of the running one:
+
+```console
+$ nish run --watch server.ts 8080
+watch: built in 1830 ms
+listening on 8080
+watch: rebuilt in 412 ms
+listening on 8080
+```
+
+- **What is watched** is the entry file and every module it imports, as far
+  as the last build got to load them, so a build that fails in an imported
+  module rebuilds when you fix that module. The standard library is left out, since an installed `nish` does not change
+  under you; run from a checkout of the compiler, `std/` is watched too.
+- **A failed build changes nothing.** Its diagnostics are printed, as plain
+  `nish run` prints them (one JSON object per line under `--json`), followed
+  by `watch: the build failed; the running program keeps running`, and the
+  program you had keeps running until the next edit builds. When no program
+  is running yet, the line ends `waiting for a change` instead.
+- **Edits are gathered, and the newest wins.** A change waits a tenth of a
+  second for the editor's next write before it builds, and an edit during a
+  build stops that build and starts a new one, so the program that runs is
+  always built from the files as they are.
+- **A server is started before the old one stops.** A program that uses the
+  network is taken for a server: the new build starts while the old one still
+  runs, and once the new one has lasted a moment the old one is sent SIGTERM,
+  then SIGKILL if it has not exited after five seconds. Listen with
+  `SO_REUSEPORT` (`tcpListenFlags(host, port, backlog, 1)`) so both can hold
+  the port at once, and answer SIGTERM by finishing the connections you have
+  accepted — a server that does both loses no request across a rebuild. A
+  server that does not set `SO_REUSEPORT` cannot bind beside the old one: the
+  new build exits as it starts, that is reported, and the old one keeps
+  serving the old code. A network client is taken for a server too, so for a
+  moment after each rebuild the old and the new copy both run.
+- **Any other program is stopped, then started again**, with the same
+  SIGTERM and SIGKILL, because two copies would write the same terminal and
+  files. A program that exits on its own leaves the watch waiting for an edit.
+- **Each run sees `NISH_WATCH=1`** in its environment, so a program can tell
+  it is being watched, and each build prints how long it took.
+- **Ctrl-C stops the watch and the program** and leaves nothing running.
+  The exit status is the one an interrupted program has (130 in a shell).
+  If the `nish run --watch` process itself is killed, the watch stops the
+  program and exits as a hangup does (129).
+
+`--watch` is a flag of `nish run`; `nish --watch app.ts` is a usage error
+(exit 2).
 
 ## Compiling: IR and binaries
 

@@ -1,0 +1,14 @@
+{
+  "name": "caps-lock-args",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_conf": [
+          "fs.read=./data",
+          "fs.read=./more"
+        ]
+      }
+    }
+  }
+}

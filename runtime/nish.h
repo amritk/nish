@@ -200,6 +200,16 @@ extern void (*nish_fatal_hook)(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);
+/* The bytes `nish_str_from_f64` would hold, written into `out` with no NUL;
+   returns the length. 32 bytes is room to spare: the longest spelling,
+   -0.0000012345678901234567, is 25 (runtime.c says why, and runtime-test.c
+   pins it). For a caller that writes numbers into its own buffer. */
+#define NISH_F64_MAX 32
+int nish_f64_format(double v, char out[NISH_F64_MAX]);
+/* `nish_f64_format`'s bytes into `buf[at]` (std/json.ts's JsonWriter): the new
+   end, or -1, with nothing written, when `at < 0` or they do not fit before
+   `len`. `buf` may be null only when nothing fits. */
+int32_t nish_json_put_f64(uint8_t *buf, int32_t len, int32_t at, double v);
 nish_str *nish_str_from_i64(int64_t v);
 /* Unsigned decimal (WP15). u8/u16/u32 are zero-extended by the caller, so one
    symbol serves every unsigned width. */
@@ -830,9 +840,12 @@ int64_t nish_cpu_online(void);
 /* WP37 `--sandbox` (runtime-sandbox.c): `nish_sandbox` confines the process to
    the capability mask `caps` from `.preinit_array`, `mode` 1 strict and 2
    best-effort, and `nish_sandbox_check` refuses to run at the top of `main`
-   when it never ran. The directory lists are a later stage's and are null.
+   when it never ran. `read_dirs` and `write_dirs` are the directories
+   Landlock scopes `fs.read` and `fs.write` to, `exec_paths` the programs
+   `process.spawn` may execute, each a run of NUL-terminated paths ended by an
+   empty one; null leaves the capability whole.
    `nish_cpu_prime` caches the pool's CPU count while /sys is still readable. */
-void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs);
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths);
 void nish_sandbox_check(void);
 void nish_cpu_prime(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);

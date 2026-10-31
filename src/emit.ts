@@ -45,7 +45,13 @@ import {
 import { capabilityIndex } from "./capabilities"
 import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
-import { emitArrayLiteral, emitBytesKernel, emitElementAccess, emitForOf } from "./emit-arrays"
+import {
+  emitArrayLiteral,
+  emitBytesKernel,
+  emitElementAccess,
+  emitForOf,
+  emitJsonPutF64Kernel,
+} from "./emit-arrays"
 import {
   checksArgumentRange,
   emitBuiltinCall,
@@ -151,6 +157,7 @@ import {
   isAesSeam,
   isCrc32Seam,
   isIndexOfAnyWalk,
+  isJsonPutF64Walk,
   isRegexScanWalk,
   isSha256Seam,
   SHA256_HW,
@@ -873,15 +880,19 @@ export class Emitter {
     const caps = this.opts.sandboxCapabilities
     const read = this.sandboxDirs("read", this.opts.sandboxRead, caps, "fs.read")
     const write = this.sandboxDirs("write", this.opts.sandboxWrite, caps, "fs.write")
+    const exec = this.sandboxDirs("exec", this.opts.sandboxExec, caps, "process.spawn")
     const apply = new IRFunction(".sandbox.apply", [], "void")
     apply.linkage = "internal"
-    apply.emit(`call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write})`)
+    apply.emit(
+      `call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write}, i8* ${exec})`
+    )
     apply.emit("ret void")
     this.module.addFunction(apply)
   }
 
   /**
-   * WP37 §2: the directories a scoped capability is held to, as one constant
+   * WP37 §2: the directories a scoped capability is held to (for
+   * `process.spawn`, the programs it may run), as one constant
    * of NUL-terminated paths ended by an empty one, and the operand that points
    * at it; `null` when `main` does not reach the capability or it is granted
    * whole, which the runtime reads as a rule beneath `/`.
@@ -1754,6 +1765,11 @@ export class Emitter {
     }
     if (isRegexScanWalk(this.program, sig)) {
       return emitRegexScanKernel(this, operandValues)
+    }
+    // `nish/json`'s f64 walk is a kernel that writes into the array and
+    // allocates nothing.
+    if (isJsonPutF64Walk(this.program, sig)) {
+      return emitJsonPutF64Kernel(this, operandValues)
     }
     // WP38 S5: a seam of `nish/crypto/aes`, or `nish/crypto/sha256`'s block
     // function, runs the runtime kernel when its resolver says so and the
