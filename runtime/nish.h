@@ -517,7 +517,9 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
 /* `spawnWithFds(argv, fds)`: `nish_spawn_child` with the child holding
  * `fds[i]` (element type `int32_t`) as descriptor `3 + i`, close-on-exec
  * cleared there. More than 64 descriptors or a negative one is -EINVAL before
- * anything starts, and a source that is not open is -EBADF; -ENOSYS under
+ * anything starts, a source that is not open is -EBADF, and a scratch
+ * descriptor the system cannot give is -EMFILE (-EINVAL above the descriptor
+ * limit); -ENOSYS under
  * WASI. This process's descriptors are left as they were. */
 int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds);
 /* `kill(pid, sig)`: send `sig` to `pid` and answer 0, or a negative errno. Only
@@ -701,15 +703,19 @@ bool nish_is_executable(const nish_str *path);
  * non-blocking and close-on-exec.
  *
  * Descriptors over a Unix socket: each of the three refuses a descriptor that
- * is not a socket with -88 and a socket of another family with -95.
+ * is closed with -9, one that is not a socket with -88 and a socket of another
+ * family with -95.
  * `nish_send_fd(sock, fd, buf, off, len)` sends `len` bytes (at least 1, else
- * -22) carrying one `SCM_RIGHTS` copy of `fd`. `nish_recv_fd(sock, buf, off,
+ * -22, as is a negative `fd`) carrying one `SCM_RIGHTS` copy of `fd`; a
+ * stream socket can send short, the descriptor gone with the first bytes. `nish_recv_fd(sock, buf, off,
  * len, fd)` reads at most `len` bytes (at least 1, and `fd` at least one
  * `int32_t` long, else -22) and writes the first descriptor received, or -1,
  * into `fd[0]`, closing every other; the one kept is close-on-exec and its
  * status flags are left as the sender's. `nish_peer_credentials(fd, out)`
  * writes the peer's pid, uid and gid as of the connect into `out` (at least
- * 3, else -22); Darwin's pid is -1 where `LOCAL_PEERPID` is missing. */
+ * 3, else -22), wrapping a uid or gid of 2^31 or above into `int32_t`; a
+ * socket with no peer is -ENOTCONN (-107) on both platforms, and Darwin's pid
+ * is -1 where `LOCAL_PEERPID` is missing. */
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
