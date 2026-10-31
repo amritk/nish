@@ -180,7 +180,7 @@ function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void -> @e
   sharedWrite: via nish_exit
   calls: emitFieldInitializers internalErrorFor nish_exit
   pointer emitter: size=280 writesThrough=false captured=false passedTo=emitFieldInitializers#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
@@ -266,7 +266,7 @@ function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args:
   sharedWrite: via Emitter.llvm
   calls: Emitter.beginReclaim Emitter.captureOperands Emitter.emitArgument Emitter.endReclaim Emitter.llvm Emitter.llvmAbi FunctionSig.isCompileTime FunctionSig.visibleOutside IRFunction.emit IRFunction.emitValue TypeTable.resultByValue emitPackedResult emitResultReturningCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat privateAbi
   pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.llvm#0 emitPackedResult#0 Emitter.emitArgument#0 Emitter.llvmAbi#0 Emitter.captureOperands#0 Emitter.beginReclaim#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.endReclaim#0
-  pointer callee: size=136 writesThrough=true captured=true passedTo=FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.emitArgument#2 Emitter.captureOperands#1 Emitter.beginReclaim#1
+  pointer callee: size=144 writesThrough=true captured=true passedTo=FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.emitArgument#2 Emitter.captureOperands#1 Emitter.beginReclaim#1
   pointer args: size=0 writesThrough=true captured=false
   pointer site: size=40 writesThrough=false captured=false passedTo=emitResultReturningCall#3
   stackSites=1 stackLocals=1
@@ -437,7 +437,7 @@ function noteSignature(emitter: Emitter, referenced: string[], results: string[]
   pointer referenced: size=0 writesThrough=true captured=false passedTo=noteStruct#1 noteStruct#1
   pointer results: size=0 writesThrough=true captured=false passedTo=noteStruct#2 noteStruct#2
   pointer headers: size=0 writesThrough=true captured=false passedTo=noteStruct#3 noteStruct#3
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 type: i32 (const)
   callee +1:5 noteStruct -> @noteStruct

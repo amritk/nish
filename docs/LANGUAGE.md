@@ -3028,11 +3028,47 @@ export const main = (): i32 => {
   in an array is
   `` `f` is a function parameter and can only be called or passed on as a function argument: a function is never a value in Nish, so it cannot be stored, returned, compared or put in an array ``
   (`tests/cases/reject_fnarg_store`, `reject_fnarg_return`).
-- **An arrow captures nothing.** It sees its own parameters and the module's
-  top-level names; a local, a parameter, `this` or a function parameter of the
-  function it is written in is
-  `` The arrow reads `step`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the module's top-level names, so it can capture nothing ``
-  (`tests/cases/reject_fnarg_capture`). An arrow anywhere but as such an
+- **An arrow may read the `const` locals and the parameters of the function
+  it is written in** (WP29 capture). Each name it reads is handed to it as an
+  extra argument when the call is made: the lifted arrow gains a parameter per
+  capture, the instantiation that runs it gains one too and forwards it, and
+  every call stays direct — no environment object, no indirect call. The
+  captures are not part of the instantiation's key, so one arrow is one
+  `define` however many values it reads. A narrowing in force at the call holds
+  in the body (`if (name !== null) { each(xs, (x) => use(name)) }` reads `name`
+  as a `string`). The arrow may write through what it captured —
+  `infos.push(x)`, `box.n = v` — because the call runs before the function goes
+  on (`tests/cases/fnarg_capture`, `fnarg_capture_narrow`,
+  `fnarg_capture_local`, `fnarg_capture_escape`). What it may not do:
+  - read `this` (NL2590, `reject_fnarg_capture_this`): bind it, or what the
+    arrow needs of it, to a `const` before the call;
+  - read a `let` (NL2585, `reject_fnarg_capture_let`), whose value could
+    change after the arrow is handed it; `nish --fix` copies it into a
+    `const` just before the call (`tests/fix/fnarg-capture-let`);
+  - assign to a name it captured (NL2586, `reject_fnarg_capture_write`):
+    the assignment would change only its own copy;
+  - name a function parameter of the function it is written in (NL2587,
+    `reject_fnarg_capture_function_param`), which is bound at instantiation
+    and is no value;
+  - capture a `Secret`, a scope, a lock, a guard, a channel, a foreign handle
+    or a `CPtr` (NL2588, `reject_fnarg_capture_secret`,
+    `reject_mutex_guard_capture`, `reject_ffi_handle_closure_capture`,
+    `reject_ffi_handle_field_capture`), which their own rules keep in the
+    block that made them;
+  - read anything from outside it when it is written inside another arrow
+    (NL2501, `reject_fnarg_capture_nested`).
+
+  An arrow given to `expose` or `exposeWith` still captures nothing (NL2335,
+  NL2589; `reject_secret_expose_capture`, `_forwarded`), an arrow handed on to
+  a parallel form or `spawn` meets their rules where it runs
+  (`reject_fnarg_capture_parallel_write`, `_spawn_write`,
+  `tests/link/fnarg_capture_forward`), and a recursive function that passes
+  itself a new arrow on every call meets the instantiation limit
+  (`reject_fnarg_capture_recursion`). Escape analysis and the parameter
+  attributes count a capture as an escaping use of what it names: a captured
+  parameter is never `readonly` or `nocapture`, and a captured `parts` array
+  is not released by `join` (`mem_join_parts_captured`). An arrow anywhere but
+  as such an
   argument is
   `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in Nish, so it cannot be stored, returned or called where it stands ``
   (`tests/cases/reject_fnarg_arrow_value`).
@@ -3384,9 +3420,10 @@ from the whole-program facts, and each rule is reported there:
 An arrow passed to one of the four forms may read the `const` locals and the
 parameters of the function it is written in, and so may an arrow given to a
 scope's `spawn`, by the rules of [scoped tasks](#scoped-tasks-using-s--scope).
-Nothing else captures: an arrow given to any other function parameter still
-reads only its own parameters and the module's top-level names
-(`tests/cases/reject_par_capture_not_parallel`).
+An arrow given to any other function-typed parameter of a top-level function
+captures too, by the sequential rules of
+[function parameters](#function-parameters) (`tests/cases/fnarg_capture_local`);
+the rules below are the stricter ones a body that runs on other threads keeps.
 
 ```typescript
 import { parallelMapInto } from "nish/threads";
@@ -3433,7 +3470,7 @@ export const main = (): i32 => {
 - **Only an arrow written directly in a function's body captures.** An arrow
   inside another arrow reads nothing from outside itself, neither the
   function's locals nor the outer arrow's parameters:
-  `` The arrow reads `k` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing ``
+  `` The arrow reads `k` from outside the arrow it is written in: only an arrow written directly in a function's body may read that function's `const` locals and parameters, and an arrow inside another arrow reads only its own parameters and the module's top-level names; move the inner call into a top-level function that takes the value as a parameter ``
   (`reject_par_capture_nested_arrow`, `reject_par_capture_nested_param`).
 - **`this` is not captured by that name**, nor a field through it; bind it,
   or what the body needs of it, to a `const` first:
@@ -3601,7 +3638,7 @@ export const main = (): i32 => {
   may be absent and a `Secret` are never captured:
   `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
   (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
-  captures nothing (NL2501, `_nested`). The arrow is lifted into a function
+  reads only its own parameters and the module's top-level names (NL2501, `_nested`). The arrow is lifted into a function
   named after the one it is written in and a counter (`main$arrow0`), which
   is the name a debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
@@ -4096,10 +4133,10 @@ breaks one is refused with that rule's own code:
   `? :`, inside the body), and
   `reject_mutex_guard_helper_expr_churn` is the use-after-free it would open: the
   object kept past the lock, its string replaced under a second lock, and
-  `churn()` reusing the memory before the old one is printed. An arrow cannot capture
-  a guard (`reject_mutex_guard_capture`), and an arrow passed to a
-  data-parallel form, which may read its function's `const` locals, may not
-  read a guard among them (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
+  `churn()` reusing the memory before the old one is printed. An arrow argument,
+  which may read its function's `const` locals, may not read a guard among
+  them, whether it runs on this thread (`reject_mutex_guard_capture`) or is
+  passed to a data-parallel form (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
   of an array it reaches included. When `T` is itself a scalar, `g.value` is
   read and stored directly — `g.value = g.value + 1` on a `Mutex<i32>` — and
   the store reaches the `Mutex` under Node as natively, because the guard is
@@ -6965,7 +7002,7 @@ export const main = (): i32 => {
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
 | `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`, `secret_inferred`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*`, `reject_secret_inferred_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
-| `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
+| `exposeWith(s, arg, f)` | `f(value, arg)`, because the arrow `expose` runs captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
 | `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`, `secret_wipe_o2_inferred`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
 
 `nish:secret` is the one builtin module with source behind it: `std/secret.ts`,
@@ -10069,8 +10106,9 @@ where its memory lives and when it is reused.
    the stored value stored, because it could hand an element on: storing
    `xs` into a field, passing it to a function, reading an element back and
    keeping it, naming `xs` through another local, or returning it through a
-   choice (`mem_return_array_callee`). An arrow captures nothing, so there is
-   no capture to count. Inside the function the value is in memory all the
+   choice (`mem_return_array_callee`). An arrow argument that reads `xs` as a
+   capture is a use too, since it may read `xs` when the call runs, after a
+   join could have released it (`mem_join_parts_captured`). Inside the function the value is in memory all the
    same, so a loop whose pass stores into an `xs` declared outside it keeps
    no pass scope, and a `using a = arena()` block that stores into an `xs`
    declared before it is refused as any store into older memory is. Only a
@@ -11225,7 +11263,8 @@ messages are exact for the cases cited; other rows quote the checker
 | a type parameter list that names one parameter twice | `` Duplicate type parameter `T` ``, on the first repeat alone | `reject_generic_duplicate_type_parameter`, `…_arrow`, `…_method`, `…_class`, `…_interface`, `…_template`, `…_triple` |
 | a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
 | a function parameter used as a value | `` `f` is a function parameter and can only be called or passed on as a function argument: ... `` | `reject_fnarg_store`, `reject_fnarg_return` |
-| an arrow argument that captures | `` The arrow reads `step`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture` |
+| an arrow argument that reads a `let`, `this`, or a function parameter of its function, or assigns to a capture | `` The arrow reads `k`, a `let` of the function it is written in: ... `` / `` The arrow reads `this`: ... `` / `` The arrow assigns to `total`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture_let`, `_this`, `_function_param`, `_write` |
+| an arrow inside another arrow that reads the function's locals | `` The arrow reads `k` from outside the arrow it is written in: ... `` | `reject_fnarg_capture_nested` |
 | an arrow anywhere but as a function argument | `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... `` | `reject_fnarg_arrow_value` |
 | a function type anywhere but on a parameter of a top-level function | `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... `` / `` `f` cannot have a function type here: ... `` | `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_method`, `reject_fnarg_nested` |
 | a function argument that is not a function's name or an arrow, or does not match | `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... `` / `` ...; a function argument must have exactly its parameter's type `` | `reject_fnarg_not_name`, `reject_fnarg_generic_name`, `reject_fnarg_mismatch`, `reject_fnarg_arity` |

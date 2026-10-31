@@ -134,7 +134,8 @@ its siblings in the same round.
 
 ## Nish-0, the subset `src/` is written in
 
-No generics, closures, nested functions or function values; no `type` aliases,
+No generics, closures (capturing arrow arguments: from the release after
+0.27.2, under the rolling freeze), nested functions or function values; no `type` aliases,
 `enum`, `namespace`, `static` members, getters or setters; no `try`/`catch`; no
 inheritance and no downcasts. **Arrow functions came off that list in WP22**:
 a top-level `const` bound to an arrow is a *declaration*, not a value, and the
