@@ -59,14 +59,14 @@ int main(void) {
   const char *gone[] = {"build/test/nuf-mode.sock", "build/test/nuf-flags.sock", "build/test/nuf-chmodfail.sock",
                         "build/test/nuf-cycle.sock", "build/test/nuf-idle.sock", "build/test/nuf-missing.sock",
                         "build/test/nuf-held.sock", cut};
-  const char *kinds[] = {"listen", "connect", "accept", "pair 0", "pair 1"};
-  int32_t fds[5];
-  for (int32_t k = 0; k < 5; k++) {
+  const char *kinds[] = {"listen", "connect", "accept", "pair 0", "pair 1", "seqpacket 0", "seqpacket 1"};
+  int32_t fds[7];
+  for (int32_t k = 0; k < 7; k++) {
     fds[k] = hold(k, k > 0 ? fds[0] : -1);
     printf("%s %d: cloexec %d nonblock %d\n", kinds[k], fds[k] >= 0, (fcntl(fds[k], F_GETFD) & FD_CLOEXEC) != 0,
            (fcntl(fds[k], F_GETFL) & O_NONBLOCK) != 0);
   }
-  for (int32_t k = 0; k < 5; k++) {
+  for (int32_t k = 0; k < 7; k++) {
     close(fds[k]);
   }
   printf("release %d\n", release());

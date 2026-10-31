@@ -10,9 +10,10 @@
 // driver's `chmod` fails for `nuf-chmodfail.sock`, and once every attempt has
 // run it reports which of the paths the attempts named are still on disk.
 // `hold` then makes one descriptor of each kind, a listener, a connect, its
-// accept and each end of a stream pair, which the driver keeps open to read
+// accept and each end of a stream pair and a seqpacket pair, which the driver keeps open to read
 // their flags: each is close-on-exec and non-blocking from creation.
 import {
+  NET_UNIX_SEQPACKET,
   NET_UNIX_STREAM,
   NET_UNIX_UNLINK_STALE,
   netClose,
@@ -181,7 +182,7 @@ export const attempt = (k: i32): i32 => {
   return rebind();
 };
 
-/** The `k`th descriptor the driver keeps to read its flags: a listener at `HELD`, a connect to it, the accept of that connect on `listener`, then end 0 and end 1 of a stream pair, the other end closed. */
+/** The `k`th descriptor the driver keeps to read its flags: a listener at `HELD`, a connect to it, the accept of that connect on `listener`, then end 0 and end 1 of a stream pair and of a seqpacket pair, the other end closed. */
 export const hold = (k: i32, listener: i32): i32 => {
   if (k === 0) {
     unlinkSync(HELD);
@@ -194,12 +195,13 @@ export const hold = (k: i32, listener: i32): i32 => {
     return unixAccept(listener);
   }
   const fds: i32[] = new Array<i32>(2);
-  const answer = unixSocketPair(NET_UNIX_STREAM, fds);
+  const end = (k - 3) % 2;
+  const answer = unixSocketPair(k < 5 ? NET_UNIX_STREAM : NET_UNIX_SEQPACKET, fds);
   if (answer < 0) {
     return answer;
   }
-  netClose(fds[4 - k]);
-  return fds[k - 3];
+  netClose(fds[1 - end]);
+  return fds[end];
 };
 
 /** Remove the socket file `hold` made. */

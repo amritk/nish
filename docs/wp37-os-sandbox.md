@@ -775,8 +775,9 @@ unstated.
    abstract sockets; the scope still costs it nothing it should keep, since
    its own abstract listeners and connects to them work, and only a connect
    to a listener outside the sandbox is -1 (`docs/security/sandbox.md`).
-   A pathname connect is not scoped: the sandbox uses no Landlock right that
-   covers connecting to a socket file, so `net` reaches every pathname listener the user may
+   A pathname connect is not scoped: the sandbox does not ask for the later
+   ABI's `LANDLOCK_ACCESS_FS_RESOLVE_UNIX`, the right that covers connecting
+   to a socket file, so `net` reaches every pathname listener the user may
    write to, recorded open in `docs/security/sandbox.md`.
 9. **A new unit or a define.** (a) `runtime-sandbox.c`, always built, dropped
    by `--gc-sections` when unused; (b) a `-DNISH_SANDBOX` define in an existing
