@@ -3625,7 +3625,7 @@ export const main = (): i32 => {
   `nish: cannot start a thread with a stack of 268435456 bytes` and exit 1. The
   smallest size is 131072 (128 KiB, the largest `PTHREAD_STACK_MIN` among the
   targets): a number written at the call below it is refused,
-  `` `scopeWithStack(4096)` asks for a stack below the minimum of 131072 bytes: no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least 131072 ``
+  `` `scopeWithStack(4096)` asks for a stack below the minimum of 131072 bytes: no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least 131072, `scopeWithStack(131072)` ``
   (NL2584, `tests/cases/reject_thread_stack_small`, `_negative`), and a
   computed one panics when the scope is made,
   `scopeWithStack: a stack of 65536 bytes is below the minimum of 131072`
