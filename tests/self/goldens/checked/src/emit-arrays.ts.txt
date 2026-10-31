@@ -30,6 +30,7 @@ import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
+import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -1645,6 +1646,21 @@ function emitBytesKernel(emitter: Emitter, walk: i32, values: string[]): string 
   callee +15:17 Emitter.useRuntime -> @Emitter.useRuntime
   callee +15:36 bytesKernelOf -> @bytesKernelOf
   callee +17:10 IRFunction.emitValue -> @IRFunction.emitValue
+function emitJsonPutF64Kernel(emitter: Emitter, values: string[]): string -> @emitJsonPutF64Kernel [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadData
+  calls: Emitter.useRuntime IRFunction.emitValue loadData loadLength nish_panic_index nish_str_concat
+  pointer emitter: size=296 writesThrough=false captured=false passedTo=loadData#0 loadLength#0 Emitter.useRuntime#0
+  pointer values: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 data: string (const)
+  callee +1:16 loadData -> @loadData
+  local +2:9 length: string (const)
+  callee +2:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:44 loadLength -> @loadLength
+  callee +3:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:17 Emitter.useRuntime -> @Emitter.useRuntime
 function bytePointer(emitter: Emitter, arr: string, at: string): string -> @bytePointer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via loadData

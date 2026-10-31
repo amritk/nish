@@ -45,7 +45,13 @@ import {
 import { capabilityIndex } from "./capabilities"
 import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
-import { emitArrayLiteral, emitBytesKernel, emitElementAccess, emitForOf } from "./emit-arrays"
+import {
+  emitArrayLiteral,
+  emitBytesKernel,
+  emitElementAccess,
+  emitForOf,
+  emitJsonPutF64Kernel,
+} from "./emit-arrays"
 import {
   checksArgumentRange,
   emitBuiltinCall,
@@ -152,6 +158,7 @@ import {
   isAesSeam,
   isCrc32Seam,
   isIndexOfAnyWalk,
+  isJsonPutF64Walk,
   isRegexScanWalk,
   isSha256Seam,
   SHA256_HW,
@@ -1768,6 +1775,11 @@ export class Emitter {
     }
     if (isRegexScanWalk(this.program, sig)) {
       return emitRegexScanKernel(this, operandValues)
+    }
+    // `nish/json`'s f64 walk is a kernel that writes into the array and
+    // allocates nothing.
+    if (isJsonPutF64Walk(this.program, sig)) {
+      return emitJsonPutF64Kernel(this, operandValues)
     }
     // WP38 S5: a seam of `nish/crypto/aes`, or `nish/crypto/sha256`'s block
     // function, runs the runtime kernel when its resolver says so and the

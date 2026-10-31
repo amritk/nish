@@ -7,6 +7,7 @@ import CLI from "./branding" -> const CLI
 import isBytesModule from "./std-modules" -> function @isBytesModule
 import isCompressChecksumModule from "./std-modules" -> function @isCompressChecksumModule
 import isCryptoAesModule from "./std-modules" -> function @isCryptoAesModule
+import isJsonModule from "./std-modules" -> function @isJsonModule
 import isRegexModule from "./std-modules" -> function @isRegexModule
 import isTextModule from "./std-modules" -> function @isTextModule
 import stdModuleName from "./std-modules" -> function @stdModuleName
@@ -31,6 +32,7 @@ const BYTES_WALK_DIGITS: i32 = 2
 const BYTES_WALK_JSON_TEXT: i32 = 3
 const BYTES_WALK_COPY: i32 = 4 [exported]
 const BYTES_WALK_JSON_PLAIN: i32 = 5
+const JSON_PUT_F64_KERNEL: string = "nish_json_put_f64" [exported]
 function isIndexOfAnyWalk(program: CheckedProgram, sig: FunctionSig): boolean -> @isIndexOfAnyWalk [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isTextModule nish_str_eq
@@ -83,3 +85,10 @@ function bytesWalkOf(program: CheckedProgram, sig: FunctionSig): i32 -> @bytesWa
 function bytesKernelOf(walk: i32): string -> @bytesKernelOf [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function isJsonPutF64Walk(program: CheckedProgram, sig: FunctionSig): boolean -> @isJsonPutF64Walk [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isJsonModule nish_str_eq
+  pointer program: size=656 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 isJsonModule -> @isJsonModule

@@ -22,6 +22,7 @@ import emitArrayLiteral from "./emit-arrays" -> function @emitArrayLiteral
 import emitBytesKernel from "./emit-arrays" -> function @emitBytesKernel
 import emitElementAccess from "./emit-arrays" -> function @emitElementAccess
 import emitForOf from "./emit-arrays" -> function @emitForOf
+import emitJsonPutF64Kernel from "./emit-arrays" -> function @emitJsonPutF64Kernel
 import checksArgumentRange from "./emit-builtins" -> function @checksArgumentRange
 import emitBuiltinCall from "./emit-builtins" -> function @emitBuiltinCall
 import emitIdentifierBuiltinCall from "./emit-builtins" -> function @emitIdentifierBuiltinCall
@@ -122,6 +123,7 @@ import CRC32_KERNEL from "./kernels" -> const CRC32_KERNEL
 import isAesSeam from "./kernels" -> function @isAesSeam
 import isCrc32Seam from "./kernels" -> function @isCrc32Seam
 import isIndexOfAnyWalk from "./kernels" -> function @isIndexOfAnyWalk
+import isJsonPutF64Walk from "./kernels" -> function @isJsonPutF64Walk
 import isRegexScanWalk from "./kernels" -> function @isRegexScanWalk
 import isSha256Seam from "./kernels" -> function @isSha256Seam
 import SHA256_HW from "./kernels" -> const SHA256_HW
@@ -1167,8 +1169,8 @@ function Emitter.emitMember(this: Emitter, expr: Node): string -> @Emitter.emitM
 function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCall [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CaptureSlot.type Emitter.beginReclaim Emitter.captureValue Emitter.emitArgument Emitter.emitCrc32KernelArm Emitter.emitKernelArm Emitter.emitScopeExit Emitter.endReclaim Emitter.joinCrc32Arms Emitter.llvmAbi Emitter.marksTailCall Emitter.typeOf Emitter.useRuntime FunctionSig.foreign FunctionSig.isCompileTime FunctionSig.visibleOutside FunctionSig.writtenArity FusionTable.roleOf IRFunction.emit IRFunction.emitValue IRFunction.placeBlock TypeTable.isResult TypeTable.resultByValue TypeTable.stripNull aesKernelOf bytesWalkOf capturesOf defaultValue dottedName elementKeepSize emitBuiltinCall emitBytesKernel emitForeignBuffers emitForeignString emitForeignStringResult emitFusedCall emitIdentifierBuiltinCall emitIndexOfAnyKernel emitJsonRoute emitMapIntrinsic emitMethodCall emitPackedResult emitParallelRegion emitRegexScanKernel emitResultConstructor emitResultMethod emitResultReturningCall emitSpawnTask emitStoredKey internalErrorFor isAesSeam isCrc32Seam isIdentifierBuiltinCall isIndexOfAnyWalk isParallelRegionCall isRegexScanWalk isResultConstructorCall isSha256Seam isSpawnTaskCall isWasmBuild jsonRouteOf keepElement mapIntrinsicOf nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from privateAbi receiverIsValue
-  pointer this: size=296 writesThrough=true captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitFusedCall#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 emitBuiltinCall#0 emitIdentifierBuiltinCall#0 emitStoredKey#0 emitPackedResult#0 Emitter.emitArgument#0 emitForeignString#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 defaultValue#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.captureValue#0 emitMapIntrinsic#0 emitSpawnTask#0 emitParallelRegion#0 elementKeepSize#0 Emitter.marksTailCall#0 Emitter.emitScopeExit#0 Emitter.useRuntime#0 emitJsonRoute#0 keepElement#0 Emitter.llvmAbi#0 emitIndexOfAnyKernel#0 emitBytesKernel#0 emitRegexScanKernel#0 Emitter.emitKernelArm#0 Emitter.emitKernelArm#0 Emitter.emitCrc32KernelArm#0 Emitter.beginReclaim#0 emitForeignBuffers#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.joinCrc32Arms#0 emitForeignStringResult#0 keepElement#0 Emitter.llvmAbi#0 Emitter.endReclaim#0
+  calls: CaptureSlot.type Emitter.beginReclaim Emitter.captureValue Emitter.emitArgument Emitter.emitCrc32KernelArm Emitter.emitKernelArm Emitter.emitScopeExit Emitter.endReclaim Emitter.joinCrc32Arms Emitter.llvmAbi Emitter.marksTailCall Emitter.typeOf Emitter.useRuntime FunctionSig.foreign FunctionSig.isCompileTime FunctionSig.visibleOutside FunctionSig.writtenArity FusionTable.roleOf IRFunction.emit IRFunction.emitValue IRFunction.placeBlock TypeTable.isResult TypeTable.resultByValue TypeTable.stripNull aesKernelOf bytesWalkOf capturesOf defaultValue dottedName elementKeepSize emitBuiltinCall emitBytesKernel emitForeignBuffers emitForeignString emitForeignStringResult emitFusedCall emitIdentifierBuiltinCall emitIndexOfAnyKernel emitJsonPutF64Kernel emitJsonRoute emitMapIntrinsic emitMethodCall emitPackedResult emitParallelRegion emitRegexScanKernel emitResultConstructor emitResultMethod emitResultReturningCall emitSpawnTask emitStoredKey internalErrorFor isAesSeam isCrc32Seam isIdentifierBuiltinCall isIndexOfAnyWalk isJsonPutF64Walk isParallelRegionCall isRegexScanWalk isResultConstructorCall isSha256Seam isSpawnTaskCall isWasmBuild jsonRouteOf keepElement mapIntrinsicOf nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from privateAbi receiverIsValue
+  pointer this: size=296 writesThrough=true captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitFusedCall#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 emitBuiltinCall#0 emitIdentifierBuiltinCall#0 emitStoredKey#0 emitPackedResult#0 Emitter.emitArgument#0 emitForeignString#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 defaultValue#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.captureValue#0 emitMapIntrinsic#0 emitSpawnTask#0 emitParallelRegion#0 elementKeepSize#0 Emitter.marksTailCall#0 Emitter.emitScopeExit#0 Emitter.useRuntime#0 emitJsonRoute#0 keepElement#0 Emitter.llvmAbi#0 emitIndexOfAnyKernel#0 emitBytesKernel#0 emitRegexScanKernel#0 emitJsonPutF64Kernel#0 Emitter.emitKernelArm#0 Emitter.emitKernelArm#0 Emitter.emitCrc32KernelArm#0 Emitter.beginReclaim#0 emitForeignBuffers#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.joinCrc32Arms#0 emitForeignStringResult#0 keepElement#0 Emitter.llvmAbi#0 Emitter.endReclaim#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitBuiltinCall#1 emitResultMethod#1 emitFusedCall#1 emitMethodCall#1 isResultConstructorCall#2 emitResultConstructor#1 emitIdentifierBuiltinCall#1 emitBuiltinCall#1 isIdentifierBuiltinCall#1 emitIdentifierBuiltinCall#1 Emitter.marksTailCall#1 emitForeignBuffers#1 emitResultReturningCall#3
   stackSites=4 stackLocals=4
   local -72:11 callee: Node (const)
@@ -1254,41 +1256,43 @@ function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCal
   callee +83:14 emitBytesKernel -> @emitBytesKernel
   callee +85:9 isRegexScanWalk -> @isRegexScanWalk
   callee +86:14 emitRegexScanKernel -> @emitRegexScanKernel
-  local +92:9 kernelJoin: IRBlock | null (let)
-  callee +93:10 isWasmBuild -> @isWasmBuild
-  local +94:13 aesSeam: i32 (const)
-  callee +94:23 isAesSeam -> @isAesSeam
-  callee +96:22 Emitter.emitKernelArm -> @Emitter.emitKernelArm
-  callee +96:49 aesKernelOf -> @aesKernelOf
-  callee +97:18 isSha256Seam -> @isSha256Seam
-  callee +98:22 Emitter.emitKernelArm -> @Emitter.emitKernelArm
-  local +103:11 noCrcKernel: string[] (const)
-  local +104:11 crcKernel: string[] (const)
-  callee +105:8 isWasmBuild -> @isWasmBuild
-  callee +105:34 isCrc32Seam -> @isCrc32Seam
-  callee +106:11 Emitter.emitCrc32KernelArm -> @Emitter.emitCrc32KernelArm
-  local +110:11 reclaim: string (const)
-  callee +110:42 Emitter.beginReclaim -> @Emitter.beginReclaim
-  local +111:11 mark: string (const)
-  local +112:11 marker: string (const)
-  callee +113:9 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +114:7 emitForeignBuffers -> @emitForeignBuffers
-  local +116:11 call: string (const)
-  callee +116:35 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +118:7 IRFunction.emit -> @IRFunction.emit
-  callee +120:9 IRFunction.emit -> @IRFunction.emit
-  callee +121:9 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +127:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +128:14 emitResultReturningCall -> @emitResultReturningCall
-  local +130:9 answer: string (let)
-  callee +130:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +132:16 Emitter.joinCrc32Arms -> @Emitter.joinCrc32Arms
-  callee +136:9 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +136:26 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +137:16 emitForeignStringResult -> @emitForeignStringResult
-  callee +140:14 keepElement -> @keepElement
-  callee +140:32 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +142:12 Emitter.endReclaim -> @Emitter.endReclaim
+  callee +90:9 isJsonPutF64Walk -> @isJsonPutF64Walk
+  callee +91:14 emitJsonPutF64Kernel -> @emitJsonPutF64Kernel
+  local +97:9 kernelJoin: IRBlock | null (let)
+  callee +98:10 isWasmBuild -> @isWasmBuild
+  local +99:13 aesSeam: i32 (const)
+  callee +99:23 isAesSeam -> @isAesSeam
+  callee +101:22 Emitter.emitKernelArm -> @Emitter.emitKernelArm
+  callee +101:49 aesKernelOf -> @aesKernelOf
+  callee +102:18 isSha256Seam -> @isSha256Seam
+  callee +103:22 Emitter.emitKernelArm -> @Emitter.emitKernelArm
+  local +108:11 noCrcKernel: string[] (const)
+  local +109:11 crcKernel: string[] (const)
+  callee +110:8 isWasmBuild -> @isWasmBuild
+  callee +110:34 isCrc32Seam -> @isCrc32Seam
+  callee +111:11 Emitter.emitCrc32KernelArm -> @Emitter.emitCrc32KernelArm
+  local +115:11 reclaim: string (const)
+  callee +115:42 Emitter.beginReclaim -> @Emitter.beginReclaim
+  local +116:11 mark: string (const)
+  local +117:11 marker: string (const)
+  callee +118:9 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +119:7 emitForeignBuffers -> @emitForeignBuffers
+  local +121:11 call: string (const)
+  callee +121:35 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +123:7 IRFunction.emit -> @IRFunction.emit
+  callee +125:9 IRFunction.emit -> @IRFunction.emit
+  callee +126:9 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +132:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +133:14 emitResultReturningCall -> @emitResultReturningCall
+  local +135:9 answer: string (let)
+  callee +135:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +137:16 Emitter.joinCrc32Arms -> @Emitter.joinCrc32Arms
+  callee +141:9 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +141:26 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +142:16 emitForeignStringResult -> @emitForeignStringResult
+  callee +145:14 keepElement -> @keepElement
+  callee +145:32 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +147:12 Emitter.endReclaim -> @Emitter.endReclaim
 function Emitter.emitKernelArm(this: Emitter, hw: string, kernel: string, prefix: string, operands: string[], answers: boolean): IRBlock -> @Emitter.emitKernelArm [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via IRFunction.emitValue
