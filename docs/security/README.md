@@ -53,7 +53,7 @@ the record that found it. The notes below the table name each such finding.
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
-| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 2 ⁷ |
+| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 2 ⁷ |
 | HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [http-client.md](http-client.md) | `std/net/http-client.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 2 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |

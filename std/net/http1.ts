@@ -88,7 +88,12 @@ export const HTTP1_NEED_MORE: i32 = 0
 export const HTTP1_HEAD: i32 = 1
 /** `next()`: `bodyLen` body bytes are at `body[bodyOff ..]`, valid until the next `feed`. */
 export const HTTP1_BODY: i32 = 2
-/** `next()`: the request's body is complete. */
+/**
+ * `next()`: the request's body is complete. Its head (method, target,
+ * version, fields, `keepAlive`) still reads as this request's until the next
+ * call to `next()`, so a response written at `HTTP1_END` sees the request it
+ * answers and never the pipelined one behind it.
+ */
 export const HTTP1_END: i32 = 3
 /** `next()`, from now on: the request switched protocols; see `upgradeBytes()`. */
 export const HTTP1_UPGRADE: i32 = 4
@@ -144,7 +149,7 @@ export class Http1Parser {
   // The fields are declared widest first, references before numbers before
   // flags, so the struct carries no padding; the groups say what each is.
 
-  // --- the request: valid from its `HTTP1_HEAD` until the next request's -----
+  // --- the request: valid from its `HTTP1_HEAD` until the `next()` after its `HTTP1_END`
   method: string = ""
   target: string = ""
   /** The field names, in lowercase, in the order they arrived; `values` beside them. */
@@ -218,6 +223,11 @@ export class Http1Parser {
   keepAlive: boolean = false
   /** Whether the request asked to switch protocols (`upgrade` is its value when `keepText`). */
   upgrading: boolean = false
+  /**
+   * Whether a kept-alive request ended and its head is still held for the
+   * response: the next `next()` clears it before it reads a byte more.
+   */
+  headHeld: boolean = false
   /**
    * Whether `method`, `target`, `names`, `values` and `upgrade` are filled as
    * strings. A server that must allocate nothing per request turns it off and
@@ -361,7 +371,7 @@ export class Http1Parser {
    * next feed and head make or the caller puts back first.
    */
   resting(): boolean {
-    return this.state === HTTP1_S_REQUEST_LINE && this.end === this.start
+    return this.state === HTTP1_S_REQUEST_LINE && this.end === this.start && !this.headHeld
   }
 
   /** How many bytes were fed and not consumed yet: what a caller bounds its reads by. */
@@ -485,6 +495,7 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.bodyTotal = 0
   p.sectionBytes = 0
   p.fieldCount = 0
+  p.headHeld = false
 }
 
 /** `http1TakeLine`'s answer when a whole line is ready; never an event. */
@@ -1092,6 +1103,11 @@ const http1Next = (p: Http1Parser): i32 => {
   while (true) {
     switch (p.state) {
       case HTTP1_S_REQUEST_LINE: {
+        // The request that ended was answered while its head was held; the
+        // pipelined bytes behind it are only read once it is cleared.
+        if (p.headHeld) {
+          http1StartRequest(p)
+        }
         // A method too long is a 400, decided before the line's length can
         // call it a long target and answer 414.
         if (http1MethodOverrun(p)) {
@@ -1162,7 +1178,11 @@ const http1Next = (p: Http1Parser): i32 => {
         } else if (!p.keepAlive) {
           p.state = HTTP1_S_CLOSED
         } else {
-          http1StartRequest(p)
+          // The head stays this request's until the next call, which clears
+          // it before reading on: a response written at HTTP1_END reads its
+          // own method, version and fields, and no copy is made.
+          p.state = HTTP1_S_REQUEST_LINE
+          p.headHeld = true
         }
         return HTTP1_END
       }

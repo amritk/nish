@@ -2064,7 +2064,8 @@ struct Http1Parser (class) size=200 align=8 exported
   field chunked: boolean index=37 offset=192 initialized
   field keepAlive: boolean index=38 offset=193 initialized
   field upgrading: boolean index=39 offset=194 initialized
-  field keepText: boolean index=40 offset=195 initialized
+  field headHeld: boolean index=40 offset=195 initialized
+  field keepText: boolean index=41 offset=196 initialized
   constructor -> @nish.Http1Parser.constructor
   method feed -> @nish.Http1Parser.feed
   method next -> @nish.Http1Parser.next
@@ -2495,8 +2496,9 @@ function http1Next(p: Http1Parser): i32 -> @nish.http1Next
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.http1BodyWindow nish.http1ChunkSize nish.http1EndOfHead nish.http1Fail nish.http1FieldLine nish.http1MethodOverrun nish.http1RequestLine nish.http1StartRequest nish.http1TakeLine nish_panic_overflow
-  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1MethodOverrun#0 nish.http1Fail#0 nish.http1TakeLine#0 nish.http1RequestLine#0 nish.http1TakeLine#0 nish.http1Fail#0 nish.http1EndOfHead#0 nish.http1FieldLine#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1ChunkSize#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1StartRequest#0
+  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1StartRequest#0 nish.http1MethodOverrun#0 nish.http1Fail#0 nish.http1TakeLine#0 nish.http1RequestLine#0 nish.http1TakeLine#0 nish.http1Fail#0 nish.http1EndOfHead#0 nish.http1FieldLine#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1ChunkSize#0 nish.http1BodyWindow#0 nish.http1TakeLine#0
   stackSites=0 stackLocals=0
+  callee -25:11 http1StartRequest -> @nish.http1StartRequest
   callee -21:13 http1MethodOverrun -> @nish.http1MethodOverrun
   callee -20:18 http1Fail -> @nish.http1Fail
   local -16:15 got: i32 (const)
@@ -2515,7 +2517,6 @@ function http1Next(p: Http1Parser): i32 -> @nish.http1Next
   callee +30:16 http1BodyWindow -> @nish.http1BodyWindow
   local +34:15 got: i32 (const)
   callee +34:26 http1TakeLine -> @nish.http1TakeLine
-  callee +47:11 http1StartRequest -> @nish.http1StartRequest
 function http1BytesOf(text: string): u8[] -> @nish.http1BytesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
