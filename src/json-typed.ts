@@ -345,23 +345,21 @@ const jsonPresenceMisuse = (ctx: CheckContext, info: StructInfo, node: Node, det
 }
 
 /**
- * The presence misuse that names the flag's type. It is a function of its own
- * because it returns nothing, so the type's name it makes is released when it
- * returns rather than kept for every pass of the caller's loop.
+ * The presence misuse of a flag that is not a `boolean` field one may set:
+ * `why` says what it is, and an empty one names its type. It is a function of
+ * its own because it returns nothing, so the type's name it makes is released
+ * when it returns rather than kept for every pass of the caller's loop.
  */
-const jsonPresenceNotBoolean = (
+const jsonPresenceFlagIs = (
   ctx: CheckContext,
   info: StructInfo,
   to: Node,
   field: FieldInfo,
-  flag: FieldInfo
+  flag: FieldInfo,
+  why: string
 ): void => {
-  jsonPresenceMisuse(
-    ctx,
-    info,
-    to,
-    `gives \`${field.name}\` the field \`${flag.name}\`, which is \`${ctx.table.typeName(flag.type)}\``
-  )
+  const what = why.length > 0 ? why : `\`${ctx.table.typeName(flag.type)}\``
+  jsonPresenceMisuse(ctx, info, to, `gives \`${field.name}\` the field \`${flag.name}\`, which is ${what}`)
 }
 
 /**
@@ -412,25 +410,15 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
       return
     }
     if (flag.jsonPresence !== null) {
-      jsonPresenceMisuse(
-        ctx,
-        info,
-        to,
-        `gives \`${field.name}\` the field \`${flag.name}\`, which is recorded itself`
-      )
+      jsonPresenceFlagIs(ctx, info, to, field, flag, "recorded itself")
       return
     }
     if (flag.type !== T_BOOL) {
-      jsonPresenceNotBoolean(ctx, info, to, field, flag)
+      jsonPresenceFlagIs(ctx, info, to, field, flag, "")
       return
     }
     if (flag.readonly) {
-      jsonPresenceMisuse(
-        ctx,
-        info,
-        to,
-        `gives \`${field.name}\` the field \`${flag.name}\`, which is \`readonly\``
-      )
+      jsonPresenceFlagIs(ctx, info, to, field, flag, "`readonly`")
       return
     }
     field.jsonPresence = flag
@@ -441,8 +429,9 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
 /**
  * Read the class's `static readonly json`, now that its fields are known, and
  * write what it says into them: a renamed field's `wireName`, an optional
- * field's `jsonOptional`, and a recorded field's `jsonPresence`. Every misuse is refused here, with the class, so a
- * class that no call decodes is held to the same rule as one that is.
+ * field's `jsonOptional`, and a recorded field's `jsonPresence`. Every misuse
+ * is refused here, with the class, so a class that no call decodes is held to
+ * the same rule as one that is.
  * `nish/json-typed`'s own `JsonNumber` is marked here too.
  */
 export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
