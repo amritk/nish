@@ -622,10 +622,21 @@ if [ -n "$objects_to" ]; then
 fi
 
 if [ -n "$objects_from" ]; then
-  for unit in runtime.c $halves; do
-    [ -f "$objects_from/${unit%.c}.o" ] || { echo "error: --runtime-from: $objects_from/${unit%.c}.o is missing" >&2; exit 2; }
-  done
   make_work
+  # A unit newer than the compiler that filled $objects_from -- the seed that
+  # builds the next compiler caches only the units it knows -- is compiled here
+  # from this script's runtime/, into the work directory.
+  unit_objects=()
+  for unit in runtime.c $halves; do
+    object="$objects_from/${unit%.c}.o"
+    if [ ! -f "$object" ]; then
+      source_dir=$(cd -- "$(dirname -- "$0")/../runtime" 2>/dev/null && pwd) || source_dir=""
+      [ "$unit" != runtime.c ] && [ -f "$source_dir/$unit" ] || { echo "error: --runtime-from: $object is missing" >&2; exit 2; }
+      object="$work/${unit%.c}.o"
+      (cd -- "$source_dir" && exec "$CC" "${compile[@]}" -c "$unit" -o "$object") || { echo "error: $unit did not compile" >&2; exit 1; }
+    fi
+    unit_objects+=("$object")
+  done
   objects=()
   n=0
   for i in "${inputs[@]}"; do
@@ -648,9 +659,7 @@ if [ -n "$objects_from" ]; then
   join_jobs || { echo "error: a module did not compile" >&2; exit 1; }
   # In the order the one-command link names them: the inputs, then runtime.c
   # and its siblings.
-  for unit in runtime.c $halves; do
-    objects+=("$objects_from/${unit%.c}.o")
-  done
+  objects+=("${unit_objects[@]}")
   inputs=("${objects[@]}")
   # clang runs dsymutil itself when one command compiles and links with -g on
   # macOS; a link of objects does not, so it is run here, while the program's

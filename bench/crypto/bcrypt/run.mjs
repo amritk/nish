@@ -7,7 +7,9 @@
  * MIT), built with `gcc` and `clang -O2 -march=native` from a copy fetched at a
  * pinned commit, run with one lane and with four; and `bcryptHashN` at each
  * width from one to six, so the widths are measured on this core rather than
- * guessed. The single path's row is also given in cycles per Blowfish block:
+ * guessed, each twice: as built, which on x86-64 with BMI1 and BMI2 runs the
+ * cost loop on runtime/runtime-bcrypt.c's kernel, and under `NISH_BCRYPT=soft`,
+ * which runs it in Nish. The single path's row is also given in cycles per Blowfish block:
  * the clock (`--ghz`, else the first `cpu MHz` of /proc/cpuinfo, which on a
  * virtual machine is often the nominal clock and not the one it runs at)
  * times its time per hash over the 2^cost × 1042 + 713 blocks a hash
@@ -269,6 +271,11 @@ for (const [name, source, exe, per] of [
     process.exit(1)
   }
   programs.push({ name, exe: path.join(dir, exe), per })
+  // The same program on the Nish path, which is main's: on x86-64 with BMI1
+  // and BMI2 the row above runs runtime/runtime-bcrypt.c's kernel instead.
+  if (exe.startsWith("nishn")) {
+    programs.push({ name: `${name}, \`NISH_BCRYPT=soft\``, exe: path.join(dir, exe), per, soft: true })
+  }
 }
 
 const cc = process.env.CC || "cc"
@@ -408,7 +415,9 @@ const samples = programs.map(() => [])
 // Round 0 warms the page cache and the CPU's clocks and is not counted.
 for (let round = 0; round <= rounds; round++) {
   programs.forEach((p, i) => {
-    const r = run("bash", ["-c", 'TIMEFORMAT=%3U; time "$0" > "$0.out"', p.exe])
+    const r = run("bash", ["-c", 'TIMEFORMAT=%3U; time "$0" > "$0.out"', p.exe], {
+      env: { ...process.env, NISH_BCRYPT: p.soft ? "soft" : "" },
+    })
     if (r.status !== 0) {
       console.error(`${p.name} failed:\n${r.stderr}`)
       process.exit(1)
