@@ -25,6 +25,7 @@ enforces them.
 
 1. [Why](#1-why)
 2. [The flags](#2-the-flags)
+   - [2a. Scopes from a dependency's grants](#2a-scopes-from-a-dependencys-grants)
 3. [The wrapper](#3-the-wrapper)
 4. [The mapping](#4-the-mapping)
 5. [The kernel version floor](#5-the-kernel-version-floor)
@@ -118,6 +119,36 @@ runs on each `--allow` as it is read (`src/compile.ts:628`), before a later
 decides once the whole command line is read, so `--allow fs.read=/srv/data
 --sandbox` and `--sandbox --allow fs.read=/srv/data` are the same command.
 
+### 2a. Scopes from a dependency's grants
+
+A dependency's grant may carry an argument
+([wp40-dependency-capabilities.md §2a](wp40-dependency-capabilities.md#2a-arguments)):
+`fs.read=<dir>`, `fs.write=<dir>`, `process.spawn=<program>`. Under
+`--sandbox`, `narrowSandbox` (`src/compilation.ts`) turns them into scopes
+when it can prove the scope is the program's whole reach of the capability:
+every dependency that reaches it is granted it with arguments, the root
+package does not reach it itself, the command line gives it no scope of its
+own and `main` does not reach `ffi`. Otherwise the capability stays whole, as
+it was. The directories join `@.sandbox.read` and `@.sandbox.write`, the
+same lists `--allow fs.read=<dir>` makes; the programs, each with the
+interpreter it needs to start (its ELF `PT_INTERP` or its `#!` line), make
+`@.sandbox.exec`, `nish_sandbox`'s fifth operand (`tests/link/sandbox_dep_exec_allowlist`,
+granted `process.spawn=true`, on x86-64 Debian):
+
+```llvm
+@.sandbox.exec = private unnamed_addr constant [62 x i8] c"/usr/bin/true\00/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2\00\00"
+
+  call void @nish_sandbox(i32 256, i32 1, i8* null, i8* null, i8* getelementptr inbounds ([62 x i8], [62 x i8]* @.sandbox.exec, i64 0, i64 0))
+```
+
+With an exec list, EXECUTE leaves the rule on `/` and each listed file gets a
+`path_beneath` rule of its own, opened `O_PATH` (a file, so `O_DIRECTORY` is
+no longer passed for any rule; the compiler has already refused a directory
+scope that is not one). `process.spawn` keeps READ_FILE and IOCTL_DEV on `/`,
+so only which programs run is narrowed. A `net=<host>` grant has no run-time
+half: seccomp sees a pointer to the address and cannot read it
+([security/capabilities.md](security/capabilities.md), CAPS-19).
+
 ## 3. The wrapper
 
 `emitEntryWrapper` (`src/emit.ts:756`) builds the native `@main`. With
@@ -140,7 +171,7 @@ arguments: the wrapper emits it only when `this.program.usesArgv`
 
 define internal void @.sandbox.apply() {
 entry:
-  call void @nish_sandbox(i32 33, i32 1, i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.sandbox.read, i64 0, i64 0), i8* null)
+  call void @nish_sandbox(i32 33, i32 1, i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.sandbox.read, i64 0, i64 0), i8* null, i8* null)
   ret void
 }
 
@@ -153,7 +184,7 @@ entry:
   ret i32 %0
 }
 
-declare void @nish_sandbox(i32, i32, i8*, i8*)
+declare void @nish_sandbox(i32, i32, i8*, i8*, i8*)
 declare void @nish_sandbox_check()
 ```
 

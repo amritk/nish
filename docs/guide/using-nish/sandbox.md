@@ -133,6 +133,63 @@ Only `fs.read` and `fs.write` take a scope, only in `--allow`, and only with
 `--sandbox`, the one thing that enforces it; each of the others is refused
 with exit status 2. A directory with a comma in its name cannot be named.
 
+## Narrowing what a dependency is granted
+
+A dependency under `node_modules` needs your `package.json` to grant it
+`fs.read`, `fs.write`, `net`, `process.spawn`, `ffi` or `unsafe` (see
+[A dependency's capabilities](../../LANGUAGE.md#a-dependencys-capabilities)).
+The grant can name what it is for, after an `=`: a directory for `fs.read`
+and `fs.write`, a program for `process.spawn`, an IP address for `net`.
+
+```json
+{
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_tool": ["fs.read=./data", "process.spawn=git", "net=127.0.0.1"]
+      }
+    }
+  }
+}
+```
+
+The directory is found from the folder your `package.json` is in, the
+program on your `PATH`, and both must exist when you build. A host is an
+address, not a name to look up. A grant without an `=` grants the whole
+capability, as it always did.
+
+The build checks what it can see. A dependency that passes a fixed path,
+program or address outside its grant stops the build, at that string:
+
+```text
+node_modules/pkg_conf/src/index.ts:2:38: error: the dependency `pkg_conf` hands `readFileSync` "/etc/passwd", which its `fs.read` grant does not cover: it is granted fs.read=data; name it in the grant, or grant `fs.read` whole
+```
+
+A path or program the dependency works out while it runs is beyond the
+build. Build with `--sandbox` and the kernel holds it instead: the granted
+directories become the program's `fs.read` and `fs.write` scopes, as
+`--allow fs.read=<dir>` makes them, and the granted programs the only ones it
+may start. A dependency granted `fs.read=./data` that is handed
+`/etc/passwd` at run time gets an error from `readFileSync`; one granted
+`process.spawn=git` that tries to start `sh` gets `-1` from `spawnSync`.
+
+The sandbox narrows a capability this way only when it can tell the
+grant is all of it: every dependency that reaches it names an argument,
+your own code does not reach it, `--allow` gives it no scope of its own and
+`main` does not call C. Otherwise the capability stays whole, as it was
+before. The scopes hold for the whole process, not one package: any
+dependency that reads files may read every granted directory.
+
+Addresses are checked at build time only. The kernel cannot see which
+address a socket call is given, so a `net=<host>` grant does not stop a
+dependency that builds its address at run time. Grant `net` to a dependency
+you have read.
+
+`nish-capabilities.lock.json` records the arguments too
+(`"pkg_conf": ["fs.read=data"]`). Widening a grant past them — a new
+directory, program or address, or the whole capability — stops the build
+until you review it and run `--update-capability-lock` again.
+
 If the directory is gone when the program runs, `--sandbox` refuses to run,
 status 126, naming it:
 
