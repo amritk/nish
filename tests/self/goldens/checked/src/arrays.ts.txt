@@ -22,6 +22,7 @@ import WANT_INFERRED from "./expressions" -> const WANT_INFERRED
 import isArrayWriteMethod from "./emit-util" -> function @isArrayWriteMethod
 import storesInlineElements from "./emit-util" -> function @storesInlineElements
 import unwrapParens from "./emit-util" -> function @unwrapParens
+import checkGenericCall from "./generics" -> function @checkGenericCall
 import genericCallSpelling from "./generics" -> function @genericCallSpelling
 import indexOfName from "./generics" -> function @indexOfName
 import checkIndexArgument from "./members" -> function @checkIndexArgument
@@ -68,6 +69,7 @@ import Instantiation from "./program" -> struct Instantiation
 import PAR_FROM from "./program" -> const PAR_FROM
 import PAR_MAP_NEW from "./program" -> const PAR_MAP_NEW
 import PAR_SPAWN from "./program" -> const PAR_SPAWN
+import SORT_LOCAL from "./std-modules" -> const SORT_LOCAL
 import Local from "./symbols" -> struct Local
 import Scope from "./symbols" -> struct Scope
 import sourceLocal from "./symbols" -> function @sourceLocal
@@ -76,7 +78,7 @@ import T_ERROR from "./types" -> const T_ERROR
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
 import TypeTable from "./types" -> struct TypeTable
-const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill"
+const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill, sort"
 const ARRAY_LEVEL: string = "[]" [exported]
 const MAP_LEVEL: string = "<>" [exported]
 const UNNAMED: string = ""
@@ -372,65 +374,86 @@ function levelled(name: string, levels: string[]): string -> @levelled
   stackSites=1 stackLocals=1
   local +0:9 parts: string[] (const)
   local +1:7 i: i32 (let)
+function checkSort(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkSort
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.template Node.constructor checkGenericCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.errorAtProperty#0 CheckContext.template#0 CheckContext.errorType#0 checkGenericCall#0
+  pointer call: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkGenericCall#1
+  pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
+  pointer args: size=40 writesThrough=true captured=false
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkGenericCall#3
+  stackSites=0 stackLocals=0
+  local -18:11 what: string (const)
+  callee -17:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  local -11:9 template: TemplateInfo | null (const)
+  callee -11:20 CheckContext.template -> @CheckContext.template
+  callee -9:12 CheckContext.errorType -> @CheckContext.errorType
+  local -7:9 name: Node (const)
+  callee -7:16 new Node -> @Node.constructor
+  local -4:9 moved: Node[] (const)
+  local -3:14 arg: Node (const)
+  callee +2:10 checkGenericCall -> @checkGenericCall
 function checkArrayMethod(ctx: CheckContext, call: Node, access: Node, args: Node, receiver: i32, scope: Scope): i32 -> @checkArrayMethod [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: receiver
-  calls: CheckContext.error CheckContext.errorAtProperty CheckContext.errorType CheckContext.numberType TypeTable.assignable TypeTable.baseOf TypeTable.isEntered TypeTable.isReadonlyArray TypeTable.refOf TypeTable.typeName checkBuiltinArity checkBulkMethod checkExpression isArgvExpression isArrayWriteMethod nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 readonlyWriteMessage typedArrayElement typedArraySpelling unwrapParens
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=isArgvExpression#0 CheckContext.errorType#0 CheckContext.errorType#0 readonlyWriteMessage#0 typedArraySpelling#0 CheckContext.errorAtProperty#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 checkBuiltinArity#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 CheckContext.errorAtProperty#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkBulkMethod#0 CheckContext.errorAtProperty#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 CheckContext.error#1 checkBulkMethod#1
-  pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 checkBulkMethod#2 CheckContext.errorAtProperty#1
-  pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBulkMethod#3
-  pointer scope: size=56 writesThrough=true captured=true passedTo=isArgvExpression#2 typedArraySpelling#2 checkExpression#2 checkExpression#2 checkExpression#2 checkBulkMethod#5
+  calls: CheckContext.error CheckContext.errorAtProperty CheckContext.errorType CheckContext.numberType TypeTable.assignable TypeTable.baseOf TypeTable.isEntered TypeTable.isReadonlyArray TypeTable.refOf TypeTable.typeName checkBuiltinArity checkBulkMethod checkExpression checkSort isArgvExpression isArrayWriteMethod nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 readonlyWriteMessage typedArrayElement typedArraySpelling unwrapParens
+  pointer ctx: size=280 writesThrough=true captured=true passedTo=isArgvExpression#0 CheckContext.errorType#0 CheckContext.errorType#0 readonlyWriteMessage#0 checkSort#0 typedArraySpelling#0 CheckContext.errorAtProperty#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 checkBuiltinArity#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 CheckContext.errorAtProperty#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkBulkMethod#0 CheckContext.errorAtProperty#0
+  pointer call: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkSort#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 CheckContext.error#1 checkBulkMethod#1
+  pointer access: size=40 writesThrough=false captured=false passedTo=checkSort#2 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 checkBulkMethod#2 CheckContext.errorAtProperty#1
+  pointer args: size=40 writesThrough=true captured=false passedTo=checkSort#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBulkMethod#3
+  pointer scope: size=56 writesThrough=true captured=true passedTo=isArgvExpression#2 checkSort#4 typedArraySpelling#2 checkExpression#2 checkExpression#2 checkExpression#2 checkBulkMethod#5
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   callee +1:46 isArgvExpression -> @isArgvExpression
   callee +2:12 CheckContext.errorType -> @CheckContext.errorType
   callee +2:26 unwrapParens -> @unwrapParens
-  callee +4:7 isArrayWriteMethod -> @isArrayWriteMethod
-  callee +4:35 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee +4:8 isArrayWriteMethod -> @isArrayWriteMethod
+  callee +4:56 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
   callee +5:12 CheckContext.errorType -> @CheckContext.errorType
   callee +5:32 readonlyWriteMessage -> @readonlyWriteMessage
-  local +8:11 alias: string (const)
-  callee +8:19 typedArraySpelling -> @typedArraySpelling
-  callee +9:9 typedArrayElement -> @typedArrayElement
-  callee +10:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee +12:93 TypeTable.typeName -> @TypeTable.typeName
-  local +17:9 elem: i32 (const)
-  callee +17:16 TypeTable.refOf -> @TypeTable.refOf
-  local +18:9 spelled: string (const)
-  callee +18:19 TypeTable.typeName -> @TypeTable.typeName
-  local +28:9 elemContext: i32 (const)
-  callee +28:62 TypeTable.isEntered -> @TypeTable.isEntered
-  callee +30:10 checkBuiltinArity -> @checkBuiltinArity
-  callee +31:14 CheckContext.numberType -> @CheckContext.numberType
-  local +33:11 got: i32 (const)
-  callee +33:17 checkExpression -> @checkExpression
-  callee +34:29 TypeTable.assignable -> @TypeTable.assignable
-  callee +35:7 CheckContext.error -> @CheckContext.error
-  callee +35:50 TypeTable.typeName -> @TypeTable.typeName
-  callee +37:12 CheckContext.numberType -> @CheckContext.numberType
-  callee +42:5 checkBuiltinArity -> @checkBuiltinArity
-  callee +46:10 checkBuiltinArity -> @checkBuiltinArity
-  callee +47:14 CheckContext.numberType -> @CheckContext.numberType
-  local +51:11 probe: i32 (const)
-  callee +51:19 TypeTable.baseOf -> @TypeTable.baseOf
-  local +52:11 got: i32 (const)
-  callee +52:17 checkExpression -> @checkExpression
-  callee +58:29 TypeTable.assignable -> @TypeTable.assignable
-  local +59:13 want: string (const)
-  callee +59:20 TypeTable.typeName -> @TypeTable.typeName
-  callee +60:7 CheckContext.error -> @CheckContext.error
-  callee +62:78 TypeTable.typeName -> @TypeTable.typeName
-  callee +65:12 CheckContext.numberType -> @CheckContext.numberType
-  callee +72:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee +79:7 CheckContext.error -> @CheckContext.error
-  local +81:13 got: i32 (const)
-  callee +81:19 checkExpression -> @checkExpression
-  callee +83:9 CheckContext.error -> @CheckContext.error
-  callee +83:69 TypeTable.typeName -> @TypeTable.typeName
-  callee +89:12 checkBulkMethod -> @checkBulkMethod
-  callee +91:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee +8:12 checkSort -> @checkSort
+  local +11:11 alias: string (const)
+  callee +11:19 typedArraySpelling -> @typedArraySpelling
+  callee +12:9 typedArrayElement -> @typedArrayElement
+  callee +13:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee +15:93 TypeTable.typeName -> @TypeTable.typeName
+  local +20:9 elem: i32 (const)
+  callee +20:16 TypeTable.refOf -> @TypeTable.refOf
+  local +21:9 spelled: string (const)
+  callee +21:19 TypeTable.typeName -> @TypeTable.typeName
+  local +31:9 elemContext: i32 (const)
+  callee +31:62 TypeTable.isEntered -> @TypeTable.isEntered
+  callee +33:10 checkBuiltinArity -> @checkBuiltinArity
+  callee +34:14 CheckContext.numberType -> @CheckContext.numberType
+  local +36:11 got: i32 (const)
+  callee +36:17 checkExpression -> @checkExpression
+  callee +37:29 TypeTable.assignable -> @TypeTable.assignable
+  callee +38:7 CheckContext.error -> @CheckContext.error
+  callee +38:50 TypeTable.typeName -> @TypeTable.typeName
+  callee +40:12 CheckContext.numberType -> @CheckContext.numberType
+  callee +45:5 checkBuiltinArity -> @checkBuiltinArity
+  callee +49:10 checkBuiltinArity -> @checkBuiltinArity
+  callee +50:14 CheckContext.numberType -> @CheckContext.numberType
+  local +54:11 probe: i32 (const)
+  callee +54:19 TypeTable.baseOf -> @TypeTable.baseOf
+  local +55:11 got: i32 (const)
+  callee +55:17 checkExpression -> @checkExpression
+  callee +61:29 TypeTable.assignable -> @TypeTable.assignable
+  local +62:13 want: string (const)
+  callee +62:20 TypeTable.typeName -> @TypeTable.typeName
+  callee +63:7 CheckContext.error -> @CheckContext.error
+  callee +65:78 TypeTable.typeName -> @TypeTable.typeName
+  callee +68:12 CheckContext.numberType -> @CheckContext.numberType
+  callee +75:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee +82:7 CheckContext.error -> @CheckContext.error
+  local +84:13 got: i32 (const)
+  callee +84:19 checkExpression -> @checkExpression
+  callee +86:9 CheckContext.error -> @CheckContext.error
+  callee +86:69 TypeTable.typeName -> @TypeTable.typeName
+  callee +92:12 checkBulkMethod -> @checkBulkMethod
+  callee +94:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
 function checkBulkMethod(ctx: CheckContext, call: Node, access: Node, args: Node, receiver: i32, scope: Scope): i32 -> @checkBulkMethod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
