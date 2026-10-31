@@ -8,7 +8,7 @@ happens to an answer that outlives its connection, and the test that pins
 each property. It is written with the code rather than after an audit, so
 that the audit of the HTTP application layer starts from evidence.
 
-Anchors are function names in `std/net/handler.ts` at `4224476`, the last
+Anchors are function names in `std/net/handler.ts` at `9a33fe0`, the last
 commit to change it on the head that merges this record.
 
 **Result.** The handler adds no parser of its own: the request line, the
