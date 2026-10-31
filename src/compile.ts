@@ -1850,12 +1850,6 @@ const cachedBinary = (
   return cached
 }
 
-/** `text` up to its first newline. */
-const firstLine = (text: string): string => {
-  const end = text.indexOf("\n")
-  return end < 0 ? text : text.slice(0, end)
-}
-
 /**
  * Whether the compiler runs from a checkout, where `std/` is source being
  * worked on, rather than from an install: a checkout has the compiler's own
@@ -1928,7 +1922,7 @@ const runWatch = (pkg: PackageSearch, entry: string, argsFrom: i32, json: boolea
   build.push(entry)
   const argv: string[] = [
     supervisor.binary,
-    pid === null ? "0" : firstLine(pid),
+    pid === null ? "0" : splitByte(pid, 10)[0],
     state,
     entry,
     `${build.length}`,

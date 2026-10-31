@@ -600,3 +600,7 @@ export const capabilitySummary = (compilation: Compilation): string => {
   const listed = names.length === 0 ? "none" : names.join(", ")
   return `capabilities: ${listed} (${isDeterministic(program) ? "deterministic" : "not deterministic"})`
 }
+
+/** Whether the program can use the network, from the set `capabilitySummary` lists. */
+export const programUsesNet = (compilation: Compilation): boolean =>
+  ((programCapabilities(compilation, compilation.analyze()) >> capabilityIndex("net")) & 1) === 1

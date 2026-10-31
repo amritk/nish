@@ -15,7 +15,7 @@
 // files it was built from in the state file (`watchState`) for the supervisor
 // to read.
 
-import { capabilitySummary } from "./capability-report"
+import { programUsesNet } from "./capability-report"
 import { Compilation } from "./compilation"
 import { isStdModule } from "./std-modules"
 import { StringBuilder } from "./strings"
@@ -29,11 +29,9 @@ import { StringBuilder } from "./strings"
  * where editing `std/` is the work being watched.
  */
 export const watchState = (compilation: Compilation, binary: string, checkout: boolean): string => {
-  const summary = capabilitySummary(compilation)
-  const listed = summary.substring("capabilities: ".length, summary.indexOf(" ("))
   const out = new StringBuilder()
   out.add(`${binary}\n`)
-  out.add(`, ${listed},`.indexOf(", net,") >= 0 ? "1\n" : "0\n")
+  out.add(programUsesNet(compilation) ? "1\n" : "0\n")
   for (const unit of compilation.modules) {
     if (checkout || !isStdModule(compilation.libraryRoot(), unit.name, unit.path)) {
       out.add(`${unit.path}\n`)
@@ -66,6 +64,8 @@ export const watchState = (compilation: Compilation, binary: string, checkout: b
 export const WATCH_SUPERVISOR_SOURCE: string = `// The supervisor \`nish run --watch\` starts. Its arguments are the driver's
 // pid, the state file a build writes, the entry file, the length of the build
 // command, the build command, and the program's arguments.
+import { splitLines } from "nish/text"
+
 const POLL_MS: i32 = 100
 const DEBOUNCE_MS: i64 = 100
 const SETTLE_MS: i32 = 300
@@ -102,21 +102,6 @@ class Watch {
 const stampOf = (path: string): f64 => {
   const m: f64 = statMtimeSync(path)
   return m === m ? m : -1
-}
-
-/** \`text\` cut at each newline. */
-const linesOf = (text: string): string[] => {
-  const lines: string[] = []
-  let from: i32 = 0
-  while (from < toI32(text.length)) {
-    let end: i32 = text.indexOf("\\n", from)
-    if (end < 0) {
-      end = toI32(text.length)
-    }
-    lines.push(text.slice(from, end))
-    from = end + 1
-  }
-  return lines
 }
 
 const millisSince = (from: i64): i64 => (monotonicNanos() - from) / MS
@@ -159,6 +144,15 @@ const stopProcess = (w: Watch, pid: i32): void => {
     } else {
       pollWait(w.loop, w.ready, 20)
     }
+  }
+}
+
+/** Stops the build in progress, whose files have changed since it began. */
+const stopBuilder = (w: Watch): void => {
+  if (w.builder > 0) {
+    kill(w.builder, 15)
+    waitPid(w.builder, 0)
+    w.builder = 0
   }
 }
 
@@ -243,7 +237,7 @@ const finishBuild = (w: Watch, status: i32): void => {
     return
   }
   const text: string | null = readFileSyncOrNull(w.state)
-  const lines: string[] = text === null ? [] : linesOf(text)
+  const lines: string[] = text === null ? [] : splitLines(text)
   if (lines.length < 2 || lines[0].length === 0) {
     console.error("watch: the build left no binary; " + keeps)
     return
@@ -311,17 +305,10 @@ export const main = (): number => {
     if (changed(w)) {
       w.pending = true
       w.due = monotonicNanos() + DEBOUNCE_MS * MS
-      if (w.builder > 0) {
-        kill(w.builder, 15)
-        waitPid(w.builder, 0)
-        w.builder = 0
-      }
+      stopBuilder(w)
     }
   }
-  if (w.builder > 0) {
-    kill(w.builder, 15)
-    waitPid(w.builder, 0)
-  }
+  stopBuilder(w)
   if (w.program > 0) {
     stopProcess(w, w.program)
   }
