@@ -226,6 +226,29 @@ const OK_EXP_EDGE: string =
   "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1MDAwMDAwMzF9.JhOmZl0oAEftrRZY60Wfvq4fIir-Z0-4MlNlbf0jl20";
 const BAD_NONE_UNSIGNED: string =
   "eyJhbGciOiJub25lIn0.eyJleHAiOjIwMDAwMDAwMDB9.";
+// The JSON reader's strictness, each an HS256 token under the RFC key.
+const BAD_JSON_UTF8: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsIngiOiLAryJ9.weyus7doiZTLCnKqqNRt60piKnEKxQM0AcLK1338wIg";
+const BAD_JSON_SURROGATE: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsIngiOiJcdWQ4MDAifQ.34oXHw4xcvX0SOuDTMEar_ma_aImKb5QN7R1g4kT7kw";
+const BAD_JSON_CONTROL: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsIngiOiJhCWIifQ.qdCCmgHgO8NXhz69yisN1AXePWIXyyV1M0X1WEhvNGE";
+const BAD_JSON_COMMA: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsfQ.oCtP68Ib-UVXndTHQYarDI-0H3RdYEIDplGmvtvHI2E";
+const BAD_JSON_ZERO: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjAyMDAwMDAwMDAwfQ.WqAIMwkq1B4bqnrlJiFPNlideqijlM1F2VjfHdzVcjQ";
+const BAD_JSON_LITERAL: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsIngiOm51bH0.haLWDdjCK75-9m96iLYN-5hcW6PMjqr-P5MWwOyVVBI";
+const BAD_JSON_DEEP: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsIngiOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV19.R7CLCU9Q6uN73brkGaN1Afv-64r00e_9lP3_dJZXTWw";
+const OK_JSON_DEEP: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsIngiOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tdXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dfQ.qIRTh5FYIHTekYmstgVqaMBodFwZNJnXoobe5gjpScU";
+const BAD_EXP_OVERFLOW: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjkyMjMzNzIwMzY4NTQ3NzU4MDh9.EBnMYjr8ex81f4VNB97uj-hOqSVWazwq4APFyXwVUtw";
+const BAD_EXP_EXPONENT: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjJlOX0.zoz6By_FE0AS0aSlhL_nMjeuQVaRhnitbbtsxuz4bZU";
+const OK_JSON_TEXT: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsInN1YiI6Ilx1MDA2MW5cdTAwNjEiLCJ4IjoiXHVkODNkXHVkZTAwIFwvIMOpIiwieSI6W3RydWUsZmFsc2UsbnVsbCwtMCwxLjVlLTNdfQ.xqoOiVKj2nyycKnOuEdXC8Bgv6j-DI651rDx90aO5Bg";
 
 const NOW: i64 = 1500000000;
 const HUGE: i64 = 1073741824 * 1073741824 * 7;
@@ -393,6 +416,17 @@ export const jwtChecks = (): i32 => {
   t.eqStr("claims: the wrong subject", codeOf(subOnly.verifyString(hs, BAD_SUB, NOW)), codeOf(JWT_ERR_SUBJECT));
   t.eqStr("claims: a payload that is an array", codeOf(v.verifyString(hs, BAD_PAYLOAD_ARRAY, NOW)), codeOf(JWT_ERR_CLAIMS));
   t.eqStr("claims: a payload that is not JSON", codeOf(v.verifyString(hs, BAD_PAYLOAD_TEXT, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: an overlong UTF-8 form in a string", codeOf(v.verifyString(hs, BAD_JSON_UTF8, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: a lone surrogate escape", codeOf(v.verifyString(hs, BAD_JSON_SURROGATE, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: a raw control byte in a string", codeOf(v.verifyString(hs, BAD_JSON_CONTROL, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: a trailing comma", codeOf(v.verifyString(hs, BAD_JSON_COMMA, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: a number with a leading zero", codeOf(v.verifyString(hs, BAD_JSON_ZERO, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: a truncated literal", codeOf(v.verifyString(hs, BAD_JSON_LITERAL, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: nesting one past JWT_MAX_DEPTH", codeOf(v.verifyString(hs, BAD_JSON_DEEP, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: nesting at JWT_MAX_DEPTH", codeOf(v.verifyString(hs, OK_JSON_DEEP, NOW)), codeOf(JWT_OK));
+  t.eqStr("json: an exp past the i64 range", codeOf(v.verifyString(hs, BAD_EXP_OVERFLOW, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: an exp with an exponent", codeOf(v.verifyString(hs, BAD_EXP_EXPONENT, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("json: escapes, a surrogate pair and literals; sub compared decoded", codeOf(subOnly.verifyString(hs, OK_JSON_TEXT, NOW)), codeOf(JWT_OK));
   t.ok("claims: a refused token leaves claimsLen 0", v.claimsLen === 0);
   const noExp = new JwtVerifier(JWT_MAX_TOKEN);
   noExp.requireExp = false;

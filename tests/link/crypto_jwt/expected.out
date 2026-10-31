@@ -63,6 +63,17 @@ PASS  claims: an aud array holding a number
 PASS  claims: the wrong subject
 PASS  claims: a payload that is an array
 PASS  claims: a payload that is not JSON
+PASS  json: an overlong UTF-8 form in a string
+PASS  json: a lone surrogate escape
+PASS  json: a raw control byte in a string
+PASS  json: a trailing comma
+PASS  json: a number with a leading zero
+PASS  json: a truncated literal
+PASS  json: nesting one past JWT_MAX_DEPTH
+PASS  json: nesting at JWT_MAX_DEPTH
+PASS  json: an exp past the i64 range
+PASS  json: an exp with an exponent
+PASS  json: escapes, a surrogate pair and literals; sub compared decoded
 PASS  claims: a refused token leaves claimsLen 0
 PASS  claims: no exp, with requireExp cleared
 PASS  leeway 0: one second before exp
@@ -105,4 +116,4 @@ PASS  a hand-built RS256 key holding an HMAC key refuses an HMAC-signed RS256 to
 PASS  a wiped EdDSA key signs nothing
 PASS  a wiped EdDSA key verifies nothing
 PASS  a wiped ES256 key signs nothing
-nish/crypto/jwt: 107 passed, 0 failed, 0 skipped
+nish/crypto/jwt: 118 passed, 0 failed, 0 skipped

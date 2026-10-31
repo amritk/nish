@@ -102,18 +102,6 @@ import {
 import { P384_POINT_SIZE, P384_SIGNATURE_SIZE, p384VerifySha384 } from "nish/crypto/p384"
 import { ed25519PublicKey, ed25519Sign, ed25519Verify } from "nish/crypto/ed25519"
 import { base64urlEncode } from "nish/crypto/base64url"
-import {
-  JSON_TOK_ARRAY_BEGIN,
-  JSON_TOK_ARRAY_END,
-  JSON_TOK_END,
-  JSON_TOK_KEY,
-  JSON_TOK_NUMBER,
-  JSON_TOK_OBJECT_BEGIN,
-  JSON_TOK_OBJECT_END,
-  JSON_TOK_STRING,
-  JsonLimits,
-  JsonTokenizer,
-} from "nish/json-tokenizer"
 import { Secret, expose, secret, wipe } from "nish:secret"
 
 /** HMAC with SHA-256 (RFC 7518 §3.2). */
@@ -517,6 +505,630 @@ const jwtDecode = (src: u8[], off: i32, len: i32, out: u8[]): i32 => {
   return at
 }
 
+// ---- JSON -------------------------------------------------------------------
+//
+// The header and the claims are read by `JwtJson`, a pull reader of RFC 8259
+// written for this module, rather than by `nish/json-tokenizer`: that one
+// steps over blanks and string runs with `nish/bytes`'s scan kernels, which
+// `std/crypto` keeps out of (docs/security/bytes.md, BYTES-2). This one reads
+// a byte at a time. It answers the token kinds `jwt.ts` asks about and one
+// error, `JWT_JSON_ERR`; it has no string or number limits of its own, since
+// the window it reads is a decoded token part of at most `maxToken` bytes.
+
+/** The top-level value is complete and only blanks follow it. */
+const JWT_JSON_END: i32 = 0
+const JWT_JSON_OBJECT_BEGIN: i32 = 1
+const JWT_JSON_OBJECT_END: i32 = 2
+const JWT_JSON_ARRAY_BEGIN: i32 = 3
+const JWT_JSON_ARRAY_END: i32 = 4
+/** A member's name and its colon; the value is the next token. */
+const JWT_JSON_KEY: i32 = 5
+const JWT_JSON_STRING: i32 = 6
+const JWT_JSON_NUMBER: i32 = 7
+/** `true`, `false` or `null`. */
+const JWT_JSON_LITERAL: i32 = 8
+/** Anything RFC 8259 refuses, the window ending inside a value, or a container past the depth. */
+const JWT_JSON_ERR: i32 = -1
+
+/** What `next()` reads at the cursor. */
+const JWT_JSON_WANT_VALUE: i32 = 0
+const JWT_JSON_WANT_VALUE_OR_CLOSE: i32 = 1
+const JWT_JSON_WANT_KEY: i32 = 2
+const JWT_JSON_WANT_KEY_OR_CLOSE: i32 = 3
+const JWT_JSON_WANT_COMMA_OR_CLOSE: i32 = 4
+const JWT_JSON_WANT_NOTHING: i32 = 5
+
+/** What the depth stack holds for an open container. */
+const JWT_JSON_IN_OBJECT: i32 = 1
+const JWT_JSON_IN_ARRAY: i32 = 2
+
+const JWT_CH_TAB: i32 = 9
+const JWT_CH_NEWLINE: i32 = 10
+const JWT_CH_RETURN: i32 = 13
+const JWT_CH_SPACE: i32 = 32
+const JWT_CH_QUOTE: i32 = 34
+const JWT_CH_PLUS: i32 = 43
+const JWT_CH_COMMA: i32 = 44
+const JWT_CH_MINUS: i32 = 45
+const JWT_CH_DOT: i32 = 46
+const JWT_CH_0: i32 = 48
+const JWT_CH_9: i32 = 57
+const JWT_CH_COLON: i32 = 58
+const JWT_CH_OPEN_BRACKET: i32 = 91
+const JWT_CH_BACKSLASH: i32 = 92
+const JWT_CH_CLOSE_BRACKET: i32 = 93
+const JWT_CH_OPEN_BRACE: i32 = 123
+const JWT_CH_CLOSE_BRACE: i32 = 125
+
+/** The value of hex digit `b`, or `-1`. */
+const jwtHexValue = (b: i32): i32 => {
+  if (b >= 48 && b <= 57) {
+    return b - 48
+  }
+  if (b >= 65 && b <= 70) {
+    return b - 55
+  }
+  if (b >= 97 && b <= 102) {
+    return b - 87
+  }
+  return -1
+}
+
+/** How many bytes code point `cp` takes in UTF-8. */
+const jwtUtf8Width = (cp: i32): i32 => {
+  if (cp < 0x80) {
+    return 1
+  }
+  if (cp < 0x800) {
+    return 2
+  }
+  if (cp < 0x10000) {
+    return 3
+  }
+  return 4
+}
+
+/** Byte `k` of the `width`-byte UTF-8 form of `cp`. */
+const jwtUtf8Byte = (cp: i32, width: i32, k: i32): i32 => {
+  if (width === 1) {
+    return cp
+  }
+  let lead: i32 = 0xf0
+  if (width === 2) {
+    lead = 0xc0
+  } else if (width === 3) {
+    lead = 0xe0
+  }
+  const shift: i32 = (width - 1 - k) * 6
+  const tail: i32 = 0x80
+  return k === 0 ? lead | (cp >> shift) : tail | ((cp >> shift) & 0x3f)
+}
+
+/**
+ * A pull reader of one JSON value in `src[off, off + len)`, a token per
+ * `next()`, as strict as RFC 8259: UTF-8 checked, every escape and surrogate
+ * pair checked, no control byte in a string, no trailing bytes. Keys and
+ * strings compare decoded (`keyEquals`), so an escaped name is the name.
+ */
+class JwtJson {
+  /** The current integer's value, negated, when `integral` holds. */
+  value: i64
+  src: u8[]
+  readonly stack: u8[]
+  pos: i32
+  end: i32
+  depth: i32
+  want: i32
+  kind: i32
+  failed: i32
+  /** The current token's bytes, `src[tokStart, tokEnd)`; a string's and a key's include their quotes. */
+  tokStart: i32
+  tokEnd: i32
+  /** The current key's or string's length once decoded. */
+  textBytes: i32
+  /** Whether the current number has no fraction or exponent and fits an `i64`. */
+  integral: boolean
+
+  /** A reader for values nested at most `maxDepth` containers deep; `reset` gives it a window. */
+  constructor(src: u8[], maxDepth: i32) {
+    this.value = toI64(0)
+    this.src = src
+    this.stack = new Array<u8>(maxDepth)
+    this.pos = 0
+    this.end = 0
+    this.depth = 0
+    this.want = JWT_JSON_WANT_VALUE
+    this.kind = JWT_JSON_ERR
+    this.failed = JWT_JSON_ERR
+    this.tokStart = 0
+    this.tokEnd = 0
+    this.textBytes = 0
+    this.integral = false
+  }
+
+  /** Starts over on `src[off, off + len)`; a window outside `src` fails the first `next()`. */
+  reset(src: u8[], off: i32, len: i32): void {
+    this.src = src
+    this.pos = off
+    this.end = off + len
+    this.depth = 0
+    this.want = JWT_JSON_WANT_VALUE
+    this.kind = JWT_JSON_ERR
+    this.failed = off < 0 || len < 0 || len > toI32(src.length) - off ? JWT_JSON_ERR : 0
+    this.integral = false
+  }
+
+  /** The byte at `i`, or `-1` past the window. */
+  at(i: i32): i32 {
+    return i >= 0 && i < this.end && i < toI32(this.src.length) ? toI32(this.src[i]) : -1
+  }
+
+  /** Fails the reader for good. */
+  fail(): i32 {
+    this.failed = JWT_JSON_ERR
+    this.kind = JWT_JSON_ERR
+    return JWT_JSON_ERR
+  }
+
+  /** Steps over the four blanks RFC 8259 §2 allows. */
+  skipBlanks(): void {
+    let b: i32 = this.at(this.pos)
+    while (b === JWT_CH_SPACE || b === JWT_CH_TAB || b === JWT_CH_NEWLINE || b === JWT_CH_RETURN) {
+      this.pos += 1
+      b = this.at(this.pos)
+    }
+  }
+
+  /** The token after the current one, or `JWT_JSON_ERR`, answered again on every later call. */
+  next(): i32 {
+    if (this.failed !== 0) {
+      return this.failed
+    }
+    this.skipBlanks()
+    const want: i32 = this.want
+    const b: i32 = this.at(this.pos)
+    if (want === JWT_JSON_WANT_NOTHING) {
+      if (b >= 0) {
+        return this.fail()
+      }
+      this.kind = JWT_JSON_END
+      return JWT_JSON_END
+    }
+    if (want === JWT_JSON_WANT_COMMA_OR_CLOSE) {
+      if (b === JWT_CH_COMMA) {
+        this.pos += 1
+        this.skipBlanks()
+        return toI32(this.stack[this.depth - 1]) === JWT_JSON_IN_OBJECT ? this.readKey() : this.readValue()
+      }
+      return this.readClose(b)
+    }
+    if (want === JWT_JSON_WANT_KEY_OR_CLOSE) {
+      return b === JWT_CH_CLOSE_BRACE ? this.readClose(b) : this.readKey()
+    }
+    if (want === JWT_JSON_WANT_KEY) {
+      return this.readKey()
+    }
+    if (want === JWT_JSON_WANT_VALUE_OR_CLOSE && b === JWT_CH_CLOSE_BRACKET) {
+      return this.readClose(b)
+    }
+    return this.readValue()
+  }
+
+  /** `b`, the closer of the innermost container, popped. */
+  readClose(b: i32): i32 {
+    if (this.depth === 0) {
+      return this.fail()
+    }
+    const inObject: boolean = toI32(this.stack[this.depth - 1]) === JWT_JSON_IN_OBJECT
+    if (b !== (inObject ? JWT_CH_CLOSE_BRACE : JWT_CH_CLOSE_BRACKET)) {
+      return this.fail()
+    }
+    this.tokStart = this.pos
+    this.pos += 1
+    this.tokEnd = this.pos
+    this.depth -= 1
+    this.afterValue()
+    this.kind = inObject ? JWT_JSON_OBJECT_END : JWT_JSON_ARRAY_END
+    return this.kind
+  }
+
+  /** What follows a complete value: nothing at the top, else a comma or a closer. */
+  afterValue(): void {
+    this.want = this.depth === 0 ? JWT_JSON_WANT_NOTHING : JWT_JSON_WANT_COMMA_OR_CLOSE
+  }
+
+  /** A member's name, its blanks and its colon. */
+  readKey(): i32 {
+    if (this.at(this.pos) !== JWT_CH_QUOTE || !this.scanString()) {
+      return this.fail()
+    }
+    this.skipBlanks()
+    if (this.at(this.pos) !== JWT_CH_COLON) {
+      return this.fail()
+    }
+    this.pos += 1
+    this.want = JWT_JSON_WANT_VALUE
+    this.kind = JWT_JSON_KEY
+    return JWT_JSON_KEY
+  }
+
+  /** A value at the cursor: an opener, a string, a number or a literal. */
+  readValue(): i32 {
+    const b: i32 = this.at(this.pos)
+    if (b === JWT_CH_OPEN_BRACE || b === JWT_CH_OPEN_BRACKET) {
+      if (this.depth >= toI32(this.stack.length)) {
+        return this.fail()
+      }
+      const inObject: boolean = b === JWT_CH_OPEN_BRACE
+      this.stack[this.depth] = toU8(inObject ? JWT_JSON_IN_OBJECT : JWT_JSON_IN_ARRAY)
+      this.depth += 1
+      this.tokStart = this.pos
+      this.pos += 1
+      this.tokEnd = this.pos
+      this.want = inObject ? JWT_JSON_WANT_KEY_OR_CLOSE : JWT_JSON_WANT_VALUE_OR_CLOSE
+      this.kind = inObject ? JWT_JSON_OBJECT_BEGIN : JWT_JSON_ARRAY_BEGIN
+      return this.kind
+    }
+    let k: i32 = JWT_JSON_ERR
+    if (b === JWT_CH_QUOTE) {
+      k = this.scanString() ? JWT_JSON_STRING : JWT_JSON_ERR
+    } else if (b === JWT_CH_MINUS || (b >= JWT_CH_0 && b <= JWT_CH_9)) {
+      k = this.scanNumber() ? JWT_JSON_NUMBER : JWT_JSON_ERR
+    } else if (this.scanWord("true") || this.scanWord("false") || this.scanWord("null")) {
+      k = JWT_JSON_LITERAL
+    }
+    if (k < 0) {
+      return this.fail()
+    }
+    this.afterValue()
+    this.kind = k
+    return k
+  }
+
+  /** Whether `word` is at the cursor, stepped over if so. */
+  scanWord(word: string): boolean {
+    const n: i32 = toI32(word.length)
+    for (let i: i32 = 0; i < n; i += 1) {
+      if (this.at(this.pos + i) !== toI32(word.charCodeAt(i))) {
+        return false
+      }
+    }
+    this.tokStart = this.pos
+    this.pos += n
+    this.tokEnd = this.pos
+    return true
+  }
+
+  /** The digits at the cursor, accumulated negated into `value`; how many, and `integral` cleared on overflow. */
+  scanDigits(bound: i64): i32 {
+    const ten: i64 = toI64(10)
+    let n: i32 = 0
+    let b: i32 = this.at(this.pos)
+    while (b >= JWT_CH_0 && b <= JWT_CH_9) {
+      const digit: i64 = toI64(b - JWT_CH_0)
+      if (this.integral) {
+        if (this.value < (bound + digit) / ten) {
+          this.integral = false
+        } else {
+          this.value = this.value * ten - digit
+        }
+      }
+      n += 1
+      this.pos += 1
+      b = this.at(this.pos)
+    }
+    return n
+  }
+
+  /**
+   * A number of RFC 8259 §6: `-? (0 | [1-9][0-9]*) (. [0-9]+)? ([eE] [+-]? [0-9]+)?`.
+   * `integral` says whether it has neither fraction nor exponent and fits an
+   * `i64` for its sign; accumulating negated reaches -2^63, where a positive
+   * number stops at 2^63 - 1.
+   */
+  scanNumber(): boolean {
+    this.tokStart = this.pos
+    const negative: boolean = this.at(this.pos) === JWT_CH_MINUS
+    if (negative) {
+      this.pos += 1
+    }
+    // -2^63 has no literal (NL2055): -2^31 shifted up 32 bits. A bare literal
+    // would be a double under Node, where an `i64` is a BigInt.
+    const min: i64 = toI64(-2147483648) << toI64(32)
+    const bound: i64 = negative ? min : min + toI64(1)
+    this.value = toI64(0)
+    this.integral = true
+    const first: i32 = this.at(this.pos)
+    if (first === JWT_CH_0) {
+      this.pos += 1
+    } else if (this.scanDigits(bound) === 0) {
+      return false
+    }
+    if (this.at(this.pos) === JWT_CH_DOT) {
+      this.pos += 1
+      this.integral = false
+      if (this.scanDigits(bound) === 0) {
+        return false
+      }
+    }
+    const e: i32 = this.at(this.pos)
+    if (e === 101 || e === 69) {
+      this.pos += 1
+      this.integral = false
+      const sign: i32 = this.at(this.pos)
+      if (sign === JWT_CH_PLUS || sign === JWT_CH_MINUS) {
+        this.pos += 1
+      }
+      if (this.scanDigits(bound) === 0) {
+        return false
+      }
+    }
+    this.tokEnd = this.pos
+    return true
+  }
+
+  /**
+   * The code point of the escape at `i` (a backslash), a surrogate pair
+   * joined, or `-1` for one RFC 8259 §7 refuses or a lone surrogate.
+   */
+  escapeCodePoint(i: i32): i32 {
+    const c: i32 = this.at(i + 1)
+    if (c === JWT_CH_QUOTE || c === JWT_CH_BACKSLASH || c === 47) {
+      return c
+    }
+    if (c === 98) {
+      return 8
+    }
+    if (c === 102) {
+      return 12
+    }
+    if (c === 110) {
+      return JWT_CH_NEWLINE
+    }
+    if (c === 114) {
+      return JWT_CH_RETURN
+    }
+    if (c === 116) {
+      return JWT_CH_TAB
+    }
+    if (c !== 117) {
+      return -1
+    }
+    const hi: i32 = this.hex4(i + 2)
+    if (hi < 0 || (hi >= 0xdc00 && hi <= 0xdfff)) {
+      return -1
+    }
+    if (hi < 0xd800 || hi > 0xdbff) {
+      return hi
+    }
+    if (this.at(i + 6) !== JWT_CH_BACKSLASH || this.at(i + 7) !== 117) {
+      return -1
+    }
+    const lo: i32 = this.hex4(i + 8)
+    if (lo < 0xdc00 || lo > 0xdfff) {
+      return -1
+    }
+    const plane: i32 = 0x10000
+    return plane + ((hi - 0xd800) << 10) + (lo - 0xdc00)
+  }
+
+  /** The four hex digits at `i` as a number, or `-1`. */
+  hex4(i: i32): i32 {
+    let v: i32 = 0
+    for (let k: i32 = 0; k < 4; k += 1) {
+      const d: i32 = jwtHexValue(this.at(i + k))
+      if (d < 0) {
+        return -1
+      }
+      v = (v << 4) | d
+    }
+    return v
+  }
+
+  /** How many bytes the escape at `i` takes, given the code point it decodes to. */
+  escapeLength(i: i32, cp: i32): i32 {
+    if (this.at(i + 1) !== 117) {
+      return 2
+    }
+    return cp >= 0x10000 ? 12 : 6
+  }
+
+  /**
+   * How many continuation bytes the lead byte at `i` takes, checked against
+   * RFC 3629 §4 (no overlong form, no surrogate, nothing past U+10FFFF), or
+   * `-1`.
+   */
+  utf8Tail(i: i32): i32 {
+    const b: i32 = this.at(i)
+    let n: i32 = 0
+    let lo: i32 = 0x80
+    let hi: i32 = 0xbf
+    if (b >= 0xc2 && b <= 0xdf) {
+      n = 1
+    } else if (b >= 0xe0 && b <= 0xef) {
+      n = 2
+      lo = b === 0xe0 ? 0xa0 : 0x80
+      hi = b === 0xed ? 0x9f : 0xbf
+    } else if (b >= 0xf0 && b <= 0xf4) {
+      n = 3
+      lo = b === 0xf0 ? 0x90 : 0x80
+      hi = b === 0xf4 ? 0x8f : 0xbf
+    } else {
+      return -1
+    }
+    const second: i32 = this.at(i + 1)
+    if (second < lo || second > hi) {
+      return -1
+    }
+    for (let k: i32 = 2; k <= n; k += 1) {
+      const c: i32 = this.at(i + k)
+      if (c < 0x80 || c > 0xbf) {
+        return -1
+      }
+    }
+    return n
+  }
+
+  /** The string at the cursor, checked, stepped over, its decoded length in `textBytes`. */
+  scanString(): boolean {
+    this.tokStart = this.pos
+    let i: i32 = this.pos + 1
+    let decoded: i32 = 0
+    while (true) {
+      const b: i32 = this.at(i)
+      if (b < 0x20) {
+        // A control byte, or `-1`: the window ended inside the string.
+        return false
+      }
+      if (b === JWT_CH_QUOTE) {
+        break
+      }
+      if (b === JWT_CH_BACKSLASH) {
+        const cp: i32 = this.escapeCodePoint(i)
+        if (cp < 0) {
+          return false
+        }
+        decoded += jwtUtf8Width(cp)
+        i += this.escapeLength(i, cp)
+      } else if (b < 0x80) {
+        decoded += 1
+        i += 1
+      } else {
+        const tail: i32 = this.utf8Tail(i)
+        if (tail < 0) {
+          return false
+        }
+        decoded += tail + 1
+        i += tail + 1
+      }
+    }
+    this.pos = i + 1
+    this.tokEnd = this.pos
+    this.textBytes = decoded
+    return true
+  }
+
+  /** Whether the current token is a key or a string. */
+  isText(): boolean {
+    return this.kind === JWT_JSON_KEY || this.kind === JWT_JSON_STRING
+  }
+
+  /** The current key's or string's length once decoded, or `-1`. */
+  stringLength(): i32 {
+    return this.isText() ? this.textBytes : -1
+  }
+
+  /**
+   * Whether the current key or string, decoded, is exactly `name`'s bytes;
+   * `false` when the token is neither. Under Node, `charCodeAt` is a UTF-16
+   * code unit, so only an ASCII name answers as it does natively, as with
+   * `nish/json-tokenizer`'s `keyEquals`.
+   */
+  keyEquals(name: string): boolean {
+    const n: i32 = toI32(name.length)
+    if (!this.isText() || n !== this.textBytes) {
+      return false
+    }
+    const end: i32 = this.tokEnd - 1
+    let i: i32 = this.tokStart + 1
+    let o: i32 = 0
+    while (i < end) {
+      const b: i32 = this.at(i)
+      if (b !== JWT_CH_BACKSLASH) {
+        if (o >= n || b !== toI32(name.charCodeAt(o))) {
+          return false
+        }
+        o += 1
+        i += 1
+        continue
+      }
+      const cp: i32 = this.escapeCodePoint(i)
+      const width: i32 = jwtUtf8Width(cp)
+      for (let k: i32 = 0; k < width; k += 1) {
+        if (o >= n || jwtUtf8Byte(cp, width, k) !== toI32(name.charCodeAt(o))) {
+          return false
+        }
+        o += 1
+      }
+      i += this.escapeLength(i, cp)
+    }
+    return o === n
+  }
+
+  /**
+   * Writes the current key's or string's decoded bytes to `out` from `at` and
+   * answers how many; `-1`, writing nothing, when the token is neither or
+   * `out` has too little room.
+   */
+  stringInto(out: u8[], at: i32): i32 {
+    if (!this.isText() || at < 0 || at > toI32(out.length) - this.textBytes) {
+      return -1
+    }
+    const end: i32 = this.tokEnd - 1
+    let i: i32 = this.tokStart + 1
+    let o: i32 = at
+    while (i < end) {
+      const b: i32 = this.at(i)
+      if (b !== JWT_CH_BACKSLASH) {
+        if (o >= 0 && o < toI32(out.length)) {
+          out[o] = toU8(b)
+        }
+        o += 1
+        i += 1
+        continue
+      }
+      const cp: i32 = this.escapeCodePoint(i)
+      const width: i32 = jwtUtf8Width(cp)
+      for (let k: i32 = 0; k < width; k += 1) {
+        if (o >= 0 && o < toI32(out.length)) {
+          out[o] = toU8(jwtUtf8Byte(cp, width, k))
+        }
+        o += 1
+      }
+      i += this.escapeLength(i, cp)
+    }
+    return o - at
+  }
+
+  /** Whether the current token is a number without fraction or exponent that fits an `i64`. */
+  isInteger(): boolean {
+    return this.kind === JWT_JSON_NUMBER && this.integral
+  }
+
+  /** The current number as an `i64` when `isInteger()` holds, else `0`. */
+  numberI64(): i64 {
+    if (!this.isInteger()) {
+      return toI64(0)
+    }
+    return this.at(this.tokStart) === JWT_CH_MINUS ? this.value : -this.value
+  }
+
+  /**
+   * Steps over the value the current token starts: after a key, its value;
+   * after an opener, everything through its closer; after a scalar or a
+   * closer, nothing. Answers the kind of the last token read, or `JWT_JSON_ERR`.
+   */
+  skipValue(): i32 {
+    if (this.failed !== 0) {
+      return this.failed
+    }
+    let k: i32 = this.kind
+    if (k === JWT_JSON_KEY) {
+      k = this.next()
+    }
+    if (k !== JWT_JSON_OBJECT_BEGIN && k !== JWT_JSON_ARRAY_BEGIN) {
+      return k
+    }
+    const outer: i32 = this.depth - 1
+    while (true) {
+      k = this.next()
+      if (k < 0 || this.depth === outer) {
+        return k
+      }
+    }
+  }
+}
+
 // ---- verify -----------------------------------------------------------------
 
 /** `v` held to `[lo, hi]`. */
@@ -596,7 +1208,7 @@ export class JwtVerifier {
   readonly part: u8[]
   readonly sig: u8[]
   readonly text: u8[]
-  readonly tok: JsonTokenizer
+  readonly tok: JwtJson
   /** The largest token taken, in bytes. */
   readonly maxToken: i32
   claimsLen: i32
@@ -630,11 +1242,7 @@ export class JwtVerifier {
     this.part = new Array<u8>(decoded)
     this.sig = new Array<u8>(JWT_MAX_SIGNATURE)
     this.text = new Array<u8>(maxToken)
-    const limits = new JsonLimits()
-    limits.maxDepth = JWT_MAX_DEPTH
-    limits.maxStringBytes = decoded
-    limits.maxTotalBytes = decoded
-    this.tok = new JsonTokenizer(this.part, 0, 0, limits)
+    this.tok = new JwtJson(this.part, JWT_MAX_DEPTH)
   }
 
   /**
@@ -733,9 +1341,9 @@ export class JwtVerifier {
 
   /** The header in `part[0 .. len)` checked against `key`'s algorithm and the verifier's `typ`. */
   checkHeader(key: JwtKey, len: i32): i32 {
-    const tok: JsonTokenizer = this.tok
+    const tok: JwtJson = this.tok
     tok.reset(this.part, toI32(0), len)
-    if (tok.next() !== JSON_TOK_OBJECT_BEGIN) {
+    if (tok.next() !== JWT_JSON_OBJECT_BEGIN) {
       return JWT_ERR_HEADER
     }
     let seenAlg: boolean = false
@@ -746,10 +1354,10 @@ export class JwtVerifier {
     const typ: string | null = this.typ
     while (true) {
       const k: i32 = tok.next()
-      if (k === JSON_TOK_OBJECT_END) {
+      if (k === JWT_JSON_OBJECT_END) {
         break
       }
-      if (k !== JSON_TOK_KEY) {
+      if (k !== JWT_JSON_KEY) {
         return JWT_ERR_HEADER
       }
       if (tok.keyEquals("alg")) {
@@ -757,7 +1365,7 @@ export class JwtVerifier {
           return JWT_ERR_HEADER
         }
         seenAlg = true
-        if (tok.next() !== JSON_TOK_STRING || !tok.keyEquals(name)) {
+        if (tok.next() !== JWT_JSON_STRING || !tok.keyEquals(name)) {
           return JWT_ERR_ALG
         }
       } else if (tok.keyEquals("typ") || tok.keyEquals("kid")) {
@@ -765,7 +1373,7 @@ export class JwtVerifier {
         if ((isTyp && seenTyp) || (!isTyp && seenKid)) {
           return JWT_ERR_HEADER
         }
-        if (tok.next() !== JSON_TOK_STRING) {
+        if (tok.next() !== JWT_JSON_STRING) {
           return JWT_ERR_HEADER
         }
         if (isTyp) {
@@ -780,7 +1388,7 @@ export class JwtVerifier {
         return JWT_ERR_HEADER
       }
     }
-    if (tok.next() !== JSON_TOK_END) {
+    if (tok.next() !== JWT_JSON_END) {
       return JWT_ERR_HEADER
     }
     if (!seenAlg) {
@@ -794,9 +1402,9 @@ export class JwtVerifier {
 
   /** The payload in `claims[0 .. len)` parsed and checked at `now`. */
   checkClaims(len: i32, now: i64): i32 {
-    const tok: JsonTokenizer = this.tok
+    const tok: JwtJson = this.tok
     tok.reset(this.claims, toI32(0), len)
-    if (tok.next() !== JSON_TOK_OBJECT_BEGIN) {
+    if (tok.next() !== JWT_JSON_OBJECT_BEGIN) {
       return JWT_ERR_CLAIMS
     }
     const issuer: string | null = this.issuer
@@ -810,10 +1418,10 @@ export class JwtVerifier {
     let audOk: boolean = false
     while (true) {
       const k: i32 = tok.next()
-      if (k === JSON_TOK_OBJECT_END) {
+      if (k === JWT_JSON_OBJECT_END) {
         break
       }
-      if (k !== JSON_TOK_KEY) {
+      if (k !== JWT_JSON_KEY) {
         return JWT_ERR_CLAIMS
       }
       if (tok.keyEquals("exp") || tok.keyEquals("nbf") || tok.keyEquals("iat")) {
@@ -826,7 +1434,7 @@ export class JwtVerifier {
           which = 1
           seen = this.hasNbf
         }
-        if (seen || tok.next() !== JSON_TOK_NUMBER || !tok.isInteger()) {
+        if (seen || tok.next() !== JWT_JSON_NUMBER || !tok.isInteger()) {
           return JWT_ERR_CLAIMS
         }
         const v: i64 = tok.numberI64()
@@ -842,7 +1450,7 @@ export class JwtVerifier {
         }
       } else if (tok.keyEquals("iss") || tok.keyEquals("sub")) {
         const isIss: boolean = tok.keyEquals("iss")
-        if ((isIss && hasIss) || (!isIss && hasSub) || tok.next() !== JSON_TOK_STRING) {
+        if ((isIss && hasIss) || (!isIss && hasSub) || tok.next() !== JWT_JSON_STRING) {
           return JWT_ERR_CLAIMS
         }
         if (isIss) {
@@ -858,15 +1466,15 @@ export class JwtVerifier {
         }
         hasAud = true
         const v: i32 = tok.next()
-        if (v === JSON_TOK_STRING) {
+        if (v === JWT_JSON_STRING) {
           audOk = audience !== null && tok.keyEquals(audience)
-        } else if (v === JSON_TOK_ARRAY_BEGIN) {
+        } else if (v === JWT_JSON_ARRAY_BEGIN) {
           while (true) {
             const e: i32 = tok.next()
-            if (e === JSON_TOK_ARRAY_END) {
+            if (e === JWT_JSON_ARRAY_END) {
               break
             }
-            if (e !== JSON_TOK_STRING) {
+            if (e !== JWT_JSON_STRING) {
               return JWT_ERR_CLAIMS
             }
             if (audience !== null && tok.keyEquals(audience)) {
@@ -880,7 +1488,7 @@ export class JwtVerifier {
         return JWT_ERR_CLAIMS
       }
     }
-    if (tok.next() !== JSON_TOK_END) {
+    if (tok.next() !== JWT_JSON_END) {
       return JWT_ERR_CLAIMS
     }
     if (this.requireExp && !this.hasExp) {
@@ -933,18 +1541,18 @@ export class JwtVerifier {
     if (n <= 0) {
       return -1
     }
-    const tok: JsonTokenizer = this.tok
+    const tok: JwtJson = this.tok
     tok.reset(this.part, toI32(0), n)
-    if (tok.next() !== JSON_TOK_OBJECT_BEGIN) {
+    if (tok.next() !== JWT_JSON_OBJECT_BEGIN) {
       return -1
     }
     while (true) {
       const k: i32 = tok.next()
-      if (k !== JSON_TOK_KEY) {
+      if (k !== JWT_JSON_KEY) {
         return -1
       }
       if (tok.keyEquals("kid")) {
-        if (tok.next() !== JSON_TOK_STRING || tok.stringLength() > toI32(out.length)) {
+        if (tok.next() !== JWT_JSON_STRING || tok.stringLength() > toI32(out.length)) {
           return -1
         }
         return tok.stringInto(out, toI32(0))
@@ -960,11 +1568,12 @@ export class JwtVerifier {
 
 /** Whether `src[0 .. len)` is one JSON object and nothing more. */
 const jwtIsObject = (src: u8[]): boolean => {
-  const tok = new JsonTokenizer(src, 0, toI32(src.length), new JsonLimits())
-  if (tok.next() !== JSON_TOK_OBJECT_BEGIN || tok.skipValue() !== JSON_TOK_OBJECT_END) {
+  const tok = new JwtJson(src, JWT_MAX_DEPTH)
+  tok.reset(src, toI32(0), toI32(src.length))
+  if (tok.next() !== JWT_JSON_OBJECT_BEGIN || tok.skipValue() !== JWT_JSON_OBJECT_END) {
     return false
   }
-  return tok.next() === JSON_TOK_END
+  return tok.next() === JWT_JSON_END
 }
 
 /** Whether `kid` is 1 to 256 printable ASCII characters without `"` or `\`, so it needs no JSON escape. */
