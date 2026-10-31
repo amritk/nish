@@ -41,6 +41,7 @@
 
 #if defined(NISH_THREADS) && !defined(__wasi__) && !defined(__wasm__)
 #define NISH_PAR_REAL 1
+#include <errno.h>
 #include <pthread.h>
 #include <sched.h>
 #ifdef __GLIBC__
@@ -360,6 +361,51 @@ static void *nish_job_thread(void *p) {
   return 0;
 }
 
+/* The end of the program when a thread with the stack a scope asked for
+ * cannot be started: running the task on a smaller one would trade the panic
+ * for an overflow nobody can read. `limit` is pthread's EAGAIN, the system out
+ * of threads or of memory for the stack; anything else is the size refused. */
+__attribute__((noinline, cold)) static void nish_stack_fail(int limit) {
+  static const char size[] = "nish: cannot start a thread with the stack scopeWithStack asked for\n";
+  static const char room[] =
+      "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n";
+  nish_panic_claim();
+  if (limit)
+    (void)!write(2, room, sizeof room - 1);
+  else
+    (void)!write(2, size, sizeof size - 1);
+  nish_fatal_exit();
+}
+
+/* Runs every job of the list `jobs` on a thread of its own with a stack of
+ * `stack` bytes, as the unpooled path does, and returns once every one has
+ * finished; the calling thread runs none of them, since its own stack is the
+ * one that was too small. The size is rounded up to the page and to the
+ * platform's minimum, a page is added for what the C library keeps at the top
+ * of a thread's stack, and a guard page sits below it, so a task that
+ * overflows faults. A job runs at depth 1, as on a worker, so anything it
+ * divides runs inline. Out of line and cold, so `nish_scope_join` keeps the
+ * body it had before the option, plus one load and a branch. */
+__attribute__((noinline, cold)) static void nish_jobs_run_sized(nish_job *jobs, int64_t stack) {
+  long sys = sysconf(_SC_PAGESIZE);
+  size_t page = sys > 0 ? (size_t)sys : 4096;
+  size_t size = ((size_t)stack + page - 1) / page * page;
+  /* sysconf, not PTHREAD_STACK_MIN: a strict -std=c11 build hides the macro. */
+  long min = sysconf(_SC_THREAD_STACK_MIN);
+  if (min > 0 && size < (size_t)min) size = (size_t)min;
+  pthread_attr_t attr;
+  int rc = pthread_attr_init(&attr);
+  if (rc != 0) nish_stack_fail(rc == EAGAIN || rc == ENOMEM);
+  if (pthread_attr_setguardsize(&attr, page) != 0 || pthread_attr_setstacksize(&attr, size + page) != 0)
+    nish_stack_fail(0);
+  for (nish_job *j = jobs; j; j = j->next) {
+    rc = pthread_create(&j->th, &attr, nish_job_thread, j);
+    if (rc != 0) nish_stack_fail(rc == EAGAIN);
+  }
+  pthread_attr_destroy(&attr);
+  for (nish_job *j = jobs; j; j = j->next) pthread_join(j->th, 0);
+}
+
 /* Runs `lead` on this thread and the list `rest` elsewhere, oldest first, and
  * returns once every one of them has finished. The caller runs `lead` itself,
  * so N jobs keep N-1 other threads busy and this one is not idle, and then
@@ -608,11 +654,20 @@ void nish_scope_join(void *scope) {
   }
   if (!mine) return;
 #ifdef NISH_PAR_REAL
-  /* The first task on this thread and the rest on the pool, in the order they
-   * were spawned, which is the order a task no worker is free for runs in here,
-   * and the order every task runs in when the scope is joined inside another
-   * job (`nish_jobs_run`). */
-  nish_jobs_run(&mine->job, mine->job.next);
+  /* The stack `scopeWithStack` asked for, `ThreadScope`'s first and only field
+   * (std/threads.ts), or 0 for `scope()`. A scope with one runs every task on
+   * a thread of its own that has it; the checker refuses a scope inside a
+   * task, so this thread is never one of those. */
+  int32_t stack = *(const int32_t *)scope;
+  if (__builtin_expect(stack > 0, 0)) {
+    nish_jobs_run_sized(&mine->job, stack);
+  } else {
+    /* The first task on this thread and the rest on the pool, in the order
+     * they were spawned, which is the order a task no worker is free for runs
+     * in here, and the order every task runs in when the scope is joined
+     * inside another job (`nish_jobs_run`). */
+    nish_jobs_run(&mine->job, mine->job.next);
+  }
 #else
   for (nish_task *t = mine; t; t = t->next) t->run(t->payload);
 #endif

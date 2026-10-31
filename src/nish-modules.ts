@@ -189,10 +189,10 @@ export const nishModuleExports = (specifier: string): string => {
     return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -214,8 +214,9 @@ export const nishModuleExports = (specifier: string): string => {
  * which.
  *
  * Each name is a global too, as every `nish:` export is, and each carries a
- * `net`, `tcp`, `udp`, `unix`, `poll` or `connect` prefix so that none of them
- * collides with a global that already exists (`write`). `pollCreate` takes
+ * `net`, `tcp`, `udp`, `unix`, `poll` or `connect` prefix, or is one of the
+ * three descriptor calls (`sendFd`, `recvFd`, `peerCredentials`), so that none
+ * of them collides with a global that already exists (`write`). `pollCreate` takes
  * nothing, so its signature is the one empty answer that is an export
  * (`isNetExport`).
  */
@@ -280,8 +281,14 @@ export const netSignature = (name: string): string => {
   if (name === "unixAccept") {
     return "i"
   }
-  if (name === "unixSocketPair") {
+  if (name === "unixSocketPair" || name === "peerCredentials") {
     return "im"
+  }
+  if (name === "sendFd") {
+    return "iirnn"
+  }
+  if (name === "recvFd") {
+    return "iwnnm"
   }
   return ""
 }
@@ -441,6 +448,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "spawnSyncTo" ||
       name === "spawn" ||
       name === "spawnPiped" ||
+      name === "spawnWithFds" ||
       name === "kill" ||
       name === "waitPid" ||
       name === "availableParallelism" ||

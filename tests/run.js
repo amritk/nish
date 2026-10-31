@@ -2783,9 +2783,9 @@ if (!only || "net_set_option".includes(only)) {
 }
 
 // The Unix-domain calls under the prelude, by their global spellings: each of
-// the five throws, naming itself, and the flag and the two pair kinds read as
-// the numbers a native build folds them to (`tests/cases/net_unix_calls` and
-// `net_unix_paths` are the native half).
+// the eight throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls`,
+// `net_unix_paths` and `net_unix_scm` are the native half).
 if (!only || "net_unix".includes(only)) {
   const unixDir = path.join(buildDir, "net-prelude")
   fs.mkdirSync(unixDir, { recursive: true })
@@ -2808,6 +2808,9 @@ if (!only || "net_unix".includes(only)) {
     ["unixConnect", 'unixConnect("@nish")'],
     ["unixAccept", "unixAccept(3)"],
     ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+    ["sendFd", "sendFd(3, 0, [1], 0, 1)"],
+    ["recvFd", "recvFd(3, [0], 0, 1, [0])"],
+    ["peerCredentials", "peerCredentials(3, [0, 0, 0])"],
   ]
   for (const [name, call] of calls) {
     const entry = path.join(unixDir, `${name}.ts`)
@@ -2819,6 +2822,34 @@ if (!only || "net_unix".includes(only)) {
       shown(loud)
     )
   }
+}
+
+// `spawnWithFds` under the prelude, by its global spelling: it starts a child
+// as `spawn` does, so it throws, naming itself, for `spawn`'s reason
+// (`tests/cases/spawn_fds_child` is the native half). `--emit-ts` imports it
+// from `nish/runtime`, which throws the same way, as it imports `spawnPiped`:
+// without its `AMBIENT_NAMES` entry the module calls a global Node never had.
+if (!only || "spawn_fds".includes(only)) {
+  const fdsDir = path.join(buildDir, "spawn-fds-prelude")
+  fs.mkdirSync(fdsDir, { recursive: true })
+  const entry = path.join(fdsDir, "spawn-with-fds.ts")
+  fs.writeFileSync(entry, 'export const main = (): number => spawnWithFds(["true"], [0]);\n')
+  const loud = runUnderPrelude(entry, [])
+  check(
+    "spawn_fds: under the prelude spawnWithFds fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`spawnWithFds` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const emitted = path.join(fdsDir, "emitted")
+  fs.rmSync(emitted, { recursive: true, force: true })
+  const ts = spawnSync(NISH, [entry, "--emit-ts", emitted], { cwd: root, encoding: "utf8" })
+  const module = path.join(emitted, "spawn-with-fds.ts")
+  const text = ts.status === 0 && fs.existsSync(module) ? fs.readFileSync(module, "utf8") : ""
+  check(
+    "spawn_fds: --emit-ts imports spawnWithFds from nish/runtime",
+    text.startsWith('import { spawnWithFds } from "nish/runtime"\n'),
+    `exit ${ts.status}\n${ts.stderr}\n${text}`
+  )
 }
 
 // `netMss` where there is no socket to ask. Under the prelude it throws, naming
@@ -10855,6 +10886,80 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
       kb > 0 && kb < 16 * 1024,
       run !== null ? `exit ${run.status}, idle ${kb} KB\n${run.stdout}${run.stderr}` : missing
     )
+  }
+}
+
+// `scopeWithStack` gives a scope's tasks the stack it names, and the default it
+// replaces is the one that fails. Each of thread_stack_deep's million-deep
+// chains needs at least 16 MB. Under `ulimit -s 8192`, which fixes glibc's
+// default thread stack and main's at 8 MiB on any host, the program written
+// with `scope()` (tests/link/thread_stack_fixtures/default.ts) faults on one
+// thread and on eight; with a 256 MiB stack it prints its two sums; with
+// 128 KiB (guard.ts) it faults on the guard page below the stack; under a
+// 128 MiB `ulimit -v` the 256 MiB stack cannot be mapped, and the program ends
+// with nish_stack_fail's out-of-memory message before any task runs. The link
+// harness counts a death by signal as a failure, so the faults are read here,
+// as `spawnSync`'s signal.
+if (!only || "thread_stack".includes(only)) {
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("thread_stack: the faults are read under a Linux ulimit, and this host is not Linux with clang")
+  } else {
+    const dir = path.join(buildDir, "thread_stack")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const programs = [
+      ["deep", path.join(linkDir, "thread_stack_deep", "main.ts")],
+      ["default", path.join(linkDir, "thread_stack_fixtures", "default.ts")],
+      ["guard", path.join(linkDir, "thread_stack_fixtures", "guard.ts")],
+    ]
+    const exes = new Map()
+    for (const [name, src] of programs) {
+      const exe = path.join(dir, name)
+      const c = spawnSync(NISH, [src, "--link", exe], { cwd: root, encoding: "utf8" })
+      if (c.status !== 0) check(`thread_stack: ${path.relative(root, src)} compiles and links`, false, shown(c))
+      exes.set(name, c.status === 0 ? exe : null)
+    }
+    const run = (name, threads, limit = "") => {
+      const exe = exes.get(name)
+      return exe === null
+        ? null
+        : spawnSync("bash", ["-c", `ulimit -S -s 8192 ${limit}&& exec "$0"`, exe], {
+            encoding: "utf8",
+            timeout: 60000,
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+    }
+    const said = (r) => (r === null ? "not built" : `signal ${r.signal}\n${shown(r)}`)
+    for (const threads of ["1", "8"]) {
+      const deep = run("deep", threads)
+      check(
+        `thread_stack: a 256 MiB scopeWithStack runs two million-deep chains on ${threads} thread(s)`,
+        deep !== null && deep.status === 0 && deep.stdout === "960218 256782\n",
+        said(deep)
+      )
+      const dflt = run("default", threads)
+      check(
+        `thread_stack: the same chains on scope()'s default 8 MiB stack fault on ${threads} thread(s)`,
+        dflt !== null && dflt.signal === "SIGSEGV",
+        said(dflt)
+      )
+      const guard = run("guard", threads)
+      check(
+        `thread_stack: a 128 KiB scopeWithStack faults on its guard page on ${threads} thread(s)`,
+        guard !== null && guard.signal === "SIGSEGV",
+        said(guard)
+      )
+      const room = run("deep", threads, "&& ulimit -S -v 131072 ")
+      check(
+        `thread_stack: a 256 MiB stack under a 128 MiB address space ends with the out-of-memory message on ${threads} thread(s)`,
+        room !== null &&
+          room.status === 1 &&
+          room.stdout === "" &&
+          room.stderr ===
+            "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n",
+        said(room)
+      )
+    }
   }
 }
 

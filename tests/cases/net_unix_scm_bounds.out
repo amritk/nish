@@ -1,0 +1,7 @@
+-18
+slice out of range: [4, 9) of length 8
+sendPastEnd exit 1
+slice out of range: [-1, 1) of length 8
+recvNegativeOffset exit 1
+slice out of range: [2, 1) of length 8
+recvNegativeLength exit 1

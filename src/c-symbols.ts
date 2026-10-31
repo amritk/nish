@@ -438,6 +438,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "getpayload" ||
   name === "getpayloadf" ||
   name === "getpayloadl" ||
+  // `peerCredentials` on Darwin, which has no `SO_PEERCRED` (runtime-net.c).
+  name === "getpeereid" ||
   name === "getpeername" ||
   name === "getpid" ||
   // `setNice` reads the current nice value before it may lower it (runtime-os.c).
@@ -590,6 +592,10 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "program_invocation_name" ||
   name === "program_invocation_short_name" ||
   name === "pthread_atfork" ||
+  name === "pthread_attr_destroy" ||
+  name === "pthread_attr_init" ||
+  name === "pthread_attr_setguardsize" ||
+  name === "pthread_attr_setstacksize" ||
   name === "pthread_cond_broadcast" ||
   name === "pthread_cond_destroy" ||
   name === "pthread_cond_init" ||
