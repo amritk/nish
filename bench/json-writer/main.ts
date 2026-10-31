@@ -42,6 +42,11 @@ export const main = (): number => {
     }
   }
   const mode: string = toI32(process.argv.length) > 2 ? process.argv[2] : ""
+  // The mode is chosen here, before the clock starts: the loop branches on a
+  // boolean it never changes, not on a string compare. 256 bytes hold eight
+  // doubles of up to 24 bytes each with their commas; the object modes use
+  // under 40 of them.
+  const doubles: boolean = mode === "f64"
   const out = new Array<u8>(256)
   const w = new JsonWriter(out, 0)
   if (mode === "pretty") {
@@ -53,7 +58,7 @@ export const main = (): number => {
   for (let i: i32 = 0; i < count; i += 1) {
     const pick: i32 = i % 64
     w.reset(out, 0)
-    if (mode === "f64") {
+    if (doubles) {
       w.beginArray()
       for (let j: i32 = 0; j < 8; j += 1) {
         const at: i32 = (pick + j * 9) % 64
