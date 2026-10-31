@@ -18803,6 +18803,24 @@ if (!only || "runtime-parallel".includes(only)) {
         .join("\n")
     )
 
+    // `--json` reaches each build, so a failed one prints its diagnostics as JSON lines.
+    fs.writeFileSync(path.join(watchDir, "bad.ts"), 'export const main = (): i32 => "x"\n')
+    const json = startWatch(["--json", "bad.ts"])
+    const jsonFailed = await json.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    await json.interrupt()
+    await groupGone(json.pgid)
+    check(
+      "nish run --watch --json: a failed build's diagnostics are JSON lines",
+      jsonFailed && json.out.split("\n").some((line) => line.startsWith('{"file":"bad.ts"') && line.includes('"severity":"error"')),
+      json.out + json.err,
+    )
+    const misplaced = spawnSync(NISH, ["--watch", "bad.ts"], { cwd: watchDir, encoding: "utf8" })
+    check(
+      "nish --watch: outside `nish run` the flag is a usage error (exit 2) that names `nish run`",
+      misplaced.status === 2 && misplaced.stderr.includes("--watch is a flag of `nish run`"),
+      `${misplaced.status}: ${misplaced.stderr}`,
+    )
+
     if (process.platform !== "linux") {
       skip(
         `runtime-parallel: the affinity and cgroup counts are Linux's, and this host is ${process.platform}`
@@ -23050,8 +23068,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   // Every flag the driver accepts is listed, by one of its spellings, bar
   // --help itself, the test hooks `--range-reference` and `--no-elision`, the
-  // refused `--nsw`, `--wrapping` and `--unchecked-indexing`, and the default `--strict-exports`: a wrapper that reads
-  // --help to learn the surface must not be missing one.
+  // watch's own `--watch-build`, the refused `--nsw`, `--wrapping` and
+  // `--unchecked-indexing`, and the default `--strict-exports`: a wrapper that
+  // reads --help to learn the surface must not be missing one.
   const documented = [
     "--output",
     "-g",
@@ -23086,6 +23105,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--allow",
     "--deny",
     "run [flags] <file.ts> [args ...]",
+    "--watch",
   ]
   // Delimited, so `--deny` is not found inside `--deny-panics`.
   const listed = (f) =>
@@ -29580,6 +29600,264 @@ if (
       lonely.status === 2 && lonely.stderr.includes("--module-objects takes --runtime-from"),
       `${lonely.status}: ${lonely.stderr}`,
     )
+  }
+}
+
+// `nish run --watch` (src/watch.ts): the program runs, an edit to a file it
+// imports rebuilds and reruns it, a failed build prints its diagnostics and
+// keeps what runs, and Ctrl-C ends it all. A server is swapped under load:
+// the new build starts beside the old one on its SO_REUSEPORT port before the
+// old one is stopped, so every request is answered -- Linux only, where the
+// kernel spreads connections over both listeners.
+if (selects("watch", "nish-run")) {
+  if (!HAS_CLANG) {
+    skip("nish run --watch: clang not on PATH, so no program can be linked")
+  } else {
+    const watchDir = path.join(buildDir, "watch")
+    fs.rmSync(watchDir, { recursive: true, force: true })
+    fs.mkdirSync(watchDir, { recursive: true })
+    const cache = path.join(watchDir, "cache")
+    const startWatch = (args) => {
+      const child = spawn(NISH, ["run", "--watch", ...args], {
+        cwd: watchDir,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, XDG_CACHE_HOME: cache },
+      })
+      const seen = { out: "", err: "", status: null, signal: null, exited: false, waiters: [] }
+      const wake = () => {
+        for (const w of seen.waiters.splice(0)) w()
+      }
+      child.stdout.on("data", (d) => {
+        seen.out += d
+        wake()
+      })
+      child.stderr.on("data", (d) => {
+        seen.err += d
+        wake()
+      })
+      child.on("exit", (status, signal) => {
+        seen.status = status
+        seen.signal = signal
+        seen.exited = true
+        wake()
+      })
+      // Resolves once `ready(seen)` holds, or with false after `ms`.
+      seen.until = (ready, ms = 60000) =>
+        new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(false), ms)
+          const look = () => {
+            if (ready(seen)) {
+              clearTimeout(timer)
+              resolve(true)
+            } else if (seen.exited) {
+              clearTimeout(timer)
+              resolve(false)
+            } else {
+              seen.waiters.push(look)
+            }
+          }
+          look()
+        })
+      // Ctrl-C, as a terminal sends it to the whole process group.
+      seen.interrupt = () => {
+        process.kill(-child.pid, "SIGINT")
+        return seen.until(() => false, 20000)
+      }
+      seen.pgid = child.pid
+      return seen
+    }
+    // Whether every process of the watch's group exits within 10 s; one that
+    // does not is killed, so a failure leaves nothing running.
+    const groupGone = async (pgid) => {
+      for (let at = Date.now(); Date.now() - at < 10000; await pause(20)) {
+        try {
+          process.kill(-pgid, 0)
+        } catch {
+          return true
+        }
+      }
+      process.kill(-pgid, "SIGKILL")
+      return false
+    }
+    const leftovers = () =>
+      fs
+        .readdirSync(path.join(cache, "nish", "run"))
+        .filter((name) => name.startsWith("watch-"))
+        .flatMap((name) => fs.readdirSync(path.join(cache, "nish", "run", name)))
+        .filter((name) => name.startsWith("driver-"))
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    const count = (text, part) => text.split(part).length - 1
+
+    // A program, its library edited under the watch.
+    const lib = path.join(watchDir, "lib.ts")
+    const word = (w) => fs.writeFileSync(lib, `export const word = (): string => ${w}\n`)
+    word(`"one"`)
+    fs.writeFileSync(
+      path.join(watchDir, "app.ts"),
+      'import { word } from "./lib"\n' +
+        "export const main = (): i32 => {\n" +
+        '  const w = getenv("NISH_WATCH")\n' +
+        '  console.log(`${word()} ${w === null ? "unset" : w} ${process.argv.length}`)\n' +
+        "  return 0\n" +
+        "}\n",
+    )
+    const app = startWatch(["app.ts", "a", "b"])
+    const first = await app.until((s) => s.out.includes("one 1 3\n") && s.err.includes("the program exited with status 0"))
+    check(
+      "nish run --watch: the program is built and run with its arguments, NISH_WATCH=1 set, and its build time printed",
+      first && /^watch: built in \d+ ms$/m.test(app.err),
+      app.out + app.err,
+    )
+    word(`"two"`)
+    const second = await app.until((s) => s.out.includes("two 1 3\n"))
+    check(
+      "nish run --watch: an edit to an imported file rebuilds the program and runs it again",
+      second && /^watch: rebuilt in \d+ ms$/m.test(app.err),
+      app.out + app.err,
+    )
+    word("42")
+    const broken = await app.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    check(
+      "nish run --watch: a failed build prints its diagnostics and waits for the next change",
+      broken && app.err.includes("lib.ts:1:") && !app.out.includes("42"),
+      app.out + app.err,
+    )
+    word(`"three"`)
+    const third = await app.until((s) => s.out.includes("three 1 3\n"))
+    check("nish run --watch: the change that fixes the build runs the program again", third, app.out + app.err)
+    await app.interrupt()
+    const appGone = await groupGone(app.pgid)
+    check(
+      "nish run --watch: Ctrl-C ends the watch as SIGINT ends a program, and leaves no process or state file behind",
+      app.signal === "SIGINT" && appGone && leftovers().length === 0,
+      `${app.status} ${app.signal} ${appGone} ${leftovers()}: ${app.err}`,
+    )
+
+    // `--json` reaches each build, so a failed one prints its diagnostics as JSON lines.
+    fs.writeFileSync(path.join(watchDir, "bad.ts"), 'export const main = (): i32 => "x"\n')
+    const json = startWatch(["--json", "bad.ts"])
+    const jsonFailed = await json.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    await json.interrupt()
+    await groupGone(json.pgid)
+    check(
+      "nish run --watch --json: a failed build's diagnostics are JSON lines",
+      jsonFailed && json.out.split("\n").some((line) => line.startsWith('{"file":"bad.ts"') && line.includes('"severity":"error"')),
+      json.out + json.err,
+    )
+    const misplaced = spawnSync(NISH, ["--watch", "bad.ts"], { cwd: watchDir, encoding: "utf8" })
+    check(
+      "nish --watch: outside `nish run` the flag is a usage error (exit 2) that names `nish run`",
+      misplaced.status === 2 && misplaced.stderr.includes("--watch is a flag of `nish run`"),
+      `${misplaced.status}: ${misplaced.stderr}`,
+    )
+
+    if (process.platform !== "linux") {
+      skip("nish run --watch: the server swap is checked on Linux, whose SO_REUSEPORT spreads connections over both listeners")
+    } else {
+      const freePort = await new Promise((resolve) => {
+        const s = net.createServer()
+        s.listen(0, "127.0.0.1", () => {
+          const { port } = s.address()
+          s.close(() => resolve(port))
+        })
+      })
+      // A server that answers each connection with its version, `v1` or `v2`,
+      // on a port it shares with SO_REUSEPORT; on SIGTERM it answers what is
+      // queued, then closes.
+      const serverFile = path.join(watchDir, "server.ts")
+      const serverSource = (digit) =>
+        'import { netClose, netWrite, pollAdd, pollCreate, pollWait, tcpAccept, tcpListenFlags } from "nish:net"\n' +
+        "\n" +
+        "const serve = (listener: i32, peer: u8[], reply: u8[]): void => {\n" +
+        "  let fd: i32 = tcpAccept(listener, peer)\n" +
+        "  while (fd >= 0) {\n" +
+        "    netWrite(fd, reply, 0, 3)\n" +
+        "    netClose(fd)\n" +
+        "    fd = tcpAccept(listener, peer)\n" +
+        "  }\n" +
+        "}\n" +
+        "\n" +
+        "export const main = (): number => {\n" +
+        "  const listener: i32 = tcpListenFlags(\"127.0.0.1\", parseInt(process.argv[1]), 128, 1)\n" +
+        "  if (listener < 0) {\n" +
+        "    console.error(`listen: ${listener}`)\n" +
+        "    return 1\n" +
+        "  }\n" +
+        "  const signals: i32 = signalFd()\n" +
+        "  const loop: i32 = pollCreate()\n" +
+        "  pollAdd(loop, listener, 1, 0)\n" +
+        "  pollAdd(loop, signals, 1, 1)\n" +
+        "  const ready: i32[] = new Array<i32>(4)\n" +
+        "  const peer: u8[] = new Array<u8>(18)\n" +
+        `  const reply: u8[] = [118, ${48 + digit}, 10]\n` +
+        "  let running = true\n" +
+        "  while (running) {\n" +
+        "    const n: i32 = pollWait(loop, ready, -1)\n" +
+        "    for (let i: i32 = 0; i < n; i++) {\n" +
+        "      if (ready[2 * i] === 1) {\n" +
+        "        readSignal(signals)\n" +
+        "        running = false\n" +
+        "      }\n" +
+        "    }\n" +
+        "    serve(listener, peer, reply)\n" +
+        "  }\n" +
+        "  return netClose(listener)\n" +
+        "}\n"
+      fs.writeFileSync(serverFile, serverSource(1))
+      const ask = () =>
+        new Promise((resolve) => {
+          const socket = net.connect(freePort, "127.0.0.1")
+          let got = ""
+          socket.setEncoding("utf8")
+          socket.on("data", (d) => (got += d))
+          socket.on("error", (e) => resolve(e.code))
+          socket.on("close", () => resolve(got.trim()))
+        })
+      const server = startWatch(["server.ts", `${freePort}`])
+      // The load starts once the first build answers, so a refusal before it is up is not counted.
+      const up = await server.until((s) => s.err.includes("watch: built in"))
+      for (let tries = 0; up && tries < 200 && (await ask()) !== "v1"; tries++) await pause(50)
+      const answers = []
+      let asking = up
+      const load = (async () => {
+        while (asking) {
+          answers.push(await ask())
+          await pause(2)
+        }
+      })()
+      const answered = (reply) => answers.includes(reply)
+      const waitFor = async (ready, ms = 60000) => {
+        for (let at = Date.now(); !ready() && Date.now() - at < ms && !server.exited; ) await pause(20)
+        return ready()
+      }
+      fs.writeFileSync(serverFile, serverSource(2))
+      const swapped = await waitFor(() => answered("v2"))
+      fs.writeFileSync(serverFile, serverSource(2).replace("return netClose(listener)", "return netClose(listener) + nope"))
+      const keeps = await server.until((s) => s.err.includes("watch: the build failed; the running program keeps running"))
+      const before = answers.length
+      await waitFor(() => answers.length > before + 20)
+      asking = false
+      await load
+      const lost = answers.filter((a) => a !== "v1" && a !== "v2")
+      check(
+        "nish run --watch: a rebuilt server starts beside the old one, so no request across the swap goes unanswered",
+        swapped && lost.length === 0 && answered("v1") && answers.at(-1) === "v2",
+        `${answers.length} answers, lost: ${lost.slice(0, 5).join(" ")}; ${server.err}`,
+      )
+      check(
+        "nish run --watch: a failed build leaves the running server answering",
+        keeps && answers.slice(before).every((a) => a === "v2") && answers.length > before + 20,
+        server.err,
+      )
+      await server.interrupt()
+      const serverGone = await groupGone(server.pgid)
+      check(
+        "nish run --watch: Ctrl-C stops the watch and the server it runs",
+        server.signal === "SIGINT" && serverGone && leftovers().length === 0 && count(server.err, "watch: built in") === 1,
+        `${server.status}: ${server.err}`,
+      )
+    }
   }
 }
 
