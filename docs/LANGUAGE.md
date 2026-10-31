@@ -7408,8 +7408,8 @@ followed (`docs/security/runtime.md`, RT-27 to RT-31).
 
 `readdirSync` sorts, which neither `readdir(3)` nor Node's `fs.readdirSync`
 does, and that is a decision about this language rather than a convenience:
-there is no `sort` to reach for, so every caller of an unsorted listing would
-have to write one, and a run whose order is the file system's is a run that
+every caller of an unsorted listing would have to sort it before reading it,
+and a run whose order is the file system's is a run that
 differs between two machines. The sort is by **bytes**, like every other string
 comparison here, so it agrees with Node's `.sort()` for ASCII names and can
 differ for names that are not (`docs/wp13-differential.md`).
@@ -8128,7 +8128,7 @@ bytes — natively and under WASI, and expect the same lines from both.
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
-| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2585); a second argument is refused too (`` `sort` takes one comparator ``, NL2584). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``). The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow that **captures nothing** — an arrow reading a local of the function it is written in is refused until closure capture lands. Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_capture` |
+| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2585); a second argument is refused too (`` `sort` takes one comparator ``, NL2584). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow that **captures nothing** — an arrow reading a local of the function it is written in is refused until closure capture lands. Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -8163,9 +8163,12 @@ total preorder there is exactly one answer and it is Node's; under Node and
 element array of records with many ties (`arr_sort_cmp_f64`) prints the same
 checksum natively and under Node.
 
-The sort costs one scratch array of `n` elements, taken from the function's
-arena and released before `sortWith` returns, so a sort leaves `Arena.used()`
-where it was and a loop that sorts keeps its per-pass scope. Insertion sorts
+The sort costs one scratch array of `n` elements, allocated once at full size
+(`new Array<T>(n)` for any `T`, which `sortWith` alone may write: the copy
+after it fills every slot before one is read) from the function's arena and
+released before `sortWith` returns, so a sort leaves `Arena.used()` where it was
+and a loop that sorts keeps its per-pass scope (`arr_sort_edge`). The scratch is
+not on the stack: its length is the array's, known only at run time. Insertion sorts
 runs of 32 from the scratch into the array, then bottom-up passes merge pairs
 of runs back and forth between the two. A pair already in order (the last of
 the left run not after the first of the right) is copied without a comparison
@@ -8177,9 +8180,21 @@ overwritten. Every index inside the sort is proven in range by a guard beside
 it, so the sort keeps no bounds check, and at `-O2` the comparator is inlined
 into the loops that call it.
 
+Where JavaScript leaves the order to the implementation, so does Nish: an
+array holding `NaN` under `(a, b) => a - b`, or a comparator that is not a
+consistent order (one answering `1` for both `(a, b)` and `(b, a)`), comes
+out a permutation of its elements, but not necessarily Node's permutation. A
+program meant to agree with Node gives NaN a place of its own in the
+comparator.
+
+The idiom `(a, b) => a - b` is checked arithmetic on `i32`: two elements more
+than `2^31 - 1` apart, as in `[2147483647, -1]`, panic with
+`attempt to subtract with overflow`. On values that may span the whole range,
+compare instead of subtracting: `(a, b) => (a > b ? 1 : a < b ? -1 : 0)`.
+
 What differs from JavaScript is refused rather than reinterpreted: no
 comparator (JavaScript would compare the elements' strings), a readonly
-receiver, and a comparator that captures a local. Until closure capture lands,
+receiver or `process.argv`, and a comparator that captures a local. Until closure capture lands,
 a comparator that needs a value from its surroundings is written as a
 top-level function or takes that value from the elements themselves.
 

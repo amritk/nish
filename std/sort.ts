@@ -149,10 +149,10 @@ export const sortWith = <T>(xs: T[], cmp: (a: T, b: T) => number): T[] => {
   if (n < 2) {
     return xs
   }
-  const tmp: T[] = []
-  for (const x of xs) {
-    tmp.push(x)
-  }
+  // One allocation at full size, every slot written before any is read: the
+  // checker lets this `new Array<T>(n)` zero-fill any `T` (`isSortScratch`).
+  const tmp = new Array<T>(n)
+  copyRun(xs, tmp, 0, n)
   let lo: i32 = 0
   while (lo >= 0 && lo < n) {
     const hi = stepTo(lo, RUN, n)

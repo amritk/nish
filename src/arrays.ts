@@ -67,7 +67,7 @@ import {
   PAR_MAP_NEW,
   PAR_SPAWN,
 } from "./program"
-import { SORT_LOCAL } from "./std-modules"
+import { isSortModule, SORT_LOCAL } from "./std-modules"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -502,7 +502,10 @@ export const checkArrayMethod = (
   scope: Scope
 ): i32 => {
   const name = access.text
-  if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
+  if (
+    (name === "push" || name === "pop" || name === "sort") &&
+    isArgvExpression(ctx, access.children[0], scope)
+  ) {
     return ctx.errorType(unwrapParens(access.children[0]), "`process.argv` is read-only")
   }
   if ((isArrayWriteMethod(name) || name === "sort") && ctx.table.isReadonlyArray(receiver)) {
@@ -751,6 +754,9 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
   if (elem === T_VOID) {
     return ctx.errorType(expr, "Array elements cannot be void")
   }
+  if (args.children.length === 1 && isSortScratch(ctx)) {
+    return checkArrayLength(ctx, args, scope, elem)
+  }
   // Zero-filling is a valid value for scalars and for `T | null` — a zero
   // pointer *is* `null` — but a zeroed plain string or array would be a null
   // value the language has no way to represent or to check for.
@@ -785,11 +791,36 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
       `\`new Array<T>(n)\` expects exactly 1 argument (the length), got ${args.children.length}`
     )
   }
+  return checkArrayLength(ctx, args, scope, elem)
+}
+
+/** The length argument of `new Array<elem>(n)`, and the array type it makes. */
+const checkArrayLength = (ctx: CheckContext, args: Node, scope: Scope, elem: i32): i32 => {
   const length = checkExpression(ctx, args.children[0], scope, ctx.numberType())
   if (length !== T_ERROR && !isNumeric(length)) {
     ctx.error(args.children[0], `Array length must be a number, got ${ctx.table.typeName(length)}`)
   }
   return ctx.table.arrayOf(elem)
+}
+
+/**
+ * Whether this is `sortWith`'s scratch (`std/sort.ts`), the one
+ * `new Array<T>(n)` let zero-fill any `T`: the copy right after it writes every
+ * slot before one is read, and the array never leaves the function, so no
+ * zeroed string, array, range or member is ever seen.
+ */
+const isSortScratch = (ctx: CheckContext): boolean => {
+  const instance = ctx.currentInstance
+  if (instance === null) {
+    return false
+  }
+  const template = instance.template
+  return (
+    template !== null &&
+    template.owner === null &&
+    template.sourceName === "sortWith" &&
+    isSortModule(template.home.program.packageName, template.home.program.source.path)
+  )
 }
 
 // ---- WP15 §2a: element references ------------------------------------------------

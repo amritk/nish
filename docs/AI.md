@@ -2110,8 +2110,9 @@ there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` i
 (ends clamped and counted back from the end when negative, as in JavaScript;
 never panics). Both are statements. `a.sort(cmp)` sorts in place, stably, and
 answers `a` — the same order Node gives; the comparator is required (`a.sort()`
-is refused, since JavaScript would compare strings), a readonly array is
-refused, and the comparator is a top-level function or an arrow that captures
+is refused, since JavaScript would compare strings), a readonly array and
+`process.argv` are refused, `a - b` panics on `i32` values a full range apart
+(compare with `a > b ? 1 : a < b ? -1 : 0` there), and the comparator is a top-level function or an arrow that captures
 nothing (closure capture has not landed). That is every array method there is. A
 window into a buffer is `(buf, offset, length)`; there is no view type.
 

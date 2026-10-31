@@ -83,10 +83,17 @@ Nish cannot yet follow:
 - `xs.sort()` with no comparator. JavaScript compares the elements as
   strings, so `[10, 9].sort()` is `[10, 9]`; Nish asks you to write
   `xs.sort((a, b) => a - b)`.
-- Sorting a `readonly T[]`.
+- Sorting a `readonly T[]`, or `process.argv`.
 - A comparator that reads a local variable of the function it is written in.
   Until closures land, write the comparator as a top-level function, or as an
   arrow that uses only its two parameters.
+
+`(a, b) => a - b` is checked `i32` arithmetic: on elements more than
+`2^31 - 1` apart, such as `[2147483647, -1]`, it panics with
+`attempt to subtract with overflow`. When the values may span the whole range,
+compare instead: `(a, b) => (a > b ? 1 : a < b ? -1 : 0)`. An array holding
+`NaN`, or a comparator that is not a consistent order, sorts to some
+permutation of its elements, which, as in JavaScript, need not be Node's.
 
 Each comparator compiles to its own copy of the sort, with the comparator
 called directly in the inner loop. A sort uses one temporary copy of the
