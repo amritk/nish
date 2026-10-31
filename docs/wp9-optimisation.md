@@ -6,6 +6,13 @@ and Rust, and the call-site reclaim. The Are We Fast Yet rounds came later
 (round 1 after #208–#210, round 2 #217, both in 0.11.0). Two outcomes have
 since been overturned:
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). A capture is a parameter of the instantiation, so the released-
+window rule below sees it as an ordinary argument.
+
 - **`--nsw` is gone.** Since #426, signed overflow is a checked panic by
   default: an operation the bounds walk proves fits keeps `nsw`, and any
   other is `llvm.s*.with.overflow` plus a branch to `nish_panic_overflow`.

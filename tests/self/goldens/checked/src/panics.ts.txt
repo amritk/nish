@@ -209,7 +209,7 @@ function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSi
   calls: FactsTable.get FunctionSig.definedIn FunctionSig.foreign
   pointer program: size=656 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0
   stackSites=0 stackLocals=0
   callee +0:3 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee +0:37 FunctionSig.foreign -> @FunctionSig.foreign
@@ -221,7 +221,7 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   pointer program: size=656 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=reachOf#0 reachOf#0
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer f: size=408 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local -9:9 sites: PanicSite[] (const)
