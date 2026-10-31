@@ -6,8 +6,14 @@
 // never panics.
 // It works in a scratch directory beside its own binary and removes it.
 import { Suite } from "../../../std/testing"
-import { BreakSettings, formatBreakSettings, parseBreakSettings } from "../../../src/break-menu"
-import { breakSettingsPath, loadBreakSettings, saveBreakSettings } from "../../../src/break"
+import {
+  BreakSettings,
+  breakSettingsPath,
+  formatBreakSettings,
+  loadBreakSettings,
+  parseBreakSettings,
+  saveBreakSettings,
+} from "../../../src/break-menu"
 import { dirname } from "../../../src/paths"
 
 /** The seven lines the defaults are kept as. */

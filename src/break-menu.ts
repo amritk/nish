@@ -6,7 +6,8 @@
 // It is pure: `stepBreakMenu` reads one step of input and answers what the
 // director should do next, `drawBreakMenu` paints a framebuffer, and neither
 // touches the terminal. The director owns the terminal, applies settings and
-// switches to the game.
+// switches to the game. The one file this module touches is the settings file
+// (`loadBreakSettings`, `saveBreakSettings`), which the director names.
 //
 // Like the game it follows two rules. Every array is made in `newBreakMenu`
 // and reused, so a step or a frame allocates nothing. And anything that moves
@@ -63,6 +64,8 @@ import {
   TermEvent,
 } from "nish/term"
 import { TermInput } from "nish/term-io"
+import { CLI } from "./branding"
+import { dirname } from "./paths"
 
 // ---- The interface the director reads ---------------------------------------
 
@@ -221,6 +224,49 @@ export const parseBreakSettings = (text: string): BreakSettings => {
   }
   applySettingLine(s, text.slice(start))
   return s
+}
+
+/**
+ * Where `nish break` keeps its settings: `${xdg}/nish/break` when `xdg` is
+ * absolute, else `${home}/.config/nish/break` when `home` is, else "" for
+ * nowhere — `runCacheRoot`'s rules, given the two variables' values.
+ */
+export const breakSettingsPath = (xdg: string, home: string): string => {
+  if (xdg.startsWith("/")) {
+    return `${xdg}/${CLI}/break`
+  }
+  return home.startsWith("/") ? `${home}/.config/${CLI}/break` : ""
+}
+
+/** The settings kept at `path`; the defaults when `path` is "" or cannot be read as a file. */
+export const loadBreakSettings = (path: string): BreakSettings => {
+  const text: string | null = path === "" ? null : readFileSyncOrNull(path)
+  if (text === null) {
+    return new BreakSettings()
+  }
+  return parseBreakSettings(text)
+}
+
+/**
+ * Keep `s` at `path`, making its directory and that directory's parent when
+ * they are missing. It is written beside `path` and renamed over it, so a
+ * failed write leaves the old file. Answers whether it was kept; a failure
+ * anywhere answers false and says nothing.
+ */
+export const saveBreakSettings = (path: string, s: BreakSettings): boolean => {
+  if (path === "") {
+    return false
+  }
+  const dir: string = dirname(path)
+  if (!mkdirSync(dirname(dir)) || !mkdirSync(dir)) {
+    return false
+  }
+  const temp: string = `${path}.tmp`
+  if (writeFileSyncMode(temp, formatBreakSettings(s), 0o644) < 0 || renameSync(temp, path) < 0) {
+    unlinkSync(temp)
+    return false
+  }
+  return true
 }
 
 // ---- Screens and layout -----------------------------------------------------
