@@ -48,10 +48,11 @@
 // run also reports the server backend's CPU over its timed loop, from
 // `/proc/<pid>/schedstat` (time on a CPU, in nanoseconds) for the pid
 // `pg_backend_pid()` answers, checked against `/proc/<pid>/stat`'s utime +
-// stime, whose 10 ms ticks are too coarse to report. The report is µs per query (wall), client CPU
-// and server CPU per query, min, median and IQR; the noise band is the build
-// against its copy on the same transport, the larger of the two; Unix against
-// TCP is a difference this machine can see only outside it and both IQRs.
+// stime, whose 10 ms ticks are too coarse to report. The report is µs per
+// query (wall), client CPU and server CPU per query, min, median and IQR; the
+// noise band is the build against its copy on the same transport, the larger
+// of the two; Unix against TCP is a difference this machine can see only
+// outside it and both IQRs.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import { createServer } from "node:net"
@@ -157,11 +158,7 @@ const HARDEN = (() => {
 })()
 
 const run = (cmd, args, what) => {
-  const r = spawnSync(cmd, args, {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 1 << 26,
-  })
+  const r = spawnSync(cmd, args, { cwd: root, encoding: "utf8", maxBuffer: 1 << 26 })
   if (r.status !== 0) {
     fail(`${what} failed (exit ${r.status})\n${r.stdout ?? ""}${r.stderr ?? ""}${r.error ?? ""}`)
   }
