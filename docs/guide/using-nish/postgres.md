@@ -314,6 +314,62 @@ named one outlives its group) and which to prepare again. The connection does
 not track names: a second `prepare("x")` while `x` exists fails its group with
 SQLSTATE `42P05`, so keep names unique or `closeStatement` first.
 
+## Connecting over a Unix socket
+
+A server on the same machine also listens on a Unix socket, and `psql`'s
+`host=/var/run/postgresql` reaches it there. `pgTarget(host, port)` reads a
+host and port the way `libpq` does, and `pgTargetUrl(url)` reads a
+`postgres://` or `postgresql://` URL; each gives a `PgTarget` and opens
+nothing. When `failure` is `PG_TARGET_OK`, a `unix` target is
+`unixConnect(target.path)` ([`nish:net`](networking.md)), and any other is
+`netAddress(addr, target.host, target.port)` and `tcpConnect(addr)`. Either
+way the connection is the same `PgConnection`.
+
+```ts nish:ok
+import { PG_TARGET_OK, pgTargetUrl } from "nish/net/postgres";
+import { netAddress, tcpConnect, unixConnect } from "nish:net";
+
+export const main = (): i32 => {
+  const target = pgTargetUrl("postgres://app@%2Fvar%2Frun%2Fpostgresql/app");
+  if (target.failure !== PG_TARGET_OK) {
+    return 2;
+  }
+  console.log(target.path); // /var/run/postgresql/.s.PGSQL.5432
+  let fd: i32 = 0;
+  if (target.unix) {
+    fd = unixConnect(target.path);
+  } else {
+    const addr = new Array<u8>(18);
+    netAddress(addr, target.host, target.port);
+    fd = tcpConnect(addr);
+  }
+  return fd < 0 ? 1 : 0;
+};
+```
+
+- A host starting with `/` is the socket's **directory**: the socket is
+  `<host>/.s.PGSQL.<port>`, the name the server gives it. A path to the socket
+  file itself is taken as a directory too, as `libpq` takes it, and names a
+  socket that does not exist.
+- A host starting with `@` is a Linux abstract socket, `@<name>/.s.PGSQL.<port>`.
+- Any other host is TCP, and the target's `host` is it, unchanged.
+- In a URL, the host, the port and the query are percent-decoded, so a
+  directory is written `%2Fvar%2Frun%2Fpostgresql`, or given as
+  `?host=/var/run/postgresql`. A `host` or `port` in the query overrides the
+  one before the path; other keys are ignored. No port means 5432.
+- Refused, with `failure` saying why: another scheme or a query key with no
+  `=` (`PG_TARGET_BAD_URL`); a `%` without two hex digits after it, or `%00`,
+  anywhere in the URL (`PG_TARGET_BAD_ESCAPE`); no host, more than one (a
+  `,`) or a NUL byte (`PG_TARGET_BAD_HOST`); a port that is not 1 to 65535
+  (`PG_TARGET_BAD_PORT`); and a socket path longer than the 107 bytes Linux
+  holds, which is never cut short (`PG_TARGET_TOO_LONG`). macOS holds 103:
+  there `unixConnect` returns `-36` for a path between the two.
+
+Over a socket the server can authenticate by `peer`, the operating system's
+word for which user is connecting, or `trust`; either way it sends
+`AuthenticationOk` without asking for the password, and the connection never
+uses it ([below](#authentication)).
+
 ## Authentication
 
 The password is a `Secret<u8[]>` ([`nish:secret`](../../LANGUAGE.md#secrets-nishsecret)):
@@ -644,6 +700,11 @@ and the simple query protocol. A pool
 neither reads a clock nor retries: a request waits in its queue until a
 connection takes it, and one lost with its connection is the program's to run
 again.
+
+A target names one host: there is no list of hosts to try in turn, and no
+default socket directory for a URL with no host, which `libpq` would use.
+The user, password and database in a URL are not read by `pgTargetUrl`; set
+them on the `PgConfig`.
 
 It does not insist on authentication: a server that answers
 `AuthenticationOk` without asking for a password is believed, as

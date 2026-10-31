@@ -114,11 +114,55 @@ const escapes = (t: Suite): void => {
   t.eqStr("an encoded port", show(pgTargetUrl("postgres://db:%36000/app")), "0 tcp db 6000 ");
 };
 
+/**
+ * 3000 URLs drawn from a fixed seed (xorshift32) from the bytes and escapes
+ * the parser splits on, escapes cut anywhere included: none panics, each answers a
+ * defined failure, and a socket target is a path that fits `sun_path`.
+ */
+const fuzz = (t: Suite): void => {
+  const pieces: string[] = [
+    "/", "@", ":", "%", "?", "&", "=", "[", "]", ",", ".", "0", "5", "9", "a", "F", "G",
+    "%2F", "%2f", "%40", "%00", "%3A", "?host=", "?host=%2F", "&port=", "postgres://", "dddddddddddddddd",
+  ];
+  let seed: i32 = 463534242;
+  let defined: boolean = true;
+  let fits: boolean = true;
+  let sockets: i32 = 0;
+  for (let k: i32 = 0; k < 3000; k++) {
+    let url: string = k % 2 === 0 ? "postgres://" : "postgresql://";
+    seed = seed ^ (seed << 13);
+    seed = seed ^ (seed >>> 17);
+    seed = seed ^ (seed << 5);
+    const n: i32 = (seed >>> 1) % 40;
+    for (let i: i32 = 0; i < n; i++) {
+      seed = seed ^ (seed << 13);
+      seed = seed ^ (seed >>> 17);
+      seed = seed ^ (seed << 5);
+      const at: i32 = (seed >>> 1) % toI32(pieces.length);
+      url = `${url}${pieces[at]}`;
+    }
+    const target: PgTarget = pgTargetUrl(url);
+    if (target.failure < PG_TARGET_OK || target.failure > PG_TARGET_TOO_LONG) {
+      defined = false;
+    }
+    if (target.unix) {
+      sockets += 1;
+      if (target.failure !== PG_TARGET_OK || target.path.length > 108 || !target.path.endsWith(`/.s.PGSQL.${target.port}`)) {
+        fits = false;
+      }
+    }
+  }
+  t.ok("3000 seeded URLs: each answers a defined failure", defined);
+  t.ok("and each socket target fits sun_path", fits);
+  t.ok("some of them sockets", sockets > 0);
+};
+
 export const main = (): number => {
   const t = new Suite("postgres targets");
   hosts(t);
   lengths(t);
   urls(t);
   escapes(t);
+  fuzz(t);
   return t.done();
 };

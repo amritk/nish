@@ -207,6 +207,14 @@ const PG_CLOCK_MAX_WAIT: i64 = 60000000
 const PG_CLOCK_MAX_FACTOR: f64 = 64
 const PG_TURNS_NONE: i32 = -1 [exported]
 const PG_TURNS_FULL: i32 = -2 [exported]
+const PG_TARGET_OK: i32 = 0 [exported]
+const PG_TARGET_BAD_URL: i32 = 1 [exported]
+const PG_TARGET_BAD_ESCAPE: i32 = 2 [exported]
+const PG_TARGET_BAD_HOST: i32 = 3 [exported]
+const PG_TARGET_BAD_PORT: i32 = 4 [exported]
+const PG_TARGET_TOO_LONG: i32 = 5 [exported]
+const PG_DEFAULT_PORT: i32 = 5432
+const PG_SOCKET_PATH_MAX: i32 = 107
 struct PgConfig (class) size=64 align=8 exported
   field user: string index=0 offset=0 initialized
   field database: string index=1 offset=8 initialized
@@ -564,6 +572,12 @@ struct PgBatchTurns (class) size=32 align=8 exported
   method finished -> @nish.PgBatchTurns.finished
   method release -> @nish.PgBatchTurns.release
   method free -> @nish.PgBatchTurns.free
+struct PgTarget (class) size=32 align=8 exported
+  field failure: i32 index=0 offset=0 initialized
+  field unix: boolean index=1 offset=4 initialized
+  field host: string index=2 offset=8 initialized
+  field port: i32 index=3 offset=16 initialized
+  field path: string index=4 offset=24 initialized
 function PgError.constructor(this: PgError, severity: string, code: string, message: string, detail: string, hint: string, constraint: string, position: string): void -> @nish.PgError.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: code constraint detail hint message position severity
@@ -2395,6 +2409,98 @@ function PgBatchTurns.free(this: PgBatchTurns, slot: i32): void -> @nish.PgBatch
   calls: nish_panic nish_panic_index
   pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function pgTargetFailed(failure: i32): PgTarget -> @nish.pgTargetFailed
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  escaping: failure
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:9 t: PgTarget (const)
+function pgTarget(host: string, port: i32): PgTarget -> @nish.pgTarget [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  escaping: host port
+  calls: nish.pgTargetFailed nish_alloc_struct nish_panic_index nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee +0:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +2:9 n: i32 (const)
+  callee +4:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +6:12 i: i32 (let)
+  local +7:11 c: i32 (const)
+  callee +9:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +12:9 t: PgTarget (const)
+  local +15:9 first: i32 (const)
+  local +17:11 path: string (const)
+  local +19:11 limit: i32 (const)
+  callee +21:14 pgTargetFailed -> @nish.pgTargetFailed
+function pgHexValue(c: i32): i32 -> @nish.pgHexValue
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function pgDecoded(text: string, start: i32, end: i32): string | null -> @nish.pgDecoded
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: start
+  calls: nish.pgHexValue nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_new
+  stackSites=1 stackLocals=1
+  local +0:9 out: u8[] (const)
+  local +1:7 i: i32 (let)
+  local +3:11 c: i32 (const)
+  local +11:13 hi: i32 (const)
+  callee +11:23 pgHexValue -> @nish.pgHexValue
+  local +12:13 lo: i32 (const)
+  callee +12:23 pgHexValue -> @nish.pgHexValue
+function pgPortValue(text: string): i32 -> @nish.pgPortValue
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +4:7 v: i32 (let)
+  local +5:12 i: i32 (let)
+  local +6:11 c: i32 (const)
+function pgTargetUrl(url: string): PgTarget -> @nish.pgTargetUrl [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  escaping: url
+  calls: nish.pgDecoded nish.pgPortValue nish.pgTarget nish.pgTargetFailed nish_panic_index nish_panic_overflow nish_str_at nish_str_eq
+  stackSites=0 stackLocals=0
+  local +0:7 at: i32 (let)
+  callee +6:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +8:9 n: i32 (const)
+  local +10:7 authorityEnd: i32 (let)
+  local +12:11 c: i32 (const)
+  local +18:7 queryStart: i32 (let)
+  local +23:7 hostStart: i32 (let)
+  local +24:12 i: i32 (let)
+  callee +29:25 pgDecoded -> @nish.pgDecoded
+  callee +30:12 pgTargetFailed -> @nish.pgTargetFailed
+  callee +32:36 pgDecoded -> @nish.pgDecoded
+  callee +33:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +36:7 hostEnd: i32 (let)
+  local +37:7 portStart: i32 (let)
+  local +38:7 bracketed: boolean (let)
+  local +40:9 close: i32 (let)
+  callee +45:14 pgTargetFailed -> @nish.pgTargetFailed
+  callee +51:16 pgTargetFailed -> @nish.pgTargetFailed
+  local +56:14 i: i32 (let)
+  local +64:9 decodedHost: string | null (const)
+  callee +65:7 pgDecoded -> @nish.pgDecoded
+  callee +66:7 pgDecoded -> @nish.pgDecoded
+  callee +68:12 pgTargetFailed -> @nish.pgTargetFailed
+  local +70:7 host: string (let)
+  local +71:7 port: i32 (let)
+  local +73:11 decodedPort: string | null (const)
+  callee +73:40 pgDecoded -> @nish.pgDecoded
+  callee +75:14 pgTargetFailed -> @nish.pgTargetFailed
+  callee +77:12 pgPortValue -> @nish.pgPortValue
+  callee +79:14 pgTargetFailed -> @nish.pgTargetFailed
+  local +83:7 i: i32 (let)
+  local +85:9 end: i32 (let)
+  local +86:9 eq: i32 (let)
+  callee +95:16 pgTargetFailed -> @nish.pgTargetFailed
+  local +97:13 key: string | null (const)
+  callee +97:34 pgDecoded -> @nish.pgDecoded
+  local +98:13 value: string | null (const)
+  callee +98:36 pgDecoded -> @nish.pgDecoded
+  callee +100:16 pgTargetFailed -> @nish.pgTargetFailed
+  callee +105:16 pgPortValue -> @nish.pgPortValue
+  callee +107:18 pgTargetFailed -> @nish.pgTargetFailed
+  callee +113:10 pgTarget -> @nish.pgTarget
 module std/bytes.ts [package nish]
 const BYTES_SPACE: i32 = 32
 const BYTES_TAB: i32 = 9

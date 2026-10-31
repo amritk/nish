@@ -56,4 +56,7 @@ PASS  in a query key
 PASS  in a query value
 PASS  in an ignored value
 PASS  an encoded port
-postgres targets: 58 passed, 0 failed, 0 skipped
+PASS  3000 seeded URLs: each answers a defined failure
+PASS  and each socket target fits sun_path
+PASS  some of them sockets
+postgres targets: 61 passed, 0 failed, 0 skipped
