@@ -271,6 +271,7 @@ is its plan. [README.md](README.md) indexes them.
 | 45 | Name resolution for `nish:net`: a DNS stub resolver | built: `nish/net/dns` on the caller's loop, `resolveHost` for start-up | [wp45](wp45-name-resolution.md) |
 | 46 | Memory for programs that do not exit: regions | proposed | [wp46](wp46-long-running-memory.md) |
 | 47 | Shared work across cores: regions, atomics and rings | built: `nish/sync/shm`, `nish/sync/ring` and `examples/prefork-jobs.ts` | [wp47](wp47-shared-memory.md) |
+| 48 | Compressed 32-bit references: a whole-program mode against `i32` handles, measured | proposed; neither built, the lean node layout recommended | [wp48](wp48-compressed-references.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
