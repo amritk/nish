@@ -465,7 +465,7 @@ function forgetArrayLengths(ctx: CheckContext, state: State): void -> @forgetArr
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: TypeTable.isArray nish_array_grow nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer state: size=120 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -12:9 index: Local[] (const)
@@ -519,7 +519,7 @@ function localOf(program: CheckedProgram, expr: Node): Local | null -> @localOf
 function lengthHolder(ctx: CheckContext, expr: Node): Local | null -> @lengthHolder
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray localOf
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=localOf#1
   stackSites=0 stackLocals=0
   local +0:9 v: Local | null (const)
@@ -599,7 +599,7 @@ function declaredPathType(ctx: CheckContext, expr: Node, fields: string[], links
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckedProgram.struct StructInfo.field TypeTable.isStruct TypeTable.nameOf declaredPathType nish_array_grow nish_panic_index unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=declaredPathType#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=declaredPathType#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer fields: size=0 writesThrough=true captured=false passedTo=declaredPathType#2
   pointer links: size=0 writesThrough=true captured=false passedTo=declaredPathType#3
@@ -695,7 +695,7 @@ function isIndexType(table: TypeTable, type: i32): boolean -> @isIndexType
 function indexLocal(ctx: CheckContext, expr: Node): Local | null -> @indexLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isIndexType localOf
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=localOf#1
   stackSites=0 stackLocals=0
   local +0:9 v: Local | null (const)
@@ -710,7 +710,7 @@ function Offset.constructor(this: Offset, v: Local, c: i32): void -> @Offset.con
 function offsetIndex(ctx: CheckContext, expr: Node): Offset | null -> @offsetIndex [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Offset.constructor checksOverflow indexLocal literalValue nish_alloc_struct nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=indexLocal#0 indexLocal#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=indexLocal#0 indexLocal#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -766,7 +766,7 @@ function lengthOf(walk: BoundsWalk, expr: Node): Local | null -> @lengthOf
 function unsignedIndexOf(ctx: CheckContext, expr: Node): Local | null -> @unsignedIndexOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBuiltinConversion localOf nish_panic_index unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:7 e: Node (let)
@@ -807,7 +807,7 @@ function isMinusOne(expr: Node): boolean -> @isMinusOne
 function declaredValueRange(ctx: CheckContext, expr: Node): DeclaredRange | null -> @declaredValueRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: DeclaredRange.constructor TypeTable.declaredRange isInteger literalValue nish_alloc_struct nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -879,7 +879,7 @@ function noteProof(walk: BoundsWalk, node: Node): void -> @noteProof
 function isArrayPop(ctx: CheckContext, call: Node): boolean -> @isArrayPop
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -909,7 +909,7 @@ function anyLiteral(expr: Node): i64 -> @anyLiteral
 function squaredLocal(ctx: CheckContext, expr: Node): Local | null -> @squaredLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf indexLocal nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=indexLocal#0 indexLocal#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=indexLocal#0 indexLocal#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -1171,7 +1171,7 @@ function isDecrement(program: CheckedProgram, v: Local, rhs: Node): boolean -> @
 function keepsUpperBound(ctx: CheckContext, v: Local): boolean -> @keepsUpperBound
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isIndexType isUnsigned
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer v: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:4 isUnsigned -> @isUnsigned
@@ -1291,7 +1291,7 @@ function initialiserArrayFacts(ctx: CheckContext, v: Local, e: Node, out: Fact[]
   sharedWrite: +0:5
   escaping: out
   calls: Fact.constructor TypeTable.isArray literalValue nish_alloc_struct nish_array_grow nish_panic_index returnedLength
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=returnedLength#0
+  pointer ctx: size=272 writesThrough=true captured=true passedTo=returnedLength#0
   pointer v: size=64 writesThrough=true captured=true passedTo=Fact.constructor#2 Fact.constructor#2 Fact.constructor#2
   pointer e: size=40 writesThrough=true captured=true passedTo=returnedLength#1
   pointer out: size=0 writesThrough=true captured=true
@@ -1352,8 +1352,8 @@ function KeepScan.constructor(this: KeepScan, ctx: CheckContext, sig: FunctionSi
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: body ctx sig trail
   pointer this: size=32 writesThrough=true captured=false
-  pointer ctx: size=280 writesThrough=true captured=true
-  pointer sig: size=136 writesThrough=true captured=true
+  pointer ctx: size=272 writesThrough=true captured=true
+  pointer sig: size=144 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   pointer trail: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -1408,8 +1408,8 @@ function keepsParameter(ctx: CheckContext, sig: FunctionSig, k: i32, trail: Keep
   sharedWrite: +0:5
   escaping: k
   calls: FunctionSig.body FunctionSig.compileTimeOnly KeepScan.constructor TypeTable.isArray declarationsOf gatherReturns nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 usesKeepLength
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=KeepScan.constructor#1
-  pointer sig: size=136 writesThrough=true captured=true passedTo=FunctionSig.compileTimeOnly#0 FunctionSig.body#0 KeepScan.constructor#2
+  pointer ctx: size=272 writesThrough=true captured=true passedTo=KeepScan.constructor#1
+  pointer sig: size=144 writesThrough=true captured=true passedTo=FunctionSig.compileTimeOnly#0 FunctionSig.body#0 KeepScan.constructor#2
   pointer trail: size=16 writesThrough=true captured=true passedTo=KeepScan.constructor#4
   stackSites=2 stackLocals=1
   local -16:9 home: SourceFile | null (const)
@@ -1457,8 +1457,8 @@ function soleConstInitialiser(body: Node, name: string, returns: i32): Node | nu
 function sizeAtCall(ctx: CheckContext, sig: FunctionSig, body: Node, size: Node, call: Node): i32 -> @sizeAtCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: CheckedProgram.constant FunctionSig.isCompileTime TypeTable.baseOf declarationsOf declaredValueRange isInteger literalValue nish_arena_mark nish_arena_release nish_panic_index nish_str_eq unwrapBoundsParens writesName
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=declaredValueRange#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.isCompileTime#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=declaredValueRange#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.isCompileTime#0
   pointer body: size=40 writesThrough=false captured=false passedTo=declarationsOf#0 writesName#0
   pointer size: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer call: size=40 writesThrough=false captured=false
@@ -1484,8 +1484,8 @@ function sizeAtCall(ctx: CheckContext, sig: FunctionSig, body: Node, size: Node,
 function builtLength(ctx: CheckContext, sig: FunctionSig, body: Node, value: Node, call: Node): i32 -> @builtLength
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq sizeAtCall typedArrayElement unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=sizeAtCall#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=sizeAtCall#1
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=sizeAtCall#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=sizeAtCall#1
   pointer body: size=40 writesThrough=false captured=false passedTo=sizeAtCall#2
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer call: size=40 writesThrough=false captured=false passedTo=sizeAtCall#4
@@ -1500,7 +1500,7 @@ function returnedLength(ctx: CheckContext, value: Node): i32 -> @returnedLength
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via gatherReturns
   calls: FunctionSig.body KeepScan.constructor KeepTrail.constructor TypeTable.isArray builtLength declarationsOf gatherReturns nish_alloc_struct nish_panic_index nish_str_eq returnsOfName soleConstInitialiser unwrapBoundsParens usesKeepLength
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=builtLength#0 KeepScan.constructor#1 builtLength#0
+  pointer ctx: size=272 writesThrough=true captured=true passedTo=builtLength#0 KeepScan.constructor#1 builtLength#0
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=2 stackLocals=1
   local +0:9 call: Node (const)
@@ -1531,12 +1531,12 @@ function BoundsWalk.constructor(this: BoundsWalk, ctx: CheckContext): void -> @B
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: ctx
   pointer this: size=152 writesThrough=true captured=false
-  pointer ctx: size=280 writesThrough=true captured=true
+  pointer ctx: size=272 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function isCharCodeAt(ctx: CheckContext, call: Node): boolean -> @isCharCodeAt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -1544,7 +1544,7 @@ function isCharCodeAt(ctx: CheckContext, call: Node): boolean -> @isCharCodeAt
 function lazyResultMethod(ctx: CheckContext, call: Node): string -> @lazyResultMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -1553,7 +1553,7 @@ function lazyResultMethod(ctx: CheckContext, call: Node): string -> @lazyResultM
 function callsNothing(ctx: CheckContext, call: Node): boolean -> @callsNothing [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBuiltinToI32 isCharCodeAt isUncheckedElementCall
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isCharCodeAt#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=isCharCodeAt#0
   pointer call: size=40 writesThrough=false captured=false passedTo=isCharCodeAt#1 isBuiltinToI32#1 isUncheckedElementCall#1
   stackSites=0 stackLocals=0
   callee +0:3 isCharCodeAt -> @isCharCodeAt
@@ -1616,21 +1616,21 @@ function judge(walk: BoundsWalk, state: State, node: Node, receiver: Node, index
 function isSubstringCall(ctx: CheckContext, call: Node): boolean -> @isSubstringCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isStringRangeCall
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isStringRangeCall#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=isStringRangeCall#0
   pointer call: size=40 writesThrough=false captured=false passedTo=isStringRangeCall#1
   stackSites=0 stackLocals=0
   callee +0:69 isStringRangeCall -> @isStringRangeCall
 function isSliceCall(ctx: CheckContext, call: Node): boolean -> @isSliceCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isStringRangeCall
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isStringRangeCall#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=isStringRangeCall#0
   pointer call: size=40 writesThrough=false captured=false passedTo=isStringRangeCall#1
   stackSites=0 stackLocals=0
   callee +0:65 isStringRangeCall -> @isStringRangeCall
 function isStringRangeCall(ctx: CheckContext, call: Node, name: string): boolean -> @isStringRangeCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -1639,7 +1639,7 @@ function isStringRangeCall(ctx: CheckContext, call: Node, name: string): boolean
 function provesClamp(ctx: CheckContext, state: State, holder: Local | null, bound: Node): boolean -> @provesClamp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: indexLocal knownAtMost knownMinLength knownNonNegative literalValue
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=indexLocal#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=indexLocal#0
   pointer state: size=120 writesThrough=false captured=false passedTo=knownMinLength#0 knownNonNegative#0 knownAtMost#0
   pointer holder: size=64 writesThrough=false captured=false passedTo=knownMinLength#1 knownAtMost#2
   pointer bound: size=40 writesThrough=true captured=true passedTo=literalValue#0 indexLocal#1
@@ -1784,7 +1784,7 @@ function writesSomething(node: Node): boolean -> @writesSomething
 function proves(ctx: CheckContext, state: State, holder: Local, index: Node): boolean -> @proves
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: belowReach indexLocal knownBelow knownMinLength knownNonNegative literalValue maxIndexOf nish_arena_mark nish_arena_release nish_panic_overflow offsetIndex
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=offsetIndex#0 indexLocal#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=offsetIndex#0 indexLocal#0
   pointer state: size=120 writesThrough=false captured=false passedTo=knownMinLength#0 knownNonNegative#0 belowReach#0 maxIndexOf#0 knownMinLength#0 knownNonNegative#0 knownBelow#0 maxIndexOf#0 knownMinLength#0
   pointer holder: size=64 writesThrough=false captured=false passedTo=knownMinLength#1 belowReach#2 knownMinLength#1 knownBelow#2 knownMinLength#1
   pointer index: size=40 writesThrough=true captured=true passedTo=literalValue#0 offsetIndex#1 indexLocal#1
@@ -1826,7 +1826,7 @@ function walkArgument(walk: BoundsWalk, state: State, arg: Node, callee: Functio
   pointer walk: size=152 writesThrough=true captured=false passedTo=walkExpression#0
   pointer state: size=120 writesThrough=true captured=false passedTo=walkExpression#1
   pointer arg: size=40 writesThrough=true captured=true passedTo=walkExpression#2
-  pointer callee: size=136 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  pointer callee: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   callee -14:3 walkExpression -> @walkExpression
   local -13:9 count: i32 (const)
@@ -1917,7 +1917,7 @@ function walkOperands(walk: BoundsWalk, state: State, expr: Node): void -> @walk
 function storesBackRange(ctx: CheckContext, node: Node): boolean -> @storesBackRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged isBoundsAssignment nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 steps: boolean (const)
@@ -1927,7 +1927,7 @@ function storesBackRange(ctx: CheckContext, node: Node): boolean -> @storesBackR
 function rangeEntryOf(ctx: CheckContext, node: Node): i32 -> @rangeEntryOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.entryIsFree TypeTable.isRanged nish_panic_index storesBackRange
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=storesBackRange#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=storesBackRange#0
   pointer node: size=40 writesThrough=false captured=false passedTo=storesBackRange#1
   stackSites=0 stackLocals=0
   local +0:9 program: CheckedProgram (const)
@@ -2250,7 +2250,7 @@ function noteStoredField(ctx: CheckContext, target: Node, effects: Effects): voi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_array_grow nish_str_eq recordStoreType unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer effects: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2441,7 +2441,7 @@ function analyzeBounds(ctx: CheckContext, body: Node): BoundsWalk -> @analyzeBou
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=152
   sharedWrite: via walkBoundsStatement
   calls: BoundsWalk.constructor State.constructor judgesAnything nish_alloc_struct walkBoundsStatement walkExpression
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=BoundsWalk.constructor#1 judgesAnything#0
+  pointer ctx: size=272 writesThrough=true captured=true passedTo=BoundsWalk.constructor#1 judgesAnything#0
   pointer body: size=40 writesThrough=true captured=true passedTo=judgesAnything#1 walkBoundsStatement#2 walkExpression#2
   stackSites=0 stackLocals=0
   local +0:9 walk: BoundsWalk (const)
@@ -2454,7 +2454,7 @@ function analyzeBounds(ctx: CheckContext, body: Node): BoundsWalk -> @analyzeBou
 function judgesAnything(ctx: CheckContext, node: Node): boolean -> @judgesAnything
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: checksOverflow judgesAnything nish_panic_index nish_str_eq rangeEntryOf unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=rangeEntryOf#0 judgesAnything#0 rangeEntryOf#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=rangeEntryOf#0 judgesAnything#0 rangeEntryOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=rangeEntryOf#1 checksOverflow#2
   stackSites=0 stackLocals=0
   callee +0:32 rangeEntryOf -> @rangeEntryOf
@@ -2921,7 +2921,7 @@ function isLocalNamed(program: CheckedProgram, expr: Node, v: Local): boolean ->
 function stepsByOne(ctx: CheckContext, update: Node, i: Local): boolean -> @stepsByOne
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isIncrement isLocalNamed literalValue nish_panic_index nish_str_eq unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=272 writesThrough=false captured=false
   pointer update: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer i: size=64 writesThrough=false captured=false passedTo=isLocalNamed#2 isLocalNamed#2 isIncrement#1
   stackSites=0 stackLocals=0
@@ -3110,7 +3110,7 @@ function RangeTables.at(this: RangeTables, known: i32[], call: Node, sig: Functi
   pointer this: size=64 writesThrough=false captured=false
   pointer known: size=0 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 cached: i32 (const)
   callee +1:38 StringMap.get -> @StringMap.get
@@ -3120,7 +3120,7 @@ function RangeTables.add(this: RangeTables, sig: FunctionSig, candidate: boolean
   escaping: candidate
   calls: StringMap.set nish_array_grow
   pointer this: size=64 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -2:5 StringMap.set -> @StringMap.set
   local -1:11 unknown: CallSummary | null (const)
@@ -3170,7 +3170,7 @@ function isOpenAccess(ctx: CheckContext, node: Node): boolean -> @isOpenAccess [
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via couldProve
   calls: couldProve indexLocal isCharCodeAt isSubstringCall lengthHolder literalValue nish_panic_index unwrapBoundsParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=couldProve#0 isCharCodeAt#0 couldProve#0 isSubstringCall#0 lengthHolder#0 indexLocal#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=couldProve#0 isCharCodeAt#0 couldProve#0 isSubstringCall#0 lengthHolder#0 indexLocal#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isCharCodeAt#1 isSubstringCall#1
   stackSites=0 stackLocals=0
   local +0:9 program: CheckedProgram (const)
@@ -3188,7 +3188,7 @@ function couldProve(ctx: CheckContext, receiver: Node, index: Node): boolean -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via declaredPathType
   calls: TypeTable.isArray declaredPathType indexLocal lengthHolder literalValue
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=indexLocal#0 lengthHolder#0 declaredPathType#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=indexLocal#0 lengthHolder#0 declaredPathType#0
   pointer receiver: size=40 writesThrough=true captured=true passedTo=lengthHolder#1 declaredPathType#1
   pointer index: size=40 writesThrough=true captured=true passedTo=literalValue#0 indexLocal#1
   stackSites=2 stackLocals=2
@@ -3356,7 +3356,7 @@ function RangeSite.constructor(this: RangeSite, call: Node, callee: FunctionSig,
   escaping: at call callee facts
   pointer this: size=32 writesThrough=true captured=false
   pointer call: size=40 writesThrough=true captured=true
-  pointer callee: size=136 writesThrough=true captured=true
+  pointer callee: size=144 writesThrough=true captured=true
   pointer facts: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function noteCallSite(walk: BoundsWalk, state: State, call: Node): void -> @noteCallSite
@@ -3392,7 +3392,7 @@ function siteFacts(walk: BoundsWalk, state: State, call: Node, callee: FunctionS
   pointer walk: size=152 writesThrough=false captured=false passedTo=laterEffects#0 arithmeticSiteFacts#0 argumentRoot#0 laterEffects#0 mapHolderFacts#0
   pointer state: size=120 writesThrough=false captured=false passedTo=minValueOf#0 maxIndexOf#0 arithmeticSiteFacts#1 mapHolderFacts#1
   pointer call: size=40 writesThrough=false captured=false
-  pointer callee: size=136 writesThrough=false captured=false
+  pointer callee: size=144 writesThrough=false captured=false
   stackSites=5 stackLocals=5
   local +0:9 count: i32 (const)
   local +1:9 out: EntryFacts (const)
@@ -3453,7 +3453,7 @@ function arithmeticSiteFacts(walk: BoundsWalk, state: State, arg: Node, type: i3
 function mayWrite(ctx: CheckContext, node: Node): boolean -> @mayWrite
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: callsNothing isBoundsAssignment mayWrite nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=callsNothing#0 mayWrite#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=callsNothing#0 mayWrite#0
   pointer node: size=40 writesThrough=false captured=false passedTo=callsNothing#1
   stackSites=0 stackLocals=0
   callee +0:56 callsNothing -> @callsNothing
@@ -3536,7 +3536,7 @@ function parameterLocals(program: CheckedProgram, sig: FunctionSig, body: Node):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: findParameters nish_array_grow
   pointer program: size=656 writesThrough=false captured=false passedTo=findParameters#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer body: size=40 writesThrough=false captured=false passedTo=findParameters#1
   stackSites=0 stackLocals=0
   local +0:9 out: Local | null[] (const)
@@ -3617,7 +3617,7 @@ function walkWithRanges(ctx: CheckContext, params: Local | null[], body: Node, t
   sharedWrite: via seedEntry
   escaping: callees record returnParams returnType stopAfter tables
   calls: BoundsWalk.constructor EntryFacts.isEmpty ReturnSummary.constructor State.constructor nish_alloc_struct noteReturn seedEntry walkBoundsStatement walkExpression
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=BoundsWalk.constructor#1
+  pointer ctx: size=272 writesThrough=true captured=true passedTo=BoundsWalk.constructor#1
   pointer params: size=0 writesThrough=false captured=false passedTo=seedEntry#2
   pointer body: size=40 writesThrough=true captured=true passedTo=walkBoundsStatement#2 noteReturn#2 walkExpression#2
   pointer tables: size=64 writesThrough=true captured=true

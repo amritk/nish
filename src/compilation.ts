@@ -1792,7 +1792,7 @@ export class Compilation {
 
   /**
    * WP40 §2a: refuse each string literal a dependency hands a gated builtin
-   * that its grant's arguments do not cover (NL2586), for a capability it is
+   * that its grant's arguments do not cover (NL2592), for a capability it is
    * granted only with arguments. Only what the compiler sees is checked: an
    * absolute path inside or beneath a granted directory, a program a granted
    * one is (by name, or as found on `PATH`), a host a granted one is. A
@@ -1987,7 +1987,7 @@ export class Compilation {
     return extra.join(", ")
   }
 
-  /** Dependency `name`'s grant of `c`, wider than the lockfile's arguments for it (NL2587). */
+  /** Dependency `name`'s grant of `c`, wider than the lockfile's arguments for it (NL2593). */
   reportArgumentGrowth(
     source: SourceFile,
     site: Node,

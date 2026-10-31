@@ -17,6 +17,14 @@ rejected at compile time. [LANGUAGE.md](LANGUAGE.md) ("Data parallelism",
 the prototype kernels and driver that §8 measured, is this file at commit `2b2eb95c`
 (`git show 2b2eb95c:docs/wp20-threads.md`).
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). The parallel forms and tasks keep WP29's stricter capture rules;
+the arrow is still a known function, so the row on closures below holds for
+what a thread runs.
+
 ## 1. The decision
 
 **1:1 OS threads, with data races rejected at compile time. Not goroutines,

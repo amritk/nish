@@ -8,8 +8,8 @@ with NL2576, naming the dependency, the capability and the function; of the
 capability lockfile after it, which refuses a dependency that reaches a
 capability `nish-capabilities.lock.json` does not record for it with NL2577;
 and of the arguments a grant may carry (a directory, a program, a host),
-which refuse a literal outside them with NL2586 and a lockfile row they
-outgrow with NL2587. It says what the check covers,
+which refuse a literal outside them with NL2592 and a lockfile row they
+outgrow with NL2593. It says what the check covers,
 what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.
 
@@ -51,7 +51,7 @@ time, since seccomp cannot read a socket's address (CAPS-19).
 | `src/manifest.ts` | `manifestReadGrants` |
 | `src/capability-lock.ts` | `readCapabilityLock` (NL3043), `capabilityLockText` |
 | `src/compilation.ts` | `checkCapabilityLock`, `reportLockGrowth` (NL2577) |
-| `src/compilation.ts` | `grantArgument` (NL3045 to NL3048), `grantArguments`, `refuseNarrowGrants`, `reportNarrowGrant` (NL2586), `reportArgumentGrowth` (NL2587), `narrowSandbox` |
+| `src/compilation.ts` | `grantArgument` (NL3045 to NL3048), `grantArguments`, `refuseNarrowGrants`, `reportNarrowGrant` (NL2592), `reportArgumentGrowth` (NL2593), `narrowSandbox` |
 | `src/capability-report.ts` | `literalReaches`, `reachArguments`, `numericHost` |
 | `src/capability-lock.ts` | `recorded` |
 
@@ -108,7 +108,7 @@ index counts.
 | CAPS-17 | Medium | `literalReaches`, `narrowSandbox` | A computed path or program, a relative path, and a literal routed through a variable are not seen at build time; and the sandbox narrows only when it can: the root itself reaching the capability, an `--allow fs.read=<dir>` or `--allow fs.write=<dir>` scope on the command line, `ffi` in `main`, or a reaching dependency granted the capability whole leaves the capability whole at run time. Without `--sandbox`, an argument binds nothing at run time. A literal path inside a granted directory that is a symlink out of it passes the build check (its normalized path is inside); Landlock refuses it at run time, since it checks the file opened. | **Accepted.** The build check is the early, readable refusal; the sandbox is the enforcement, and the program author asks for it with `--sandbox`. Each case that leaves the capability whole keeps the confinement the program had before arguments, never a looser one. |
 | CAPS-18 | Low | `narrowSandbox` | Run-time scopes are per program, not per package: under `--sandbox`, every package that reaches `fs.read` may read every directory any dependency is granted, and a granted program may be run by any dependency that reaches `process.spawn`. | **Accepted.** The kernel confines a process, not a package. The build check (CAPS-16) is per package. |
 | CAPS-19 | Medium | `refuseNarrowGrants`, the sandbox's seccomp filter | A `net=<host>` grant binds only literal hosts: a host computed at run time is not checked, with or without `--sandbox`, since seccomp sees a pointer to the socket address and cannot read it, and Landlock's network rules scope ports, not addresses. | **Open.** A grant with a host is a review aid, not a confinement. Closing it needs the runtime's `netAddress` to check the granted list itself, or a network namespace; recorded for a later change. |
-| CAPS-20 | Medium if it failed | `reportArgumentGrowth`, `recorded` | An upgrade must not widen a grant's arguments past what the lockfile records without review. | **Holds.** The lockfile records each grant's arguments (`"pkg_conf": ["fs.read=data"]`, the directory relative to the root package); a grant naming a directory, program or host the row does not record, or granting whole a capability the row records narrowed, is NL2587, while a row that records the capability whole accepts any argument. |
+| CAPS-20 | Medium if it failed | `reportArgumentGrowth`, `recorded` | An upgrade must not widen a grant's arguments past what the lockfile records without review. | **Holds.** The lockfile records each grant's arguments (`"pkg_conf": ["fs.read=data"]`, the directory relative to the root package); a grant naming a directory, program or host the row does not record, or granting whole a capability the row records narrowed, is NL2593, while a row that records the capability whole accepts any argument. |
 
 ## Properties verified
 

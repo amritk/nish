@@ -1,0 +1,1 @@
+The arrow assigns to `total`, which belongs to the function it is written in: an arrow argument is handed what it captures as an argument when the call is made, so an assignment would change only its own copy; make the arrow answer the value and assign it after the call, or write through an object the function holds (`box.n = v`, `list.push(v)`)

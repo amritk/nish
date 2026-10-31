@@ -7,6 +7,14 @@ became WP18 ([wp18-generics.md](wp18-generics.md)). One decision has since been
 reversed: §3 made signed overflow `nsw` undefined behaviour by default, and #426
 made it a checked panic instead.
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). Runtime closures stay forbidden: the capture allocates nothing
+and keeps every callee known, so the purity, termination and escape analyses
+still see it, with each capture counted as an escape of what it names.
+
 The project's northern star is **the fastest binary we can emit**, with
 **binary size second**. This note records the decisions that follow from that
 ordering and the measurements behind them. [LANGUAGE.md](LANGUAGE.md) stays

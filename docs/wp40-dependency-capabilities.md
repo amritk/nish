@@ -71,7 +71,7 @@ may be named once per argument. When the program is built:
 module hands a builtin that reaches the capability — `readFileSync` and its
 kin for a path, `spawnSync` and its kin for the program (an array's first
 element), `netAddress` for the host — is held to the arguments, and one
-outside them is NL2586, spanned at the literal. An absolute path is
+outside them is NL2592, spanned at the literal. An absolute path is
 normalized and compared by its real path and its parent's; a relative path
 and a computed value are not seen.
 
@@ -150,7 +150,7 @@ A grant with arguments is recorded with them, one entry per argument, a
 directory relative to the root package's directory: `"pkg_conf":
 ["fs.read=data"]`. A row that records a capability whole accepts any grant of
 it; one that records it narrowed refuses a grant naming an argument it does
-not record, or granting the capability whole, with NL2587, until the lock is
+not record, or granting the capability whole, with NL2593, until the lock is
 updated.
 
 ## 7. Out of scope

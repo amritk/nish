@@ -16,6 +16,13 @@ still accepted. Whether stage D ever rejects one is §10's open question, and
 question. The full plan, including the codemod's design history, is this file
 at commit `2b2eb95c`.
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). An arrow bound to a top-level `const` still captures nothing; it
+is a declaration.
+
 The decision: **`const f = (...) => ...` is how Nish declares a function, and
 `function` is legacy.** The rules are in [LANGUAGE.md](LANGUAGE.md)
 ("Functions"), which is normative.

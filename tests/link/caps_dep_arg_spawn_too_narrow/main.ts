@@ -1,4 +1,4 @@
-// WP40 §2a: a grant too narrow is refused at build (NL2586): `pkg_tool` is
+// WP40 §2a: a grant too narrow is refused at build (NL2592): `pkg_tool` is
 // granted `process.spawn` of `true` and runs `sh`.
 import { work } from "pkg_tool";
 

@@ -494,7 +494,7 @@ function checksRangesInPrologue(table: TypeTable, opts: Options, sig: FunctionSi
   calls: FunctionSig.visibleOutside privateAbi takesRange
   pointer table: size=96 writesThrough=false captured=false passedTo=takesRange#0
   pointer opts: size=192 writesThrough=false captured=false passedTo=privateAbi#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 takesRange#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 takesRange#1
   stackSites=0 stackLocals=0
   callee +0:4 privateAbi -> @privateAbi
   callee +0:21 FunctionSig.visibleOutside -> @FunctionSig.visibleOutside
@@ -503,7 +503,7 @@ function takesRange(table: TypeTable, sig: FunctionSig): boolean -> @takesRange 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 type: i32 (const)
   callee +1:9 TypeTable.isRanged -> @TypeTable.isRanged
@@ -512,7 +512,7 @@ function checksArgumentRange(emitter: Emitter, callee: FunctionSig, index: i32):
   escaping: index
   calls: TypeTable.isRanged checksRangesInPrologue nish_panic_index
   pointer emitter: size=280 writesThrough=false captured=false
-  pointer callee: size=136 writesThrough=false captured=false passedTo=checksRangesInPrologue#2
+  pointer callee: size=144 writesThrough=false captured=false passedTo=checksRangesInPrologue#2
   stackSites=0 stackLocals=0
   callee +0:4 TypeTable.isRanged -> @TypeTable.isRanged
   callee +1:4 checksRangesInPrologue -> @checksRangesInPrologue
@@ -521,7 +521,7 @@ function emitParamRangeChecks(emitter: Emitter, sig: FunctionSig): void -> @emit
   sharedWrite: via emitRangeEntry
   calls: FunctionSig.visibleOutside TypeTable.isRanged emitRangeEntry nish_panic_index paramValue privateAbi
   pointer emitter: size=280 writesThrough=false captured=false passedTo=emitRangeEntry#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   callee +0:7 privateAbi -> @privateAbi
   callee +0:32 FunctionSig.visibleOutside -> @FunctionSig.visibleOutside

@@ -848,7 +848,7 @@ function Compilation.reportRefusal(this: Compilation, source: SourceFile, site: 
   pointer this: size=200 writesThrough=false captured=false passedTo=Compilation.refusedBy#0
   pointer source: size=24 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
   pointer site: size=40 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer hops: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 DiagnosticSink.report -> @DiagnosticSink.report
@@ -1393,8 +1393,8 @@ function Compilation.reportForeignMismatch(this: Compilation, unit: ModuleUnit, 
   calls: DiagnosticSink.report nameNode nish_str_concat signatureText
   pointer this: size=200 writesThrough=false captured=false
   pointer unit: size=88 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false passedTo=nameNode#0 signatureText#1
-  pointer previousSig: size=136 writesThrough=false captured=false passedTo=signatureText#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=nameNode#0 signatureText#1
+  pointer previousSig: size=144 writesThrough=false captured=false passedTo=signatureText#1
   pointer previousModule: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: Node (const)
@@ -1430,7 +1430,7 @@ function Compilation.reportForeignShadow(this: Compilation, unit: ModuleUnit, si
   calls: DiagnosticSink.report nameNode nish_str_concat
   pointer this: size=200 writesThrough=false captured=false
   pointer unit: size=88 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false passedTo=nameNode#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=nameNode#0
   pointer declarer: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: Node (const)
@@ -1686,7 +1686,7 @@ function reservedPrefixText(name: string): string -> @reservedPrefixText
 function nameNode(sig: FunctionSig): Node -> @nameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function isInstantiationName(name: string): boolean -> @isInstantiationName
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -1704,8 +1704,8 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
-  pointer sig: size=136 writesThrough=false captured=false
-  pointer previous: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
+  pointer previous: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
   local +2:11 member: string (const)
@@ -1715,15 +1715,15 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
 function sameSignature(a: FunctionSig, b: FunctionSig): boolean -> @sameSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer a: size=136 writesThrough=false captured=false
-  pointer b: size=136 writesThrough=false captured=false
+  pointer a: size=144 writesThrough=false captured=false
+  pointer b: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
 function signatureText(table: TypeTable, sig: FunctionSig): string -> @signatureText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_alloc_struct nish_array_grow nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 params: string[] (const)
   local +1:14 type: i32 (const)
@@ -1732,7 +1732,7 @@ function signatureText(table: TypeTable, sig: FunctionSig): string -> @signature
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.edit#0
+  pointer ctx: size=272 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0

@@ -134,6 +134,10 @@ syntactic category (wp14 §3a D2), and the family modules hold the handlers:
 Nish-0 has no function values, so there are no tables of closures: the
 emitter is one `Emitter` class that the family modules are handed, and a new
 construct is a new `case` in the switch plus a function in its family.
+**2026-10-30:** an arrow passed to a function-typed parameter may read its
+enclosing function's `const` locals and parameters; each capture is one more
+argument of a direct call (`generics.ts`, `liftArrow`), so there is still no
+closure value, environment struct or indirect call.
 Narrowing is `narrow` in `expressions.ts`, which `T | null` guards and
 `result.ts`'s `narrowResultTest` both go through.
 
@@ -372,6 +376,7 @@ it.
 | `noalias` (`%this`) | constructors only | `new` hands the constructor a fresh allocation; never on other struct params (two may alias). |
 | `readonly` (struct/array param) | `!writesThrough` after the fixpoint | No store through the pointer, no escape, only passed to `readonly` parameters. Array element stores through nested indexing count as writes, conservatively. An element store into an array field stored inside the object (`p.f[i] = v`, `src/inline-arrays.ts`) is a store to the object's own bytes, so it counts as a write through `p` (`classifyMemberUse`); with the pointer layout the same store is only a read of `p` (`tests/cases/cls_inline_array`: `Board.mark` is not `readonly`, `Board.sum` is). |
 | `nocapture` | strings: `!escaping`; pointers: `!captured` after the fixpoint | `classifyUse`: a use is harmless when consumed on the spot (operator operand, condition, `.length` receiver, template hole that concatenates, runtime builtin argument, all declared `nocapture`); it escapes when returned, stored, aliased, pushed, or passed to a capturing user function. Strings passed to a user function always escape (no fixpoint for strings). |
+| no `nocapture`, no `readonly` (params) | a local an arrow given to an ordinary function parameter captures (`capturesForCall`) | The instance receives it as a `%cap.N` parameter no fact describes, and the arrow may push it or store it, so `noteCaptures` (`src/attributes.ts`, and `src/escape.ts` for scopes) treats it as an escape and a write through. A data-parallel form's or a task's captures keep their facts: their rules keep them read-only and inside the call (`tests/cases/fnarg_capture_escape`, `docs/security/codegen.md` CG-12). |
 | no `nocapture`, no `readonly` (params) | a `parallelMapInto` or `parallelReduce` instance from `nish/threads` (WP29 P1) | Its region stores every parameter into a context block whose address `nish_parallel_range` hands to other threads, which write `dst` through that copy. The source walk sees a direct call instead, so `markParallelEntry` (`src/attributes.ts`) adds the runtime callee and marks every parameter escaping, written through and captured. The chunk loop the region runs is an ordinary instance and keeps its own attributes. |
 | runtime `declare` attributes | from the `RuntimeTable` | Written next to each symbol in `src/runtime.ts`; intrinsics carry a subset of what LLVM itself attaches (`nounwind willreturn readnone`). |
 | `alwaysinline allocsize(0)` / `cold noinline allocsize(0)` | the inline allocator / `nish_arena_grow` | The fast path must inline; the slow path must not. |
