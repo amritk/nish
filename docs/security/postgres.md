@@ -471,9 +471,11 @@ for byte by `link/std_postgres_unix_target: exits with 0 and stdout matches
 expected.out`. That `pgTargetUrl` and `pgTarget` never panic is pinned by
 3000 URLs drawn from a fixed seed (xorshift32) out of the bytes and escapes
 the parser splits on — `/`, `@`, `:`, `%`, `?`, `&`, `=`, brackets, `,`,
-`%2F`, `%40`, `%00`, `?host=` and `&port=` among them, cut anywhere: each
-must answer a failure code from `PG_TARGET_OK` to `PG_TARGET_TOO_LONG`
-("3000 seeded URLs: each answers a defined failure"), each socket target it
+`%2F`, `%40`, `%00`, a raw NUL, `é` and `%C3%A9`, `?host=` and `&port=`
+among them, cut anywhere: each must answer a failure code from
+`PG_TARGET_OK` to `PG_TARGET_TOO_LONG` ("3000 seeded URLs: each answers a
+defined failure"), no target it accepts may hold a NUL in its host or path
+("no accepted target holds a NUL", PG-19), each socket target it
 gives must end `/.s.PGSQL.<port>` within 107 bytes, or 108 for an `@` name
 ("and each socket target fits sun_path"), and some must be sockets ("some of them sockets"). A panic
 ends the run, so the line after it is missing and the comparison fails.

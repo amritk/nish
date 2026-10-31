@@ -62,7 +62,9 @@ const lengths = (t: Suite): void => {
   t.eqI32("an @ name of 107 bytes after the @ is taken", pgTarget(padded("@", "d", 93), 5432).failure, PG_TARGET_OK);
   t.eqI32("one of 108 is refused", pgTarget(padded("@", "d", 94), 5432).failure, PG_TARGET_TOO_LONG);
   t.eqI32("a longer port counts", pgTarget(padded("/", "d", 92), 15432).failure, PG_TARGET_TOO_LONG);
-  // `é` is 2 bytes: 91 + 2 + 14 bytes is 107, one `d` more is 108.
+  // `é` is 2 bytes: 91 + 2 + 14 bytes is 107, one `d` more is 108. These
+  // count bytes, so they hold natively only: under Node a string's length
+  // counts UTF-16 units.
   t.eqI32("multi-byte UTF-8 counts in bytes: 107 is taken", pgTarget(`${padded("/", "d", 90)}é`, 5432).failure, PG_TARGET_OK);
   t.eqI32("and 108 refused", pgTarget(`${padded("/", "d", 91)}é`, 5432).failure, PG_TARGET_TOO_LONG);
   t.eqStr("a trailing / is kept, as libpq does", show(pgTarget("/tmp/", 5432)), "0 unix /tmp/ 5432 /tmp//.s.PGSQL.5432");
@@ -157,17 +159,19 @@ const escapes = (t: Suite): void => {
 /**
  * 3000 URLs drawn from a fixed seed (xorshift32) from the bytes and escapes
  * the parser splits on, escapes cut anywhere included: none panics, each answers a
- * defined failure, and a socket target is a directory path of at most 107 bytes
- * or an `@` name of at most 108.
+ * defined failure, no accepted target's host or path holds a NUL, and a socket
+ * target is a directory path of at most 107 bytes or an `@` name of at most 108.
  */
 const fuzz = (t: Suite): void => {
   const pieces: string[] = [
     "/", "@", ":", "%", "?", "&", "=", "[", "]", ",", ".", "0", "5", "9", "a", "F", "G",
     "%2F", "%2f", "%40", "%00", "%3A", "?host=", "?host=%2F", "&port=", "postgres://", "dddddddddddddddd",
+    String.fromCharCode(0), "é", "%C3%A9",
   ];
   let seed: i32 = 463534242;
   let defined: boolean = true;
   let fits: boolean = true;
+  let nulFree: boolean = true;
   let sockets: i32 = 0;
   for (let k: i32 = 0; k < 3000; k++) {
     let url: string = k % 2 === 0 ? "postgres://" : "postgresql://";
@@ -186,6 +190,9 @@ const fuzz = (t: Suite): void => {
     if (target.failure < PG_TARGET_OK || target.failure > PG_TARGET_TOO_LONG) {
       defined = false;
     }
+    if (target.failure === PG_TARGET_OK && (target.host.indexOf(String.fromCharCode(0)) >= 0 || target.path.indexOf(String.fromCharCode(0)) >= 0)) {
+      nulFree = false;
+    }
     if (target.unix) {
       sockets += 1;
       const limit: i32 = target.host.startsWith("@") ? 108 : 107;
@@ -196,6 +203,7 @@ const fuzz = (t: Suite): void => {
   }
   t.ok("3000 seeded URLs: each answers a defined failure", defined);
   t.ok("and each socket target fits sun_path", fits);
+  t.ok("no accepted target holds a NUL", nulFree);
   t.ok("some of them sockets", sockets > 0);
 };
 

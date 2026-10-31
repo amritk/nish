@@ -84,5 +84,6 @@ PASS  an escape that is not UTF-8 is refused
 PASS  escaped UTF-8 decodes
 PASS  3000 seeded URLs: each answers a defined failure
 PASS  and each socket target fits sun_path
+PASS  no accepted target holds a NUL
 PASS  some of them sockets
-postgres targets: 87 passed, 0 failed, 0 skipped
+postgres targets: 88 passed, 0 failed, 0 skipped
