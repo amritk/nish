@@ -23,7 +23,7 @@
  */
 
 /** The length of the runs insertion sort makes before the first merge. */
-const RUN: i32 = 16
+const RUN: i32 = 32
 
 /** `xs[lo..hi)` sorted in place by insertion. */
 const insertionRun = <T>(xs: T[], cmp: (a: T, b: T) => number, lo: i32, hi: i32): void => {
