@@ -364,7 +364,14 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   real directory as the fs.read scope`, `sandbox dependency grants: a
   dependency granted process.spawn=true runs true and cannot exec echo`
   (without `--sandbox`, it runs `echo`), `sandbox dependency grants: the exec
-  allowlist names the granted program by its absolute path`
+  allowlist names the granted program by its absolute path`; on
+  `sandbox_dep_fs_write_scoped`: `sandbox dependency grants: a dependency
+  granted fs.write=<dir> writes inside it and not beside it` (without
+  `--sandbox`, it writes beside it; skipped below Landlock ABI 3),
+  `sandbox dependency grants: the wrapper passes the grant's real directory
+  as the fs.write scope`; and the SBX-1 pin, `sandbox dependency grants: a
+  granted program's ELF loader runs a program the grant does not name
+  (SBX-1, open)`, which fails once SBX-1 is closed
 
 ### Checks CI does not run
 

@@ -141,6 +141,11 @@ granted `process.spawn=true`, on x86-64 Debian):
   call void @nish_sandbox(i32 256, i32 1, i8* null, i8* null, i8* getelementptr inbounds ([62 x i8], [62 x i8]* @.sandbox.exec, i64 0, i64 0))
 ```
 
+The list is not a complete control: the loader it must hold runs any program
+it is handed (`spawnSync([loader, "/bin/echo", "x"])`), so it bounds a
+dependency that starts only what it names, not one written to escape it
+(SBX-1 in [security/sandbox.md](security/sandbox.md#findings), open).
+
 With an exec list, EXECUTE leaves the rule on `/` and each listed file gets a
 `path_beneath` rule of its own, opened `O_PATH` (a file, so `O_DIRECTORY` is
 no longer passed for any rule; the compiler has already refused a directory

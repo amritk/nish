@@ -11860,40 +11860,46 @@ if (!only || "sandbox dependency grants".includes(only)) {
           ),
         ir(reader)
       )
-      const writer = "sandbox_dep_fs_write_scoped"
-      const wScoped = build(writer, ["--sandbox"])
-      const wPlain = build(writer, [])
-      const wInside = path.join(linkDir, writer, "out", "mark.txt")
-      const wOutside = path.join(dir, "outside-mark.txt")
-      const wOutsidePlain = path.join(dir, "outside-mark-plain.txt")
-      const rwIn = run(wScoped, [wInside])
-      const wroteIn = fs.existsSync(wInside) && fs.readFileSync(wInside, "utf8") === "x"
-      fs.rmSync(wInside, { force: true })
-      const rwOut = run(wScoped, [wOutside])
-      const rwPlain = run(wPlain, [wOutsidePlain])
-      check(
-        "sandbox dependency grants: a dependency granted fs.write=<dir> writes inside it and not beside it",
-        rwIn !== null &&
-          rwIn.status === 0 &&
-          rwIn.stdout === "1\n" &&
-          wroteIn &&
-          rwOut !== null &&
-          rwOut.status !== 0 &&
-          rwOut.stderr.includes(`cannot write ${wOutside}`) &&
-          !fs.existsSync(wOutside) &&
-          rwPlain !== null &&
-          rwPlain.status === 0 &&
-          fs.existsSync(wOutsidePlain),
-        `${said(rwIn)}\n--- outside\n${said(rwOut)}\n--- without --sandbox\n${said(rwPlain)}`
-      )
-      check(
-        "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
-        ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
-          /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
-            ir(writer)
-          ),
-        ir(writer)
-      )
+      // A write scope under strict `--sandbox` needs TRUNCATE, which Landlock
+      // cannot grant beneath one directory below ABI 3: the program exits 126.
+      if (abi < 3) {
+        skip(`sandbox dependency grants: this kernel's Landlock is ABI ${abi} (<3); the fs.write=<dir> checks did not run`)
+      } else {
+        const writer = "sandbox_dep_fs_write_scoped"
+        const wScoped = build(writer, ["--sandbox"])
+        const wPlain = build(writer, [])
+        const wInside = path.join(linkDir, writer, "out", "mark.txt")
+        const wOutside = path.join(dir, "outside-mark.txt")
+        const wOutsidePlain = path.join(dir, "outside-mark-plain.txt")
+        const rwIn = run(wScoped, [wInside])
+        const wroteIn = fs.existsSync(wInside) && fs.readFileSync(wInside, "utf8") === "x"
+        fs.rmSync(wInside, { force: true })
+        const rwOut = run(wScoped, [wOutside])
+        const rwPlain = run(wPlain, [wOutsidePlain])
+        check(
+          "sandbox dependency grants: a dependency granted fs.write=<dir> writes inside it and not beside it",
+          rwIn !== null &&
+            rwIn.status === 0 &&
+            rwIn.stdout === "1\n" &&
+            wroteIn &&
+            rwOut !== null &&
+            rwOut.status !== 0 &&
+            rwOut.stderr.includes(`cannot write ${wOutside}`) &&
+            !fs.existsSync(wOutside) &&
+            rwPlain !== null &&
+            rwPlain.status === 0 &&
+            fs.existsSync(wOutsidePlain),
+          `${said(rwIn)}\n--- outside\n${said(rwOut)}\n--- without --sandbox\n${said(rwPlain)}`
+        )
+        check(
+          "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
+          ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
+            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
+              ir(writer)
+            ),
+          ir(writer)
+        )
+      }
       const runner = "sandbox_dep_exec_allowlist"
       const allow = build(runner, ["--sandbox"])
       const open = build(runner, [])

@@ -360,6 +360,8 @@ only.
 
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
+| SBX-1 | High | `src/compilation.ts` (`narrowSandbox`), `runtime/runtime-sandbox.c` (`nish_sandbox`) | The exec allowlist grants a granted program's ELF loader, and the loader runs any program it is handed, so a dependency granted `process.spawn=<program>` that sets out to escape it can start any binary | — |
+| CAPS-19 | Medium | `src/capabilities.ts` (`refuseNarrowGrants`), the sandbox's seccomp filter | A `net=<host>` grant binds only literal hosts: a host computed at run time is not checked, with or without `--sandbox` | — |
 | PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |

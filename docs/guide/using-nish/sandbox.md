@@ -169,8 +169,8 @@ node_modules/pkg_conf/src/index.ts:2:38: error: the dependency `pkg_conf` hands 
 A path or program the dependency works out while it runs is beyond the
 build. Build with `--sandbox` and the kernel holds it instead: the granted
 directories become the program's `fs.read` and `fs.write` scopes, as
-`--allow fs.read=<dir>` makes them, and the granted programs the only ones it
-may start. A dependency granted `fs.read=./data` that is handed
+`--allow fs.read=<dir>` makes them, and the granted programs the ones it may
+start (with the loader they need, below). A dependency granted `fs.read=./data` that is handed
 `/etc/passwd` at run time gets an error from `readFileSync`; one granted
 `process.spawn=git` that tries to start `sh` gets `-1` from `spawnSync`.
 
