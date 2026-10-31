@@ -233,8 +233,6 @@ import { isWasmBuild } from "./visibility"
 export class LoopTarget {
   breakBlock: IRBlock
   continueBlock: IRBlock | null
-  /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
-  hasBreak: boolean
   /**
    * The arena's `buf` and `off` at the top of the current pass when the
    * loop's passes are scoped (`emitPass`), and `""` otherwise; a `switch`
@@ -248,6 +246,8 @@ export class LoopTarget {
    * otherwise.
    */
   walkClose: string
+  /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
+  hasBreak: boolean
   labelOnly: boolean
 
   constructor(breakBlock: IRBlock, continueBlock: IRBlock | null) {

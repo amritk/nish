@@ -65,7 +65,7 @@ function emitLoopBody(emitter: Emitter, body: Node, loop: LoopTarget): void -> @
   calls: Emitter.emitStatement nish_array_grow nish_panic_index
   pointer emitter: size=296 writesThrough=true captured=false passedTo=Emitter.emitStatement#0
   pointer body: size=40 writesThrough=false captured=false passedTo=Emitter.emitStatement#1
-  pointer loop: size=56 writesThrough=true captured=true
+  pointer loop: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +1:3 Emitter.emitStatement -> @Emitter.emitStatement
 function emitIf(emitter: Emitter, stmt: Node): void -> @emitIf [exported]

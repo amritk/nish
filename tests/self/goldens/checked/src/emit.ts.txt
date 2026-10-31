@@ -195,14 +195,14 @@ import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
 import TypeTable from "./types" -> struct TypeTable
 import isWasmBuild from "./visibility" -> function @isWasmBuild
-struct LoopTarget (class) size=56 align=8 exported
+struct LoopTarget (class) size=48 align=8 exported
   field breakBlock: IRBlock index=0 offset=0
   field continueBlock: IRBlock | null index=1 offset=8
-  field hasBreak: boolean index=2 offset=16
-  field markBuf: string index=3 offset=24
-  field markOff: string index=4 offset=32
-  field walkClose: string index=5 offset=40
-  field labelOnly: boolean index=6 offset=48
+  field markBuf: string index=2 offset=16
+  field markOff: string index=3 offset=24
+  field walkClose: string index=4 offset=32
+  field hasBreak: boolean index=5 offset=40
+  field labelOnly: boolean index=6 offset=41
   constructor -> @LoopTarget.constructor
   method scopesPass -> @LoopTarget.scopesPass
 struct Emitter (class) size=296 align=8 exported
@@ -316,13 +316,13 @@ struct Emitter (class) size=296 align=8 exported
 function LoopTarget.constructor(this: LoopTarget, breakBlock: IRBlock, continueBlock: IRBlock | null): void -> @LoopTarget.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: breakBlock continueBlock
-  pointer this: size=56 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   pointer breakBlock: size=16 writesThrough=true captured=true
   pointer continueBlock: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function LoopTarget.scopesPass(this: LoopTarget): boolean -> @LoopTarget.scopesPass [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function captureParamName(k: i32): string -> @captureParamName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -845,7 +845,7 @@ function Emitter.releasePass(this: Emitter, loop: LoopTarget): void -> @Emitter.
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.arenaField Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock nish_str_concat
   pointer this: size=296 writesThrough=false captured=false passedTo=Emitter.arenaField#0 Emitter.arenaField#0 Emitter.useRuntime#0
-  pointer loop: size=56 writesThrough=false captured=false
+  pointer loop: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 fn: IRFunction (const)
   local +1:11 rewind: IRBlock (const)

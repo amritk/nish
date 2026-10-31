@@ -616,15 +616,15 @@ const sameState = (a: FlowState, b: FlowState): boolean => {
 
 /** One loop or `switch` a `break` or a `continue` can leave, and what reached its exits. */
 class SecretExitTarget {
+  /** The label written on the statement, or "" for none. */
+  label: string
+  breaks: FlowState
+  continues: FlowState
+  /** How many targets enclose it: a variable declared deeper than this is inside it. */
+  depth: i32
   isSwitch: boolean
   /** A labelled block: only a `break` that names it leaves it. */
   isBlock: boolean
-  /** The label written on the statement, or "" for none. */
-  label: string
-  /** How many targets enclose it: a variable declared deeper than this is inside it. */
-  depth: i32
-  breaks: FlowState
-  continues: FlowState
 
   constructor(isSwitch: boolean, depth: i32, vars: i32, movable: i32) {
     this.isSwitch = isSwitch
