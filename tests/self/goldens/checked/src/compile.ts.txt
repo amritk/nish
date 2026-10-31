@@ -3289,7 +3289,7 @@ function report(compilation: Compilation, json: boolean): void -> @report
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: Diagnostic.json DiagnosticSink.format DiagnosticSink.sorted nish_print nish_str_concat nish_write
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:19 DiagnosticSink.format -> @DiagnosticSink.format
   local +3:14 diagnostic: Diagnostic (const)
@@ -3300,7 +3300,7 @@ function reportPerformance(compilation: Compilation, enabled: boolean, json: boo
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 reportWarnings -> @reportWarnings
 function reportPortability(compilation: Compilation, json: boolean): void -> @reportPortability
@@ -3308,7 +3308,7 @@ function reportPortability(compilation: Compilation, json: boolean): void -> @re
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 reportWarnings -> @reportWarnings
 function reportDeprecations(compilation: Compilation, json: boolean): void -> @reportDeprecations
@@ -3316,7 +3316,7 @@ function reportDeprecations(compilation: Compilation, json: boolean): void -> @r
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 reportWarnings -> @reportWarnings
 function reportWarnings(warnings: Diagnostic[], kind: string, json: boolean): void -> @reportWarnings
@@ -3342,7 +3342,7 @@ function reportLoadFailure(compilation: Compilation, json: boolean): void -> @re
   sharedWrite: via reportRootFailure
   escaping: json
   calls: DiagnosticSink.hasErrors nish_str_concat report reportRootFailure
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=report#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=report#0
   stackSites=0 stackLocals=0
   callee +0:5 reportRootFailure -> @reportRootFailure
   callee +1:14 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
@@ -3409,7 +3409,7 @@ function capabilityScopes(scopes: string[], whole: i32, opts: Options): i32 -> @
   sharedWrite: +0:9
   calls: capabilityIndex nish_array_grow nish_is_dir nish_panic_overflow nish_panic_slice nish_realpath nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new nish_write
   pointer scopes: size=0 writesThrough=false captured=false
-  pointer opts: size=184 writesThrough=false captured=false
+  pointer opts: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -32:7 mask: i32 (let)
   local -31:14 entry: string (const)
@@ -3963,7 +3963,7 @@ function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalF
   sharedWrite: via napiBridges
   escaping: fns
   calls: napiBridges nish_array_grow
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 opts: Options (const)
@@ -3974,7 +3974,7 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
   calls: generateDts generateHeader generateNapiShim generateWasmLoader makeDirectoryFor nish_str_concat nish_write nish_write_file wasmLoaderPath
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
   local +0:9 opts: Options (const)

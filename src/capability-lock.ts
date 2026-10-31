@@ -7,9 +7,16 @@
 //       "version": 1,
 //       "packages": {
 //         "@acme/fastmath": ["unsafe"],
-//         "pkg_http": ["clock", "net"]
+//         "pkg_http": ["clock", "net"],
+//         "pkg_git": ["fs.read=vendor/repos", "process.spawn=git"]
 //       }
 //     }
+//
+// A row's entry `cap=arg` records a capability granted with that argument
+// (WP40 §2a): the dependency reaches `cap` only as far as the grant's
+// arguments do, and a later grant that widens it -- a new argument, or the
+// capability whole -- is growth like a new capability. A bare name records
+// the capability whole, so every row written before arguments stays valid.
 //
 // The writer is byte-stable -- packages sorted, each row in the fixed
 // capability order, two-space indentation and a trailing newline -- so the
@@ -22,9 +29,9 @@
 // `Compilation.checkCapabilityLock` compares; this module only reads and
 // writes.
 
-import { capabilityIndex, capabilityNames } from "./capabilities"
+import { argumentCapabilities, capabilityIndex, capabilityName, capabilityNames } from "./capabilities"
 import { CLI } from "./branding"
-import { StringBuilder, jsonQuote } from "./strings"
+import { StringBuilder, compareStrings, jsonQuote } from "./strings"
 
 const TAB: i32 = 9
 const NEWLINE: i32 = 10
@@ -60,7 +67,8 @@ export const capabilityLockName = (): string => `${CLI}-capabilities.lock.json`
 /**
  * A lockfile read: each package it records beside the mask of its row, or the
  * opening of the NL3043 message and its span when the file is not the shape,
- * and then no row at all.
+ * and then no row at all. `scoped` holds, per row, the capabilities it records
+ * only with arguments, and `argRows` and `argTexts` each such entry, flat.
  */
 export class CapabilityLock {
   text: string
@@ -70,6 +78,9 @@ export class CapabilityLock {
   problemEnd: i32
   names: string[]
   masks: i32[]
+  scoped: i32[]
+  argRows: i32[]
+  argTexts: string[]
 
   constructor(text: string) {
     this.text = text
@@ -79,6 +90,9 @@ export class CapabilityLock {
     this.problemEnd = 0
     this.names = []
     this.masks = []
+    this.scoped = []
+    this.argRows = []
+    this.argTexts = []
   }
 
   /** Refuse the file, read no further: the first problem is the one reported. */
@@ -91,6 +105,9 @@ export class CapabilityLock {
     this.problemEnd = end > start ? end : start + 1
     this.names = []
     this.masks = []
+    this.scoped = []
+    this.argRows = []
+    this.argTexts = []
   }
 
   failed(): boolean {
@@ -314,12 +331,12 @@ export class CapabilityLock {
         return
       }
       this.skipBlank()
-      const mask = this.readRow(name)
+      const mask = this.readRow(name, this.names.length)
       if (this.failed()) {
         return
       }
       this.names.push(name)
-      this.masks.push(mask)
+      this.masks.push(mask | this.scoped[this.scoped.length - 1])
       more = this.separator(CLOSE_BRACE)
     }
     if (!this.failed()) {
@@ -327,8 +344,13 @@ export class CapabilityLock {
     }
   }
 
-  /** One package's row, as a mask: an array of capability names, each written once. */
-  readRow(name: string): i32 {
+  /**
+   * One package's row, at `row`, as the mask of what it records whole: an
+   * array of capability names, or `cap=arg` entries for a capability that
+   * takes an argument, each written once. What it records only with
+   * arguments is pushed to `scoped`.
+   */
+  readRow(name: string, row: i32): i32 {
     if (this.peek() !== OPEN_BRACKET) {
       this.fail(`the row of \`${name}\` is not an array`, this.at, this.at + 1)
       return 0
@@ -336,6 +358,7 @@ export class CapabilityLock {
     this.at = this.at + 1
     this.skipBlank()
     let mask = 0
+    let scoped = 0
     let more = this.peek() !== CLOSE_BRACKET
     while (more && !this.failed()) {
       this.skipBlank()
@@ -352,23 +375,76 @@ export class CapabilityLock {
       if (entry === null) {
         return 0
       }
-      const c = capabilityIndex(entry)
-      if (c < 0) {
+      const equals = entry.indexOf("=")
+      const c = capabilityIndex(equals >= 0 ? entry.slice(0, equals) : entry)
+      if (
+        c < 0 ||
+        (equals >= 0 && ((argumentCapabilities() & (1 << c)) === 0 || equals + 1 >= entry.length))
+      ) {
         this.fail(`\`${entry}\` in the row of \`${name}\` is no capability`, entryAt, this.at)
         return 0
       }
-      if ((mask & (1 << c)) !== 0) {
+      if ((equals < 0 && (mask & (1 << c)) !== 0) || (equals >= 0 && this.holds(row, entry))) {
         this.fail(`\`${entry}\` is written twice in the row of \`${name}\``, entryAt, this.at)
         return 0
       }
-      mask = mask | (1 << c)
+      if (equals < 0) {
+        mask = mask | (1 << c)
+      } else {
+        scoped = scoped | (1 << c)
+        this.argRows.push(row)
+        this.argTexts.push(entry)
+      }
       more = this.separator(CLOSE_BRACKET)
     }
     if (!this.failed()) {
       this.at = this.at + 1
     }
+    this.scoped.push(scoped & ~mask)
     return mask
   }
+
+  /** Whether row `row` already records the `cap=arg` entry `entry`, without allocating. */
+  holds(row: i32, entry: string): boolean {
+    let j = 0
+    while (j < this.argRows.length && j < this.argTexts.length) {
+      if (this.argRows[j] === row && this.argTexts[j] === entry) {
+        return true
+      }
+      j = j + 1
+    }
+    return false
+  }
+
+  /** The arguments row `row` records for capability `c`, as `cap=arg` entries. */
+  recorded(row: i32, c: i32): string[] {
+    return argumentsOf(this.argRows, this.argTexts, row, capabilityName(c))
+  }
+}
+
+/**
+ * The `cap=arg` entries of `texts` whose `rows` is `row` and whose capability
+ * is `cap`, sorted, so that the lockfile is written in one order and read
+ * back the same.
+ */
+const argumentsOf = (rows: i32[], texts: string[], row: i32, cap: string): string[] => {
+  const out: string[] = []
+  const prefix = `${cap}=`
+  let j = 0
+  while (j < rows.length && j < texts.length) {
+    if (rows[j] === row && texts[j].startsWith(prefix)) {
+      let at = out.length
+      out.push(texts[j])
+      while (at > 0 && at < out.length && compareStrings(out[at - 1], out[at]) > 0) {
+        const held = out[at]
+        out[at] = out[at - 1]
+        out[at - 1] = held
+        at = at - 1
+      }
+    }
+    j = j + 1
+  }
+  return out
 }
 
 /** A byte a JSON number can hold, so that `1.0` or `10` is read whole and refused. */
@@ -401,9 +477,17 @@ export const readCapabilityLock = (text: string): CapabilityLock => {
 /**
  * The lockfile for `names`, sorted, each beside its mask: byte-stable, so the
  * same program writes the same file. A package that reaches nothing is
- * written with `[]`, which records that it reached nothing.
+ * written with `[]`, which records that it reached nothing. A capability in a
+ * package's `scoped` bits is written as the `cap=arg` entries of `argTexts`
+ * whose `argRows` is that package's place, sorted, in place of its name.
  */
-export const capabilityLockText = (names: string[], masks: i32[]): string => {
+export const capabilityLockText = (
+  names: string[],
+  masks: i32[],
+  scoped: i32[],
+  argRows: i32[],
+  argTexts: string[]
+): string => {
   const out = new StringBuilder()
   out.add(`{\n  "version": ${LOCK_VERSION},\n  "packages": {`)
   let p = 0
@@ -411,13 +495,49 @@ export const capabilityLockText = (names: string[], masks: i32[]): string => {
     out.add(p === 0 ? "\n    " : ",\n    ")
     out.add(jsonQuote(name))
     out.add(": [")
-    const caps: string[] = p < masks.length ? capabilityNames(masks[p]) : []
+    const mask = p < masks.length ? masks[p] : 0
+    const narrow = p < scoped.length ? scoped[p] & mask : 0
+    const entries: string[] = []
+    for (const cap of capabilityNames(mask)) {
+      if ((narrow & (1 << capabilityIndex(cap))) === 0) {
+        entries.push(cap)
+      } else {
+        // `argumentsOf` inlined: the entries are pushed and sorted in place,
+        // so the loop allocates nothing of its own.
+        const from = entries.length
+        let j = 0
+        while (j < argRows.length && j < argTexts.length) {
+          const text = argTexts[j]
+          if (
+            argRows[j] === p &&
+            text.startsWith(cap) &&
+            text.length > cap.length &&
+            text.charCodeAt(cap.length) === 61
+          ) {
+            let at = entries.length
+            entries.push(text)
+            while (
+              at > 0 &&
+              at > from &&
+              at < entries.length &&
+              compareStrings(entries[at - 1], entries[at]) > 0
+            ) {
+              const held = entries[at]
+              entries[at] = entries[at - 1]
+              entries[at - 1] = held
+              at = at - 1
+            }
+          }
+          j = j + 1
+        }
+      }
+    }
     let c = 0
-    for (const cap of caps) {
+    for (const entry of entries) {
       if (c > 0) {
         out.add(", ")
       }
-      out.add(jsonQuote(cap))
+      out.add(jsonQuote(entry))
       c++
     }
     out.add("]")
