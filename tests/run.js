@@ -11741,7 +11741,7 @@ if (!only || "sandbox".includes(only)) {
         `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
       ) &&
       !scopedText.includes("@.sandbox.write") &&
-      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null)`) &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null)`) &&
       (as === null || as.status === 0),
     sc.status === 0
       ? `${scopedText
@@ -11775,6 +11775,106 @@ if (!only || "sandbox".includes(only)) {
       added.every((l) => l === "" || /sandbox|llvm\.used|^entry:$|^ {2}ret void$|^\}$/.test(l)),
     ph.status === 0 ? added.join("\n") : shown(ph)
   )
+}
+
+// WP40 §2a at run time: a dependency's grant with arguments, held by the WP37
+// sandbox where the compiler could not read the value. Each fixture's
+// dependency reaches what the program's first argument names, so the build
+// accepts it (tests/link/caps_dep_arg_*_too_narrow is the same reach written
+// as a literal, refused at build), and `--sandbox` stops the reach the grant
+// does not cover: Landlock scopes `fs.read=<dir>` to the directory and takes
+// EXECUTE everywhere but the programs `process.spawn=<program>` names. The
+// same binaries built without `--sandbox` are the control.
+if (!only || "sandbox dependency grants".includes(only)) {
+  const dir = path.join(buildDir, "sandbox-grants")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("sandbox dependency grants: --sandbox confines through Linux system calls, and this host is not Linux with clang")
+  } else {
+    const abiProbe = path.join(dir, "abi")
+    fs.writeFileSync(
+      `${abiProbe}.c`,
+      "#include <stdio.h>\n#include <unistd.h>\n#include <sys/syscall.h>\n" +
+        'int main(void) { long r = syscall(444, NULL, 0, 1); printf("%ld\\n", r < 0 ? 0 : r); return 0; }\n'
+    )
+    const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root })
+    if (a.status !== 0) check("sandbox dependency grants: the Landlock ABI probe compiles", false, shown(a))
+    const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
+    /** Builds tests/link/<fixture> with `flags` into its own directory: the binary, or null and a FAIL. */
+    const build = (fixture, flags) => {
+      const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
+      const exe = path.join(out, "app")
+      const r = spawnSync(
+        NISH,
+        [path.join(linkDir, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      if (r.status !== 0) check(`sandbox dependency grants: ${fixture} ${flags.join(" ")} builds`, false, shown(r))
+      return r.status === 0 ? exe : null
+    }
+    const run = (exe, args) =>
+      exe === null ? null : spawnSync(exe, args, { cwd: dir, encoding: "utf8", timeout: 60000 })
+    const said = (r) => (r === null ? "not built" : shown(r))
+    const ir = (fixture) => {
+      const f = path.join(dir, `${fixture}-sandbox`, "main.ll")
+      return fs.existsSync(f) ? fs.readFileSync(f, "utf8") : ""
+    }
+    if (abi < 1) {
+      skip(`sandbox dependency grants: this kernel has no Landlock (ABI ${abi}); the checks did not run`)
+    } else {
+      const reader = "sandbox_dep_fs_scoped"
+      const scoped = build(reader, ["--sandbox"])
+      const plain = build(reader, [])
+      const inside = path.join(linkDir, reader, "data", "in.txt")
+      const rIn = run(scoped, [inside])
+      const rOut = run(scoped, ["/etc/passwd"])
+      const rPlain = run(plain, ["/etc/passwd"])
+      check(
+        "sandbox dependency grants: a dependency granted fs.read=<dir> reads inside it and not /etc/passwd",
+        rIn !== null &&
+          rIn.status === 0 &&
+          rIn.stdout === "7\n" &&
+          rOut !== null &&
+          rOut.status !== 0 &&
+          rOut.stderr.includes("cannot read /etc/passwd") &&
+          rPlain !== null &&
+          rPlain.status === 0,
+        `${said(rIn)}\n--- outside\n${said(rOut)}\n--- without --sandbox\n${said(rPlain)}`
+      )
+      check(
+        "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.read scope",
+        ir(reader).includes(`c"${fs.realpathSync(path.join(linkDir, reader, "data"))}\\00\\00"`) &&
+          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null\)/.test(
+            ir(reader)
+          ),
+        ir(reader)
+      )
+      const runner = "sandbox_dep_exec_allowlist"
+      const allow = build(runner, ["--sandbox"])
+      const open = build(runner, [])
+      const rTrue = run(allow, ["true"])
+      const rEcho = run(allow, ["echo"])
+      const rEchoPlain = run(open, ["echo"])
+      check(
+        "sandbox dependency grants: a dependency granted process.spawn=true runs true and cannot exec echo",
+        rTrue !== null &&
+          rTrue.status === 0 &&
+          rTrue.stdout === "0\n" &&
+          rEcho !== null &&
+          rEcho.status === 0 &&
+          rEcho.stdout === "-1\n" &&
+          rEchoPlain !== null &&
+          rEchoPlain.stdout === "\n0\n",
+        `${said(rTrue)}\n--- echo\n${said(rEcho)}\n--- without --sandbox\n${said(rEchoPlain)}`
+      )
+      check(
+        "sandbox dependency grants: the exec allowlist names the granted program by its absolute path",
+        /@\.sandbox\.exec = [^\n]*c"\/[^"]*\/true\\00/.test(ir(runner)),
+        ir(runner)
+      )
+    }
+  }
 }
 
 // `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the

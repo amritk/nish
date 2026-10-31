@@ -3,7 +3,7 @@
 @llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"
 
 declare void @nish_free_arena() #0
-declare void @nish_sandbox(i32, i32, i8*, i8*) #0
+declare void @nish_sandbox(i32, i32, i8*, i8*, i8*) #0
 declare void @nish_sandbox_check() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 
@@ -15,7 +15,7 @@ entry:
 
 define internal void @.sandbox.apply() "probe-stack"="inline-asm" {
 entry:
-  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null)
+  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null, i8* null)
   ret void
 }
 

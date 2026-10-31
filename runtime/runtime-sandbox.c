@@ -20,9 +20,9 @@
  * scopes, each a run of NUL-terminated absolute paths ended by an empty one,
  * or null when the capability is granted whole or not at all; a list moves
  * its capability's rights from the rule on `/` to one rule per directory.
- * `exec_paths` is the `--allow process.spawn=<program>` list and the grants'
- * programs, in the same shape: with it, `EXECUTE` leaves the rule on `/` and
- * each program (and its interpreter) gets a rule of its own.
+ * `exec_paths` is the programs a dependency's `process.spawn=<program>`
+ * grants name (WP40 §2a), and their interpreters, in the same shape: with
+ * it, `EXECUTE` leaves the rule on `/` and each program gets a rule of its own.
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
