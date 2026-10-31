@@ -128,6 +128,7 @@ cases/caps_process_wait added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with
 cases/caps_signal added after R6: no rewriter to freeze it with
 cases/caps_tty added after R6: no rewriter to freeze it with
+cases/cf_label_dispose added after R6: no rewriter to freeze it with
 cases/cf_label_walks added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with

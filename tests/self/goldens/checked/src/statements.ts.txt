@@ -125,10 +125,11 @@ import flowNoteBreak from "./loop-flow" -> function @flowNoteBreak
 import flowUpdated from "./loop-flow" -> function @flowUpdated
 function terminatorName(stmt: Node): string -> @terminatorName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
+  calls: nish_panic_index terminatorName
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:18 clause: Node (const)
+  callee +12:14 terminatorName -> @terminatorName
 function checkLabeled(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkLabeled
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

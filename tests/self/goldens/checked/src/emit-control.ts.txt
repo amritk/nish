@@ -269,11 +269,13 @@ function emitLabeled(emitter: Emitter, stmt: Node): void -> @emitLabeled [export
   callee +11:7 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee +15:5 Emitter.emitStatement -> @Emitter.emitStatement
 function labelled(emitter: Emitter, label: string): i32 -> @labelled
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_str_eq
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_exit
+  calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat nish_str_eq
   pointer emitter: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
+  callee +5:18 internalErrorFor -> @internalErrorFor
 function leaveTo(emitter: Emitter, at: i32): void -> @leaveTo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitScopeJoins
@@ -301,7 +303,7 @@ function emitBreak(emitter: Emitter, stmt: Node): void -> @emitBreak [exported]
   callee +2:3 branch -> @branch
 function emitContinue(emitter: Emitter, stmt: Node): void -> @emitContinue [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_exit
+  sharedWrite: via labelled
   calls: branch internalErrorFor labelled leaveTo nish_exit nish_panic_index nish_str_concat nish_str_eq
   pointer emitter: size=296 writesThrough=false captured=false passedTo=labelled#0 leaveTo#0 branch#0
   pointer stmt: size=40 writesThrough=false captured=false
