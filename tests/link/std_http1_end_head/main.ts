@@ -2,12 +2,17 @@
 // request already fed behind it, `HTTP1_END` / `H1_END` still read the request
 // that ended (method, target, version, fields), so a response written there
 // answers it and not the pipelined one. `acceptEncoding` and `targetIs` read
-// the first request's at its `H1_END`; a HEAD answered there gets no body and
-// an HTTP/1.0 client is not sent chunked; the next request reads whole after.
+// the first request's at its `H1_END`, and the first response is gzipped by
+// its own `Accept-Encoding`; bytes fed after `H1_END`, enough to grow the
+// input buffer, leave the held head as it was; a router matching at `H1_END`
+// finds the first request's route, not a 404; a HEAD answered there gets no
+// body and an HTTP/1.0 client is not sent chunked; the next request reads
+// whole after.
 import { HTTP1_CHUNKED, HTTP1_END, HTTP1_HEAD, Http1Parser } from "nish/net/http1"
 import { HTTP_CODING_GZIP, HTTP_CODING_IDENTITY, HttpCompressor } from "nish/net/http-compress"
 import { DEFLATE_FAST } from "nish/compress/deflate"
 import { H1_END, H1_REQUEST, Http1Config, Http1Connection } from "nish/net/http1-server"
+import { ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router"
 import { Suite } from "nish/testing"
 
 /** The bytes of an ASCII string. */
@@ -27,6 +32,25 @@ const output = (conn: Http1Connection, from: i32): string => {
     parts.push(String.fromCharCode(c >= 65 && c <= 90 ? c + 32 : c))
   }
   return parts.join("")
+}
+
+/** `count` bytes of JSON-shaped text, which gzip shrinks well. */
+const json = (count: i32): u8[] => {
+  const parts: string[] = []
+  let length: i32 = 0
+  let i: i32 = 0
+  while (length < count) {
+    const item: string = `{"id":${i},"name":"item ${i}","ok":true},`
+    parts.push(item)
+    length += toI32(item.length)
+    i++
+  }
+  const out: u8[] = ascii(parts.join(""))
+  const body: u8[] = new Array<u8>(count)
+  for (let k: i32 = 0; k < count; k++) {
+    body[k] = out[k]
+  }
+  return body
 }
 
 /** A connection fed `bytes`, read through the first request's `H1_END`. */
@@ -71,15 +95,50 @@ export const main = (): number => {
     t.eqI32("pipelined: acceptEncoding at H1_END is the first's gzip", conn.acceptEncoding(), HTTP_CODING_GZIP)
     t.ok("pipelined: targetIs at H1_END is the first's", conn.parser.targetIs("/first") && !conn.parser.targetIs("/second"))
     const enc = new HttpCompressor(DEFLATE_FAST, 256, 65536)
-    const body: u8[] = ascii("hello")
-    t.eqI32("pipelined: answered at H1_END", conn.respondEncoded(200, names, values, body, 0, 5, enc, conn.acceptEncoding()), 0)
+    const body: u8[] = json(4000)
+    t.eqI32("pipelined: answered at H1_END", conn.respondEncoded(200, names, values, body, 0, 4000, enc, conn.acceptEncoding()), 0)
     const first: i32 = conn.outputEnd
+    const sent: string = output(conn, conn.outputStart)
+    t.ok("pipelined: the first response is gzipped, by the first's accept-encoding", sent.indexOf("content-encoding: gzip\r\n") >= 0 && sent.indexOf("content-length: 4000") < 0)
     t.eqI32("pipelined: the second request", conn.next(), H1_REQUEST)
     t.ok("pipelined: reads as the second", conn.parser.targetIs("/second"))
     t.eqI32("pipelined: without gzip", conn.acceptEncoding(), HTTP_CODING_IDENTITY)
     t.eqI32("pipelined: its end", conn.next(), H1_END)
     t.eqI32("pipelined: still the second's at its end", conn.acceptEncoding(), HTTP_CODING_IDENTITY)
     t.ok("pipelined: the first response is whole", output(conn, conn.outputStart).startsWith("http/1.1 200 ok\r\n") && first > conn.outputStart)
+  }
+
+  // --- Bytes fed after H1_END, before the answer --------------------------------
+  {
+    const conn = atEnd(t, "fed after", "GET /first HTTP/1.1\r\nhost: a\r\naccept-encoding: gzip\r\n\r\nGET /sec")
+    const filler: string[] = []
+    for (let i: i32 = 0; i < 30; i++) {
+      filler.push("x-pad: 01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\r\n")
+    }
+    // About 6 KB more: the input buffer, 1024 bytes at first, grows and moves.
+    const more: u8[] = ascii(`ond HTTP/1.1\r\nhost: b\r\n${filler.join("")}\r\n`)
+    conn.feed(more, 0, toI32(more.length))
+    t.ok("fed after: the held head is still the first's", conn.parser.targetIs("/first") && conn.parser.methodIs("GET") && conn.parser.headerIs("host", "a"))
+    t.eqI32("fed after: and so is its accept-encoding", conn.acceptEncoding(), HTTP_CODING_GZIP)
+    const enc = new HttpCompressor(DEFLATE_FAST, 256, 65536)
+    t.eqI32("fed after: answered", conn.respondEncoded(200, names, values, json(4000), 0, 4000, enc, conn.acceptEncoding()), 0)
+    t.ok("fed after: gzipped", output(conn, conn.outputStart).indexOf("content-encoding: gzip\r\n") >= 0)
+    t.eqI32("fed after: the second request", conn.next(), H1_REQUEST)
+    t.ok("fed after: reads whole", conn.parser.targetIs("/second") && conn.parser.headerIs("host", "b") && conn.parser.headerCount === 31)
+    t.eqI32("fed after: its end", conn.next(), H1_END)
+  }
+
+  // --- A router at H1_END -------------------------------------------------------
+  {
+    const router = new Router(new RouterLimits())
+    t.eqI32("router: /first is route 0", router.add("GET", "/first"), 0)
+    const params: i32[] = new Array<i32>(32)
+    const conn = atEnd(t, "router", "GET /first HTTP/1.1\r\nhost: a\r\n\r\nGET /second HTTP/1.1\r\nhost: a\r\n\r\n")
+    const p: Http1Parser = conn.parser
+    t.eqI32("router: at H1_END the first's route, not a 404", router.match(p.head, p.methodStart, p.methodEnd, p.head, p.targetStart, p.targetEnd, params), 0)
+    t.ok("router: answered", conn.respond(200, names, values, 5) === 0 && conn.write(ascii("found"), 0, 5) === 5 && conn.end() === 0)
+    t.eqI32("router: the second request", conn.next(), H1_REQUEST)
+    t.eqI32("router: is not found", router.match(p.head, p.methodStart, p.methodEnd, p.head, p.targetStart, p.targetEnd, params), ROUTER_NOT_FOUND)
   }
 
   // --- A response written at H1_END reads its own request ------------------------

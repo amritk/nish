@@ -13,12 +13,29 @@ PASS  pipelined: its end
 PASS  pipelined: acceptEncoding at H1_END is the first's gzip
 PASS  pipelined: targetIs at H1_END is the first's
 PASS  pipelined: answered at H1_END
+PASS  pipelined: the first response is gzipped, by the first's accept-encoding
 PASS  pipelined: the second request
 PASS  pipelined: reads as the second
 PASS  pipelined: without gzip
 PASS  pipelined: its end
 PASS  pipelined: still the second's at its end
 PASS  pipelined: the first response is whole
+PASS  fed after: the first request
+PASS  fed after: its end
+PASS  fed after: the held head is still the first's
+PASS  fed after: and so is its accept-encoding
+PASS  fed after: answered
+PASS  fed after: gzipped
+PASS  fed after: the second request
+PASS  fed after: reads whole
+PASS  fed after: its end
+PASS  router: /first is route 0
+PASS  router: the first request
+PASS  router: its end
+PASS  router: at H1_END the first's route, not a 404
+PASS  router: answered
+PASS  router: the second request
+PASS  router: is not found
 PASS  HEAD: the first request
 PASS  HEAD: its end
 PASS  HEAD: respond at H1_END
@@ -30,4 +47,4 @@ PASS  HTTP/1.0: its end
 PASS  HTTP/1.0: respond chunked at H1_END
 PASS  HTTP/1.0: not chunked
 PASS  HTTP/1.0: read to the close
-http1-end-head: 32 passed, 0 failed, 0 skipped
+http1-end-head: 49 passed, 0 failed, 0 skipped

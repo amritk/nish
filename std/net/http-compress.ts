@@ -32,7 +32,9 @@
  * default): a 1300-byte body that gzips to 700 still fits in one segment
  * either way. After each call `decision` says why (`HTTP_COMPRESS_SENT`,
  * `_NOT_ACCEPTED`, `_TOO_SMALL`, `_TOO_LARGE`, `_TOO_LITTLE_SAVED`,
- * `_NO_FEWER_SEGMENTS`), for a program to count.
+ * `_NO_FEWER_SEGMENTS`), for a program to count. A response whose identity
+ * form already fits one segment is `_NO_FEWER_SEGMENTS` without running gzip
+ * at all, as no compression could take fewer.
  *
  * **Two encoders.** Bodies up to `fixedLimit` (16 KB) go through
  * `GzipFixedCompressor`: one fixed-Huffman block, a 16 KB window, no state
@@ -69,6 +71,7 @@
  */
 import { DEFLATE_FAST, compressBound } from "nish/compress/deflate"
 import { GzipCompressor, GzipFixedCompressor } from "nish/compress/gzip"
+import { wrappingAdd } from "nish:unsafe"
 
 /** No content coding: the body as it is. */
 export const HTTP_CODING_IDENTITY: i32 = 0
@@ -92,7 +95,8 @@ export const HTTP_OFFER_DEFLATE: i32 = 2
  * went out compressed; the client did not take gzip; it was shorter than
  * `minLength`; longer than `maxLength`; gzip did not save `minSaving` bytes
  * and `minSavingPercent` percent; or the compressed response would not have
- * taken fewer TCP segments (`segmentMode`).
+ * taken fewer TCP segments (`segmentMode`), which includes an identity
+ * response that already fits one segment, decided without compressing.
  */
 export const HTTP_COMPRESS_SENT: i32 = 0
 export const HTTP_COMPRESS_NOT_ACCEPTED: i32 = 1
@@ -403,7 +407,9 @@ export class HttpCompressor {
   decision: i32
   /**
    * How many times `compress` and `compressAnyway` ran an encoder, from 0: a
-   * count for a test or a profile to read, never consulted by a decision.
+   * count for a test or a profile to read, never consulted by a decision. It
+   * wraps past 2^31 - 1 to -2^31 rather than panic, as a server can run that
+   * many; read it as a difference between two reads.
    */
   encoderRuns: i32
 
@@ -468,7 +474,7 @@ export class HttpCompressor {
     if (keep > 0) {
       const fixed: boolean =
         this.encoder === HTTP_ENCODER_FIXED || (this.encoder !== HTTP_ENCODER_LEVEL && len <= this.fixedLimit)
-      this.encoderRuns += 1
+      this.encoderRuns = wrappingAdd(this.encoderRuns, 1)
       n = fixed
         ? this.fixed.compress(body, off, len, this.output, toI32(0), keep)
         : this.gzip.compress(body, off, len, this.output, toI32(0))
@@ -500,7 +506,7 @@ export class HttpCompressor {
       this.decision = HTTP_COMPRESS_NOT_ACCEPTED
       return -1
     }
-    this.encoderRuns += 1
+    this.encoderRuns = wrappingAdd(this.encoderRuns, 1)
     let n: i32 = -1
     if (
       this.encoder === HTTP_ENCODER_FIXED ||

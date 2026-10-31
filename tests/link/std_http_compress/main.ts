@@ -10,7 +10,8 @@
 // mode (its head arithmetic against the heads written), `Vary` only where the
 // request decided, and `identity;q=0` sent gzip below every threshold. Last,
 // segment mode's skip: a response that fits one segment as it is goes out
-// with no encoder run (`encoderRuns`), at the segment's edge and one byte past.
+// with no encoder run (`encoderRuns`), at the segment's edge and one byte past,
+// and `encoderRuns` wrapping past 2^31 - 1 rather than panicking.
 import { DEFLATE_FAST, DEFLATE_NO_ROOM } from "nish/compress/deflate"
 import { GzipDecompressor, GzipFixedCompressor } from "nish/compress/gzip"
 import {
@@ -549,7 +550,6 @@ export const main = (): number => {
     t.ok("skip: the connection's mss wins over the compressor's", p.oneSegment(HTTP_CODING_GZIP, 2000, 2000) && !p.oneSegment(HTTP_CODING_GZIP, 2001, 2000))
     t.ok("skip: not under minLength", !p.oneSegment(HTTP_CODING_GZIP, 255, 0))
     t.ok("skip: not for a client without gzip", !p.oneSegment(HTTP_CODING_IDENTITY, 600, 0))
-    t.eqI32("skip: oneSegment runs no encoder", p.encoderRuns, 0)
     // 600 bytes and their head fit the default segment: no encoder runs.
     const one = request(t, "skip one", config, "GET", "accept-encoding: gzip\r\n")
     t.eqI32("skip one: respondEncoded", one.respondEncoded(200, names, values, body, 0, 600, p, one.acceptEncoding()), 0)
@@ -598,6 +598,12 @@ export const main = (): number => {
     t.eqI32("skip refused: respondEncoded", must.respondEncoded(200, names, values, body, 0, 600, p, must.acceptEncoding()), 0)
     t.ok("skip refused: gzipped", queued(must).has("content-encoding: gzip") && p.decision === HTTP_COMPRESS_SENT)
     t.eqI32("skip refused: one encoder run more", p.encoderRuns, 4)
+    // The count wraps rather than panic a server that has run 2^31 encoders.
+    p.encoderRuns = 2147483647
+    t.ok("runs: compress at 2^31 - 1 runs", p.compress(HTTP_CODING_GZIP, body, 0, 5221) > 0)
+    t.eqI32("runs: wraps to -2^31", p.encoderRuns, -2147483648)
+    p.encoderRuns = 2147483647
+    t.ok("runs: so does compressAnyway", p.compressAnyway(HTTP_CODING_GZIP, body, 0, 40) > 0 && p.encoderRuns === -2147483648)
   }
   return t.done()
 }
