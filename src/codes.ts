@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 724
+export const RULE_COUNT: i32 = 726
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -185,6 +185,8 @@ const diagnosticRules = (): string[] => [
   "NL2338",
   "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",
   "NL2352",
+  "`sort` takes one comparator: write `xs.sort((a, b) => a - b)`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)",
+  "NL2584",
   "` is a `Secret` parameter, which its caller owns and wipes: wiped here, the caller would go on reading zeros and wipe it again. Leave the wipe to the caller, which knows when it is done",
   "NL2548",
   " and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`",
@@ -195,6 +197,8 @@ const diagnosticRules = (): string[] => [
   "NL2554",
   "`, which belongs to the function it is written in: a task reads a captured value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument",
   "NL2508",
+  "`sort` needs a comparator: write `xs.sort((a, b) => a - b)`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)",
+  "NL2585",
   " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it",
   "NL2364",
   ": a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`",

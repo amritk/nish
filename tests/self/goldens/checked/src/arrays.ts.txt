@@ -377,15 +377,14 @@ function levelled(name: string, levels: string[]): string -> @levelled
 function checkSort(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkSort
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.template Node.constructor checkGenericCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.template Node.constructor checkGenericCall nish_alloc_struct nish_array_grow nish_panic_index
   pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.errorAtProperty#0 CheckContext.template#0 CheckContext.errorType#0 checkGenericCall#0
   pointer call: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkGenericCall#1
   pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   pointer args: size=40 writesThrough=true captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkGenericCall#3
   stackSites=0 stackLocals=0
-  local -18:11 what: string (const)
-  callee -17:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -19:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
   local -11:9 template: TemplateInfo | null (const)
   callee -11:20 CheckContext.template -> @CheckContext.template
   callee -9:12 CheckContext.errorType -> @CheckContext.errorType

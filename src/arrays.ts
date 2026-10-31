@@ -466,10 +466,13 @@ const levelled = (name: string, levels: string[]): string => {
  */
 const checkSort = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {
   if (args.children.length !== 1) {
-    const what = args.children.length === 0 ? "needs a comparator" : "takes one comparator"
+    // Two literal sentences, not one with the verb interpolated: each is the
+    // registry fragment its code is keyed on (`src/codes.ts`).
     ctx.errorAtProperty(
       access,
-      `\`sort\` ${what}: write \`xs.sort((a, b) => a - b)\`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)`
+      args.children.length === 0
+        ? "`sort` needs a comparator: write `xs.sort((a, b) => a - b)`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)"
+        : "`sort` takes one comparator: write `xs.sort((a, b) => a - b)`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)"
     )
     return T_ERROR
   }
