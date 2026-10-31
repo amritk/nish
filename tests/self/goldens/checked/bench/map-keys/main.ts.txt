@@ -882,18 +882,18 @@ unsafe import 13:23 wrappingMul from "nish:unsafe"
 unsafe call 43:31 wrappingAdd (node 94)
 unsafe call 43:43 wrappingMul (node 97)
 unsafe call 46:33 wrappingMul (node 113)
-unsafe call 73:11 wrappingAdd (node 355)
-unsafe call 80:11 wrappingAdd (node 423)
-unsafe call 91:42 wrappingAdd (node 532)
-unsafe call 108:11 wrappingAdd (node 685)
-unsafe call 115:11 wrappingAdd (node 754)
-unsafe call 126:42 wrappingAdd (node 862)
-unsafe call 164:11 wrappingAdd (node 1066)
-unsafe call 172:11 wrappingAdd (node 1141)
-unsafe call 184:43 wrappingAdd (node 1247)
-unsafe call 207:11 wrappingAdd (node 1452)
-unsafe call 214:11 wrappingAdd (node 1522)
-unsafe call 225:45 wrappingAdd (node 1633)
+unsafe call 73:11 wrappingAdd (node 358)
+unsafe call 80:11 wrappingAdd (node 426)
+unsafe call 91:42 wrappingAdd (node 535)
+unsafe call 108:11 wrappingAdd (node 688)
+unsafe call 115:11 wrappingAdd (node 757)
+unsafe call 126:42 wrappingAdd (node 865)
+unsafe call 164:11 wrappingAdd (node 1069)
+unsafe call 172:11 wrappingAdd (node 1144)
+unsafe call 184:43 wrappingAdd (node 1250)
+unsafe call 207:11 wrappingAdd (node 1455)
+unsafe call 214:11 wrappingAdd (node 1525)
+unsafe call 225:45 wrappingAdd (node 1636)
 const L1: i32 = 1024
 const L2: i32 = 65536
 const L3: i32 = 8388608
@@ -904,11 +904,10 @@ function keyI32(i: i32): i32 -> @keyI32
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function pack(hi: i32, lo: i32): i64 -> @pack
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function keyI64(i: i32, miss: boolean): i64 -> @keyI64
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: pack
   stackSites=0 stackLocals=0
   callee +0:48 pack -> @pack
