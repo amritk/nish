@@ -386,10 +386,12 @@ cases/panics_pop added after R6: no rewriter to freeze it with
 cases/panics_range added after R6: no rewriter to freeze it with
 cases/panics_slice added after R6: no rewriter to freeze it with
 cases/param_default added after R6: no rewriter to freeze it with
+cases/param_eval_order added after R6: no rewriter to freeze it with
 cases/param_f64 added after R6: no rewriter to freeze it with
 cases/param_generic added after R6: no rewriter to freeze it with
 cases/param_method added after R6: no rewriter to freeze it with
 cases/param_rest added after R6: no rewriter to freeze it with
+cases/param_rest_escape added after R6: no rewriter to freeze it with
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_drop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_quiet added after R6: no rewriter to freeze it with

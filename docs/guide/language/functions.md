@@ -84,14 +84,14 @@ has a default or a rest parameter, not both.
 
 Optional parameters (`n?: i32`) are refused; write a default instead:
 
-```ts nish:err NL2603
+```ts nish:err NL2605
 const greet = (name?: string): string => "hi";
 ```
 
 A call never spreads an array into arguments; pass the array to a parameter
 of array type:
 
-```ts nish:err-body NL2604
+```ts nish:err-body NL2606
 const xs: i32[] = [1, 2];
 console.log(`${Math.max(...xs)}`);
 ```
