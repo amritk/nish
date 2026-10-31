@@ -142,7 +142,7 @@ tagged classes and interfaces, `eval`, `Function`, `Proxy`,
 `Reflect`, `Symbol`, `globalThis`, `arguments`, `with`, `delete`, `typeof`,
 `instanceof`, `in`, `for...in`, `==`/`!=`, comma expressions, `void expr`,
 `var`, `try`/`catch`/`finally` and `throw` (a failure is a `Result<T, E>`,
-WP16), labelled statements, generators and `yield`, `async`/`await` (WP24),
+WP16), a label on anything but a loop, a block or a `switch`, generators and `yield`, `async`/`await` (WP24),
 decorators, enum members that are not numeric literals, namespaces and
 `declare global`, computed property names, object spread, prototype access,
 `Object.assign` and its relatives, string-keyed element access, `?.` outside a

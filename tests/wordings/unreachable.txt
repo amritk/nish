@@ -28,6 +28,9 @@ NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`
 NL2040  retired: inheritance, removed
 NL2042  retired: the long form of the WP15 §8 allocation warning; the live one is NL9001
 NL2047  retired: inheritance, removed
+NL2166  retired: a `case` clause had to end in `break`, `return`, `continue` or `process.exit`; a clause falls into the next as in TypeScript now (tests/cases/cf_switch_fallthrough)
+NL2217  retired: the checker's refusal of a labelled `break`; one compiles now (tests/cases/cf_label_loops)
+NL2218  retired: the checker's refusal of a labelled `continue`; one compiles now (tests/cases/cf_label_loops)
 NL2049  retired: inheritance, removed
 NL2050  retired: inheritance, removed
 NL2051  retired: inheritance, removed
@@ -97,8 +100,6 @@ NL2205  generators are Phase 0's (NL1044)
 NL2207  generic functions are Phase 0's (NL1054)
 NL2208  retired: `Generic methods are not supported`; generic methods compile since WP18 G8 (wp18 §15.8)
 NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
-NL2217  labelled `break` is Phase 0's (NL1046)
-NL2218  labelled `continue` is Phase 0's (NL1046)
 NL3022  a member symbol carries its package's prefix, so only two same-named structs of one package share one; declaredStructs compares each with its own package's first and refuses the pair first, a declared class as NL3028 and an instantiation at its template as NL3013, and skips their members (#193)
 NL3023  NL3022 inside a package, preempted by NL3028 or NL3013 the same way (#193)
 

@@ -587,7 +587,7 @@ method call names one symbol today.
 Generic functions, classes, interfaces and methods compile — each
 instantiation becomes its own specialised function or struct
 ([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic type aliases,
-closures, `try`/`catch` and labelled `break`/`continue` are refusals
+closures and `try`/`catch` are refusals
 rather than gaps, each with the message and the idiom to use instead
 ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
 Release engineering (`--version`, exit codes, npm packaging, tag-driven
