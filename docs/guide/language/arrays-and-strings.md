@@ -32,15 +32,64 @@ export const main = (): i32 => {
 ```
 
 Those — `length` (read-only), `push`, `pop`, `indexOf` and `join` (on a
-`string[]` only) — with `set` and `fill` on arrays of numbers, are every
-array method there is. There is no `map`, `filter`, `reduce`, `forEach`,
-`slice` or `sort`, and no spread. Write the loop, or a function that takes
+`string[]` only) — with `set` and `fill` on arrays of numbers and `sort`
+(below), are every array method there is. There is no `map`, `filter`,
+`reduce`, `forEach` or `slice`, and no spread. Write the loop, or a function that takes
 [a function argument](functions.md#passing-a-function-to-a-function).
 
 `const` fixes the binding, not the contents: `primes.push(11)` and
 `primes[0] = 1` above are fine on a `const`, and `primes = []` would not be.
 Declare a parameter `readonly T[]` to promise the function writes nothing
 into it.
+
+### Sorting
+
+`xs.sort(cmp)` sorts the array in place and answers it. The comparator says
+how two elements compare: a negative number puts `a` first, a positive one
+puts `b` first, and zero keeps them in the order they had — the sort is
+stable, so the result is exactly the one Node gives.
+
+```ts nish:ok
+class Score {
+  name: string;
+  points: i32;
+  constructor(name: string, points: i32) {
+    this.name = name;
+    this.points = points;
+  }
+}
+
+const byPoints = (a: Score, b: Score): number => b.points - a.points;
+
+export const main = (): i32 => {
+  const xs: i32[] = [5, -2, 9, 0];
+  xs.sort((a, b) => a - b);
+  console.log(`${xs[0]} ${xs[3]}`);                 // -2 9
+
+  const board: Score[] = [new Score("ada", 3), new Score("bo", 7), new Score("cy", 3)];
+  board.sort(byPoints);
+  const names: string[] = [];
+  for (const s of board) {
+    names.push(s.name);
+  }
+  console.log(names.join(" "));                     // bo ada cy
+  return 0;
+};
+```
+
+Three things are refused where JavaScript would do something surprising or
+Nish cannot yet follow:
+
+- `xs.sort()` with no comparator. JavaScript compares the elements as
+  strings, so `[10, 9].sort()` is `[10, 9]`; Nish asks you to write
+  `xs.sort((a, b) => a - b)`.
+- Sorting a `readonly T[]`.
+- A comparator that reads a local variable of the function it is written in.
+  Until closures land, write the comparator as a top-level function, or as an
+  arrow that uses only its two parameters.
+
+Each comparator compiles to its own copy of the sort, with the comparator
+called directly in the inner loop.
 
 ### Walking an array
 

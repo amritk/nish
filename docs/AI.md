@@ -49,7 +49,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -159,7 +159,7 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
+| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
@@ -2108,7 +2108,11 @@ there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` i
 `string[]` only** — and, on an array of numbers only, `dst.set(src[, offset])`
 (one `memmove`; a range past the end panics) and `a.fill(v[, start[, end]])`
 (ends clamped and counted back from the end when negative, as in JavaScript;
-never panics). Both are statements. That is every array method there is. A
+never panics). Both are statements. `a.sort(cmp)` sorts in place, stably, and
+answers `a` — the same order Node gives; the comparator is required (`a.sort()`
+is refused, since JavaScript would compare strings), a readonly array is
+refused, and the comparator is a top-level function or an arrow that captures
+nothing (closure capture has not landed). That is every array method there is. A
 window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),

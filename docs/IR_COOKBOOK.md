@@ -17087,6 +17087,21 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end arr-join -->
 
+### `sort` with a comparator
+
+`xs.sort(cmp)` is the one array method written in Nish: the checker rewrites
+the call to `sortWith(xs, cmp)` in `std/sort.ts`, a stable merge sort, and
+because `cmp` is a compile-time function parameter the instantiation
+`sortWith$i32$fn...ascending` calls the comparator with a plain `call` in
+each of its loops — no function pointer, no indirect call. `std/sort.ts` writes
+no module of its own: its instantiations are copied into the module that
+sorts, as `std/math.ts`'s functions are, so the listing below is complete. A
+comparator's answer is tested only with `> 0` (`fcmp ogt`), which is false for
+`NaN` and for `-0`, as Node reads them.
+
+<!-- cookbook:begin arr-sort -->
+<!-- cookbook:end arr-sort -->
+
 ### `set` and `fill`
 
 `dst.set(src, at)` is one byte copy behind the range check `s.slice` makes:
