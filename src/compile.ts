@@ -2228,6 +2228,31 @@ class StagedModules {
 }
 
 /**
+ * One module of `stageModules`: its cached object joins `copy` when its entry
+ * holds this key, and otherwise its object, entry and key join `staged`, to be
+ * kept once the link succeeds.
+ */
+const stageModule = (
+  staged: StagedModules,
+  copy: string[],
+  cacheRoot: string,
+  recipe: string,
+  output: string,
+  ir: string
+): void => {
+  const stem = basenameWithout(output, ".ll")
+  const key = moduleCacheKey(recipe, stem, ir)
+  const entry = `${cacheRoot}/${sha256Hex(key)}`
+  const stored = readFileSyncOrNull(`${entry}/key`)
+  if (stored !== null && stored === key) {
+    copy.push(`${entry}/${stem}.o`)
+  } else {
+    staged.objects.push(`${staged.dir}/${stem}.o`)
+    staged.entries.push(entry)
+    staged.keys.push(key)
+  }
+}
+/**
  * The module cache's lookup (src/build-cache.ts): each of `outputs` whose IR,
  * in `irs`, has an entry under this recipe (`recipe`, the runtime entry's key)
  * gets that entry's object copied beside it as `<stem>.o`, which
@@ -2257,18 +2282,8 @@ const stageModules = (outputs: string[], irs: string[], recipe: string): StagedM
   const staged = new StagedModules(dirname(outputs[0]))
   const copy: string[] = ["cp", "-f", "--"]
   let i = 0
-  while (i < outputs.length) {
-    const stem = basenameWithout(outputs[i], ".ll")
-    const key = moduleCacheKey(recipe, stem, irs[i])
-    const entry = `${cacheRoot}/${sha256Hex(key)}`
-    const stored = readFileSyncOrNull(`${entry}/key`)
-    if (stored !== null && stored === key) {
-      copy.push(`${entry}/${stem}.o`)
-    } else {
-      staged.objects.push(`${staged.dir}/${stem}.o`)
-      staged.entries.push(entry)
-      staged.keys.push(key)
-    }
+  while (i < outputs.length && i < irs.length) {
+    stageModule(staged, copy, cacheRoot, recipe, outputs[i], irs[i])
     i = i + 1
   }
   if (copy.length > 3) {
