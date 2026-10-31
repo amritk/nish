@@ -9727,8 +9727,9 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
 
 ##### A dependency's capabilities
 
-A dependency — a package loaded from `node_modules` — may reach `ffi`, `net`,
-`process.spawn` and `unsafe`, the **gated** capabilities, only when the root
+A dependency — a package loaded from `node_modules` — may reach `ffi`,
+`fs.read`, `fs.write`, `net`, `process.spawn` and `unsafe`, the **gated**
+capabilities, only when the root
 `package.json` grants them to it by name; it reaches every other capability
 without one ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)):
 
@@ -9773,6 +9774,51 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   (`caps_dep_manifest_ungated`). `unsafe` may be granted, keys are decoded as
   JSON, and a grant to a package the program does not load is no error
   (`caps_dep_manifest_unsafe`, `_escaped_name`, `_unloaded`).
+- `fs.read` and `fs.write` are gated: a dependency that reads or writes a file
+  needs its grant like one that dials (`caps_dep_fs_read_refused`,
+  `caps_dep_fs_write_refused`).
+
+A grant entry may carry an **argument**, `capability=argument`, which narrows
+it: a directory for `fs.read` and `fs.write`, a program for `process.spawn`,
+a numeric host, or a Unix socket's absolute path, for `net`. An entry
+without one grants the capability whole, as before:
+
+```json
+{ "nish": { "capabilities": { "dependencies": {
+  "pkg_tool": ["fs.read=./data", "process.spawn=git", "net=127.0.0.1"]
+} } } }
+```
+
+- A directory is resolved from the root package's directory and must exist
+  when the program is built (NL3047); a program is found on `PATH`, or as a
+  path from that directory (NL3046); a host is an IPv4 or IPv6 address, the
+  form `nish:net` takes (NL3045). `ffi`, `unsafe` and the ungated
+  capabilities take no argument (NL3048; all four in
+  `caps_dep_manifest_arg_refused`). A capability may be named more than once,
+  one argument each.
+- What the compiler can see it checks: a string literal a dependency hands
+  `readFileSync`, `writeFileSync`, `spawnSync` or `netAddress` outside its
+  grant is refused (NL2594), at the literal:
+
+  ```text
+  node_modules/pkg_conf/src/index.ts:2:38: error: the dependency `pkg_conf` hands `readFileSync` "/etc/passwd", which its `fs.read` grant does not cover: it is granted fs.read=data; name it in the grant, or grant `fs.read` whole
+  ```
+
+  (`caps_dep_arg_fs_too_narrow`, `_spawn_too_narrow`, `_net_too_narrow`; the
+  grant that covers each, `caps_dep_arg_granted`).
+- What it cannot see — a computed path, program or host — the build leaves to
+  `--sandbox`, which scopes Landlock to the granted directories and
+  programs ([The sandbox](#the-sandbox), `tests/link/sandbox_dep_*`).
+  Hosts have no run-time check: seccomp cannot read the address a socket is
+  given, so a `net=<host>` grant binds only the literals the build sees.
+- The lockfile records the arguments (`"pkg_conf": ["fs.read=data"]`). A
+  grant past them — a new directory, program or host for a capability the
+  row records narrowed — is NL2593 until the lock is updated; a row that
+  records the capability whole accepts any argument (`caps_lock_args`).
+- `@nish_sandbox` takes a fifth operand for the programs a
+  `process.spawn=<program>` grant allows, null when none is named:
+  `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
+  The four-operand call in "The sandbox" below predates it.
 
 ##### The capability lockfile
 

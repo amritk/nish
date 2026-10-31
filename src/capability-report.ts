@@ -20,6 +20,8 @@
 import { FactsTable, FunctionFacts } from "./attributes"
 import { CLI } from "./branding"
 import {
+  argumentCapabilities,
+  builtinCapability,
   CAPABILITY_COUNT,
   capabilityIndex,
   capabilityName,
@@ -27,15 +29,16 @@ import {
   isDeterministic,
 } from "./capabilities"
 import { Compilation, ModuleUnit } from "./compilation"
+import { builtinNameOf } from "./emit-util"
 import { StringMap } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 import { isStdModule } from "./std-modules"
-import { dirname, relativePath } from "./paths"
-import { Node } from "./nodes"
+import { dirname, relativePath, resolvePath } from "./paths"
+import { N_ARRAY, N_CALL, N_IDENT, N_STRING, Node } from "./nodes"
 import { SourceFile } from "./diagnostics"
 import { CheckedProgram, FunctionSig } from "./program"
 import { siteReportEntry, sitesOf } from "./panics"
-import { compareStrings, jsonQuote } from "./strings"
+import { compareStrings, jsonQuote, splitByte } from "./strings"
 
 /** How the root package is named in the report: it has no name of its own. */
 const ROOT_NAME: string = "<root>"
@@ -252,11 +255,14 @@ export const witnessChain = (
 /**
  * The capabilities a dependency reaches only when the root package grants
  * them (docs/wp40-dependency-capabilities.md): the ones that step outside
- * what the language checks or that reach another machine or program. Every
- * other capability a dependency reaches without a word.
+ * what the language checks, that reach another machine or program, or that
+ * read or change the files. Every other capability a dependency reaches
+ * without a word.
  */
 export const gatedCapabilities = (): i32 =>
   (1 << capabilityIndex("ffi")) |
+  (1 << capabilityIndex("fs.read")) |
+  (1 << capabilityIndex("fs.write")) |
   (1 << capabilityIndex("net")) |
   (1 << capabilityIndex("process.spawn")) |
   (1 << capabilityIndex("unsafe"))
@@ -358,6 +364,324 @@ export const dependencyWitness = (
     }
   }
   return []
+}
+
+/**
+ * A string literal a dependency hands a builtin where the compiler can read
+ * what the call reaches: a file builtin's path, a spawn's program (the first
+ * element of its `argv` literal) or a `nish:net` call's host. `cap` is the
+ * builtin's capability, `module` the module's place in `modules`, and `site`
+ * the literal, which a refusal is spanned at.
+ */
+export class LiteralReach {
+  value: string
+  builtin: string
+  site: Node
+  cap: i32
+  module: i32
+
+  constructor(cap: i32, value: string, builtin: string, module: i32, site: Node) {
+    this.cap = cap
+    this.value = value
+    this.builtin = builtin
+    this.module = module
+    this.site = site
+  }
+}
+
+/**
+ * Which arguments of builtin `name`, whose capability is `c`, name what it
+ * reaches, a bit per position: a file builtin's path (both of `renameSync`'s),
+ * a spawn's `argv`, and a `nish:net` call's host or socket path. `kill`,
+ * `waitPid` and the priority calls name no program, so they have none.
+ */
+const reachArguments = (name: string, c: i32): i32 => {
+  if (c === capabilityIndex("fs.read") || c === capabilityIndex("fs.write")) {
+    return name === "renameSync" ? 3 : 1
+  }
+  if (c === capabilityIndex("process.spawn")) {
+    return name === "spawnSync" ||
+      name === "spawnSyncTo" ||
+      name === "spawn" ||
+      name === "spawnPiped" ||
+      name === "spawnWithFds"
+      ? 1
+      : 0
+  }
+  if (c === capabilityIndex("net")) {
+    if (name === "netAddress") {
+      return 2
+    }
+    return name === "tcpListen" ||
+      name === "tcpListenFlags" ||
+      name === "udpBind" ||
+      name === "unixListen" ||
+      name === "unixListenMode" ||
+      name === "unixConnect"
+      ? 1
+      : 0
+  }
+  return 0
+}
+
+/**
+ * Every literal a module of a dependency hands a builtin that reaches an
+ * argument capability (`LiteralReach`), in source order, module by module. A
+ * builtin call is found as the attribute pass finds one: a plain identifier
+ * no user function of that name answers. A computed argument, or a template,
+ * is nothing the compiler can read, and is left to the sandbox.
+ */
+export const literalReaches = (compilation: Compilation, reach: DependencyReach): LiteralReach[] => {
+  const out: LiteralReach[] = []
+  const args = argumentCapabilities()
+  let m = 0
+  while (m < compilation.modules.length && m < reach.packageOf.length) {
+    if (reach.packageOf[m] >= 0) {
+      const unit = compilation.modules[m]
+      const program = unit.checker.program
+      const stack: Node[] = [unit.file]
+      while (stack.length > 0) {
+        const node = stack[stack.length - 1]
+        stack.pop()
+        let k = node.children.length - 1
+        while (k >= 0) {
+          stack.push(node.children[k])
+          k = k - 1
+        }
+        if (
+          node.kind === N_CALL &&
+          node.children[0].kind === N_IDENT &&
+          program.nodeCallees[node.id] === null
+        ) {
+          const name = builtinNameOf(program, node)
+          const c = builtinCapability(name)
+          const positions = c >= 0 && (args & (1 << c)) !== 0 ? reachArguments(name, c) : 0
+          const given = node.children[1].children
+          let a = 0
+          while (a < given.length && a < 2) {
+            if ((positions & (1 << a)) !== 0) {
+              let literal = given[a]
+              if (c === capabilityIndex("process.spawn")) {
+                literal =
+                  literal.kind === N_ARRAY && literal.children.length > 0 ? literal.children[0] : literal
+              }
+              if (literal.kind === N_STRING) {
+                out.push(new LiteralReach(c, literal.text, name, m, literal))
+              }
+            }
+            a = a + 1
+          }
+        }
+      }
+    }
+    m = m + 1
+  }
+  return out
+}
+
+/**
+ * Whether `host` is an address `nish:net` takes as it is (`netAddress`): four
+ * dotted decimal parts of at most 255, or an IPv6 address, which is hex
+ * digits, colons and, for a mapped IPv4 tail, dots, with two colons at least.
+ */
+export const numericHost = (host: string): boolean => {
+  if (host.indexOf(":") >= 0) {
+    let colons = 0
+    let i = 0
+    while (i < host.length) {
+      const code = host.charCodeAt(i)
+      const hex = (code >= 48 && code <= 57) || (code >= 97 && code <= 102) || (code >= 65 && code <= 70)
+      if (!hex && code !== 58 && code !== 46) {
+        return false
+      }
+      colons = colons + (code === 58 ? 1 : 0)
+      i = i + 1
+    }
+    return colons >= 2
+  }
+  const parts = splitByte(host, 46)
+  if (parts.length !== 4) {
+    return false
+  }
+  for (const part of parts) {
+    if (part.length === 0 || part.length > 3) {
+      return false
+    }
+    let value = 0
+    let i = 0
+    while (i < part.length) {
+      const code = part.charCodeAt(i)
+      if (code < 48 || code > 57) {
+        return false
+      }
+      value = value * 10 + (code - 48)
+      i = i + 1
+    }
+    if (value > 255) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * The real path of the program `name` names, as `posix_spawnp` would find it
+ * when the build runs, or null: a name with a `/` is a path from `base`, and
+ * a bare one the first executable file of that name in a `PATH` directory
+ * (an empty entry is the working directory, as POSIX has it).
+ */
+export const findProgram = (name: string, base: string): string | null => {
+  if (name.indexOf("/") >= 0) {
+    return executableFile(resolvePath(base, name))
+  }
+  const path = getenv("PATH")
+  for (const dir of splitByte(path === null ? "/usr/bin:/bin" : path, 58)) {
+    const found = executableFile(`${dir.length === 0 ? "." : dir}/${name}`)
+    if (found !== null) {
+      return found
+    }
+  }
+  return null
+}
+
+/**
+ * The real path of `path` when it is an executable file, or null. The
+ * question goes to `/bin/sh` running `test -x`, as `distrustOf` in compile.ts
+ * asks its own, rather than to `isExecutableSync`: that builtin is refused on
+ * a wasm32 build, and `src/` is also the web compiler. The shell is named by
+ * absolute path and `real` reaches it as an operand, never as script text; a
+ * probe that cannot start answers null.
+ */
+const executableFile = (path: string): string | null => {
+  const real = realpathSync(path)
+  if (real === null || isDirectorySync(real)) {
+    return null
+  }
+  const probe: string[] = ["/bin/sh", "-c", 'test -x "$1"', "sh", real]
+  return spawnSyncTo(probe, "/dev/null", "/dev/null") === 0 ? real : null
+}
+
+/** The little-endian unsigned value of `count` bytes of `bytes` at `at`, or -1 past the end. */
+const littleEndian = (bytes: u8[], at: i32, count: i32): i32 => {
+  if (at < 0 || at + count > bytes.length) {
+    return -1
+  }
+  let value = 0
+  let k = count - 1
+  while (k >= 0) {
+    value = value * 256 + toI32(bytes[at + k])
+    k = k - 1
+  }
+  return value
+}
+
+/**
+ * The real path of the file the kernel runs `program` through, or null when
+ * there is none: a 64-bit ELF's `PT_INTERP`, the dynamic loader, or a
+ * script's `#!` line's program. An exec allowlist holds both, since the
+ * kernel opens that file for execution too (docs/wp37-os-sandbox.md §2a).
+ */
+export const programInterpreter = (program: string): string | null => {
+  const bytes = readFileBytesSync(program)
+  if (bytes === null || bytes.length < 4) {
+    return null
+  }
+  if (bytes[0] === 35 && bytes[1] === 33) {
+    let at = 2
+    while (at < bytes.length && (bytes[at] === 32 || bytes[at] === 9)) {
+      at = at + 1
+    }
+    const from = at
+    while (at < bytes.length && bytes[at] !== 32 && bytes[at] !== 9 && bytes[at] !== 10) {
+      at = at + 1
+    }
+    return at > from ? executableFile(String.fromBytes(bytes, from, at)) : null
+  }
+  if (
+    bytes[0] !== 127 ||
+    bytes[1] !== 69 ||
+    bytes[2] !== 76 ||
+    bytes[3] !== 70 ||
+    littleEndian(bytes, 4, 2) !== 258
+  ) {
+    return null
+  }
+  const table = littleEndian(bytes, 32, 4)
+  const size = littleEndian(bytes, 54, 2)
+  const count = littleEndian(bytes, 56, 2)
+  let k = 0
+  while (table >= 0 && size > 0 && k < count) {
+    const header = table + k * size
+    if (littleEndian(bytes, header, 4) === 3) {
+      const from = littleEndian(bytes, header + 8, 4)
+      const length = littleEndian(bytes, header + 32, 4)
+      if (from < 0 || length <= 1 || from + length > bytes.length) {
+        return null
+      }
+      return realpathSync(String.fromBytes(bytes, from, from + length - 1))
+    }
+    k = k + 1
+  }
+  return null
+}
+
+/**
+ * What the root package reaches itself (WP40 §2a): the union of the
+ * capabilities its functions, and the library functions they call, exercise
+ * directly, following no call into a dependency. A capability the root does
+ * not reach itself is reached only through the dependencies, so their
+ * argument grants are all the sandbox has to allow of it.
+ */
+export const rootReach = (
+  compilation: Compilation,
+  facts: FactsTable,
+  index: FunctionIndex,
+  reach: DependencyReach
+): i32 => {
+  const seen = new StringMap()
+  const todo: FunctionSig[] = []
+  let k = 0
+  while (k < index.sigs.length && k < index.sigModules.length) {
+    const m = index.sigModules[k]
+    if (
+      m < compilation.modules.length &&
+      compilation.modules[m].packageName === ROOT_PACKAGE &&
+      reach.packageOf[m] < 0
+    ) {
+      if (!isLibrary(compilation, compilation.modules[m])) {
+        seen.set(index.sigs[k].name, 1)
+        todo.push(index.sigs[k])
+      }
+    }
+    k = k + 1
+  }
+  let mask = 0
+  while (todo.length > 0) {
+    const sig = todo[todo.length - 1]
+    todo.pop()
+    const f = facts.get(sig.name)
+    if (f === null) {
+      continue
+    }
+    let c = 0
+    while (c < CAPABILITY_COUNT && c < f.capDist.length) {
+      if ((f.caps & (1 << c)) !== 0 && f.capDist[c] === 0) {
+        mask = mask | (1 << c)
+      }
+      c = c + 1
+    }
+    for (const callee of f.capCallees) {
+      const at = index.bySymbol.get(callee, -1)
+      if (at >= 0 && at < index.sigs.length && at < index.sigModules.length && seen.get(callee, 0) === 0) {
+        const m = index.sigModules[at]
+        if (m < reach.packageOf.length && reach.packageOf[m] < 0) {
+          seen.set(callee, 1)
+          todo.push(index.sigs[at])
+        }
+      }
+    }
+  }
+  return mask
 }
 
 /**

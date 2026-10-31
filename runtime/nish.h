@@ -840,9 +840,12 @@ int64_t nish_cpu_online(void);
 /* WP37 `--sandbox` (runtime-sandbox.c): `nish_sandbox` confines the process to
    the capability mask `caps` from `.preinit_array`, `mode` 1 strict and 2
    best-effort, and `nish_sandbox_check` refuses to run at the top of `main`
-   when it never ran. The directory lists are a later stage's and are null.
+   when it never ran. `read_dirs` and `write_dirs` are the directories
+   Landlock scopes `fs.read` and `fs.write` to, `exec_paths` the programs
+   `process.spawn` may execute, each a run of NUL-terminated paths ended by an
+   empty one; null leaves the capability whole.
    `nish_cpu_prime` caches the pool's CPU count while /sys is still readable. */
-void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs);
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths);
 void nish_sandbox_check(void);
 void nish_cpu_prime(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
