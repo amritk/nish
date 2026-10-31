@@ -304,10 +304,12 @@ class PreforkSupervisor {
     const self: string | null = platform === "linux" ? realpathSync("/proc/self/exe") : null
     this.program = self !== null ? self : this.args[0]
     this.slots = []
+    // No end yet; typed so an f64 build still pushes an i32.
+    const none: i32 = -1
     for (let i: i32 = 0; i < count; i++) {
       this.slots.push(new PreforkSlot())
-      this.toService.push(-1)
-      this.fromWorkers.push(-1)
+      this.toService.push(none)
+      this.fromWorkers.push(none)
     }
   }
 
@@ -638,7 +640,8 @@ const preforkInvalid = (config: PreforkConfig): string => {
 
 /** Read and drop what a channel holds: `preforkWith`'s callback. */
 const preforkDiscard = (buf: u8[], _index: i32, fd: i32, _events: i32): void => {
-  while (netRead(fd, buf, 0, buf.length) > 0) {
+  const size: i32 = toI32(buf.length)
+  while (netRead(fd, buf, 0, size) > 0) {
     // Dropped.
   }
 }

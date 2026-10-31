@@ -81,6 +81,24 @@ const fdCount = (): i32 => {
 };
 
 /**
+ * Close every descriptor above 2 this process was started holding: a runner
+ * that leaks one without close-on-exec would otherwise reach every worker, and
+ * the counts below would read the runner, not prefork.
+ */
+const closeInherited = (): void => {
+  const entries = readdirSync("/proc/self/fd");
+  if (entries === null) {
+    return;
+  }
+  for (const name of entries) {
+    const fd: i32 = parseInt(name);
+    if (fd > 2) {
+      netClose(fd);
+    }
+  }
+};
+
+/**
  * True when this process holds exactly 0, 1, 2 and `ends` channel ends from 3
  * on, besides the one descriptor that reads the list, the lowest free.
  */
@@ -547,6 +565,7 @@ export const main = (): number => {
     }
     return 0;
   }
+  closeInherited();
   run("sup", [1]);
   run("svc", [0, 2]);
   run("solo", []);
