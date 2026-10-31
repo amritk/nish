@@ -302,8 +302,16 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * that the first region's fresh read (which sees `NISH_NUM_THREADS`, unset while
  * `.preinit_array` runs) may lower. The fallback above measured 608, 1 more, inside its
  * ceiling.
+ *
+ * **Raised to 2,816 by `scopeWithStack`**, measured **2,798 bytes** on 2026-10-31 with
+ * clang 18.1.3 on linux-x64, 240 more: a scope with a stack runs each task on a thread of
+ * its own made with that stack, the size rounded to the page and a guard page below it
+ * (`nish_jobs_run_sized`, inlined into `nish_scope_join`, which `-ffunction-sections`
+ * sizes at 328 against 117 before), and `nish_stack_fail` (29) ends the program when one cannot be
+ * started. A thread per task reuses the unpooled path's `nish_job_thread`; a queue that a
+ * CPU-count of sized threads shared measured 3,166. The fallback measured 608, unchanged.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2560
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and

@@ -1746,7 +1746,7 @@ if.end:
   store i32 %bytes, i32* %8, align 4
 ```
 
-A nonzero word sends every task to new threads made with
+A nonzero word sends every task to a new thread of its own made with
 `pthread_attr_setstacksize` (the size rounded up to the page, one page more)
 and `pthread_attr_setguardsize` of a page, none on the joining thread.
 
