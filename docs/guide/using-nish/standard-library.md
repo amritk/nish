@@ -63,6 +63,29 @@ It is `process.spawn` in the capability report, and refused when compiling for
 WebAssembly. See
 [Directories and subprocesses](../../LANGUAGE.md#directories-and-subprocesses).
 
+`spawnWithFds(argv, fds)` starts a child as `spawn` does and hands it the
+descriptors in `fds`: `fds[0]` is the child's descriptor 3, `fds[1]` its 4,
+and so on, which is where a program started by a supervisor looks for a
+listener it did not open. It answers the pid, or a negative errno: -22 for
+more than 64 descriptors or a negative one, -9 for one that is not open. No
+other descriptor of the program reaches the child but its three streams, and
+the child shares each one it is handed, offset and flags included. Reap it
+with `waitPid`:
+
+```ts
+import { spawnWithFds, waitPid } from "nish:process"
+import { tcpListen } from "nish:net"
+
+const listener = tcpListen("127.0.0.1", 8080, 64)
+const pid = spawnWithFds(["./worker"], [listener])
+if (pid > 0) {
+  waitPid(pid, 0)
+}
+```
+
+It is `process.spawn` in the capability report too. See
+[Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+
 `nish:fs` is where a program replaces a file in one step: write the new
 contents beside the target, then `renameSync` the temporary over it, so a
 reader sees the old file or the new one and never half of either.
