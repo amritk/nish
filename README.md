@@ -588,8 +588,7 @@ Generic functions, classes, interfaces and methods compile — each
 instantiation becomes its own specialised function or struct
 ([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic type aliases,
 closures as values (an arrow written as a call's argument may read the
-caller's `const` locals, but is never stored), `try`/`catch` and labelled
-`break`/`continue` are refusals
+caller's `const` locals, but is never stored) and `try`/`catch` are refusals
 rather than gaps, each with the message and the idiom to use instead
 ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
 Release engineering (`--version`, exit codes, npm packaging, tag-driven

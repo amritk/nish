@@ -24,8 +24,9 @@ import {
   targetLocal,
 } from "./emit-ops"
 import { unwrapParens } from "./emit-util"
+import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
-import { FLAG_POSTFIX, N_CASE, N_EMPTY, N_TRUE, N_VAR, Node } from "./nodes"
+import { FLAG_POSTFIX, N_BLOCK, N_CASE, N_EMPTY, N_TRUE, N_VAR, Node } from "./nodes"
 import { SWITCH_COVERED } from "./program"
 import { isFloat } from "./types"
 
@@ -204,8 +205,8 @@ export const emitFor = (emitter: Emitter, stmt: Node): void => {
  *
  * A clause with no statements has no block of its own — its label points at
  * the next clause that has one, which is exactly the fallthrough of
- * `case 1: case 2: body`. Every other clause ends in a terminator (the checker
- * proved it), except the last, which may fall out into `sw.end`.
+ * `case 1: case 2: body`. A body that does not end in a terminator branches
+ * to the next body, or out into `sw.end` from the last.
  */
 export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   const fn = emitter.fn
@@ -266,7 +267,8 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
       for (const statement of clauseBody(clauses[i]).children) {
         emitter.emitStatement(statement)
       }
-      if (fallThrough(emitter, endBlock)) {
+      const next = targetOf(bodies, endBlock, i + 1)
+      if (fallThrough(emitter, next) && next === endBlock) {
         reachesEnd = true
       }
     }
@@ -301,34 +303,117 @@ const targetOf = (bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRB
   return endBlock
 }
 
-/** `break` leaves the pass of the loop it targets, and releases it when it is scoped; a `switch` has no pass. */
-export const emitBreak = (emitter: Emitter): void => {
-  const target = emitter.loops[emitter.loops.length - 1]
-  target.hasBreak = true
-  // WP29 P2: the scopes and arenas opened inside the target close first, inside its pass.
-  emitScopeJoins(emitter, emitter.loops.length, true)
-  if (target.scopesPass()) {
-    emitter.releasePass(target)
+/**
+ * A labelled loop or `switch` is emitted as one, its label naming the target
+ * it pushes; a labelled block pushes one of its own, which only a `break`
+ * naming the label reaches, and whose `label.end` follows the block.
+ */
+export const emitLabeled = (emitter: Emitter, stmt: Node): void => {
+  const fn = emitter.fn
+  const body = stmt.children[0]
+  emitter.labelNames.push(stmt.text)
+  emitter.labelDepths.push(emitter.loops.length)
+  if (body.kind === N_BLOCK) {
+    const endBlock = fn.newBlock("label.end")
+    const target = new LoopTarget(endBlock, null)
+    target.labelOnly = true
+    emitter.loops.push(target)
+    emitter.emitStatement(body)
+    emitter.loops.pop()
+    if (target.hasBreak) {
+      fallThrough(emitter, endBlock)
+      fn.placeBlock(endBlock)
+    }
+  } else {
+    // The loop or `switch` pushes its own target at the depth recorded above.
+    emitter.emitStatement(body)
   }
-  branch(emitter, target.breakBlock)
+  emitter.labelNames.pop()
+  emitter.labelDepths.pop()
 }
 
-/** `continue` looks past any enclosing `switch` for the innermost loop, and ends that loop's pass. */
-export const emitContinue = (emitter: Emitter): void => {
+/**
+ * The index in `loops` of what a jump's label names, which the checker proved
+ * is there: a label the stack lacks is the compiler's own fault, so it ends the
+ * compile with the exit-70 report rather than read below the stack.
+ */
+const labelled = (emitter: Emitter, label: string): i32 => {
+  let i = emitter.labelNames.length - 1
+  while (i >= 0 && emitter.labelNames[i] !== label) {
+    i = i - 1
+  }
+  if (i < 0) {
+    process.exit(internalErrorFor(`emitter: no enclosing label \`${label}\``, emitter.opts.json))
+  }
+  return emitter.labelDepths[i]
+}
+
+/**
+ * Leave every loop inside `loops[at]` for it: the scopes and arenas opened
+ * inside close first (WP29 P2), each walk left closes (WP32), and the
+ * outermost scoped pass from `at` in is released, which frees the inner
+ * passes' memory too.
+ */
+const leaveTo = (emitter: Emitter, at: i32): void => {
+  emitScopeJoins(emitter, at + 1, true)
   let i = emitter.loops.length - 1
-  while (i >= 0) {
-    const loop = emitter.loops[i]
-    const target = loop.continueBlock
-    if (target !== null) {
-      emitScopeJoins(emitter, i + 1, true) // WP29 P2, as for `break`
-      if (loop.scopesPass()) {
-        emitter.releasePass(loop)
-      }
-      branch(emitter, target)
-      return
+  while (i > at) {
+    const close = emitter.loops[i].walkClose
+    if (close.length > 0) {
+      emitter.fn.emit(close)
     }
     i = i - 1
   }
+  i = at
+  while (i < emitter.loops.length && !emitter.loops[i].scopesPass()) {
+    i = i + 1
+  }
+  if (i < emitter.loops.length) {
+    emitter.releasePass(emitter.loops[i])
+  }
+}
+
+/**
+ * `break` leaves the innermost loop or `switch`, or what its label names, and
+ * the pass of each loop it leaves.
+ */
+export const emitBreak = (emitter: Emitter, stmt: Node): void => {
+  let at = emitter.loops.length - 1
+  if (stmt.text !== "") {
+    at = labelled(emitter, stmt.text)
+  } else {
+    while (emitter.loops[at].labelOnly) {
+      at = at - 1
+    }
+  }
+  const target = emitter.loops[at]
+  target.hasBreak = true
+  leaveTo(emitter, at)
+  branch(emitter, target.breakBlock)
+}
+
+/**
+ * `continue` looks past any enclosing `switch` for the innermost loop, or
+ * goes to the loop its label names, and ends the pass of each loop it leaves.
+ */
+export const emitContinue = (emitter: Emitter, stmt: Node): void => {
+  let at = emitter.loops.length - 1
+  if (stmt.text !== "") {
+    at = labelled(emitter, stmt.text)
+  } else {
+    while (at >= 0 && emitter.loops[at].continueBlock === null) {
+      at = at - 1
+    }
+  }
+  if (at < 0) {
+    process.exit(internalErrorFor("emitter: `continue` has no enclosing loop", emitter.opts.json))
+  }
+  const target = emitter.loops[at].continueBlock
+  if (target === null) {
+    process.exit(internalErrorFor(`emitter: \`continue ${stmt.text}\` names no loop`, emitter.opts.json))
+  }
+  leaveTo(emitter, at)
+  branch(emitter, target)
 }
 
 /** `throw e`: evaluate `e` for its effects, then trap. There is no unwinding. */
