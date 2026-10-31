@@ -1,0 +1,24 @@
+child: 3:a 4:b 5:c
+attempt 0: 0, descriptors +0
+child: 3:c 4:a 5:b
+attempt 1: 0, descriptors +0
+child: 3:b 4:b
+attempt 2: 0, descriptors +0
+child:
+attempt 3: 0, descriptors +0
+child: 3:a 4:b 5:c 6:a 7:b 8:c 9:a 10:b 11:c 12:a 13:b 14:c 15:a 16:b 17:c 18:a 19:b 20:c 21:a 22:b 23:c 24:a 25:b 26:c 27:a 28:b 29:c 30:a 31:b 32:c 33:a 34:b 35:c 36:a 37:b 38:c 39:a 40:b 41:c 42:a 43:b 44:c 45:a 46:b 47:c 48:a 49:b 50:c 51:a 52:b 53:c 54:a 55:b 56:c 57:a 58:b 59:c 60:a 61:b 62:c 63:a 64:b 65:c 66:a
+attempt 4: 0, descriptors +0
+attempt 5: -22, descriptors +0
+child: 3:-~
+attempt 6: 0, descriptors +0
+attempt 7: -22, descriptors +0
+attempt 8: -9, descriptors +0
+attempt 9: -22, descriptors +0
+attempt 10: -2, descriptors +0
+attempt 11: -22, descriptors +0
+cloexec here: 1 1 1
+far end: ready 1, letter a, cloexec 1
+far end: peer pid 1 uid 1 gid 1
+child:
+far end: report 0
+pass: 0, descriptors +0

@@ -30,15 +30,19 @@ import {
   captureOuter,
   capturedMessage,
   checkGenericCall,
+  outerFunctionMessage,
   refuseOnce,
+  thisCaptureMessageFor,
 } from "./generics"
 import { CheckContext } from "./context"
 import {
+  CAPTURE_CALL,
+  CAPTURE_PARALLEL,
+  CAPTURE_TASK,
+  callCaptureWriteMessage,
   captureWriteMessage,
   captureWriteRemedy,
   taskCaptureWriteMessage,
-  taskThisCaptureMessage,
-  thisCaptureMessage,
 } from "./parallel"
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays"
 import {
@@ -962,19 +966,19 @@ const isCapture = (ctx: CheckContext, local: Local | null): boolean => {
 
 /**
  * WP29: an assignment, inside an arrow argument, to a name of the function the
- * arrow is written in. An arrow passed to a data-parallel form reads such a
- * name as a capture and is told it cannot write one, and any other arrow is
- * told it captures nothing.
+ * arrow is written in. An arrow reads such a name as a capture and is told,
+ * by its mode, why it cannot write one; an arrow given to `expose` or
+ * `exposeWith` is told it captures nothing.
  */
 const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
-  const depth = ctx.arrowCaptures.length
-  const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
-  const task = depth > 0 && depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
+  const mode = ctx.arrowMode()
   let message = capturedMessage(target.text)
-  if (task) {
+  if (mode === CAPTURE_TASK) {
     message = taskCaptureWriteMessage(target.text)
-  } else if (parallel) {
+  } else if (mode === CAPTURE_PARALLEL) {
     message = captureWriteMessage(target.text, captureWriteRemedy(ctx.program, target))
+  } else if (mode === CAPTURE_CALL) {
+    message = callCaptureWriteMessage(target.text)
   }
   refuseOnce(ctx, target, message)
   return T_ERROR
@@ -983,18 +987,8 @@ const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
 const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const self = scope.lookup("this")
   if (self === null && ctx.capturesOuter("this")) {
-    // WP29: an arrow argument has no `this`, and one passed to a
-    // data-parallel form is told what it may read instead.
-    const depth = ctx.arrowCaptures.length
-    const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
-    const task = depth > 0 && depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
-    let message = capturedMessage("this")
-    if (task) {
-      message = taskThisCaptureMessage()
-    } else if (parallel) {
-      message = thisCaptureMessage()
-    }
-    refuseOnce(ctx, expr, message)
+    // WP29: an arrow argument has no `this`, and is told what it may read instead.
+    refuseOnce(ctx, expr, thisCaptureMessageFor(ctx.arrowMode()))
     return T_ERROR
   }
   if (self === null) {
@@ -3218,7 +3212,7 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   const local = scope.lookup(callee.text)
   if (local === null) {
     if (ctx.capturesOuter(callee.text)) {
-      refuseOnce(ctx, callee, capturedMessage(callee.text))
+      refuseOnce(ctx, callee, outerFunctionMessage(ctx, callee.text))
       return T_ERROR
     }
     const bound = ctx.functionBindings.get(callee.text)

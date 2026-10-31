@@ -32,6 +32,14 @@ H, so they collide with neither WP27's S4 (struct layout) nor its S5 (errno).
 The design sits on top of WP27 §8, the S3 string borrow, which is built:
 S3.1 (#695), S3.2 (#701) and S3.3 (#704). This document does not change it.
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). A handle, a `CPtr` and `this` of a handle class are still
+refused as captures (`reject_ffi_handle_closure_capture`,
+`reject_ffi_handle_field_capture`), so the rules below are unchanged.
+
 Every claim about today's compiler is anchored at commit `8790ea3`
 (`8790ea338464432dafb88ca381872626389538a1`), on `main` after S3.3. The tests
 §2 cites exist, as do those marked existing. Every other test named here is

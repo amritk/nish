@@ -845,10 +845,14 @@ export const main = (): i32 => {
 - **Call it, or pass it on to another function parameter. Nothing else**:
   `const g = f`, `return f` and `[f]` are
   `` `f` is a function parameter and can only be called or passed on as a function argument ``.
-- **An arrow captures nothing.** It sees its own parameters and top-level
-  names; reading a local of the function around it is
-  `` The arrow reads `k`, which belongs to the function it is written in ``.
-  Pass the value in as another argument of the template instead.
+- **An arrow may read the `const` locals and parameters of the function it is
+  written in**, and write through a captured reference
+  (`(x) => { if (x > limit) { hits.push(x) } }`); each capture becomes one more
+  argument of the direct call. It may not assign to one, read a `let`
+  (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
+  read `this` (bind `const self = this`), or read a function parameter of its
+  function. An arrow inside another arrow, or given to a method, a
+  constructor, `expose` or `exposeWith`, captures nothing.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -858,12 +862,13 @@ export const main = (): i32 => {
 - **Only a top-level function** may have one: not a method, a constructor, a
   field, a local, a return type or an alias.
 
-```ts nish:err NL2335
+```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
 export const main = (): i32 => {
-  const k = 3;
-  return apply((x) => x + k, 1);   // captures `k`: pass it to `apply` instead
+  let k = 3;
+  k = k + 1;
+  return apply((x) => x + k, 1);   // reads the `let` `k`: bind `const kNow = k` before the call
 };
 ```
 
@@ -2206,6 +2211,10 @@ also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
 a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
 `totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
 the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
+`spawnWithFds(argv, fds)` is `spawn` that hands the child `fds[i]` as
+descriptor `3 + i` (systemd's `LISTEN_FDS` numbering); every other descriptor
+still closes at exec. More than 64, or a negative one, is `-22`; it needs
+`process.spawn` under `--sandbox`, refuses a wasm target and throws under Node.
 `setNice(n)` sets the nice value, and it is lower-only even as root: `n` takes
 0..19 (`-22` outside it) and a value below the current one is `-13`, with no
 system call either way. `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
@@ -2277,8 +2286,17 @@ bytes (103 on Darwin) and an abstract name at most 107 after its `@`; longer
 is `-36`. A full backlog makes `unixConnect`
 `-11` on Linux and `-111` on Darwin. Under `--sandbox`, a listener on a path
 also needs `fs.write` (`-13` without it); an abstract name does not, and a
-connect to a path is not confined. The Unix calls are refused on a wasm
-target, and under Node each throws.
+connect to a path is not confined. `sendFd(sock, fd, buf, off, len)` sends
+`buf[off, off + len)` with descriptor `fd` attached (`len` 0 is `-22`) and
+answers the bytes sent; `recvFd(sock, buf, off, len, fd)` reads into the
+range and sets `fd[0]` to the descriptor that came with it, or `-1`; the
+descriptor arrives close-on-exec and blocking, any beyond the first are closed,
+and `fd` shorter than 1 is `-22`. `peerCredentials(sock, out)` writes
+`[pid, uid, gid]` of the process that made the connection, as it was at
+connect time, into an `out` of length 3 or more (`-22` shorter); on Darwin the
+pid can be `-1`. All three answer `-88` or `-95` for a socket that is not
+Unix-domain. The Unix calls are refused on a wasm target, and under Node each
+throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write

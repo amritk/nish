@@ -4,6 +4,13 @@
 `c8a00d6`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this note is
 a proposal and is not compiled by `npm test`.
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). `expose`'s arrow still captures nothing; a region proposal that
+follows it should say which mode its own arrow takes.
+
 Issue #482 asks what a long-running server does with state whose size is not
 known at start-up. WP34's relay does not need an answer: every cap it has is a
 compile-time number, so its state lives in pools sized at start-up (N9 in

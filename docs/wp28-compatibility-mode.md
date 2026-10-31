@@ -7,6 +7,14 @@ out to TypeScript, and [MASTER_PLAN.md](MASTER_PLAN.md) lists it as additive
 and unscheduled. Two things have landed since this note was written that
 change its ground without building any of it:
 
+**2026-10-30:** an arrow passed to a function-typed parameter of a top-level
+function may read the `const` locals and the parameters of the function it is
+written in, each lowered as one more parameter of the direct call: no
+environment struct, no indirect call
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). That is the strict-mode half of the closures row: what stays for
+`--compat=closures` is a function *value*, stored or returned, with its
+environment and indirect call.
+
 - **`nish --fix`** ([#421](https://github.com/amritk/nish/pull/421),
   [#429](https://github.com/amritk/nish/pull/429),
   [#431](https://github.com/amritk/nish/pull/431), for the deprecated

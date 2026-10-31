@@ -51,7 +51,7 @@ const FUSE_USE: i32 = 2 [exported]
 const FUSE_UPDATE: i32 = 3 [exported]
 const FUSE_WRITE_FOUND: i32 = 4 [exported]
 const FUSE_WRITE_ABSENT: i32 = 5 [exported]
-struct FunctionSig (class) size=136 align=8 exported
+struct FunctionSig (class) size=144 align=8 exported
   field name: string index=0 offset=0
   field sourceName: string index=1 offset=8
   field paramNames: string[] index=2 offset=16
@@ -70,8 +70,9 @@ struct FunctionSig (class) size=136 align=8 exported
   field arrowCount: i32 index=15 offset=100
   field captures: Local[] index=16 offset=104
   field captureHost: FunctionSig | null index=17 offset=112
-  field returnSpelling: string index=18 offset=120
-  field keepsLength: i32[] index=19 offset=128
+  field capturesForCall: boolean index=18 offset=120
+  field returnSpelling: string index=19 offset=128
+  field keepsLength: i32[] index=20 offset=136
   constructor -> @FunctionSig.constructor
   method writtenArity -> @FunctionSig.writtenArity
   method isCompileTime -> @FunctionSig.isCompileTime
@@ -426,42 +427,42 @@ struct CheckedProgram (class) size=656 align=8 exported
   method exported -> @CheckedProgram.exported
 function FunctionSig.writtenArity(this: FunctionSig): i32 -> @FunctionSig.writtenArity [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.isCompileTime(this: FunctionSig, index: i32): boolean -> @FunctionSig.isCompileTime [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: nish_panic_index
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.compileTimeOnly(this: FunctionSig): boolean -> @FunctionSig.compileTimeOnly [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.visibleOutside(this: FunctionSig): boolean -> @FunctionSig.visibleOutside [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.body(this: FunctionSig): Node | null -> @FunctionSig.body [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 node: Node (const)
 function FunctionSig.foreign(this: FunctionSig): boolean -> @FunctionSig.foreign [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionSig.definedIn(this: FunctionSig, source: SourceFile): boolean -> @FunctionSig.definedIn [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   pointer source: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 origin: SourceFile | null (const)
 function FunctionSig.constructor(this: FunctionSig, name: string, sourceName: string, decl: Node): void -> @FunctionSig.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: decl name sourceName
-  pointer this: size=136 writesThrough=true captured=false
+  pointer this: size=144 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FusionTable.constructor(this: FusionTable): void -> @FusionTable.constructor [exported constructor]
@@ -503,7 +504,7 @@ function ParallelCall.constructor(this: ParallelCall, node: Node, sig: FunctionS
   escaping: dst node sig
   pointer this: size=24 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
-  pointer sig: size=136 writesThrough=true captured=true
+  pointer sig: size=144 writesThrough=true captured=true
   pointer dst: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function capturedReads(program: CheckedProgram, node: Node, out: Node[]): void -> @capturedReads [exported]
@@ -523,7 +524,7 @@ function SecretNeed.constructor(this: SecretNeed, site: Node, sig: FunctionSig, 
   escaping: copy param sig site via what
   pointer this: size=48 writesThrough=true captured=false
   pointer site: size=40 writesThrough=true captured=true
-  pointer sig: size=136 writesThrough=true captured=true
+  pointer sig: size=144 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ScopeChannels.constructor(this: ScopeChannels, scope: Node): void -> @ScopeChannels.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -541,7 +542,7 @@ function FunctionBindings.add(this: FunctionBindings, name: string, sig: Functio
   escaping: name sig
   calls: nish_array_grow
   pointer this: size=16 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=true captured=true
+  pointer sig: size=144 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FunctionBindings.get(this: FunctionBindings, name: string): FunctionSig | null -> @FunctionBindings.get [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -565,7 +566,7 @@ function TemplateInfo.constructor(this: TemplateInfo, sourceName: string, decl: 
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=296 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
 function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: string, kind: i32, decl: Node, origin: SourceFile, home: CheckContext): void -> @StructTemplateInfo.constructor [exported constructor]
@@ -575,7 +576,7 @@ function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: st
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=296 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
 function StructInstantiation.constructor(this: StructInstantiation, template: StructTemplateInfo, typeArgs: i32[], info: StructInfo, bindings: StringMap): void -> @StructInstantiation.constructor [exported constructor]
@@ -594,7 +595,7 @@ function Instantiation.constructor(this: Instantiation, template: TemplateInfo |
   pointer this: size=184 writesThrough=true captured=false
   pointer template: size=64 writesThrough=true captured=true
   pointer typeArgs: size=0 writesThrough=true captured=true
-  pointer sig: size=136 writesThrough=true captured=true
+  pointer sig: size=144 writesThrough=true captured=true
   pointer bindings: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:29 new FunctionBindings -> @FunctionBindings.constructor
@@ -673,7 +674,7 @@ function AliasInfo.constructor(this: AliasInfo, name: string, decl: Node, origin
   pointer this: size=40 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=296 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function EnumInfo.constructor(this: EnumInfo, name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean): void -> @EnumInfo.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false

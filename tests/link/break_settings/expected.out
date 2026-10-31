@@ -1,0 +1,45 @@
+PASS  the scratch directory is made
+PASS  an absolute XDG_CONFIG_HOME holds it
+PASS  a relative XDG_CONFIG_HOME falls back to HOME
+PASS  an empty XDG_CONFIG_HOME falls back to HOME
+PASS  neither absolute is nowhere
+PASS  neither set is nowhere
+PASS  no directory before the first save
+PASS  a save into a directory not there yet answers true
+PASS  and makes it
+PASS  and writes exactly the seven lines
+PASS  leaving no temporary beside it
+PASS  nowhere to save answers false
+PASS  a directory where the file goes answers false
+PASS  a save under HOME answers true
+PASS  a load gives back every field saved
+PASS  a second save over it answers true
+PASS  and the load after it gives the second
+PASS  a missing file gives the defaults
+PASS  nowhere gives the defaults
+PASS  a directory gives the defaults
+PASS  the defaults format as the seven lines
+PASS  fps=99 is out of range, and the last good line, with no newline, wins
+PASS  resolution with \r\n is skipped, +3 too, and the plain 3 applies
+PASS  an empty graphics, and one past ascii, give the default
+PASS  a huge effects, and -0, give the default
+PASS  smoothing=false with \r\n gives the default
+PASS  a good stats line among them applies
+PASS  sound=maybe gives the default
+PASS  a file of bytes that are not text is written
+PASS  its one good line, stats=true, applies
+PASS  and the rest keep their defaults
+PASS  the empty file is the defaults
+PASS  a lone newline is the defaults
+PASS  a lone = is the defaults
+PASS  names are matched exactly
+PASS  hostile values are all dropped
+PASS  a 10000-digit value is dropped
+PASS  a hostile XDG_CONFIG_HOME is joined as text
+PASS  and the save lands under it, made without a shell
+PASS  holding only the defaults' seven lines
+PASS  colour=red is ignored and fps=1 before it applies
+PASS  and stats=true after it
+PASS  and the rest keep their defaults
+PASS  the scratch directory is removed
+break-settings: 44 passed, 0 failed, 0 skipped

@@ -111,7 +111,10 @@ would land on the `const`. Two statements in one block that capture the same
 its own, `kNow` and `kNow2`, counted by the capturing arrows before it:
 two `parallelMap`s (`thread-capture-two`), two `spawn`s in one scope
 (`thread-capture-two-spawn`) and two in a loop's body
-(`thread-capture-two-loop`). `thread-hoist-channel` (NL2484)
+(`thread-capture-two-loop`). An arrow given to an ordinary function's
+parameter gets the same fix (`fnarg-capture-let`, NL2585), and keeps the
+refusal when it assigns the `let` (`fnarg-nofix-capture-assigned`).
+`thread-hoist-channel` (NL2484)
 moves an arrow that uses a `Channel` to a `const` of its own above the
 top-level statement it is written in, named for the function and `Task`; an
 arrow that captures (`thread-nofix-hoist-capturing`) or leaves a type out

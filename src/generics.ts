@@ -48,8 +48,15 @@ import {
 } from "./arrays"
 import { StringMap, StringSet } from "./map"
 import {
+  CAPTURE_CALL,
+  CAPTURE_NONE,
+  CAPTURE_PARALLEL,
+  CAPTURE_TASK,
+  callLetCaptureMessage,
+  callThisCaptureMessage,
   captureTypeMessage,
   capturesOf,
+  functionParamCaptureMessage,
   isParallelEntry,
   isSpawnTemplate,
   isVoidSpawnTemplate,
@@ -64,6 +71,7 @@ import {
   thisCaptureMessage,
 } from "./parallel"
 import {
+  isExposeTemplate,
   isSecretPayload,
   isSecretTemplate,
   recordExposeCall,
@@ -141,6 +149,7 @@ import {
   PAR_FROM,
   PAR_MAP,
   PAR_MAP_NEW,
+  PAR_NONE,
   PAR_REDUCE,
   PAR_SPAWN,
   ROLE_FUNCTION,
@@ -1978,7 +1987,12 @@ const resolveFunctionArgument = (
     return null
   }
   if (ctx.capturesOuter(name)) {
-    refuseOnce(ctx, arg, capturedMessage(name))
+    const local = ctx.arrowOuterScopes.length > 0 && ctx.arrowOuterScopes[0].lookup(name) !== null
+    if (local && ctx.arrowMode() !== CAPTURE_NONE) {
+      refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
+    } else {
+      refuseOnce(ctx, arg, outerFunctionMessage(ctx, name))
+    }
     return null
   }
   const bound = ctx.functionBindings.get(name)
@@ -2121,15 +2135,31 @@ const liftArrowArgument = (
     )
     return null
   }
-  const role = parallelRole(template)
-  const task = role === PAR_SPAWN
-  const capture = task || role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM
-  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, capture, task)
+  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, captureMode(template))
   if (fn === null) {
     return null
   }
   unifyAnnotation(ctx, returns, fn.returnType, names, bindings)
   return fn
+}
+
+/**
+ * The `CAPTURE_*` mode of an arrow given to an instantiation of `template`. A
+ * data-parallel form's arrow and a scope's task capture by their own rules;
+ * `expose` and `exposeWith` keep theirs capturing nothing, so a secret's
+ * plaintext has no way out but the result (`docs/security/secret.md`), and so
+ * do `nish/threads`'s own helpers, which only forward what a form was given.
+ * Every other function runs the arrow, if at all, before its call returns.
+ */
+const captureMode = (template: TemplateInfo): i32 => {
+  const role = parallelRole(template)
+  if (role === PAR_SPAWN) {
+    return CAPTURE_TASK
+  }
+  if (role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM) {
+    return CAPTURE_PARALLEL
+  }
+  return role !== PAR_NONE || isExposeTemplate(template) ? CAPTURE_NONE : CAPTURE_CALL
 }
 
 /** A numeric literal, negated or not, whose type is whatever its context says it is. */
@@ -2154,9 +2184,9 @@ const arrowDisplayName = (arrow: Node): string => {
  * per instantiation, so each node still has exactly one answer — and an arrow
  * inside an instantiation's body shares that instantiation's tables for the
  * passes after this one. It sees its parameters and the module's top-level
- * names and nothing else: a name of the function around it is a capture, and
- * is refused as one (`capturesOuter`) — unless `capture` says the arrow is
- * passed to a data-parallel form, which may read a `const` (`captureOuter`).
+ * names, and a name of the function around it is a capture (`capturesOuter`):
+ * read as `mode` allows, which for every arrow but one given to `expose` or
+ * `exposeWith` is a `const` local or a parameter (`captureOuter`).
  *
  * The symbol is the enclosing function's and a counter, behind a `$`, which is
  * unique in the module because the enclosing symbol is. `returnType` is -1 when
@@ -2168,8 +2198,7 @@ const liftArrow = (
   types: i32[],
   returnType: i32,
   outer: Scope,
-  capture: boolean,
-  task: boolean
+  mode: i32
 ): FunctionSig | null => {
   // Checked twice in one body (a caller that re-checks an argument): the arrow
   // is lifted once, and the call node's table slot for it says which.
@@ -2230,9 +2259,9 @@ const liftArrow = (
   ctx.arrowOuterFunctions.push(savedFunctions)
   ctx.arrowFns.push(fn)
   ctx.arrowScopes.push(scope)
-  ctx.arrowCaptures.push(capture)
-  ctx.arrowTasks.push(task)
+  ctx.arrowModes.push(mode)
   fn.captureHost = enclosing
+  fn.capturesForCall = mode === CAPTURE_CALL
   ctx.functionBindings = new FunctionBindings()
   ctx.current = fn
   ctx.errored = false
@@ -2255,8 +2284,7 @@ const liftArrow = (
   ctx.arrowOuterFunctions.pop()
   ctx.arrowFns.pop()
   ctx.arrowScopes.pop()
-  ctx.arrowCaptures.pop()
-  ctx.arrowTasks.pop()
+  ctx.arrowModes.pop()
   if (fn.poisoned) {
     // The arrow's own diagnostic stands for the call around it.
     ctx.errored = true
@@ -2283,28 +2311,51 @@ export const arrowElsewhereMessage = (): string =>
   `lifts it into a function of its own: a function is never a value in ${LANGUAGE}, so it cannot be stored, ` +
   "returned or called where it stands"
 
-/** The refusal for an arrow argument that reads a name of the function it is written in. */
+/** The refusal for an arrow given to `expose` or `exposeWith` that reads a name of the function it is written in. */
 export const capturedMessage = (name: string): string =>
-  `The arrow reads \`${name}\`, which belongs to the function it is written in: an arrow argument is lifted into a ` +
-  "function of its own and sees only its parameters and the module's top-level names, so it can capture nothing"
+  `The arrow reads \`${name}\`, which belongs to the function it is written in: an arrow given to \`expose\` or ` +
+  "`exposeWith` reads only its own parameters and the module's top-level names, so nothing it computes from the " +
+  "plaintext leaves but its result; pass what it needs as `exposeWith`'s argument"
+
+/** The refusal for `this` in an arrow argument, by the arrow's `CAPTURE_*` mode. */
+export const thisCaptureMessageFor = (mode: i32): string => {
+  if (mode === CAPTURE_TASK) {
+    return taskThisCaptureMessage()
+  }
+  if (mode === CAPTURE_PARALLEL) {
+    return thisCaptureMessage()
+  }
+  return mode === CAPTURE_CALL ? callThisCaptureMessage() : capturedMessage("this")
+}
+
+/**
+ * The refusal for a function parameter of the function around an arrow that
+ * the arrow names: `expose`'s arrow is told it captures nothing, any other the
+ * reason a function parameter is out of its reach.
+ */
+export const outerFunctionMessage = (ctx: CheckContext, name: string): string =>
+  ctx.arrowMode() === CAPTURE_NONE ? capturedMessage(name) : functionParamCaptureMessage(name)
 
 /**
  * WP29: `expr` names `name` in a function an arrow argument is written inside
- * (`capturesOuter` has said so). An arrow passed to a data-parallel form reads
- * a `const` local or a parameter of the function it is written directly in:
- * the local becomes a parameter of the arrow, declared in its parameter scope
- * so that every later read of the name finds it, and appended to its
- * signature after the parameters it wrote, with the outer local remembered in
- * `captures` for the call to pass. Anything else is refused, with the reason.
- * Answers the parameter, or `null` once it has refused.
+ * (`capturesOuter` has said so). An arrow argument reads a `const` local or a
+ * parameter of the function it is written directly in, unless it is given to
+ * `expose` or `exposeWith`: the local becomes a parameter of the arrow,
+ * declared in its parameter scope so that every later read of the name finds
+ * it, and appended to its signature after the parameters it wrote, with the
+ * outer local remembered in `captures` for the call to pass. Anything else is
+ * refused, with the reason the arrow's mode gives. Answers the parameter, or
+ * `null` once it has refused.
  */
 export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local | null => {
   const depth = ctx.arrowFns.length
-  if (depth === 0 || depth > ctx.arrowScopes.length || depth > ctx.arrowCaptures.length) {
-    refuseOnce(ctx, expr, capturedMessage(name))
-    return null
-  }
-  if (!ctx.arrowCaptures[depth - 1]) {
+  const mode = ctx.arrowMode()
+  if (
+    depth === 0 ||
+    depth > ctx.arrowScopes.length ||
+    depth > ctx.arrowModes.length ||
+    mode === CAPTURE_NONE
+  ) {
     refuseOnce(ctx, expr, capturedMessage(name))
     return null
   }
@@ -2315,20 +2366,25 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
   const outer = ctx.arrowOuterScopes[0].lookup(name)
   if (outer === null) {
     // A compile-time function parameter of the function around the arrow.
-    refuseOnce(ctx, expr, capturedMessage(name))
+    refuseOnce(ctx, expr, functionParamCaptureMessage(name))
     return null
   }
   // A scope's task is told about itself: it runs when the scope joins.
-  const task = depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
+  const task = mode === CAPTURE_TASK
   if (name === "this") {
-    refuseOnce(ctx, expr, task ? taskThisCaptureMessage() : thisCaptureMessage())
+    refuseOnce(ctx, expr, thisCaptureMessageFor(mode))
     return null
   }
   if (outer.mutable) {
-    const message = task ? taskLetCaptureMessage(name) : letCaptureMessage(name)
+    let message = letCaptureMessage(name)
+    if (task) {
+      message = taskLetCaptureMessage(name)
+    } else if (mode === CAPTURE_CALL) {
+      message = callLetCaptureMessage(name)
+    }
     // The fix binds the value to a `const`, which only a capture the rule then admits makes progress.
     const host = ctx.arrowFns[0].captureHost
-    const kept = captureTypeMessage(ctx.program, ctx.table, name, ctx.arrowOuterScopes[0].typeOf(outer), task)
+    const kept = captureTypeMessage(ctx.program, ctx.table, name, ctx.arrowOuterScopes[0].typeOf(outer), mode)
     const edits: Edit[] =
       host === null || kept.length > 0
         ? []
@@ -2343,7 +2399,7 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
   // A `const` cannot change, so a narrowing in force at the call holds for
   // as long as the body runs: `if (p !== null)` around the call is enough.
   const type = ctx.arrowOuterScopes[0].typeOf(outer)
-  const why = captureTypeMessage(ctx.program, ctx.table, name, type, task)
+  const why = captureTypeMessage(ctx.program, ctx.table, name, type, mode)
   if (why.length > 0) {
     refuseOnce(ctx, expr, why)
     return null

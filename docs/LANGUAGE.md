@@ -3031,11 +3031,47 @@ export const main = (): i32 => {
   in an array is
   `` `f` is a function parameter and can only be called or passed on as a function argument: a function is never a value in Nish, so it cannot be stored, returned, compared or put in an array ``
   (`tests/cases/reject_fnarg_store`, `reject_fnarg_return`).
-- **An arrow captures nothing.** It sees its own parameters and the module's
-  top-level names; a local, a parameter, `this` or a function parameter of the
-  function it is written in is
-  `` The arrow reads `step`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the module's top-level names, so it can capture nothing ``
-  (`tests/cases/reject_fnarg_capture`). An arrow anywhere but as such an
+- **An arrow may read the `const` locals and the parameters of the function
+  it is written in** (WP29 capture). Each name it reads is handed to it as an
+  extra argument when the call is made: the lifted arrow gains a parameter per
+  capture, the instantiation that runs it gains one too and forwards it, and
+  every call stays direct — no environment object, no indirect call. The
+  captures are not part of the instantiation's key, so one arrow is one
+  `define` however many values it reads. A narrowing in force at the call holds
+  in the body (`if (name !== null) { each(xs, (x) => use(name)) }` reads `name`
+  as a `string`). The arrow may write through what it captured —
+  `infos.push(x)`, `box.n = v` — because the call runs before the function goes
+  on (`tests/cases/fnarg_capture`, `fnarg_capture_narrow`,
+  `fnarg_capture_local`, `fnarg_capture_escape`). What it may not do:
+  - read `this` (NL2590, `reject_fnarg_capture_this`): bind it, or what the
+    arrow needs of it, to a `const` before the call;
+  - read a `let` (NL2585, `reject_fnarg_capture_let`), whose value could
+    change after the arrow is handed it; `nish --fix` copies it into a
+    `const` just before the call (`tests/fix/fnarg-capture-let`);
+  - assign to a name it captured (NL2586, `reject_fnarg_capture_write`):
+    the assignment would change only its own copy;
+  - name a function parameter of the function it is written in (NL2587,
+    `reject_fnarg_capture_function_param`), which is bound at instantiation
+    and is no value;
+  - capture a `Secret`, a scope, a lock, a guard, a channel, a foreign handle
+    or a `CPtr` (NL2588, `reject_fnarg_capture_secret`,
+    `reject_mutex_guard_capture`, `reject_ffi_handle_closure_capture`,
+    `reject_ffi_handle_field_capture`), which their own rules keep in the
+    block that made them;
+  - read anything from outside it when it is written inside another arrow
+    (NL2501, `reject_fnarg_capture_nested`).
+
+  An arrow given to `expose` or `exposeWith` still captures nothing (NL2335,
+  NL2589; `reject_secret_expose_capture`, `_forwarded`), an arrow handed on to
+  a parallel form or `spawn` meets their rules where it runs
+  (`reject_fnarg_capture_parallel_write`, `_spawn_write`,
+  `tests/link/fnarg_capture_forward`), and a recursive function that passes
+  itself a new arrow on every call meets the instantiation limit
+  (`reject_fnarg_capture_recursion`). Escape analysis and the parameter
+  attributes count a capture as an escaping use of what it names: a captured
+  parameter is never `readonly` or `nocapture`, and a captured `parts` array
+  is not released by `join` (`mem_join_parts_captured`). An arrow anywhere but
+  as such an
   argument is
   `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in Nish, so it cannot be stored, returned or called where it stands ``
   (`tests/cases/reject_fnarg_arrow_value`).
@@ -3387,9 +3423,10 @@ from the whole-program facts, and each rule is reported there:
 An arrow passed to one of the four forms may read the `const` locals and the
 parameters of the function it is written in, and so may an arrow given to a
 scope's `spawn`, by the rules of [scoped tasks](#scoped-tasks-using-s--scope).
-Nothing else captures: an arrow given to any other function parameter still
-reads only its own parameters and the module's top-level names
-(`tests/cases/reject_par_capture_not_parallel`).
+An arrow given to any other function-typed parameter of a top-level function
+captures too, by the sequential rules of
+[function parameters](#function-parameters) (`tests/cases/fnarg_capture_local`);
+the rules below are the stricter ones a body that runs on other threads keeps.
 
 ```typescript
 import { parallelMapInto } from "nish/threads";
@@ -3436,7 +3473,7 @@ export const main = (): i32 => {
 - **Only an arrow written directly in a function's body captures.** An arrow
   inside another arrow reads nothing from outside itself, neither the
   function's locals nor the outer arrow's parameters:
-  `` The arrow reads `k` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing ``
+  `` The arrow reads `k` from outside the arrow it is written in: only an arrow written directly in a function's body may read that function's `const` locals and parameters, and an arrow inside another arrow reads only its own parameters and the module's top-level names; move the inner call into a top-level function that takes the value as a parameter ``
   (`reject_par_capture_nested_arrow`, `reject_par_capture_nested_param`).
 - **`this` is not captured by that name**, nor a field through it; bind it,
   or what the body needs of it, to a `const` first:
@@ -3604,7 +3641,7 @@ export const main = (): i32 => {
   may be absent and a `Secret` are never captured:
   `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
   (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
-  captures nothing (NL2501, `_nested`). The arrow is lifted into a function
+  reads only its own parameters and the module's top-level names (NL2501, `_nested`). The arrow is lifted into a function
   named after the one it is written in and a counter (`main$arrow0`), which
   is the name a debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
@@ -4099,10 +4136,10 @@ breaks one is refused with that rule's own code:
   `? :`, inside the body), and
   `reject_mutex_guard_helper_expr_churn` is the use-after-free it would open: the
   object kept past the lock, its string replaced under a second lock, and
-  `churn()` reusing the memory before the old one is printed. An arrow cannot capture
-  a guard (`reject_mutex_guard_capture`), and an arrow passed to a
-  data-parallel form, which may read its function's `const` locals, may not
-  read a guard among them (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
+  `churn()` reusing the memory before the old one is printed. An arrow argument,
+  which may read its function's `const` locals, may not read a guard among
+  them, whether it runs on this thread (`reject_mutex_guard_capture`) or is
+  passed to a data-parallel form (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
   of an array it reaches included. When `T` is itself a scalar, `g.value` is
   read and stored directly — `g.value = g.value + 1` on a `Mutex<i32>` — and
   the store reaches the `Mutex` under Node as natively, because the guard is
@@ -6435,10 +6472,10 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair` and their constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 | `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors)) |
@@ -6993,7 +7030,7 @@ export const main = (): i32 => {
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
 | `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`, `secret_inferred`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*`, `reject_secret_inferred_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
-| `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
+| `exposeWith(s, arg, f)` | `f(value, arg)`, because the arrow `expose` runs captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
 | `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`, `secret_wipe_o2_inferred`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
 
 `nish:secret` is the one builtin module with source behind it: `std/secret.ts`,
@@ -7461,6 +7498,14 @@ reason `spawnSyncTo` gave for refusing to buffer: a child that prints more
 than memory holds is stopped, with a code no exit status can be, rather than
 followed (`docs/security/runtime.md`, RT-27 to RT-31).
 
+`spawnWithFds` numbers the descriptors from 3 rather than taking a target
+for each, because 3 onward is where a child that is handed descriptors looks
+for them (systemd's socket activation, `LISTEN_FDS`), and a target list would
+let a program aim one at 0 to 2 and lose the child's streams. The runtime
+duplicates each source above the targets before the child's `dup2` reads it,
+so an entry that is its own target or another's is never overwritten first
+(`docs/security/runtime.md`, RT-40).
+
 `readdirSync` sorts, which neither `readdir(3)` nor Node's `fs.readdirSync`
 does, and that is a decision about this language rather than a convenience:
 there is no `sort` to reach for, so every caller of an unsorted listing would
@@ -7604,6 +7649,7 @@ exported by `nish:process` as well as being a global.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `spawn(argv: string[]): i32` | start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does — the same vector, environment, streams and working directory — and answer the child's **pid** at once, **without waiting**. A failure is a **negative errno**: -22 (EINVAL) for an empty vector or an argument holding a NUL, and `posix_spawnp`'s own error otherwise, so a program that is not there is -2 (ENOENT). **Test `pid > 0` before handing the answer on**: a failure such as -1 (EPERM) passed to `waitPid` reads as "any child". The child is this process's until `waitPid` reaps it; one never reaped stays a zombie until the program exits, as it would in C | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
+| `spawnWithFds(argv: string[], fds: readonly i32[]): i32` | `spawn`, with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec cleared there, and its pid or a negative errno back. Its streams 0 to 2 are this process's, and **no other descriptor** of this process reaches it but one opened without close-on-exec, which nothing the runtime opens is. Any order works: `fds` may list a descriptor that is already its own target (`[3]`), another entry's target (`[4, 3]`), or the same one twice. More than **64** descriptors, or a negative one, is `-22` before anything is opened or started; one that is not open is `-9`; an empty `fds` is `spawn` exactly. The child shares each descriptor's open file, its offset and its status flags, `O_NONBLOCK` among them, and this process keeps its own. Reap the pid with `waitPid` | write | `spawn_fds_child`, `caps_process_spawn_fds`; `reject_spawn_fds_arity`, `reject_spawn_fds_element`, `reject_spawn_fds_argv`, `reject_spawn_fds_wasm` |
 | `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, so a number means the same signal on every host. A `pid` of 0 or below is -22 too, because `kill(2)` reads those as a process group or every process, which is not one process. -3 (ESRCH) when no process has the pid — a child already reaped included — and -1 (EPERM) when it is another user's. A positive pid may be any process of this user, not only a child ([RT-19](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
 | `waitPid(pid: i32, flags: i32): i32[]` | reap a child and answer a fresh two-element **`[pid, status]`**. `pid` is a child's, or **-1 for any child**; flag **1 is WNOHANG**. The status is `spawnSync`'s: the exit code, or **128 + n** when signal `n` ended it. `[0, 0]` is a WNOHANG wait with a child left and none exited. A failure puts the negative errno first: `[-10, 0]` (ECHILD) when there is no child to wait for, `[-4, 0]` (EINTR) when a signal interrupted the wait — though after `signalFd()` a blocking wait never sees it, because that handler is installed with `SA_RESTART` and the wait restarts, and `[-22, 0]` for any other flag bit or a pid that is neither -1 nor positive. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
 | `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number — which can lower the count and never raise it. It needs no `--threads`: a program asks it to decide how many workers to start | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
@@ -7715,6 +7761,9 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`: the descriptor, `-111` when nothing listens there, `-2` when there is no such file, `-11` on Linux and `-111` on Darwin when the listener's backlog is full (the socket is closed; try again later), and the path refusals `unixListen` has | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
 | `unixAccept(fd: i32): i32` | the next waiting connection, non-blocking and close-on-exec; `-11` when none is waiting. No peer address is written: a Unix client is seldom bound | write | `net_unix_calls` |
 | `unixSocketPair(kind: i32, fds: i32[]): i32` | two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec, and `0`. Kind `1` (`NET_UNIX_STREAM`) is a byte stream, kind `2` (`NET_UNIX_SEQPACKET`) keeps each write one message; any other kind, or an `fds` shorter than 2, is `-22` before a socket exists. Kind `2` is **`-95` on Darwin** | write | `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`, `reject_net_unix_pair_readonly` |
+| `sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | `len` bytes of `buf[off, off + len)` over the Unix socket `sock`, with one copy of the descriptor `fd` riding on them (`SCM_RIGHTS`): the bytes sent, or the failure. A descriptor travels with data, so a `len` of `0` is **`-22`**, and so is a negative `fd`; an `fd` that is not open is `-9`. `fd` stays open here, and the receiver gets its own. A `sock` that is not a socket is `-88`, a socket of another family **`-95`**, and a gone peer `-32`, never SIGPIPE. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`, `reject_net_unix_scm_wasm` |
+| `recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, `-11` when nothing is waiting, or the failure. `fd[0]` is the first descriptor the message carried, or **`-1`** when it carried none; every further one is closed before the answer, and room is made for 8, so the kernel drops the rest of a message that carries more and the bytes are still answered. The descriptor kept is close-on-exec and **not** made non-blocking: its status flags are the open file's, which the sender shares. A `len` of `0` or an empty `fd` is `-22` before anything is read; `sock` is refused as `sendFd`'s is. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly` |
+| `peerCredentials(fd: i32, out: i32[]): i32` | the process at the other end of the connected Unix socket `fd`, as `out[0]`, `out[1]`, `out[2]` = pid, uid, gid, and `0`. They are what the kernel recorded **when the connection was made** (the `connect`, or the `socketpair`), not who holds the other end now. An `out` shorter than 3 is `-22` before anything is asked, and `fd` is refused as `sendFd`'s `sock` is. On Darwin the pid is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it | write | `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`, `reject_net_unix_peer_readonly` |
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -8002,6 +8051,22 @@ too. There is no address form: `unixAccept` writes no peer.
   connection is; `NET_UNIX_SEQPACKET` keeps each write one message, so a read
   returns one message, never two run together (`net_unix_calls`). Darwin has
   no Unix seqpacket, and kind `2` there is `-95`.
+- **Descriptors and credentials.** `sendFd` hands the process at the other
+  end of a Unix socket a descriptor of this one: the receiver's `recvFd` gets
+  a new descriptor for the same open file, with its offset and status flags
+  shared, as `dup` gives. It rides on at least one byte of data, so the
+  receiver's read is what tells it a descriptor came. `recvFd` keeps the
+  first descriptor of a message and closes every other one before it answers,
+  so a peer cannot leave this process holding descriptors it never asked for
+  ([docs/security/runtime.md](security/runtime.md), RT-37). The one it keeps
+  is close-on-exec, so a later `spawn` does not hand it on, but it is not made
+  non-blocking: `netRead` on a blocking one waits, so set what the program
+  needs on it before it joins a loop. `peerCredentials` names the process at
+  the other end, as the kernel recorded it at the connect; a peer that has
+  changed its uid since, or passed the socket on, still reads as it was then
+  (RT-39). On a TCP socket, or any socket not `AF_UNIX`, the three are
+  `-95`, and on a descriptor that is not a socket `-88`, both before anything
+  is sent or asked (`net_unix_scm`).
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
@@ -8013,12 +8078,17 @@ too. There is no address form: `unixAccept` writes no peer.
 `NET_TCP_NODELAY` is: the constants are plain `i32`s, so the checker cannot
 tell one passed where another belongs. Name the one the call takes.
 
-On Darwin the calls are the same C under `#if`, with five differences: no
+On Darwin the calls are the same C under `#if`, with seven differences: no
 abstract names (`-95`), no seqpacket pair (`-95`), flag `1` meeting a socket
 file is `-95` rather than a probe, a connect to a full backlog is `-111`
-rather than `-11`, and `fcntl` after `accept` and `socketpair` where Linux
-passes `SOCK_NONBLOCK | SOCK_CLOEXEC`. CI does not
-run them on a mac yet.
+rather than `-11`, `fcntl` after `accept` and `socketpair` where Linux
+passes `SOCK_NONBLOCK | SOCK_CLOEXEC`, `fcntl` after `recvmsg` where Linux
+passes `MSG_CMSG_CLOEXEC`, so a child another thread spawns between the two
+inherits the descriptor `recvFd` keeps (RT-38), and `peerCredentials` reading
+`getpeereid` and `LOCAL_PEERPID`, its pid `-1` where that refuses, where
+Linux reads `SO_PEERCRED`. A listener has no peer: Linux answers its own
+process's credentials there, and what Darwin answers is not yet seen on a
+mac. CI does not run them on a mac yet.
 
 #### Bounds
 
@@ -8047,20 +8117,24 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   are the program's own `i32`s (`` `pollWait` fills an `i32[]`, got u8[] ``,
   `reject_net_poll_element`), and so is `unixSocketPair`'s `fds`
   (`` `unixSocketPair` fills an `i32[]`, got u8[] ``,
-  `reject_net_unix_pair_element`). A path is a `string`, and anything else is
+  `reject_net_unix_pair_element`), and so are `recvFd`'s `fd` and
+  `peerCredentials`'s `out` (`reject_net_unix_scm_element`). A path is a `string`, and anything else is
   refused (`reject_net_unix_path_type`). A descriptor, an offset, a length, a port, a
   backlog, `how`, the flags, a segment size, the ECN bits, a loop, the events,
   a token, a timeout, a socket option and its value, a pair kind and a mode are `i32` in both number modes, and an
   `f64` is refused rather than converted (`reject_net_fd_type`).
 - **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer`,
   `netRead`'s `buf`, `udpRecvFrom`'s `buf`, `from` and `meta`, `pollWait`'s
-  `ready` and `unixSocketPair`'s `fds` are written, so
+  `ready`, `unixSocketPair`'s `fds`, `recvFd`'s `buf` and `fd` and
+  `peerCredentials`'s `out` are written, so
   a `readonly` array there is refused as a store through it is
   (`reject_net_readonly`, `reject_net_accept_readonly`,
   `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`,
-  `reject_net_poll_readonly`, `reject_net_unix_pair_readonly`), a parameter one of
-  them fills is never `readonly` in the IR, and `netWrite`'s `buf` and
-  `udpSendTo`'s `buf` and `to` may be `readonly` (`net_udp_calls`).
+  `reject_net_poll_readonly`, `reject_net_unix_pair_readonly`,
+  `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly`,
+  `reject_net_unix_peer_readonly`), a parameter one of
+  them fills is never `readonly` in the IR, and `netWrite`'s `buf`,
+  `udpSendTo`'s `buf` and `to` and `sendFd`'s `buf` may be `readonly` (`net_udp_calls`).
 - **Threads.** Every call changes the kernel's state of a socket, which is a
   write its caller can see, and a loop is a socket's state as much as its
   bytes, so none may be made in a `scope()` task
@@ -10060,8 +10134,9 @@ where its memory lives and when it is reused.
    the stored value stored, because it could hand an element on: storing
    `xs` into a field, passing it to a function, reading an element back and
    keeping it, naming `xs` through another local, or returning it through a
-   choice (`mem_return_array_callee`). An arrow captures nothing, so there is
-   no capture to count. Inside the function the value is in memory all the
+   choice (`mem_return_array_callee`). An arrow argument that reads `xs` as a
+   capture is a use too, since it may read `xs` when the call runs, after a
+   join could have released it (`mem_join_parts_captured`). Inside the function the value is in memory all the
    same, so a loop whose pass stores into an `xs` declared outside it keeps
    no pass scope, and a `using a = arena()` block that stores into an `xs`
    declared before it is refused as any store into older memory is. Only a
@@ -11216,7 +11291,8 @@ messages are exact for the cases cited; other rows quote the checker
 | a type parameter list that names one parameter twice | `` Duplicate type parameter `T` ``, on the first repeat alone | `reject_generic_duplicate_type_parameter`, `…_arrow`, `…_method`, `…_class`, `…_interface`, `…_template`, `…_triple` |
 | a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
 | a function parameter used as a value | `` `f` is a function parameter and can only be called or passed on as a function argument: ... `` | `reject_fnarg_store`, `reject_fnarg_return` |
-| an arrow argument that captures | `` The arrow reads `step`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture` |
+| an arrow argument that reads a `let`, `this`, or a function parameter of its function, or assigns to a capture | `` The arrow reads `k`, a `let` of the function it is written in: ... `` / `` The arrow reads `this`: ... `` / `` The arrow assigns to `total`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture_let`, `_this`, `_function_param`, `_write` |
+| an arrow inside another arrow that reads the function's locals | `` The arrow reads `k` from outside the arrow it is written in: ... `` | `reject_fnarg_capture_nested` |
 | an arrow anywhere but as a function argument | `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... `` | `reject_fnarg_arrow_value` |
 | a function type anywhere but on a parameter of a top-level function | `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... `` / `` `f` cannot have a function type here: ... `` | `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_method`, `reject_fnarg_nested` |
 | a function argument that is not a function's name or an arrow, or does not match | `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... `` / `` ...; a function argument must have exactly its parameter's type `` | `reject_fnarg_not_name`, `reject_fnarg_generic_name`, `reject_fnarg_mismatch`, `reject_fnarg_arity` |

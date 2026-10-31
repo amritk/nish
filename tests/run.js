@@ -2413,26 +2413,33 @@ if (dealtHere("termIo")) {
     // run pauses before F4 so the reopened stage can be held to the one it left;
     // 120 frames is past the title's outro at any rate the relay draws. The play and
     // stage runs skip the opening (the help falling apart) with a space at frame 2,
-    // so the title is up by frame 5.
+    // so the title is up by frame 5. Each run keeps its settings in a config
+    // directory of its own, never the real `~/.config/nish/break`.
+    const configs = [0, 1, 2].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-")))
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
+        env: { XDG_CONFIG_HOME: configs[0] },
         keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-reopen"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[1] },
         keys: wallKeys([3, "\x1b[17~"], [10, "\x1bOS"], [30, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-stage"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[2] },
         keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
-    ])
+    ]).finally(() => {
+      for (const config of configs) {
+        fs.rmSync(config, { recursive: true, force: true })
+      }
+    })
     const restored = (r) => r.status === 0 && r.sameStty && r.out.endsWith("\x1b[?1049l") && r.err === ""
     check(
       "nish break on a terminal: draws kitty images, and q quits with the screen restored, exit 0",
@@ -2783,9 +2790,9 @@ if (!only || "net_set_option".includes(only)) {
 }
 
 // The Unix-domain calls under the prelude, by their global spellings: each of
-// the five throws, naming itself, and the flag and the two pair kinds read as
-// the numbers a native build folds them to (`tests/cases/net_unix_calls` and
-// `net_unix_paths` are the native half).
+// the eight throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls`,
+// `net_unix_paths` and `net_unix_scm` are the native half).
 if (!only || "net_unix".includes(only)) {
   const unixDir = path.join(buildDir, "net-prelude")
   fs.mkdirSync(unixDir, { recursive: true })
@@ -2808,6 +2815,9 @@ if (!only || "net_unix".includes(only)) {
     ["unixConnect", 'unixConnect("@nish")'],
     ["unixAccept", "unixAccept(3)"],
     ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+    ["sendFd", "sendFd(3, 0, [1], 0, 1)"],
+    ["recvFd", "recvFd(3, [0], 0, 1, [0])"],
+    ["peerCredentials", "peerCredentials(3, [0, 0, 0])"],
   ]
   for (const [name, call] of calls) {
     const entry = path.join(unixDir, `${name}.ts`)
@@ -2819,6 +2829,34 @@ if (!only || "net_unix".includes(only)) {
       shown(loud)
     )
   }
+}
+
+// `spawnWithFds` under the prelude, by its global spelling: it starts a child
+// as `spawn` does, so it throws, naming itself, for `spawn`'s reason
+// (`tests/cases/spawn_fds_child` is the native half). `--emit-ts` imports it
+// from `nish/runtime`, which throws the same way, as it imports `spawnPiped`:
+// without its `AMBIENT_NAMES` entry the module calls a global Node never had.
+if (!only || "spawn_fds".includes(only)) {
+  const fdsDir = path.join(buildDir, "spawn-fds-prelude")
+  fs.mkdirSync(fdsDir, { recursive: true })
+  const entry = path.join(fdsDir, "spawn-with-fds.ts")
+  fs.writeFileSync(entry, 'export const main = (): number => spawnWithFds(["true"], [0]);\n')
+  const loud = runUnderPrelude(entry, [])
+  check(
+    "spawn_fds: under the prelude spawnWithFds fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`spawnWithFds` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const emitted = path.join(fdsDir, "emitted")
+  fs.rmSync(emitted, { recursive: true, force: true })
+  const ts = spawnSync(NISH, [entry, "--emit-ts", emitted], { cwd: root, encoding: "utf8" })
+  const module = path.join(emitted, "spawn-with-fds.ts")
+  const text = ts.status === 0 && fs.existsSync(module) ? fs.readFileSync(module, "utf8") : ""
+  check(
+    "spawn_fds: --emit-ts imports spawnWithFds from nish/runtime",
+    text.startsWith('import { spawnWithFds } from "nish/runtime"\n'),
+    `exit ${ts.status}\n${ts.stderr}\n${text}`
+  )
 }
 
 // `netMss` where there is no socket to ask. Under the prelude it throws, naming
@@ -23190,11 +23228,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
     riddle.stderr
   )
-  const secret = inSecret(["break"])
+  // The refused run gets a config directory of its own, so it can be shown to
+  // write no settings, and never touches the real `~/.config/nish/break`.
+  const secretConfig = fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-"))
+  const secret = spawnSync(NISH, ["break"], {
+    cwd: secretDir,
+    encoding: "utf8",
+    env: { ...process.env, ...plainEnv, XDG_CONFIG_HOME: secretConfig },
+  })
+  const secretWrote = fs.readdirSync(secretConfig)
+  fs.rmSync(secretConfig, { recursive: true, force: true })
   check(
     "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
     secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
+  )
+  check(
+    "nish break, refused on a pipe: writes no settings file",
+    secretWrote.length === 0,
+    secretWrote.join(", ")
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
   const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])

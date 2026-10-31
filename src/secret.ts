@@ -87,6 +87,7 @@ import {
   TemplateInfo,
   capturedReads,
 } from "./program"
+import { capturesOf } from "./parallel"
 import { RuntimeTable } from "./runtime"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { methodReceiver } from "./emit-util"
@@ -145,6 +146,12 @@ const secretRole = (template: TemplateInfo): i32 => {
     return SECRET_EXPOSE_WITH
   }
   return name === "wipe" ? SECRET_WIPE : SECRET_NONE
+}
+
+/** Whether `template` is `expose` or `exposeWith`, whose arrow captures nothing (`captureMode` in `src/generics.ts`). */
+export const isExposeTemplate = (template: TemplateInfo): boolean => {
+  const role = secretRole(template)
+  return role === SECRET_EXPOSE || role === SECRET_EXPOSE_WITH
 }
 
 /** The role of the function `sig` is, or `SECRET_NONE` when it is no instance of `nish:secret`'s. */
@@ -2565,6 +2572,16 @@ const keepsMessage = (fn: string, intrinsic: string): string =>
   `\`${fn}\` keeps the value \`${intrinsic}\` hands it — returns it, stores it or passes it where it is kept — ` +
   "and the key would outlive the `Secret` unwiped; return a value computed from it instead"
 
+/**
+ * What `expose` runs carries a capture: an arrow given to an ordinary
+ * function's parameter, which captured a name of the function it is written
+ * in, and which that function handed on to `expose` or `exposeWith`.
+ */
+const exposeCaptureMessage = (fn: string, intrinsic: string): string =>
+  `\`${fn}\` carries a value an arrow captured from the function it is written in, and what \`${intrinsic}\` ` +
+  "runs captures nothing: a capture it could write through would be a channel out of it that its result type " +
+  "does not name; pass the value as `exposeWith`'s argument instead"
+
 /** What `exposeWith` runs writes the argument it is handed. */
 const writesArgMessage = (fn: string): string =>
   `\`${fn}\` writes the argument \`exposeWith\` hands it, a channel out of \`expose\` its result type does ` +
@@ -2702,6 +2719,9 @@ export const exposeMessages = (
   }
   if (fn.lifted && fn.decl.children.length > 2 && fn.decl.children[2].kind === N_EMPTY) {
     out.push(undeclaredMessage(intrinsic))
+  }
+  if (capturesOf(fn).length > 0) {
+    out.push(exposeCaptureMessage(name, intrinsic))
   }
   const own = facts.get(fn.name)
   if (own === null) {

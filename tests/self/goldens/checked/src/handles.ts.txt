@@ -149,7 +149,7 @@ function rejectHandleArgument(ctx: CheckContext, type: i32, at: Node): boolean -
   sharedWrite: via CheckContext.error
   escaping: type
   calls: CheckContext.error handleOf handleTypeMessage
-  pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
@@ -172,7 +172,7 @@ function HandleClose.constructor(this: HandleClose, info: StructInfo, sig: Funct
   escaping: info sig tested
   pointer this: size=24 writesThrough=true captured=false
   pointer info: size=168 writesThrough=true captured=true
-  pointer sig: size=136 writesThrough=true captured=true
+  pointer sig: size=144 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function isThisField(expr: Node): boolean -> @isThisField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -315,7 +315,7 @@ function HandleWalk.parent(this: HandleWalk, up: i32): Node | null -> @HandleWal
 function HandleWalk.closeOf(this: HandleWalk, sig: FunctionSig): StructInfo | null -> @HandleWalk.closeOf [method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=72 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 close: HandleClose (const)
 function climbParens(walk: HandleWalk): i32 -> @climbParens

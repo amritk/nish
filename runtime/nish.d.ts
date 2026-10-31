@@ -334,6 +334,13 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  */
 declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
 /**
+ * `spawn` with the child holding `fds[i]` as descriptor `3 + i`, inherited
+ * across the exec; every other descriptor stays close-on-exec. The child's pid,
+ * or a negative errno: -22 more than 64 descriptors or a negative one, -9 one
+ * that is not open. No reading under Node, which throws.
+ */
+declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
+/**
  * Start `argv[0]` through `PATH` without waiting: the child's pid, or a
  * negative errno. The child is the program's until `waitPid` reaps it. No
  * reading under Node, which throws.
@@ -497,6 +504,26 @@ declare function unixAccept(fd: i32): i32;
  * or an `fds` shorter than 2.
  */
 declare function unixSocketPair(kind: i32, fds: i32[]): i32;
+/**
+ * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
+ * descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a
+ * zero `len`, -88 a `sock` that is not a socket, -95 one that is not Unix.
+ */
+declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+/**
+ * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and
+ * the first descriptor that came with them into `fd[0]`, or -1: the bytes read,
+ * or a negative errno. Every other descriptor in the message is closed; the
+ * one kept is close-on-exec and keeps the sender's blocking mode. -22 a zero
+ * `len` or an empty `fd`, -88 not a socket, -95 not Unix.
+ */
+declare function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
+/**
+ * The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid
+ * and gid, and the answer is 0; the pid is -1 where Darwin has no
+ * `LOCAL_PEERPID`. -22 an `out` shorter than 3, -88 not a socket, -95 not Unix.
+ */
+declare function peerCredentials(fd: i32, out: i32[]): i32;
 /** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
 declare const NET_UNIX_UNLINK_STALE: i32;
 /** `unixSocketPair` kind: a byte stream. */
@@ -609,6 +636,11 @@ declare module "nish:process" {
   export function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
   /** Start a child without waiting: its pid, or a negative errno. */
   export function spawn(argv: string[]): i32;
+  /**
+   * `spawn` with the child holding `fds[i]` as descriptor `3 + i`: its pid, or
+   * a negative errno; -22 more than 64 descriptors or a negative one.
+   */
+  export function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
   /** Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22. */
   export function kill(pid: i32, sig: i32): i32;
   /** `[pid, status]` for a child that exited, `[0, 0]` under WNOHANG (flag 1) with none, or `[-errno, 0]`. */
@@ -733,6 +765,26 @@ declare module "nish:net" {
    * or an `fds` shorter than 2.
    */
   export function unixSocketPair(kind: i32, fds: i32[]): i32;
+  /**
+   * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
+   * descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a
+   * zero `len`, -88 a `sock` that is not a socket, -95 one that is not Unix.
+   */
+  export function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+  /**
+   * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and
+   * the first descriptor that came with them into `fd[0]`, or -1: the bytes read,
+   * or a negative errno. Every other descriptor in the message is closed; the
+   * one kept is close-on-exec and keeps the sender's blocking mode. -22 a zero
+   * `len` or an empty `fd`, -88 not a socket, -95 not Unix.
+   */
+  export function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
+  /**
+   * The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid
+   * and gid, and the answer is 0; the pid is -1 where Darwin has no
+   * `LOCAL_PEERPID`. -22 an `out` shorter than 3, -88 not a socket, -95 not Unix.
+   */
+  export function peerCredentials(fd: i32, out: i32[]): i32;
   /** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
   export const NET_UNIX_UNLINK_STALE: i32;
   /** `unixSocketPair` kind: a byte stream. */
