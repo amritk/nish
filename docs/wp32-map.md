@@ -260,14 +260,19 @@ three words would make the 64-bit hash provable at the cost of one more load.
 Floats and class instances stay on unkeyed `fmix64`: a float key is rarely
 attacker-chosen, and an address is not chosen by the program's input at all.
 
-The integer hashes cost what `fmix32` did (`bench/map-keys`, 15 rounds against
-0.28.0, noise band ±6%): `get`, `set` and `has` on `i32` keys 0.999×, on `i64`
-keys 0.924×, on a 16-member enum 1.064×. An unkeyed Fx-style multiply
-(rustc's `FxHasher`) measured 0.80×, 0.79× and 0.57× in the same run, and
-most of that is not the cheaper instruction but the structure: it spreads an
-arithmetic sequence of keys over distinct buckets with no collisions, which is
-exactly the predictability a flooding attack exploits, so a keyed hash cannot
-have it.
+The integer hashes cost what `fmix32` did (`bench/map-keys`, 9 rounds against
+0.28.0; a byte-identical copy of one binary, the noise band, lands 0.86 to
+1.09 of it): `insert`, `hit` and `miss` on `i32`, packed-`i64` and enum keys,
+at L1, L2 and past-L3 table sizes, are 0.83 to 1.09 of 0.28.0, and the string
+rows did not move. Rust's `FxHashMap` is 2 to 7 times faster on most integer
+rows. Most of that gap is the table: this layout keeps insertion order, so a
+hit reads a bucket, the entry's stored hash, its key and its value from four
+arrays through a probe call, where SwissTable reads one slot. An Fx-style
+multiply in place of the keyed hash took about 20% off. And the unkeyed
+multiply has a cliff of its own: its low bits depend only on the key's low
+bits, so packed `i64` keys sharing 1,024 low words fill 1,024 buckets, and Fx
+ran 35 to 130 times slower than Nish past L3. The table is in
+[bench/map-keys/README.md](../bench/map-keys/README.md#result).
 
 **The integer key is not the string key.** Multiply-add-shift is linear in its
 key: an attacker who can time probes of an integer-keyed table learns which of
