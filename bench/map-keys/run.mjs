@@ -1,19 +1,23 @@
 #!/usr/bin/env node
-// Map lookups by integer and enum key, one binary per compiler.
+// Map operations by integer, enum and string key, one binary per compiler.
 //
-//   node bench/map-keys/run.mjs [--rounds N] [--passes N] [--compiler label=path]...
+//   node bench/map-keys/run.mjs [--rounds N] [--scale N] [--rustc path] [--compiler label=path]...
 //
 // Builds bench/map-keys/main.ts with each `--compiler` (default: `head` =
 // build/nish and `0.28.0` = build/rel028/bin/nish, which `scripts/fetch-seed.sh
 // 0.28.0` and a copy of build/seed give) at `--profile speed`, and links a
 // byte-identical copy of the first one's binary as `<label>-copy`: the
 // baseline timed against itself in the same interleaved rounds is the noise
-// band. It runs the binaries in turn, rotating which goes first, `--rounds`
-// times (default 15), each run `--passes` passes per row (default 20), and
-// reports each row's median ns per operation and its ratio to the first
-// compiler. A checksum that differs between binaries fails the run.
+// band. It builds fx.rs with `--rustc` (default: `rustc`, then
+// ~/.cargo/bin/rustc) as `rust-fx`, Rust's `HashMap` under `FxHasher`, and
+// leaves that column out when there is no rustc. It runs the binaries in turn,
+// rotating which goes first, `--rounds` times (default 9), each run 2^23 times
+// `--scale` operations per row (default 1), and reports each row's median ns
+// per operation and its ratio to the first compiler; `-` is a row a binary
+// does not have. A checksum that differs between binaries fails the run.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -24,8 +28,8 @@ const flag = (name, fallback) => {
   const i = process.argv.indexOf(name)
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : fallback
 }
-const rounds = Number(flag("--rounds", "15"))
-const passes = flag("--passes", "20")
+const rounds = Number(flag("--rounds", "9"))
+const scale = flag("--scale", "1")
 const given = process.argv.flatMap((a, i) => (a === "--compiler" ? [process.argv[i + 1]] : []))
 const compilers = (
   given.length > 0
@@ -62,6 +66,26 @@ const copy = path.join(out, `${binaries[0].label}-copy`)
 fs.copyFileSync(binaries[0].exe, copy)
 fs.chmodSync(copy, 0o755)
 binaries.splice(1, 0, { label: `${binaries[0].label}-copy`, exe: copy })
+const rustc = [flag("--rustc", "rustc"), path.join(os.homedir(), ".cargo", "bin", "rustc")].find(
+  (cmd) => spawnSync(cmd, ["--version"]).status === 0
+)
+if (rustc) {
+  const exe = path.join(out, "rust-fx")
+  run(rustc, [
+    "-C",
+    "opt-level=3",
+    "-C",
+    "codegen-units=1",
+    "-C",
+    "panic=abort",
+    path.join(here, "fx.rs"),
+    "-o",
+    exe,
+  ])
+  binaries.push({ label: "rust-fx", exe })
+} else {
+  process.stderr.write("bench/map-keys: no rustc, so no rust-fx column\n")
+}
 
 // label -> row -> ns per op, one per round
 const times = new Map(binaries.map((b) => [b.label, new Map()]))
@@ -69,7 +93,7 @@ const sums = new Map()
 for (let r = 0; r < rounds; r++) {
   for (let k = 0; k < binaries.length; k++) {
     const { label, exe } = binaries[(r + k) % binaries.length]
-    for (const line of run(exe, [passes]).trim().split("\n")) {
+    for (const line of run(exe, [scale]).trim().split("\n")) {
       const [row, ns, ops, sum] = line.split(" ")
       if (sums.has(row) && sums.get(row) !== sum) {
         process.stderr.write(`bench/map-keys: ${label} ${row} checksum ${sum}, expected ${sums.get(row)}\n`)
@@ -86,12 +110,15 @@ const median = (xs) => {
   return s[Math.floor(s.length / 2)]
 }
 const rows = [...times.get(binaries[0].label).keys()]
-console.log(`${rounds} rounds of ${passes} passes; median ns per operation (ratio to ${binaries[0].label})\n`)
-console.log(`| key | ${binaries.map((b) => b.label).join(" | ")} |`)
+console.log(`${rounds} rounds at scale ${scale}; median ns per operation (ratio to ${binaries[0].label})\n`)
+console.log(`| row | ${binaries.map((b) => b.label).join(" | ")} |`)
 console.log(`| --- |${binaries.map(() => " --- |").join("")}`)
 for (const row of rows) {
   const base = median(times.get(binaries[0].label).get(row))
   const cells = binaries.map((b) => {
+    if (!times.get(b.label).has(row)) {
+      return "-"
+    }
     const m = median(times.get(b.label).get(row))
     return `${m.toFixed(2)} (${(m / base).toFixed(3)})`
   })
