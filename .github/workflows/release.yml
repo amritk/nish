@@ -875,6 +875,8 @@ jobs:
     name: regenerate package-lock.json
     needs: [targets, npm]
     runs-on: ubuntu-latest
+    # The registry wait below is bounded at half an hour; this bounds the rest.
+    timeout-minutes: 45
     permissions:
       contents: write # push the release/lockfile-v<version> branch
       pull-requests: write # open the pull request from it and merge it
@@ -909,9 +911,13 @@ jobs:
       #
       # The `npm` job finishing is not the registry serving: a version can
       # take a while to appear in the metadata an install reads. So each name is
-      # asked for with a bounded wait (30 tries, 10 seconds apart), and a
-      # version still missing after that fails the job rather than writing a
-      # lockfile that leaves it out. "Re-run failed jobs" retries this alone.
+      # asked for with a bounded wait (180 tries, 10 seconds apart: half an
+      # hour), and a version still missing after that fails the job rather
+      # than writing a lockfile that leaves it out. "Re-run failed jobs"
+      # retries this alone. The wait was five minutes until 0.28.0, whose
+      # x86_64-linux package took longer than that to appear: the job failed,
+      # no lockfile pull request opened, and main stayed red until a human
+      # re-ran it. Waiting here is that re-run without the human.
       - name: The registry serves every package of this release
         if: steps.main.outputs.current == 'true'
         env:
@@ -927,13 +933,13 @@ jobs:
           echo "$name" >> "$RUNNER_TEMP/packages.txt"
           while IFS= read -r pkg; do
             seen=""
-            for _ in $(seq 1 30); do
+            for _ in $(seq 1 180); do
               seen="$(npm view "$pkg@$version" version --prefer-online 2>/dev/null || true)"
               [ "$seen" = "$version" ] && break
               sleep 10
             done
             if [ "$seen" != "$version" ]; then
-              echo "::error::the registry does not serve $pkg@$version after 5 minutes; re-run this job once it does"
+              echo "::error::the registry does not serve $pkg@$version after 30 minutes; re-run this job once it does"
               exit 1
             fi
             echo "$pkg@$version is on the registry"
