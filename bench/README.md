@@ -2146,6 +2146,10 @@ Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
 
 ## Other files
 
+- `wp47-refs/`: one AST-shaped tree in five layouts, pointer graphs against
+  records in arrays addressed by `i32` (`node bench/wp47-refs/run.mjs`), the
+  measurements behind
+  [docs/wp47-compressed-references.md](../docs/wp47-compressed-references.md).
 - `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
   accuracy figures ("Math accuracy" above).
 - `pg-batch-clock.ts`: when to start a PostgreSQL batch, adaptive against
