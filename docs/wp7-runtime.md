@@ -7,7 +7,7 @@ strings, and the `wasi` build profile. Later work superseded several parts:
 
 - signed overflow, `i64` included, is a checked panic by default (#426);
 - the shortest-digits search was replaced by a port of Ryu;
-- the runtime grew from one translation unit to eleven, each with its own
+- the runtime grew from one translation unit to fourteen, each with its own
   measured budget (below).
 
 The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",
@@ -190,6 +190,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 | `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore, and the restore bytes | 2,048 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,825 (2026-10-24) |
 | `runtime/runtime-sandbox.c` | `--sandbox`: the capability drop, the Landlock ruleset and the seccomp filter `nish_sandbox` applies from `.preinit_array`, and `nish_sandbox_check`, with the `fs.read=<dir>` / `fs.write=<dir>` scope rules ([wp37](wp37-os-sandbox.md) stages 1 and 2, [security/sandbox.md](security/sandbox.md)) | 2,560 (`RUNTIME_SANDBOX_TEXT_BUDGET`) | 2,545 (2026-10-30) |
+| `runtime/runtime-shm.c` | `nish/sync/shm` and `nish/sync/ring`: the region handle table, a named region's create, open, unlink and close, the 32- and 64-bit slot atomics with their bounds, alignment and ordering checks, the byte copies and the futex wait and wake ([wp47](wp47-shared-memory.md), [security/shm.md](security/shm.md)) | 2,816 (`RUNTIME_SHM_TEXT_BUDGET`) | 2,539, 2,576 threaded (2026-10-30) |
 
 **How the ceilings moved.**
 
@@ -235,6 +236,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-29 | `wallClockNanos`: `runtime-os.c` 2,822 → 2,828 (2,380 → 2,386 alone), the two clocks sharing `nish_clock_nanos` | os 3,072 |
 | 2026-10-29 | `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (#992): `runtime-os.c` 2,828 → 3,174, `nish_put_file_mode` 253, its two callers 12 each, `nish_mkdir_mode` 72 | os 3,328 |
 | 2026-10-29 | `spawnPiped`: `runtime-os.c` 3,174 → 4,450. `nish_spawn_piped` 1,082 (the poll loop that writes stdin while it drains both outputs, the 16 MiB cap and its kill, SIGPIPE blocked on the calling thread), `nish_pipe` 109 (`pipe2` with `O_CLOEXEC`, both ends moved off 0–2), and `nish_spawn_start` 284 → 365 for the three `dup2` actions and the check that each was recorded; the rest is the shared helpers' growth | os 4,608 |
+| 2026-10-30 | `runtime-shm.c` (2,539; 2,576 with `-DNISH_THREADS=1`, where the handle table is thread-local), wp47; its own unit so a program that imports neither `nish/sync/shm` nor `nish/sync/ring` links none of it | shm 2,816 |
 | 2026-10-30 | `runtime-checksum.c` (718), wp38 CRC: the PCLMULQDQ folding kernel 514, its byte tail 58, the resolver 121 and the entry point 25 | checksum 768 |
 | 2026-10-30 | the `fs.read=<dir>` / `fs.write=<dir>` scopes, wp37 stage 2: `runtime-sandbox.c` 2,264 → 2,545. One Landlock rule per scope directory (`nish_sb_rule`, `nish_sb_scope`), the strict refusal and the best-effort line for a directory gone since the build, and the root rule granting only what is granted whole. Raised to the next 256-byte boundary above the measurement: the rules are built inside the ruleset this file already makes | sandbox 2,560 |
 | 2026-10-31 | `scopeWithStack`, a stack size for a scope's tasks (#1098): `runtime-parallel.c` threaded 2,558 → 2,881. Each task of a scope with a stack runs on a thread of its own made with it, rounded to the page with a guard page below (`nish_jobs_run_sized` 256), and `nish_stack_fail` 51 ends the program when one cannot be started. Both are out of line and cold, so `nish_scope_join` grows 117 → 133 (the load of the stack and a predicted branch; inlined, the sized path made it 328). Reusing the unpooled path's `nish_job_thread` rather than a queue shared by a CPU-count of sized threads saved 285 | parallel threads 2,896 |

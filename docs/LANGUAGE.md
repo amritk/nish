@@ -1139,8 +1139,11 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
-`try`, a labelled statement, destructuring and an arrow that captures a
-local are refused by Nish on their own, so no loop that compiles holds them.
+`try`, destructuring and an arrow that captures a local are refused by Nish
+on their own, so no loop that compiles holds them. A loop that holds a
+labelled statement or a labelled `break` or `continue` anywhere in its body,
+or whose `switch` has a clause that falls into the next, is one the pass
+gives up on: it keeps the checker's widened state.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
@@ -4681,6 +4684,85 @@ cases):
 | NL2500, the same in a `parallelMap` | the same | the same |
 | NL2484, an arrow that uses a `Channel` | the arrow moves to a `const` above the top-level statement it is written in, named for the function and `Task` (`mainTask`), and the call names it | an arrow that captures, or leaves a parameter's or its result's type out, which would not check at the top level |
 
+### Shared memory between processes: `nish/sync/shm` and `nish/sync/ring`
+
+Threads share an address space; processes share nothing unless they map the
+same memory. `nish/sync/shm` maps a **named region** that every process of
+the same user can open, and `nish/sync/ring` builds lock-free queues of byte
+records in one, so prefork workers can hand work to an owner process without a
+socket:
+
+```typescript
+import { ACQ_REL, ACQUIRE, createRegion, unlinkRegion } from "nish/sync/shm";
+import { initSpscRing, spscRingBytes } from "nish/sync/ring";
+
+export const main = (): i32 => {
+  const region = createRegion("lang-demo", 64 + spscRingBytes(4096)).expect("create");
+  region.addI64(0, toI64(1), ACQ_REL); // a counter every process may bump
+  const ring = initSpscRing(region, 64, 4096, true); // a ring after it
+  const job: u8[] = [1, 2, 3];
+  ring.tryPush(job, 0, job.length); // false when full
+  const got: u8[] = new Array<u8>(16);
+  const n: i32 = ring.tryPop(got, 0); // 3, or RING_EMPTY
+  console.log(`${region.loadI64(0, ACQUIRE)} ${n}`);
+  unlinkRegion("lang-demo").expect("unlink");
+  return 0;
+};
+```
+
+- **A region is named, never inherited.** A Nish program has no `fork`, and
+  every descriptor is close-on-exec, so an anonymous mapping or a `memfd`
+  cannot reach a child; a name can. `createRegion(name, bytes)` makes one,
+  zeroed, mode 0600, and refuses a name that exists (`SHM_EXISTS`), so a name
+  another user planted is never adopted. `openRegion(name)` maps one this
+  user made, and refuses one owned by someone else, open to group or others,
+  reached through a symbolic link, or (on Linux) not a regular file or with a
+  second hard link (`SHM_ACCESS`). A name is 1 to 30 of `A-Z a-z 0-9 . _ -`,
+  not starting with `.`; a size is 1 byte to 1 GiB. Errors are a `Result`
+  with the errno (`SHM_NOT_FOUND`, `SHM_INVALID`, `SHM_TOO_MANY`, ...).
+- **Lifetime.** The name lasts until `unlinkRegion`, even past every process
+  that mapped it, which is how a process started later finds it. A mapping
+  lasts until `close()` or the process's exit, when the kernel unmaps it. A
+  thread may hold 63 regions at once.
+- **Every access is checked, as an array index is.** `loadI32`, `storeI32`,
+  `addI32`, `exchangeI32`, `compareExchangeI32` and their `I64` twins take an
+  `i32` byte offset; a slot must lie wholly inside the region and at a multiple
+  of its width, or the access panics naming the offset (`nish/sync/shm: slot
+  offset 4 is not a multiple of 8, the slot's width`). `read` and `write` copy
+  a byte window, checked against both the region and the buffer. No offset
+  reaches outside the mapping, whatever a peer wrote into it.
+- **Orderings are C11's**: `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL`,
+  `SEQ_CST`, plus `fence(order)`. Each access is one LLVM `load atomic`,
+  `store atomic`, `atomicrmw` or `cmpxchg` with that ordering; an ordering an
+  access cannot take (a load with `RELEASE`) panics. A compare-exchange
+  answers the value it found, so it succeeded when that equals `expected`.
+- **Waking.** `waitI32(at, expected, timeoutMs)` sleeps while the slot holds
+  `expected` and `wake(at, count)` wakes sleepers, in any process: Linux's
+  shared futex. Darwin and wasi answer `SHM_UNSUPPORTED` (-95) from both, and
+  a program there polls.
+- **Rings.** `SpscRing` (one producer, one consumer, records of any length
+  up to its capacity) and `MpscRing` (any number of producers, fixed slots)
+  live at a 64-byte-aligned `base` in a region: `initSpscRing` /
+  `initMpscRing` write the header once, `attachSpscRing` / `attachMpscRing`
+  read it in another process. `tryPush` answers `false` when full; `tryPop`
+  answers the record's length, `RING_EMPTY` or `RING_TOO_SMALL`; `popBatch`
+  takes every record ready. A ring made with the doorbell lets `popWait`
+  sleep, and a push rings it only when the consumer is asleep, so a busy ring
+  makes no system call. Two consumers, or two producers on an `SpscRing`, lose
+  or repeat records but never leave the region; a length no record can have
+  panics as `the ring is corrupt`.
+- **What a program reaches.** The modules call C, so a program that imports
+  them reaches [`ffi`](#capabilities) (and `clock`, for `popWait`'s deadline)
+  and `--deny ffi` refuses it; under `--sandbox` a region, being a file in
+  `/dev/shm`, needs `fs.read` and `fs.write` as well. They are native only:
+  `--emit-ts` refuses them, since Node's `SharedArrayBuffer` is shared between
+  threads of one process, not between processes. A region belongs to the
+  thread that mapped it. A program that imports neither module is unchanged.
+  Tested by `tests/link/sync_shm`, `tests/link/sync_ring` and
+  `tests/link/sync_shm_deny_ffi`; the design, its measurements and the threads
+  it was weighed against are `docs/wp47-shared-memory.md`, and the threat model
+  is [`docs/security/shm.md`](security/shm.md).
+
 ### Random numbers: `Rng` in `nish/random`
 
 `new Rng(seed)` is a generator of pseudo-random numbers whose every answer
@@ -5673,13 +5755,15 @@ switch (node.kind) {
   `tests/cases/reject_switch_duplicate_case`), and there is at most one
   `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
   which may appear anywhere among the clauses.
-- **There is no implicit fallthrough.** A clause with statements ends in
-  `break`, `return`, `continue` or `process.exit`, unless it is the
-  last clause (``A `case` clause with statements must end in `break`,
-  `return`, `continue` or `process.exit` ``,
-  `tests/cases/reject_switch_fallthrough`). An **empty** clause does fall
-  through, which is how `case 1: case 2:` gives several labels one body
-  (`tests/cases/cf_switch`).
+- **A clause falls through, as in TypeScript.** A clause whose statements do
+  not end in `break`, `return`, `continue` or `process.exit` runs on into the
+  next clause's statements; the IR branches into the next clause's block, with
+  no flag (`tests/cases/cf_switch_fallthrough`, `cf_label_walks`). An **empty**
+  clause falls through the same way, which is how `case 1: case 2:` gives
+  several labels one body (`tests/cases/cf_switch`). A clause reached by
+  falling into it is reached with either label's value: a tag test does not
+  narrow there (`reject_switch_fall_narrow`), and a local the clauses above it
+  assigned holds its declared type.
 - A clause cannot declare a variable directly; wrap its body in a block
   (``A `case` clause cannot declare a variable directly ``,
   `tests/cases/reject_switch_case_declaration`). Clauses share one scope in
@@ -5687,7 +5771,8 @@ switch (node.kind) {
   ones below it.
 - `break` inside a `switch` leaves the switch, not an enclosing loop;
   `continue` looks past the switch to the loop
-  (`tests/cases/cf_switch_break`).
+  (`tests/cases/cf_switch_break`). A labelled `break` or `continue` names
+  the loop instead (see below, `cf_label_switch`).
 - A `switch` terminates (see Termination) when no `break` targets it, its
   last clause terminates, and it has a `default` or is a complete `switch` on a
   union's tag, whose labels name every variant
@@ -5697,10 +5782,28 @@ switch (node.kind) {
 
 ### `break` / `continue`
 
-Unlabelled only: labeled statements are forbidden outright
-(`tests/cases/reject_labeled_statement`), and a `break` or `continue` that names
-one is part of that one refusal. A label nothing declares is a syntax error, as
-it is in TypeScript. `break` needs an
+A label goes on a loop, a block or a `switch` (`outer: for (...)`,
+`check: { ... }`, `sw: switch (...)`); on any other statement it is refused
+(`` Labeled statements are forbidden in Nish except on a loop, a block or a
+`switch` ``, `tests/cases/reject_label_if`). `break label` leaves the statement
+the label names, from any depth inside it; `continue label` starts the next turn
+of the loop it names. Each lowers to the branch a hand-kept `done` flag would
+take — to that statement's exit block or its loop's step block — with no flag
+(`tests/cases/cf_label_loops`, `cf_label_block`, `cf_label_switch`,
+`cf_label_walks`). Leaving a scoped pass or a `Map` walk this way releases it
+as an unlabelled exit would, and a `Secret` local a labelled exit skips past
+must be wiped first (`reject_label_secret_break`, `reject_label_secret_block`).
+
+- A label is not reused inside the statement it names (``Duplicate label
+  'outer'``, `reject_label_duplicate`).
+- `continue label` names a loop (`` A `continue` can only jump to a label of
+  an enclosing loop ``, `reject_label_continue_block`), and `break label` a
+  statement around it (`` A `break` can only jump to a label of an enclosing
+  statement ``, `reject_label_unknown`).
+- A jump does not leave an arrow for a label outside it (``Jump target cannot
+  cross function boundary``, `reject_label_crosses_arrow`).
+
+Unlabelled, `break` needs an
 enclosing loop or `switch` (`` `break` outside of a loop or `switch` ``,
 `tests/cases/reject_cf_break_outside`) and `continue` an enclosing loop
 (`` `continue` outside of a loop ``, `reject_cf_continue_outside`), which it
@@ -5735,8 +5838,11 @@ A statement *terminates* when control cannot fall out of it: `return`,
 `break`, `continue`, `process.exit(...)`, `panic(...)`; an `if` whose branches
 both terminate; a `switch` with a `default` or one complete on a union's tag,
 no `break` aimed at it and a terminating last clause; a loop with no condition or the condition `true` and
-no `break` aimed at it. Any other loop may run zero times and does not
-terminate. Rules (`src/statements.ts`, `checker.ts`):
+no `break` aimed at it; a labelled block whose statements terminate and no
+`break` names. A `break` aimed at a statement is an unlabelled one directly
+inside it or a labelled one that names it from any depth, so a `break outer`
+in an inner loop makes `outer: while (true)` one that may finish. Any other
+loop may run zero times and does not terminate. Rules (`src/statements.ts`, `checker.ts`):
 
 - A non-`void` function's body must terminate
   (`must return a value of type i32 on every path`,
@@ -5752,7 +5858,8 @@ terminate. Rules (`src/statements.ts`, `checker.ts`):
 ### Rejected statements
 
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
-`debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
+`debugger` (`reject_debugger`), a label on a statement other than a loop, a
+block or a `switch` (`reject_label_if`),
 `var` (`reject_var_keyword`), `for...in` (`` `for...in` is forbidden in Nish
 (it enumerates property names, and object layout is fixed at compile time); use
 `for...of` ``, NL1056, `reject_for_in`), nested `function`, `enum`, `type`,
@@ -7621,7 +7728,7 @@ exported by `nish:process` as well as being a global.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `spawn(argv: string[]): i32` | start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does — the same vector, environment, streams and working directory — and answer the child's **pid** at once, **without waiting**. A failure is a **negative errno**: -22 (EINVAL) for an empty vector or an argument holding a NUL, and `posix_spawnp`'s own error otherwise, so a program that is not there is -2 (ENOENT). **Test `pid > 0` before handing the answer on**: a failure such as -1 (EPERM) passed to `waitPid` reads as "any child". The child is this process's until `waitPid` reaps it; one never reaped stays a zombie until the program exits, as it would in C | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
-| `spawnWithFds(argv: string[], fds: readonly i32[]): i32` | `spawn`, with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec cleared there, and its pid or a negative errno back. Its streams 0 to 2 are this process's, and **no other descriptor** of this process reaches it but one opened without close-on-exec, which nothing the runtime opens is. Any order works: `fds` may list a descriptor that is already its own target (`[3]`), another entry's target (`[4, 3]`), or the same one twice. More than **64** descriptors, or a negative one, is `-22` before anything is opened or started; one that is not open is `-9`; an empty `fds` is `spawn` exactly. The child shares each descriptor's open file, its offset and its status flags, `O_NONBLOCK` among them, and this process keeps its own. Reap the pid with `waitPid` | write | `spawn_fds_child`, `caps_process_spawn_fds`; `reject_spawn_fds_arity`, `reject_spawn_fds_element`, `reject_spawn_fds_argv`, `reject_spawn_fds_wasm` |
+| `spawnWithFds(argv: string[], fds: readonly i32[]): i32` | `spawn`, with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec cleared there, and its pid or a negative errno back. Its streams 0 to 2 are this process's, and **no other descriptor** of this process reaches it but one opened without close-on-exec, which nothing the runtime opens is. Any order works: `fds` may list a descriptor that is already its own target (`[3]`), another entry's target (`[4, 3]`), or the same one twice. More than **64** descriptors, or a negative one, is `-22` before anything is opened or started; one that is not open is `-9`; a scratch descriptor the system cannot give is `-24`, or `-22` above the descriptor limit; an empty `fds` is `spawn` exactly. The child shares each descriptor's open file, its offset and its status flags, `O_NONBLOCK` among them, and this process keeps its own. Reap the pid with `waitPid` | write | `spawn_fds_child`, `caps_process_spawn_fds`; `reject_spawn_fds_arity`, `reject_spawn_fds_element`, `reject_spawn_fds_argv`, `reject_spawn_fds_wasm` |
 | `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, so a number means the same signal on every host. A `pid` of 0 or below is -22 too, because `kill(2)` reads those as a process group or every process, which is not one process. -3 (ESRCH) when no process has the pid — a child already reaped included — and -1 (EPERM) when it is another user's. A positive pid may be any process of this user, not only a child ([RT-19](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
 | `waitPid(pid: i32, flags: i32): i32[]` | reap a child and answer a fresh two-element **`[pid, status]`**. `pid` is a child's, or **-1 for any child**; flag **1 is WNOHANG**. The status is `spawnSync`'s: the exit code, or **128 + n** when signal `n` ended it. `[0, 0]` is a WNOHANG wait with a child left and none exited. A failure puts the negative errno first: `[-10, 0]` (ECHILD) when there is no child to wait for, `[-4, 0]` (EINTR) when a signal interrupted the wait — though after `signalFd()` a blocking wait never sees it, because that handler is installed with `SA_RESTART` and the wait restarts, and `[-22, 0]` for any other flag bit or a pid that is neither -1 nor positive. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
 | `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number — which can lower the count and never raise it. It needs no `--threads`: a program asks it to decide how many workers to start | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
@@ -7733,9 +7840,9 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`: the descriptor, `-111` when nothing listens there, `-2` when there is no such file, `-11` on Linux and `-111` on Darwin when the listener's backlog is full (the socket is closed; try again later), and the path refusals `unixListen` has | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
 | `unixAccept(fd: i32): i32` | the next waiting connection, non-blocking and close-on-exec; `-11` when none is waiting. No peer address is written: a Unix client is seldom bound | write | `net_unix_calls` |
 | `unixSocketPair(kind: i32, fds: i32[]): i32` | two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec, and `0`. Kind `1` (`NET_UNIX_STREAM`) is a byte stream, kind `2` (`NET_UNIX_SEQPACKET`) keeps each write one message; any other kind, or an `fds` shorter than 2, is `-22` before a socket exists. Kind `2` is **`-95` on Darwin** | write | `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`, `reject_net_unix_pair_readonly` |
-| `sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | `len` bytes of `buf[off, off + len)` over the Unix socket `sock`, with one copy of the descriptor `fd` riding on them (`SCM_RIGHTS`): the bytes sent, or the failure. A descriptor travels with data, so a `len` of `0` is **`-22`**, and so is a negative `fd`; an `fd` that is not open is `-9`. `fd` stays open here, and the receiver gets its own. A `sock` that is not a socket is `-88`, a socket of another family **`-95`**, and a gone peer `-32`, never SIGPIPE. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`, `reject_net_unix_scm_wasm` |
-| `recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, `-11` when nothing is waiting, or the failure. `fd[0]` is the first descriptor the message carried, or **`-1`** when it carried none; every further one is closed before the answer, and room is made for 8, so the kernel drops the rest of a message that carries more and the bytes are still answered. The descriptor kept is close-on-exec and **not** made non-blocking: its status flags are the open file's, which the sender shares. A `len` of `0` or an empty `fd` is `-22` before anything is read; `sock` is refused as `sendFd`'s is. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly` |
-| `peerCredentials(fd: i32, out: i32[]): i32` | the process at the other end of the connected Unix socket `fd`, as `out[0]`, `out[1]`, `out[2]` = pid, uid, gid, and `0`. They are what the kernel recorded **when the connection was made** (the `connect`, or the `socketpair`), not who holds the other end now. An `out` shorter than 3 is `-22` before anything is asked, and `fd` is refused as `sendFd`'s `sock` is. On Darwin the pid is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it | write | `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`, `reject_net_unix_peer_readonly` |
+| `sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | `len` bytes of `buf[off, off + len)` over the Unix socket `sock`, with one copy of the descriptor `fd` riding on them (`SCM_RIGHTS`): the bytes sent, or the failure. A descriptor travels with data, so a `len` of `0` is **`-22`**, and so is a negative `fd`; an `fd` that is not open is `-9`. `fd` stays open here, and the receiver gets its own. On a stream socket the count can be short of `len`: the descriptor has travelled with the first bytes, so send the rest with `netWrite`, not `sendFd`, or the receiver gets a second copy. A closed `sock` is `-9`, one that is not a socket `-88`, a socket of another family **`-95`**, and a gone peer `-32`, never SIGPIPE. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`, `reject_net_unix_scm_wasm` |
+| `recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, `-11` when nothing is waiting, or the failure. `fd[0]` is the first descriptor the message carried, or **`-1`** when it carried none; every further one is closed before the answer, and room is made for 8, so the kernel drops the rest of a message that carries more and the bytes are still answered. The descriptor kept is close-on-exec and **not** made non-blocking: its status flags are the open file's, which the sender shares. A `len` of `0` or an empty `fd` is `-22` before anything is read; `sock` is refused as `sendFd`'s is. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly`, `reject_net_unix_scm_wasm` |
+| `peerCredentials(fd: i32, out: i32[]): i32` | the process at the other end of the connected Unix socket `fd`, as `out[0]`, `out[1]`, `out[2]` = pid, uid, gid, and `0`. They are what the kernel recorded **when the connection was made** (the `connect`, or the `socketpair`), not who holds the other end now. A uid or gid of 2³¹ or above wraps into the `i32` (`-2` is uid 4294967294). A socket with no peer, a listener or one never connected, is **`-107`** on every platform; a peer that has since closed keeps its connect-time answer. An `out` shorter than 3 is `-22` before anything is asked, and `fd` is refused as `sendFd`'s `sock` is. On Darwin the pid is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it | write | `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`, `reject_net_unix_peer_readonly`, `reject_net_unix_peer_element`, `reject_net_unix_scm_wasm` |
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -8090,7 +8197,8 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   `reject_net_poll_element`), and so is `unixSocketPair`'s `fds`
   (`` `unixSocketPair` fills an `i32[]`, got u8[] ``,
   `reject_net_unix_pair_element`), and so are `recvFd`'s `fd` and
-  `peerCredentials`'s `out` (`reject_net_unix_scm_element`). A path is a `string`, and anything else is
+  `peerCredentials`'s `out` (`reject_net_unix_scm_element`,
+  `reject_net_unix_peer_element`). A path is a `string`, and anything else is
   refused (`reject_net_unix_path_type`). A descriptor, an offset, a length, a port, a
   backlog, `how`, the flags, a segment size, the ECN bits, a loop, the events,
   a token, a timeout, a socket option and its value, a pair kind and a mode are `i32` in both number modes, and an
@@ -8857,6 +8965,25 @@ export const main = (): i32 => {
   failed ``. On wasm32 the key comes from WASI's `random_get`, and a reactor
   module is keyed only once its host calls `_initialize`
   (docs/security/json.md, JSON-13).
+- **An integer, `boolean` or enum key is hashed under a per-process random
+  key too**, drawn the same way: a key of 32 bits or fewer by
+  multiply-add-shift, `(a * x + b) >> 32`, and an `i64` or `u64` key by a
+  folded 128-bit multiply. 8192 `i32` keys built to collide under 0.28's
+  unkeyed `fmix32` run within 8 times of as many ordinary keys, where 0.28
+  ran them about 215 times slower (`tests/cases/map_key_int_collide`). The
+  `i64` hash is keyed but not provably universal, and before `_initialize` a
+  wasm32 reactor hashes every key of 32 bits or fewer to one bucket
+  (docs/security/json.md, JSON-15). **A float key and a class instance key
+  are not keyed**: a float hashes its canonical bits with `fmix64` and an
+  instance its address, so a program keying a table by floats a peer chose
+  converts them to a string or a scaled integer first (JSON-16).
+- **A pair of `i32`s is one `i64` key**, packed exactly for every pair:
+  `(toI64(hi) << toI64(32)) | toI64(toU32(lo))`. `toU32` takes `lo`
+  unsigned, so it stays in the low half, so nothing is added and nothing overflows; with `+` in
+  place of `|` the key leaves the `i64` range at `hi = -2^31` with a negative
+  `lo`. Every operand is an `i64` so the same line runs under Node, where an
+  `i64` is a `BigInt` (`tests/cases/map_key_composite`, both extremes
+  included).
 - **Every `set`, `add`, `has` and `delete` is one probe.** A bucket holds eight
   bits of the key's hash beside the entry's index, and each entry keeps its
   full hash, so a probe reads a key only when both match: 10000 lookups of
@@ -11222,7 +11349,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
 | `throw` | `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
 | `debugger` | `` `debugger` is forbidden in Nish (no debugger hook) `` | `reject_debugger` |
-| labeled statements | `` Labeled statements are forbidden in Nish (use structured loops) `` | `reject_labeled_statement` |
+| a label on another statement | `` Labeled statements are forbidden in Nish except on a loop, a block or a `switch` `` | `reject_label_if` |
 | `for...in` | `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` `` | `reject_for_in`, `reject_map_iter_for_in` |
 
 ### Expressions

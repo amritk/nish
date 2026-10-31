@@ -716,6 +716,30 @@ Run 1 put everything together 1.48 µs under main on `list`, outside that run's 
 `readRow` was not changed: it is 2.2 % of `list` out of line, about 1.2 µs a query for 20 rows, and already reads each column's length without a call. Halving it would save less than the run-to-run spread above.
 <!-- postgres-profile:end -->
 
+<!-- unix-ipc:begin -->
+## Unix sockets against loopback TCP
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged; recorded by hand. `node bench/unix-ipc.mjs` times an echo between two processes over loopback TCP (TCP_NODELAY), a Unix stream socketpair and a seqpacket socketpair, and `node bench/postgres/run.mjs --unix` the module's `SELECT 1` and a 100-row read over TCP and over the server's Unix socket; [bench/README.md](../bench/README.md#unix-sockets-against-loopback-tcp) describes both and has the full tables. 2026-10-31, the bench code as of `add5bcf` (the commits after it reformat it and add error handling outside the timed loops; what is measured is unchanged), Intel Xeon @ 2.80 GHz, 4 CPUs, KVM VM, Linux 6.18.44, PostgreSQL 18.6 (pgdg), 12 interleaved rounds after a warm-up. The noise band is the same transport run twice in every round (unix-ipc's run a against run b, postgres's build against its byte-identical copy); a difference counts only outside it and both sides' IQRs.
+
+| | tcp | unix | unix − tcp | noise band | verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| echo 64 B, round trip median | 51.16 µs | 42.59 µs (stream) | −8.56 µs (−16.7 %) | 1.29 µs | outside the noise |
+| echo 64 B, round trip p99 | 110.93 µs | 99.08 µs (stream) | −11.85 µs (−10.7 %) | 2.34 µs | inside TCP's IQR (17.86): noise |
+| echo 64 B, client CPU/trip | 27.25 µs | 21.49 µs (stream) | −5.76 µs (−21.2 %) | 0.76 µs | outside the noise |
+| echo 64 B, peer CPU/trip | 27.12 µs | 20.52 µs (stream) | −6.61 µs (−24.4 %) | 1.22 µs | outside the noise |
+| echo 4 KB, round trip median | 53.07 µs | 47.78 µs (stream) | −5.29 µs (−10.0 %) | 0.93 µs | outside the noise |
+| echo 4 KB, client CPU/trip | 35.54 µs | 31.74 µs (stream) | −3.80 µs (−10.7 %) | 0.95 µs | outside the noise |
+| echo 4 KB, peer CPU/trip | 28.15 µs | 24.01 µs (stream) | −4.14 µs (−14.7 %) | 0.67 µs | outside the noise |
+| `SELECT 1`, wall/query | 66.13 µs | 56.60 µs | −9.53 µs (−14.4 %) | 1.38 µs | outside the noise |
+| `SELECT 1`, client CPU/query | 28.13 µs | 21.95 µs | −6.19 µs (−22.0 %) | 0.40 µs | outside the noise |
+| `SELECT 1`, server CPU/query | 37.39 µs | 30.71 µs | −6.67 µs (−17.9 %) | 1.21 µs | outside the noise |
+| 100 rows, wall/query | 191.59 µs | 173.30 µs | −18.30 µs (−9.5 %) | 1.85 µs | outside the noise, by 2 µs over TCP's IQR (16.27) |
+| 100 rows, client CPU/query | 70.59 µs | 61.00 µs | −9.59 µs (−13.6 %) | 1.52 µs | outside the noise |
+| 100 rows, server CPU/query | 159.13 µs | 141.08 µs | −18.06 µs (−11.3 %) | 0.24 µs | outside the noise |
+
+The echo client's CPU per trip includes making each message and checking the reply byte by byte inside its timed loop, a cost the same on every transport that the peer, echoing only, does not pay: it is why the client's figure is above the peer's at 4 KB and its percentages the smaller; the peer's row is the transport alone. Seqpacket is within the noise of stream in every figure (64 B median 44.61 µs, 4 KB 47.11 µs). The 4 KB p99 is inside the noise for both Unix kinds. A 3-round run on the same box put the bands 1.3 to 8 times wider (64 B median 2.18 µs, 4 KB median 7.43 µs) and found the 4 KB round trip inside the noise; the 12-round figures above are the record.
+<!-- unix-ipc:end -->
+
 <!-- regex:begin -->
 ## Regular expressions
 

@@ -194,6 +194,10 @@ A few rules keep a peer from pushing descriptors on you:
 - **Always some data.** A descriptor rides on at least one byte, so a `len` of
   `0` answers `-22` on both sides. The read is what tells the receiver a
   message came; check `fd[0]` after every one.
+- **The descriptor goes with the first bytes.** On a stream socket `sendFd`
+  can send fewer than `len` bytes, as `netWrite` can. The descriptor has gone
+  already, so send the rest with `netWrite`: calling `sendFd` again sends a
+  second copy.
 - **Close-on-exec, but not non-blocking.** The descriptor kept is
   close-on-exec, so a later `spawn` does not hand it on. It is not made
   non-blocking: whether a read on it waits is the sender's open file's flag.
@@ -235,7 +239,10 @@ export const main = (): i32 => {
 The kernel records the credentials when the connection is made, by the
 `unixConnect` or the `unixSocketPair`. A client that changes its uid
 afterwards, or passes its end to another process, still reads as the process
-that connected. On macOS the uid and gid come from `getpeereid` and the pid
+that connected, and one that has since closed its end still answers what it
+was. A socket with no other end, a listener or one never connected, answers
+`-107`. A uid or gid of 2³¹ or above does not fit an `i32` and wraps: `-2` is
+uid 4294967294. On macOS the uid and gid come from `getpeereid` and the pid
 from `LOCAL_PEERPID`; where that is refused the pid is `-1`.
 
 ## Under `--sandbox`

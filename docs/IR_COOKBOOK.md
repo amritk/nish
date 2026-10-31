@@ -2962,7 +2962,9 @@ module names one, and that module writes no `.ll` of its own: every function
 of it this module reaches is defined here, `internal`, after the module's own
 code (docs/wp32-map.md §4.1). `s.has(x)` is a call to `Set$i32.has`, which asks
 `probeTable$i32` for the packed probe result. The key's hash is lowered in
-place — here `fmix32`, then 0 moved to 1 — and the loop reads `entryHashes`
+place — here multiply-add-shift under `@nish_int_hash_key`, the process's
+random integer key, apart from the string hash's `@nish_hash_key`, then 0 moved
+to 1 — and the loop reads `entryHashes`
 and `entryKeys` only after the bucket word's top eight bits match the hash's,
 comparing the stored hash before the key (§2). `hashKey` and `sameKey` are
 never called: they are intrinsics `src/emit-map.ts` lowers per key type. So is
@@ -2980,11 +2982,56 @@ export const seen = (s: Set<i32>, x: i32): boolean => s.has(x)
 %struct.Set$i32 = type { i32, %struct.nish_array*, i32, i32, %struct.nish_array*, %struct.nish_array*, i32 }
 %struct.nish_array = type { i64, i64, i8* }
 
-@.str.0 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
+@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8
+@.str.0 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"Map: the system's entropy source failed\00" }, align 8
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.int.hash.seed, i8* null }]
+@.str.1 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 
+declare i32 @getentropy(i8* noundef, i64 noundef)
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
+
+define internal void @nish.int.hash.seed() nounwind {
+entry:
+  %k = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %filled = icmp ne i64 %k, 0
+  br i1 %filled, label %done, label %fill
+fill:
+  %got = call i32 @getentropy(i8* bitcast ([2 x i64]* @nish_int_hash_key to i8*), i64 16)
+  %failed = icmp ne i32 %got, 0
+  br i1 %failed, label %fail, label %mark
+fail:
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.0 to i8*))
+  unreachable
+mark:
+  %r0 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %r0.s1 = lshr i64 %r0, 30
+  %r0.x1 = xor i64 %r0, %r0.s1
+  %r0.m1 = mul i64 %r0.x1, -4658895280553007687
+  %r0.s2 = lshr i64 %r0.m1, 27
+  %r0.x2 = xor i64 %r0.m1, %r0.s2
+  %r0.m2 = mul i64 %r0.x2, -7723592293110705685
+  %r0.s3 = lshr i64 %r0.m2, 31
+  %r0.x3 = xor i64 %r0.m2, %r0.s3
+  store i64 %r0.x3, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %r1 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 1), align 8
+  %r1.s1 = lshr i64 %r1, 30
+  %r1.x1 = xor i64 %r1, %r1.s1
+  %r1.m1 = mul i64 %r1.x1, -4658895280553007687
+  %r1.s2 = lshr i64 %r1.m1, 27
+  %r1.x2 = xor i64 %r1.m1, %r1.s2
+  %r1.m2 = mul i64 %r1.x2, -7723592293110705685
+  %r1.s3 = lshr i64 %r1.m2, 31
+  %r1.x3 = xor i64 %r1.m2, %r1.s3
+  store i64 %r1.x3, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 1), align 8
+  %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %set = or i64 %w, 1
+  store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  br label %done
+done:
+  ret void
+}
 
 define noundef zeroext i1 @seen(%struct.Set$i32* noundef nonnull readonly align 8 dereferenceable(48) nocapture %s, i32 noundef %x) #0 {
 entry:
@@ -3048,155 +3095,154 @@ entry:
   %bucket.addr = alloca i32, align 4
   %word.addr = alloca i32, align 4
   %at.addr = alloca i32, align 4
-  %0 = lshr i32 %key, 16
-  %1 = xor i32 %key, %0
-  %2 = mul i32 %1, -2048144789
-  %3 = lshr i32 %2, 13
-  %4 = xor i32 %2, %3
-  %5 = mul i32 %4, -1028477387
-  %6 = lshr i32 %5, 16
-  %7 = xor i32 %5, %6
-  %8 = icmp eq i32 %7, 0
-  %9 = select i1 %8, i32 1, i32 %7
-  store i32 %9, i32* %h.addr, align 4
-  %10 = load i32, i32* %h.addr, align 4
-  %11 = lshr i32 %10, 24
-  store i32 %11, i32* %fingerprint.addr, align 4
-  %12 = load i32, i32* %h.addr, align 4
-  %13 = call i32 @nish.homeBucket(i32 %12, i32 %mask)
-  store i32 %13, i32* %bucket.addr, align 4
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
-  %15 = load i64, i64* %14, align 8, !alias.scope !12, !noalias !13, !tbaa !17
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
-  %17 = load i8*, i8** %16, align 8, !alias.scope !12, !noalias !13, !tbaa !18
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
-  %19 = load i64, i64* %18, align 8, !alias.scope !12, !noalias !13, !tbaa !17
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !12, !noalias !13, !tbaa !18
-  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0
-  %23 = load i64, i64* %22, align 8, !alias.scope !12, !noalias !13, !tbaa !17
-  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2
-  %25 = load i8*, i8** %24, align 8, !alias.scope !12, !noalias !13, !tbaa !18
+  %0 = zext i32 %key to i64
+  %1 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %2 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 1), align 8
+  %3 = mul i64 %0, %1
+  %4 = add i64 %3, %2
+  %5 = lshr i64 %4, 32
+  %6 = trunc i64 %5 to i32
+  %7 = icmp eq i32 %6, 0
+  %8 = select i1 %7, i32 1, i32 %6
+  store i32 %8, i32* %h.addr, align 4
+  %9 = load i32, i32* %h.addr, align 4
+  %10 = lshr i32 %9, 24
+  store i32 %10, i32* %fingerprint.addr, align 4
+  %11 = load i32, i32* %h.addr, align 4
+  %12 = call i32 @nish.homeBucket(i32 %11, i32 %mask)
+  store i32 %12, i32* %bucket.addr, align 4
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
+  %14 = load i64, i64* %13, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
+  %16 = load i8*, i8** %15, align 8, !alias.scope !12, !noalias !13, !tbaa !18
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
+  %18 = load i64, i64* %17, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
+  %20 = load i8*, i8** %19, align 8, !alias.scope !12, !noalias !13, !tbaa !18
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0
+  %22 = load i64, i64* %21, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2
+  %24 = load i8*, i8** %23, align 8, !alias.scope !12, !noalias !13, !tbaa !18
   br label %while.cond
 
 while.cond:
-  %26 = load i32, i32* %bucket.addr, align 4
-  %27 = icmp sge i32 %26, 0
-  br i1 %27, label %land.rhs, label %land.end
+  %25 = load i32, i32* %bucket.addr, align 4
+  %26 = icmp sge i32 %25, 0
+  br i1 %26, label %land.rhs, label %land.end
 
 land.rhs:
-  %28 = load i32, i32* %bucket.addr, align 4
-  %29 = trunc i64 %15 to i32
-  %30 = icmp slt i32 %28, %29
+  %27 = load i32, i32* %bucket.addr, align 4
+  %28 = trunc i64 %14 to i32
+  %29 = icmp slt i32 %27, %28
   br label %land.end
 
 land.end:
-  %31 = phi i1 [ false, %while.cond ], [ %30, %land.rhs ]
-  br i1 %31, label %while.body, label %while.end
+  %30 = phi i1 [ false, %while.cond ], [ %29, %land.rhs ]
+  br i1 %30, label %while.body, label %while.end
 
 while.body:
-  %32 = load i32, i32* %bucket.addr, align 4
-  %33 = sext i32 %32 to i64
-  %34 = bitcast i8* %17 to i32*
-  %35 = getelementptr inbounds i32, i32* %34, i64 %33
-  %36 = load i32, i32* %35, align 4, !alias.scope !13, !noalias !12, !tbaa !20
-  store i32 %36, i32* %word.addr, align 4
-  %37 = load i32, i32* %word.addr, align 4
-  %38 = icmp eq i32 %37, 0
-  br i1 %38, label %if.then, label %if.end
+  %31 = load i32, i32* %bucket.addr, align 4
+  %32 = sext i32 %31 to i64
+  %33 = bitcast i8* %16 to i32*
+  %34 = getelementptr inbounds i32, i32* %33, i64 %32
+  %35 = load i32, i32* %34, align 4, !alias.scope !13, !noalias !12, !tbaa !20
+  store i32 %35, i32* %word.addr, align 4
+  %36 = load i32, i32* %word.addr, align 4
+  %37 = icmp eq i32 %36, 0
+  br i1 %37, label %if.then, label %if.end
 
 if.then:
-  %39 = load i32, i32* %bucket.addr, align 4
-  %40 = load i32, i32* %h.addr, align 4
-  %41 = tail call i64 @nish.absentAt(i32 %39, i32 %40)
-  ret i64 %41
+  %38 = load i32, i32* %bucket.addr, align 4
+  %39 = load i32, i32* %h.addr, align 4
+  %40 = tail call i64 @nish.absentAt(i32 %38, i32 %39)
+  ret i64 %40
 
 if.end:
-  %42 = load i32, i32* %word.addr, align 4
-  %43 = lshr i32 %42, 24
-  %44 = load i32, i32* %fingerprint.addr, align 4
-  %45 = icmp eq i32 %43, %44
-  br i1 %45, label %if.then.1, label %if.end.1
+  %41 = load i32, i32* %word.addr, align 4
+  %42 = lshr i32 %41, 24
+  %43 = load i32, i32* %fingerprint.addr, align 4
+  %44 = icmp eq i32 %42, %43
+  br i1 %44, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %46 = load i32, i32* %word.addr, align 4
-  %47 = and i32 %46, 16777215
-  %48 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %47, i32 1)
-  %49 = extractvalue { i32, i1 } %48, 0
-  %50 = extractvalue { i32, i1 } %48, 1
-  br i1 %50, label %ovf.fail, label %ovf.ok
+  %45 = load i32, i32* %word.addr, align 4
+  %46 = and i32 %45, 16777215
+  %47 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %46, i32 1)
+  %48 = extractvalue { i32, i1 } %47, 0
+  %49 = extractvalue { i32, i1 } %47, 1
+  br i1 %49, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %49, i32* %at.addr, align 4
-  %51 = load i32, i32* %at.addr, align 4
-  %52 = icmp sge i32 %51, 0
-  br i1 %52, label %land.rhs.4, label %land.end.4
+  store i32 %48, i32* %at.addr, align 4
+  %50 = load i32, i32* %at.addr, align 4
+  %51 = icmp sge i32 %50, 0
+  br i1 %51, label %land.rhs.4, label %land.end.4
 
 land.rhs.4:
-  %53 = load i32, i32* %at.addr, align 4
-  %54 = trunc i64 %19 to i32
-  %55 = icmp slt i32 %53, %54
+  %52 = load i32, i32* %at.addr, align 4
+  %53 = trunc i64 %18 to i32
+  %54 = icmp slt i32 %52, %53
   br label %land.end.4
 
 land.end.4:
-  %56 = phi i1 [ false, %ovf.ok ], [ %55, %land.rhs.4 ]
-  br i1 %56, label %land.rhs.3, label %land.end.3
+  %55 = phi i1 [ false, %ovf.ok ], [ %54, %land.rhs.4 ]
+  br i1 %55, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %57 = load i32, i32* %at.addr, align 4
-  %58 = sext i32 %57 to i64
-  %59 = bitcast i8* %21 to i32*
-  %60 = getelementptr inbounds i32, i32* %59, i64 %58
-  %61 = load i32, i32* %60, align 4, !alias.scope !13, !noalias !12, !tbaa !20
-  %62 = load i32, i32* %h.addr, align 4
-  %63 = icmp eq i32 %61, %62
+  %56 = load i32, i32* %at.addr, align 4
+  %57 = sext i32 %56 to i64
+  %58 = bitcast i8* %20 to i32*
+  %59 = getelementptr inbounds i32, i32* %58, i64 %57
+  %60 = load i32, i32* %59, align 4, !alias.scope !13, !noalias !12, !tbaa !20
+  %61 = load i32, i32* %h.addr, align 4
+  %62 = icmp eq i32 %60, %61
   br label %land.end.3
 
 land.end.3:
-  %64 = phi i1 [ false, %land.end.4 ], [ %63, %land.rhs.3 ]
-  br i1 %64, label %land.rhs.2, label %land.end.2
+  %63 = phi i1 [ false, %land.end.4 ], [ %62, %land.rhs.3 ]
+  br i1 %63, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %65 = load i32, i32* %at.addr, align 4
-  %66 = trunc i64 %23 to i32
-  %67 = icmp slt i32 %65, %66
+  %64 = load i32, i32* %at.addr, align 4
+  %65 = trunc i64 %22 to i32
+  %66 = icmp slt i32 %64, %65
   br label %land.end.2
 
 land.end.2:
-  %68 = phi i1 [ false, %land.end.3 ], [ %67, %land.rhs.2 ]
-  br i1 %68, label %land.rhs.1, label %land.end.1
+  %67 = phi i1 [ false, %land.end.3 ], [ %66, %land.rhs.2 ]
+  br i1 %67, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %69 = load i32, i32* %at.addr, align 4
-  %70 = sext i32 %69 to i64
-  %71 = bitcast i8* %25 to i32*
-  %72 = getelementptr inbounds i32, i32* %71, i64 %70
-  %73 = load i32, i32* %72, align 4, !alias.scope !13, !noalias !12, !tbaa !20
-  %74 = icmp eq i32 %73, %key
+  %68 = load i32, i32* %at.addr, align 4
+  %69 = sext i32 %68 to i64
+  %70 = bitcast i8* %24 to i32*
+  %71 = getelementptr inbounds i32, i32* %70, i64 %69
+  %72 = load i32, i32* %71, align 4, !alias.scope !13, !noalias !12, !tbaa !20
+  %73 = icmp eq i32 %72, %key
   br label %land.end.1
 
 land.end.1:
-  %75 = phi i1 [ false, %land.end.2 ], [ %74, %land.rhs.1 ]
-  br i1 %75, label %if.then.2, label %if.end.2
+  %74 = phi i1 [ false, %land.end.2 ], [ %73, %land.rhs.1 ]
+  br i1 %74, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %76 = load i32, i32* %bucket.addr, align 4
-  %77 = load i32, i32* %at.addr, align 4
-  %78 = tail call i64 @nish.foundAt(i32 %76, i32 %77)
-  ret i64 %78
+  %75 = load i32, i32* %bucket.addr, align 4
+  %76 = load i32, i32* %at.addr, align 4
+  %77 = tail call i64 @nish.foundAt(i32 %75, i32 %76)
+  ret i64 %77
 
 if.end.2:
   br label %if.end.1
 
 if.end.1:
-  %79 = load i32, i32* %bucket.addr, align 4
-  %80 = add nsw i32 %79, 1
-  %81 = and i32 %80, %mask
-  store i32 %81, i32* %bucket.addr, align 4
+  %78 = load i32, i32* %bucket.addr, align 4
+  %79 = add nsw i32 %78, 1
+  %80 = and i32 %79, %mask
+  store i32 %80, i32* %bucket.addr, align 4
   br label %while.cond
 
 while.end:
-  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.0 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.1 to i8*))
   unreachable
 
 ovf.fail:
@@ -12840,8 +12886,8 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 One `switch` instruction: a constant-to-label table and a default edge, which
 the backend turns into a jump table once the labels are dense enough. Empty
-clauses have no block of their own — `case 1:` points at the body of `case 2:`,
-which is the whole of Nish's fallthrough. A label that names a module
+clauses have no block of their own — `case 1:` points at the body of `case 2:`.
+A clause with statements that falls through is in the next section. A label that names a module
 constant is folded before the table is written, so `KIND_CALL` is a `4` here.
 
 <!-- cookbook:begin stmt-switch -->
@@ -12896,6 +12942,81 @@ attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-switch -->
+
+### `switch` fallthrough
+
+A clause that does not end in `break`, `return` or `continue` ends in a `br`
+to the next clause's block, the edge a hand-written `goto` would be: no flag,
+no copy of the body. `sw.case` runs on into `sw.case.1` and that into
+`sw.case.2`, whose `break` is the only edge to `sw.end`.
+
+<!-- cookbook:begin stmt-switch-fallthrough -->
+```ts
+const points = (stars: number): number => {
+  let total = 0
+  switch (stars) {
+    // biome-ignore lint/suspicious/noFallthroughSwitchClause: the fallthrough is the point
+    case 3:
+      total = 100
+    // biome-ignore lint/suspicious/noFallthroughSwitchClause: the fallthrough is the point
+    case 2:
+      total |= 10
+    case 1:
+      total |= 1
+      break
+    default:
+      total = -1
+  }
+  return total
+}
+```
+
+```llvm
+define internal noundef i32 @points(i32 noundef %stars) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  store i32 0, i32* %total.addr, align 4
+  switch i32 %stars, label %sw.default [
+    i32 3, label %sw.case
+    i32 2, label %sw.case.1
+    i32 1, label %sw.case.2
+  ]
+
+sw.case:
+  store i32 100, i32* %total.addr, align 4
+  br label %sw.case.1
+
+sw.case.1:
+  %0 = load i32, i32* %total.addr, align 4
+  %1 = or i32 %0, 10
+  store i32 %1, i32* %total.addr, align 4
+  br label %sw.case.2
+
+sw.case.2:
+  %2 = load i32, i32* %total.addr, align 4
+  %3 = or i32 %2, 1
+  store i32 %3, i32* %total.addr, align 4
+  br label %sw.end
+
+sw.default:
+  store i32 -1, i32* %total.addr, align 4
+  br label %sw.end
+
+sw.end:
+  %4 = load i32, i32* %total.addr, align 4
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end stmt-switch-fallthrough -->
 
 ### `break` / `continue`
 
@@ -12993,6 +13114,120 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-break-continue -->
+
+### Labelled `break` / `continue`
+
+A label names a loop, a block or a `switch`, and a jump that names it is a
+`br` to that statement's block from any depth: `continue outer` inside the
+inner loop is `br label %for.inc`, the outer loop's step, and `break outer`
+is `br label %for.end`, the outer loop's exit. The inner loop's own blocks
+carry the `.1` suffix and are skipped, as a `done` flag tested after the
+inner loop would skip them, without the flag.
+
+<!-- cookbook:begin stmt-labelled -->
+```ts
+const firstPair = (limit: number, target: number): number => {
+  outer: for (let i = 0; i < limit; i++) {
+    for (let j = 0; j < limit; j++) {
+      if (j > i) {
+        continue outer
+      }
+      if (i * j === target) {
+        break outer
+      }
+    }
+  }
+  return 0
+}
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
+
+define internal noundef i32 @firstPair(i32 noundef %limit, i32 noundef %target) #0 {
+entry:
+  %i.addr = alloca i32, align 4
+  %j.addr = alloca i32, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %limit
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  store i32 0, i32* %j.addr, align 4
+  br label %for.cond.1
+
+for.cond.1:
+  %2 = load i32, i32* %j.addr, align 4
+  %3 = icmp slt i32 %2, %limit
+  br i1 %3, label %for.body.1, label %for.end.1
+
+for.body.1:
+  %4 = load i32, i32* %j.addr, align 4
+  %5 = load i32, i32* %i.addr, align 4
+  %6 = icmp sgt i32 %4, %5
+  br i1 %6, label %if.then, label %if.end
+
+if.then:
+  br label %for.inc
+
+if.end:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = load i32, i32* %j.addr, align 4
+  %9 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %7, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %12 = icmp eq i32 %10, %target
+  br i1 %12, label %if.then.1, label %if.end.1
+
+if.then.1:
+  br label %for.end
+
+if.end.1:
+  br label %for.inc.1
+
+for.inc.1:
+  %13 = load i32, i32* %j.addr, align 4
+  %14 = add nsw i32 %13, 1
+  store i32 %14, i32* %j.addr, align 4
+  br label %for.cond.1
+
+for.end.1:
+  br label %for.inc
+
+for.inc:
+  %15 = load i32, i32* %i.addr, align 4
+  %16 = add nsw i32 %15, 1
+  store i32 %16, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end stmt-labelled -->
 
 ### `Result<T, E>`
 
