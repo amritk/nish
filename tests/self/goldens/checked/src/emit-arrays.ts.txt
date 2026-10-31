@@ -267,7 +267,7 @@ function inlineHeaderPointer(emitter: Emitter, info: StructInfo, receiver: strin
   calls: Emitter.declareType IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.declareType#0
   pointer info: size=168 writesThrough=false captured=false
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 Emitter.declareType -> @Emitter.declareType
   local +1:9 ty: string (const)
@@ -278,7 +278,7 @@ function inlineDataPointer(emitter: Emitter, info: StructInfo, receiver: string,
   calls: Emitter.llvm IRFunction.emitValue TypeTable.refOf nish_str_concat nish_str_from_i32
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.llvm#0
   pointer info: size=168 writesThrough=false captured=false
-  pointer field: size=64 writesThrough=false captured=false
+  pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   local +1:9 slot: string (const)
@@ -327,7 +327,7 @@ function emitInlineArrayAssignment(emitter: Emitter, expr: Node, field: FieldInf
   calls: CheckedProgram.inlineAssignLength Emitter.declare Emitter.emitExpression IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize inlineDataPointer inlineHeaderPointer inlineOwnerOf internalErrorFor loadHeaderField nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType storeElement storeHeaderField unwrapParens
   pointer emitter: size=296 writesThrough=true captured=false passedTo=inlineOwnerOf#0 elementSize#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 inlineHeaderPointer#0 inlineDataPointer#0 slotType#0 storeElement#0 Emitter.declare#0 elementAccess#0 loadHeaderField#0 Emitter.declare#0 elementAccess#0 storeHeaderField#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckedProgram.inlineAssignLength#1
-  pointer field: size=64 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
+  pointer field: size=72 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
   stackSites=1 stackLocals=1
   local +0:9 target: Node (const)
   callee +0:18 unwrapParens -> @unwrapParens

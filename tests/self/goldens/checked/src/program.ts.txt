@@ -175,19 +175,21 @@ struct Instantiation (class) size=184 align=8 exported
   field channelSenders: string[] index=23 offset=176
   constructor -> @Instantiation.constructor
   method shareTablesOf -> @Instantiation.shareTablesOf
-struct FieldInfo (class) size=64 align=8 exported
+struct FieldInfo (class) size=72 align=8 exported
   field name: string index=0 offset=0
   field type: i32 index=1 offset=8
   field index: i32 index=2 offset=12
   field offset: i32 index=3 offset=16
   field readonly: boolean index=4 offset=20
   field jsonOptional: boolean index=5 offset=21
-  field initializer: Node | null index=6 offset=24
-  field decl: Node index=7 offset=32
-  field inlineCapacity: i32 index=8 offset=40
-  field initializerValue: i32 index=9 offset=44
-  field spelling: string index=10 offset=48
-  field wireName: string index=11 offset=56
+  field jsonOffWire: boolean index=6 offset=22
+  field initializer: Node | null index=7 offset=24
+  field decl: Node index=8 offset=32
+  field jsonPresence: FieldInfo | null index=9 offset=40
+  field inlineCapacity: i32 index=10 offset=48
+  field initializerValue: i32 index=11 offset=52
+  field spelling: string index=12 offset=56
+  field wireName: string index=13 offset=64
   constructor -> @FieldInfo.constructor
   method inline -> @FieldInfo.inline
 struct StructInfo (class) size=168 align=8 exported
@@ -610,12 +612,12 @@ function Instantiation.shareTablesOf(this: Instantiation, outer: Instantiation):
 function FieldInfo.constructor(this: FieldInfo, name: string, type: i32, decl: Node): void -> @FieldInfo.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: decl name type
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FieldInfo.inline(this: FieldInfo): boolean -> @FieldInfo.inline [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function StructInfo.constructor(this: StructInfo, name: string, kind: i32, type: i32, decl: Node, origin: SourceFile): void -> @StructInfo.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
