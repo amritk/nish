@@ -3966,7 +3966,7 @@ export const PG_TARGET_OK: i32 = 0
 export const PG_TARGET_BAD_URL: i32 = 1
 /** `PgTarget.failure`: a `%` not followed by two hex digits, `%00`, or escapes that decode to bytes that are not UTF-8. */
 export const PG_TARGET_BAD_ESCAPE: i32 = 2
-/** `PgTarget.failure`: no host, more than one (a `,`), an unclosed `[`, or a NUL byte. */
+/** `PgTarget.failure`: no host, more than one (a `,`), an unclosed `[` or text after its `]`, a raw `@` past the user information, or a NUL byte. */
 export const PG_TARGET_BAD_HOST: i32 = 3
 /** `PgTarget.failure`: a port that is not 1 to 65535 in decimal digits. */
 export const PG_TARGET_BAD_PORT: i32 = 4
@@ -4081,9 +4081,12 @@ const pgPortValue = (text: string): i32 => {
  * `port` in the query overrides the authority's, and other keys are ignored.
  * The user, password and database are not read here, but a bad escape in them
  * still refuses the URL. A `%` without two hex digits after it, `%00`, or a
- * part that decodes to bytes that are not UTF-8 is `PG_TARGET_BAD_ESCAPE`;
- * with no host anywhere the URL is `PG_TARGET_BAD_HOST`, where libpq would
- * use its default socket directory.
+ * part that decodes to bytes that are not UTF-8 is `PG_TARGET_BAD_ESCAPE`.
+ * The user information ends at the first `@`, as in libpq; a raw `@` after a
+ * `?` or after that first `@` in the authority, or a raw NUL byte anywhere,
+ * is `PG_TARGET_BAD_HOST`, as is a URL with no host anywhere, where libpq
+ * would use its default socket directory. An empty port or query value is
+ * refused, where libpq would take it as unset.
  * The decoded host is then resolved as `pgTarget` resolves one.
  */
 export const pgTargetUrl = (url: string): PgTarget => {
@@ -4109,13 +4112,35 @@ export const pgTargetUrl = (url: string): PgTarget => {
   while (queryStart < n && toI32(url.charCodeAt(queryStart)) !== 63) {
     queryStart += 1
   }
-  // The user information ends at the authority's last `@`. The loops below
-  // also test `>= 0` and `< n`, always true as `authorityEnd <= n`, so the
-  // prover drops each access's bounds check.
+  // A raw NUL byte anywhere is refused: no part may carry one past here.
+  for (let i: i32 = at; i < n; i++) {
+    if (toI32(url.charCodeAt(i)) === 0) {
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
+    }
+  }
+  // libpq ends the user information at the first `@` before a `/`, a `?`
+  // included. One after a `?`, or a second in the host and port, reads
+  // differently by other parsers, so either is refused. The loops below also
+  // test `>= 0` and `< n`, always true as `authorityEnd <= n`, so the prover
+  // drops each access's bounds check.
+  let firstAt: i32 = at
+  while (firstAt >= 0 && firstAt < n) {
+    const c: i32 = toI32(url.charCodeAt(firstAt))
+    if (c === 64 || c === 47) {
+      break
+    }
+    firstAt += 1
+  }
   let hostStart: i32 = at
-  for (let i: i32 = at; i < authorityEnd && i < n; i++) {
+  if (firstAt < n && toI32(url.charCodeAt(firstAt)) === 64) {
+    if (firstAt > authorityEnd) {
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
+    }
+    hostStart = firstAt + 1
+  }
+  for (let i: i32 = hostStart; i >= 0 && i < authorityEnd && i < n; i++) {
     if (toI32(url.charCodeAt(i)) === 64) {
-      hostStart = i + 1
+      return pgTargetFailed(PG_TARGET_BAD_HOST)
     }
   }
   if (hostStart > at && pgDecoded(url, at, hostStart - 1) === null) {

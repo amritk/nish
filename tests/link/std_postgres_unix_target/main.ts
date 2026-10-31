@@ -62,6 +62,11 @@ const lengths = (t: Suite): void => {
   t.eqI32("an @ name of 107 bytes after the @ is taken", pgTarget(padded("@", "d", 93), 5432).failure, PG_TARGET_OK);
   t.eqI32("one of 108 is refused", pgTarget(padded("@", "d", 94), 5432).failure, PG_TARGET_TOO_LONG);
   t.eqI32("a longer port counts", pgTarget(padded("/", "d", 92), 15432).failure, PG_TARGET_TOO_LONG);
+  // `é` is 2 bytes: 91 + 2 + 14 bytes is 107, one `d` more is 108.
+  t.eqI32("multi-byte UTF-8 counts in bytes: 107 is taken", pgTarget(`${padded("/", "d", 90)}é`, 5432).failure, PG_TARGET_OK);
+  t.eqI32("and 108 refused", pgTarget(`${padded("/", "d", 91)}é`, 5432).failure, PG_TARGET_TOO_LONG);
+  t.eqStr("a trailing / is kept, as libpq does", show(pgTarget("/tmp/", 5432)), "0 unix /tmp/ 5432 /tmp//.s.PGSQL.5432");
+  t.eqStr("pgTarget does not percent-decode", show(pgTarget("%2Ftmp", 5432)), "0 tcp %2Ftmp 5432 ");
   t.eqI32("a long TCP host is no socket path", pgTarget(padded("h", "h", 200), 5432).failure, PG_TARGET_OK);
 };
 
@@ -83,7 +88,10 @@ const urls = (t: Suite): void => {
     "0 unix /run 7000 /run/.s.PGSQL.7000",
   );
   t.eqStr("an IPv6 host loses its brackets", show(pgTargetUrl("postgres://[::1]:5433/app")), "0 tcp ::1 5433 ");
-  t.eqStr("an @ in the password is not the host", show(pgTargetUrl("postgres://u:p@ss@db/app")), "0 tcp db 5432 ");
+  t.eqI32("a second @ is refused, not read as the host", pgTargetUrl("postgres://u:p@ss@db/app").failure, PG_TARGET_BAD_HOST);
+  t.eqStr("an encoded @ in the password is the user's", show(pgTargetUrl("postgres://u:p%40ss@db/app")), "0 tcp db 5432 ");
+  t.eqI32("an @ after a ? is refused", pgTargetUrl("postgres://db?x=a@evil/app").failure, PG_TARGET_BAD_HOST);
+  t.eqStr("an @ in the path is the database's", show(pgTargetUrl("postgres://db/a@b")), "0 tcp db 5432 ");
   t.eqStr("a query with no path", show(pgTargetUrl("postgres://db?port=6000")), "0 tcp db 6000 ");
   t.eqI32("another scheme is refused", pgTargetUrl("mysql://db/app").failure, PG_TARGET_BAD_URL);
   t.eqI32("the scheme is case-sensitive", pgTargetUrl("POSTGRES://db/app").failure, PG_TARGET_BAD_URL);
@@ -96,7 +104,37 @@ const urls = (t: Suite): void => {
   t.eqI32("a port of letters is refused", pgTargetUrl("postgres://db:http/app").failure, PG_TARGET_BAD_PORT);
   t.eqI32("a six-digit port is refused", pgTargetUrl("postgres://db:015432/app").failure, PG_TARGET_BAD_PORT);
   t.eqI32("?port=0 is refused", pgTargetUrl("postgres://db/app?port=0").failure, PG_TARGET_BAD_PORT);
+  t.eqI32("URL port 65536 is refused", pgTargetUrl("postgres://db:65536/app").failure, PG_TARGET_BAD_PORT);
+  t.eqI32("an empty ?port= is refused", pgTargetUrl("postgres://db/app?port=").failure, PG_TARGET_BAD_PORT);
+  t.eqI32("an empty ?host= is refused", pgTargetUrl("postgres://db/app?host=").failure, PG_TARGET_BAD_HOST);
+  t.eqStr("?host=@x is an abstract name", show(pgTargetUrl("postgres://db/app?host=@x")), "0 unix @x 5432 @x/.s.PGSQL.5432");
+  t.eqStr("%252F stays the TCP host %2F", show(pgTargetUrl("postgres://%252Ftmp/app")), "0 tcp %2Ftmp 5432 ");
+  t.eqStr("a bracketed host is decoded too, as libpq does", show(pgTargetUrl("postgres://[%2Ftmp]/app")), "0 unix /tmp 5432 /tmp/.s.PGSQL.5432");
+  t.eqStr(
+    "a URL's socket file is a directory too",
+    show(pgTargetUrl("postgres://%2Ftmp%2F.s.PGSQL.5432/app")),
+    "0 unix /tmp/.s.PGSQL.5432 5432 /tmp/.s.PGSQL.5432/.s.PGSQL.5432",
+  );
+  t.eqI32("a URL's @ name of 107 bytes after the @ is taken", pgTargetUrl(padded("postgres:///app?host=@", "d", 93)).failure, PG_TARGET_OK);
+  t.eqI32("one of 108 is refused", pgTargetUrl(padded("postgres:///app?host=@", "d", 94)).failure, PG_TARGET_TOO_LONG);
   t.eqI32("a long encoded directory is refused", pgTargetUrl(padded("postgres://", "%2Fd", 47)).failure, PG_TARGET_TOO_LONG);
+};
+
+/** `url` with a raw NUL byte put in place of its `#`. */
+const nul = (url: string): string => {
+  const at: i32 = toI32(url.indexOf("#"));
+  return `${url.substring(0, at)}${String.fromCharCode(0)}${url.substring(at + 1)}`;
+};
+
+const nuls = (t: Suite): void => {
+  t.eqI32("a raw NUL in the user is refused", pgTargetUrl(nul("postgres://u#@db/app")).failure, PG_TARGET_BAD_HOST);
+  t.eqI32("in the password", pgTargetUrl(nul("postgres://u:p#@db/app")).failure, PG_TARGET_BAD_HOST);
+  t.eqI32("in the host", pgTargetUrl(nul("postgres://%2Ftmp#x/app")).failure, PG_TARGET_BAD_HOST);
+  t.eqI32("in the port", pgTargetUrl(nul("postgres://db:54#32/app")).failure, PG_TARGET_BAD_HOST);
+  t.eqI32("in the database", pgTargetUrl(nul("postgres://db/a#pp")).failure, PG_TARGET_BAD_HOST);
+  t.eqI32("in a query key", pgTargetUrl(nul("postgres://db/app?ho#st=/tmp")).failure, PG_TARGET_BAD_HOST);
+  t.eqI32("in a query value", pgTargetUrl(nul("postgres://db/app?host=/tmp#x")).failure, PG_TARGET_BAD_HOST);
+  t.eqI32("in an ignored value", pgTargetUrl(nul("postgres://db/app?sslmode=dis#able")).failure, PG_TARGET_BAD_HOST);
 };
 
 const escapes = (t: Suite): void => {
@@ -119,7 +157,8 @@ const escapes = (t: Suite): void => {
 /**
  * 3000 URLs drawn from a fixed seed (xorshift32) from the bytes and escapes
  * the parser splits on, escapes cut anywhere included: none panics, each answers a
- * defined failure, and a socket target is a path that fits `sun_path`.
+ * defined failure, and a socket target is a directory path of at most 107 bytes
+ * or an `@` name of at most 108.
  */
 const fuzz = (t: Suite): void => {
   const pieces: string[] = [
@@ -149,7 +188,8 @@ const fuzz = (t: Suite): void => {
     }
     if (target.unix) {
       sockets += 1;
-      if (target.failure !== PG_TARGET_OK || target.path.length > 108 || !target.path.endsWith(`/.s.PGSQL.${target.port}`)) {
+      const limit: i32 = target.host.startsWith("@") ? 108 : 107;
+      if (target.failure !== PG_TARGET_OK || toI32(target.path.length) > limit || !target.path.endsWith(`/.s.PGSQL.${target.port}`)) {
         fits = false;
       }
     }
@@ -164,6 +204,7 @@ export const main = (): number => {
   hosts(t);
   lengths(t);
   urls(t);
+  nuls(t);
   escapes(t);
   fuzz(t);
   return t.done();

@@ -353,18 +353,28 @@ export const main = (): i32 => {
   socket that does not exist.
 - A host starting with `@` is a Linux abstract socket, `@<name>/.s.PGSQL.<port>`.
 - Any other host is TCP, and the target's `host` is it, unchanged.
-- In a URL, the host, the port and the query are percent-decoded, so a
+  `pgTarget` does not percent-decode: `%2Ftmp` is a TCP host there.
+- In a URL, the host, the port and the query are percent-decoded, once, so a
   directory is written `%2Fvar%2Frun%2Fpostgresql`, or given as
   `?host=/var/run/postgresql`. A `host` or `port` in the query overrides the
-  one before the path; other keys are ignored. No port means 5432.
+  one before the path; other keys are ignored. No port means 5432. An IPv6
+  address is bracketed, `postgres://[::1]:5433/app`, and its `host` comes
+  without the brackets.
+- The user and password end at the first `@`, as in `libpq`. Write an `@` in
+  a password as `%40`: a second raw `@` before the path is refused rather
+  than read as part of the host.
 - Refused, with `failure` saying why: another scheme or a query key with no
   `=` (`PG_TARGET_BAD_URL`); a `%` without two hex digits after it, `%00`, or
   escapes that decode to bytes that are not UTF-8, anywhere in the URL
-  (`PG_TARGET_BAD_ESCAPE`); no host, more than one (a
-  `,`) or a NUL byte (`PG_TARGET_BAD_HOST`); a port that is not 1 to 65535
-  (`PG_TARGET_BAD_PORT`); and a socket path longer than the 107 bytes Linux
-  holds, which is never cut short (`PG_TARGET_TOO_LONG`). macOS holds 103:
-  there `unixConnect` returns `-36` for a path between the two.
+  (`PG_TARGET_BAD_ESCAPE`); no host, more than one (a `,`), an unclosed `[`
+  or text after its `]` other than `:port`, a raw `@` after the first or
+  after a `?`, or a NUL byte anywhere (`PG_TARGET_BAD_HOST`); a port that is
+  not 1 to 65535 (`PG_TARGET_BAD_PORT`); and a socket path longer than the
+  107 bytes Linux holds, counted in bytes and never cut short
+  (`PG_TARGET_TOO_LONG`). macOS holds 103: there `unixConnect` returns `-36`
+  for a path between the two.
+- An empty port, `?port=` or `?host=` is refused, where `libpq` takes an
+  empty value as unset: leave the key out instead.
 
 Over a socket the server can authenticate by `peer`, the operating system's
 word for which user is connecting, or `trust`; either way it sends
