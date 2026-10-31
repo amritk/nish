@@ -14,6 +14,7 @@ import loadLocal from "./emit-ops" -> function @loadLocal
 import storeLocal from "./emit-ops" -> function @storeLocal
 import targetLocal from "./emit-ops" -> function @targetLocal
 import unwrapParens from "./emit-util" -> function @unwrapParens
+import internalErrorFor from "./ice" -> function @internalErrorFor
 import IRBlock from "./ir" -> struct IRBlock
 import FLAG_POSTFIX from "./nodes" -> const FLAG_POSTFIX
 import N_BLOCK from "./nodes" -> const N_BLOCK
@@ -266,7 +267,7 @@ function emitLabeled(emitter: Emitter, stmt: Node): void -> @emitLabeled [export
   callee +7:5 Emitter.emitStatement -> @Emitter.emitStatement
   callee +10:7 fallThrough -> @fallThrough
   callee +11:7 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +14:5 Emitter.emitStatement -> @Emitter.emitStatement
+  callee +15:5 Emitter.emitStatement -> @Emitter.emitStatement
 function labelled(emitter: Emitter, label: string): i32 -> @labelled
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -300,16 +301,17 @@ function emitBreak(emitter: Emitter, stmt: Node): void -> @emitBreak [exported]
   callee +2:3 branch -> @branch
 function emitContinue(emitter: Emitter, stmt: Node): void -> @emitContinue [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via leaveTo
-  calls: branch labelled leaveTo nish_panic_index nish_str_eq
+  sharedWrite: via nish_exit
+  calls: branch internalErrorFor labelled leaveTo nish_exit nish_panic_index nish_str_concat nish_str_eq
   pointer emitter: size=296 writesThrough=false captured=false passedTo=labelled#0 leaveTo#0 branch#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
   callee +2:10 labelled -> @labelled
   local +8:9 target: IRBlock | null (const)
-  callee +10:5 leaveTo -> @leaveTo
-  callee +11:5 branch -> @branch
+  callee +10:18 internalErrorFor -> @internalErrorFor
+  callee +12:3 leaveTo -> @leaveTo
+  callee +13:3 branch -> @branch
 function emitThrow(emitter: Emitter, stmt: Node): void -> @emitThrow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression

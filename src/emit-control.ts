@@ -24,6 +24,7 @@ import {
   targetLocal,
 } from "./emit-ops"
 import { unwrapParens } from "./emit-util"
+import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
 import { FLAG_POSTFIX, N_BLOCK, N_CASE, N_EMPTY, N_TRUE, N_VAR, Node } from "./nodes"
 import { SWITCH_COVERED } from "./program"
@@ -324,6 +325,7 @@ export const emitLabeled = (emitter: Emitter, stmt: Node): void => {
       fn.placeBlock(endBlock)
     }
   } else {
+    // The loop or `switch` pushes its own target at the depth recorded above.
     emitter.emitStatement(body)
   }
   emitter.labelNames.pop()
@@ -397,10 +399,11 @@ export const emitContinue = (emitter: Emitter, stmt: Node): void => {
     }
   }
   const target = emitter.loops[at].continueBlock
-  if (target !== null) {
-    leaveTo(emitter, at)
-    branch(emitter, target)
+  if (target === null) {
+    process.exit(internalErrorFor(`emitter: \`continue ${stmt.text}\` names no loop`, emitter.opts.json))
   }
+  leaveTo(emitter, at)
+  branch(emitter, target)
 }
 
 /** `throw e`: evaluate `e` for its effects, then trap. There is no unwinding. */

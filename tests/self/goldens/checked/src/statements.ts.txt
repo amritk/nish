@@ -862,10 +862,9 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   callee +129:55 labelledMembers -> @labelledMembers
   callee +132:7 snapshotExit -> @snapshotExit
   local +135:9 coverage: i32 (const)
-  local +137:9 frame: SwitchFrame (const)
-  callee +140:5 narrowAfterSwitch -> @narrowAfterSwitch
-  local +142:9 steered: Local[] (const)
-  callee +149:3 joinExits -> @joinExits
+  callee +139:5 narrowAfterSwitch -> @narrowAfterSwitch
+  local +141:9 steered: Local[] (const)
+  callee +148:3 joinExits -> @joinExits
 function unionTagRead(ctx: CheckContext, node: Node): i32 -> @unionTagRead
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isUnion TypeTable.tagNameOf isOptionalChain nish_panic_index nish_str_eq unwrapParens

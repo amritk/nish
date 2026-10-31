@@ -1317,7 +1317,6 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   }
   const coverage = ctx.program.switchCoverage[stmt.id]
   ctx.program.switchCoverage[stmt.id] = covered && coverage !== SWITCH_OPEN ? SWITCH_COVERED : SWITCH_OPEN
-  const frame = ctx.switchFrames[ctx.switchFrames.length - 1]
   ctx.switchFrames.pop()
   if (tagged !== null || held !== null) {
     narrowAfterSwitch(ctx, scope, tagged, held, clauses, reaching, hasDefault ? defaultReaches : true)
@@ -1329,7 +1328,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   if (held !== null) {
     steered.push(held)
   }
-  joinExits(ctx, stmt.children[1], scope, frame, steered)
+  joinExits(ctx, stmt.children[1], scope, switchFrame, steered)
   // Anything no clause names reaches the statement after the `switch` unless
   // a `default` catches it, or the discriminant is a union's tag and the
   // labels name every tag it can hold; a `break` or a last clause that falls

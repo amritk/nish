@@ -1426,11 +1426,11 @@ function walkLoopBody(walk: PerfWalk, body: Node, once: boolean): void -> @walkL
   pointer walk: size=80 writesThrough=true captured=false passedTo=walkPerformance#0
   pointer body: size=40 writesThrough=true captured=true passedTo=walkPerformance#1
   stackSites=1 stackLocals=1
-  local -23:9 enclosing: Node[] (const)
-  local -22:9 assignments: Node[] (const)
-  local -21:7 loops: boolean (let)
-  local -20:9 statements: Node[] (const)
-  local -18:16 statement: Node (const)
+  local -28:9 enclosing: Node[] (const)
+  local -27:9 assignments: Node[] (const)
+  local -26:7 loops: boolean (let)
+  local -25:9 statements: Node[] (const)
+  local -23:16 statement: Node (const)
   local -9:14 statement: Node (const)
   local -5:11 expr: Node (const)
   callee -5:18 unwrapPerfParens -> @unwrapPerfParens

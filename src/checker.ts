@@ -2747,8 +2747,8 @@ const isArenaReassignment = (walk: PerfWalk, expr: Node): boolean => {
  * Walk a loop's body with `walk.passAssignments` set to the assignments that
  * run on every one of its passes: each `x = ...` that is a statement of its own
  * at the body's top level. A body whose top level ends the loop (`break`,
- * `return`, `throw`) runs at most once, and so does one `once` says runs once,
- * so it has none: whatever it assigns is never replaced by a later pass. The
+ * `return`, `throw`, a labelled `continue`) runs at most once, and so does one
+ * `once` says runs once, so it has none: whatever it assigns is never replaced by a later pass. The
  * list is the innermost loop's alone, and the enclosing loop's comes back when
  * the body is done.
  */
@@ -2759,7 +2759,12 @@ const walkLoopBody = (walk: PerfWalk, body: Node, once: boolean): void => {
   const statements: Node[] = []
   if (body.kind === N_BLOCK) {
     for (const statement of body.children) {
-      if (statement.kind === N_BREAK || statement.kind === N_RETURN || statement.kind === N_THROW) {
+      if (
+        statement.kind === N_BREAK ||
+        statement.kind === N_RETURN ||
+        statement.kind === N_THROW ||
+        (statement.kind === N_CONTINUE && statement.text !== "")
+      ) {
         loops = false
       }
       statements.push(statement)

@@ -413,9 +413,8 @@ export class Parser {
 
   /**
    * The labels of the labelled statements around the current one, innermost
-   * last. A `break` or `continue` naming one of them is read, so that the
-   * refusal is the labelled statement's (NL1046) and there is only one; a
-   * label nothing declares stays a syntax error, as it is in TypeScript.
+   * last. A `break` or `continue` may name one of them; a label nothing
+   * declares stays a syntax error, as it is in TypeScript.
    */
   labels: string[]
   /** For each of `labels`, whether it names a loop, the only target a `continue` may name. */
