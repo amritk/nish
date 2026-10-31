@@ -56,19 +56,21 @@ const stepTo = (lo: i32, step: i32, n: i32): i32 => (wrappingSub(n, lo) > step ?
 const insertionRun = <T>(src: T[], dst: T[], cmp: (a: T, b: T) => number, lo: i32, hi: i32): void => {
   // A strictly descending run is copied reversed: no two of its elements are
   // equal, so reversing it keeps the sort stable, and costs one comparison each.
-  let d = lo + 1
+  // `lo < hi`, and `d` steps only while below `hi`, so neither `+ 1` wraps.
+  let d = wrappingAdd(lo, 1)
   while (d > 0 && d < hi && d < toI32(src.length)) {
     const p = d - 1
     if (!(cmp(src[p], src[d]) > 0)) {
       break
     }
-    d = d + 1
+    d = wrappingAdd(d, 1)
   }
   if (d >= hi) {
-    let r = hi - 1
+    // `hi > lo >= 0`, so `hi - 1` does not wrap, and `r` steps down only from `r >= 0`.
+    let r = wrappingSub(hi, 1)
     for (let k: i32 = lo; k >= 0 && k < hi && k < toI32(dst.length) && r >= 0 && r < toI32(src.length); k++) {
       dst[k] = src[r]
-      r = r - 1
+      r = wrappingSub(r, 1)
     }
     return
   }

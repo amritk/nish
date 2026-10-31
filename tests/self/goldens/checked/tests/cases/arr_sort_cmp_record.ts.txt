@@ -8,8 +8,12 @@ unsafe import 41:10 wrappingAdd from "nish:unsafe"
 unsafe import 41:23 wrappingSub from "nish:unsafe"
 unsafe call 50:54 wrappingSub (node 34)
 unsafe call 50:82 wrappingAdd (node 42)
-unsafe call 122:11 wrappingAdd (node 641)
-unsafe call 128:11 wrappingAdd (node 680)
+unsafe call 60:11 wrappingAdd (node 93)
+unsafe call 66:9 wrappingAdd (node 143)
+unsafe call 70:13 wrappingSub (node 158)
+unsafe call 73:11 wrappingSub (node 212)
+unsafe call 124:11 wrappingAdd (node 649)
+unsafe call 130:11 wrappingAdd (node 688)
 const RUN: i32 = 32
 function stepTo(lo: i32, step: i32, n: i32): i32 -> @nish.stepTo
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -36,7 +40,7 @@ function sortWith<Row, byKey>(xs: Row[], cmp: void): Row[] -> @nish.sortWith$$Ro
   callee +23:13 stepTo -> @nish.stepTo
   callee +26:5 copyRun<Row> -> @nish.copyRun$$Row
 function sortWith<string, byLength>(xs: string[], cmp: void): string[] -> @nish.sortWith$str$fn.8.byLength [exported instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.insertionRun$str$fn.8.byLength
   escaping: xs
   calls: nish.copyRun$str nish.insertionRun$str$fn.8.byLength nish.mergePass$str$fn.8.byLength nish.stepTo nish_arena_mark nish_arena_release nish_array_grow
@@ -59,13 +63,13 @@ function insertionRun<Row, byKey>(src: Row[], dst: Row[], cmp: void, lo: i32, hi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: lo
-  calls: byKey$ nish_panic_overflow
+  calls: byKey$
   pointer src: size=0 writesThrough=false captured=false passedTo=byKey$#0 byKey$#1 byKey$#1
   pointer dst: size=0 writesThrough=true captured=false passedTo=byKey$#0
   stackSites=0 stackLocals=0
-  local -11:7 d: i32 (let)
-  local -9:11 p: i32 (const)
-  callee -8:11 byKey -> @byKey$
+  local -12:7 d: i32 (let)
+  local -10:11 p: i32 (const)
+  callee -9:11 byKey -> @byKey$
   local -2:9 r: i32 (let)
   local -1:14 k: i32 (let)
   local +5:12 i: i32 (let)
@@ -95,16 +99,16 @@ function copyRun<Row>(src: Row[], dst: Row[], lo: i32, hi: i32): void -> @nish.c
   stackSites=0 stackLocals=0
   local -1:12 k: i32 (let)
 function insertionRun<string, byLength>(src: string[], dst: string[], cmp: void, lo: i32, hi: i32): void -> @nish.insertionRun$str$fn.8.byLength [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: lo
-  calls: byLength$ nish_panic_overflow
+  calls: byLength$
   pointer src: size=0 writesThrough=true captured=false
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -11:7 d: i32 (let)
-  local -9:11 p: i32 (const)
-  callee -8:11 byLength -> @byLength$
+  local -12:7 d: i32 (let)
+  local -10:11 p: i32 (const)
+  callee -9:11 byLength -> @byLength$
   local -2:9 r: i32 (let)
   local -1:14 k: i32 (let)
   local +5:12 i: i32 (let)
