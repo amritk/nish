@@ -1226,7 +1226,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   let defaultReaches = false
   // A body that falls out of its bottom runs on into the next one, so that
   // one is entered by the labels of both groups, and with what the bodies
-  // before it assigned joined to what held before the `switch`.
+  // before it assigned dropped to its declared type.
   let fell = false
   let fallen: Local[] = []
   let i = 0
@@ -1259,7 +1259,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
     if (body.children.length > 0 || i === clauses.length - 1) {
       captureNarrowings(kept, before, scope)
       if (fell) {
-        for (const local of kept) {
+        for (const local of fallen) {
           scope.clearNarrowing(local)
         }
       }

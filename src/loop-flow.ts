@@ -916,7 +916,8 @@ const flowLabelBits = (ctx: CheckContext, f: LoopFlow, k: i32, label: Node): i32
  * names — and a `break` out of it, the last body falling out of the bottom,
  * or a value no label names reaches its end; a `continue` goes on to the
  * loop. Any other body that falls out of its bottom runs on into the next,
- * which then starts from both. A label the pass does not read narrows nothing it would remove.
+ * where the checker drops what it assigned to its declared type: a form this
+ * pass gives up on. A label the pass does not read narrows nothing it would remove.
  */
 const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] => {
   if (flowDead(s)) {
@@ -938,7 +939,6 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
     }
   }
   let out: i32[] = []
-  let fell: i32[] = []
   let hasDefault = false
   let group = 0
   let groupKnown = true
@@ -965,7 +965,6 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
       } else if (k >= 0 && k < s.length && groupKnown) {
         state = flowSet(s, k, s[k] & group)
       }
-      state = flowJoin(f, state, fell)
       for (const statement of body.children) {
         if (flowDead(state)) {
           f.status = "bail"
@@ -975,8 +974,8 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
       }
       if (i === clauses.length - 1) {
         out = flowJoin(f, out, state)
-      } else {
-        fell = state
+      } else if (!flowDead(state)) {
+        f.status = "bail"
       }
       group = 0
       groupKnown = true

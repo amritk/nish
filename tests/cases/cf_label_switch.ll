@@ -57,46 +57,41 @@ if.then:
 
 if.end:
   %16 = load i32, i32* %acc.addr, align 4
-  %17 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 10)
-  %18 = extractvalue { i32, i1 } %17, 0
-  %19 = extractvalue { i32, i1 } %17, 1
-  br i1 %19, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  store i32 %18, i32* %acc.addr, align 4
+  %17 = add nsw i32 %16, 10
+  store i32 %17, i32* %acc.addr, align 4
   br label %sw.end
 
 sw.default:
-  %20 = load i32, i32* %acc.addr, align 4
-  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 100)
-  %22 = extractvalue { i32, i1 } %21, 0
-  %23 = extractvalue { i32, i1 } %21, 1
-  br i1 %23, label %ovf.fail, label %ovf.ok.2
+  %18 = load i32, i32* %acc.addr, align 4
+  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 100)
+  %20 = extractvalue { i32, i1 } %19, 0
+  %21 = extractvalue { i32, i1 } %19, 1
+  br i1 %21, label %ovf.fail, label %ovf.ok.1
 
-ovf.ok.2:
-  store i32 %22, i32* %acc.addr, align 4
+ovf.ok.1:
+  store i32 %20, i32* %acc.addr, align 4
   br label %sw.end
 
 sw.end:
-  %24 = load i32, i32* %acc.addr, align 4
-  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %24, i32 1000)
-  %26 = extractvalue { i32, i1 } %25, 0
-  %27 = extractvalue { i32, i1 } %25, 1
-  br i1 %27, label %ovf.fail, label %ovf.ok.3
+  %22 = load i32, i32* %acc.addr, align 4
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %22, i32 1000)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.2
 
-ovf.ok.3:
-  store i32 %26, i32* %acc.addr, align 4
+ovf.ok.2:
+  store i32 %24, i32* %acc.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %28 = load i64, i64* %forof.idx, align 8
-  %29 = add i64 %28, 1
-  store i64 %29, i64* %forof.idx, align 8
+  %26 = load i64, i64* %forof.idx, align 8
+  %27 = add i64 %26, 1
+  store i64 %27, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %30 = load i32, i32* %acc.addr, align 4
-  ret i32 %30
+  %28 = load i32, i32* %acc.addr, align 4
+  ret i32 %28
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

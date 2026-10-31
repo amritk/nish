@@ -3,11 +3,9 @@
 
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
-declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
@@ -59,72 +57,42 @@ for.cond.1:
 for.body.1:
   %4 = load i32, i32* %i.addr, align 4
   %5 = load i32, i32* %j.addr, align 4
-  %6 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %4, i32 %5)
-  %7 = extractvalue { i32, i1 } %6, 0
-  %8 = extractvalue { i32, i1 } %6, 1
-  br i1 %8, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  %9 = icmp eq i32 %7, %target
-  br i1 %9, label %if.then, label %if.end
+  %6 = mul nsw i32 %4, %5
+  %7 = icmp eq i32 %6, %target
+  br i1 %7, label %if.then, label %if.end
 
 if.then:
-  %10 = load i32, i32* %i.addr, align 4
-  %11 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %10, i32 100)
-  %12 = extractvalue { i32, i1 } %11, 0
-  %13 = extractvalue { i32, i1 } %11, 1
-  br i1 %13, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  %14 = load i32, i32* %j.addr, align 4
-  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %14)
-  %16 = extractvalue { i32, i1 } %15, 0
-  %17 = extractvalue { i32, i1 } %15, 1
-  br i1 %17, label %ovf.fail, label %ovf.ok.2
-
-ovf.ok.2:
-  store i32 %16, i32* %found.addr, align 4
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = mul nsw i32 %8, 100
+  %10 = load i32, i32* %j.addr, align 4
+  %11 = add nsw i32 %9, %10
+  store i32 %11, i32* %found.addr, align 4
   br label %for.end
 
 if.end:
   br label %for.inc.1
 
 for.inc.1:
-  %18 = load i32, i32* %j.addr, align 4
-  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 1)
-  %20 = extractvalue { i32, i1 } %19, 0
-  %21 = extractvalue { i32, i1 } %19, 1
-  br i1 %21, label %ovf.fail, label %ovf.ok.3
-
-ovf.ok.3:
-  store i32 %20, i32* %j.addr, align 4
+  %12 = load i32, i32* %j.addr, align 4
+  %13 = add nsw i32 %12, 1
+  store i32 %13, i32* %j.addr, align 4
   br label %for.cond.1
 
 for.end.1:
   br label %for.inc
 
 for.inc:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %22, i32 1)
-  %24 = extractvalue { i32, i1 } %23, 0
-  %25 = extractvalue { i32, i1 } %23, 1
-  br i1 %25, label %ovf.fail, label %ovf.ok.4
-
-ovf.ok.4:
-  store i32 %24, i32* %i.addr, align 4
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = add nsw i32 %14, 1
+  store i32 %15, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %26 = load i32, i32* %found.addr, align 4
-  ret i32 %26
-
-ovf.fail:
-  %ovf.op = phi i32 [ 2, %for.body.1 ], [ 2, %if.then ], [ 0, %ovf.ok.1 ], [ 0, %for.inc.1 ], [ 0, %for.inc ]
-  call void @nish_panic_overflow(i32 %ovf.op)
-  unreachable
+  %16 = load i32, i32* %found.addr, align 4
+  ret i32 %16
 }
 
-define internal noundef i32 @skipRows(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %rows) #0 {
+define internal noundef i32 @skipRows(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %rows) #1 {
 entry:
   %total.addr = alloca i32, align 4
   %row.addr = alloca %struct.nish_array*, align 8
@@ -218,7 +186,7 @@ ovf.fail:
   unreachable
 }
 
-define internal noundef i32 @countdown(i32 noundef %start) #0 {
+define internal noundef i32 @countdown(i32 noundef %start) #1 {
 entry:
   %steps.addr = alloca i32, align 4
   %n.addr = alloca i32, align 4
@@ -234,45 +202,40 @@ while.cond:
 
 while.body:
   %2 = load i32, i32* %n.addr, align 4
-  %3 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %2, i32 1)
-  %4 = extractvalue { i32, i1 } %3, 0
-  %5 = extractvalue { i32, i1 } %3, 1
-  br i1 %5, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  store i32 %4, i32* %n.addr, align 4
+  %3 = sub nsw i32 %2, 1
+  store i32 %3, i32* %n.addr, align 4
   store i32 0, i32* %k.addr, align 4
   br label %do.body
 
 do.body:
-  %6 = load i32, i32* %k.addr, align 4
-  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 1)
-  %8 = extractvalue { i32, i1 } %7, 0
-  %9 = extractvalue { i32, i1 } %7, 1
-  br i1 %9, label %ovf.fail, label %ovf.ok.1
+  %4 = load i32, i32* %k.addr, align 4
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 1)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %6, i32* %k.addr, align 4
+  %8 = load i32, i32* %steps.addr, align 4
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 1)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  store i32 %8, i32* %k.addr, align 4
-  %10 = load i32, i32* %steps.addr, align 4
-  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 1)
-  %12 = extractvalue { i32, i1 } %11, 0
-  %13 = extractvalue { i32, i1 } %11, 1
-  br i1 %13, label %ovf.fail, label %ovf.ok.2
-
-ovf.ok.2:
-  store i32 %12, i32* %steps.addr, align 4
-  %14 = load i32, i32* %k.addr, align 4
-  %15 = load i32, i32* %n.addr, align 4
-  %16 = icmp eq i32 %14, %15
-  br i1 %16, label %if.then, label %if.end
+  store i32 %10, i32* %steps.addr, align 4
+  %12 = load i32, i32* %k.addr, align 4
+  %13 = load i32, i32* %n.addr, align 4
+  %14 = icmp eq i32 %12, %13
+  br i1 %14, label %if.then, label %if.end
 
 if.then:
   br label %while.cond
 
 if.end:
-  %17 = load i32, i32* %steps.addr, align 4
-  %18 = icmp sgt i32 %17, 20
-  br i1 %18, label %if.then.1, label %if.end.1
+  %15 = load i32, i32* %steps.addr, align 4
+  %16 = icmp sgt i32 %15, 20
+  br i1 %16, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %while.end
@@ -281,24 +244,23 @@ if.end.1:
   br label %do.cond
 
 do.cond:
-  %19 = load i32, i32* %k.addr, align 4
-  %20 = icmp slt i32 %19, 3
-  br i1 %20, label %do.body, label %do.end
+  %17 = load i32, i32* %k.addr, align 4
+  %18 = icmp slt i32 %17, 3
+  br i1 %18, label %do.body, label %do.end
 
 do.end:
   br label %while.cond
 
 while.end:
-  %21 = load i32, i32* %steps.addr, align 4
-  ret i32 %21
+  %19 = load i32, i32* %steps.addr, align 4
+  ret i32 %19
 
 ovf.fail:
-  %ovf.op = phi i32 [ 1, %while.body ], [ 0, %do.body ], [ 0, %ovf.ok.1 ]
-  call void @nish_panic_overflow(i32 %ovf.op)
+  call void @nish_panic_overflow(i32 0)
   unreachable
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x %struct.nish_array*], align 8
@@ -380,10 +342,10 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind "probe-stack"="inline-asm" }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
-attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!17, !18, !19, !20, !21}
