@@ -346,6 +346,31 @@ export class ThreadScope {
 export const scope = (): ThreadScope => new ThreadScope()
 
 /**
+ * The smallest stack `scopeWithStack` takes: 128 KiB, the largest
+ * `PTHREAD_STACK_MIN` among the targets (aarch64 Linux). A constant below it
+ * is refused at compile time (NL2584); a computed one panics here, under Node
+ * as natively.
+ */
+const MIN_STACK: i32 = 131072
+
+/**
+ * A new scope whose tasks each run on a thread with a stack of at least
+ * `bytes` bytes, for a `using` declaration: `using s = scopeWithStack(n)`.
+ * The tasks run on new threads, never on the one that joins. The runtime
+ * rounds `bytes` up to the page size and adds a guard page below it, so a task
+ * that overflows it faults instead of writing past it. Under Node, and on a
+ * target without threads, the size is checked and has no other effect.
+ */
+export const scopeWithStack = (bytes: i32): ThreadScope => {
+  if (bytes < MIN_STACK) {
+    panic(`scopeWithStack: a stack of ${bytes} bytes is below the minimum of ${MIN_STACK}`)
+  }
+  const s = scope()
+  s.stack = bytes
+  return s
+}
+
+/**
  * What a `Mutex` hands out: its data, as `value`, for as long as the block of
  * the `using` declaration that took the lock (docs/LANGUAGE.md, "A lock that
  * owns its data"). A guard is only ever named as `g.value`, and `g.value`
@@ -666,29 +691,4 @@ class ChannelWalk<T> {
     }
     return { done: false, value: this.channel.take() }
   }
-}
-
-/**
- * The smallest stack `scopeWithStack` takes: 128 KiB, the largest
- * `PTHREAD_STACK_MIN` among the targets (aarch64 Linux). A constant below it
- * is refused at compile time (NL2584); a computed one panics here, under Node
- * as natively.
- */
-const MIN_STACK: i32 = 131072
-
-/**
- * A new scope whose tasks each run on a thread with a stack of at least
- * `bytes` bytes, for a `using` declaration: `using s = scopeWithStack(n)`.
- * The tasks run on new threads, never on the one that joins. The runtime
- * rounds `bytes` up to the page size and adds a guard page below it, so a task
- * that overflows it faults instead of writing past it. Under Node, and on a
- * target without threads, the size is checked and has no other effect.
- */
-export const scopeWithStack = (bytes: i32): ThreadScope => {
-  if (bytes < MIN_STACK) {
-    panic(`scopeWithStack: a stack of ${bytes} bytes is below the minimum of ${MIN_STACK}`)
-  }
-  const s = scope()
-  s.stack = bytes
-  return s
 }
