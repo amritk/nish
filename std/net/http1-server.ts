@@ -493,7 +493,11 @@ export class Http1Connection {
    * put another, to share it or to pin its clock.
    */
   date: HttpDate
-  /** The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is the last `H1_REQUEST`'s. */
+  /**
+   * The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is
+   * the current request's from its `H1_REQUEST` until its response is done,
+   * `H1_END` included, however much of a pipelined request is fed behind it.
+   */
   parser: Http1Parser
   /**
    * The frame decoder: made when the slot first switches to WebSocket, so a
@@ -1225,7 +1229,8 @@ export class Http1Connection {
    * `Accept-Encoding` with gzip offered (`httpAcceptEncoding`):
    * `HTTP_CODING_GZIP`, `HTTP_CODING_IDENTITY` (also with no such field), or
    * `HTTP_CODING_NONE` when the client refuses identity and does not take
-   * gzip. Allocates nothing.
+   * gzip. Allocates nothing. Read at `H1_REQUEST`, `H1_BODY` or `H1_END`
+   * alike: the head stays the request's until its response is done.
    */
   acceptEncoding(): i32 {
     return this.acceptEncodingOf(HTTP_OFFER_GZIP)
@@ -1264,9 +1269,11 @@ export class Http1Connection {
    * and the choice turned on the request (`HttpCompressor.varies`). Under
    * `enc.segmentMode` the compressed response goes out only when, head
    * included, it takes fewer segments of `mss` bytes (this connection's, or
-   * `enc.mss`) than the body as it is; `enc.decision` says what was chosen.
-   * A request that refuses identity (`identityRefused`) is sent gzip whatever
-   * the length, the saving or the segments (`enc.compressAnyway`).
+   * `enc.mss`) than the body as it is, and a response that fits one segment
+   * as it is goes so without compressing (`enc.oneSegment`); `enc.decision`
+   * says what was chosen. A request that refuses identity (`identityRefused`)
+   * is sent gzip whatever the length, the saving or the segments
+   * (`enc.compressAnyway`).
    * The program's fields may not name `Content-Encoding` or, with
    * `enc.vary`, `Vary`. The whole response is written or none of
    * it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says
@@ -1290,16 +1297,6 @@ export class Http1Connection {
       return H1_CLOSED
     }
     const required: boolean = coding === HTTP_CODING_GZIP && this.identityRefused()
-    let packed: i32 = required
-      ? enc.compressAnyway(coding, body, off, len)
-      : enc.compress(coding, body, off, len)
-    let n: i32 = len
-    if (packed >= 0) {
-      enc.addFields(names, values)
-      n = packed
-    } else {
-      enc.identityFields(names, values)
-    }
     // `respond` and the body together, or neither: what `respond` sets is
     // put back when the body does not fit behind the head. `room` first, so
     // that what was sent is already moved out of the way and the `outputEnd`
@@ -1307,9 +1304,36 @@ export class Http1Connection {
     this.room()
     const outputEnd: i32 = this.outputEnd
     const closeAfter: boolean = this.closeAfter
-    let r: i32 = this.respond(status, enc.names, enc.values, n)
-    if (r !== 0) {
-      return r
+    let packed: i32 = -1
+    let n: i32 = len
+    let r: i32 = 0
+    let queued: boolean = false
+    if (!required && enc.segmentMode && enc.oneSegment(coding, len, this.mss)) {
+      // A response that fits one segment as it is cannot take fewer
+      // compressed, so it goes as it is with no encoder run, unless its head
+      // pushes it past the segment: then it is taken back and decided below.
+      enc.identityFields(names, values)
+      r = this.respond(status, enc.names, enc.values, len)
+      if (r !== 0) {
+        return r
+      }
+      queued = this.outputEnd - outputEnd + len <= enc.segmentSize(this.mss)
+      if (!queued) {
+        this.unrespond(outputEnd, closeAfter)
+      }
+    }
+    if (!queued) {
+      packed = required ? enc.compressAnyway(coding, body, off, len) : enc.compress(coding, body, off, len)
+      if (packed >= 0) {
+        enc.addFields(names, values)
+        n = packed
+      } else {
+        enc.identityFields(names, values)
+      }
+      r = this.respond(status, enc.names, enc.values, n)
+      if (r !== 0) {
+        return r
+      }
     }
     if (packed >= 0 && enc.segmentMode && !required) {
       // The head just written, and the one the body as it is would get.
