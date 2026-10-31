@@ -1309,6 +1309,8 @@ const diagnosticRules = (): string[] => [
   "NL2297",
   "` returns before field `",
   "NL2104",
+  "` takes an `i32[]`, got ",
+  "NL2584",
   "`, which share no member",
   "NL2531",
   "`unwrapOr(...)` expects ",

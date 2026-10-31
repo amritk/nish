@@ -94,7 +94,7 @@ clocks. The command lines above stay as they are.
   `udpBind`, `udpSendTo`,
   `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`,
   `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`,
-  `unixSocketPair` — installed only to **throw**, each
+  `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` — installed only to **throw**, each
   naming itself: Node's sockets are ready only to its event loop, which a
   program that owns its loop never returns to
   ([`nish:net`](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)). A

@@ -121,8 +121,10 @@ cases/caps_fs_write added after R6: no rewriter to freeze it with
 cases/caps_generic added after R6: no rewriter to freeze it with
 cases/caps_host added after R6: no rewriter to freeze it with
 cases/caps_net added after R6: no rewriter to freeze it with
+cases/caps_net_peer added after R6: no rewriter to freeze it with
 cases/caps_process_nice added after R6: no rewriter to freeze it with
 cases/caps_process_spawn added after R6: no rewriter to freeze it with
+cases/caps_process_spawn_fds added after R6: no rewriter to freeze it with
 cases/caps_process_spawn_piped added after R6: no rewriter to freeze it with
 cases/caps_process_wait added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with

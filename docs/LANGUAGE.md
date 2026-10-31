@@ -6407,10 +6407,10 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair` and their constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 | `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors)) |
@@ -7433,6 +7433,14 @@ reason `spawnSyncTo` gave for refusing to buffer: a child that prints more
 than memory holds is stopped, with a code no exit status can be, rather than
 followed (`docs/security/runtime.md`, RT-27 to RT-31).
 
+`spawnWithFds` numbers the descriptors from 3 rather than taking a target
+for each, because 3 onward is where a child that is handed descriptors looks
+for them (systemd's socket activation, `LISTEN_FDS`), and a target list would
+let a program aim one at 0 to 2 and lose the child's streams. The runtime
+duplicates each source above the targets before the child's `dup2` reads it,
+so an entry that is its own target or another's is never overwritten first
+(`docs/security/runtime.md`, RT-40).
+
 `readdirSync` sorts, which neither `readdir(3)` nor Node's `fs.readdirSync`
 does, and that is a decision about this language rather than a convenience:
 there is no `sort` to reach for, so every caller of an unsorted listing would
@@ -7576,6 +7584,7 @@ exported by `nish:process` as well as being a global.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `spawn(argv: string[]): i32` | start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does — the same vector, environment, streams and working directory — and answer the child's **pid** at once, **without waiting**. A failure is a **negative errno**: -22 (EINVAL) for an empty vector or an argument holding a NUL, and `posix_spawnp`'s own error otherwise, so a program that is not there is -2 (ENOENT). **Test `pid > 0` before handing the answer on**: a failure such as -1 (EPERM) passed to `waitPid` reads as "any child". The child is this process's until `waitPid` reaps it; one never reaped stays a zombie until the program exits, as it would in C | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
+| `spawnWithFds(argv: string[], fds: readonly i32[]): i32` | `spawn`, with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec cleared there, and its pid or a negative errno back. Its streams 0 to 2 are this process's, and **no other descriptor** of this process reaches it but one opened without close-on-exec, which nothing the runtime opens is. Any order works: `fds` may list a descriptor that is already its own target (`[3]`), another entry's target (`[4, 3]`), or the same one twice. More than **64** descriptors, or a negative one, is `-22` before anything is opened or started; one that is not open is `-9`; an empty `fds` is `spawn` exactly. The child shares each descriptor's open file, its offset and its status flags, `O_NONBLOCK` among them, and this process keeps its own. Reap the pid with `waitPid` | write | `spawn_fds_child`, `caps_process_spawn_fds`; `reject_spawn_fds_arity`, `reject_spawn_fds_element`, `reject_spawn_fds_argv`, `reject_spawn_fds_wasm` |
 | `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, so a number means the same signal on every host. A `pid` of 0 or below is -22 too, because `kill(2)` reads those as a process group or every process, which is not one process. -3 (ESRCH) when no process has the pid — a child already reaped included — and -1 (EPERM) when it is another user's. A positive pid may be any process of this user, not only a child ([RT-19](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
 | `waitPid(pid: i32, flags: i32): i32[]` | reap a child and answer a fresh two-element **`[pid, status]`**. `pid` is a child's, or **-1 for any child**; flag **1 is WNOHANG**. The status is `spawnSync`'s: the exit code, or **128 + n** when signal `n` ended it. `[0, 0]` is a WNOHANG wait with a child left and none exited. A failure puts the negative errno first: `[-10, 0]` (ECHILD) when there is no child to wait for, `[-4, 0]` (EINTR) when a signal interrupted the wait — though after `signalFd()` a blocking wait never sees it, because that handler is installed with `SA_RESTART` and the wait restarts, and `[-22, 0]` for any other flag bit or a pid that is neither -1 nor positive. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
 | `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number — which can lower the count and never raise it. It needs no `--threads`: a program asks it to decide how many workers to start | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
@@ -7687,6 +7696,9 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`: the descriptor, `-111` when nothing listens there, `-2` when there is no such file, `-11` on Linux and `-111` on Darwin when the listener's backlog is full (the socket is closed; try again later), and the path refusals `unixListen` has | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
 | `unixAccept(fd: i32): i32` | the next waiting connection, non-blocking and close-on-exec; `-11` when none is waiting. No peer address is written: a Unix client is seldom bound | write | `net_unix_calls` |
 | `unixSocketPair(kind: i32, fds: i32[]): i32` | two connected sockets into `fds[0]` and `fds[1]`, non-blocking and close-on-exec, and `0`. Kind `1` (`NET_UNIX_STREAM`) is a byte stream, kind `2` (`NET_UNIX_SEQPACKET`) keeps each write one message; any other kind, or an `fds` shorter than 2, is `-22` before a socket exists. Kind `2` is **`-95` on Darwin** | write | `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`, `reject_net_unix_pair_readonly` |
+| `sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | `len` bytes of `buf[off, off + len)` over the Unix socket `sock`, with one copy of the descriptor `fd` riding on them (`SCM_RIGHTS`): the bytes sent, or the failure. A descriptor travels with data, so a `len` of `0` is **`-22`**, and so is a negative `fd`; an `fd` that is not open is `-9`. `fd` stays open here, and the receiver gets its own. A `sock` that is not a socket is `-88`, a socket of another family **`-95`**, and a gone peer `-32`, never SIGPIPE. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`, `reject_net_unix_scm_wasm` |
+| `recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, `-11` when nothing is waiting, or the failure. `fd[0]` is the first descriptor the message carried, or **`-1`** when it carried none; every further one is closed before the answer, and room is made for 8, so the kernel drops the rest of a message that carries more and the bytes are still answered. The descriptor kept is close-on-exec and **not** made non-blocking: its status flags are the open file's, which the sender shares. A `len` of `0` or an empty `fd` is `-22` before anything is read; `sock` is refused as `sendFd`'s is. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly` |
+| `peerCredentials(fd: i32, out: i32[]): i32` | the process at the other end of the connected Unix socket `fd`, as `out[0]`, `out[1]`, `out[2]` = pid, uid, gid, and `0`. They are what the kernel recorded **when the connection was made** (the `connect`, or the `socketpair`), not who holds the other end now. An `out` shorter than 3 is `-22` before anything is asked, and `fd` is refused as `sendFd`'s `sock` is. On Darwin the pid is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it | write | `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`, `reject_net_unix_peer_readonly` |
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -7974,6 +7986,22 @@ too. There is no address form: `unixAccept` writes no peer.
   connection is; `NET_UNIX_SEQPACKET` keeps each write one message, so a read
   returns one message, never two run together (`net_unix_calls`). Darwin has
   no Unix seqpacket, and kind `2` there is `-95`.
+- **Descriptors and credentials.** `sendFd` hands the process at the other
+  end of a Unix socket a descriptor of this one: the receiver's `recvFd` gets
+  a new descriptor for the same open file, with its offset and status flags
+  shared, as `dup` gives. It rides on at least one byte of data, so the
+  receiver's read is what tells it a descriptor came. `recvFd` keeps the
+  first descriptor of a message and closes every other one before it answers,
+  so a peer cannot leave this process holding descriptors it never asked for
+  ([docs/security/runtime.md](security/runtime.md), RT-37). The one it keeps
+  is close-on-exec, so a later `spawn` does not hand it on, but it is not made
+  non-blocking: `netRead` on a blocking one waits, so set what the program
+  needs on it before it joins a loop. `peerCredentials` names the process at
+  the other end, as the kernel recorded it at the connect; a peer that has
+  changed its uid since, or passed the socket on, still reads as it was then
+  (RT-39). On a TCP socket, or any socket not `AF_UNIX`, the three are
+  `-95`, and on a descriptor that is not a socket `-88`, both before anything
+  is sent or asked (`net_unix_scm`).
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
@@ -7985,12 +8013,17 @@ too. There is no address form: `unixAccept` writes no peer.
 `NET_TCP_NODELAY` is: the constants are plain `i32`s, so the checker cannot
 tell one passed where another belongs. Name the one the call takes.
 
-On Darwin the calls are the same C under `#if`, with five differences: no
+On Darwin the calls are the same C under `#if`, with seven differences: no
 abstract names (`-95`), no seqpacket pair (`-95`), flag `1` meeting a socket
 file is `-95` rather than a probe, a connect to a full backlog is `-111`
-rather than `-11`, and `fcntl` after `accept` and `socketpair` where Linux
-passes `SOCK_NONBLOCK | SOCK_CLOEXEC`. CI does not
-run them on a mac yet.
+rather than `-11`, `fcntl` after `accept` and `socketpair` where Linux
+passes `SOCK_NONBLOCK | SOCK_CLOEXEC`, `fcntl` after `recvmsg` where Linux
+passes `MSG_CMSG_CLOEXEC`, so a child another thread spawns between the two
+inherits the descriptor `recvFd` keeps (RT-38), and `peerCredentials` reading
+`getpeereid` and `LOCAL_PEERPID`, its pid `-1` where that refuses, where
+Linux reads `SO_PEERCRED`. A listener has no peer: Linux answers its own
+process's credentials there, and what Darwin answers is not yet seen on a
+mac. CI does not run them on a mac yet.
 
 #### Bounds
 
@@ -8019,20 +8052,24 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   are the program's own `i32`s (`` `pollWait` fills an `i32[]`, got u8[] ``,
   `reject_net_poll_element`), and so is `unixSocketPair`'s `fds`
   (`` `unixSocketPair` fills an `i32[]`, got u8[] ``,
-  `reject_net_unix_pair_element`). A path is a `string`, and anything else is
+  `reject_net_unix_pair_element`), and so are `recvFd`'s `fd` and
+  `peerCredentials`'s `out` (`reject_net_unix_scm_element`). A path is a `string`, and anything else is
   refused (`reject_net_unix_path_type`). A descriptor, an offset, a length, a port, a
   backlog, `how`, the flags, a segment size, the ECN bits, a loop, the events,
   a token, a timeout, a socket option and its value, a pair kind and a mode are `i32` in both number modes, and an
   `f64` is refused rather than converted (`reject_net_fd_type`).
 - **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer`,
   `netRead`'s `buf`, `udpRecvFrom`'s `buf`, `from` and `meta`, `pollWait`'s
-  `ready` and `unixSocketPair`'s `fds` are written, so
+  `ready`, `unixSocketPair`'s `fds`, `recvFd`'s `buf` and `fd` and
+  `peerCredentials`'s `out` are written, so
   a `readonly` array there is refused as a store through it is
   (`reject_net_readonly`, `reject_net_accept_readonly`,
   `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`,
-  `reject_net_poll_readonly`, `reject_net_unix_pair_readonly`), a parameter one of
-  them fills is never `readonly` in the IR, and `netWrite`'s `buf` and
-  `udpSendTo`'s `buf` and `to` may be `readonly` (`net_udp_calls`).
+  `reject_net_poll_readonly`, `reject_net_unix_pair_readonly`,
+  `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly`,
+  `reject_net_unix_peer_readonly`), a parameter one of
+  them fills is never `readonly` in the IR, and `netWrite`'s `buf`,
+  `udpSendTo`'s `buf` and `to` and `sendFd`'s `buf` may be `readonly` (`net_udp_calls`).
 - **Threads.** Every call changes the kernel's state of a socket, which is a
   write its caller can see, and a loop is a socket's state as much as its
   bytes, so none may be made in a `scope()` task

@@ -2186,6 +2186,10 @@ also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
 a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
 `totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
 the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
+`spawnWithFds(argv, fds)` is `spawn` that hands the child `fds[i]` as
+descriptor `3 + i` (systemd's `LISTEN_FDS` numbering); every other descriptor
+still closes at exec. More than 64, or a negative one, is `-22`; it needs
+`process.spawn` under `--sandbox`, refuses a wasm target and throws under Node.
 `setNice(n)` sets the nice value, and it is lower-only even as root: `n` takes
 0..19 (`-22` outside it) and a value below the current one is `-13`, with no
 system call either way. `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
@@ -2257,8 +2261,17 @@ bytes (103 on Darwin) and an abstract name at most 107 after its `@`; longer
 is `-36`. A full backlog makes `unixConnect`
 `-11` on Linux and `-111` on Darwin. Under `--sandbox`, a listener on a path
 also needs `fs.write` (`-13` without it); an abstract name does not, and a
-connect to a path is not confined. The Unix calls are refused on a wasm
-target, and under Node each throws.
+connect to a path is not confined. `sendFd(sock, fd, buf, off, len)` sends
+`buf[off, off + len)` with descriptor `fd` attached (`len` 0 is `-22`) and
+answers the bytes sent; `recvFd(sock, buf, off, len, fd)` reads into the
+range and sets `fd[0]` to the descriptor that came with it, or `-1`; the
+descriptor arrives close-on-exec and blocking, any beyond the first are closed,
+and `fd` shorter than 1 is `-22`. `peerCredentials(sock, out)` writes
+`[pid, uid, gid]` of the process that made the connection, as it was at
+connect time, into an `out` of length 3 or more (`-22` shorter); on Darwin the
+pid can be `-1`. All three answer `-88` or `-95` for a socket that is not
+Unix-domain. The Unix calls are refused on a wasm target, and under Node each
+throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write

@@ -2783,9 +2783,9 @@ if (!only || "net_set_option".includes(only)) {
 }
 
 // The Unix-domain calls under the prelude, by their global spellings: each of
-// the five throws, naming itself, and the flag and the two pair kinds read as
-// the numbers a native build folds them to (`tests/cases/net_unix_calls` and
-// `net_unix_paths` are the native half).
+// the eight throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls`,
+// `net_unix_paths` and `net_unix_scm` are the native half).
 if (!only || "net_unix".includes(only)) {
   const unixDir = path.join(buildDir, "net-prelude")
   fs.mkdirSync(unixDir, { recursive: true })
@@ -2808,6 +2808,9 @@ if (!only || "net_unix".includes(only)) {
     ["unixConnect", 'unixConnect("@nish")'],
     ["unixAccept", "unixAccept(3)"],
     ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+    ["sendFd", "sendFd(3, 0, [1], 0, 1)"],
+    ["recvFd", "recvFd(3, [0], 0, 1, [0])"],
+    ["peerCredentials", "peerCredentials(3, [0, 0, 0])"],
   ]
   for (const [name, call] of calls) {
     const entry = path.join(unixDir, `${name}.ts`)
@@ -2819,6 +2822,34 @@ if (!only || "net_unix".includes(only)) {
       shown(loud)
     )
   }
+}
+
+// `spawnWithFds` under the prelude, by its global spelling: it starts a child
+// as `spawn` does, so it throws, naming itself, for `spawn`'s reason
+// (`tests/cases/spawn_fds_child` is the native half). `--emit-ts` imports it
+// from `nish/runtime`, which throws the same way, as it imports `spawnPiped`:
+// without its `AMBIENT_NAMES` entry the module calls a global Node never had.
+if (!only || "spawn_fds".includes(only)) {
+  const fdsDir = path.join(buildDir, "spawn-fds-prelude")
+  fs.mkdirSync(fdsDir, { recursive: true })
+  const entry = path.join(fdsDir, "spawn-with-fds.ts")
+  fs.writeFileSync(entry, 'export const main = (): number => spawnWithFds(["true"], [0]);\n')
+  const loud = runUnderPrelude(entry, [])
+  check(
+    "spawn_fds: under the prelude spawnWithFds fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`spawnWithFds` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const emitted = path.join(fdsDir, "emitted")
+  fs.rmSync(emitted, { recursive: true, force: true })
+  const ts = spawnSync(NISH, [entry, "--emit-ts", emitted], { cwd: root, encoding: "utf8" })
+  const module = path.join(emitted, "spawn-with-fds.ts")
+  const text = ts.status === 0 && fs.existsSync(module) ? fs.readFileSync(module, "utf8") : ""
+  check(
+    "spawn_fds: --emit-ts imports spawnWithFds from nish/runtime",
+    text.startsWith('import { spawnWithFds } from "nish/runtime"\n'),
+    `exit ${ts.status}\n${ts.stderr}\n${text}`
+  )
 }
 
 // `netMss` where there is no socket to ask. Under the prelude it throws, naming
