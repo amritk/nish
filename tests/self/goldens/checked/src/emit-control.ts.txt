@@ -310,10 +310,11 @@ function emitContinue(emitter: Emitter, stmt: Node): void -> @emitContinue [expo
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
   callee +2:10 labelled -> @labelled
-  local +8:9 target: IRBlock | null (const)
-  callee +10:18 internalErrorFor -> @internalErrorFor
-  callee +12:3 leaveTo -> @leaveTo
-  callee +13:3 branch -> @branch
+  callee +9:18 internalErrorFor -> @internalErrorFor
+  local +11:9 target: IRBlock | null (const)
+  callee +13:18 internalErrorFor -> @internalErrorFor
+  callee +15:3 leaveTo -> @leaveTo
+  callee +16:3 branch -> @branch
 function emitThrow(emitter: Emitter, stmt: Node): void -> @emitThrow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
