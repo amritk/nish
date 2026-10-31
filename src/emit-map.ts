@@ -338,13 +338,40 @@ fail:
   call void ${panic}(i8* ${message})
   unreachable
 mark:
-  %w = load i64, i64* ${word0}, align 8
+${integer ? spreadIntKey(key) : ""}  %w = load i64, i64* ${word0}, align 8
   %set = or i64 %w, 1
   store i64 %set, i64* ${word0}, align 8
   br label %done
 done:
   ret void
 }`)
+}
+
+/**
+ * The constructor lines that pass each word of the integer key through
+ * splitmix64's finalizer once `getentropy` has filled it. A bijection keeps a
+ * uniform word uniform, so the universality `multiplyAddShift` claims is
+ * unchanged, but a source whose bytes have structure no longer hands the
+ * multiply a structured `a`: bench/fixed-key.c's sixteen 0x5a bytes left 9
+ * home buckets for 65536 multiplicative-sequence keys, and 57914 once spread.
+ */
+const spreadIntKey = (key: string): string => {
+  let out = ""
+  for (let i = 0; i < 2; i++) {
+    const at = hashKeyWord(i, key)
+    out = `${out}  %r${i} = load i64, i64* ${at}, align 8
+  %r${i}.s1 = lshr i64 %r${i}, 30
+  %r${i}.x1 = xor i64 %r${i}, %r${i}.s1
+  %r${i}.m1 = mul i64 %r${i}.x1, -4658895280553007687
+  %r${i}.s2 = lshr i64 %r${i}.m1, 27
+  %r${i}.x2 = xor i64 %r${i}.m1, %r${i}.s2
+  %r${i}.m2 = mul i64 %r${i}.x2, -7723592293110705685
+  %r${i}.s3 = lshr i64 %r${i}.m2, 31
+  %r${i}.x3 = xor i64 %r${i}.m2, %r${i}.s3
+  store i64 %r${i}.x3, i64* ${at}, align 8
+`
+  }
+  return out
 }
 
 /** Seeds `INT_HASH_KEY` (`seedHashKey`) and loads its two words, `a` and `b`. */

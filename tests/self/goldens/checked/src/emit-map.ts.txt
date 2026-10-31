@@ -335,7 +335,7 @@ function seedHashKey(emitter: Emitter, key: string): void -> @seedHashKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareGlobal
   escaping: key
-  calls: Emitter.addConstructor Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat nish_str_eq
+  calls: Emitter.addConstructor Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat nish_str_eq spreadIntKey
   pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.declareGlobal#0 Emitter.declare#0 Emitter.useRuntime#0 Emitter.stringConstant#0 Emitter.addConstructor#0
   stackSites=0 stackLocals=0
   local +0:9 integer: boolean (const)
@@ -352,6 +352,16 @@ function seedHashKey(emitter: Emitter, key: string): void -> @seedHashKey
   local +7:9 ctor: string (const)
   callee +8:3 Emitter.addConstructor -> @Emitter.addConstructor
   callee +9:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  callee +22:13 spreadIntKey -> @spreadIntKey
+function spreadIntKey(key: string): string -> @spreadIntKey
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: key
+  calls: hashKeyWord nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:7 out: string (let)
+  local +1:12 i: i32 (let)
+  local +2:11 at: string (const)
+  callee +2:16 hashKeyWord -> @hashKeyWord
 function loadIntKey(emitter: Emitter): string[] -> @loadIntKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via seedHashKey
