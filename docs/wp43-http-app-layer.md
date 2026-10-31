@@ -228,21 +228,22 @@ the carrier gives the noise band.
 `node bench/http.mjs --rounds 5 --duration 3 carrier=… copy=… handler=…`,
 server on one CPU, `wrk -t3` on three more, in a 4-core cloud session. Each
 cell is the median of five rounds and its change against the carrier; user
-time is CPU microseconds a request.
+time and sys (kernel) time are CPU microseconds a request; RSS is peak
+resident megabytes.
 
-| Scenario | carrier req/s | copy (noise) | handler | carrier user µs | handler user µs |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| ping, c=500 | 99,909 | −23.1% | −1.3% | 1.62 | 1.55 |
-| query, c=500 | 108,989 | −2.3% | −2.5% | 1.92 | 1.75 |
-| body, c=500 | 87,446 | +9.2% | +23.8% | 2.24 | 2.25 |
-| plaintext, c=256 | 161,645 | −5.8% | +0.1% | 1.21 | 1.50 |
-| json, c=256 | 158,452 | −13.5% | −5.9% | 1.40 | 1.49 |
-| post-json, c=256 | 60,799 | −1.1% | +11.7% | 7.91 | 6.36 |
-| post-json-doc, c=256 | 44,432 | +13.7% | +20.0% | 10.12 | 9.32 |
-| deep-route, c=256 | 139,875 | −1.3% | +3.1% | 1.83 | 1.80 |
-| plaintext, c=4096 | 86,311 | −7.3% | +17.1% | 2.19 | 2.49 |
-| plaintext close, c=64 | 49,753 | +7.4% | +8.3% | 2.68 | 3.02 |
-| close, c=64 + 8000 idle | 53,594 | −8.3% | −1.3% | 2.47 | 2.58 |
+| Scenario | carrier req/s | copy (noise) | handler | user µs (carrier / handler) | sys µs (carrier / handler) | RSS MB (carrier / handler) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ping, c=500 | 99,909 | −23.1% | −1.3% | 1.62 / 1.55 | 8.04 / 8.35 | 4 / 3 |
+| query, c=500 | 108,989 | −2.3% | −2.5% | 1.92 / 1.75 | 7.02 / 7.42 | 4 / 3 |
+| body, c=500 | 87,446 | +9.2% | +23.8% | 2.24 / 2.25 | 8.92 / 6.71 | 6 / 3 |
+| plaintext, c=256 | 161,645 | −5.8% | +0.1% | 1.21 / 1.50 | 4.78 / 4.59 | 3 / 3 |
+| json, c=256 | 158,452 | −13.5% | −5.9% | 1.40 / 1.49 | 4.84 / 5.14 | 3 / 3 |
+| post-json, c=256 | 60,799 | −1.1% | +11.7% | 7.91 / 6.36 | 8.68 / 8.12 | 4 / 3 |
+| post-json-doc, c=256 | 44,432 | +13.7% | +20.0% | 10.12 / 9.32 | 11.50 / 8.75 | 7 / 6 |
+| deep-route, c=256 | 139,875 | −1.3% | +3.1% | 1.83 / 1.80 | 5.07 / 4.85 | 3 / 3 |
+| plaintext, c=4096 | 86,311 | −7.3% | +17.1% | 2.19 / 2.49 | 8.93 / 7.08 | 12 / 11 |
+| plaintext close, c=64 | 49,753 | +7.4% | +8.3% | 2.68 / 3.02 | 16.32 / 14.90 | 3 / 2 |
+| close, c=64 + 8000 idle | 53,594 | −8.3% | −1.3% | 2.47 / 2.58 | 15.37 / 15.10 | 10 / 10 |
 
 The copy, the same bytes as the carrier, moves −23% to +14%, so no loss
 here is outside the noise band; the two gains past it (`body`, +24%, and
@@ -250,7 +251,15 @@ c=4096, +17%) are not claimed as wins of the handler, since its user time
 there is the carrier's or above it. What the handler does cost shows in user
 time on the small requests: up to 0.35 µs a request more than the carrier
 driven by hand (the head copy, the routing before the body and the queue),
-against 5 to 17 µs of kernel time. On a JSON body it spends 0.8 to 1.6 µs
+against 4.6 to 16.3 µs of kernel time. On a JSON body it spends 0.8 to 1.6 µs
 less; the cause is not measured.
-Its peak RSS matches the carrier's or is below it in every scenario, and it
-starts in 5.4 ms against the carrier's 6.0.
+Its peak RSS matches the carrier's or is below it in every scenario. From
+spawn to first answer, over 20 starts each:
+
+| Build | ms (median) | spread | RSS MB then |
+| --- | ---: | ---: | ---: |
+| carrier | 6.0 | 5.0–21.6 | 2.7 |
+| handler | 5.4 | 4.4–7.2 | 2.2 |
+
+The handler's median sits inside the carrier's spread, so it starts no
+slower; it is not claimed as faster.
