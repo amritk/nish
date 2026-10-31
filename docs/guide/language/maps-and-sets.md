@@ -54,6 +54,34 @@ export const main = (): i32 => {
 **Values** may be anything except `void` and an interface. To store a record,
 make it a class.
 
+### Two numbers as one key
+
+A map keyed by a pair — a grid cell, an edge between two nodes — needs no
+string and no class: pack the two `i32`s into one `i64`, the first shifted
+into the high half and the second taken unsigned (`toU32`) into the low half. Write every
+operand as an `i64`, because under Node an `i64` is a `BigInt`, which will not
+mix with a plain number:
+
+```ts nish:ok
+const cell = (row: i32, col: i32): i64 => (toI64(row) << toI64(32)) | toI64(toU32(col));
+
+export const main = (): i32 => {
+  const grid = new Map<i64, string>();
+  grid.set(cell(1, -2), "wall");
+  grid.set(cell(-2, 1), "door");
+  console.log(`${grid.get(cell(1, -2)) ?? "?"} ${grid.get(cell(-2, 1)) ?? "?"} ${grid.has(cell(0, 0))}`);
+  return 0;
+};
+```
+
+This prints `wall door false`. The key is exact for every pair of `i32`s,
+negative ones and the extremes included: taking the low half unsigned keeps it from
+reaching the high one, so nothing is added and nothing overflows, and two
+different pairs never give the same key. Write `|`, not `+`: `row * 2^32 + col`
+leaves the `i64` range at `row = -2^31` with a negative `col`. It is also
+cheaper than a string key like `` `${row},${col}` ``, which builds and hashes a
+string on every lookup.
+
 ## Reading a value: `get`
 
 `m.get(key)` returns `V | undefined`, just as it does in TypeScript: the key
@@ -107,9 +135,11 @@ the key up once, not twice: the compiler recognises a `set` whose new value
 reads the same key with `get` or `has`, and reuses that first lookup. So does
 `if (!s.has(x)) { s.add(x); … }`.
 
-A string key is hashed under a key the program draws at random when it starts,
-so input from outside — the keys of a JSON body, the words of a file — cannot
-be chosen to land in one bucket and slow every lookup down. Nothing you can
+A string key, and an integer, boolean or enum key, is hashed under a key the
+program draws at random when it starts, so input from outside — the keys of a
+JSON body, the words of a file, the ids in a request — cannot be chosen to land
+in one bucket and slow every lookup down. A floating-point key is not keyed, so
+key a table of outside input by an integer or a string. Nothing you can
 observe depends on that key: a map still walks in insertion order, run after
 run.
 

@@ -4734,6 +4734,85 @@ cases):
 | NL2500, the same in a `parallelMap` | the same | the same |
 | NL2484, an arrow that uses a `Channel` | the arrow moves to a `const` above the top-level statement it is written in, named for the function and `Task` (`mainTask`), and the call names it | an arrow that captures, or leaves a parameter's or its result's type out, which would not check at the top level |
 
+### Shared memory between processes: `nish/sync/shm` and `nish/sync/ring`
+
+Threads share an address space; processes share nothing unless they map the
+same memory. `nish/sync/shm` maps a **named region** that every process of
+the same user can open, and `nish/sync/ring` builds lock-free queues of byte
+records in one, so prefork workers can hand work to an owner process without a
+socket:
+
+```typescript
+import { ACQ_REL, ACQUIRE, createRegion, unlinkRegion } from "nish/sync/shm";
+import { initSpscRing, spscRingBytes } from "nish/sync/ring";
+
+export const main = (): i32 => {
+  const region = createRegion("lang-demo", 64 + spscRingBytes(4096)).expect("create");
+  region.addI64(0, toI64(1), ACQ_REL); // a counter every process may bump
+  const ring = initSpscRing(region, 64, 4096, true); // a ring after it
+  const job: u8[] = [1, 2, 3];
+  ring.tryPush(job, 0, job.length); // false when full
+  const got: u8[] = new Array<u8>(16);
+  const n: i32 = ring.tryPop(got, 0); // 3, or RING_EMPTY
+  console.log(`${region.loadI64(0, ACQUIRE)} ${n}`);
+  unlinkRegion("lang-demo").expect("unlink");
+  return 0;
+};
+```
+
+- **A region is named, never inherited.** A Nish program has no `fork`, and
+  every descriptor is close-on-exec, so an anonymous mapping or a `memfd`
+  cannot reach a child; a name can. `createRegion(name, bytes)` makes one,
+  zeroed, mode 0600, and refuses a name that exists (`SHM_EXISTS`), so a name
+  another user planted is never adopted. `openRegion(name)` maps one this
+  user made, and refuses one owned by someone else, open to group or others,
+  reached through a symbolic link, or (on Linux) not a regular file or with a
+  second hard link (`SHM_ACCESS`). A name is 1 to 30 of `A-Z a-z 0-9 . _ -`,
+  not starting with `.`; a size is 1 byte to 1 GiB. Errors are a `Result`
+  with the errno (`SHM_NOT_FOUND`, `SHM_INVALID`, `SHM_TOO_MANY`, ...).
+- **Lifetime.** The name lasts until `unlinkRegion`, even past every process
+  that mapped it, which is how a process started later finds it. A mapping
+  lasts until `close()` or the process's exit, when the kernel unmaps it. A
+  thread may hold 63 regions at once.
+- **Every access is checked, as an array index is.** `loadI32`, `storeI32`,
+  `addI32`, `exchangeI32`, `compareExchangeI32` and their `I64` twins take an
+  `i32` byte offset; a slot must lie wholly inside the region and at a multiple
+  of its width, or the access panics naming the offset (`nish/sync/shm: slot
+  offset 4 is not a multiple of 8, the slot's width`). `read` and `write` copy
+  a byte window, checked against both the region and the buffer. No offset
+  reaches outside the mapping, whatever a peer wrote into it.
+- **Orderings are C11's**: `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL`,
+  `SEQ_CST`, plus `fence(order)`. Each access is one LLVM `load atomic`,
+  `store atomic`, `atomicrmw` or `cmpxchg` with that ordering; an ordering an
+  access cannot take (a load with `RELEASE`) panics. A compare-exchange
+  answers the value it found, so it succeeded when that equals `expected`.
+- **Waking.** `waitI32(at, expected, timeoutMs)` sleeps while the slot holds
+  `expected` and `wake(at, count)` wakes sleepers, in any process: Linux's
+  shared futex. Darwin and wasi answer `SHM_UNSUPPORTED` (-95) from both, and
+  a program there polls.
+- **Rings.** `SpscRing` (one producer, one consumer, records of any length
+  up to its capacity) and `MpscRing` (any number of producers, fixed slots)
+  live at a 64-byte-aligned `base` in a region: `initSpscRing` /
+  `initMpscRing` write the header once, `attachSpscRing` / `attachMpscRing`
+  read it in another process. `tryPush` answers `false` when full; `tryPop`
+  answers the record's length, `RING_EMPTY` or `RING_TOO_SMALL`; `popBatch`
+  takes every record ready. A ring made with the doorbell lets `popWait`
+  sleep, and a push rings it only when the consumer is asleep, so a busy ring
+  makes no system call. Two consumers, or two producers on an `SpscRing`, lose
+  or repeat records but never leave the region; a length no record can have
+  panics as `the ring is corrupt`.
+- **What a program reaches.** The modules call C, so a program that imports
+  them reaches [`ffi`](#capabilities) (and `clock`, for `popWait`'s deadline)
+  and `--deny ffi` refuses it; under `--sandbox` a region, being a file in
+  `/dev/shm`, needs `fs.read` and `fs.write` as well. They are native only:
+  `--emit-ts` refuses them, since Node's `SharedArrayBuffer` is shared between
+  threads of one process, not between processes. A region belongs to the
+  thread that mapped it. A program that imports neither module is unchanged.
+  Tested by `tests/link/sync_shm`, `tests/link/sync_ring` and
+  `tests/link/sync_shm_deny_ffi`; the design, its measurements and the threads
+  it was weighed against are `docs/wp47-shared-memory.md`, and the threat model
+  is [`docs/security/shm.md`](security/shm.md).
+
 ### Random numbers: `Rng` in `nish/random`
 
 `new Rng(seed)` is a generator of pseudo-random numbers whose every answer
@@ -8886,6 +8965,25 @@ export const main = (): i32 => {
   failed ``. On wasm32 the key comes from WASI's `random_get`, and a reactor
   module is keyed only once its host calls `_initialize`
   (docs/security/json.md, JSON-13).
+- **An integer, `boolean` or enum key is hashed under a per-process random
+  key too**, drawn the same way: a key of 32 bits or fewer by
+  multiply-add-shift, `(a * x + b) >> 32`, and an `i64` or `u64` key by a
+  folded 128-bit multiply. 8192 `i32` keys built to collide under 0.28's
+  unkeyed `fmix32` run within 8 times of as many ordinary keys, where 0.28
+  ran them about 215 times slower (`tests/cases/map_key_int_collide`). The
+  `i64` hash is keyed but not provably universal, and before `_initialize` a
+  wasm32 reactor hashes every key of 32 bits or fewer to one bucket
+  (docs/security/json.md, JSON-15). **A float key and a class instance key
+  are not keyed**: a float hashes its canonical bits with `fmix64` and an
+  instance its address, so a program keying a table by floats a peer chose
+  converts them to a string or a scaled integer first (JSON-16).
+- **A pair of `i32`s is one `i64` key**, packed exactly for every pair:
+  `(toI64(hi) << toI64(32)) | toI64(toU32(lo))`. `toU32` takes `lo`
+  unsigned, so it stays in the low half, so nothing is added and nothing overflows; with `+` in
+  place of `|` the key leaves the `i64` range at `hi = -2^31` with a negative
+  `lo`. Every operand is an `i64` so the same line runs under Node, where an
+  `i64` is a `BigInt` (`tests/cases/map_key_composite`, both extremes
+  included).
 - **Every `set`, `add`, `has` and `delete` is one probe.** A bucket holds eight
   bits of the key's hash beside the entry's index, and each entry keeps its
   full hash, so a probe reads a key only when both match: 10000 lookups of
@@ -9404,12 +9502,15 @@ export const main = (): i32 => {
   | --- | --- | --- |
   | `static json` without `readonly` but with a type, `static readonly json` with a type annotation, or on a generic class | NL2492 | `json_reject_options_mutable_typed`, `json_reject_options_annotated`, `json_reject_options_generic`, and on a generic class nothing instantiates, `json_reject_options_generic_unused` |
   | options, `rename`, a key or an `optional` entry not written as the literal it must be: a module constant, an array for the object, a string for `optional`'s array | NL2493 | `json_reject_options_alias`, `json_reject_options_alias_whole`, `json_reject_options_not_object`, `json_reject_options_optional_not_array` |
-  | an option other than `rename` and `optional` | NL2494 | `json_reject_options_unknown` |
+  | an option other than `rename`, `optional` and `presence` | NL2494 | `json_reject_options_unknown` |
   | a name that is not one of the class's fields | NL2495 | `json_reject_options_misspelt_rename`, `json_reject_options_misspelt_optional` |
   | a rename to a value that is not a string | NL2496 | `json_reject_options_rename_number` |
   | two fields with one key, a rename to another field's own name included, or a field renamed or made optional twice | NL2497 | `json_reject_options_wire_collides`, `json_reject_options_wire_twice`, `json_reject_options_optional_twice` |
   | an optional field with no initializer | NL2498 | `json_reject_options_no_initializer` |
   | a rename to a key that is not valid UTF-8, a lone surrogate such as `"\ud800"` included, which no input could give | NL2499 | `json_reject_options_surrogate` |
+  | `presence` or one of its entries not written as an object literal of string literals | NL2493 | `json_reject_presence_not_object`, `json_reject_presence_not_literal` |
+  | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
+  | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `reject_json_presence_twice` |
 
   A spread or a computed key in the literal is refused by Phase 0 as it is
   anywhere (NL1061, NL1041; `reject_json_options_spread`,
@@ -9429,6 +9530,36 @@ export const main = (): i32 => {
   a namespace of their own ("order: a json field before the options
   decodes", "order: a json method before the options decodes"). Under Node the literal is a
   static property of the class that nothing reads.
+- **`presence` records which keys were given.** A third option names, for a
+  field, a `boolean` field of the same class that every decoding sets to
+  whether the input gave that field's key; a key given `null` is given:
+
+  ```typescript
+  class UserPatch {
+    static readonly json = { optional: ["email"], presence: { email: "hasEmail" } };
+    email: string | null = null;
+    hasEmail: boolean = false;
+  }
+  ```
+
+  So `{}` leaves `hasEmail` false, and `{"email":null}` and `{"email":"a"}`
+  set it true, which `optional` alone cannot tell apart from a key given the
+  initializer. Any field may be recorded, of any kind the decoder takes and
+  optional or not (`tests/link/json_presence`). The presence field is off the
+  wire: no key decodes into it, `jsonEncode` leaves it out, it takes no part
+  in the key-uniqueness rule, and no option renames it, makes it optional or
+  records it. It is set when the object closes, from the per-field flag the
+  decoder already keeps to report a duplicate or a missing key: one `store i1`
+  per recorded field, no allocation, and a class that records nothing compiles
+  to the code it did before. Each object decoded sets its own, so a nested
+  class, an array element and a map's value answer for their own keys, and a
+  second decoding into one object answers for its own input. A decoding that
+  fails may have set some presence fields and not others (none, when the input
+  is not an object), so they are read only after `JSON_DECODE_OK`. A JSON Merge Patch (RFC 7396) is applied with it: the patch
+  is a class whose fields are all optional and recorded, and `null` on a field
+  that is not `| null` is `JSON_DECODE_TYPE`, so the patch is refused before
+  any of it is applied (`examples/merge-patch.ts`,
+  `tests/link/json_merge_patch`).
 - **A `JsonNumber` is a number's text.** `JsonNumber`, from `nish/json-typed`,
   holds a number as the bytes it was written in, so a field of it decodes and
   encodes any number byte for byte: an integer wider than a `u64`, a fraction

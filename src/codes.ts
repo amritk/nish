@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 745
+export const RULE_COUNT: i32 = 746
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -195,6 +195,8 @@ const diagnosticRules = (): string[] => [
   "NL2338",
   "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",
   "NL2352",
+  ": a presence field is a `boolean` that is not `readonly` and records whether one other field's key was given; it is off the wire, so no option renames it, makes it optional or records it",
+  "NL2592",
   "` is a `Secret` parameter, which its caller owns and wipes: wiped here, the caller would go on reading zeros and wipe it again. Leave the wipe to the caller, which knows when it is done",
   "NL2548",
   " and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`",
@@ -436,7 +438,7 @@ const diagnosticRules = (): string[] => [
   "Spread arguments are not supported: pass the array itself to a parameter of array type, or write each argument",
   "NL2604",
   "` and cannot have a default in this version: a default is a number, a `boolean`, a `string` or an enum member",
-  "NL2592",
+  "NL2605",
   "` can leave this `wipe()` unwiped: a holder's `wipe()` ends every `Secret` field it holds itself, with `wipe(",
   "NL2541",
   "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",

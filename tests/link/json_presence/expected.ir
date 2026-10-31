@@ -1,0 +1,5 @@
+define internal void @.json.decode.Inner(%struct.JsonDecoder* %r, %struct.Inner* %v) "probe-stack"="inline-asm" {
+ = load i1, i1* %seen, align 1
+ = getelementptr inbounds %struct.Inner, %struct.Inner* %v, i32 0, i32 1
+  store i1 %
+, label %json.given, label %json.default

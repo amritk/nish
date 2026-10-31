@@ -1437,6 +1437,30 @@ other non-2xx row, when its row count differs from the requests h2load says
 it completed, or when more than 5 % of rows have no status. Results gathered
 before the error are still written and reported.
 
+## Ring latency
+
+`ring-latency/run.mjs` measures [`nish/sync/ring`](../std/sync/ring.ts)
+against an `AF_UNIX` socketpair: 16-byte messages between two processes
+pinned to two cores, `ring.ts` built by `build/nish` and `socketpair.c` by
+`clang -O2`. It is [wp47](../docs/wp47-shared-memory.md)'s measure, and §7
+there records its figures. It is not in this suite's tables. Linux only (it
+uses `taskset` and the futex).
+
+```bash
+npm run build
+node bench/ring-latency/run.mjs                         # 5 rounds, CPUs 0 and 1
+node bench/ring-latency/run.mjs --rounds 9 --cpus 2,3
+```
+
+There are three modes: `pingpong` sends a message and times its echo (p50,
+p99 and mean of the round trip), `stream` sends as fast as the transport
+takes it (messages a second), and `idle` sends one message a millisecond, so
+the reader is asleep for every one. Each round runs
+every transport and mode once in a seeded shuffled order; a figure is the
+median over the rounds, with the lowest and highest beside it. When `strace`
+is installed, one more run of `stream` and `idle` under `strace -f -c` counts
+the system calls a message costs: a busy ring's target is 0.
+
 ## SQLite
 
 `sqlite/run.mjs` measures what [`nish/sqlite`](../docs/guide/using-nish/sqlite.md)
@@ -2252,8 +2276,36 @@ infinite operand or result) to Node's `Math` bit for bit through
 Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
 1.4.1, about 40 s on four cores.
 
+## Formatting a double
+
+`f64-format.ts` times `String(x)` for an f64, the runtime's `nish_f64_format`,
+in ns per number. It is not in this suite's tables, and it has no twins. The
+inputs are a seeded third each of random bit patterns, short decimals and
+integers below 2^53, built before the clock starts. The length of every string
+is folded into a printed checksum, `82232700`, so two runtimes that disagree on
+it did not print the same strings:
+
+```bash
+build/nish bench/f64-format.ts -o build/bench/f64-format/ --link build/bench/f64-format/app
+build/bench/f64-format/app
+```
+
+To compare two runtimes, link the same `.ll` against each with
+`bash scripts/build.sh build/bench/f64-format/f64-format.ll <dir>/runtime.c -o <exe> --profile speed`,
+and run them in interleaved rounds with a byte-identical copy of the baseline
+as the noise band. The figures for Zmij against Ryu are in
+[docs/wp15-performance.md §7a](../docs/wp15-performance.md).
+
 ## Other files
 
+- `map-keys/`: the global `Map` by integer, enum and string key, against
+  0.28.0 and Rust's `FxHashMap` (`node bench/map-keys/run.mjs`), the
+  measurement behind the keyed integer hash; its README holds the protocol and
+  the result. Not part of this suite.
+- `wp48-refs/`: one AST-shaped tree in five layouts, pointer graphs against
+  records in arrays addressed by `i32` (`node bench/wp48-refs/run.mjs`), the
+  measurements behind
+  [docs/wp48-compressed-references.md](../docs/wp48-compressed-references.md).
 - `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
   accuracy figures ("Math accuracy" above).
 - `pg-batch-clock.ts`: when to start a PostgreSQL batch, adaptive against

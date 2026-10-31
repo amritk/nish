@@ -317,6 +317,105 @@ export const main = (): number => {
 
 SIGTERM and SIGINT still stop the workers that are left, and still give `-1`.
 
+### Channels to the supervisor and to a service worker
+
+Workers share nothing, but some servers need one thing in one place: a cache,
+a connection pool, a counter. Two more `PreforkConfig` fields give the
+processes a Unix socketpair to talk over
+([Unix sockets](unix-sockets.md#a-connected-pair)):
+
+- **`supervisorChannels`**, `true`: each worker gets a pair to the supervisor.
+  Supervise with `preforkSupervise(process.argv, config, state, onChannel)`
+  instead of `preforkWith` to hear from them; `preforkWith` reads what a
+  worker sends and drops it.
+- **`serviceWorker`**, a worker's index: every other worker gets a pair to
+  that one. `-1`, the default, gives none.
+- **`channelKind`**: `NET_UNIX_STREAM` (`1`, the default), or
+  `NET_UNIX_SEQPACKET` (`2`) to keep each write one message. Only Linux has
+  seqpacket pairs, so stream is the default: it works on macOS too. On macOS
+  a seqpacket channel stops the program with a panic, `seqpacket channels
+  need Linux`, before any worker starts.
+
+A worker finds its ends with three calls, each taking `process.argv` and
+answering a descriptor, or `-1` when it has no such end:
+
+| Call | Answers |
+| --- | --- |
+| `preforkSupervisorChannel(process.argv)` | its end to the supervisor |
+| `preforkServiceChannel(process.argv)` | its end to the service worker |
+| `preforkServiceChannelOf(process.argv, index)` | in the service worker, its end to worker `index` |
+
+The ends start at descriptor 3, the supervisor channel first. A worker holds
+those ends and no other descriptor of the supervisor's. Like every `nish:net` socket they
+never block, so wait for one in the readiness loop alongside the listener.
+Where they are rides in one more argument, `--nish-prefork-channels=`, just
+before the worker's index; `preforkArgs` drops it with the index.
+
+```ts nish:ok
+import { NET_UNIX_STREAM, netRead } from "nish:net";
+import {
+  PREFORK_STOPPED,
+  PreforkConfig,
+  preforkServiceChannel,
+  preforkServiceChannelOf,
+  preforkSupervise,
+} from "nish/net/prefork";
+
+class Log {
+  lines: i32 = 0;
+}
+
+// The supervisor: worker `index` wrote on `fd`, or hung up (`events & 4`).
+const heard = (log: Log, index: i32, fd: i32, events: i32): void => {
+  const buf = new Array<u8>(256);
+  while (netRead(fd, buf, 0, buf.length) > 0) {
+    log.lines = log.lines + 1;
+  }
+};
+
+export const main = (): number => {
+  const config = new PreforkConfig();
+  config.supervisorChannels = true;
+  config.serviceWorker = 0;
+  config.channelKind = NET_UNIX_STREAM;
+  const worker = preforkSupervise(process.argv, config, new Log(), heard);
+  if (worker < 0) {
+    return worker === PREFORK_STOPPED ? 0 : 1;
+  }
+  if (worker === 0) {
+    // The service worker: its end to worker 1, say.
+    const one = preforkServiceChannelOf(process.argv, 1);
+    // ... serve the others over their ends ...
+  } else {
+    const service = preforkServiceChannel(process.argv);
+    // ... ask the service worker over `service`, serve clients ...
+  }
+  return 0;
+};
+```
+
+The callback runs in the supervisor each time a worker's end is readable or
+has hung up, with `events` as `pollWait` gives it: `1` readable, `4` added on
+a hang-up. Read everything waiting, since an end left readable calls it again
+at once; write back if you like; never close the end. The supervisor closes
+it when the worker hangs up or is reaped, and a restarted worker comes with a
+new one. The state is whatever you pass, a class instance to keep counts in,
+since a function cannot capture.
+
+**A restart restarts the group.** A socketpair cannot be handed to a process
+that is already running, so with a service worker the workers live and die
+together: when any of them exits, the supervisor sends the rest SIGTERM
+(SIGKILL after `graceMs`), and once none is left starts them all again on
+fresh pairs, after the backoff of the one that exited first. No worker is left
+holding an end to a peer that is gone. With only supervisor channels, a
+worker restarts on its own with a new pair. With `restart` off nothing is
+signalled: a worker sees its peer's exit as a hang-up on its end.
+
+A `serviceWorker` below `-1` or not below the worker count, more than 64
+workers with a service worker (the most descriptors one child is handed), a
+`channelKind` that is neither kind, or seqpacket channels off Linux stop the
+program with a panic.
+
 ## Names: `nish/net/dns`
 
 A socket call takes an address. `nish/net/dns` turns a name into addresses
