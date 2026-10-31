@@ -18,6 +18,9 @@ const HELD_DERIVE_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha|T
 /** The module that defines bcrypt. */
 const BCRYPT_MODULES = /^define [^\n]*@nish\.bcrypt/m
 
+/** The modules that define HMAC, SHA-2, JWT, P-256 or Ed25519. */
+const JWT_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Sha|sha|Jwt|jwt|P256|p256|Ed25519|ed25519)/m
+
 /** The modules that define AES or ChaCha20-Poly1305. */
 const AEAD_MODULES = /^define [^\n]*@nish\.(Aes|aes|ghash|chacha20|poly1305)/m
 
@@ -276,6 +279,35 @@ export const wipeChecks = [
       ["nish.bcryptHash4", 13],
       ["nish.bcryptVerify4", 52],
       ["nish.bcryptCalibrateTime", 19],
+    ],
+  },
+  // `HmacKey` in `nish/crypto/hmac` and the keys of `nish/crypto/jwt` (#1114).
+  // `crypto_jwt` imports both. A hasher's wipe is 3 (its state, block and
+  // schedule). `hmacMidstates` 36: each hash's branch keys two hashers, 6 (the
+  // pad block on either path, and for a key longer than the block its hasher
+  // and its hash), and wipes them, 6. The constructor 48 (the midstates' 36
+  // and its four work hashers, 12); `HmacKey.wipe` 13 (the pads and the four
+  // hashers). `hmacKeyedTag` 28: each of its two branches wipes the midstate
+  // copy, resumes both hashers from a wiped start (6), wipes the inner digest
+  // and both hashers again (7). `hmacKeyedInto` and `hmacKeyedVerify` 29, the
+  // tag's 28 and the tag they made. `JwtKey.wipe` 14 (its private copy and
+  // `HmacKey.wipe`), `jwtPublicKey` 1 (the empty private slot), `jwtHmacKey`
+  // 49 (the constructor and `jwtPublicKey`). Turning `hmacKeyedVerify`'s wipe
+  // of its tag into `fill(0)` dropped its count to 28.
+  {
+    name: "crypto_jwt: the wipes survive opt -O2 (HmacKey's keyed pads, midstate copy, inner digest, tag and hashers; JwtKey's private copy)",
+    program: "tests/link/crypto_jwt/main.ts",
+    modules: JWT_MODULES,
+    roots: [
+      ["nish.hmacMidstates", 36],
+      ["nish.HmacKey.constructor", 48],
+      ["nish.HmacKey.wipe", 13],
+      ["nish.hmacKeyedTag", 28],
+      ["nish.hmacKeyedInto", 29],
+      ["nish.hmacKeyedVerify", 29],
+      ["nish.JwtKey.wipe", 14],
+      ["nish.jwtPublicKey", 1],
+      ["nish.jwtHmacKey", 49],
     ],
   },
 ]
