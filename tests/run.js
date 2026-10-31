@@ -24484,10 +24484,16 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // The options are `npm run check`'s, so the two cannot drift apart;
       // `include: []` drops its file list for this project's own. The two
       // unused-name checks are lint for the compiler's own source, not typing:
-      // a golden case declares a function it never calls on purpose.
+      // a golden case declares a function it never calls on purpose. So is
+      // the fallthrough check: a clause that runs on into the next is
+      // TypeScript the language accepts (docs/LANGUAGE.md, `switch`).
       JSON.stringify({
         extends: path.join(root, "tsconfig.json"),
-        compilerOptions: { noUnusedLocals: false, noUnusedParameters: false },
+        compilerOptions: {
+          noUnusedLocals: false,
+          noUnusedParameters: false,
+          noFallthroughCasesInSwitch: false,
+        },
         include: [],
         files: [declarations, ...files],
       })
