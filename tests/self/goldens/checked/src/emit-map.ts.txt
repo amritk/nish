@@ -51,6 +51,9 @@ import T_I32 from "./types" -> const T_I32
 import T_I64 from "./types" -> const T_I64
 import T_STRING from "./types" -> const T_STRING
 import TypeTable from "./types" -> struct TypeTable
+const INT_HASH_KEY: string = "@nish_int_hash_key"
+const INT_HASH_KEY_GLOBAL: string = "@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8"
+const STRING_HASH_KEY: string = "@nish_hash_key"
 struct MaybeParts (class) size=40 align=8 exported
   field found: string index=0 offset=0
   field value: string index=1 offset=8
@@ -110,8 +113,8 @@ function hashOf(emitter: Emitter, key: i32, value: string): string -> @hashOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitStringHash
   escaping: key value
-  calls: Emitter.llvm IRFunction.emitValue TypeTable.enumBase TypeTable.isStruct TypeTable.typeName emitStringHash floatBits fmix32 fmix64 intBits internalErrorFor nish_exit nish_str_concat
-  pointer emitter: size=296 writesThrough=true captured=false passedTo=emitStringHash#0 fmix64#0 floatBits#0 fmix64#0 floatBits#0 fmix64#0 Emitter.llvm#0 fmix64#0 fmix32#0 fmix32#0 Emitter.llvm#0
+  calls: Emitter.llvm IRFunction.emitValue TypeTable.enumBase TypeTable.isStruct TypeTable.typeName emitStringHash floatBits fmix64 foldedMultiply intBits internalErrorFor multiplyAddShift nish_exit nish_str_concat
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=emitStringHash#0 fmix64#0 floatBits#0 fmix64#0 floatBits#0 fmix64#0 Emitter.llvm#0 foldedMultiply#0 multiplyAddShift#0 Emitter.llvm#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   callee +2:12 emitStringHash -> @emitStringHash
@@ -126,14 +129,13 @@ function hashOf(emitter: Emitter, key: i32, value: string): string -> @hashOf
   callee +11:53 Emitter.llvm -> @Emitter.llvm
   local +13:9 bits: i32 (const)
   callee +13:16 intBits -> @intBits
-  callee +15:12 fmix64 -> @fmix64
-  callee +17:22 TypeTable.enumBase -> @TypeTable.enumBase
-  callee +18:12 fmix32 -> @fmix32
-  callee +21:12 fmix32 -> @fmix32
-  callee +21:28 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +21:49 Emitter.llvm -> @Emitter.llvm
-  callee +23:16 internalErrorFor -> @internalErrorFor
-  callee +23:61 TypeTable.typeName -> @TypeTable.typeName
+  callee +15:12 foldedMultiply -> @foldedMultiply
+  callee +17:37 TypeTable.enumBase -> @TypeTable.enumBase
+  callee +18:12 multiplyAddShift -> @multiplyAddShift
+  callee +18:38 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +18:59 Emitter.llvm -> @Emitter.llvm
+  callee +20:16 internalErrorFor -> @internalErrorFor
+  callee +20:61 TypeTable.typeName -> @TypeTable.typeName
 function nonZero(emitter: Emitter, h: string): string -> @nonZero
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
@@ -259,7 +261,7 @@ function emitStringHash(emitter: Emitter, str: string): string -> @emitStringHas
   callee +63:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee +63:42 IRFunction.emitValue -> @IRFunction.emitValue
   callee +64:10 IRFunction.emitValue -> @IRFunction.emitValue
-function hashKeyWord(i: i32): string -> @hashKeyWord
+function hashKeyWord(i: i32, key: string): string -> @hashKeyWord
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
@@ -329,43 +331,101 @@ function rotl(emitter: Emitter, x: string, by: i32): string -> @rotl
   callee +1:14 IRFunction.emitValue -> @IRFunction.emitValue
   callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +2:40 IRFunction.emitValue -> @IRFunction.emitValue
-function seedHashKey(emitter: Emitter): void -> @seedHashKey
+function seedHashKey(emitter: Emitter, key: string): void -> @seedHashKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareGlobal
-  calls: Emitter.addConstructor Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat
+  escaping: key
+  calls: Emitter.addConstructor Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat nish_str_eq spreadIntKey
   pointer emitter: size=296 writesThrough=true captured=false passedTo=Emitter.declareGlobal#0 Emitter.declare#0 Emitter.useRuntime#0 Emitter.stringConstant#0 Emitter.addConstructor#0
   stackSites=0 stackLocals=0
-  callee +0:3 Emitter.declareGlobal -> @Emitter.declareGlobal
-  local +1:9 size: string (const)
-  callee +1:16 isWasmBuild -> @isWasmBuild
-  callee +2:3 Emitter.declare -> @Emitter.declare
-  local +3:9 panic: string (const)
-  callee +3:17 Emitter.useRuntime -> @Emitter.useRuntime
-  local +4:9 message: string (const)
-  callee +4:19 Emitter.stringConstant -> @Emitter.stringConstant
-  local +5:9 word0: string (const)
-  callee +5:17 hashKeyWord -> @hashKeyWord
-  callee +6:3 Emitter.addConstructor -> @Emitter.addConstructor
-  callee +7:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
-function fmix32(emitter: Emitter, x: string): string -> @fmix32
+  local +0:9 integer: boolean (const)
+  callee +1:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  local +2:9 size: string (const)
+  callee +2:16 isWasmBuild -> @isWasmBuild
+  callee +3:3 Emitter.declare -> @Emitter.declare
+  local +4:9 panic: string (const)
+  callee +4:17 Emitter.useRuntime -> @Emitter.useRuntime
+  local +5:9 message: string (const)
+  callee +5:19 Emitter.stringConstant -> @Emitter.stringConstant
+  local +6:9 word0: string (const)
+  callee +6:17 hashKeyWord -> @hashKeyWord
+  local +7:9 ctor: string (const)
+  callee +8:3 Emitter.addConstructor -> @Emitter.addConstructor
+  callee +9:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  callee +22:13 spreadIntKey -> @spreadIntKey
+function spreadIntKey(key: string): string -> @spreadIntKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: key
+  calls: nish_str_concat spreadIntWord
+  stackSites=0 stackLocals=0
+  callee +0:50 spreadIntWord -> @spreadIntWord
+  callee +0:74 spreadIntWord -> @spreadIntWord
+function spreadIntWord(i: i32, key: string): string -> @spreadIntWord
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: i key
+  calls: hashKeyWord nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:9 at: string (const)
+  callee +0:14 hashKeyWord -> @hashKeyWord
+function loadIntKey(emitter: Emitter): string[] -> @loadIntKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via IRFunction.emitValue
-  calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=296 writesThrough=false captured=false
+  sharedWrite: via seedHashKey
+  calls: Emitter.alignSuffix IRFunction.emitValue hashKeyWord nish_str_concat seedHashKey
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=seedHashKey#0 Emitter.alignSuffix#0
+  stackSites=0 stackLocals=0
+  callee +0:3 seedHashKey -> @seedHashKey
+  local +1:9 a64: string (const)
+  callee +1:15 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +2:9 fn: IRFunction (const)
+  callee +4:5 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:36 hashKeyWord -> @hashKeyWord
+  callee +5:5 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:36 hashKeyWord -> @hashKeyWord
+function multiplyAddShift(emitter: Emitter, x: string): string -> @multiplyAddShift
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadIntKey
+  calls: IRFunction.emitValue loadIntKey nish_str_concat
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=loadIntKey#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
-  local +1:9 a: string (const)
-  callee +1:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +1:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local +2:9 b: string (const)
-  callee +2:13 IRFunction.emitValue -> @IRFunction.emitValue
-  local +3:9 c: string (const)
-  callee +3:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +3:43 IRFunction.emitValue -> @IRFunction.emitValue
-  local +4:9 d: string (const)
+  local +1:9 key: string[] (const)
+  callee +1:15 loadIntKey -> @loadIntKey
+  local +2:9 a: string (const)
+  local +3:9 b: string (const)
+  local +4:9 h: string (const)
   callee +4:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:37 IRFunction.emitValue -> @IRFunction.emitValue
   callee +5:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +5:40 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:36 IRFunction.emitValue -> @IRFunction.emitValue
+function foldedMultiply(emitter: Emitter, x: string): string -> @foldedMultiply
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadIntKey
+  calls: IRFunction.emitValue loadIntKey nish_str_concat
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=loadIntKey#0
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 key: string[] (const)
+  callee +1:15 loadIntKey -> @loadIntKey
+  local +2:9 a: string (const)
+  local +3:9 b: string (const)
+  local +4:9 wideX: string (const)
+  callee +4:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:42 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 wide: string (const)
+  callee +5:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:51 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:9 low: string (const)
+  callee +6:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local +7:9 high: string (const)
+  callee +7:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:43 IRFunction.emitValue -> @IRFunction.emitValue
+  local +8:9 folded: string (const)
+  callee +8:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +9:9 top: string (const)
+  callee +9:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +9:41 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:34 IRFunction.emitValue -> @IRFunction.emitValue
 function fmix64(emitter: Emitter, x: string): string -> @fmix64
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue

@@ -146,6 +146,16 @@ licence: the three `SPEC.md` queries the PostgreSQL benchmark runs.
 Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see bench/postgres/LICENSE.md.
 ```
 
+### `bench/map-keys/LICENSE-rustc-hash.md`
+
+[rustc-hash](https://github.com/rust-lang/rustc-hash) 1.1.0, Copyright 2015
+The Rust Project Developers, under the MIT licence (upstream also offers
+Apache-2.0): the `FxHasher` the map-keys benchmark's Rust baseline reproduces.
+
+```notice
+FxHasher reproduced from rustc-hash 1.1.0 (https://github.com/rust-lang/rustc-hash), src/lib.rs. Copyright 2015 The Rust Project Developers. Used under the MIT License; see bench/map-keys/LICENSE-rustc-hash.md.
+```
+
 ### `bench/awfy/LICENSE.md`
 
 The [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet) benchmarks.
@@ -455,6 +465,7 @@ Derived from the Unicode Character Database 16.0.0 (https://www.unicode.org/Publ
 | `bench/nbody.go` | the same, through `bench/nbody.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/nbody.rs` | the same, through `bench/nbody.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `examples/nbody.ts` | the same | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/map-keys/fx.rs` | rustc-hash 1.1.0, `src/lib.rs`: `FxHasher` (`add_to_hash` as `add`, its 64-bit seed, and the `write`, `write_u32`, `write_u64`, `write_isize` and `finish` methods); the tables, keys and timing are not derived from it | MIT | `bench/map-keys/LICENSE-rustc-hash.md` |
 | `bench/sqlite/schema.sql` | the twelve-dollar server challenge's `schema.sql`, unchanged | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/sqlite/twin.c` | the seed: a port of the challenge's `seed/generate.mjs` (mulberry32 and seed 42, the table sizes, the author skew, the `ADJECTIVES` and `NOUNS` lists, part of the word list), and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/sqlite/main.ts` | the challenge's table sizes, `USERS` and `POSTS`, and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |

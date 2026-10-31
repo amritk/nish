@@ -59,7 +59,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
-| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 1 ¹⁰ |
+| JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts`; the global `Map`'s key hashes: `std/collections.ts`, `src/emit-map.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 0 / 2 ¹⁰ |
 | Percent-decoding, query strings and URL parsing | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | YAML into a JsonDocument | [yaml.md](yaml.md) | `std/yaml-json.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 1 / 0 |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
@@ -181,7 +181,10 @@ the record that found it. The notes below the table name each such finding.
     bytes written raw. JSON-2 is open. JSON-13 (Medium), the map keys a body
     can make collide, was bounded by `jsonDecode` (#622, `maxMapKeys`) and
     closed by #900, which seeds the global `Map`'s string hash; it is counted
-    as a fixed Medium. JSON-3, duplicate keys
+    as a fixed Medium. JSON-15 (Medium), the same flood through integer, `boolean`
+    and enum keys, was closed by #1107, which keys the integer hash; it is
+    counted as a fixed Medium. JSON-16 (Low), float keys still hashed unkeyed,
+    is open, beside JSON-2. JSON-3, duplicate keys
     reported as tokens, was left open by the tokenizer stage and is fixed for
     `jsonDecode` callers by the typed layer (#573), which refuses a duplicate
     of a field; it is counted as a fixed Low. The tokenizer is unchanged, a
@@ -341,7 +344,7 @@ takes a file in deletes its row.
 | `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1.md` names it but no Scope table does. |
 | `std/crypto/x509-random.ts` | The private key and serial `x509MintSelfSigned` needs, drawn from the OS CSPRNG; `crypto-x509.md` (X509-6) and `secret.md` cover it in their bodies, not in a Scope table. |
 | `std/net/buffer-pool.ts` | Holds no parser: it lends fixed-size buffers and zeroes what a borrower used on give-back. No record has reviewed that zeroing yet. |
-| `std/net/prefork.ts` | A supervisor over `spawn` and signals that reads no network input; its descriptor hygiene is RT-17 and RT-19 in `runtime.md`, and RT-40 covers `spawnWithFds`, which a supervisor may use to hand workers one listener instead (`prefork.ts` does not yet). |
+| `std/net/prefork.ts` | A supervisor over `spawn`, `spawnWithFds` and signals that reads no network input. Its channels are `unixSocketPair`s it makes to its own workers before spawning them: it hands each worker exactly its ends through `spawnWithFds` (RT-40) and closes its copies of them, a supervisor channel's once its worker has started and the service pairs, made once per group, once the whole group has started, and reads its own ends only to hand them to the program's callback (`preforkSupervise`) or, through `preforkWith`, to drop what arrives. Its descriptor hygiene is RT-17 and RT-19 in `runtime.md`; `tests/link/net_prefork_channels` pins that each worker holds no descriptor but 0 to 2 and its own ends, and that a restart leaves the supervisor holding as many descriptors as before. A worker trusts the descriptor numbers in its `--nish-prefork-channels=` argument as given, the same boundary as `--nish-prefork-worker=`: whoever starts the program chooses its arguments. |
 | `std/net/qpack.ts` | HTTP/3's field decoder, which `http3.md` audits through its callers (the refusals of a field section) but does not list in its Scope table. |
 | `std/net/tls/ticket.ts` | The session-ticket seal, open and strike register; `tls.md`'s Resumption section and its ticket-seal stage record the design and tests, but its Scope table does not list the file. |
 
