@@ -3,7 +3,8 @@
 > Nish is an ahead-of-time compiler from a strictly static subset of TypeScript
 > to LLVM IR. Every Nish program is legal TypeScript syntax and type-checks
 > under `tsc --strict`, but the subset is far smaller than TypeScript: no `any`,
-> no `throw`, no callbacks or function values, no inheritance, no truthiness,
+> no `throw`, no function values (a callback is an arrow written at the call,
+> which may read the caller's `const` locals), no inheritance, no truthiness,
 > and no implicit conversion of any kind. Generics are monomorphised: each
 > instantiation is its own function or struct. Failure is a `Result<T, E>` the
 > checker will not let you drop; absence is `T | null` you must narrow. There is

@@ -142,7 +142,7 @@ tagged classes and interfaces, `eval`, `Function`, `Proxy`,
 `Reflect`, `Symbol`, `globalThis`, `arguments`, `with`, `delete`, `typeof`,
 `instanceof`, `in`, `for...in`, `==`/`!=`, comma expressions, `void expr`,
 `var`, `try`/`catch`/`finally` and `throw` (a failure is a `Result<T, E>`,
-WP16), labelled statements, generators and `yield`, `async`/`await` (WP24),
+WP16), a label on anything but a loop, a block or a `switch`, generators and `yield`, `async`/`await` (WP24),
 decorators, enum members that are not numeric literals, namespaces and
 `declare global`, computed property names, object spread, prototype access,
 `Object.assign` and its relatives, string-keyed element access, `?.` outside a
@@ -203,7 +203,7 @@ modules; the table below is the inventory.
 | Debug info | done (WP10, WP17) | `src/debug.ts` |
 | Interop: C header, `.d.ts` and loader, N-API (sync and async), wasm, C calls through `declare function` | done (WP8, WP17, WP24, WP27, WP30) | `src/interop-*.ts` |
 | Packages: `package.json` `exports`, bare specifiers, real-path identity, the manifest's `nish` field | S1–S2 and half of S3 (WP21) | `src/manifest.ts`, `paths.ts` |
-| Runtime: thirteen translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
+| Runtime: fourteen translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
 | Threads: `parallelMapInto`, `parallelReduce`, `parallelMap`, `parallelFrom`, `using s = scope()`, `Mutex<T>`, `AtomicI32`/`AtomicI64`, `Channel<T>` | done (WP20, WP29) | `std/threads.ts`, `runtime/runtime-parallel.c` |
 | Standard library: testing, text, json, pair, collections, secret, threads, `nish/crypto/*`, `nish/net/*` | growing (WP26, WP34) | `std/`, [std/README.md](../std/README.md) |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, PGO | done (WP9) | `scripts/build.sh` |
@@ -254,7 +254,7 @@ is its plan. [README.md](README.md) indexes them.
 | 26 | The standard library | landed, and growing | [wp26](wp26-stdlib.md) |
 | 27 | Calling C | S1 and S2 built; S3 planned | [wp27](wp27-ffi.md) |
 | 28 | Compatibility mode | proposed | [wp28](wp28-compatibility-mode.md) |
-| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks, wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await; deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values | [wp29](wp29-thread-surface.md) |
+| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks (*2026-10-30:* an arrow passed to a function parameter may now read the caller's `const` locals, as extra arguments; closure values stay declined), wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await; deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values | [wp29](wp29-thread-surface.md) |
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
 | 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
 | 32 | `Map` and `Set` | landed in 0.11.0 and 0.12.0; a `Map` read in a parallel body (§9.3) is still open | [wp32](wp32-map.md) |
@@ -270,6 +270,7 @@ is its plan. [README.md](README.md) indexes them.
 | 44 | Streaming file reads: a descriptor, a positional read, a size and a close | proposed; design only, open questions for the owner | [wp44](wp44-streaming-files.md) |
 | 45 | Name resolution for `nish:net`: a DNS stub resolver | built: `nish/net/dns` on the caller's loop, `resolveHost` for start-up | [wp45](wp45-name-resolution.md) |
 | 46 | Memory for programs that do not exit: regions | proposed | [wp46](wp46-long-running-memory.md) |
+| 47 | Shared work across cores: regions, atomics and rings | built: `nish/sync/shm`, `nish/sync/ring` and `examples/prefork-jobs.ts` | [wp47](wp47-shared-memory.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
