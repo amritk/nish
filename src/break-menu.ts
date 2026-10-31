@@ -251,12 +251,12 @@ const OUTRO_GRAVITY: f64 = 540.0
 
 // ---- The attract wall -------------------------------------------------------
 
-/** The background wall: 16 columns of 20-unit bricks across the world, 6 rows deep. */
-const WALL_COLS: i32 = 16
-const WALL_ROWS: i32 = 6
-const WALL_BRICK_W: f64 = 20.0
-const WALL_BRICK_H: f64 = 8.0
-const WALL_TOP: f64 = 6.0
+/** The background wall: 16 columns of 20-unit bricks across the world, 6 rows deep; the intro lays it too. */
+export const WALL_COLS: i32 = 16
+export const WALL_ROWS: i32 = 6
+export const WALL_BRICK_W: f64 = 20.0
+export const WALL_BRICK_H: f64 = 8.0
+export const WALL_TOP: f64 = 6.0
 
 /** The steps a knocked-out brick stays away before it grows back: 4 s and up to 2 s more. */
 const REGROW_STEPS: i32 = 480
@@ -275,11 +275,11 @@ const SPARK_CAPACITY: i32 = 160
 
 // ---- Colours ----------------------------------------------------------------
 
-const BG_TOP: i32 = 0x0a0820
-const BG_BOTTOM: i32 = 0x1e0c30
+export const BG_TOP: i32 = 0x0a0820
+export const BG_BOTTOM: i32 = 0x1e0c30
 /** What a fading item fades into: the background where the items sit. */
 const BG_MID: i32 = 0x160a2a
-const LETTERBOX: i32 = 0x05040c
+export const LETTERBOX: i32 = 0x05040c
 const WIPE: i32 = 0x05040c
 const PANEL: i32 = 0x0c0a1c
 const WHITE: i32 = 0xf4f2ff
@@ -933,8 +933,8 @@ const itemsFade = (menu: BreakMenu, time: f64, alpha: f64): f64 => {
   return fadeIn * (1.0 - out)
 }
 
-/** A wall row's face: the rainbow, dimmed well back so the menu reads over it. */
-const wallColour = (row: i32): i32 => dim(hue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
+/** A wall row's face: the rainbow, dimmed well back so the menu reads over it; `break-intro.ts` lays the same wall. */
+export const wallColour = (row: i32): i32 => dim(hue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
 
 /** The attract wall: every brick there, and returning ones growing from their centre. */
 const menuDrawWall = (menu: BreakMenu, view: View, alpha: f64): void => {

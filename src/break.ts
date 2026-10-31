@@ -1,6 +1,7 @@
 // The director of `nish break`, the brick breaker hidden in the CLI: it owns
-// the terminal and hands it between the title card (`break-menu.ts`) and the
-// game (`break-game.ts`), which are pure and never touch it.
+// the terminal and hands it from the intro (`break-intro.ts`), where the help
+// falls apart into the title, to the title card (`break-menu.ts`) and between
+// it and the game (`break-game.ts`), all of which are pure and never touch it.
 //
 // It runs both under `runTerminal` at 120 steps a second and draws each into
 // a framebuffer sized to the backend in use, the terminal's cells and the
@@ -61,6 +62,14 @@ import {
   viewFor,
 } from "./break-gfx"
 import { GAME_PLAYING, BreakGame, drawBreakGame, newBreakGame, stepBreakGame } from "./break-game"
+import {
+  BreakIntro,
+  INTRO_DONE,
+  INTRO_QUIT,
+  drawBreakIntro,
+  newBreakIntro,
+  stepBreakIntro,
+} from "./break-intro"
 import { BreakSound, SOUND_HELLO, closeSound, playSound, prepareSound, soundPlayer } from "./break-sound"
 import {
   BreakMenu,
@@ -75,6 +84,8 @@ import {
   resolutionChoice,
   stepBreakMenu,
 } from "./break-menu"
+import { helpText } from "./cli-style"
+import { Style } from "../std/cli"
 
 /** The least screen, in cells, the scenes are drawn on; a smaller one gets a prompt. */
 const WALL_MIN_COLS: i32 = 40
@@ -100,9 +111,11 @@ const WALL_FAST_RTT_MS: f64 = 20.0
 /** The scene the director is showing. */
 const WALL_SCENE_MENU: i32 = 0
 const WALL_SCENE_GAME: i32 = 1
+const WALL_SCENE_INTRO: i32 = 2
 
 /** Everything the director keeps across steps, frames and reopenings of the terminal. */
 class WallRun {
+  intro: BreakIntro
   menu: BreakMenu
   game: BreakGame
   /** The settings the menu edits; every menu after the first edits the same ones. */
@@ -139,7 +152,9 @@ class WallRun {
   constructor(seed: i64) {
     this.settings = new BreakSettings()
     this.seed = seed
-    this.scene = WALL_SCENE_MENU
+    // The help in its colours, as `--help` paints it on a terminal that has them, without an agent's section.
+    this.intro = newBreakIntro(helpText(new Style(true, true), ""), seed)
+    this.scene = WALL_SCENE_INTRO
     this.menu = newBreakMenuWith(1, seed, this.settings)
     this.game = newBreakGame(1, seed)
     this.startLevel = 1
@@ -297,6 +312,17 @@ const wallTakeHotkeys = (run: WallRun, events: TermEvent[]): void => {
   }
 }
 
+/** Play the sounds a scene asked for this step, when sound is on. */
+const wallPlaySounds = (run: WallRun, sounds: i32[]): void => {
+  if (!run.settings.sound) {
+    return
+  }
+  const now: i64 = monotonicNanos()
+  for (const id of sounds) {
+    playSound(run.sound, id, now)
+  }
+}
+
 /** Start a game at `level`, the menu's answer. */
 const wallStartGame = (run: WallRun, level: i32): void => {
   run.games = run.games + 1
@@ -331,6 +357,18 @@ const wallUpdate = (run: WallRun, input: TermInput): boolean => {
   if (run.small) {
     return !wallQuitPressed(input.events)
   }
+  if (run.scene === WALL_SCENE_INTRO) {
+    run.intro.effects = run.settings.effects
+    const answer: i32 = stepBreakIntro(run.intro, input)
+    wallPlaySounds(run, run.intro.sounds)
+    if (answer === INTRO_QUIT) {
+      return false
+    }
+    if (answer === INTRO_DONE) {
+      run.scene = WALL_SCENE_MENU
+    }
+    return true
+  }
   if (run.scene === WALL_SCENE_MENU) {
     const answer: i32 = stepBreakMenu(run.menu, input)
     if (answer === MENU_QUIT) {
@@ -362,12 +400,7 @@ const wallUpdate = (run: WallRun, input: TermInput): boolean => {
   }
   run.game.effects = run.settings.effects
   const answer: i32 = stepBreakGame(run.game, input)
-  if (run.settings.sound) {
-    const now: i64 = monotonicNanos()
-    for (const id of run.game.sounds) {
-      playSound(run.sound, id, now)
-    }
-  }
+  wallPlaySounds(run, run.game.sounds)
   if (answer !== GAME_PLAYING) {
     wallBackToMenu(run)
   }
@@ -530,7 +563,9 @@ const wallRender = (run: WallRun, frame: Frame): void => {
   wallAdaptResolution(run, frame.stats, fb.height, monotonicNanos())
   wallSizeFramebuffer(run, frame, fb)
   const alpha: f64 = run.settings.smoothing ? frame.alpha : 1.0
-  if (run.scene === WALL_SCENE_MENU) {
+  if (run.scene === WALL_SCENE_INTRO) {
+    drawBreakIntro(run.intro, fb, alpha)
+  } else if (run.scene === WALL_SCENE_MENU) {
     drawBreakMenu(run.menu, fb, alpha)
   } else {
     drawBreakGame(run.game, fb, alpha)
