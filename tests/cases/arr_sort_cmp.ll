@@ -550,7 +550,7 @@ for.cond:
 for.body:
   %8 = load i32, i32* %lo.addr, align 4
   %9 = load i32, i32* %lo.addr, align 4
-  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 16)
+  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 32)
   %11 = extractvalue { i32, i1 } %10, 0
   %12 = extractvalue { i32, i1 } %10, 1
   br i1 %12, label %ovf.fail, label %ovf.ok
@@ -562,7 +562,7 @@ ovf.ok:
 
 cond.true:
   %15 = load i32, i32* %lo.addr, align 4
-  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 16)
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 32)
   %17 = extractvalue { i32, i1 } %16, 0
   %18 = extractvalue { i32, i1 } %16, 1
   br i1 %18, label %ovf.fail, label %ovf.ok.1
@@ -581,7 +581,7 @@ cond.end:
 
 for.inc:
   %21 = load i32, i32* %lo.addr, align 4
-  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 16)
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 32)
   %23 = extractvalue { i32, i1 } %22, 0
   %24 = extractvalue { i32, i1 } %22, 1
   br i1 %24, label %ovf.fail, label %ovf.ok.2
@@ -592,7 +592,7 @@ ovf.ok.2:
 
 for.end:
   %25 = load i32, i32* %n.addr, align 4
-  %26 = icmp sle i32 %25, 16
+  %26 = icmp sle i32 %25, 32
   br i1 %26, label %if.then.1, label %if.end.1
 
 if.then.1:
@@ -656,7 +656,7 @@ forof.inc:
 
 forof.end:
   store i1 false, i1* %inTmp.addr, align 1
-  store i32 16, i32* %width.addr, align 4
+  store i32 32, i32* %width.addr, align 4
   br label %for.cond.1
 
 for.cond.1:
@@ -812,7 +812,7 @@ for.cond:
 for.body:
   %8 = load i32, i32* %lo.addr, align 4
   %9 = load i32, i32* %lo.addr, align 4
-  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 16)
+  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 32)
   %11 = extractvalue { i32, i1 } %10, 0
   %12 = extractvalue { i32, i1 } %10, 1
   br i1 %12, label %ovf.fail, label %ovf.ok
@@ -824,7 +824,7 @@ ovf.ok:
 
 cond.true:
   %15 = load i32, i32* %lo.addr, align 4
-  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 16)
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 32)
   %17 = extractvalue { i32, i1 } %16, 0
   %18 = extractvalue { i32, i1 } %16, 1
   br i1 %18, label %ovf.fail, label %ovf.ok.1
@@ -843,7 +843,7 @@ cond.end:
 
 for.inc:
   %21 = load i32, i32* %lo.addr, align 4
-  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 16)
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 32)
   %23 = extractvalue { i32, i1 } %22, 0
   %24 = extractvalue { i32, i1 } %22, 1
   br i1 %24, label %ovf.fail, label %ovf.ok.2
@@ -854,7 +854,7 @@ ovf.ok.2:
 
 for.end:
   %25 = load i32, i32* %n.addr, align 4
-  %26 = icmp sle i32 %25, 16
+  %26 = icmp sle i32 %25, 32
   br i1 %26, label %if.then.1, label %if.end.1
 
 if.then.1:
@@ -918,7 +918,7 @@ forof.inc:
 
 forof.end:
   store i1 false, i1* %inTmp.addr, align 1
-  store i32 16, i32* %width.addr, align 4
+  store i32 32, i32* %width.addr, align 4
   br label %for.cond.1
 
 for.cond.1:
@@ -1074,7 +1074,7 @@ for.cond:
 for.body:
   %8 = load i32, i32* %lo.addr, align 4
   %9 = load i32, i32* %lo.addr, align 4
-  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 16)
+  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 32)
   %11 = extractvalue { i32, i1 } %10, 0
   %12 = extractvalue { i32, i1 } %10, 1
   br i1 %12, label %ovf.fail, label %ovf.ok
@@ -1086,7 +1086,7 @@ ovf.ok:
 
 cond.true:
   %15 = load i32, i32* %lo.addr, align 4
-  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 16)
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 32)
   %17 = extractvalue { i32, i1 } %16, 0
   %18 = extractvalue { i32, i1 } %16, 1
   br i1 %18, label %ovf.fail, label %ovf.ok.1
@@ -1105,7 +1105,7 @@ cond.end:
 
 for.inc:
   %21 = load i32, i32* %lo.addr, align 4
-  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 16)
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 32)
   %23 = extractvalue { i32, i1 } %22, 0
   %24 = extractvalue { i32, i1 } %22, 1
   br i1 %24, label %ovf.fail, label %ovf.ok.2
@@ -1116,7 +1116,7 @@ ovf.ok.2:
 
 for.end:
   %25 = load i32, i32* %n.addr, align 4
-  %26 = icmp sle i32 %25, 16
+  %26 = icmp sle i32 %25, 32
   br i1 %26, label %if.then.1, label %if.end.1
 
 if.then.1:
@@ -1180,7 +1180,7 @@ forof.inc:
 
 forof.end:
   store i1 false, i1* %inTmp.addr, align 1
-  store i32 16, i32* %width.addr, align 4
+  store i32 32, i32* %width.addr, align 4
   br label %for.cond.1
 
 for.cond.1:
