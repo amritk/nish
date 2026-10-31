@@ -130,6 +130,8 @@ cases/caps_process_wait added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with
 cases/caps_signal added after R6: no rewriter to freeze it with
 cases/caps_tty added after R6: no rewriter to freeze it with
+cases/cf_label_dispose added after R6: no rewriter to freeze it with
+cases/cf_label_walks added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with
 cases/cls_inline_array_dynamic added after R6: no rewriter to freeze it with
@@ -258,12 +260,14 @@ cases/map_iter_set_new added after R6: no rewriter to freeze it with
 cases/map_iter_values added after R6: no rewriter to freeze it with
 cases/map_key_bool added after R6: no rewriter to freeze it with
 cases/map_key_class added after R6: no rewriter to freeze it with
+cases/map_key_composite added after R6: no rewriter to freeze it with
 cases/map_key_enum added after R6: no rewriter to freeze it with
 cases/map_key_f32 added after R6: no rewriter to freeze it with
 cases/map_key_f32_negzero added after R6: no rewriter to freeze it with
 cases/map_key_f64 added after R6: no rewriter to freeze it with
 cases/map_key_i32 added after R6: no rewriter to freeze it with
 cases/map_key_i64 added after R6: no rewriter to freeze it with
+cases/map_key_int_collide added after R6: no rewriter to freeze it with
 cases/map_key_negzero added after R6: no rewriter to freeze it with
 cases/map_key_str added after R6: no rewriter to freeze it with
 cases/map_key_u16 added after R6: no rewriter to freeze it with

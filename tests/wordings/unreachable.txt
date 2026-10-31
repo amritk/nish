@@ -47,6 +47,9 @@ NL2156  retired: `super(...)`, removed with inheritance
 NL2157  retired: `super`, removed with inheritance
 NL2158  retired: `super`, removed with inheritance
 NL2159  retired: `super`, removed with inheritance
+NL2166  retired: a `case` clause had to end in `break`, `return`, `continue` or `process.exit`; a clause falls into the next as in TypeScript now (tests/cases/cf_switch_fallthrough)
+NL2217  retired: the checker's refusal of a labelled `break`; one compiles now (tests/cases/cf_label_loops)
+NL2218  retired: the checker's refusal of a labelled `continue`; one compiles now (tests/cases/cf_label_loops)
 NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
 NL2227  retired: `Only relative import specifiers are supported`, from before WP21 S2 made a package name one of the four legal forms; the live rule is NL2320
 NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2321, itself retired for NL2538
@@ -97,8 +100,6 @@ NL2205  generators are Phase 0's (NL1044)
 NL2207  generic functions are Phase 0's (NL1054)
 NL2208  retired: `Generic methods are not supported`; generic methods compile since WP18 G8 (wp18 §15.8)
 NL2293  retired: the checker's `Generic classes are not supported yet`, deleted when WP18 G5 made a generic class an ordinary struct
-NL2217  labelled `break` is Phase 0's (NL1046)
-NL2218  labelled `continue` is Phase 0's (NL1046)
 NL3022  a member symbol carries its package's prefix, so only two same-named structs of one package share one; declaredStructs compares each with its own package's first and refuses the pair first, a declared class as NL3028 and an instantiation at its template as NL3013, and skips their members (#193)
 NL3023  NL3022 inside a package, preempted by NL3028 or NL3013 the same way (#193)
 

@@ -31,5 +31,5 @@ blocking socket 1: cloexec 1 nonblock 0 same 1
 pair: pid 1 uid 1 gid 1
 connect: pid 1 uid 1 gid 1
 accept: pid 1 uid 1 gid 1
-listen: own or refused 1
+listen: refused 1
 release 0

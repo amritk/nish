@@ -163,6 +163,7 @@ import {
   N_IDENT,
   N_IF,
   N_INDEX,
+  N_LABELED,
   N_MEMBER,
   N_NEW,
   N_NUMBER,
@@ -2544,6 +2545,16 @@ export class BoundsWalk {
    */
   breaks: State[]
   /**
+   * The label of each labelled statement being walked, innermost last, with
+   * the `breaks` and `continues` a jump that names it joins: a labelled loop's
+   * or `switch`'s own, a labelled block's fresh `breaks`. A label goes to the
+   * statement it labels through `label`, which that statement takes first.
+   */
+  labels: string[]
+  labelBreaks: State[][]
+  labelContinues: State[][]
+  label: string
+  /**
    * What the whole program knows about callees (`src/ranges.ts`), or `null`
    * in pass 2, which runs before every body is checked and so knows nothing:
    * there, any call drops every array length and every path.
@@ -2609,6 +2620,10 @@ export class BoundsWalk {
     this.paths = []
     this.continues = []
     this.breaks = []
+    this.labels = []
+    this.labelBreaks = []
+    this.labelContinues = []
+    this.label = ""
     this.loops = 0
     this.tables = null
     this.record = true
@@ -4110,6 +4125,48 @@ const breakJoin = (walk: BoundsWalk, exit: State): void => {
 }
 
 /**
+ * The label `walk` holds for the statement about to be walked, taken so that a
+ * statement nested in it does not take it too.
+ */
+const takeLabel = (walk: BoundsWalk): string => {
+  const label = walk.label
+  walk.label = ""
+  return label
+}
+
+/** Name `breaks` and the current `continues` by `label`, when there is one. */
+const openLabel = (walk: BoundsWalk, label: string, breaks: State[]): void => {
+  if (label !== "") {
+    walk.labels.push(label)
+    walk.labelBreaks.push(breaks)
+    walk.labelContinues.push(walk.continues)
+  }
+}
+
+const closeLabel = (walk: BoundsWalk, label: string): void => {
+  if (label !== "") {
+    walk.labels.pop()
+    walk.labelBreaks.pop()
+    walk.labelContinues.pop()
+  }
+}
+
+/**
+ * Where a `break` or `continue` that names `label` lands among the labelled
+ * statements being walked, or -1 for a jump without a label.
+ */
+const labelTarget = (walk: BoundsWalk, label: string): i32 => {
+  if (label === "") {
+    return -1
+  }
+  let i = walk.labels.length - 1
+  while (i >= 0 && walk.labels[i] !== label) {
+    i = i - 1
+  }
+  return i
+}
+
+/**
  * Walk one statement, returning whether control definitely leaves it. That
  * answer is what makes the early-exit guard work: after
  * `if (i >= s.length) { return 0; }` the negation of the test holds for the
@@ -4168,7 +4225,31 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     return false
   }
 
+  if (stmt.kind === N_LABELED) {
+    const target = stmt.children[0]
+    if (target.kind !== N_BLOCK) {
+      walk.label = stmt.text
+      return walkBoundsStatement(walk, state, target)
+    }
+    // A labelled block goes on after its closing brace from its end and from
+    // every `break` that names it, so the state there is the join of those.
+    const breaks: State[] = []
+    openLabel(walk, stmt.text, breaks)
+    const exits = walkBoundsStatement(walk, state, target)
+    closeLabel(walk, stmt.text)
+    if (breaks.length === 0) {
+      return exits
+    }
+    let joined = exits ? breaks[0] : state
+    for (const b of breaks) {
+      joined = intersect(joined, b)
+    }
+    copyInto(state, joined)
+    return false
+  }
+
   if (stmt.kind === N_WHILE) {
+    const label = takeLabel(walk)
     forgetAcross(walk, state, stmt)
     walk.loops = walk.loops + 1
     walkExpression(walk, state, stmt.children[0])
@@ -4181,7 +4262,9 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
+    openLabel(walk, label, walk.breaks)
     walkBoundsStatement(walk, body, stmt.children[1])
+    closeLabel(walk, label)
     breakJoin(walk, state)
     walk.continues = outer
     walk.breaks = outerBreaks
@@ -4190,6 +4273,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   }
 
   if (stmt.kind === N_DO) {
+    const label = takeLabel(walk)
     forgetAcross(walk, state, stmt)
     walk.loops = walk.loops + 1
     const body = cloneState(state)
@@ -4200,7 +4284,9 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
+    openLabel(walk, label, walk.breaks)
     const exits = walkBoundsStatement(walk, body, stmt.children[0])
+    closeLabel(walk, label)
     const condition = continueJoin(walk, body, exits)
     walk.continues = outer
     walk.breaks = outerBreaks
@@ -4210,6 +4296,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   }
 
   if (stmt.kind === N_FOR) {
+    const label = takeLabel(walk)
     // The initializer runs once, before the loop, so it is walked in the outer
     // state and its facts are what `forgetAcross` then prunes.
     const init = stmt.children[0]
@@ -4236,7 +4323,9 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
+    openLabel(walk, label, walk.breaks)
     const exits = walkBoundsStatement(walk, body, stmt.children[3])
+    closeLabel(walk, label)
     const update = continueJoin(walk, body, exits)
     breakJoin(walk, state)
     walk.continues = outer
@@ -4249,6 +4338,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   }
 
   if (stmt.kind === N_FOR_OF) {
+    const label = takeLabel(walk)
     walkExpression(walk, state, stmt.children[1])
     forgetAcross(walk, state, stmt)
     walk.loops = walk.loops + 1
@@ -4259,7 +4349,9 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     const outerBreaks = walk.breaks
     walk.continues = []
     walk.breaks = []
+    openLabel(walk, label, walk.breaks)
     walkBoundsStatement(walk, body, stmt.children[2])
+    closeLabel(walk, label)
     walk.continues = outer
     walk.breaks = outerBreaks
     walk.loops = walk.loops - 1
@@ -4275,12 +4367,22 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   }
 
   if (stmt.kind === N_CONTINUE) {
-    walk.continues.push(cloneState(state))
+    const at = labelTarget(walk, stmt.text)
+    if (at < 0) {
+      walk.continues.push(cloneState(state))
+    } else {
+      walk.labelContinues[at].push(cloneState(state))
+    }
     return true
   }
 
   if (stmt.kind === N_BREAK) {
-    walk.breaks.push(cloneState(state))
+    const at = labelTarget(walk, stmt.text)
+    if (at < 0) {
+      walk.breaks.push(cloneState(state))
+    } else {
+      walk.labelBreaks[at].push(cloneState(state))
+    }
     return true
   }
 
@@ -4290,6 +4392,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   }
 
   if (stmt.kind === N_SWITCH) {
+    const label = takeLabel(walk)
     walkExpression(walk, state, stmt.children[0])
     // A clause can be entered from the discriminant or fallen into from the
     // one above it, so each is walked from the state the whole `switch` is
@@ -4300,6 +4403,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     // further. A `continue` does reach the loop, and stays in its frame.
     const outerBreaks = walk.breaks
     walk.breaks = []
+    openLabel(walk, label, walk.breaks)
     for (const clause of stmt.children[1].children) {
       const clauseState = cloneState(state)
       const body = clause.kind === N_CASE ? clause.children[1] : clause.children[0]
@@ -4309,6 +4413,7 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
         }
       }
     }
+    closeLabel(walk, label)
     walk.breaks = outerBreaks
     return false
   }

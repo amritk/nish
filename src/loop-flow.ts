@@ -915,7 +915,9 @@ const flowLabelBits = (ctx: CheckContext, f: LoopFlow, k: i32, label: Node): i32
  * labels of its run of clauses, or for a `default` to what no other label
  * names — and a `break` out of it, the last body falling out of the bottom,
  * or a value no label names reaches its end; a `continue` goes on to the
- * loop. A label the pass does not read narrows nothing it would remove.
+ * loop. Any other body that falls out of its bottom runs on into the next,
+ * where the checker drops what it assigned to its declared type: a form this
+ * pass gives up on. A label the pass does not read narrows nothing it would remove.
  */
 const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] => {
   if (flowDead(s)) {
@@ -970,7 +972,11 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
           state = flowExec(ctx, f, statement, state)
         }
       }
-      out = flowJoin(f, out, state)
+      if (i === clauses.length - 1) {
+        out = flowJoin(f, out, state)
+      } else if (!flowDead(state)) {
+        f.status = "bail"
+      }
       group = 0
       groupKnown = true
       groupDefault = false

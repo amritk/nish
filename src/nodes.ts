@@ -66,8 +66,8 @@ export const N_FOR: i32 = 21 // children: initializer, condition, incrementor, b
 // apart by the child's kind (NL2135). `for...in` and `for await` are this node
 // with FLAG_FOR_IN and FLAG_AWAIT.
 export const N_FOR_OF: i32 = 22 // children: VAR or the refused expression, iterable, body
-export const N_BREAK: i32 = 23 // text: the label, only in a refused labelled statement
-export const N_CONTINUE: i32 = 24 // text: the label, only in a refused labelled statement
+export const N_BREAK: i32 = 23 // text: the label it names, or empty
+export const N_CONTINUE: i32 = 24 // text: the label it names, or empty
 export const N_RETURN: i32 = 25 // children: the expression
 export const N_THROW: i32 = 26 // children: the expression
 export const N_SWITCH: i32 = 27 // children: discriminant, LIST of CASE / DEFAULT
@@ -148,7 +148,8 @@ export const N_TYPE_LITERAL: i32 = 63
 export const N_TRY: i32 = 64
 // `with (o) body` (NL1038): children: the object, the body.
 export const N_WITH: i32 = 65
-// `outer: body` (NL1046): text: the label; children: the statement it labels.
+// `outer: body`: text: the label; children: the loop, block or `switch` it labels
+// (on anything else, NL1046).
 export const N_LABELED: i32 = 66
 
 // ---- Refused expressions (WP33 R1) ---------------------------------------------------

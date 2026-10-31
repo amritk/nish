@@ -1903,32 +1903,52 @@ export const main = (): i32 => {
   `push` inside the body extends the loop. `for...in`, `for await` and
   `for (x of xs)` over an existing `x` are each refused by name.
 - `switch` takes an **integer or enum** discriminant; every `case` label is an
-  integer constant expression of that type. **There is no implicit
-  fallthrough** — a clause with statements ends in `break`, `return`,
-  `continue` or `process.exit`, unless it is the last. An *empty* clause does
-  fall through, which is how `case 1: case 2:` shares a body. A clause cannot
-  declare a variable directly; wrap its body in a block.
-- `break` / `continue` are unlabelled only; labeled statements are forbidden.
+  integer constant expression of that type. A clause that does not end in
+  `break`, `return`, `continue` or `process.exit` **falls through** into the
+  next, as in TypeScript; an *empty* clause is how `case 1: case 2:` shares a
+  body. A clause reached by falling into it is not narrowed by its label. A
+  clause cannot declare a variable directly; wrap its body in a block.
+- **Labels** go on a loop, a block or a `switch`: `break outer` leaves the
+  statement named `outer` from any depth, `continue outer` starts the next
+  turn of the loop named `outer`. A label on any other statement is refused,
+  and a jump cannot leave an arrow for a label outside it.
 - `process.exit(code)` and `panic(msg)` **terminate control flow**, so a
   non-`void` function may end with either.
 - **Unreachable code is an error**, not a warning: anything after a `return`,
   `break`, `continue`, `process.exit`, an `if` whose branches all return, or an
   infinite loop.
 
-```ts nish:err NL2166
-const classify = (n: i32): string => {
+```ts nish:ok
+const firstPair = (limit: i32, target: i32): i32 => {
+  outer: for (let i: i32 = 0; i < limit; i++) {
+    for (let j: i32 = 0; j < limit; j++) {
+      if (i * j === target) {
+        return i * 100 + j;
+      }
+      if (j > i) {
+        continue outer;   // the next `i`
+      }
+    }
+  }
+  return -1;
+};
+
+const classify = (n: i32): i32 => {
+  let score: i32 = 0;
   switch (n) {
     case 0:
-      console.log("zero");   // no `break`: a clause with statements must end in one
+      score += 10;   // no `break`: falls into `case 1`
     case 1:
-      return "one";
+      score += 1;
+      break;
     default:
-      return "many";
+      score = -1;
   }
+  return score;
 };
 
 export const main = (): i32 => {
-  console.log(classify(0));
+  console.log(`${firstPair(10, 12)} ${classify(0)} ${classify(1)}`);   // 304 11 1
   return 0;
 };
 ```
@@ -2268,12 +2288,15 @@ is `-36`. A full backlog makes `unixConnect`
 also needs `fs.write` (`-13` without it); an abstract name does not, and a
 connect to a path is not confined. `sendFd(sock, fd, buf, off, len)` sends
 `buf[off, off + len)` with descriptor `fd` attached (`len` 0 is `-22`) and
-answers the bytes sent; `recvFd(sock, buf, off, len, fd)` reads into the
+answers the bytes sent, which on a stream socket can be short: the descriptor
+went with the first bytes, so send the rest with `netWrite`; `recvFd(sock, buf, off, len, fd)` reads into the
 range and sets `fd[0]` to the descriptor that came with it, or `-1`; the
-descriptor arrives close-on-exec and blocking, any beyond the first are closed,
+descriptor arrives close-on-exec, its status flags (`O_NONBLOCK` among them)
+the open file's, which the sender shares, any beyond the first are closed,
 and `fd` shorter than 1 is `-22`. `peerCredentials(sock, out)` writes
 `[pid, uid, gid]` of the process that made the connection, as it was at
-connect time, into an `out` of length 3 or more (`-22` shorter); on Darwin the
+connect time, into an `out` of length 3 or more (`-22` shorter, `-107` for a
+listener or a socket never connected); on Darwin the
 pid can be `-1`. All three answer `-88` or `-95` for a socket that is not
 Unix-domain. The Unix calls are refused on a wasm target, and under Node each
 throws.
@@ -2306,6 +2329,10 @@ console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
 - A key is a string, any number type, a `boolean`, an enum or a class instance
   (by identity). An interface, an array, a nullable type or a `Result` is not a
   key; a value is anything but `void` or an interface.
+- A pair of `i32`s is one `i64` key, not a string: `(toI64(a) << toI64(32)) |
+  toI64(toU32(b))`. Every operand is an `i64` so it also runs
+  under Node, where `i64` is a `BigInt`; it is exact for every pair. A `+` in
+  place of `|` overflows at `a = -2^31` with a negative `b`.
 - A module that declares its own `Map` or `Set` keeps it, but then no other
   module of the program may name the global one.
 
