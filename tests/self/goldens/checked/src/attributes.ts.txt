@@ -372,15 +372,19 @@ struct ParamUse (class) size=24 align=8 exported
   field callee: FunctionSig | null index=1 offset=8
   field index: i32 index=2 offset=16
   constructor -> @ParamUse.constructor
-struct FactCollector (class) size=56 align=8
+struct FactCollector (class) size=72 align=8
   field unit: AnalysisUnit index=0 offset=0
   field table: TypeTable index=1 offset=8
   field opts: Options index=2 offset=16
   field sig: FunctionSig index=3 offset=24
   field facts: FunctionFacts index=4 offset=32
   field known: FactsTable | null index=5 offset=40
-  field siteOrder: i32 index=6 offset=48
+  field declNames: StringMap index=6 offset=48
+  field declBuckets: Node[][] index=7 offset=56
+  field siteOrder: i32 index=8 offset=64
+  field declsGathered: boolean index=9 offset=68
   constructor -> @FactCollector.constructor
+  method declarationOf -> @FactCollector.declarationOf
   method paramRef -> @FactCollector.paramRef
   method noteSite -> @FactCollector.noteSite
   method orderSites -> @FactCollector.orderSites
@@ -925,18 +929,22 @@ function isPartsUse(unit: AnalysisUnit, table: TypeTable, ref: Node): boolean ->
   callee +5:17 ParentTable.parentOf -> @ParentTable.parentOf
   callee +7:12 isPushCall -> @isPushCall
   callee +7:49 isJoinCall -> @isJoinCall
-function declarationIn(program: CheckedProgram, node: Node, local: Local): Node | null -> @declarationIn
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+function gatherDeclarations(program: CheckedProgram, node: Node, names: StringMap, buckets: Node[][]): void -> @gatherDeclarations
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   escaping: node
-  calls: declarationIn nish_panic_index
-  pointer program: size=656 writesThrough=false captured=false passedTo=declarationIn#0
+  calls: StringMap.get StringMap.set gatherDeclarations nish_array_grow nish_panic_index
+  pointer program: size=656 writesThrough=false captured=false passedTo=gatherDeclarations#0
   pointer node: size=40 writesThrough=true captured=true
-  pointer local: size=64 writesThrough=false captured=false passedTo=declarationIn#2
+  pointer names: size=40 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0 gatherDeclarations#2
+  pointer buckets: size=0 writesThrough=true captured=false passedTo=gatherDeclarations#3
   stackSites=0 stackLocals=0
-  local +0:9 declared: Local | null (const)
+  local -6:9 declared: Local | null (const)
+  local -4:9 at: i32 (let)
+  callee -4:14 StringMap.get -> @StringMap.get
+  callee -1:7 StringMap.set -> @StringMap.set
   local +4:14 child: Node (const)
-  local +5:11 found: Node | null (const)
-  callee +5:19 declarationIn -> @declarationIn
+  callee +5:5 gatherDeclarations -> @gatherDeclarations
 function returnedParameter(callee: FunctionSig): i32 -> @returnedParameter
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.body FunctionSig.foreign FunctionSig.writtenArity nish_array_grow nish_str_eq returnsAndBindings unwrapParens
@@ -1056,9 +1064,10 @@ function isPointerParam(table: TypeTable, type: i32): boolean -> @isPointerParam
   callee +4:10 TypeTable.isStruct -> @TypeTable.isStruct
   callee +4:35 TypeTable.isArray -> @TypeTable.isArray
 function FactCollector.constructor(this: FactCollector, unit: AnalysisUnit, table: TypeTable, opts: Options, sig: FunctionSig, facts: FunctionFacts, known: FactsTable | null): void -> @FactCollector.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: facts known opts sig table unit
-  pointer this: size=56 writesThrough=true captured=false
+  calls: StringMap.constructor nish_alloc_struct
+  pointer this: size=72 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   pointer opts: size=192 writesThrough=true captured=true
@@ -1066,10 +1075,24 @@ function FactCollector.constructor(this: FactCollector, unit: AnalysisUnit, tabl
   pointer facts: size=408 writesThrough=true captured=true
   pointer known: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+  callee +0:22 new StringMap -> @StringMap.constructor
+function FactCollector.declarationOf(this: FactCollector, body: Node, local: Local): Node | null -> @FactCollector.declarationOf [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: StringMap.get gatherDeclarations nish_panic_index
+  pointer this: size=72 writesThrough=true captured=false
+  pointer body: size=40 writesThrough=true captured=true passedTo=gatherDeclarations#1
+  pointer local: size=64 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee -1:7 gatherDeclarations -> @gatherDeclarations
+  local +2:11 at: i32 (const)
+  callee +2:16 StringMap.get -> @StringMap.get
+  local +6:16 decl: Node (const)
+  local +7:13 declared: Local | null (const)
 function FactCollector.paramRef(this: FactCollector, node: Node): string -> @FactCollector.paramRef [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 local: Local | null (const)
@@ -1079,7 +1102,7 @@ function FactCollector.noteSite(this: FactCollector, node: Node, kind: i32, prov
   sharedWrite: +0:7
   escaping: callee kind proven
   calls: Options.recordsPanics PanicSite.constructor nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=PanicSite.constructor#1
   stackSites=0 stackLocals=0
   callee -1:9 Options.recordsPanics -> @Options.recordsPanics
@@ -1089,14 +1112,14 @@ function FactCollector.orderSites(this: FactCollector, from: i32, to: i32): void
   sharedWrite: +0:7
   escaping: from
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=56 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:9 k: i32 (let)
 function FactCollector.noteCall(this: FactCollector, node: Node, callee: FunctionSig): void -> @FactCollector.noteCall [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteSite
   calls: FactCollector.noteSite parallelRoleOf
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1
   pointer callee: size=160 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
@@ -1106,7 +1129,7 @@ function FactCollector.noteCaptures(this: FactCollector, node: Node): void -> @F
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteCaptured
   calls: FactCollector.noteCaptured FactCollector.noteCaptures nish_panic_index sourceLocal
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteCaptured#0 FactCollector.noteCaptures#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteCaptured#0 FactCollector.noteCaptures#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 local: Local | null (const)
@@ -1119,7 +1142,7 @@ function FactCollector.noteCaptured(this: FactCollector, source: Local): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: DirtMark.constructor FactCollector.escapeParam FactCollector.localPathAt nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.escapeParam#0 FactCollector.localPathAt#0 FactCollector.escapeParam#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.escapeParam#0 FactCollector.localPathAt#0 FactCollector.escapeParam#0
   pointer source: size=64 writesThrough=true captured=true passedTo=FactCollector.localPathAt#1
   stackSites=0 stackLocals=0
   callee -5:7 FactCollector.escapeParam -> @FactCollector.escapeParam
@@ -1132,7 +1155,7 @@ function FactCollector.escapeParam(this: FactCollector, name: string): void -> @
   sharedWrite: +0:7
   escaping: name
   calls: FunctionFacts.pointerParam StringSet.add
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -3:5 StringSet.add -> @StringSet.add
   local -2:11 pointer: PointerParamFacts | null (const)
@@ -1142,7 +1165,7 @@ function FactCollector.noteUse(this: FactCollector, name: string, ref: Node): vo
   sharedWrite: +0:9
   escaping: name
   calls: FactCollector.escapeParam FactCollector.handsStringElement FactCollector.pushedOntoJoinedParts FunctionFacts.pointerParam StringSet.add classifyUse nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.pushedOntoJoinedParts#0 FactCollector.escapeParam#0 FactCollector.handsStringElement#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.pushedOntoJoinedParts#0 FactCollector.escapeParam#0 FactCollector.handsStringElement#0
   pointer ref: size=40 writesThrough=true captured=true passedTo=classifyUse#2 FactCollector.pushedOntoJoinedParts#1 FactCollector.handsStringElement#1
   stackSites=0 stackLocals=0
   local -14:11 found: ParamUse (const)
@@ -1157,7 +1180,7 @@ function FactCollector.noteUse(this: FactCollector, name: string, ref: Node): vo
 function FactCollector.handsStringElement(this: FactCollector, ref: Node): boolean -> @FactCollector.handsStringElement [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer ref: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   stackSites=0 stackLocals=0
   local +0:11 access: Node | null (const)
@@ -1168,8 +1191,8 @@ function FactCollector.handsStringElement(this: FactCollector, ref: Node): boole
 function FactCollector.pushedOntoJoinedParts(this: FactCollector, ref: Node): boolean -> @FactCollector.pushedOntoJoinedParts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectRefs
-  calls: FunctionSig.body TypeTable.isArray TypeTable.refOf collectRefs declarationIn isJoinedParts pushedOnto
-  pointer this: size=56 writesThrough=false captured=false
+  calls: FactCollector.declarationOf FunctionSig.body TypeTable.isArray TypeTable.refOf collectRefs isJoinedParts pushedOnto
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.declarationOf#0
   pointer ref: size=40 writesThrough=false captured=false passedTo=pushedOnto#2
   stackSites=1 stackLocals=1
   local +0:11 parts: Local | null (const)
@@ -1181,11 +1204,11 @@ function FactCollector.pushedOntoJoinedParts(this: FactCollector, ref: Node): bo
   local +14:11 refs: Node[] (const)
   callee +15:5 collectRefs -> @collectRefs
   callee +16:12 isJoinedParts -> @isJoinedParts
-  callee +16:56 declarationIn -> @declarationIn
+  callee +16:56 FactCollector.declarationOf -> @FactCollector.declarationOf
 function FactCollector.isStackOwned(this: FactCollector, expr: Node): boolean -> @FactCollector.isStackOwned [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionFacts.holdsStackObject FunctionFacts.isStackSite nish_panic_index unwrapParens
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:11 e: Node (const)
@@ -1197,13 +1220,13 @@ function FactCollector.noteSharedWrite(this: FactCollector, node: Node): void ->
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: node
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FactCollector.initialisesThis(this: FactCollector, receiver: Node): boolean -> @FactCollector.initialisesThis [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: unwrapParens
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   callee +0:36 unwrapParens -> @unwrapParens
@@ -1211,7 +1234,7 @@ function FactCollector.noteArrayWrite(this: FactCollector, node: Node, receiver:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.notePastWrite
   calls: FactCollector.isStackOwned FactCollector.notePastWrite FactCollector.noteSlotWrite
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.notePastWrite#0 FactCollector.isStackOwned#0 FactCollector.noteSlotWrite#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.notePastWrite#0 FactCollector.isStackOwned#0 FactCollector.noteSlotWrite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.notePastWrite#1 FactCollector.noteSlotWrite#1
   pointer receiver: size=40 writesThrough=true captured=true passedTo=FactCollector.isStackOwned#1 FactCollector.noteSlotWrite#2
   stackSites=0 stackLocals=0
@@ -1222,7 +1245,7 @@ function FactCollector.notePastWrite(this: FactCollector, node: Node): void -> @
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: FactCollector.noteSharedWrite
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteSharedWrite#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSharedWrite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSharedWrite#1
   stackSites=0 stackLocals=0
   callee -1:5 FactCollector.noteSharedWrite -> @FactCollector.noteSharedWrite
@@ -1231,7 +1254,7 @@ function FactCollector.noteSlotWrite(this: FactCollector, node: Node, receiver: 
   sharedWrite: +0:9
   escaping: node
   calls: FactCollector.notePastWrite FactCollector.noteSharedWrite FactCollector.pathOf FactCollector.pointerParamOf FactCollector.privateArrayOf nish_array_grow unwrapParens
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.privateArrayOf#0 FactCollector.pathOf#0 FactCollector.pointerParamOf#0 FactCollector.noteSharedWrite#0 FactCollector.notePastWrite#0 FactCollector.noteSharedWrite#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.privateArrayOf#0 FactCollector.pathOf#0 FactCollector.pointerParamOf#0 FactCollector.noteSharedWrite#0 FactCollector.notePastWrite#0 FactCollector.noteSharedWrite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSharedWrite#1 FactCollector.notePastWrite#1 FactCollector.noteSharedWrite#1
   pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -1250,7 +1273,7 @@ function FactCollector.pathOf(this: FactCollector, expr: Node): MemPath -> @Fact
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via FactCollector.pathFrom
   calls: FactCollector.pathFrom
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.pathFrom#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.pathFrom#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=FactCollector.pathFrom#1
   stackSites=0 stackLocals=0
   callee +0:12 FactCollector.pathFrom -> @FactCollector.pathFrom
@@ -1259,7 +1282,7 @@ function FactCollector.pathFrom(this: FactCollector, e: Node, depth: i32): MemPa
   sharedWrite: via FactCollector.pathFrom
   escaping: depth
   calls: FactCollector.localPathAt FactCollector.pathFrom FactCollector.pointerParamOf FactCollector.readBackPath FactCollector.returnedPath MemPath.constructor nish_alloc_struct nish_panic_index nish_str_concat
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.pathFrom#0 FactCollector.pathFrom#0 FactCollector.pathFrom#0 FactCollector.pointerParamOf#0 FactCollector.readBackPath#0 FactCollector.returnedPath#0 FactCollector.pointerParamOf#0 FactCollector.localPathAt#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.pathFrom#0 FactCollector.pathFrom#0 FactCollector.pathFrom#0 FactCollector.pointerParamOf#0 FactCollector.readBackPath#0 FactCollector.returnedPath#0 FactCollector.pointerParamOf#0 FactCollector.localPathAt#0
   pointer e: size=40 writesThrough=false captured=false passedTo=FactCollector.pointerParamOf#1 FactCollector.readBackPath#1 FactCollector.returnedPath#1 FactCollector.pointerParamOf#1
   stackSites=0 stackLocals=0
   callee +0:14 FactCollector.pathFrom -> @FactCollector.pathFrom
@@ -1289,7 +1312,7 @@ function FactCollector.localPathAt(this: FactCollector, local: Local, depth: i32
   sharedWrite: +0:5
   escaping: depth
   calls: FactCollector.resolveLocal LocalPath.constructor nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.resolveLocal#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.resolveLocal#0
   pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.resolveLocal#1 LocalPath.constructor#1
   stackSites=0 stackLocals=0
   local -6:16 seen: LocalPath (const)
@@ -1299,9 +1322,9 @@ function FactCollector.localPathAt(this: FactCollector, local: Local, depth: i32
 function FactCollector.resolveLocal(this: FactCollector, local: Local, depth: i32): MemPath -> @FactCollector.resolveLocal [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via FactCollector.ownKeyOf
-  calls: FactCollector.elementPath FactCollector.ownKeyOf FactCollector.pathFrom FunctionSig.body MemPath.constructor ParentTable.parentOf declarationIn nish_alloc_struct nish_panic_index nish_panic_overflow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.ownKeyOf#0 FactCollector.elementPath#0 FactCollector.pathFrom#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.ownKeyOf#1 declarationIn#2
+  calls: FactCollector.declarationOf FactCollector.elementPath FactCollector.ownKeyOf FactCollector.pathFrom FunctionSig.body MemPath.constructor ParentTable.parentOf nish_alloc_struct nish_panic_index nish_panic_overflow
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.ownKeyOf#0 FactCollector.declarationOf#0 FactCollector.elementPath#0 FactCollector.pathFrom#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.ownKeyOf#1 FactCollector.declarationOf#2
   stackSites=0 stackLocals=0
   local +0:11 key: string (const)
   callee +0:17 FactCollector.ownKeyOf -> @FactCollector.ownKeyOf
@@ -1309,7 +1332,7 @@ function FactCollector.resolveLocal(this: FactCollector, local: Local, depth: i3
   local +4:11 body: Node | null (const)
   callee +4:18 FunctionSig.body -> @FunctionSig.body
   local +5:11 decl: Node | null (const)
-  callee +6:61 declarationIn -> @declarationIn
+  callee +6:61 FactCollector.declarationOf -> @FactCollector.declarationOf
   callee +8:14 new MemPath -> @MemPath.constructor
   local +11:9 loop: Node | null (let)
   callee +11:16 ParentTable.parentOf -> @ParentTable.parentOf
@@ -1322,7 +1345,7 @@ function FactCollector.elementPath(this: FactCollector, iterable: Node, depth: i
   sharedWrite: via FactCollector.pathFrom
   escaping: depth
   calls: FactCollector.isCollectionType FactCollector.pathFrom MemPath.constructor TypeTable.isArray nish_alloc_struct nish_panic_index nish_str_concat unwrapParens walkTable
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isCollectionType#0 FactCollector.pathFrom#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isCollectionType#0 FactCollector.pathFrom#0
   pointer iterable: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:11 program: CheckedProgram (const)
@@ -1341,7 +1364,7 @@ function FactCollector.isCollectionType(this: FactCollector, type: i32): boolean
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf isCollectionStruct
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 info: StructInfo | null (const)
   callee +0:37 TypeTable.isStruct -> @TypeTable.isStruct
@@ -1353,7 +1376,7 @@ function FactCollector.readBackPath(this: FactCollector, call: Node, depth: i32)
   sharedWrite: via FactCollector.pathFrom
   escaping: depth
   calls: FactCollector.pathFrom MemPath.constructor isCollectionStruct isMapRoute nish_alloc_struct nish_panic_index nish_str_concat tableReceiver
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.pathFrom#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.pathFrom#0
   pointer call: size=40 writesThrough=false captured=false passedTo=tableReceiver#1
   stackSites=0 stackLocals=0
   local +0:11 program: CheckedProgram (const)
@@ -1370,7 +1393,7 @@ function FactCollector.returnedPath(this: FactCollector, call: Node, depth: i32)
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via FactCollector.pathFrom
   calls: FactCollector.pathFrom MemPath.constructor nish_alloc_struct nish_panic_index nish_panic_overflow returnedParameter
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.pathFrom#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.pathFrom#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 callee: FunctionSig | null (const)
@@ -1383,15 +1406,15 @@ function FactCollector.ownKeyOf(this: FactCollector, local: Local): string -> @F
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: local
-  calls: FactCollector.isWipedFreshSecret FactCollector.noteFreshInit FactCollector.noteStore FunctionSig.body declarationIn nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 unwrapParens
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isWipedFreshSecret#0 FactCollector.noteFreshInit#0 FactCollector.noteStore#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=declarationIn#2 FactCollector.isWipedFreshSecret#1
+  calls: FactCollector.declarationOf FactCollector.isWipedFreshSecret FactCollector.noteFreshInit FactCollector.noteStore FunctionSig.body nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 unwrapParens
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.declarationOf#0 FactCollector.isWipedFreshSecret#0 FactCollector.noteFreshInit#0 FactCollector.noteStore#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.declarationOf#2 FactCollector.isWipedFreshSecret#1
   stackSites=0 stackLocals=0
-  local -16:11 at: i32 (const)
-  local -12:11 body: Node | null (const)
-  callee -12:18 FunctionSig.body -> @FunctionSig.body
-  local -11:11 decl: Node | null (const)
-  callee -10:47 declarationIn -> @declarationIn
+  local -15:11 at: i32 (const)
+  local -11:11 body: Node | null (const)
+  callee -11:18 FunctionSig.body -> @FunctionSig.body
+  local -10:11 decl: Node | null (const)
+  callee -10:71 FactCollector.declarationOf -> @FactCollector.declarationOf
   local -9:11 init: Node | null (const)
   callee -9:54 unwrapParens -> @unwrapParens
   local -5:11 fresh: boolean (const)
@@ -1403,7 +1426,7 @@ function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, ini
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectRefs
   calls: FunctionSig.body ParentTable.parentOf collectRefs nish_panic_index secretRoleOf unwrapParens
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer init: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -1429,7 +1452,7 @@ function FactCollector.noteFreshInit(this: FactCollector, key: string, init: Nod
   sharedWrite: +0:5
   escaping: key
   calls: DirtMark.constructor FactCollector.noteStore FactCollector.valueOf TypeTable.isStruct constructorOf intrinsicType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.valueOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.valueOf#0
   pointer init: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
   local -31:11 program: CheckedProgram (const)
@@ -1452,7 +1475,7 @@ function FactCollector.noteSlotStore(this: FactCollector, slot: MemPath, value: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: FactCollector.noteStore FactCollector.valueOf ParamStore.constructor nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteStore#0 FactCollector.valueOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteStore#0 FactCollector.valueOf#0
   pointer slot: size=24 writesThrough=false captured=false
   pointer value: size=40 writesThrough=true captured=true passedTo=FactCollector.noteStore#3 FactCollector.valueOf#1
   stackSites=0 stackLocals=0
@@ -1465,7 +1488,7 @@ function FactCollector.noteStore(this: FactCollector, key: string, steps: string
   sharedWrite: +0:5
   escaping: key steps
   calls: DirtMark.constructor FactCollector.valueOf nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.valueOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.valueOf#0
   pointer value: size=40 writesThrough=true captured=true passedTo=FactCollector.valueOf#1
   stackSites=0 stackLocals=0
   local -9:11 desc: ValueDesc (const)
@@ -1477,7 +1500,7 @@ function FactCollector.isPlainValue(this: FactCollector, type: i32): boolean -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isMaybe TypeTable.isRanged TypeTable.refOf TypeTable.stripNull isScalarArgument
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 table: TypeTable (const)
   local +1:9 t: i32 (let)
@@ -1491,7 +1514,7 @@ function FactCollector.valueOf(this: FactCollector, value: Node): ValueDesc -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via FactCollector.describe
   calls: FactCollector.describe ValueDesc.constructor nish_alloc_struct
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.describe#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.describe#0
   pointer value: size=40 writesThrough=true captured=true passedTo=FactCollector.describe#1
   stackSites=0 stackLocals=0
   local +0:11 desc: ValueDesc (const)
@@ -1501,7 +1524,7 @@ function FactCollector.describe(this: FactCollector, value: Node, desc: ValueDes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: FactCollector.describe FactCollector.isPlainValue FactCollector.pathOf TypeTable.isArray TypeTable.isStruct constructorOf intrinsicType nish_array_grow nish_panic_index nish_str_eq unwrapParens
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isPlainValue#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.pathOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isPlainValue#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.pathOf#0
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer desc: size=32 writesThrough=true captured=false passedTo=FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2
   stackSites=0 stackLocals=0
@@ -1532,7 +1555,7 @@ function FactCollector.noteOwnStore(this: FactCollector, node: Node): void -> @F
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteSlotStore
   calls: FactCollector.noteSlotStore FactCollector.pathOf MemPath.constructor arrayMethodName isAssignmentOperator methodReceiver nish_panic_index nish_str_concat nish_str_eq unwrapParens
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteSlotStore#0 FactCollector.pathOf#0 FactCollector.pathOf#0 FactCollector.noteSlotStore#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteSlotStore#0 FactCollector.pathOf#0 FactCollector.pathOf#0 FactCollector.noteSlotStore#0
   pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2 methodReceiver#0
   stackSites=1 stackLocals=1
   callee +0:35 isAssignmentOperator -> @isAssignmentOperator
@@ -1555,7 +1578,7 @@ function FactCollector.noteEscape(this: FactCollector, node: Node): void -> @Fac
   sharedWrite: +0:7
   escaping: node
   calls: DirtMark.constructor FactCollector.followsUse FactCollector.isPlainValue FactCollector.pathOf ParentTable.parentOf nish_alloc_struct nish_array_grow nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isPlainValue#0 FactCollector.followsUse#0 FactCollector.pathOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isPlainValue#0 FactCollector.followsUse#0 FactCollector.pathOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.pathOf#1
   stackSites=0 stackLocals=0
   local -36:11 program: CheckedProgram (const)
@@ -1572,7 +1595,7 @@ function FactCollector.noteEscape(this: FactCollector, node: Node): void -> @Fac
 function FactCollector.followsUse(this: FactCollector, parent: Node, at: Node): boolean -> @FactCollector.followsUse [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf fusedCalleesOf isAssignmentOperator isCollectionStruct keepsArguments nish_panic_index nish_str_eq tableReceiver
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer parent: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   pointer at: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1592,7 +1615,7 @@ function FactCollector.followsUse(this: FactCollector, parent: Node, at: Node): 
 function FactCollector.privateArrayOf(this: FactCollector, e: Node): PrivateArray | null -> @FactCollector.privateArrayOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer e: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 local: Local | null (const)
@@ -1600,7 +1623,7 @@ function FactCollector.privateArrayOf(this: FactCollector, e: Node): PrivateArra
 function FactCollector.pointerParamOf(this: FactCollector, e: Node): PointerParamFacts | null -> @FactCollector.pointerParamOf [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactCollector.paramRef FunctionFacts.pointerParam
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.paramRef#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.paramRef#0
   pointer e: size=40 writesThrough=false captured=false passedTo=FactCollector.paramRef#1
   stackSites=0 stackLocals=0
   local +0:11 param: string (const)
@@ -1610,7 +1633,7 @@ function FactCollector.findPrivateArrays(this: FactCollector, node: Node): void 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.notePrivateArray
   calls: FactCollector.findPrivateArrays FactCollector.notePrivateArray nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.notePrivateArray#0 FactCollector.findPrivateArrays#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.notePrivateArray#0 FactCollector.findPrivateArrays#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:18 decl: Node (const)
@@ -1622,7 +1645,7 @@ function FactCollector.isReturned(this: FactCollector, ref: Node): boolean -> @F
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: ref
   calls: ParentTable.parentOf nish_panic_index nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer ref: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 node: Node (let)
@@ -1633,7 +1656,7 @@ function FactCollector.notePrivateArray(this: FactCollector, local: Local, decl:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: ArgEdge.constructor FactCollector.callAround FactCollector.heldByOf FactCollector.holdArray FactCollector.isReturned FactCollector.ownEdge FactCollector.ownKeyOf FunctionSig.body MemPath.constructor PrivateArray.constructor TypeTable.refOf classifyUse collectRefs inlineElementStruct isFreshArrayLocal namedInArrow nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isReturned#0 FactCollector.ownKeyOf#0 FactCollector.ownEdge#0 FactCollector.callAround#0 FactCollector.holdArray#0 FactCollector.heldByOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isReturned#0 FactCollector.ownKeyOf#0 FactCollector.ownEdge#0 FactCollector.callAround#0 FactCollector.holdArray#0 FactCollector.heldByOf#0
   pointer local: size=64 writesThrough=true captured=true passedTo=isFreshArrayLocal#1 namedInArrow#2 collectRefs#2 PrivateArray.constructor#1 FactCollector.ownKeyOf#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=isFreshArrayLocal#2
   stackSites=3 stackLocals=3
@@ -1673,7 +1696,7 @@ function FactCollector.notePrivateArray(this: FactCollector, local: Local, decl:
 function FactCollector.callAround(this: FactCollector, ref: Node): Node | null -> @FactCollector.callAround [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer ref: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   stackSites=0 stackLocals=0
   local +0:9 at: Node | null (let)
@@ -1685,14 +1708,14 @@ function FactCollector.holdArray(this: FactCollector, key: string, holder: strin
   sharedWrite: +0:9
   escaping: holder
   calls: nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:16 edge: ArgEdge (const)
 function FactCollector.noteArguments(this: FactCollector, call: Node, callee: FunctionSig): void -> @FactCollector.noteArguments [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: FactCollector.heldByOf FactCollector.noteArgument FactCollector.noteArgumentList FactCollector.noteTableStores FactCollector.noteWholeReach isCollectionStruct methodReceiver nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteArgumentList#0 FactCollector.heldByOf#0 FactCollector.noteWholeReach#0 FactCollector.noteTableStores#0 FactCollector.noteArgument#0 FactCollector.noteArgumentList#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteArgumentList#0 FactCollector.heldByOf#0 FactCollector.noteWholeReach#0 FactCollector.noteTableStores#0 FactCollector.noteArgument#0 FactCollector.noteArgumentList#0
   pointer call: size=40 writesThrough=true captured=true passedTo=FactCollector.heldByOf#1 methodReceiver#0 FactCollector.noteTableStores#1
   pointer callee: size=160 writesThrough=false captured=false passedTo=FactCollector.noteArgumentList#1 FactCollector.noteArgument#1 FactCollector.noteArgumentList#1
   stackSites=0 stackLocals=0
@@ -1714,7 +1737,7 @@ function FactCollector.heldByOf(this: FactCollector, call: Node): string -> @Fac
   sharedWrite: via FactCollector.ownKeyOf
   escaping: call
   calls: FactCollector.ownKeyOf ParentTable.parentOf nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.ownKeyOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.ownKeyOf#0
   pointer call: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 at: Node (let)
@@ -1727,7 +1750,7 @@ function FactCollector.noteArgumentList(this: FactCollector, callee: FunctionSig
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteArgument
   calls: FactCollector.noteArgument nish_panic_overflow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteArgument#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteArgument#0
   pointer callee: size=160 writesThrough=false captured=false passedTo=FactCollector.noteArgument#1
   pointer args: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -1738,7 +1761,7 @@ function FactCollector.noteArgument(this: FactCollector, callee: FunctionSig, ar
   sharedWrite: +0:5
   escaping: index
   calls: ArgEdge.constructor FactCollector.ownEdge FactCollector.pathOf FactCollector.pointerParamOf FactCollector.privateArrayOf FunctionSig.isCompileTime MemPath.constructor isScalarArgument nish_alloc_struct nish_array_grow nish_panic_index unwrapParens
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.privateArrayOf#0 FactCollector.pointerParamOf#0 FactCollector.pathOf#0 FactCollector.ownEdge#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.privateArrayOf#0 FactCollector.pointerParamOf#0 FactCollector.pathOf#0 FactCollector.ownEdge#0
   pointer callee: size=160 writesThrough=false captured=false passedTo=FunctionSig.isCompileTime#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -1760,7 +1783,7 @@ function FactCollector.visit(this: FactCollector, node: Node): void -> @FactColl
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: FactCollector.addCallee FactCollector.addUserCallee FactCollector.collectArrayFacts FactCollector.collectClassFacts FactCollector.collectDivisionFacts FactCollector.collectIdentifierBuiltinFacts FactCollector.collectNamespacePropertyFacts FactCollector.collectOverflowFacts FactCollector.collectRangeFacts FactCollector.collectResultFacts FactCollector.collectStringFacts FactCollector.noteCall FactCollector.noteCaptures FactCollector.noteEscape FactCollector.noteOwnStore FactCollector.noteTableStores FactCollector.noteUse FactCollector.noteWholeReach FactCollector.orderSites FactCollector.paramRef FactCollector.visit StringSet.add TypeTable.isMaybe fusedCalleesOf isChannelReader isCountedLoop methodReceiver nish_panic_index tableReceiver valueReaderOf walkMethodsOf walkTable
-  pointer this: size=56 writesThrough=true captured=false passedTo=FactCollector.noteCaptures#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.noteTableStores#0 FactCollector.addCallee#0 FactCollector.noteCall#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.paramRef#0 FactCollector.noteUse#0 FactCollector.collectStringFacts#0 FactCollector.noteOwnStore#0 FactCollector.noteEscape#0 FactCollector.collectClassFacts#0 FactCollector.collectResultFacts#0 FactCollector.collectArrayFacts#0 FactCollector.collectDivisionFacts#0 FactCollector.collectOverflowFacts#0 FactCollector.collectRangeFacts#0 FactCollector.collectNamespacePropertyFacts#0 FactCollector.collectIdentifierBuiltinFacts#0 FactCollector.orderSites#0 FactCollector.visit#0 FactCollector.orderSites#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteCaptures#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.noteTableStores#0 FactCollector.addCallee#0 FactCollector.noteCall#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.addUserCallee#0 FactCollector.noteCall#0 FactCollector.noteWholeReach#0 FactCollector.paramRef#0 FactCollector.noteUse#0 FactCollector.collectStringFacts#0 FactCollector.noteOwnStore#0 FactCollector.noteEscape#0 FactCollector.collectClassFacts#0 FactCollector.collectResultFacts#0 FactCollector.collectArrayFacts#0 FactCollector.collectDivisionFacts#0 FactCollector.collectOverflowFacts#0 FactCollector.collectRangeFacts#0 FactCollector.collectNamespacePropertyFacts#0 FactCollector.collectIdentifierBuiltinFacts#0 FactCollector.orderSites#0 FactCollector.visit#0 FactCollector.orderSites#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteCaptures#1 isCountedLoop#2 fusedCalleesOf#2 tableReceiver#1 FactCollector.addUserCallee#2 FactCollector.noteCall#1 FactCollector.noteTableStores#1 FactCollector.addCallee#2 FactCollector.noteCall#1 FactCollector.addUserCallee#2 FactCollector.noteCall#1 methodReceiver#0 FactCollector.addUserCallee#2 FactCollector.noteCall#1 FactCollector.paramRef#1 FactCollector.noteUse#2 FactCollector.collectStringFacts#1 FactCollector.noteOwnStore#1 FactCollector.noteEscape#1 FactCollector.collectClassFacts#1 FactCollector.collectResultFacts#1 FactCollector.collectArrayFacts#1 FactCollector.collectDivisionFacts#1 FactCollector.collectOverflowFacts#1 FactCollector.collectRangeFacts#1 FactCollector.collectNamespacePropertyFacts#1 FactCollector.collectIdentifierBuiltinFacts#1
   stackSites=0 stackLocals=0
   local -14:11 program: CheckedProgram (const)
@@ -1820,7 +1843,7 @@ function FactCollector.addUserCallee(this: FactCollector, callee: string, site: 
   sharedWrite: via StringSet.add
   escaping: callee
   calls: FactCollector.addComposedCallee StringSet.add
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.addComposedCallee#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.addComposedCallee#0
   pointer site: size=40 writesThrough=true captured=true passedTo=FactCollector.addComposedCallee#2
   stackSites=0 stackLocals=0
   callee +0:5 StringSet.add -> @StringSet.add
@@ -1830,7 +1853,7 @@ function FactCollector.noteWholeReach(this: FactCollector, callee: string, recei
   sharedWrite: +0:5
   escaping: callee
   calls: ArgEdge.constructor FactCollector.pathOf MemPath.constructor nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.pathOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.pathOf#0
   pointer receiver: size=40 writesThrough=false captured=false passedTo=FactCollector.pathOf#1
   stackSites=0 stackLocals=0
   local -1:11 path: MemPath (const)
@@ -1841,7 +1864,7 @@ function FactCollector.noteTableStores(this: FactCollector, call: Node, receiver
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.pathOf
   calls: FactCollector.noteSlotStore FactCollector.pathOf MemPath.constructor keepsArguments nish_panic_index nish_str_concat
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.pathOf#0 FactCollector.noteSlotStore#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.pathOf#0 FactCollector.noteSlotStore#0
   pointer call: size=40 writesThrough=false captured=false passedTo=keepsArguments#1
   pointer receiver: size=40 writesThrough=false captured=false passedTo=FactCollector.pathOf#1
   stackSites=2 stackLocals=1
@@ -1858,7 +1881,7 @@ function FactCollector.ownEdge(this: FactCollector, edge: ArgEdge): ArgEdge -> @
   sharedWrite: +0:7
   escaping: edge
   calls: DirtMark.constructor nish_alloc_struct nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer edge: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -1:13 mark: DirtMark (const)
@@ -1868,7 +1891,7 @@ function FactCollector.addComposedCallee(this: FactCollector, callee: string, si
   sharedWrite: +0:7
   escaping: callee site
   calls: StringSet.add nish_array_grow
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer site: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -2:5 StringSet.add -> @StringSet.add
@@ -1876,7 +1899,7 @@ function FactCollector.noteHandleClose(this: FactCollector, node: Node): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
   calls: FunctionFacts.offerCapability StringSet.add openedHandle
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=openedHandle#2 FunctionFacts.offerCapability#3
   stackSites=0 stackLocals=0
   local +0:11 info: StructInfo | null (const)
@@ -1889,7 +1912,7 @@ function FactCollector.addCallee(this: FactCollector, callee: FunctionSig, call:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.addComposedCallee
   calls: FactCollector.addCallees FactCollector.addComposedCallee FactCollector.noteArguments FactCollector.noteSite FactCollector.noteSlotWrite FunctionFacts.offerCapability FunctionSig.foreign StringSet.add TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.stripNull foreignBufferCount foreignBufferCountProven foreignResultCallees foreignStringCallees foreignStringIsNulFree isForeignBuffer nish_panic_index panicTailCallees
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSlotWrite#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.addCallees#0 FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSlotWrite#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.addCallees#0 FactCollector.noteSite#0
   pointer callee: size=160 writesThrough=false captured=false passedTo=FunctionSig.foreign#0 FactCollector.noteArguments#2 foreignBufferCount#1
   pointer call: size=40 writesThrough=true captured=true passedTo=FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FunctionFacts.offerCapability#3 FactCollector.noteSlotWrite#1 foreignBufferCountProven#2 FactCollector.noteSite#1
   stackSites=3 stackLocals=3
@@ -1933,7 +1956,7 @@ function FactCollector.noteBuiltin(this: FactCollector, name: string, call: Node
   sharedWrite: via nish_exit
   escaping: name
   calls: FunctionFacts.offerCapability builtinCapability isBuiltinFunction isResultConstructor nish_exit nish_str_eq unlabelledBuiltinError
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer call: size=40 writesThrough=true captured=true passedTo=FunctionFacts.offerCapability#3
   stackSites=0 stackLocals=0
   local +0:11 label: i32 (const)
@@ -1946,7 +1969,7 @@ function FactCollector.addCallees(this: FactCollector, names: string[]): void ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: StringSet.add nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer names: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -3:16 name: string (const)
@@ -1955,7 +1978,7 @@ function FactCollector.noteWorld(this: FactCollector, node: Node, symbols: strin
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: isNumericLiteral isPureRuntime nish_panic_index nish_str_concat nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   pointer symbols: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1968,7 +1991,7 @@ function FactCollector.collectStringFacts(this: FactCollector, node: Node): void
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: FactCollector.addCallees FactCollector.noteBuiltin FactCollector.noteBuiltinSite FactCollector.noteSite FactCollector.noteWorld FactCollector.noteWrittenArguments StringSet.add builtinCalleesNamed dottedName isStringMethodCall isTemplateExpression nish_panic_index nish_str_eq receiverIsValue stringConstructCallees stringifyCallee templateParts
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.noteBuiltin#0 FactCollector.noteBuiltinSite#0 FactCollector.noteWrittenArguments#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.noteBuiltin#0 FactCollector.noteBuiltinSite#0 FactCollector.noteWrittenArguments#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=builtinCalleesNamed#3 FactCollector.noteWorld#1 FactCollector.noteBuiltin#2 FactCollector.noteBuiltinSite#1 FactCollector.noteWrittenArguments#1 isStringMethodCall#1 FactCollector.noteSite#1 FactCollector.noteSite#1 isTemplateExpression#0 templateParts#0
   stackSites=0 stackLocals=0
   local -32:11 program: CheckedProgram (const)
@@ -2004,7 +2027,7 @@ function FactCollector.collectClassFacts(this: FactCollector, node: Node): void 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: FactCollector.addComposedCallee FactCollector.initialisesThis FactCollector.isStackOwned FactCollector.noteArguments FactCollector.noteCall FactCollector.noteHandleClose FactCollector.noteSlotWrite FunctionFacts.isStackSite ParentTable.parentOf StringSet.add TypeTable.isStruct TypeTable.isUnion TypeTable.stripNull constructorOf intrinsicType isAssignmentTarget isGuardedAccess nish_panic_index nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0 FactCollector.noteHandleClose#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0 FactCollector.noteHandleClose#0
   pointer node: size=40 writesThrough=true captured=true passedTo=ParentTable.parentOf#1 isAssignmentTarget#1 isGuardedAccess#2 intrinsicType#1 FunctionFacts.isStackSite#1 intrinsicType#1 FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FactCollector.noteCall#1 FactCollector.noteHandleClose#1 FunctionFacts.isStackSite#1
   stackSites=0 stackLocals=0
   local -9:11 program: CheckedProgram (const)
@@ -2039,7 +2062,7 @@ function FactCollector.collectResultFacts(this: FactCollector, node: Node): void
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   calls: FactCollector.addCallees FactCollector.isStackOwned FactCollector.noteSite FunctionFacts.isStackSite ParentTable.parentOf StringSet.add TypeTable.isResult TypeTable.resultByValue isResultConstructorCall nish_panic_index nish_str_eq panicTailCallees resultMethodName
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteSite#0 FactCollector.isStackOwned#0 FactCollector.addCallees#0 FactCollector.isStackOwned#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0 FactCollector.isStackOwned#0 FactCollector.addCallees#0 FactCollector.isStackOwned#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FunctionFacts.isStackSite#1 resultMethodName#2 FactCollector.noteSite#1 isResultConstructorCall#2 FunctionFacts.isStackSite#1 ParentTable.parentOf#1
   stackSites=1 stackLocals=1
   local -14:11 program: CheckedProgram (const)
@@ -2069,7 +2092,7 @@ function FactCollector.collectArrayFacts(this: FactCollector, node: Node): void 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: FactCollector.collectMethodFacts FactCollector.isArrayValued FactCollector.noteArrayWrite FactCollector.noteSite FunctionFacts.isStackSite StringSet.add arrayMethodName callsAnything isAssignmentOperator isGuardedAccess newArrayLengthChecked nish_panic_index nish_str_eq panicTailCallees
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isArrayValued#0 FactCollector.noteSite#0 FactCollector.isArrayValued#0 FactCollector.isArrayValued#0 FactCollector.noteSite#0 FactCollector.collectMethodFacts#0 FactCollector.noteArrayWrite#0 FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isArrayValued#0 FactCollector.noteSite#0 FactCollector.isArrayValued#0 FactCollector.isArrayValued#0 FactCollector.noteSite#0 FactCollector.collectMethodFacts#0 FactCollector.noteArrayWrite#0 FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1 FactCollector.isArrayValued#1 FunctionFacts.isStackSite#1 FactCollector.noteSite#1 arrayMethodName#2 FactCollector.collectMethodFacts#1 FactCollector.noteArrayWrite#1 FactCollector.noteSite#1
   stackSites=1 stackLocals=1
   local -3:11 program: CheckedProgram (const)
@@ -2099,7 +2122,7 @@ function FactCollector.collectArrayFacts(this: FactCollector, node: Node): void 
 function FactCollector.isArrayValued(this: FactCollector, expr: Node): boolean -> @FactCollector.isArrayValued [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 type: i32 (const)
@@ -2108,7 +2131,7 @@ function FactCollector.collectMethodFacts(this: FactCollector, call: Node, metho
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: FactCollector.noteArrayWrite FactCollector.noteSite StringSet.add TypeTable.isArray TypeTable.refOf methodReceiver nish_panic_index nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteArrayWrite#0 FactCollector.noteArrayWrite#0 FactCollector.noteSite#0 FactCollector.noteArrayWrite#0 FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteArrayWrite#0 FactCollector.noteArrayWrite#0 FactCollector.noteSite#0 FactCollector.noteArrayWrite#0 FactCollector.noteSite#0
   pointer call: size=40 writesThrough=true captured=true passedTo=FactCollector.noteArrayWrite#1 methodReceiver#0 FactCollector.noteArrayWrite#1 methodReceiver#0 FactCollector.noteSite#1 FactCollector.noteArrayWrite#1 methodReceiver#0 FactCollector.noteSite#1 methodReceiver#0
   stackSites=0 stackLocals=0
   callee +1:7 FactCollector.noteArrayWrite -> @FactCollector.noteArrayWrite
@@ -2134,7 +2157,7 @@ function FactCollector.collectDivisionFacts(this: FactCollector, node: Node): vo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
   calls: FactCollector.noteSite StringSet.add TypeTable.baseOf isInteger nish_panic_index nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1
   stackSites=0 stackLocals=0
   local +0:11 op: string (const)
@@ -2148,7 +2171,7 @@ function FactCollector.collectOverflowFacts(this: FactCollector, node: Node): vo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
   calls: FactCollector.noteSite StringSet.add checksOverflow nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=checksOverflow#2 FactCollector.noteSite#1
   stackSites=0 stackLocals=0
   local +0:11 program: CheckedProgram (const)
@@ -2160,7 +2183,7 @@ function FactCollector.collectRangeFacts(this: FactCollector, node: Node): void 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.addCallees
   calls: FactCollector.addCallees FactCollector.noteSite TypeTable.entryIsFree TypeTable.isRanged nish_panic_index panicTailCallees rangedStoreOf
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=rangedStoreOf#2 FactCollector.noteSite#1 FactCollector.noteSite#1
   stackSites=1 stackLocals=1
   local +0:11 program: CheckedProgram (const)
@@ -2181,7 +2204,7 @@ function FactCollector.collectNamespacePropertyFacts(this: FactCollector, node: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: StringSet.add dottedName nish_panic_index nish_str_eq receiverIsValue
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=dottedName#0
   stackSites=0 stackLocals=0
   local -15:9 name: string (let)
@@ -2194,7 +2217,7 @@ function FactCollector.noteBuiltinSite(this: FactCollector, call: Node, name: st
   sharedWrite: via FactCollector.noteSite
   escaping: name
   calls: FactCollector.noteSite builtinPanicKind
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
   pointer call: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1
   stackSites=0 stackLocals=0
   local +0:11 kind: i32 (const)
@@ -2204,7 +2227,7 @@ function FactCollector.noteWrittenArguments(this: FactCollector, call: Node): vo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteArrayWrite
   calls: FactCollector.noteArrayWrite builtinArgumentLetters isWrittenArgument nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteArrayWrite#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteArrayWrite#0
   pointer call: size=40 writesThrough=true captured=true passedTo=builtinArgumentLetters#1 FactCollector.noteArrayWrite#1
   stackSites=0 stackLocals=0
   local +0:11 letters: string (const)
@@ -2217,7 +2240,7 @@ function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: FactCollector.addCallees FactCollector.noteBuiltin FactCollector.noteBuiltinSite FactCollector.noteWorld FactCollector.noteWrittenArguments StringSet.add builtinCalleesNamed builtinNameOf identifierBuiltinCallees identifierBuiltinCalleesNamed isArenaCall isSimdLoad nish_panic_index nish_str_eq nish_str_index_of nish_str_index_of_from
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteBuiltinSite#0 FactCollector.noteBuiltin#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.noteWrittenArguments#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteBuiltinSite#0 FactCollector.noteBuiltin#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.noteWrittenArguments#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteBuiltinSite#1 builtinNameOf#1 FactCollector.noteBuiltin#2 identifierBuiltinCalleesNamed#2 builtinCalleesNamed#3 FactCollector.noteWorld#1 identifierBuiltinCallees#2 FactCollector.noteWorld#1 isArenaCall#1 FactCollector.noteWrittenArguments#1 builtinNameOf#1
   stackSites=0 stackLocals=0
   local -18:11 imported: string (const)
@@ -2257,13 +2280,14 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=2 stackLocals=2
-  local -143:9 program: CheckedProgram (const)
-  local -142:9 facts: FunctionFacts (const)
-  callee -142:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -140:23 structSize -> @structSize
-  callee -139:23 pointerAlign -> @pointerAlign
-  callee -136:27 isChannelSend -> @isChannelSend
-  callee -136:49 jsonRouteOf -> @jsonRouteOf
+  local -148:9 program: CheckedProgram (const)
+  local -145:9 ownMemory: boolean (const)
+  callee -145:41 isChannelSend -> @isChannelSend
+  callee -145:63 jsonRouteOf -> @jsonRouteOf
+  local -140:9 facts: FunctionFacts (const)
+  callee -140:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -138:23 structSize -> @structSize
+  callee -137:23 pointerAlign -> @pointerAlign
   callee -117:23 rootsHoldNoPointer -> @rootsHoldNoPointer
   callee -109:54 isScalarArgument -> @isScalarArgument
   local -108:7 i: i32 (let)

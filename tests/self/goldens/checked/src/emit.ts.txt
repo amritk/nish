@@ -773,7 +773,7 @@ function Emitter.addConstructor(this: Emitter, fn: string): void -> @Emitter.add
   local +2:16 ctor: string (const)
   local +5:11 text: string (const)
 function Emitter.metadata(this: Emitter, text: string): string -> @Emitter.metadata [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addMetadata
   escaping: text
   calls: IRModule.addMetadata

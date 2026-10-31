@@ -117,7 +117,7 @@ function slotType(emitter: Emitter, elem: i32): string -> @slotType
   stackSites=0 stackLocals=0
   callee +0:3 elementLLVMType -> @elementLLVMType
 function scopePair(emitter: Emitter, wantHeader: boolean): string -> @scopePair
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.metadata
   calls: Emitter.metadata nish_str_concat
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0
@@ -142,7 +142,7 @@ function headerAccess(emitter: Emitter, index: i32): string -> @headerAccess
   callee +0:13 scopePair -> @scopePair
   callee +0:40 headerTbaa -> @headerTbaa
 function elementAccess(emitter: Emitter): string -> @elementAccess
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via scopePair
   calls: scopePair
   pointer emitter: size=296 writesThrough=false captured=false passedTo=scopePair#0
