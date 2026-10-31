@@ -11947,17 +11947,24 @@ if (!only || "sandbox dependency grants".includes(only)) {
       const execList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(runner))
       const loaders =
         execList === null ? [] : execList[1].split("\\00").filter((p) => p !== "" && p !== trueReal)
-      const echoReal = realOnPath("echo")
-      if (loaders.length === 0 || echoReal === null) {
+      // The program the loader is handed is one this check builds, not the
+      // machine's `echo`: a multicall coreutils (uutils, as on CI's runners)
+      // picks its utility from argv[0], which is the loader's path here, and
+      // refuses to run.
+      const ungranted = path.join(dir, "sbx-1-ungranted")
+      const ungrantedSrc = `${ungranted}.c`
+      fs.writeFileSync(ungrantedSrc, '#include <stdio.h>\nint main(void) { puts("sbx-1"); return 0; }\n')
+      const ungrantedCc = spawnSync("clang", ["-O2", ungrantedSrc, "-o", ungranted], { encoding: "utf8" })
+      if (loaders.length === 0 || ungrantedCc.status !== 0) {
         skip(
-          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or no \`echo\` is on PATH; SBX-1 is not pinned`
+          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not pinned`
         )
       } else {
-        const rLoader = run(allow, [loaders[0], echoReal, "sbx-1"])
+        const rLoader = run(allow, [loaders[0], ungranted])
         check(
           "sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)",
           rLoader !== null && rLoader.status === 0 && rLoader.stdout === "sbx-1\n0\n",
-          `${loaders[0]} ${echoReal} sbx-1\n${said(rLoader)}`
+          `${loaders[0]} ${ungranted}\n${said(rLoader)}`
         )
       }
     }
