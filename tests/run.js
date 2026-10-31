@@ -23042,11 +23042,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
     riddle.stderr
   )
-  const secret = inSecret(["break"])
+  // The refused run gets a config directory of its own, so it can be shown to
+  // write no settings, and never touches the real `~/.config/nish/break`.
+  const secretConfig = fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-"))
+  const secret = spawnSync(NISH, ["break"], {
+    cwd: secretDir,
+    encoding: "utf8",
+    env: { ...process.env, ...plainEnv, XDG_CONFIG_HOME: secretConfig },
+  })
+  const secretWrote = fs.readdirSync(secretConfig)
+  fs.rmSync(secretConfig, { recursive: true, force: true })
   check(
     "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
     secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
+  )
+  check(
+    "nish break, refused on a pipe: writes no settings file",
+    secretWrote.length === 0,
+    secretWrote.join(", ")
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
   const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])

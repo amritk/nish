@@ -3317,8 +3317,8 @@ function wallApplyKey(run: WallRun, key: i32): void -> @wallApplyKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: key
-  calls: cycleSetting wallGraphicsToast wallKeyRow wallResetAuto wallResolutionToast wallSoundToast wallToast
-  pointer run: size=128 writesThrough=true captured=false passedTo=wallToast#0 wallResetAuto#0 wallToast#0 wallToast#0 wallSoundToast#0 wallToast#0 wallToast#0 wallToast#0
+  calls: cycleSetting wallGraphicsToast wallKeyRow wallResetAuto wallResolutionToast wallSaveSettings wallSoundToast wallToast
+  pointer run: size=128 writesThrough=true captured=false passedTo=wallToast#0 wallResetAuto#0 wallToast#0 wallToast#0 wallSoundToast#0 wallToast#0 wallToast#0 wallToast#0 wallSaveSettings#0
   stackSites=0 stackLocals=0
   local -5:9 s: BreakSettings (const)
   callee -4:3 cycleSetting -> @cycleSetting
@@ -3333,6 +3333,7 @@ function wallApplyKey(run: WallRun, key: i32): void -> @wallApplyKey
   callee +9:20 wallGraphicsToast -> @wallGraphicsToast
   callee +11:5 wallToast -> @wallToast
   callee +13:5 wallToast -> @wallToast
+  callee +15:3 wallSaveSettings -> @wallSaveSettings
 function wallTakeHotkeys(run: WallRun, events: TermEvent[]): void -> @wallTakeHotkeys
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -3541,5 +3542,5 @@ function playBreak(): i32 -> @playBreak [exported]
   local +10:11 played: Result<i32, string> (const)
   callee +10:41 runTerminal<WallRun, wallUpdate, wallRender> -> @nish.runTerminal$$WallRun$fn.10.wallUpdate$fn.10.wallRender
   callee +10:53 wallOptions -> @wallOptions
-  callee +21:3 wallSaveSettings -> @wallSaveSettings
-  callee +22:3 closeSound -> @closeSound
+  callee +22:5 wallSaveSettings -> @wallSaveSettings
+  callee +24:3 closeSound -> @closeSound

@@ -27,10 +27,13 @@
 //
 // The settings are kept between runs in `$XDG_CONFIG_HOME/nish/break`, or
 // `$HOME/.config/nish/break` (`breakSettingsPath`): read before the terminal
-// opens, written when Settings is left and when the game ends. A file that is
-// missing, unreadable or wrong in any line gives the defaults for what it
-// does not say, and one that cannot be written is let go: neither stops the
-// game. NISH_BREAK_SOUND=1 is an override, not a choice, so it is not saved.
+// opens, written when Settings is left, when F3 to F9 change one, and when a
+// run that drew a frame ends. A pipe, refused, writes nothing. A SIGINT
+// Ctrl-C ends the process before that last write, so the others keep every
+// change. A file that is missing, unreadable or wrong in any line gives the
+// defaults for what it does not say, and one that cannot be written is let
+// go: neither stops the game. NISH_BREAK_SOUND=1 is an override, not a
+// choice, so it is not saved.
 
 import {
   ACTION_PRESS,
@@ -288,7 +291,8 @@ const wallSoundToast = (run: WallRun): string => {
 
 /**
  * Apply the director's key `key`: step its setting as Settings does, say so,
- * and ask for a reopening where it needs one.
+ * ask for a reopening where it needs one, and keep the settings now, since a
+ * SIGINT Ctrl-C would end the run before `playBreak` keeps them.
  */
 const wallApplyKey = (run: WallRun, key: i32): void => {
   const s: BreakSettings = run.settings
@@ -311,6 +315,7 @@ const wallApplyKey = (run: WallRun, key: i32): void => {
   } else if (key === KEY_F8) {
     wallToast(run, s.effects === 0 ? "effects low" : "effects high")
   }
+  wallSaveSettings(run)
 }
 
 /**
@@ -623,7 +628,8 @@ const wallOptions = (s: BreakSettings): TerminalOptions => {
 
 /**
  * Play until the menu quits or Ctrl-C, opening the terminal again whenever a
- * setting needs it, and keep the settings however it ends. Answers the exit
+ * setting needs it, and keep the settings once a frame was drawn, however it
+ * ends; a run refused before that writes nothing. Answers the exit
  * code: 1, with a sentence on stderr, when the terminal cannot be opened (a
  * pipe, say) before anything was drawn.
  */
@@ -649,7 +655,9 @@ export const playBreak = (): i32 => {
       run.reopened = run.reopen
     }
   }
-  wallSaveSettings(run)
+  if (run.drawn) {
+    wallSaveSettings(run)
+  }
   closeSound(run.sound)
   return code
 }
