@@ -565,6 +565,9 @@ export class TypeTable {
     let hi = variants.length
     while (lo < hi) {
       const mid = lo + ((hi - lo) >> 1)
+      if (mid < 0 || mid >= variants.length) {
+        return false
+      }
       const at = variants[mid]
       if (at === variant) {
         return true
