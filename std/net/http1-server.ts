@@ -115,12 +115,15 @@
 import { Secret } from "nish:secret"
 import { copyBytes } from "nish/bytes"
 import {
+  HTTP_CODING_GZIP,
   HTTP_CODING_IDENTITY,
+  HTTP_CODING_NONE,
+  HTTP_DEFAULT_MSS,
   HTTP_OFFER_GZIP,
   HttpCompressor,
   httpAcceptEncoding,
 } from "nish/net/http-compress"
-import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
+import { netClose, netMss, netRead, netWrite, tcpAccept } from "nish:net"
 import {
   HTTP1_BODY,
   HTTP1_CHUNKED,
@@ -491,7 +494,11 @@ export class Http1Connection {
    * put another, to share it or to pin its clock.
    */
   date: HttpDate
-  /** The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is the last `H1_REQUEST`'s. */
+  /**
+   * The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is
+   * the current request's from its `H1_REQUEST` until its response is done,
+   * `H1_END` included, however much of a pipelined request is fed behind it.
+   */
   parser: Http1Parser
   /**
    * The frame decoder: made when the slot first switches to WebSocket, so a
@@ -559,6 +566,15 @@ export class Http1Connection {
   inputEnded: boolean = false
   /** A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. */
   headTimed: boolean = false
+  /**
+   * The TCP maximum segment size the program sets for this connection, for
+   * `respondEncoded` under `HttpCompressor.segmentMode`; 0, the default,
+   * leaves it to the compressor and the socket (`segmentMss`). Each accept
+   * puts it back to 0.
+   */
+  mss: i32 = 0
+  /** The MSS `Http1Server.accept` read from this connection's socket (`netMss`), or 0 when it reports none. */
+  socketMss: i32 = 0
 
   /** A connection under `config`. A cap outside what the connection can work with panics. */
   constructor(config: Http1Config) {
@@ -642,6 +658,8 @@ export class Http1Connection {
     this.inputEnded = false
     this.headTimed = false
     this.headSince = 0
+    this.mss = 0
+    this.socketMss = 0
     this.release()
     this.park()
   }
@@ -1218,9 +1236,23 @@ export class Http1Connection {
    * `Accept-Encoding` with gzip offered (`httpAcceptEncoding`):
    * `HTTP_CODING_GZIP`, `HTTP_CODING_IDENTITY` (also with no such field), or
    * `HTTP_CODING_NONE` when the client refuses identity and does not take
-   * gzip. Allocates nothing.
+   * gzip. Allocates nothing. Read at `H1_REQUEST`, `H1_BODY` or `H1_END`
+   * alike: the head stays the request's until its response is done.
    */
   acceptEncoding(): i32 {
+    return this.acceptEncodingOf(HTTP_OFFER_GZIP)
+  }
+
+  /**
+   * Whether the current request's `Accept-Encoding` refuses the body as it
+   * is (`httpIdentityRefused`); `respondEncoded` then gzips any body it can.
+   */
+  identityRefused(): boolean {
+    return this.acceptEncodingOf(toI32(0)) === HTTP_CODING_NONE
+  }
+
+  /** `httpAcceptEncoding` of the current request's `Accept-Encoding`, with `offered`. */
+  acceptEncodingOf(offered: i32): i32 {
     const parser: Http1Parser = this.parser
     const i: i32 = parser.headerIndex("accept-encoding")
     const spans: i32[] = parser.spans
@@ -1232,7 +1264,23 @@ export class Http1Connection {
     if (start < 0 || start > end || end > toI32(parser.head.length)) {
       return HTTP_CODING_IDENTITY
     }
-    return httpAcceptEncoding(parser.head, start, end, HTTP_OFFER_GZIP)
+    return httpAcceptEncoding(parser.head, start, end, offered)
+  }
+
+  /**
+   * The segment `respondEncoded` counts in under `enc.segmentMode`: this
+   * connection's `mss` when the program set it, else `enc.mss` when the
+   * program set it to other than `HTTP_DEFAULT_MSS`, else the socket's
+   * (`socketMss`), else `HTTP_DEFAULT_MSS`.
+   */
+  segmentMss(enc: HttpCompressor): i32 {
+    if (this.mss > 0) {
+      return this.mss
+    }
+    if (enc.mss > 0 && enc.mss !== HTTP_DEFAULT_MSS) {
+      return enc.mss
+    }
+    return this.socketMss > 0 ? this.socketMss : HTTP_DEFAULT_MSS
   }
 
   /**
@@ -1240,9 +1288,17 @@ export class Http1Connection {
    * call: `respond`, `write` and `end`, the body compressed by `enc` when
    * `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it,
    * with `Content-Encoding: gzip` and the compressed `Content-Length`, and
-   * otherwise sent as it is; `Vary: Accept-Encoding` either way while
-   * `enc.vary` is set. The program's fields may not name `Content-Encoding`
-   * or, with `enc.vary`, `Vary`. The whole response is written or none of
+   * otherwise sent as it is; `Vary: Accept-Encoding` while `enc.vary` is set
+   * and the choice turned on the request (`HttpCompressor.varies`). Under
+   * `enc.segmentMode` the compressed response goes out only when, head
+   * included, it takes fewer segments of `segmentMss(enc)` bytes than the
+   * body as it is, and a response that fits one segment as it is goes so
+   * without compressing (`enc.oneSegment`); `enc.decision`
+   * says what was chosen. A request that refuses identity (`identityRefused`)
+   * is sent gzip whatever the length, the saving or the segments
+   * (`enc.compressAnyway`).
+   * The program's fields may not name `Content-Encoding` or, with
+   * `enc.vary`, `Vary`. The whole response is written or none of
    * it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says
    * when to try again, compressing again), `H1_INVALID` for a response
    * larger than the output could ever hold or one `respond` refuses,
@@ -1263,14 +1319,7 @@ export class Http1Connection {
     if (!this.answerable()) {
       return H1_CLOSED
     }
-    const packed: i32 = enc.compress(coding, body, off, len)
-    let n: i32 = len
-    if (packed >= 0) {
-      enc.addFields(names, values)
-      n = packed
-    } else {
-      enc.identityFields(names, values)
-    }
+    const required: boolean = coding === HTTP_CODING_GZIP && this.identityRefused()
     // `respond` and the body together, or neither: what `respond` sets is
     // put back when the body does not fit behind the head. `room` first, so
     // that what was sent is already moved out of the way and the `outputEnd`
@@ -1278,18 +1327,56 @@ export class Http1Connection {
     this.room()
     const outputEnd: i32 = this.outputEnd
     const closeAfter: boolean = this.closeAfter
-    const r: i32 = this.respond(status, enc.names, enc.values, n)
-    if (r !== 0) {
-      return r
+    let packed: i32 = -1
+    let n: i32 = len
+    let r: i32 = 0
+    let queued: boolean = false
+    const mss: i32 = this.segmentMss(enc)
+    if (!required && enc.segmentMode && enc.oneSegment(coding, len, mss)) {
+      // A response that fits one segment as it is cannot take fewer
+      // compressed, so it goes as it is with no encoder run, unless its head
+      // pushes it past the segment: then it is taken back and decided below.
+      enc.identityFields(names, values)
+      r = this.respond(status, enc.names, enc.values, len)
+      if (r !== 0) {
+        return r
+      }
+      queued = this.outputEnd - outputEnd + len <= enc.segmentSize(mss)
+      if (!queued) {
+        this.unrespond(outputEnd, closeAfter)
+      }
+    }
+    if (!queued) {
+      packed = required ? enc.compressAnyway(coding, body, off, len) : enc.compress(coding, body, off, len)
+      if (packed >= 0) {
+        enc.addFields(names, values)
+        n = packed
+      } else {
+        enc.identityFields(names, values)
+      }
+      r = this.respond(status, enc.names, enc.values, n)
+      if (r !== 0) {
+        return r
+      }
+    }
+    if (packed >= 0 && enc.segmentMode && !required) {
+      // The head just written, and the one the body as it is would get.
+      const head: i32 = this.outputEnd - outputEnd
+      const plain: i32 = enc.http1IdentityHead(head, packed, len)
+      if (!enc.fewerSegments(plain + len, head + packed, mss)) {
+        this.unrespond(outputEnd, closeAfter)
+        enc.identityFields(names, values)
+        packed = -1
+        n = len
+        r = this.respond(status, enc.names, enc.values, n)
+        if (r !== 0) {
+          return r
+        }
+      }
     }
     if (!this.responseEmpty && n > this.bodyRoom()) {
       const fits: boolean = this.outputEnd - outputEnd + n <= this.config.outputSize - H1_CONTROL_RESERVE
-      this.outputEnd = outputEnd
-      this.closeAfter = closeAfter
-      this.response = H1_R_NONE
-      this.responseFraming = 0
-      this.responseLeft = 0
-      this.responseEmpty = false
+      this.unrespond(outputEnd, closeAfter)
       if (!fits) {
         return H1_INVALID
       }
@@ -1301,6 +1388,16 @@ export class Http1Connection {
       panic("Http1Connection.respondEncoded: a body the room was checked for did not fit")
     }
     return this.end()
+  }
+
+  /** Takes back a head `respond` just queued: `outputEnd` and `closeAfter` as they were before it. */
+  unrespond(outputEnd: i32, closeAfter: boolean): void {
+    this.outputEnd = outputEnd
+    this.closeAfter = closeAfter
+    this.response = H1_R_NONE
+    this.responseFraming = 0
+    this.responseLeft = 0
+    this.responseEmpty = false
   }
 
   // ---- WebSocket ----------------------------------------------------------------
@@ -1620,6 +1717,12 @@ export class Http1Server {
     this.fds[k] = fd
     this.armed[k] = H1_WANT_READ
     conn.restart()
+    // Once a connection, not a request, so a keep-alive request costs no
+    // syscall: a path whose MSS moves after the handshake is not followed.
+    const mss: i32 = netMss(fd)
+    if (mss > 0) {
+      conn.socketMss = mss
+    }
     conn.lastActive = monotonicNanos()
     return k
   }

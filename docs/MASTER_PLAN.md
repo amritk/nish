@@ -62,6 +62,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime-cross.c      copy-at-join (C, 1.1 KB)         │
 │    runtime/runtime-simd.c       vector byte search (C, 0.7 KB)   │
 │    runtime/runtime-aes.c        AES-NI/PMULL AES-GCM (C, 2.5 KB) │
+│    runtime/runtime-sha256.c     SHA-NI/ARMv8 SHA-256 (C, 0.5 KB) │
 │    runtime/runtime-term.c       stdin, raw mode (C, 0.7 KB)      │
 │    runtime/runtime-bytes.c      JSON byte-class runs (C, 1.3 KB) │
 │    runtime/runtime-checksum.c   CRC-32 kernels (C, 0.7 KB)       │
@@ -99,6 +100,7 @@ Design rules that every WP must respect:
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
   | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
+  | `runtime-sha256.c` | 495 (2026-10-30) | 512 |
   | `runtime-term.c` | 1,825 (2026-10-24) | 2,048 |
   | `runtime-bytes.c` | 1,525 (2026-10-24) | 1,536 |
   | `runtime-checksum.c` | 718 (2026-10-30) | 768 |
@@ -201,7 +203,7 @@ modules; the table below is the inventory.
 | Debug info | done (WP10, WP17) | `src/debug.ts` |
 | Interop: C header, `.d.ts` and loader, N-API (sync and async), wasm, C calls through `declare function` | done (WP8, WP17, WP24, WP27, WP30) | `src/interop-*.ts` |
 | Packages: `package.json` `exports`, bare specifiers, real-path identity, the manifest's `nish` field | S1–S2 and half of S3 (WP21) | `src/manifest.ts`, `paths.ts` |
-| Runtime: thirteen translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
+| Runtime: fourteen translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
 | Threads: `parallelMapInto`, `parallelReduce`, `parallelMap`, `parallelFrom`, `using s = scope()`, `Mutex<T>`, `AtomicI32`/`AtomicI64`, `Channel<T>` | done (WP20, WP29) | `std/threads.ts`, `runtime/runtime-parallel.c` |
 | Standard library: testing, text, json, pair, collections, secret, threads, `nish/crypto/*`, `nish/net/*` | growing (WP26, WP34) | `std/`, [std/README.md](../std/README.md) |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, PGO | done (WP9) | `scripts/build.sh` |
@@ -252,7 +254,7 @@ is its plan. [README.md](README.md) indexes them.
 | 26 | The standard library | landed, and growing | [wp26](wp26-stdlib.md) |
 | 27 | Calling C | S1 and S2 built; S3 planned | [wp27](wp27-ffi.md) |
 | 28 | Compatibility mode | proposed | [wp28](wp28-compatibility-mode.md) |
-| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks, wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await; deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values | [wp29](wp29-thread-surface.md) |
+| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks (*2026-10-30:* an arrow passed to a function parameter may now read the caller's `const` locals, as extra arguments; closure values stay declined), wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await; deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values | [wp29](wp29-thread-surface.md) |
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
 | 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
 | 32 | `Map` and `Set` | landed in 0.11.0 and 0.12.0; a `Map` read in a parallel body (§9.3) is still open | [wp32](wp32-map.md) |
@@ -260,7 +262,7 @@ is its plan. [README.md](README.md) indexes them.
 | 34 | Hosting cs: the network stack | in progress | [wp34](wp34-hosting-cs.md) |
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
-| 37 | The OS sandbox | proposed; note written, not built | [wp37](wp37-os-sandbox.md) |
+| 37 | The OS sandbox | stages 1 and 2 built (`--sandbox`, `fs.read=<dir>` and `fs.write=<dir>` scopes); manifest scopes not built | [wp37](wp37-os-sandbox.md) |
 | 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S3a and S2's flag planned | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
@@ -435,9 +437,10 @@ major. Whether it happens at all is still wp22 §10's open question.
    and no stage moves a `.ll` golden or raises `bench/instructions.json`.
 3. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
    the process with Landlock and seccomp to the capabilities the compiler
-   computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. Its note,
-   [wp37-os-sandbox.md](wp37-os-sandbox.md), is written and proposed, not
-   built. WP35, the capability report
+   computed, and accepts the `fs.read=<dir>` and `fs.write=<dir>` scopes
+   WP36 refuses without it. Its note,
+   [wp37-os-sandbox.md](wp37-os-sandbox.md), records stages 1 and 2 as
+   built; scopes in the manifest are not. WP35, the capability report
    ([wp35-capabilities.md](wp35-capabilities.md)), and
    WP36, the compile-time policy
    ([wp36-capability-policy.md](wp36-capability-policy.md)), are built.

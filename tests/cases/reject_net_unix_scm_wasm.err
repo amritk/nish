@@ -1,0 +1,3 @@
+`sendFd` reaches the operating system, and a wasm32 build has none to reach
+`recvFd` reaches the operating system, and a wasm32 build has none to reach
+`peerCredentials` reaches the operating system, and a wasm32 build has none to reach

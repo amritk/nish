@@ -23,6 +23,32 @@
  * its `minLength`, longer than its `maxLength`, or that gzip would not make
  * smaller, answering -1 so the program sends the bytes as they are.
  *
+ * **Compression that pays for itself.** A body is sent compressed only when
+ * it saves at least `minSaving` bytes and `minSavingPercent` percent of the
+ * body; otherwise the compressed bytes are dropped and the body goes as it
+ * is. With `segmentMode` set, `respondEncoded` also sends it compressed only
+ * when the whole response, head included, takes fewer TCP segments of `mss`
+ * bytes (the connection's `mss` if set, else the compressor's, 1448 by
+ * default): a 1300-byte body that gzips to 700 still fits in one segment
+ * either way. After each call `decision` says why (`HTTP_COMPRESS_SENT`,
+ * `_NOT_ACCEPTED`, `_TOO_SMALL`, `_TOO_LARGE`, `_TOO_LITTLE_SAVED`,
+ * `_NO_FEWER_SEGMENTS`), for a program to count. A response whose identity
+ * form already fits one segment is `_NO_FEWER_SEGMENTS` without running gzip
+ * at all, as no compression could take fewer.
+ *
+ * **Two encoders.** Bodies up to `fixedLimit` (16 KB) go through
+ * `GzipFixedCompressor`: one fixed-Huffman block, a 16 KB window, no state
+ * between calls, two to four times faster than `DEFLATE_FAST` on 0.5 to
+ * 16 KB of JSON for output about 1.35 times larger. Larger bodies go through
+ * the `GzipCompressor` at the level given; `encoder` forces either one.
+ *
+ * **`Vary: Accept-Encoding`** (with `vary`, on by default) goes on every
+ * response whose coding depended on the request: one sent compressed, and
+ * one sent as it is because the request did not accept gzip. A body that is
+ * too small, too large or did not pay is sent the same to every client, so
+ * it carries no `Vary`. A request that refuses identity (`identity;q=0`)
+ * and accepts gzip is sent gzip whatever the policy (`compressAnyway`).
+ *
  * **Negotiation** (`httpAcceptEncoding`) follows §12.5.3: each listed coding
  * with its q-value, `x-gzip` as `gzip`, `*` for every coding not listed, and
  * `identity` acceptable unless it is given q=0, directly or through `*`. Of
@@ -35,15 +61,17 @@
  * and identity is refused: a server may answer 406 or send identity anyway.
  * A malformed element is skipped. The parser allocates nothing.
  *
- * **Compressing allocates nothing**: `HttpCompressor` holds a
- * `GzipCompressor`, an output buffer of `compressBound(maxLength)` bytes and
+ * **Compressing allocates nothing** and caches nothing between responses:
+ * `HttpCompressor` holds a `GzipCompressor`, a `GzipFixedCompressor`, an
+ * output buffer of `compressBound(maxLength)` bytes and
  * the field arrays `addFields` fills, all built once.
  * `HTTP_CODING_DEFLATE` (zlib framing) is negotiated but not produced: a
  * client that accepts only `deflate` is sent identity, which every client
  * reads.
  */
 import { DEFLATE_FAST, compressBound } from "nish/compress/deflate"
-import { GzipCompressor } from "nish/compress/gzip"
+import { GzipCompressor, GzipFixedCompressor } from "nish/compress/gzip"
+import { wrappingAdd } from "nish:unsafe"
 
 /** No content coding: the body as it is. */
 export const HTTP_CODING_IDENTITY: i32 = 0
@@ -60,6 +88,63 @@ export const HTTP_CODING_NONE: i32 = -1
 /** `httpAcceptEncoding`'s `offered` bits: the program can send gzip, deflate. */
 export const HTTP_OFFER_GZIP: i32 = 1
 export const HTTP_OFFER_DEFLATE: i32 = 2
+
+/**
+ * What `HttpCompressor.compress` (and `respondEncoded`'s segment check) last
+ * decided, in `HttpCompressor.decision`, for a program to count: the body
+ * went out compressed; the client did not take gzip; it was shorter than
+ * `minLength`; longer than `maxLength`; gzip did not save `minSaving` bytes
+ * and `minSavingPercent` percent; or the compressed response would not have
+ * taken fewer TCP segments (`segmentMode`), which includes an identity
+ * response that already fits one segment, decided without compressing.
+ */
+export const HTTP_COMPRESS_SENT: i32 = 0
+export const HTTP_COMPRESS_NOT_ACCEPTED: i32 = 1
+export const HTTP_COMPRESS_TOO_SMALL: i32 = 2
+export const HTTP_COMPRESS_TOO_LARGE: i32 = 3
+export const HTTP_COMPRESS_TOO_LITTLE_SAVED: i32 = 4
+export const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5
+
+/**
+ * `HttpCompressor.encoder`: by the body's length (the fixed-Huffman encoder up
+ * to `fixedLimit` bytes, the constructor's level above), the fixed-Huffman
+ * encoder always, or the constructor's level always.
+ */
+export const HTTP_ENCODER_AUTO: i32 = 0
+export const HTTP_ENCODER_FIXED: i32 = 1
+export const HTTP_ENCODER_LEVEL: i32 = 2
+
+/**
+ * The maximum segment size `segmentMode` counts with unless told the
+ * connection's: a 1500-byte Ethernet MTU less 20 bytes of IPv4 header, 20 of
+ * TCP header and 12 of the timestamp option.
+ */
+export const HTTP_DEFAULT_MSS: i32 = 1448
+
+/** The bytes `content-encoding: gzip` adds to an HTTP/1.1 head: name, value, ": " and CRLF. */
+export const HTTP1_GZIP_FIELD_BYTES: i32 = 24
+
+/** The number of TCP segments `bytes` bytes take at `mss` bytes a segment. */
+export const httpSegments = (bytes: i32, mss: i32): i32 => {
+  if (mss <= 0) {
+    panic("httpSegments: a segment size of zero or less")
+  }
+  if (bytes <= 0) {
+    return 0
+  }
+  return (bytes - 1) / mss + 1
+}
+
+/** The digits of `n` in decimal, `n` 0 or more. */
+const httpDecimalDigits = (n: i32): i32 => {
+  let digits: i32 = 1
+  let rest: i32 = n
+  while (rest >= 10) {
+    rest = rest / 10
+    digits += 1
+  }
+  return digits
+}
 
 /** A q-value of 1, in thousandths. */
 const HTTP_Q_ONE: i32 = 1000
@@ -255,6 +340,15 @@ export const httpAcceptEncoding = (buf: u8[], start: i32, end: i32, offered: i32
   return HTTP_CODING_NONE
 }
 
+/**
+ * Whether the `Accept-Encoding` value in `buf[start .. end)` refuses the
+ * body as it is: `identity;q=0`, or `*;q=0` with no `identity` listed. A
+ * server should then send a coding the client takes even where it would not
+ * bother (`HttpCompressor.compressAnyway`).
+ */
+export const httpIdentityRefused = (buf: u8[], start: i32, end: i32): boolean =>
+  httpAcceptEncoding(buf, start, end, 0) === HTTP_CODING_NONE
+
 /** The bytes of an ASCII string. */
 const httpCompressBytes = (text: string): u8[] => {
   const out: u8[] = new Array<u8>(toI32(text.length))
@@ -270,6 +364,8 @@ const httpCompressBytes = (text: string): u8[] => {
  */
 export class HttpCompressor {
   readonly gzip: GzipCompressor
+  /** The small-body encoder: one fixed-Huffman block, nothing kept between calls. */
+  readonly fixed: GzipFixedCompressor
   /** Where `compress` writes; valid until the next call. */
   readonly output: u8[]
   /** The fields `addFields` built: the program's, then `Content-Encoding` and `Vary`. */
@@ -283,11 +379,39 @@ export class HttpCompressor {
   readonly minLength: i32
   readonly maxLength: i32
   /**
+   * The least a compressed body must save to be sent: `minSaving` bytes and
+   * `minSavingPercent` percent of the body, whichever is more. 1 and 0 by
+   * default (any saving at all); a value below those counts as them.
+   */
+  minSaving: i32
+  minSavingPercent: i32
+  /**
    * Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which
    * a cache needs whenever the same resource may be sent either way. On by
    * default; turn it off when the program sets its own `Vary`.
    */
   vary: boolean
+  /**
+   * Whether `respondEncoded` also sends the compressed response only when,
+   * head included, it takes fewer TCP segments of `mss` bytes than the body
+   * as it is; off by default. `mss` is `HTTP_DEFAULT_MSS` unless the program
+   * sets it, or a connection's own `mss` overrides it.
+   */
+  segmentMode: boolean
+  mss: i32
+  /** `HTTP_ENCODER_AUTO` (the default), `HTTP_ENCODER_FIXED` or `HTTP_ENCODER_LEVEL`. */
+  encoder: i32
+  /** The longest body `HTTP_ENCODER_AUTO` gives the fixed-Huffman encoder: 16384 by default. */
+  fixedLimit: i32
+  /** The last decision, an `HTTP_COMPRESS_*`; `HTTP_COMPRESS_NOT_ACCEPTED` before any. */
+  decision: i32
+  /**
+   * How many times `compress` and `compressAnyway` ran an encoder, from 0: a
+   * count for a test or a profile to read, never consulted by a decision. It
+   * wraps past 2^31 - 1 to -2^31 rather than panic, as a server can run that
+   * many; read it as a difference between two reads.
+   */
+  encoderRuns: i32
 
   /**
    * A compressor at `level` (`DEFLATE_FAST` suits a server) for bodies of
@@ -299,6 +423,7 @@ export class HttpCompressor {
       panic("HttpCompressor: the lengths are out of order")
     }
     this.gzip = new GzipCompressor(level)
+    this.fixed = new GzipFixedCompressor()
     this.output = new Array<u8>(compressBound(maxLength))
     this.names = []
     this.values = []
@@ -309,26 +434,180 @@ export class HttpCompressor {
     this.minLength = minLength
     this.maxLength = maxLength
     this.vary = true
+    this.minSaving = 1
+    this.minSavingPercent = 0
+    this.segmentMode = false
+    this.mss = HTTP_DEFAULT_MSS
+    this.encoder = HTTP_ENCODER_AUTO
+    this.fixedLimit = 16384
+    this.decision = HTTP_COMPRESS_NOT_ACCEPTED
+    this.encoderRuns = 0
   }
 
   /**
-   * Compresses `body[off .. off + len)` into `output` when `coding` is
-   * `HTTP_CODING_GZIP`, the length is in `[minLength, maxLength]` and gzip
-   * makes it smaller; answers the compressed length, or -1 to send the body
-   * as it is. A window outside `body` panics.
+   * Compresses `body[off .. off + len)` into `output` when the length is in
+   * `[minLength, maxLength]`, `coding` is `HTTP_CODING_GZIP` and gzip saves
+   * what `minSaving` and `minSavingPercent` ask; answers the compressed
+   * length, or -1 to send the body as it is, and sets `decision` either way.
+   * `encoder` picks the encoder; the fixed-Huffman one stops as soon as its
+   * output passes what would be kept. A window outside `body` panics.
    */
   compress(coding: i32, body: u8[], off: i32, len: i32): i32 {
     if (off < 0 || len < 0 || off > toI32(body.length) - len) {
       panic("HttpCompressor.compress: the window lies outside its body")
     }
-    if (coding !== HTTP_CODING_GZIP || len < this.minLength || len > this.maxLength) {
+    if (len < this.minLength) {
+      this.decision = HTTP_COMPRESS_TOO_SMALL
       return -1
     }
-    const n: i32 = this.gzip.compress(body, off, len, this.output, toI32(0))
-    if (n < 0 || n >= len) {
+    if (len > this.maxLength) {
+      this.decision = HTTP_COMPRESS_TOO_LARGE
       return -1
     }
+    if (coding !== HTTP_CODING_GZIP) {
+      this.decision = HTTP_COMPRESS_NOT_ACCEPTED
+      return -1
+    }
+    // The longest output kept; `output` holds `compressBound(maxLength)`, more.
+    const keep: i32 = len - this.leastSaving(len)
+    let n: i32 = -1
+    if (keep > 0) {
+      const fixed: boolean =
+        this.encoder === HTTP_ENCODER_FIXED || (this.encoder !== HTTP_ENCODER_LEVEL && len <= this.fixedLimit)
+      this.encoderRuns = wrappingAdd(this.encoderRuns, 1)
+      n = fixed
+        ? this.fixed.compress(body, off, len, this.output, toI32(0), keep)
+        : this.gzip.compress(body, off, len, this.output, toI32(0))
+    }
+    if (n < 0 || n > keep) {
+      this.decision = HTTP_COMPRESS_TOO_LITTLE_SAVED
+      return -1
+    }
+    this.decision = HTTP_COMPRESS_SENT
     return n
+  }
+
+  /**
+   * `compress` for a client that refuses identity (`httpIdentityRefused`):
+   * gzip whatever the body's length, the saving or the
+   * segments, so long as it is no longer than `maxLength`. Answers the
+   * compressed length, or -1 when `coding` is not gzip or the body is too
+   * long (sent as it is, which RFC 9110 §12.5.3 allows).
+   */
+  compressAnyway(coding: i32, body: u8[], off: i32, len: i32): i32 {
+    if (off < 0 || len < 0 || off > toI32(body.length) - len) {
+      panic("HttpCompressor.compressAnyway: the window lies outside its body")
+    }
+    if (len > this.maxLength) {
+      this.decision = HTTP_COMPRESS_TOO_LARGE
+      return -1
+    }
+    if (coding !== HTTP_CODING_GZIP) {
+      this.decision = HTTP_COMPRESS_NOT_ACCEPTED
+      return -1
+    }
+    this.encoderRuns = wrappingAdd(this.encoderRuns, 1)
+    let n: i32 = -1
+    if (
+      this.encoder === HTTP_ENCODER_FIXED ||
+      (this.encoder !== HTTP_ENCODER_LEVEL && len <= this.fixedLimit)
+    ) {
+      n = this.fixed.compress(body, off, len, this.output, toI32(0), toI32(this.output.length))
+    }
+    if (n < 0) {
+      n = this.gzip.compress(body, off, len, this.output, toI32(0))
+    }
+    this.decision = HTTP_COMPRESS_SENT
+    return n
+  }
+
+  /** The bytes a compressed `len`-byte body must save: `minSaving` and `minSavingPercent`, at least 1. */
+  leastSaving(len: i32): i32 {
+    let least: i32 = this.minSaving > 1 ? this.minSaving : 1
+    let pct: i32 = this.minSavingPercent
+    if (pct < 0) {
+      pct = 0
+    } else if (pct > 100) {
+      pct = 100
+    }
+    const share: i32 = toI32((toI64(len) * toI64(pct) + toI64(99)) / toI64(100))
+    if (share > least) {
+      least = share
+    }
+    return least
+  }
+
+  /**
+   * `segmentMode`'s rule, for a response of `identityBytes` bytes sent as it
+   * is or `encodedBytes` compressed, heads included, at `mss` bytes a segment
+   * (`this.mss` when 0 or less): whether the compressed one takes fewer
+   * segments. When it does not, `decision` becomes
+   * `HTTP_COMPRESS_NO_FEWER_SEGMENTS`. `respondEncoded` calls it; a program
+   * driving HTTP/2 or HTTP/3 by hand may with its own head sizes.
+   */
+  fewerSegments(identityBytes: i32, encodedBytes: i32, mss: i32): boolean {
+    const size: i32 = this.segmentSize(mss)
+    if (httpSegments(encodedBytes, size) < httpSegments(identityBytes, size)) {
+      return true
+    }
+    this.decision = HTTP_COMPRESS_NO_FEWER_SEGMENTS
+    return false
+  }
+
+  /** The segment `segmentMode` counts in: `mss` when above 0, else `this.mss` when above 0, else `HTTP_DEFAULT_MSS`. */
+  segmentSize(mss: i32): i32 {
+    if (mss > 0) {
+      return mss
+    }
+    return this.mss > 0 ? this.mss : HTTP_DEFAULT_MSS
+  }
+
+  /**
+   * `segmentMode`'s shortcut, before any encoder runs: whether a `len`-byte
+   * body that `compress` would try (its length in `[minLength, maxLength]`
+   * and `coding` gzip) is no longer than one segment of `mss` bytes (as
+   * `fewerSegments` reads it). Sent as it is, such a response takes one
+   * segment once its head fits beside it, and no compression takes fewer, so
+   * `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS` and the caller checks
+   * the head: when it does not fit, the caller goes on to `compress`, which
+   * decides again. Anything else answers false and leaves `decision` alone.
+   */
+  oneSegment(coding: i32, len: i32, mss: i32): boolean {
+    if (
+      coding !== HTTP_CODING_GZIP ||
+      len < this.minLength ||
+      len > this.maxLength ||
+      len > this.segmentSize(mss)
+    ) {
+      return false
+    }
+    this.decision = HTTP_COMPRESS_NO_FEWER_SEGMENTS
+    return true
+  }
+
+  /**
+   * The bytes of the HTTP/1.1 head a `length`-byte body sent as it is would
+   * get, from `encodedHead`, that of the same response sent compressed as
+   * `encodedLength` bytes with the fields `addFields` built: less
+   * `Content-Encoding: gzip`, less `Vary` (a body the segment count kept as
+   * it is would go out so to any client), and the other `Content-Length`.
+   */
+  http1IdentityHead(encodedHead: i32, encodedLength: i32, length: i32): i32 {
+    let head: i32 = encodedHead - HTTP1_GZIP_FIELD_BYTES
+    if (this.vary) {
+      head -= toI32(this.varyName.length) + toI32(this.acceptEncodingValue.length) + 4
+    }
+    return head - httpDecimalDigits(encodedLength) + httpDecimalDigits(length)
+  }
+
+  /**
+   * Whether the last decision depended on the request's `Accept-Encoding`, so
+   * the response needs `Vary: Accept-Encoding`: a body sent compressed, or
+   * one sent as it is because the client did not take gzip. A body the
+   * lengths or the saving kept as it is would go out the same to any client.
+   */
+  varies(): boolean {
+    return this.decision === HTTP_COMPRESS_SENT || this.decision === HTTP_COMPRESS_NOT_ACCEPTED
   }
 
   /**
@@ -354,11 +633,6 @@ export class HttpCompressor {
     }
     this.names.push(this.contentEncodingName)
     this.values.push(this.gzipValue)
-    this.addVary()
-  }
-
-  /** Appends `Vary: Accept-Encoding` to the arrays `addFields` built when `vary` is set. */
-  addVary(): void {
     if (this.vary) {
       this.names.push(this.varyName)
       this.values.push(this.acceptEncodingValue)
@@ -366,9 +640,20 @@ export class HttpCompressor {
   }
 
   /**
-   * Sets `names` / `values` to the program's fields and, when `vary`,
-   * `Vary: Accept-Encoding`: the fields of a body sent as it is from a
-   * resource that is sometimes compressed.
+   * Appends `Vary: Accept-Encoding` to the arrays `identityFields` built when
+   * `vary` is set and the last decision `varies`.
+   */
+  addVary(): void {
+    if (this.vary && this.varies()) {
+      this.names.push(this.varyName)
+      this.values.push(this.acceptEncodingValue)
+    }
+  }
+
+  /**
+   * Sets `names` / `values` to the program's fields and, when `vary` and the
+   * last decision `varies`, `Vary: Accept-Encoding`: the fields of a body
+   * sent as it is from a resource that is sometimes compressed.
    */
   identityFields(names: u8[][], values: u8[][]): void {
     while (this.names.length > 0) {

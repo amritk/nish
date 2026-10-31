@@ -41,18 +41,19 @@ the record that found it. The notes below the table name each such finding.
 | Area | Record | Scope | Fixed (C / H / M / L) | Open (C / H / M / L) |
 | --- | --- | --- | ---: | ---: |
 | AEADs | [crypto-aead.md](crypto-aead.md) | `std/crypto/chacha20poly1305.ts`, `std/crypto/aes.ts`, `runtime/runtime-aes.c` | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 1 |
+| SHA-256 block kernel | [crypto-sha256-hw.md](crypto-sha256-hw.md) | `runtime/runtime-sha256.c`; its lowering (`isSha256Seam` in `src/kernels.ts`, `emitKernelArm` in `src/emit.ts`) | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, `std/crypto/ed25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
 | RSA signatures | [crypto-rsa.md](crypto-rsa.md) | `std/crypto/rsa.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²³ |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
-| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 17 ² | 0 / 0 / 0 / 1 |
-| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 13 / 11 ⁴ | 0 / 0 / 0 / 0 |
+| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
+| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 15 / 14 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
-| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 2 ⁷ |
+| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 2 ⁷ |
 | HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [http-client.md](http-client.md) | `std/net/http-client.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 2 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
@@ -67,18 +68,18 @@ the record that found it. The notes below the table name each such finding.
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
-| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper in `src/emit.ts`; the flag and its refusals in `src/compile.ts`, `src/options.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
 | PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
-| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
+| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 41 / 137** | **0 / 0 / 1 / 27** |
+| **Total** ⁸ | | | **3 / 10 / 46 / 144** | **0 / 0 / 2 / 30** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -115,7 +116,20 @@ the record that found it. The notes below the table name each such finding.
    (Low), `spawnPiped`'s deadlock, output cap, pipe descriptors and SIGPIPE,
    were found and fixed by the stage that added it, and are counted as
    fixed; RT-30's Darwin window is recorded in the row and is not counted.
-   RT-31, the stdin channel itself, is a decision and is not counted.
+   RT-31, the stdin channel itself, is a decision and is not counted, and so
+   is RT-32, how `netMss` reads the kernel's reply (#1094).
+   RT-33 and RT-35 (Medium) and RT-36 (Low), the Unix path copy, the socket
+   file's mode window and the error paths of the Unix-domain calls, were
+   found and fixed by the stage that added them, and are counted as fixed.
+   RT-34 (Low), the stale-socket unlink racing another binder, is counted as
+   an open Low: its boundary is the socket's directory. RT-37 (Low), the
+   descriptors `recvFd` closes and the family check, and RT-40 (Low),
+   `spawnWithFds`' self-dups and collisions, were found and fixed by the stage
+   that added descriptor passing, and are counted as fixed. RT-38 (Low), the
+   window on Darwin before a received descriptor is close-on-exec, is counted
+   as an open Low. RT-39, what `peerCredentials` reads and when, is a
+   decision and is not counted. RT-17 and RT-19 were amended there, not
+   reopened.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
@@ -244,7 +258,11 @@ the record that found it. The notes below the table name each such finding.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
-    does. BCRYPT-5 is a property checked and found to hold, not a finding.
+    does. BCRYPT-10 (Low), the calibrated width following a clock, is
+    accepted too: the width changes only the speed, never a hash. BCRYPT-8
+    (Low), accepted when found, is superseded, since the kernel is now as
+    wide as the lanes given; BCRYPT-9 was a limitation of the language, since
+    lifted. BCRYPT-5 is a property checked and found to hold, not a finding.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
@@ -322,7 +340,7 @@ takes a file in deletes its row.
 | `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1.md` names it but no Scope table does. |
 | `std/crypto/x509-random.ts` | The private key and serial `x509MintSelfSigned` needs, drawn from the OS CSPRNG; `crypto-x509.md` (X509-6) and `secret.md` cover it in their bodies, not in a Scope table. |
 | `std/net/buffer-pool.ts` | Holds no parser: it lends fixed-size buffers and zeroes what a borrower used on give-back. No record has reviewed that zeroing yet. |
-| `std/net/prefork.ts` | A supervisor over `spawn` and signals that reads no network input; its descriptor hygiene is RT-17 and RT-19 in `runtime.md`. |
+| `std/net/prefork.ts` | A supervisor over `spawn` and signals that reads no network input; its descriptor hygiene is RT-17 and RT-19 in `runtime.md`, and RT-40 covers `spawnWithFds`, which a supervisor may use to hand workers one listener instead (`prefork.ts` does not yet). |
 | `std/net/qpack.ts` | HTTP/3's field decoder, which `http3.md` audits through its callers (the refusals of a field section) but does not list in its Scope table. |
 | `std/net/tls/ticket.ts` | The session-ticket seal, open and strike register; `tls.md`'s Resumption section and its ticket-seal stage record the design and tests, but its Scope table does not list the file. |
 
@@ -342,6 +360,8 @@ only.
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
+| SHA256HW-2 | Low | `runtime/runtime-sha256.c` (`nish_sha256_compress`) | On the SHA-NI and ARMv8 SHA-256 path the state, the message words and every round's intermediates pass through vector registers, and on x86-64 seven spills of them, which no store from C or the language can wipe; the kernel keeps no buffer and writes only the new state to `h`, which HMAC wipes (K1-7). Recorded rather than reached, as AEAD-4 | — |
+| RT-38 | Low | `runtime/runtime-net.c` (`nish_recv_fd`) | On Darwin a descriptor `recvFd` keeps is made close-on-exec by an `fcntl` after `recvmsg`, so a child another thread spawns in between inherits it; Linux marks it in the receive. The window RT-30 records for pipes, recorded rather than reached | — |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | TLS-7 | Low | `std/net/tls/client.ts` | TLS 1.2 and below are refused by design (`protocol_version`, or `illegal_parameter` for the downgrade sentinel); client certificates, 0-RTT and client resumption are not offered | — |
 | TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | A handshake that fails within the `receive` that delivered the ServerHello seals its fatal alert in the clear, before the client's handshake write keys are installed | — |

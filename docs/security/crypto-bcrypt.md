@@ -29,19 +29,21 @@ table](#interoperability) is the one place that says who answers what; the
 module departs from `crypt_r` on three rows of it, `$2x$`, a hash string of
 the wrong length and a digest character outside the alphabet.
 
-The four-lane batch, `bcryptHash4` and `bcryptVerify4`, gives each lane the
-single path's answer byte for byte, so every row of that table holds for it
-lane by lane. Its state is one `Secret<u32[]>`, wiped by a store `opt -O2`
-keeps, as are its digests and, in the verify, each lane's rebuilt hash and
-given hash's bytes; the ways it can differ from four single calls (null lanes, a malformed
-lane, lanes of different costs) are set down in [The four-lane
-batch](#the-four-lane-batch).
+The batch, `bcryptHashN` and `bcryptVerifyN` for one to six passwords and
+`bcryptHash4` and `bcryptVerify4` for up to four, gives each lane the single
+path's answer byte for byte, so every row of that table holds for it lane by
+lane. Its state is one `Secret<u32[]>`, wiped by a store `opt -O2` keeps, as
+are its digests and, in the verify, each lane's rebuilt hash and given hash's
+bytes; the ways it can differ from single calls (null lanes, a malformed
+lane, lanes of different costs) are set down in [The
+batch](#the-batch). `bcryptCalibrate`, which picks a width by timing
+throwaway passwords, handles no secret of the caller's (BCRYPT-10).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptHashInto`, `bcryptHashExposed`, `bcryptVerifyExposed`, `bcryptSameWiped`, `bcryptVerifyOne`, `bcryptExposed`, `bcryptKeySchedule`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptEncodeInto`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`, `bcryptParseHash`; the batch: `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptLoad4`, `bcryptHash4Exposed`, `bcryptVerify4Exposed`, `bcryptMaskOf`, `bcryptInit4`, `bcryptKeyWord`, `bcryptLoadLane` (and its four `bcryptLoadLane0`–`3`), `bcryptEks4`, `bcryptBody4`, `bcryptEncrypt4`, `bcryptXorKey4`, `bcryptXorSalt4`, `bcryptMagic4`, `bcryptSaltOf`, `bcryptBatchSalt`, `bcryptJoin`, `bcryptLaneString`, `bcryptLaneOk`, `bcryptJoinedOk`, `bcryptBytesOf` |
+| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptHashInto`, `bcryptHashExposed`, `bcryptVerifyExposed`, `bcryptSameWiped`, `bcryptVerifyOne`, `bcryptExposed`, `bcryptKeySchedule`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptEncodeInto`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`, `bcryptParseHash`; the batch: `bcryptHashN`, `bcryptVerifyN`, `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptLoadN`, `bcryptLoadSlot`, `bcryptHashNExposed`, `bcryptVerifyNExposed`, `bcryptMaskOf`, `bcryptSlotsOf`, `bcryptInitN`, `bcryptKeyWord`, `bcryptLoadLane` (and its six `bcryptLoadLane0`–`5`), `bcryptEksN`, `bcryptBodyN`, `bcryptBody2`–`bcryptBody6`, `bcryptEncryptAt`, `bcryptXorKeyN`, `bcryptXorSaltN`, `bcryptExpandAt`, `bcryptMagicAt`, `bcryptSaltOf`, `bcryptBatchSalt`, `bcryptJoin`, `bcryptLaneString`, `bcryptLaneOk`, `bcryptJoinedOk`, `bcryptBytesOf`; the calibration: `bcryptCalibrate`, `bcryptCalibrateTime`, `bcryptCalibrateKey` |
 
 Out of scope: `timingSafeEqual` (`std/crypto/ct.ts`, in
 [crypto-k1.md](crypto-k1.md)), the `Secret` rules the checker enforces
@@ -129,28 +131,38 @@ gcc -O2 -w -include $O/shim.h -I$O $O/bcrypt.c $O/blowfish.c vec.c -o vec
 The same program gives the 400-byte digest from n = 327 on, the first length
 past the run, and refuses `$2y$` and `$2x$` settings.
 
-## The four-lane batch
+## The batch
 
-`bcryptHash4(p0, p1, p2, p3, salts, cost)` and `bcryptVerify4(p0, p1, p2, p3,
-hashes)` take lane 0 and up to three more passwords, each `Secret<u8[]> |
-null`. Their Blowfish encryptions run interleaved in one loop
-(`bcryptBody4`, `bcryptEncrypt4`): the four chains are independent, so the
-S-box loads of one overlap the others' and a core is not left waiting on one
-chain's latency. Each lane's hash is the single path's, byte for byte.
+`bcryptHashN(p0, p1, p2, p3, p4, p5, salts, cost)` and `bcryptVerifyN(p0, …,
+p5, hashes)` take lane 0 and up to five more passwords, each `Secret<u8[]> |
+null`, with 96 bytes of salt or six hash strings. `bcryptHash4` and
+`bcryptVerify4` are the same computation for up to four, with 64 bytes of salt
+or four strings, and keep the signatures, errors and outputs they had. The
+given lanes' Blowfish encryptions run interleaved in one loop of the width
+given (`bcryptBodyN`, one of `bcryptBody2` to `bcryptBody6`, through
+`bcryptEncryptAt`): the chains are independent, so the S-box loads of one
+overlap the others' and a core is not left waiting on one chain's latency.
+Each lane's hash is the single path's, byte for byte. The kernels other than
+`bcryptBody4` are written out by `bench/crypto/bcrypt/gen-body.mjs`, whose
+output is the source as committed; its width 4 is `bcryptBody4`'s text below
+the doc comment, and `gen-body.mjs --check` compares all five with the module.
 
 **One state, one wipe.** A `Secret` cannot be stored in an array or a field,
-so the four states cannot be four `Secret`s handed to one kernel. They are one
-`Secret<u32[]>` of 4244 words (`BCRYPT_BATCH_WORDS`): lane k's Blowfish state
-at 1042k, its expanded key at 4168 + 18k and its `$2a$` safety word at
-4240 + k. `bcryptHash4` and `bcryptVerifyGroup` make it, set it to π
-(`bcryptInit4`), load each given lane's key with one `exposeWith` of the state
-per password (`bcryptLoad4`, through `bcryptLoadLane`), run the expansion, the
-2^cost rounds and the magic string on all four in one more
-(`bcryptHash4Exposed` or `bcryptVerify4Exposed`, through `bcryptEks4`), and
-wipe it. The hash's exposed half returns the four 60-byte hashes, which are
-the strings `bcryptHash4` returns and so are not wiped; the verify's compares
-each lane's rebuilt hash with the given one inside the exposure and wipes
-both, and the digests, before it returns.
+so the lanes' states cannot be several `Secret`s handed to one kernel. They
+are one `Secret<u32[]>` of 6366 words (`BCRYPT_BATCH_WORDS`): slot s's
+Blowfish state at 1042s, its expanded key at 6252 + 18s and its `$2a$`
+safety word at 6360 + s. The given lanes take slots 0, 1, … in order
+(`bcryptSlotsOf`), so a batch of w lanes runs the w-wide kernel and no slot
+runs without a key. `bcryptHashN` and `bcryptVerifyGroup` make the state, set
+it to π (`bcryptInitN`), load each given lane's key with one `exposeWith` of
+the state per password (`bcryptLoadN`, through `bcryptLoadSlot` and
+`bcryptLoadLane`), run the salted expansion, the 2^cost rounds and the magic
+string on all slots in one more (`bcryptHashNExposed` or
+`bcryptVerifyNExposed`, through `bcryptEksN`), and wipe it. The hash's
+exposed half returns the 60-byte hashes, which are the strings `bcryptHashN`
+returns and so are not wiped; the verify's compares each slot's rebuilt hash
+with the given one inside the exposure, wipes both and the digests, and
+returns one bit per slot.
 
 **A key word at a time.** While `bcryptLoadLane` has the state exposed it
 cannot also expose the password, so it takes the key one word at a time:
@@ -161,14 +173,13 @@ milliseconds), and only a `u32` leaves each call, into `bcryptLoadLane`'s
 unwiped local `word` and then the state. That local is a register or a spill
 slot, which no wipe reaches (BCRYPT-7).
 
-**Null lanes.** A null lane's key is not loaded: its state is π with no key
-in it, the kernel runs it with the others, and its digest is dropped. `bcryptHash4`
-gives "" for it and does not read its salt; `bcryptVerify4` gives `false` and
+**Null lanes.** A null lane takes no slot and is not hashed. `bcryptHashN`
+gives "" for it and does not read its salt; `bcryptVerifyN` gives `false` and
 does not read its hash string, so a malformed string in a null lane is no
 error. One given lane runs as the single path, so a batch of one costs one
-hash and not four.
+hash and not six.
 
-**A malformed lane.** `bcryptVerify4` parses all four hash strings before it
+**A malformed lane.** `bcryptVerifyN` and `bcryptVerify4` parse every given hash string before it
 hashes anything; a malformed one in any given lane makes the whole call
 `Err("bcrypt: lane k: …")`, the single path's message with the lane named. A
 per-lane `Err` was the alternative; it was not chosen because a
@@ -176,12 +187,12 @@ per-lane `Err` was the alternative; it was not chosen because a
 `false` would let a corrupted stored hash read as a wrong password. A caller
 whose rows come from storage it trusts sees the error as the corruption it is.
 
-**Costs.** One kernel runs one cost. `bcryptVerify4` groups the given lanes by
+**Costs.** One kernel runs one cost. `bcryptVerifyN` groups the given lanes by
 the cost their hash names: a group of two or more runs as one interleaved
 computation (`bcryptVerifyGroup`), a group of one as `bcryptVerify`. Lanes of a
 group may carry different prefixes; each lane's safety word is its own, so a
-`$2a$` lane gets the countermeasure beside a `$2y$` one. A batch of four costs
-takes the time of four single verifies.
+`$2a$` lane gets the countermeasure beside a `$2y$` one. A batch of six costs
+takes the time of six single verifies.
 
 **The comparison** is `timingSafeEqual` over each lane's whole 60 characters,
 as in `bcryptVerify`; the lanes' answers do not depend on one another, and the
@@ -192,7 +203,7 @@ which the caller chose.
 
 Rows BCRYPT-1 to BCRYPT-5 are the decisions a reviewer might question, each
 following the reference; BCRYPT-6 and BCRYPT-7 are what a wipe and a
-constant-time compare cannot reach; BCRYPT-8 and BCRYPT-9 are the batch's.
+constant-time compare cannot reach; BCRYPT-8 to BCRYPT-10 are the batch's.
 They are accepted, or a limitation of the language since lifted, not flaws,
 and none is counted as fixed or open in the index.
 
@@ -204,9 +215,10 @@ and none is counted as fixed or open in the index.
 | BCRYPT-4 | Low | `bcryptDecodeSalt` | A hash whose last salt character has the dropped bits set verifies false for its own password. | **Accepted.** It is `crypt_r`'s answer: it rebuilds the string with the bits cleared and compares the whole of it. Accepting it would make a hash string that verifies here and not there. OpenBSD answers the same; Go verifies such a string true, since it keeps the salt characters as given ([Interoperability](#interoperability)). |
 | BCRYPT-5 | Low if it failed | `bcryptVerify`, `bcryptParse` | A hash string of any length or bytes must not panic or read past itself. | **Holds.** The length is checked to be 60 first; every character after that is read at an index below 60 and checked against the alphabet, each refusal an `Err`. |
 | BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte's value, but the copy's trip count follows the password's length (up to 72), and the cycle position `p` of the `key[p & 0x7f]` loads restarts at its first NUL (or at 72), so which of the 128-byte key array's two cache lines each load touches follows the length up to that NUL. A local attacker who can watch those lines learns the length (to within the line split), not a byte; C implementations walk a C string the same way. The base64 that encodes the digest (`bcryptCharOf`, `bcryptSextetOf`) is branchless, since the digest is the stored hash when the password is right, and the verify's compare is constant-time. |
-| BCRYPT-7 | Low | `bcryptExposed`, `bcryptHashExposed`, `bcryptKeyWord`, `bcryptLoadLane`, `bcryptHash4Exposed` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped, and so is every array the verify makes: the hash `bcryptVerifyExposed` rebuilds and the given hash's bytes, and in the batch the digests and each lane's joined and given hash (`bcryptJoinedOk`), all through `bcryptSameWiped`, since a rebuilt hash is a crackable hash of whatever password was tried. The hash paths' 60 bytes (`bcryptHashExposed`, the batch's `all` from `bcryptHash4Exposed`) are not wiped: they are the hash strings `bcryptHash` and `bcryptHash4` return, public by design, and the strings themselves are the caller's. The `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. The batch's 19 key words per lane each pass through `bcryptLoadLane`'s `word`, an unwiped `u32` local, on their way from `bcryptKeyWord`'s wiped array into the state: a register, or a spill slot if the code generator spills it, which no wipe reaches; the same reach as a round's working values. |
-| BCRYPT-8 | Low | `bcryptEks4` | A null lane, or a lane of another cost in a `bcryptVerify4` group, runs through the kernel with π and no key, and its digest is computed and dropped. | **Accepted.** Nothing secret is in it, its digest is wiped with the rest of the state's block and digests, and running it costs nothing a lane-count branch inside the kernel would save: the four chains run side by side either way. |
+| BCRYPT-7 | Low | `bcryptExposed`, `bcryptHashExposed`, `bcryptKeyWord`, `bcryptLoadLane`, `bcryptHashNExposed` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped, and so is every array the verify makes: the hash `bcryptVerifyExposed` rebuilds and the given hash's bytes, and in the batch the digests and each lane's joined and given hash (`bcryptJoinedOk`), all through `bcryptSameWiped`, since a rebuilt hash is a crackable hash of whatever password was tried. The hash paths' 60 bytes (`bcryptHashExposed`, the batch's `all` from `bcryptHashNExposed`) are not wiped: they are the hash strings `bcryptHash`, `bcryptHashN` and `bcryptHash4` return, public by design, and the strings themselves are the caller's. The `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. The batch's 19 key words per lane each pass through `bcryptLoadLane`'s `word`, an unwiped `u32` local, on their way from `bcryptKeyWord`'s wiped array into the state: a register, or a spill slot if the code generator spills it, which no wipe reaches; the same reach as a round's working values. |
+| BCRYPT-8 | Low | `bcryptEksN`, `bcryptSlotsOf` | A null lane, or a lane of another cost in a verify group, ran through the four-lane kernel with π and no key, and its digest was computed and dropped. | **Superseded.** It was accepted, since nothing secret was in such a lane and its digest was wiped with the rest. Now the given lanes take consecutive slots (`bcryptSlotsOf`) and the kernel is as wide as they are, so no slot runs without a key: three lanes of a four-lane call run `bcryptBody3`. Pinned by `link/crypto_bcrypt_width`'s "hashN, width w, lanes m" lines, whose lane masks m leave gaps (lanes 33 is lanes 0 and 5, run in slots 0 and 1), each lane equal to `bcryptHash`. |
 | BCRYPT-9 | Low | `bcryptHash4`, `bcryptVerify4` | The batch could not run in a `std/threads` task: a task calling `bcryptHash4` was refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Closed: the language limitation is lifted.** A task may now wipe a `Secret` it made with `secret(...)` from a fresh value ([`secret.md`](secret.md), [`LANGUAGE.md`](../LANGUAGE.md) NL2471), and `bcryptVerify4` no longer counts as writing the caller's `hashes`: handing a `string` element to a call writes nothing, since a string has no slot a callee can store into. Before: `tests/link/thread_bcrypt_batch_refused`, refused. After: `tests/link/thread_bcrypt_batch` runs `bcryptHash4` and `bcryptVerify4` on two tasks under `NISH_NUM_THREADS` of 1, 2 and 8, and checks the hashes against `bcryptHash`. The analysis as it stood: the batch made its state with `secret(new Array…)` and wipes it; the task rule counts that wipe as a shared write: [`threads.md`](../guide/using-nish/threads.md) and [`LANGUAGE.md`](../LANGUAGE.md) (NL2471) say a `wipe` of a `Secret` made with `secret(...)` is a write to memory the caller can see, since the rule does not follow a fresh array through `secret(…)`. The way round it costs more than it buys: a plain `u32[]` state would hold every lane's key schedule and S-boxes outside a `Secret` and outside `expose`, where the checker no longer makes each use go through `exposeWith` nor makes the function wipe it, and a zeroing loop in place of the wipe is a store `opt -O2` may drop. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. That is the change made. |
+| BCRYPT-10 | Low | `bcryptCalibrate`, `bcryptCalibrateTime` | The width a program runs follows a clock, so it differs between machines, between runs and with the load at startup. | **Accepted.** The width changes only the speed: every width gives each lane the single path's hash byte for byte (BCRYPT-8's test, and the differential at widths 2 to 6), so a hash made at one width verifies at any other. The calibration hashes its own one-byte throwaway passwords (`bcryptCalibrateKey`), wiped like any other, and an all-zero salt; it reads no caller's secret, and its running time follows only the widths and the core. It reads the clock (`monotonicNanos`), the one function of the module that does. |
 
 ## Properties verified
 
@@ -301,22 +313,41 @@ one call); and the refusals "63 bytes of salt are refused", "cost 3 is
 refused", "a malformed lane is an Err naming it", "and is not read when the
 lane is null", "a batch is four hashes".
 
+**The widths** (`tests/link/crypto_bcrypt_width`, compared by
+`link/crypto_bcrypt_width: exits with 0 and stdout matches expected.out`):
+"hashN, width w, lanes m, cost c" for widths 2 to 6, costs 4 to 8 and 10, and
+lane masks m with gaps, each lane the string `bcryptHash` makes and a null lane
+""; "hashN, lane 0 alone"; "verifyN = verify, width w, lanes m" and
+"verifyN = verify, lane 5 wrong, width w" for widths 1 to 6;
+"verifyN: crypt_blowfish's vector in all six lanes"; "a malformed lane k is
+an Err naming it" for each of lanes 0 to 5, and "and is not read when lane k
+is null"; the refusals "95 bytes of salt are refused", "cost 3 is refused",
+"cost 32 is refused", "a batch is six hashes"; and "bcryptCalibrate answers 1
+to 6" and, called again, "and again". `bcrypt differential: Nish and libxcrypt crypt_r agree on
+random passwords and salts, both ways` runs its cases again through
+`bcryptHashN` and `bcryptVerifyN` in batches of widths 6 down to 2, every lane
+checked against `crypt_r` both ways.
+
 **The batch's wipes survive `-O2`**: `crypto: the wipes survive opt -O2
 (bcrypt's batch state, key words, block, digests, joined and given hashes in
-bcryptVerify4Exposed)` counts the volatile wipes reached from `bcryptKeyWord`
-(2), `bcryptEks4` (3), `bcryptLoad4` (16), `bcryptHash4Exposed` (4),
-`bcryptVerify4Exposed` (6), `bcryptHash4` (26) and `bcryptVerify4` (51);
-`tests/wipes/crypto.js` says where each comes from. Turning the digests'
-`wipe` into `fill(0)` drops `bcryptHash4Exposed`, `bcryptVerify4Exposed`,
-`bcryptHash4` and `bcryptVerify4` to 3, 5, 25 and 50; either of
-`bcryptSameWiped`'s two (the joined hash and the given bytes) drops
-`bcryptVerify4Exposed` and `bcryptVerify4` to 5 and 46.
+bcryptVerify4Exposed)` (a name kept from the four-lane batch) counts the
+volatile wipes reached from `bcryptKeyWord` (2), `bcryptEksN` (2),
+`bcryptLoadN` (4), `bcryptHashNExposed` (3), `bcryptVerifyNExposed` (5),
+`bcryptHashN` (13), `bcryptVerifyN` (52), `bcryptHash4` (13), `bcryptVerify4`
+(52) and `bcryptCalibrateTime` (19); `tests/wipes/crypto.js` says where each
+comes from. Turning the digests' `wipe` into `fill(0)` drops each of those
+from `bcryptHashNExposed` on by one.
 
 **Threads**: `link/thread_bcrypt_task: exits with 0 and stdout matches
 expected.out` hashes two passwords and verifies one on three tasks, natively
 and under `NISH_NUM_THREADS` of 1, 2 and 8; `link/thread_bcrypt_batch` runs
 the batch's hash and verify on two tasks at the same sizes, and its hashes
 match `bcryptHash`'s (BCRYPT-9).
+
+**The half-round's shape**: ``bcrypt barrier: after opt -O3 all 16 of
+bcryptBody's half-rounds end in one XOR with the barrier's `and` (16)``
+counts the XORs that close a half-round after the value barrier's `and`
+([The half-round's critical path](#the-half-rounds-critical-path)).
 
 **wasm32**: the module has no I/O and no C; `crypto_bcrypt` and
 `crypto_bcrypt_batch` build and run under WASI with the rest of `std/crypto`
@@ -325,61 +356,216 @@ match `bcryptHash`'s (BCRYPT-9).
 ## Speed
 
 CPU milliseconds per cost-10 hash, single-threaded, on a 4-core x86-64 Xeon
-(machine A)
-(`bench/crypto/bcrypt/run.mjs`: user time of 8 hashes, median and spread of 5
-interleaved rounds; a four-lane row is the time of 8 batches over 32; every
-row prints the same hash):
+whose `/proc/cpuinfo` says 2.80 GHz and whose clock measures 3.1 to 3.25 GHz
+(machine C; the clock measured by timing a long chain of dependent `xor`, `add`
+and `imul` instructions)
+(`node bench/crypto/bcrypt/run.mjs --rounds 9`: user time of 8 hashes, median
+and spread of 9 interleaved rounds; a row of w lanes is the time of 8 batches
+over 8w; every row prints the same hash):
 
 | Implementation | ms per hash |
 | --- | ---: |
-| Nish `bcryptHash` | 52.9 (52.3–53.1) |
-| Nish `bcryptHash4`, four lanes | 16.0 (15.8–16.4) |
-| libxcrypt `crypt_r`, `$2b$` | 48.6 (48.4–49.8) |
-| OpenBSD `bcrypt.c`, `gcc -O2` | 48.8 (48.3–50.1) |
-| OpenBSD `bcrypt.c`, `clang -O2` | 54.1 (53.5–54.3) |
-| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 50.8 (50.5–50.9) |
-| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 23.1 (22.9–23.3) |
-| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 51.6 (51.4–52.0) |
-| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 16.4 (16.2–16.9) |
+| Nish `bcryptHash` | 57.6 (56.4–59.0) |
+| Nish `bcryptHash4`, four lanes | 23.1 (22.0–26.4) |
+| Nish `bcryptHashN`, one lane | 57.4 (56.9–58.6) |
+| Nish `bcryptHashN`, 2 lanes | 34.3 (32.8–37.2) |
+| Nish `bcryptHashN`, 3 lanes | 27.1 (26.5–28.6) |
+| Nish `bcryptHashN`, 4 lanes | 22.2 (21.9–25.2) |
+| Nish `bcryptHashN`, 5 lanes | 22.4 (21.2–24.6) |
+| Nish `bcryptHashN`, 6 lanes | 24.5 (22.5–27.5) |
+| libxcrypt `crypt_r`, `$2b$` | 59.0 (58.0–60.1) |
+| OpenBSD `bcrypt.c`, `gcc -O2` | 61.8 (61.3–64.0) |
+| OpenBSD `bcrypt.c`, `clang -O2` | 69.6 (68.1–71.8) |
+| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 61.3 (60.3–62.9) |
+| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 33.6 (31.1–37.0) |
+| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 62.0 (61.6–68.1) |
+| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 24.6 (23.0–27.0) |
 
-On machine A the single path is 8% behind gcc's builds, 2% ahead of OpenBSD's clang build
-and 2.5% behind tigokraft's one-lane clang build, each outside the noise: no bounds
-check is left in the round (every S-box index is masked to 0–255 and the
-state's length is checked once), and the gap is one XOR on the round's
-critical path that LLVM's Reassociate and InstCombine put there and gcc does not (below):
-the clang build of the same C has it too. Four lanes run in
-the time of 1.2 single hashes, 3.3 times the single path's throughput on one
-core: level with the four-lane C of the tigokraft submission
-(commit `c3012257f2ee`, MIT; fetched by the bench, not copied) built by clang,
-inside its noise, and 1.44 times its gcc build. The C rows of tigokraft are
-built with `-march=native`, as its build does, so they may use any instruction
-this CPU has; the Nish rows (no `--cpu x86-64-v3`) and the other C rows are
-built for baseline x86-64.
+**The targets.** The single path, with the half-round's order pinned
+([below](#the-half-rounds-critical-path)), takes 0.98 times `crypt_r`'s time,
+inside the 1.2 aimed at and level with it inside the noise; it is 6% ahead of
+OpenBSD's gcc build and tigokraft's one-lane gcc build, outside their spreads,
+and 17% ahead of OpenBSD's clang build. The best width, four lanes, hashes
+2.66 times as fast per password as `crypt_r` on one core, past the 1.5 aimed
+at; five lanes are level with four, and six level inside the noise with a
+median 10% higher. `bcryptHash4` and `bcryptHashN` at four lanes run the same
+computation and overlap. Neither AMD nor AArch64 was measured: the best width
+there is what `bcryptCalibrate` answers, which is why it measures.
 
-### Why the single path trails gcc
+**Cycles.** A cost-10 hash encrypts 2^10 × 1042 + 713 = 1,067,721 Blowfish
+blocks (each of the 1 + 2 × 1024 key expansions encrypts 521, the magic string
+192), so cycles per block = clock × time / 1,067,721. The bench prints 151 for
+the single path at cpuinfo's 2.80 GHz; at the measured 3.2 GHz it is 173, 10.8
+cycles per half-round, against the 11-cycle chain one half-round waits on
+([below](#the-half-rounds-critical-path)): the single path is latency-bound.
+Per lane, the widths take 103 (2), 81 (3), 67 (4), 67 (5) and 73 (6) cycles
+per block, and `crypt_r` 177.
+
+**The four-lane kernel, read.** The loop of `bcryptBody4` after `opt -O3` and
+`llc`, from its `objdump`, is one round (two half-rounds) of all four lanes
+in 123 instructions (124 before it was inlined into `bcryptBodyN`): 45 loads (each lane's 4 S-box words and `P` word per
+half-round, 40, and 5 reloads of spilled values), 5 stores, all spills to
+the stack, and one compare and backward branch, the only branch; it runs 8
+times per block, not unrolled further. Checked against the suspects: no
+bounds check (each S-box index is masked to 0–255 and the state's length is
+checked once, before the loop) and no overflow check (the arithmetic is
+`u32`, which wraps); no `Secret` or wipe work inside the loop, which calls
+nothing; the lanes interleave, each lane's loads issued between the others'.
+The state's slots are 1042 words, 4168 bytes, apart, not a multiple of 4096,
+so the lanes' S-box words at one index fall in different L1 sets, and the
+six-lane state, 25.5 KB, fits the 32 KB L1. The spills are five registers'
+worth per round: 16 general-purpose registers do not hold four lanes' two
+halves, base, counter and temporaries.
+
+**Reproducing the clock and the counts.** `run.mjs` turns times into cycles
+at cpuinfo's clock unless `--ghz` gives one, so the 3.2 GHz figures are
+`node bench/crypto/bcrypt/run.mjs --rounds 9 --ghz 3.2`. The clock is a chain
+of dependent one-cycle `add`s timed with `CLOCK_MONOTONIC`; on machine C it
+printed 3.12, 3.14 and 3.23 on three runs, with a build running beside it:
+
+```sh
+cat > clock.c <<'C'
+#include <stdio.h>
+#include <time.h>
+int main(void) {
+  unsigned long x = 1, n = 1000000000;
+  struct timespec a, b;
+  clock_gettime(CLOCK_MONOTONIC, &a);
+  for (unsigned long i = 0; i < n; i++)
+    __asm__ volatile("add %0, %0\n\tadd %0, %0\n\tadd %0, %0\n\tadd %0, %0" : "+r"(x));
+  clock_gettime(CLOCK_MONOTONIC, &b);
+  printf("%.2f GHz\n", 4.0 * n / ((b.tv_sec - a.tv_sec) * 1e9 + (b.tv_nsec - a.tv_nsec)));
+  return (int)(x & 1);
+}
+C
+gcc -O2 clock.c -o clock && ./clock
+```
+
+The four-lane loop's counts are read from the `bcryptHash4` bench program.
+`bcryptBody4` is inlined into `bcryptBodyN`, so the command lists every loop
+there, from a backward branch's target to the branch. A load is an
+instruction that reads memory, and a store is one that writes it:
+
+```sh
+build/nish build/bench/bcrypt/nish4.ts -o build/bench/bcrypt/nish4-g-out/ --link build/bench/bcrypt/nish4-g -g
+objdump -d --no-show-raw-insn -M intel --disassemble=nish.bcryptBodyN build/bench/bcrypt/nish4-g |
+  grep -P '^\s+[0-9a-f]+:\t' | awk -F'\t' '{ a = $1; sub(/^ +/, "", a); sub(/:$/, "", a); i[++n] = $2; at[a] = n }
+  $2 ~ /^j/ { split($2, t, " +"); if (t[2] in at && at[t[2]] < n) { lo[++L] = at[t[2]]; hi[L] = n } }
+  END { for (l = 1; l <= L; l++) { ld = st = br = 0; for (k = lo[l]; k <= hi[l]; k++) { o = i[k]; sub(/^[a-z]+ +/, "", o)
+    if (o ~ /^[^,]*PTR \[/) st++; else if (o ~ /PTR \[/) ld++; if (i[k] ~ /^(j|call)/) br++ }
+    print hi[l] - lo[l] + 1 " instructions, " ld " loads, " st " stores, " br " branches" } }'
+```
+
+It prints ten loops, a round loop with one branch and its block loop with
+two for each width. A width-w round loop's loads are its 10w S-box and `P`
+words plus its reloads. The round loops print 58, 188, 123, 154 and 90
+instructions, with 20, 73, 45, 59 and 30 loads, for widths 2, 6, 4, 5 and 3.
+
+**The bounds.** Per lane half-round: the latency floor is the 11-cycle chain
+over the w lanes (about 2.8 cycles at four, 2.2 at five), the load-port bound
+is 5 loads over the core's 2 load ports (2.5 cycles, 2.8 with the reloads),
+and issue is 15.5 instructions at 4 a cycle (3.9 cycles). The measured 4.2
+(4 and 5 lanes) and 4.6 (6) cycles sit on the issue bound: from four lanes
+there are enough chains to hide the latency, and a wider kernel still issues
+the same instructions per lane, so five and six gain nothing on four.
+
+**Why the kernel is Nish and not C.** A C kernel was the alternative, and it
+would be C in `runtime/` holding the secret state outside the checker's
+`Secret` rules. The C to beat is the four-lane `bc_hash_n` of tigokraft:
+33.6 ms per hash built by gcc and 24.6 (23.0–27.0) by clang, against 22.2
+(21.9–25.2) for `bcryptHashN` at four lanes and 23.1 (22.0–26.4) for
+`bcryptHash4`. The Nish is ahead of gcc's build outside both spreads and of
+clang's by its median, inside the spreads; no C row beats it, so no C
+prototype was built.
+
+**Machine B**, the run that pinned the half-round's order (`--rounds 9`, before
+the widths; a nominal 2.1 GHz), for comparison:
+
+| Implementation | ms per hash |
+| --- | ---: |
+| Nish `bcryptHash` | 67.8 (66.5–69.0) |
+| Nish `bcryptHash4`, four lanes | 24.4 (23.3–32.0) |
+| libxcrypt `crypt_r`, `$2b$` | 68.8 (66.0–71.3) |
+| OpenBSD `bcrypt.c`, `gcc -O2` | 69.4 (66.5–70.3) |
+| OpenBSD `bcrypt.c`, `clang -O2` | 75.4 (73.0–78.5) |
+| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 71.4 (70.6–73.3) |
+| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 35.4 (32.1–42.9) |
+| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 72.3 (70.0–75.1) |
+| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 26.2 (23.1–30.2) |
+
+The single path is level with gcc's builds and `crypt_r`, inside the noise,
+and 10% ahead of OpenBSD's clang build. No bounds check is left in the round:
+every S-box index is masked to 0–255 and the state's length is checked once.
+Each half-round closes with one XOR after its last S-box add, as gcc's do and
+clang's do not (below). Before that order was pinned, the single path
+trailed gcc. Two runs of the bench, interleaved with the branch's in one
+session, measured 73.1 (72.0–84.1) and 74.6 (72.1–76.9) ms on `main`
+(`be8e623`). The branch measured 67.8 (66.5–69.0) and 68.9 (66.6–71.0) ms,
+7.3% and 7.6% less, and gcc measured 68.5 to 69.6 ms across the four.
+
+Four lanes run in the time of 1.4 single hashes, 2.8 times the single path's
+throughput on one core. That is level with the four-lane C of the tigokraft
+submission (commit `c3012257f2ee`, MIT; fetched by the bench, not copied)
+built by clang, inside its noise, and 1.45 times its gcc build. The four-lane
+rows spread widely on this machine (22.0 to 34.7 ms across the session's
+runs), so read them as their medians' order, not their ratios. The C rows of
+tigokraft are built with `-march=native`, as its build does, so they may use
+any instruction this CPU has. The Nish rows (no `--cpu x86-64-v3`) and the
+other C rows are built for baseline x86-64.
+
+### The half-round's critical path
 
 Each half-round is `x ^= P[n] ^ F(y)`, where `F(y)` is four S-box loads joined
 by add, xor, add, and `y` is the half the previous half-round produced. `x` and
 `P[n]` are ready long before `F(y)`, so the fast shape XORs them first, off
 the path, and leaves one XOR after the last S-box add: `(x ^ P[n]) ^ F(y)`.
-gcc builds that shape in all 16 half-rounds. LLVM builds it in the first and
-puts `P[n]` on the path in the other 15, `(P[n] ^ F(y)) ^ x`: two dependent
-XORs after the add instead of one.
+gcc builds that shape in all 16 half-rounds. LLVM, given the expression
+plainly, builds it in the first and puts `P[n]` on the path in the other 15,
+`(P[n] ^ F(y)) ^ x`: two dependent XORs after the add instead of one.
+`bcryptBody` and `bcryptEncrypt` therefore write each half-round as
 
-The verdict is (a), LLVM against gcc. It is not (b), Nish's codegen: the IR
-Nish emits for the round has the source's order, and the order is chosen by
-LLVM passes that also run on clang's build of the C. It is not (c), the shape
-of the `std/` source: every way of writing the XOR tried below gives the same
-machine code.
+```ts
+r = ctSelect(0xffffffff, r ^ st[n], 0) ^ F(l)
+```
+
+`ctSelect(m, a, b)` lowers to `(a & h) | (b & ~h)`, where `h` is `m` passed
+through the value barrier, an empty inline `asm` LLVM cannot see through. With
+`b` 0 the `or` folds away and `(x ^ P[n]) & h` is left. LLVM cannot know that
+`h` is all ones, so it cannot move `P[n]` out of the `and` and into the XOR
+chain: the half-round keeps the order written. The barrier takes a constant,
+so LLVM hoists it out of the loop and merges the copies into one register
+holding `0xffffffff`. Each half-round pays one register `and`, computed off
+the path while the S-box loads are in flight.
+
+The barrier is safe because it is an identity on the value: with an all-ones
+mask, `ctSelect` gives `x ^ P[n]` in every bit, so every hash is unchanged,
+and the bcrypt vectors, the `crypt_r` differential and the batch's
+lane-by-lane comparisons with the single path answer as before. It adds no
+branch and no load. The mask is a constant, not a secret, and the `and` is
+one ALU instruction on registers, so the cache lines the round touches are
+still the four S-box words BCRYPT-6 records and nothing more. The working
+values stay in registers as before, which BCRYPT-7 records. Neither row
+changes.
+
+The batch kernels, `bcryptBody2` to `bcryptBody6`, keep the plain
+`x ^= P[n] ^ F(y)`. Their chains are independent, so a core has other
+work while one chain waits, and one extra XOR on a chain's path costs little
+there. Writing the four-lane kernel's 16 half-rounds with the barrier was
+measured as a loss: in two runs interleaved with the plain form in one
+session, `bcryptHash4` took
+27.6 (21.4–31.8) and 24.8 (21.0–34.2) ms against 24.2 (22.5–28.3) and 22.9
+(22.3–31.8) ms. Both medians were slower, inside the batch's wide spread, and
+nothing was gained to set against the extra `and` per half-round.
 
 | Build | Loads | Stores | Stack spills | Bounds checks, calls, jumps | Critical path from `y` | `P` on the path |
 | --- | ---: | ---: | ---: | ---: | --- | ---: |
-| Nish `bcryptBody` | 5 | 0 | 0 | 0 | 8 instructions, 12 cycles | 15 of 16 |
+| Nish `bcryptBody` | 5 | 0 | 0 | 0 | 7 instructions, 11 cycles | 0 of 16 |
 | OpenBSD `Blowfish_encipher`, `gcc -O2` | 5 | 0 | 0 | 0 | 6 instructions, 11 cycles | 0 of 16 |
 | OpenBSD `Blowfish_encipher`, `clang -O2` | 5 | 0 | 0 | 0 | 8 instructions, 12 cycles | 15 of 16 |
 
 The first five columns count one half-round, from `perhr` in the recipe below,
-which reads the 15 windows between consecutive S3 adds. Nish stores twice per
+which reads the 15 windows between consecutive S3 adds. The barrier's `and`
+is a register operation, so it adds no load. Nish stores twice per
 block (`st[i]`, `st[i + 1]`) and the C stores its halves through its pointer
 arguments once per call; neither stores inside a round. The critical path is
 the dependent chain from `y` to the next half-round's input, under 1 cycle
@@ -394,12 +580,12 @@ instructions are in program order, several to a line; none is changed:
   mov ecx,[rax+rcx*4]  * add ecx,[rax+r9*4+0x400]  movzx r9d,dl
 * xor ecx,[rax+rbx*4+0x800]  * add ecx,[rax+r9*4+0xc00]
   xor edx,[rax+0x100c] * xor ecx,r8d
-; Nish: (P ^ F) ^ x
-  mov r8d,ebx            mov eax,ebx         * shr eax,0xe
-  shr r8d,0x18         * and eax,0x3fc
-* mov eax,[rsi+rax*1+0x448]  * add eax,[rsi+r8*4+0x48]  movzx r8d,bl  movzx ebp,bh
-* xor eax,[rsi+rbp*4+0x848]  * add eax,[rsi+r8*4+0xc48]
-* xor eax,[rsi+0x8]    * xor eax,edx
+; Nish: ((x ^ P) & h) ^ F, x ^ P and the and computed off the path
+  xor ecx,[rsi+0xc]      mov eax,edx           mov r10d,edx
+* shr r10d,0xe           shr eax,0x18        * and r10d,0x3fc
+* mov ebx,[rsi+r10*1+0x448]  * add ebx,[rsi+rax*4+0x48]  movzx eax,dl  movzx ebp,dh
+* xor ebx,[rsi+rbp*4+0x848]  and ecx,r9d     * add ebx,[rsi+rax*4+0xc48]
+* xor ebx,ecx
 ; clang: (P ^ F) ^ x
   mov r9d,r8d            shr r9d,0x18          mov eax,r8d
 * shr eax,0xe          * and eax,0x3fc
@@ -408,30 +594,20 @@ instructions are in program order, several to a line; none is changed:
 * xor eax,[rdi+0x1008] * xor eax,ecx
 ```
 
-The two index computations of the second S-box cost the same, `shr` and
-`movzx` against `shr` and `and`: the extra cycle is the XOR with `P`. The
-Nish round is otherwise as tight as the C. The 16 half-rounds are fully
-unrolled and the state base and length stay in registers. The second-lowest
-byte is one `movzx …, bh` where clang's C takes a `shr` and an `and`. The C
-expansion loops call `Blowfish_encipher` once per block, which Nish's inlined
-loop does not.
+`r9d` is the hoisted barrier, set to `0xffffffff` once before the loop. The
+Nish path is one instruction longer than gcc's in the same 11 cycles. It
+loads the second S-box word with a `mov` and adds the first to it, where gcc
+loads the first off the path and adds the second to it in one instruction.
+The index computations cost the same, `shr` and `and` against `shr` and
+`movzx`. The 16 half-rounds are fully unrolled and the state
+base and length stay in registers. The second-lowest byte is one
+`movzx …, bh` where clang's C takes a `shr` and an `and`. The C expansion
+loops call `Blowfish_encipher` once per block, which Nish's inlined loop does
+not.
 
-The model's one cycle on 11 would be 9%. A cost-10 hash runs
-521 blocks × (1 + 2 × 1024) + 64 × 3 = 1,067,721 Blowfish blocks, which is
-17,083,536 half-rounds. On a second 4-core Xeon (machine B, nominal 2.1 GHz) the bench measured
-71.5 (70.9–73.3) ms for Nish, 66.8 (65.4–68.3) ms for OpenBSD's gcc build and
-72.4 (72.3–73.8) ms for its clang build: Nish 7.0% behind gcc, and level
-with clang inside the noise. The clock is measured, not nominal: a C loop of
-10⁹ dependent `xor` and `add` instructions on one register, written in
-`asm volatile` so the compiler keeps them, and one of 10⁹ dependent `imul`
-(3 cycles each), both ran at about 2.8 GHz of CPU time on machine B. At that clock the hashes take 10.9
-(gcc), 11.7 (Nish) and 11.9 (clang) cycles per half-round, against the 11 and
-12 of the chain model: Nish's measured gap is 0.8 cycles, not a whole one.
-Machine A's figures (52.9 against 48.8 ms, 8%) are from the table above.
-
-The order is made in the IR, not in the backend. In the pre-link `-O3`
-pipeline, Reassociate turns the source's `x ^ (P[n] ^ F(y))` into
-`(P[n] ^ x) ^ F(y)`, and a later InstCombine flips it to
+The order is made in the IR, not in the backend. Without the barrier, in the
+pre-link `-O3` pipeline, Reassociate turns the source's `x ^ (P[n] ^ F(y))`
+into `(P[n] ^ x) ^ F(y)`, and a later InstCombine flips it to
 `(P[n] ^ F(y)) ^ x`. In the loop it is the InstCombine after the loop
 passes:
 
@@ -446,16 +622,21 @@ passes:
 
 The unrolling is not the cause. A copy of `bcryptBody` with the 16
 half-rounds written out as straight-line code, which was not committed, gave
-the same hash and the same 15 of 16. There the same Reassociate and the
-InstCombine after it make the order in each half-round directly. `llc` keeps
-the tree at `-O1`, `-O2` and `-O3`, and with `-x86-machine-combiner=false`.
-The same 15 of 16 came from three other forms of the source: writing it as
-`(x ^ P[n]) ^ F(y)`, loading `P[n]` into a `const` first, and a loop of one
-half-round with a swap. LLVM canonicalizes the three-operand XOR whatever
-order it arrives in, so `std/` cannot choose the order. Nor could Nish's
-codegen, by emitting a different one. Nish's `opt` and `llc` are the same
-LLVM 18.1.3 as the clang that built the C, and that build ends in the same
-15 of 16. The gap is LLVM 18 against gcc 13, not Nish against C.
+the same hash and the same 15 of 16. `llc` keeps the tree at `-O1`, `-O2`
+and `-O3`, and with `-x86-machine-combiner=false`. Three other plain forms
+of the source gave the same 15 of 16: writing it as `(x ^ P[n]) ^ F(y)`,
+loading `P[n]` into a `const` first, and a loop of one half-round with a
+swap. LLVM canonicalizes a three-operand XOR whatever order it arrives in, so
+only an operand it cannot see through holds the order, which is what the
+barrier's `and` is. Nish's `opt` and `llc` are the same LLVM 18.1.3 as the
+clang that built the C, and that build ends in the same 15 of 16.
+
+`bcrypt barrier` in `tests/run.js` pins the shape. It compiles
+`tests/link/crypto_bcrypt` and runs `opt -O3` on `bcrypt.ll`, then counts the
+XORs in `bcryptBody` that take the barrier's `and` as an operand. There must
+be 16, one per half-round. A source that drops the barrier leaves no such
+`and` to count, and a compiler that stops emitting the barrier opaquely
+folds the `and` away; either fails it.
 
 To reproduce, run `npm run build` and then `node bench/crypto/bcrypt/run.mjs`
 once to build the programs, then:
@@ -474,10 +655,12 @@ for f in "build/bench/bcrypt/nish-g nish.bcryptBody 0xc48" "build/bench/bcrypt/o
 `onpath` finds each add of the last S-box word (state offset `0xc48` in Nish,
 `0xc00` in OpenBSD's context) and checks whether the next instruction XORs a
 state word into the same register. It relies on the add being followed
-directly by that XOR. That was checked against all three listings by hand:
-each S3 add is followed by the `P` XOR on the path or, in Nish's and clang's
-first half-round and in all of gcc's, by an XOR into another register. It
-prints 16 S3 adds and 15, 0 and 15. `perhr` prints 15 half-rounds, 5 loads
+directly by that XOR. That was checked against all three listings by hand.
+In clang's, each S3 add is followed by the `P` XOR on the path or, in the
+first half-round, by an XOR into another register, as in all of gcc's. In
+Nish's, each is followed by the half-round's one closing XOR of two
+registers, directly or after the barrier's `and` of the other half. It
+prints 16 S3 adds and 0, 0 and 15. `perhr` prints 15 half-rounds, 5 loads
 and no stores, stack references, calls or jumps for each. With clang/LLVM
 18.1.3, gcc 13.3.0 and GNU objdump 2.42 on x86-64, the three `dis` listings
 have these sha256s (`dis … | sha256sum`). Branch targets keep their
@@ -486,7 +669,7 @@ well as the toolchain:
 
 | Listing | sha256 |
 | --- | --- |
-| `nish.bcryptBody` | `11273e35c9a1ce10e78e34cd0bd1977e7ba81394be8a61e5ccd24ea4dacbbdb2` |
+| `nish.bcryptBody` | `e5e4a901342e13f1505fa677ba6edec9315d2aae39f479cea5c9c15ea9b0fdec` |
 | `Blowfish_encipher`, gcc | `5bd677c28adadcd01e97a6c9c2a17b55347bda224db42e6266a0db579aa2295d` |
 | `Blowfish_encipher`, clang | `f3c2b0791101df18ec265ca65924336544990e18398d97939d953845d470b396` |
 

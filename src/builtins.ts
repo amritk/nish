@@ -188,6 +188,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "isExecutableSync" ||
     name === "spawn" ||
     name === "spawnPiped" ||
+    name === "spawnWithFds" ||
     name === "kill" ||
     name === "waitPid" ||
     name === "availableParallelism" ||
@@ -1133,6 +1134,16 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     return T_I32
   }
+  // `spawn` with descriptors handed on: the child gets `fds[i]` as `3 + i`.
+  // The array is only read, so a `readonly i32[]` is accepted, and the pid is
+  // `i32` as `spawn`'s is.
+  if (name === "spawnWithFds") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
+      checkBuffer(ctx, args.children[1], scope, name, T_I32, false)
+    }
+    return T_I32
+  }
   if (name === "kill" || name === "waitPid") {
     if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_I32)
@@ -1267,12 +1278,16 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
  * an `i32` answer in either number mode, as `signalFd`'s is. A descriptor, an
  * offset and a length are `i32` because they are one: an `f64` is refused
  * rather than converted. `runtime-net.c` is empty on wasm, so every call is
- * refused there as the host builtins are.
+ * refused there as the host builtins are, but `netMss`: it answers a fact
+ * whose absence is `-1` anywhere, so a wasm build compiles it to that.
  */
 const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i32 => {
   const params = netSignature(name)
   const args = call.children[1]
-  if (checkBuiltinArity(ctx, call, name, args, params.length) && !refuseOnWasm(ctx, call, name)) {
+  if (
+    checkBuiltinArity(ctx, call, name, args, params.length) &&
+    (name === "netMss" || !refuseOnWasm(ctx, call, name))
+  ) {
     for (let i = 0; i < params.length && i < args.children.length; i++) {
       const param = params.charCodeAt(i)
       const arg = args.children[i]
@@ -1329,7 +1344,7 @@ const checkBuffer = (
   } else if (!readonlyWant) {
     let what = written ? "fills a `u8[]`" : "sends from a `u8[]`"
     if (element !== T_U8) {
-      what = "fills an `i32[]`"
+      what = written ? "fills an `i32[]`" : "takes an `i32[]`"
     }
     ctx.error(arg, `\`${name}\` ${what}, got ${ctx.table.typeName(got)}`)
   }

@@ -53,9 +53,16 @@
 // build writes its profile at a normal exit, never at a signal. With
 // BENCH_CORES=N above 1 it runs as N workers under `nish/net/prefork` (see
 // `main`), `requests` counted per worker.
+//
+// BENCH_QUICKACK, read once at start-up, sets TCP_QUICKACK the ways
+// bench/quickack/ measures: `reset0` to 0 after each response, `once0` to 0
+// once per connection at accept, `reset1` to 1 after each response. Unset, or
+// any other value, the server makes no call at all.
 import {
   netAddress,
+  NET_TCP_QUICKACK,
   netClose,
+  netSetOption,
   pollAdd,
   pollCreate,
   pollModify,
@@ -99,6 +106,11 @@ const LISTENER: i32 = -1
 const ZERO: i32 = 0
 /** The largest request body an echo takes; one byte more is answered 413. */
 const MAX_BODY: i32 = 4096
+/** BENCH_QUICKACK's modes; see the header. */
+const QUICKACK_NONE: i32 = 0
+const QUICKACK_RESET0: i32 = 1
+const QUICKACK_ONCE0: i32 = 2
+const QUICKACK_RESET1: i32 = 3
 /** The routes, in the order `Router.add` numbers them; a slot holds one until `H1_END`. */
 const ROUTE_NONE: i32 = -1
 const ROUTE_PLAINTEXT: i32 = 0
@@ -389,6 +401,8 @@ class Bench {
   requests: i32 = 0
   /** Return from `run` once this many requests are answered; 0 serves forever. */
   limit: i32 = 0
+  /** BENCH_QUICKACK's `QUICKACK_*`, read once in `main`; 0 is `QUICKACK_NONE`. */
+  quickack: i32 = 0
 
   constructor(listener: i32, slots: i32) {
     this.listener = listener
@@ -693,6 +707,9 @@ class Bench {
     while (true) {
       const slot: i32 = this.server.accept()
       if (slot >= 0) {
+        if (this.quickack === QUICKACK_ONCE0) {
+          netSetOption(this.server.fd(slot), NET_TCP_QUICKACK, 0)
+        }
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
       } else if (slot !== H1_POOL_FULL) {
         return
@@ -704,6 +721,7 @@ class Bench {
     if (!this.server.holds(slot)) {
       return
     }
+    const answered: i32 = this.requests
     let wants: i32 = (events & 5) !== 0 ? this.server.readable(slot) : this.server.writable(slot)
     const conn: Http1Connection = this.server.connection(slot)
     let event: i32 = this.server.next(slot)
@@ -721,6 +739,18 @@ class Bench {
     if ((wants & H1_DONE) !== 0) {
       this.server.close(slot)
       return
+    }
+    // One call per wakeup that answered something: a pipelined batch is one
+    // flush, and so one response as far as the peer's ACKs go. It is made even
+    // when the flush left bytes for a later writable wakeup: TCP_QUICKACK
+    // governs how the socket ACKs what it receives next, not what it sends, and
+    // the bench's responses fit one write, so a partial flush is rare here.
+    if (this.requests !== answered) {
+      if (this.quickack === QUICKACK_RESET0) {
+        netSetOption(this.server.fd(slot), NET_TCP_QUICKACK, 0)
+      } else if (this.quickack === QUICKACK_RESET1) {
+        netSetOption(this.server.fd(slot), NET_TCP_QUICKACK, 1)
+      }
     }
     if (this.server.rearm(slot, wants)) {
       pollModify(this.loop, this.server.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot)
@@ -753,6 +783,24 @@ const benchCores = (): i32 => {
     return 65535
   }
   return n > 1 ? n : 1
+}
+
+/** The `QUICKACK_*` BENCH_QUICKACK names; `QUICKACK_NONE` when it is unset or unknown. */
+const benchQuickack = (): i32 => {
+  const env: string | null = getenv("BENCH_QUICKACK")
+  if (env === null) {
+    return QUICKACK_NONE
+  }
+  if (env === "reset0") {
+    return QUICKACK_RESET0
+  }
+  if (env === "once0") {
+    return QUICKACK_ONCE0
+  }
+  if (env === "reset1") {
+    return QUICKACK_RESET1
+  }
+  return QUICKACK_NONE
 }
 
 /** `value` (below 65536) into `buf`'s first two bytes, little-endian. */
@@ -833,6 +881,7 @@ export const main = (): i32 => {
   }
   const bench: Bench = new Bench(listener, slots)
   bench.limit = limit
+  bench.quickack = benchQuickack()
   if (count > 1) {
     awaitPeers(worker, count, port)
   }

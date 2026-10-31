@@ -1062,8 +1062,8 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 An arrow written as the argument becomes a function of its own, named after
 the one it is written in with a `$` no declaration can spell
-(`@halves$arrow0`), and it can see only its parameters and the module's
-top-level names. Its parameter takes `T` from the array, and its concise body
+(`@halves$arrow0`). This one reads only its parameters and the module's
+top-level names; the next one reads a name of the function around it. Its parameter takes `T` from the array, and its concise body
 binds `U`, so the instantiation is `map<i32, f64, (n) => ...>`,
 `@map$i32$f64$fn.13.halves$arrow0`.
 
@@ -1226,6 +1226,138 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !21 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fnarg-arrow -->
+
+### An arrow argument that captures
+
+An arrow argument may read the `const` locals and the parameters of the
+function it is written in. Each one it reads is appended to the lifted arrow's
+parameters (`@above$arrow0(i32 %x, i32 %limit)`), and the instance it is given
+to takes it as one more parameter after its own, `%cap.0`, which it passes on
+at the direct call. There is no environment struct and no indirect call, and
+the captured value is not part of the instantiation's key: two arrows that read
+different values share a shape but still get one `define` each, because each
+arrow is its own callee. The instance's capture parameter carries no facts, so
+it has no `readonly` or `nocapture`, and the caller counts a captured reference
+as an escape (docs/LANGUAGE.md, "Function parameters").
+
+<!-- cookbook:begin fnarg-capture -->
+```ts
+// An arrow argument that reads a `const` of the function it is written in:
+// `limit` is appended to the lifted arrow's parameters, and the instance of
+// `countWhere` takes it as one more argument and passes it on.
+const countWhere = (xs: i32[], keep: (x: i32) => boolean): i32 => {
+  let n = 0
+  for (const x of xs) {
+    if (keep(x)) {
+      n++
+    }
+  }
+  return n
+}
+
+export const above = (xs: i32[], limit: i32): i32 => countWhere(xs, (x) => x > limit)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+
+define noundef i32 @above(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %limit) #0 {
+entry:
+  %0 = call i32 @countWhere$fn.12.above$arrow0(%struct.nish_array* %xs, i32 %limit)
+  ret i32 %0
+}
+
+define internal noundef zeroext i1 @above$arrow0(i32 noundef %x, i32 noundef %limit) #1 {
+entry:
+  %0 = icmp sgt i32 %x, %limit
+  ret i1 %0
+}
+
+define internal noundef i32 @countWhere$fn.12.above$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %cap.0) #0 {
+entry:
+  %n.addr = alloca i32, align 4
+  %x.addr = alloca i32, align 4
+  %forof.idx = alloca i64, align 8
+  store i32 0, i32* %n.addr, align 4
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %8, i32* %x.addr, align 4
+  %9 = load i32, i32* %x.addr, align 4
+  %10 = call i1 @above$arrow0(i32 %9, i32 %cap.0)
+  br i1 %10, label %if.then, label %if.end
+
+if.then:
+  %11 = load i32, i32* %n.addr, align 4
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 1)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %13, i32* %n.addr, align 4
+  br label %if.end
+
+if.end:
+  br label %forof.inc
+
+forof.inc:
+  %15 = load i64, i64* %forof.idx, align 8
+  %16 = add i64 %15, 1
+  store i64 %16, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %17 = load i32, i32* %n.addr, align 4
+  ret i32 %17
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end fnarg-capture -->
 
 ### `nish/threads`: a map and a reduce over the partitioner
 
@@ -1728,6 +1860,27 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end thread-scope -->
+
+`using s = scopeWithStack(256 * 1024 * 1024)` lowers as `scope()` does, but
+the scope comes from `nish/threads`'s own `scopeWithStack`, which checks the
+size and stores it in `ThreadScope`'s one field, the word `nish_scope_join`
+reads first (`tests/link/thread_stack_deep`):
+
+```llvm
+; main
+%11 = call %struct.ThreadScope* @nish.scopeWithStack(i32 %10)
+; nish/threads
+%0 = icmp slt i32 %bytes, 131072
+br i1 %0, label %if.then, label %if.end   ; if.then: nish_panic
+if.end:
+  %6 = call %struct.ThreadScope* @nish.scope()
+  %8 = getelementptr inbounds %struct.ThreadScope, %struct.ThreadScope* %7, i32 0, i32 0
+  store i32 %bytes, i32* %8, align 4
+```
+
+A nonzero word sends every task to a new thread of its own made with
+`pthread_attr_setstacksize` (the size rounded up to the page, one page more)
+and `pthread_attr_setguardsize` of a page, none on the joining thread.
 
 ### `nish/threads`: an arrow task, with no destination
 
@@ -22053,6 +22206,266 @@ attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-net-reuseport -->
 
+### `nish:net`: `unixListen`, `unixConnect`, `unixAccept` and `unixSocketPair`
+
+Unix-domain stream sockets, each one call into `runtime/runtime-net.c`
+answering an `i32` and each a write. A path travels as the string's header,
+`readonly nocapture`: the runtime copies it into `sun_path` and refuses one
+that does not fit (`-36`) before any socket exists, so the IR carries no check
+of its own. Listening and connecting never wait and keep `willreturn`;
+`unixAccept` is `nounwind` alone, as `tcpAccept` is. `unixSocketPair` fills
+its `i32[]`, so the array loses `readonly`, and the constant kind folds to its
+value. The descriptors these answer are ordinary sockets to `netRead`,
+`netWrite`, `netShutdown`, `netClose` and the readiness loop
+([LANGUAGE.md](LANGUAGE.md#unix-domain-sockets)).
+
+<!-- cookbook:begin builtin-net-unix -->
+```ts
+// `nish:net`'s Unix-domain calls, one call into runtime-net.c each. A path is
+// a `string` the runtime copies into `sun_path`, `readonly nocapture`; a
+// leading "@" names the abstract namespace. Listening and connecting never
+// wait, so they keep `willreturn`; `unixAccept` is `nounwind` alone, as
+// `tcpAccept` is. `unixSocketPair` fills an `i32[]` and so travels as its
+// header without `readonly`; the runtime answers -22 for one shorter than 2,
+// and `NET_UNIX_STREAM` folds to its value, 1.
+import { NET_UNIX_STREAM, unixAccept, unixConnect, unixListen, unixSocketPair } from "nish:net"
+
+export const serve = (backlog: i32): i32 => unixListen("@app", backlog, 0)
+
+export const dial = (): i32 => unixConnect("@app")
+
+export const take = (fd: i32): i32 => unixAccept(fd)
+
+export const pair = (fds: i32[]): i32 => unixSocketPair(NET_UNIX_STREAM, fds)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"@app\00" }, align 8
+
+declare noundef i32 @nish_unix_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish_unix_connect(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_unix_accept(i32 noundef) #1
+declare noundef i32 @nish_unix_socket_pair(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #0
+
+define noundef i32 @serve(i32 noundef %backlog) #0 {
+entry:
+  %0 = call i32 @nish_unix_listen(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i32 %backlog, i32 0)
+  ret i32 %0
+}
+
+define noundef i32 @dial() #0 {
+entry:
+  %0 = call i32 @nish_unix_connect(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  ret i32 %0
+}
+
+define noundef i32 @take(i32 noundef %fd) #1 {
+entry:
+  %0 = call i32 @nish_unix_accept(i32 %fd)
+  ret i32 %0
+}
+
+define noundef i32 @pair(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %fds) #0 {
+entry:
+  %0 = call i32 @nish_unix_socket_pair(i32 1, %struct.nish_array* %fds)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-unix -->
+
+### `nish:net`: `sendFd`, `recvFd` and `peerCredentials`
+
+A descriptor passed over a Unix socket, and the process at its other end,
+each one call into `runtime/runtime-net.c` answering an `i32` and each a
+write. `sendFd` and `recvFd` take a byte range as `netWrite` and `netRead` do,
+and the range is checked before the call with the same slice panic; the arrays
+the runtime fills, `recvFd`'s bytes and descriptor and `peerCredentials`'s
+three numbers, lose `readonly`. The runtime refuses a socket that is not
+`AF_UNIX` before it sends or asks anything
+([LANGUAGE.md](LANGUAGE.md#unix-domain-sockets)).
+
+<!-- cookbook:begin builtin-net-unix-fds -->
+```ts
+// `nish:net`'s descriptor calls, one call into runtime-net.c each. `sendFd`
+// reads its bytes, so its `u8[]` keeps `readonly`; `recvFd` writes both its
+// bytes and the descriptor it keeps, and `peerCredentials` writes its three
+// numbers, so those arrays travel without it. The range `[off, off + len)` is
+// checked in the compiled code before the call, as `netRead`'s is; the length
+// of `fd` and `out` is the runtime's to check, which answers -22.
+import { peerCredentials, recvFd, sendFd } from "nish:net"
+
+export const give = (sock: i32, fd: i32, note: readonly u8[]): i32 => sendFd(sock, fd, note, 0, note.length)
+
+export const take = (sock: i32, buf: u8[], fd: i32[]): i32 => recvFd(sock, buf, 0, buf.length, fd)
+
+export const who = (sock: i32, out: i32[]): i32 => peerCredentials(sock, out)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i32 @nish_send_fd(i32 noundef, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #0
+declare noundef i32 @nish_recv_fd(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #0
+declare noundef i32 @nish_peer_credentials(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #1
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define noundef i32 @give(i32 noundef %sock, i32 noundef %fd, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %note) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %note, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = sext i32 %2 to i64
+  %4 = add i64 0, %3
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %note, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8
+  %7 = icmp ule i64 0, %4
+  %8 = icmp ule i64 %4, %6
+  %9 = and i1 %7, %8
+  br i1 %9, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
+  unreachable
+
+net.ok:
+  %10 = call i32 @nish_send_fd(i32 %sock, i32 %fd, %struct.nish_array* %note, i64 0, i64 %3)
+  ret i32 %10
+}
+
+define noundef i32 @take(i32 noundef %sock, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %buf, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %fd) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = sext i32 %2 to i64
+  %4 = add i64 0, %3
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8
+  %7 = icmp ule i64 0, %4
+  %8 = icmp ule i64 %4, %6
+  %9 = and i1 %7, %8
+  br i1 %9, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
+  unreachable
+
+net.ok:
+  %10 = call i32 @nish_recv_fd(i32 %sock, %struct.nish_array* %buf, i64 0, i64 %3, %struct.nish_array* %fd)
+  ret i32 %10
+}
+
+define noundef i32 @who(i32 noundef %sock, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #1 {
+entry:
+  %0 = call i32 @nish_peer_credentials(i32 %sock, %struct.nish_array* %out)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-unix-fds -->
+
+### `nish:net`: `netMss`
+
+A connected TCP socket's send MSS, the payload that fits one segment, to size
+a write batch by. It is one call into `runtime/runtime-net.c`: a
+`getpeername` that turns away anything unconnected, then `TCP_INFO`'s
+`tcpi_snd_mss` on Linux and `TCP_MAXSEG` where that is missing or zero. None of
+them waits, so it keeps `willreturn`; it is a write, as `netLocalPort` is,
+because the kernel's answer changes as the path does and two calls must not
+fold into one. Every failure is a plain `-1`, never an errno, so the IR carries
+no check, and a wasm build, with no socket to ask, compiles the call to that
+`-1` ([LANGUAGE.md](LANGUAGE.md#socket-options)).
+
+<!-- cookbook:begin builtin-net-mss -->
+```ts
+// `netMss`, a connected TCP socket's send MSS: one call into runtime-net.c,
+// `nounwind willreturn` since its two or three syscalls never wait, and a
+// write, so two calls never fold into one: the kernel's answer moves as the
+// path does. Anything but a connected TCP socket answers `-1`.
+import { netMss } from "nish:net"
+
+export const segment = (fd: i32): i32 => netMss(fd)
+
+export const batch = (fd: i32, fallback: i32): i32 => {
+  const mss = netMss(fd)
+  return mss > 0 ? mss : fallback
+}
+```
+
+```llvm
+declare noundef i32 @nish_net_mss(i32 noundef) #0
+
+define noundef i32 @segment(i32 noundef %fd) #0 {
+entry:
+  %0 = call i32 @nish_net_mss(i32 %fd)
+  ret i32 %0
+}
+
+define noundef i32 @batch(i32 noundef %fd, i32 noundef %fallback) #0 {
+entry:
+  %mss.addr = alloca i32, align 4
+  %0 = call i32 @nish_net_mss(i32 %fd)
+  store i32 %0, i32* %mss.addr, align 4
+  %1 = load i32, i32* %mss.addr, align 4
+  %2 = icmp sgt i32 %1, 0
+  br i1 %2, label %cond.true, label %cond.false
+
+cond.true:
+  %3 = load i32, i32* %mss.addr, align 4
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %4 = phi i32 [ %3, %cond.true ], [ %fallback, %cond.false ]
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-mss -->
+
 ### `nish:net`: `pollCreate`, `pollAdd` and `pollWait`
 
 The readiness loop (WP34 N5), one call into `runtime/runtime-net.c` each,
@@ -23350,6 +23763,50 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end builtin-spawn-piped -->
 
+### `nish:process`: `spawnWithFds`
+
+`spawn` with descriptors handed on: one call into `runtime/runtime-os.c`,
+taking the argument vector as `spawn` does and the descriptor list as a
+read-only array. Moving each descriptor to `3 + i` in the child, past
+self-dups and collisions, is the runtime's work, so the call is the whole
+story in the IR
+([LANGUAGE.md](LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory)).
+
+<!-- cookbook:begin builtin-spawn-fds -->
+```ts
+// `spawnWithFds` is one call into runtime-os.c, the argument vector and the
+// descriptors passed as their headers. `argv` is a plain `string[]` with no
+// mark on its parameter, as `spawn`'s is; the descriptors are only read, so
+// they may be `readonly` and the parameter says `nocapture readonly`. The child
+// holds `fds[i]` as descriptor `3 + i`; the answer is its pid or a negative
+// errno, which `waitPid` takes as `spawn`'s.
+import { spawnWithFds } from "nish:process"
+
+export const start = (argv: string[], fds: readonly i32[]): i32 => spawnWithFds(argv, fds)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i32 @nish_spawn_with_fds(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #0
+
+define noundef i32 @start(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %argv, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %fds) #0 {
+entry:
+  %0 = call i32 @nish_spawn_with_fds(%struct.nish_array* %argv, %struct.nish_array* %fds)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-spawn-fds -->
+
 ### Reading the environment
 
 `getenv` is the only environment read the language has, and it is a call rather
@@ -24075,10 +24532,13 @@ to it in `.preinit_array` (kept by `@llvm.used`, so neither the optimizer nor
 the linker drops it), and a call of `@nish_sandbox_check` as `@main`'s first
 instruction. The first operand is the capability bitmask — bit 5 is `fs.read`,
 so `32` here — and the second is `1` for `--sandbox`, `2` for
-`--sandbox=best-effort`; the last two are `null`. The loader runs
-`.preinit_array` before any constructor, so the sandbox holds C code linked
-beside the program as much as Nish code; the check exits 126 when a C library
-skipped it. Without the flag the listing is this one less those lines, byte for
+`--sandbox=best-effort`; the last two are the `fs.read` and `fs.write`
+directory scopes, `null` here. `--allow fs.read=/srv/data` gives the third a
+private `@.sandbox.read` constant, each directory's real path NUL-ended and
+the list ended by one more NUL (`c"/srv/data\00\00"`), and Landlock grants
+reads beneath those directories only. The loader runs `.preinit_array` before
+any constructor, so the sandbox holds C code linked beside the program as much
+as Nish code; the check exits 126 when a C library skipped it. Without the flag the listing is this one less those lines, byte for
 byte, which `tests/run.js` holds for a program of its own.
 
 <!-- cookbook:begin sandbox -->
@@ -24672,6 +25132,7 @@ declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8) #3
 declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #2
 declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #3
+declare noundef i32 @nish_spawn_with_fds(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #2
 declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #3
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #3
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -24704,6 +25165,7 @@ declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonn
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_set_option(i32 noundef, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_net_mss(i32 noundef) #2
 declare noundef i32 @nish_net_close(i32 noundef) #3
 declare noundef i32 @nish_tcp_connect(%struct.nish_array* noundef nonnull align 8 nocapture readonly) #2
 declare noundef i32 @nish_connect_result(i32 noundef) #2
@@ -24715,6 +25177,14 @@ declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 no
 declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_wait(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_unix_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_unix_listen_mode(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_unix_connect(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noundef i32 @nish_unix_accept(i32 noundef) #3
+declare noundef i32 @nish_unix_socket_pair(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
+declare noundef i32 @nish_send_fd(i32 noundef, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
+declare noundef i32 @nish_recv_fd(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #3
+declare noundef i32 @nish_peer_credentials(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
@@ -24749,6 +25219,8 @@ declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 noca
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_ctr(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 declare void @nish_aes_ghash(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
+declare i32 @nish_sha256_hw() #9
+declare noundef i32 @nish_sha256_compress(%struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 declare i32 @nish_crc32_hw() #9
 declare i32 @nish_crc32_update(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #2
 

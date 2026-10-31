@@ -172,9 +172,12 @@ less detail instead: a cheaper pixel backend, a coarser framebuffer, 256
 colours. `options.prefer = DETAIL_FIRST` cuts the rate first; `RATE_FIRST`
 and `DETAIL_FIRST` come from `nish/term-rate`.
 
-It starts at 30 frames a second, or 15 when an `SSH_*` variable says the
-session is remote and the probe's first answer took 5 ms or more, or never
-came; it settles within a few seconds. `frame.stats` shows the numbers;
+On a local terminal it starts at the best rate it may use (`options.maxFps`,
+60 by default; 120 needs `options.allow120` too) and falls within half a
+second if it cannot keep it. It
+starts at 30 when the probe's first answer took 5 ms or more, and at 15 when
+an `SSH_*` variable says the session is remote and the probe's answer took
+5 ms or more, or never came; it settles within a few seconds. `frame.stats` shows the numbers;
 `options.overlay` draws them in a corner, one of `nish/term-rate`'s
 `CORNER_TOP_LEFT`, `CORNER_TOP_RIGHT`, `CORNER_BOTTOM_LEFT` and
 `CORNER_BOTTOM_RIGHT`, or `-1`, the default, for none.

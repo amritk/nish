@@ -8,7 +8,8 @@
 // answers its error code.
 //
 // Run with `--emit`, it prints what Nish compresses — every input, every
-// format, every level, and a `GzipWriter` stream with a flush in it — one
+// format, every level, the fixed-Huffman small-body encoder raw and in gzip,
+// and a `GzipWriter` stream with a flush in it — one
 // `<format> <level> <input> <hex>` line each, which tests/run.js inflates with
 // `zlib.gunzipSync`, `inflateSync` and `inflateRawSync` and compares with
 // inputs.mjs's bytes.
@@ -19,6 +20,7 @@ import {
   DEFLATE_ERR_STORED_LENGTH,
   DEFLATE_ERR_TRUNCATED,
   Deflater,
+  FixedDeflater,
   Inflater,
   compressBound,
 } from "nish/compress/deflate"
@@ -30,6 +32,7 @@ import {
   GZIP_NEED_INPUT,
   GzipCompressor,
   GzipDecompressor,
+  GzipFixedCompressor,
   GzipReader,
   GzipWriter,
 } from "nish/compress/gzip"
@@ -171,6 +174,12 @@ const inputOf = (name: string): u8[] => {
   if (name === "json") {
     return jsonOf(5221)
   }
+  if (name === "json700") {
+    return jsonOf(700)
+  }
+  if (name === "json16k") {
+    return jsonOf(16384)
+  }
   if (name === "noise") {
     return noiseOf(2000)
   }
@@ -193,7 +202,7 @@ const inputOf = (name: string): u8[] => {
   return none
 }
 
-const INPUT_NAMES: string = "empty one text json noise zeros mixed"
+const INPUT_NAMES: string = "empty one text json json700 json16k noise zeros mixed"
 
 /** The code a bad stream's fixture names. */
 const codeOf = (name: string): i32 => {
@@ -304,6 +313,14 @@ const emit = (): void => {
       console.log(`gzip ${level} ${name} ${hex(out, gz.compress(src, 0, n, out, 0))}`)
       console.log(`zlib ${level} ${name} ${hex(out, z.compress(src, 0, n, out, 0))}`)
     }
+  }
+  const fixedRaw = new FixedDeflater()
+  const fixedGz = new GzipFixedCompressor()
+  for (const name of names) {
+    const src: u8[] = inputOf(name)
+    const n: i32 = toI32(src.length)
+    console.log(`raw fixed ${name} ${hex(out, fixedRaw.compress(src, 0, n, out, 0, toI32(out.length)))}`)
+    console.log(`gzip fixed ${name} ${hex(out, fixedGz.compress(src, 0, n, out, 0, toI32(out.length)))}`)
   }
   for (const name of ["text", "mixed", "zeros"]) {
     const src: u8[] = inputOf(name)

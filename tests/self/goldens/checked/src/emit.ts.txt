@@ -14,6 +14,7 @@ import returnAttributes from "./attributes" -> function @returnAttributes
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
+import capabilityIndex from "./capabilities" -> function @capabilityIndex
 import DebugInfo from "./debug" -> struct DebugInfo
 import marksTailCall from "./escape" -> function @marksTailCall
 import reclaimsReturnedString from "./escape" -> function @reclaimsReturnedString
@@ -120,6 +121,9 @@ import isAesSeam from "./kernels" -> function @isAesSeam
 import isCrc32Seam from "./kernels" -> function @isCrc32Seam
 import isIndexOfAnyWalk from "./kernels" -> function @isIndexOfAnyWalk
 import isRegexScanWalk from "./kernels" -> function @isRegexScanWalk
+import isSha256Seam from "./kernels" -> function @isSha256Seam
+import SHA256_HW from "./kernels" -> const SHA256_HW
+import SHA256_KERNEL from "./kernels" -> const SHA256_KERNEL
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import N_ARRAY from "./nodes" -> const N_ARRAY
@@ -159,6 +163,8 @@ import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
 import nodeName from "./nodes" -> function @nodeName
 import Options from "./options" -> struct Options
+import irEscapeInto from "./strings" -> function @irEscapeInto
+import StringBuilder from "./strings" -> struct StringBuilder
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FUSE_NONE from "./program" -> const FUSE_NONE
 import FunctionSig from "./program" -> struct FunctionSig
@@ -249,6 +255,7 @@ struct Emitter (class) size=280 align=8 exported
   method emitEntryWrapper -> @Emitter.emitEntryWrapper
   method sandboxed -> @Emitter.sandboxed
   method emitSandboxApply -> @Emitter.emitSandboxApply
+  method sandboxDirs -> @Emitter.sandboxDirs
   method emitImportDeclarations -> @Emitter.emitImportDeclarations
   method isLibraryCopy -> @Emitter.isLibraryCopy
   method declareAll -> @Emitter.declareAll
@@ -286,7 +293,7 @@ struct Emitter (class) size=280 align=8 exported
   method emitUncopied -> @Emitter.emitUncopied
   method emitMember -> @Emitter.emitMember
   method emitCall -> @Emitter.emitCall
-  method emitAesKernelArm -> @Emitter.emitAesKernelArm
+  method emitKernelArm -> @Emitter.emitKernelArm
   method emitCrc32KernelArm -> @Emitter.emitCrc32KernelArm
   method joinCrc32Arms -> @Emitter.joinCrc32Arms
   method slotOf -> @Emitter.slotOf
@@ -324,7 +331,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer this: size=280 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=96 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=160 writesThrough=true captured=true passedTo=isWasmBuild#0
+  pointer opts: size=184 writesThrough=true captured=true passedTo=isWasmBuild#0
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
@@ -383,7 +390,7 @@ function Emitter.factsFor(this: Emitter, sig: FunctionSig): FunctionFacts -> @Em
   sharedWrite: via nish_exit
   calls: FactsTable.get internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer this: size=280 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 facts: FunctionFacts | null (const)
   callee +0:19 FactsTable.get -> @FactsTable.get
@@ -393,7 +400,7 @@ function Emitter.declareSignatureTypes(this: Emitter, sig: FunctionSig): void ->
   sharedWrite: via IRModule.addTypeDecl
   calls: IRModule.addTypeDecl TypeTable.isArray declareResultTypes
   pointer this: size=280 writesThrough=false captured=false passedTo=declareResultTypes#0 declareResultTypes#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:9 TypeTable.isArray -> @TypeTable.isArray
   callee +1:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
@@ -408,7 +415,7 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   escaping: sig
   calls: DebugInfo.beginFunction Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue captureParamName emitAtomicBody emitChannelSendBody emitConstructorPrologue emitLockBody emitParamRangeChecks emitWipeBody functionAttributes isAtomicMethod isChannelSend isLockMethod nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat paramAttributes paramValue privateAbi returnAttributes secretRoleOf unpackReturnedResult
   pointer this: size=280 writesThrough=true captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0 Emitter.isLibraryCopy#0 emitParamRangeChecks#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 emitWipeBody#0 emitLockBody#0 emitChannelSendBody#0 emitAtomicBody#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 Emitter.emitScopeExit#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitParamRangeChecks#1 emitConstructorPrologue#1 secretRoleOf#0 emitWipeBody#1 isLockMethod#0 emitLockBody#1 isChannelSend#0 emitChannelSendBody#1 isAtomicMethod#0 emitAtomicBody#1
+  pointer sig: size=144 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitParamRangeChecks#1 emitConstructorPrologue#1 secretRoleOf#0 emitWipeBody#1 isLockMethod#0 emitLockBody#1 isChannelSend#0 emitChannelSendBody#1 isAtomicMethod#0 emitAtomicBody#1
   stackSites=0 stackLocals=0
   local -36:11 facts: FunctionFacts (const)
   callee -36:19 Emitter.factsFor -> @Emitter.factsFor
@@ -478,7 +485,7 @@ function Emitter.beginReclaim(this: Emitter, callee: FunctionSig): string -> @Em
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat reclaimsReturnedString
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
-  pointer callee: size=136 writesThrough=false captured=false passedTo=reclaimsReturnedString#0
+  pointer callee: size=144 writesThrough=false captured=false passedTo=reclaimsReturnedString#0
   stackSites=0 stackLocals=0
   callee +0:10 reclaimsReturnedString -> @reclaimsReturnedString
   callee +3:12 IRFunction.emitValue -> @IRFunction.emitValue
@@ -546,7 +553,7 @@ function Emitter.emitEntryWrapper(this: Emitter, userMain: FunctionSig): IRFunct
   sharedWrite: +0:7
   calls: DebugInfo.beginFunction Emitter.emitSandboxApply Emitter.sandboxed Emitter.useRuntime IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow nish_str_concat
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.sandboxed#0 Emitter.emitSandboxApply#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
-  pointer userMain: size=136 writesThrough=false captured=false passedTo=DebugInfo.beginFunction#2
+  pointer userMain: size=144 writesThrough=false captured=false passedTo=DebugInfo.beginFunction#2
   stackSites=1 stackLocals=1
   local -3:11 optimize: boolean (const)
   local -2:11 attrs: string[] (const)
@@ -582,18 +589,42 @@ function Emitter.sandboxed(this: Emitter): boolean -> @Emitter.sandboxed [export
 function Emitter.emitSandboxApply(this: Emitter): void -> @Emitter.emitSandboxApply [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.useRuntime
-  calls: Emitter.useRuntime IRFunction.constructor IRFunction.emit IRModule.addFunction IRModule.addGlobal nish_alloc_struct nish_str_concat nish_str_from_i32
-  pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  calls: Emitter.sandboxDirs Emitter.useRuntime IRFunction.constructor IRFunction.emit IRModule.addFunction IRModule.addGlobal nish_alloc_struct nish_str_concat nish_str_from_i32
+  pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.sandboxDirs#0 Emitter.sandboxDirs#0
   stackSites=0 stackLocals=0
   local +0:11 sandbox: string (const)
   callee +0:21 Emitter.useRuntime -> @Emitter.useRuntime
   callee +1:5 IRModule.addGlobal -> @IRModule.addGlobal
   callee +4:5 IRModule.addGlobal -> @IRModule.addGlobal
-  local +7:11 apply: IRFunction (const)
-  callee +7:19 new IRFunction -> @IRFunction.constructor
-  callee +9:5 IRFunction.emit -> @IRFunction.emit
+  local +7:11 caps: i32 (const)
+  local +8:11 read: string (const)
+  callee +8:18 Emitter.sandboxDirs -> @Emitter.sandboxDirs
+  local +9:11 write: string (const)
+  callee +9:19 Emitter.sandboxDirs -> @Emitter.sandboxDirs
+  local +10:11 apply: IRFunction (const)
+  callee +10:19 new IRFunction -> @IRFunction.constructor
   callee +12:5 IRFunction.emit -> @IRFunction.emit
-  callee +13:5 IRModule.addFunction -> @IRModule.addFunction
+  callee +13:5 IRFunction.emit -> @IRFunction.emit
+  callee +14:5 IRModule.addFunction -> @IRModule.addFunction
+function Emitter.sandboxDirs(this: Emitter, name: string, dirs: string[], caps: i32, capability: string): string -> @Emitter.sandboxDirs [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRModule.addGlobal
+  escaping: capability
+  calls: IRModule.addGlobal StringBuilder.add StringBuilder.constructor StringBuilder.toText capabilityIndex irEscapeInto nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=280 writesThrough=false captured=false
+  pointer dirs: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  callee +0:44 capabilityIndex -> @capabilityIndex
+  local +3:11 out: StringBuilder (const)
+  callee +3:17 new StringBuilder -> @StringBuilder.constructor
+  local +4:9 size: i32 (let)
+  local +5:16 dir: string (const)
+  callee +6:7 irEscapeInto -> @irEscapeInto
+  callee +7:7 StringBuilder.add -> @StringBuilder.add
+  local +10:11 body: string (const)
+  callee +10:18 StringBuilder.toText -> @StringBuilder.toText
+  local +11:11 type: string (const)
+  callee +12:5 IRModule.addGlobal -> @IRModule.addGlobal
 function Emitter.emitImportDeclarations(this: Emitter): void -> @Emitter.emitImportDeclarations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareAll
@@ -618,7 +649,7 @@ function Emitter.isLibraryCopy(this: Emitter, sig: FunctionSig): boolean -> @Emi
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn
   pointer this: size=280 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   local +0:16 library: CheckedProgram (const)
   callee +1:11 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -642,7 +673,7 @@ function Emitter.foreignDeclarationFor(this: Emitter, sig: FunctionSig): string 
   sharedWrite: via Emitter.llvmAbi
   calls: Emitter.llvmAbi isForeignBuffer nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 Emitter.llvmAbi#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 params: string[] (const)
   local +1:9 i: i32 (let)
@@ -654,7 +685,7 @@ function Emitter.declarationFor(this: Emitter, sig: FunctionSig): string -> @Emi
   sharedWrite: via Emitter.factsFor
   calls: Emitter.captureParamTypes Emitter.declareSignatureTypes Emitter.factsFor Emitter.llvmAbi FunctionSig.isCompileTime IRModule.attrGroupFor functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes returnAttributes
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.captureParamTypes#0 Emitter.llvmAbi#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1
+  pointer sig: size=144 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.isCompileTime#0 Emitter.captureParamTypes#1
   stackSites=3 stackLocals=3
   local +0:11 facts: FunctionFacts (const)
   callee +0:19 Emitter.factsFor -> @Emitter.factsFor
@@ -960,7 +991,7 @@ function Emitter.emitArgument(this: Emitter, expr: Node, callee: FunctionSig, in
   calls: Emitter.emitEntering checksArgumentRange
   pointer this: size=280 writesThrough=true captured=false passedTo=Emitter.emitEntering#0 checksArgumentRange#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=Emitter.emitEntering#1
-  pointer callee: size=136 writesThrough=false captured=false passedTo=checksArgumentRange#1
+  pointer callee: size=144 writesThrough=false captured=false passedTo=checksArgumentRange#1
   stackSites=0 stackLocals=0
   callee +0:12 Emitter.emitEntering -> @Emitter.emitEntering
   callee +0:36 checksArgumentRange -> @checksArgumentRange
@@ -1129,8 +1160,8 @@ function Emitter.emitMember(this: Emitter, expr: Node): string -> @Emitter.emitM
 function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCall [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CaptureSlot.type Emitter.beginReclaim Emitter.captureValue Emitter.emitAesKernelArm Emitter.emitArgument Emitter.emitCrc32KernelArm Emitter.emitScopeExit Emitter.endReclaim Emitter.joinCrc32Arms Emitter.llvmAbi Emitter.marksTailCall Emitter.typeOf Emitter.useRuntime FunctionSig.foreign FunctionSig.isCompileTime FunctionSig.visibleOutside FusionTable.roleOf IRFunction.emit IRFunction.emitValue IRFunction.placeBlock TypeTable.isResult TypeTable.resultByValue TypeTable.stripNull bytesWalkOf capturesOf dottedName elementKeepSize emitBuiltinCall emitBytesKernel emitForeignBuffers emitForeignString emitForeignStringResult emitFusedCall emitIdentifierBuiltinCall emitIndexOfAnyKernel emitJsonRoute emitMapIntrinsic emitMethodCall emitPackedResult emitParallelRegion emitRegexScanKernel emitResultConstructor emitResultMethod emitResultReturningCall emitSpawnTask emitStoredKey internalErrorFor isAesSeam isCrc32Seam isIdentifierBuiltinCall isIndexOfAnyWalk isParallelRegionCall isRegexScanWalk isResultConstructorCall isSpawnTaskCall isWasmBuild jsonRouteOf keepElement mapIntrinsicOf nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from privateAbi receiverIsValue
-  pointer this: size=280 writesThrough=true captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitFusedCall#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 emitBuiltinCall#0 emitIdentifierBuiltinCall#0 emitStoredKey#0 emitPackedResult#0 Emitter.emitArgument#0 emitForeignString#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.captureValue#0 emitMapIntrinsic#0 emitSpawnTask#0 emitParallelRegion#0 elementKeepSize#0 Emitter.marksTailCall#0 Emitter.emitScopeExit#0 Emitter.useRuntime#0 emitJsonRoute#0 keepElement#0 Emitter.llvmAbi#0 emitIndexOfAnyKernel#0 emitBytesKernel#0 emitRegexScanKernel#0 Emitter.emitAesKernelArm#0 Emitter.emitCrc32KernelArm#0 Emitter.beginReclaim#0 emitForeignBuffers#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.joinCrc32Arms#0 emitForeignStringResult#0 keepElement#0 Emitter.llvmAbi#0 Emitter.endReclaim#0
+  calls: CaptureSlot.type Emitter.beginReclaim Emitter.captureValue Emitter.emitArgument Emitter.emitCrc32KernelArm Emitter.emitKernelArm Emitter.emitScopeExit Emitter.endReclaim Emitter.joinCrc32Arms Emitter.llvmAbi Emitter.marksTailCall Emitter.typeOf Emitter.useRuntime FunctionSig.foreign FunctionSig.isCompileTime FunctionSig.visibleOutside FusionTable.roleOf IRFunction.emit IRFunction.emitValue IRFunction.placeBlock TypeTable.isResult TypeTable.resultByValue TypeTable.stripNull aesKernelOf bytesWalkOf capturesOf dottedName elementKeepSize emitBuiltinCall emitBytesKernel emitForeignBuffers emitForeignString emitForeignStringResult emitFusedCall emitIdentifierBuiltinCall emitIndexOfAnyKernel emitJsonRoute emitMapIntrinsic emitMethodCall emitPackedResult emitParallelRegion emitRegexScanKernel emitResultConstructor emitResultMethod emitResultReturningCall emitSpawnTask emitStoredKey internalErrorFor isAesSeam isCrc32Seam isIdentifierBuiltinCall isIndexOfAnyWalk isParallelRegionCall isRegexScanWalk isResultConstructorCall isSha256Seam isSpawnTaskCall isWasmBuild jsonRouteOf keepElement mapIntrinsicOf nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from privateAbi receiverIsValue
+  pointer this: size=280 writesThrough=true captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitFusedCall#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 emitBuiltinCall#0 emitIdentifierBuiltinCall#0 emitStoredKey#0 emitPackedResult#0 Emitter.emitArgument#0 emitForeignString#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.captureValue#0 emitMapIntrinsic#0 emitSpawnTask#0 emitParallelRegion#0 elementKeepSize#0 Emitter.marksTailCall#0 Emitter.emitScopeExit#0 Emitter.useRuntime#0 emitJsonRoute#0 keepElement#0 Emitter.llvmAbi#0 emitIndexOfAnyKernel#0 emitBytesKernel#0 emitRegexScanKernel#0 Emitter.emitKernelArm#0 Emitter.emitKernelArm#0 Emitter.emitCrc32KernelArm#0 Emitter.beginReclaim#0 emitForeignBuffers#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.joinCrc32Arms#0 emitForeignStringResult#0 keepElement#0 Emitter.llvmAbi#0 Emitter.endReclaim#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitBuiltinCall#1 emitResultMethod#1 emitFusedCall#1 emitMethodCall#1 isResultConstructorCall#2 emitResultConstructor#1 emitIdentifierBuiltinCall#1 emitBuiltinCall#1 isIdentifierBuiltinCall#1 emitIdentifierBuiltinCall#1 Emitter.marksTailCall#1 emitForeignBuffers#1 emitResultReturningCall#3
   stackSites=3 stackLocals=3
   local -70:11 callee: Node (const)
@@ -1208,64 +1239,71 @@ function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCal
   callee +72:14 emitBytesKernel -> @emitBytesKernel
   callee +74:9 isRegexScanWalk -> @isRegexScanWalk
   callee +75:14 emitRegexScanKernel -> @emitRegexScanKernel
-  local +80:11 aesSeam: i32 (const)
-  callee +80:21 isWasmBuild -> @isWasmBuild
-  callee +80:62 isAesSeam -> @isAesSeam
-  local +81:11 aesJoin: IRBlock | null (const)
-  callee +82:42 Emitter.emitAesKernelArm -> @Emitter.emitAesKernelArm
-  local +85:11 noCrcKernel: string[] (const)
-  local +86:11 crcKernel: string[] (const)
-  callee +87:8 isWasmBuild -> @isWasmBuild
-  callee +87:34 isCrc32Seam -> @isCrc32Seam
-  callee +88:11 Emitter.emitCrc32KernelArm -> @Emitter.emitCrc32KernelArm
-  local +92:11 reclaim: string (const)
-  callee +92:42 Emitter.beginReclaim -> @Emitter.beginReclaim
-  local +93:11 mark: string (const)
-  local +94:11 marker: string (const)
-  callee +95:9 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +96:7 emitForeignBuffers -> @emitForeignBuffers
-  local +98:11 call: string (const)
-  callee +98:35 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +100:7 IRFunction.emit -> @IRFunction.emit
-  callee +102:9 IRFunction.emit -> @IRFunction.emit
-  callee +103:9 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +109:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +110:14 emitResultReturningCall -> @emitResultReturningCall
-  local +112:9 answer: string (let)
-  callee +112:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +114:16 Emitter.joinCrc32Arms -> @Emitter.joinCrc32Arms
-  callee +118:9 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +118:26 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +119:16 emitForeignStringResult -> @emitForeignStringResult
-  callee +122:14 keepElement -> @keepElement
-  callee +122:32 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +124:12 Emitter.endReclaim -> @Emitter.endReclaim
-function Emitter.emitAesKernelArm(this: Emitter, seam: i32, operands: string[]): IRBlock -> @Emitter.emitAesKernelArm [exported method]
+  local +81:9 kernelJoin: IRBlock | null (let)
+  callee +82:10 isWasmBuild -> @isWasmBuild
+  local +83:13 aesSeam: i32 (const)
+  callee +83:23 isAesSeam -> @isAesSeam
+  callee +85:22 Emitter.emitKernelArm -> @Emitter.emitKernelArm
+  callee +85:49 aesKernelOf -> @aesKernelOf
+  callee +86:18 isSha256Seam -> @isSha256Seam
+  callee +87:22 Emitter.emitKernelArm -> @Emitter.emitKernelArm
+  local +92:11 noCrcKernel: string[] (const)
+  local +93:11 crcKernel: string[] (const)
+  callee +94:8 isWasmBuild -> @isWasmBuild
+  callee +94:34 isCrc32Seam -> @isCrc32Seam
+  callee +95:11 Emitter.emitCrc32KernelArm -> @Emitter.emitCrc32KernelArm
+  local +99:11 reclaim: string (const)
+  callee +99:42 Emitter.beginReclaim -> @Emitter.beginReclaim
+  local +100:11 mark: string (const)
+  local +101:11 marker: string (const)
+  callee +102:9 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +103:7 emitForeignBuffers -> @emitForeignBuffers
+  local +105:11 call: string (const)
+  callee +105:35 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +107:7 IRFunction.emit -> @IRFunction.emit
+  callee +109:9 IRFunction.emit -> @IRFunction.emit
+  callee +110:9 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +116:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +117:14 emitResultReturningCall -> @emitResultReturningCall
+  local +119:9 answer: string (let)
+  callee +119:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +121:16 Emitter.joinCrc32Arms -> @Emitter.joinCrc32Arms
+  callee +125:9 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +125:26 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +126:16 emitForeignStringResult -> @emitForeignStringResult
+  callee +129:14 keepElement -> @keepElement
+  callee +129:32 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +131:12 Emitter.endReclaim -> @Emitter.endReclaim
+function Emitter.emitKernelArm(this: Emitter, hw: string, kernel: string, prefix: string, operands: string[], answers: boolean): IRBlock -> @Emitter.emitKernelArm [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via IRFunction.emitValue
-  escaping: seam
-  calls: Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock aesKernelOf nish_alloc_struct nish_str_concat
+  escaping: hw kernel
+  calls: Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock nish_alloc_struct nish_str_concat
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer operands: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 hw: string (const)
-  callee +0:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +0:46 Emitter.useRuntime -> @Emitter.useRuntime
+  local +0:11 asked: string (const)
+  callee +0:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +0:49 Emitter.useRuntime -> @Emitter.useRuntime
   local +1:11 taken: string (const)
   callee +1:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +2:11 kernel: IRBlock (const)
-  callee +2:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local +2:11 kernelArm: IRBlock (const)
+  callee +2:23 IRFunction.newBlock -> @IRFunction.newBlock
   local +3:11 walker: IRBlock (const)
   callee +3:20 IRFunction.newBlock -> @IRFunction.newBlock
   local +4:11 join: IRBlock (const)
   callee +4:18 IRFunction.newBlock -> @IRFunction.newBlock
   callee +5:5 IRFunction.emit -> @IRFunction.emit
   callee +6:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +7:5 IRFunction.emit -> @IRFunction.emit
-  callee +7:31 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +7:47 aesKernelOf -> @aesKernelOf
-  callee +8:5 IRFunction.emit -> @IRFunction.emit
-  callee +9:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +7:11 call: string (const)
+  callee +7:54 Emitter.useRuntime -> @Emitter.useRuntime
+  local +9:13 ran: string (const)
+  callee +9:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +9:52 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:7 IRFunction.emit -> @IRFunction.emit
+  callee +12:7 IRFunction.emit -> @IRFunction.emit
+  callee +13:7 IRFunction.emit -> @IRFunction.emit
+  callee +15:5 IRFunction.placeBlock -> @IRFunction.placeBlock
 function Emitter.emitCrc32KernelArm(this: Emitter, operands: string[]): string[] -> @Emitter.emitCrc32KernelArm [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
@@ -1347,7 +1385,7 @@ function Emitter.captureOperands(this: Emitter, sig: FunctionSig, isPrivate: boo
   escaping: isPrivate
   calls: Emitter.captureParamTypes Emitter.captureValue capturesOf nish_array_grow nish_str_concat
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.captureParamTypes#0 Emitter.captureValue#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=Emitter.captureParamTypes#1 capturesOf#0
+  pointer sig: size=144 writesThrough=true captured=true passedTo=Emitter.captureParamTypes#1 capturesOf#0
   stackSites=0 stackLocals=0
   local +0:11 types: string[] (const)
   callee +0:19 Emitter.captureParamTypes -> @Emitter.captureParamTypes
@@ -1362,7 +1400,7 @@ function Emitter.captureParamTypes(this: Emitter, sig: FunctionSig, isPrivate: b
   escaping: isPrivate
   calls: CaptureSlot.type Emitter.llvmAbi capturesOf nish_array_grow
   pointer this: size=280 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0
-  pointer sig: size=136 writesThrough=true captured=true passedTo=capturesOf#0
+  pointer sig: size=144 writesThrough=true captured=true passedTo=capturesOf#0
   stackSites=0 stackLocals=0
   local +0:11 out: string[] (const)
   local +4:16 slot: CaptureSlot (const)
@@ -1433,7 +1471,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   calls: Emitter.constructor Emitter.emitModule
   pointer unit: size=16 writesThrough=false captured=false passedTo=Emitter.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=Emitter.constructor#2
-  pointer opts: size=160 writesThrough=true captured=true passedTo=Emitter.constructor#3
+  pointer opts: size=184 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=24 writesThrough=true captured=true passedTo=Emitter.constructor#5
   pointer libraries: size=0 writesThrough=false captured=false passedTo=Emitter.constructor#6

@@ -607,6 +607,15 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `nish_spawn_child` with descriptors handed to the child. The vector is
+    // captured as there; the descriptor array is only read and kept by nothing.
+    this.add(
+      plain(
+        "nish_spawn_with_fds",
+        `declare noundef i32 @nish_spawn_with_fds(%struct.nish_array* noundef nonnull align 8, ${NET_BUFFER} readonly)`,
+        EFFECT_WRITE
+      )
+    )
     // One `kill(2)`. A signal is external state, so the call writes, and two
     // of them never fold into one; a program that signals itself with 9 or 15
     // never sees the call return, so no `willreturn`.
@@ -851,6 +860,10 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `netMss`: a `getpeername` and up to two `getsockopt`s, none of which
+    // waits. A write, as `netLocalPort` is, because the kernel changes the
+    // answer between two calls.
+    this.add(plain("nish_net_mss", "declare noundef i32 @nish_net_mss(i32 noundef)", EFFECT_WRITE))
     this.add(
       new RuntimeFunction(
         "nish_net_close",
@@ -930,6 +943,65 @@ export class RuntimeTable {
         "nish_poll_wait",
         `declare noundef i32 @nish_poll_wait(i32 noundef, ${NET_BUFFER}, i32 noundef)`,
         attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    // The Unix-domain calls. Listening, connecting and the pair never wait
+    // (the connect is non-blocking, as `tcpConnect`'s is); the accept is
+    // `nounwind` alone, as `tcpAccept` is.
+    this.add(
+      plain(
+        "nish_unix_listen",
+        `declare noundef i32 @nish_unix_listen(${STR_NOCAP}, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_unix_listen_mode",
+        `declare noundef i32 @nish_unix_listen_mode(${STR_NOCAP}, i32 noundef, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(plain("nish_unix_connect", `declare noundef i32 @nish_unix_connect(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(
+      new RuntimeFunction(
+        "nish_unix_accept",
+        "declare noundef i32 @nish_unix_accept(i32 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_unix_socket_pair",
+        `declare noundef i32 @nish_unix_socket_pair(i32 noundef, ${NET_BUFFER})`,
+        EFFECT_WRITE
+      )
+    )
+    // A descriptor passed over a Unix socket and the peer it came from. Both
+    // transfers may block on the peer, as `nish_net_read` does, so neither is
+    // `willreturn`; the credentials are one `getsockopt` and never wait.
+    this.add(
+      new RuntimeFunction(
+        "nish_send_fd",
+        `declare noundef i32 @nish_send_fd(i32 noundef, i32 noundef, ${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_recv_fd",
+        `declare noundef i32 @nish_recv_fd(i32 noundef, ${NET_BUFFER}, i64 noundef, i64 noundef, ${NET_BUFFER})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_peer_credentials",
+        `declare noundef i32 @nish_peer_credentials(i32 noundef, ${NET_BUFFER})`,
         EFFECT_WRITE
       )
     )
@@ -1288,6 +1360,26 @@ export class RuntimeTable {
       new RuntimeFunction(
         "nish_aes_ghash",
         `declare void @nish_aes_ghash(${AES_ARRAY}, i64 noundef, i64 noundef, ${AES_ARRAY}, ${AES_ARRAY}, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
+    // SHA-256 on the CPU's SHA instructions, runtime-sha256.c
+    // (`src/kernels.ts`): a resolver of `nish_aes_hw`'s kind, and a kernel
+    // that writes `h`'s elements and only reads the others, with the AES
+    // kernels' attributes for their reasons.
+    this.add(
+      new RuntimeFunction(
+        "nish_sha256_hw",
+        "declare i32 @nish_sha256_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_sha256_compress",
+        `declare noundef i32 @nish_sha256_compress(${AES_ARRAY}, ${AES_ARRAY}, ${AES_ARRAY}, i32 noundef)`,
         attrs2("nounwind", "willreturn"),
         EFFECT_WRITE
       )

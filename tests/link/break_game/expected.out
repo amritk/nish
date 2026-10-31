@@ -185,6 +185,25 @@ PASS  the brick breaks before the pause
 PASS  a pause draws the same frame at any alpha
 PASS  a pause draws the same frame step after step
 PASS  a held D moves the paddle right
+PASS  a waiting ball asks for no sound
+PASS  a serve asks for the launch
+PASS  and nothing else
+PASS  the next step starts with none
+PASS  a first break asks for the lowest pitch
+PASS  a long combo's break stops at the top pitch
+PASS  the paddle asks for its knock
+PASS  an explosive brick asks for the bang
+PASS  a busy step asks for six sounds at most
+PASS  a step asks for each sound once
+PASS  a dent asks for the crack
+PASS  steel rings
+PASS  a rail asks for the wall sound
+PASS  a caught capsule asks for its chime
+PASS  a lost ball asks for the loss
+PASS  the last life asks for game over instead
+PASS  and not the loss
+PASS  a clear asks for its fanfare
+PASS  the wall coming down a row asks for the rumble
 PASS  alpha 0 draws the ball where it was
 PASS  alpha 1 draws the ball where it is
 PASS  alpha 0.5 draws the ball midway across
@@ -209,4 +228,4 @@ PASS  the compact last screen is three lines apart
 PASS  a perfect player clears level 1
 PASS  a perfect player wins
 PASS  the pools never grow
-break-game: 211 passed, 0 failed, 0 skipped
+break-game: 230 passed, 0 failed, 0 skipped

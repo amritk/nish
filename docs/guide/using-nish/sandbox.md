@@ -54,6 +54,31 @@ on every file beneath `/`, since a child has to load its program and
 libraries. So a program that reaches `process.spawn` can read any file the
 user can, even when its `main` does not reach `fs.read`.
 
+A Unix-domain listener on a path makes a socket file, which the kernel counts
+as a write: under `net` alone, `unixListen("app.sock", …)` answers -13 and
+makes nothing. Reaching `net` does not reach `fs.write` for you, because the
+path is data the compiler cannot see. Reach `fs.write` as well, or listen on
+an abstract name (`"@app"`), which makes no file
+([Unix sockets](unix-sockets.md)).
+
+Connecting is different. The kernel has no rule for connecting to a socket
+file, so a program that reaches `net` can `unixConnect` to any Unix socket on
+a path whose permissions let the user in, a system daemon's included, with or
+without `fs.read` or `fs.write`. The sandbox stops a connect only to an
+abstract name created outside it, and only from Landlock ABI 6 (below). If
+the program must not talk to the machine's daemons, do not let `main` reach
+`net`.
+
+A descriptor that arrives already open is not checked either. Landlock rules
+apply when a path is opened, so a file another process opens and passes over a
+Unix socket with `sendFd` reaches `recvFd` usable as it was opened, whatever
+`fs.read` or `fs.write` say; sending and receiving such a descriptor are not
+filtered, only making the socket is. The same holds for what a sandboxed
+parent hands a child with `spawnWithFds`: the child holds whatever the parent
+held. Treat a socket that can pass descriptors as a door into the sandbox, and
+check who is on the other end with `peerCredentials`
+([Unix sockets](unix-sockets.md#passing-a-descriptor)).
+
 A few things are refused whatever `main` reaches: attaching to, reading or
 writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
 and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
@@ -76,6 +101,54 @@ $ echo $?
 159
 ```
 
+## Granting one directory
+
+`fs.read` and `fs.write` reach every file the user can. Under `--sandbox`
+you can grant either beneath one directory instead, with a scope in
+`--allow`:
+
+```sh
+nish --link app.ts --sandbox --allow fs.read=/srv/data -o app
+nish --link app.ts --sandbox --allow fs.read=/srv/data,fs.write=/srv/data/out -o app
+```
+
+Built with `--allow fs.read=/srv/data`, the program above could read
+`/srv/data/notes.txt` but no longer `/etc/hostname`: that open fails with
+`EACCES`, as a missing permission would. Name a capability more than once to
+grant it beneath several directories (`--allow fs.read=/srv/a,fs.read=/srv/b`).
+
+A scope is an `--allow` list like any other, so it also names every other
+capability the program reaches; leaving one out is refused at compile time,
+as without the scope. If the program calls C (`ffi`), the scopes you grant
+are what the C code can reach too.
+
+Each directory is resolved, symbolic links and all, when you build, and must
+exist then:
+
+```text
+compile: `fs.read=/srv/dta` names no directory; a scope is a directory that exists when the program is built
+```
+
+Only `fs.read` and `fs.write` take a scope, only in `--allow`, and only with
+`--sandbox`, the one thing that enforces it; each of the others is refused
+with exit status 2. A directory with a comma in its name cannot be named.
+
+If the directory is gone when the program runs, `--sandbox` refuses to run,
+status 126, naming it:
+
+```text
+nish: --sandbox: cannot open the directory /srv/data (ENOENT)
+```
+
+and `--sandbox=best-effort` runs with nothing granted beneath it, saying so
+once.
+
+Inside a write scope a program can create, write, rename and remove files,
+but changing a file's mode, owner, times or extended attributes is still
+refused (`EPERM`): that check cannot see which directory a file is in. A
+program that reaches `process.spawn` can still read every file beneath `/`,
+scope or not, as above.
+
 ## When the sandbox cannot be applied
 
 The sandbox needs Linux's Landlock and seccomp. A program that cannot apply
@@ -91,6 +164,10 @@ apply, and says what it could not:
 ```text
 nish: --sandbox: no Landlock, files are not confined
 ```
+
+A write scope needs Landlock ABI 3 (Linux 6.2); on an older kernel
+`--sandbox` refuses a program built with one, and best-effort runs it with
+`TRUNCATE` unconfined.
 
 On an older Landlock it names the rights it could not withhold, for example
 `nish: --sandbox: this kernel's Landlock cannot withhold TRUNCATE, IOCTL_DEV,

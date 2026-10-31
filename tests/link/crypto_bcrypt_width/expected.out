@@ -1,0 +1,61 @@
+PASS  hashN, width 2, lanes 33, cost 4
+PASS  hashN, width 2, lanes 9, cost 5
+PASS  hashN, width 2, lanes 5, cost 6
+PASS  hashN, width 2, lanes 3, cost 7
+PASS  hashN, width 2, lanes 17, cost 8
+PASS  hashN, width 3, lanes 49, cost 4
+PASS  hashN, width 3, lanes 13, cost 5
+PASS  hashN, width 3, lanes 13, cost 6
+PASS  hashN, width 3, lanes 21, cost 7
+PASS  hashN, width 3, lanes 35, cost 8
+PASS  hashN, width 4, lanes 43, cost 4
+PASS  hashN, width 4, lanes 27, cost 5
+PASS  hashN, width 4, lanes 15, cost 6
+PASS  hashN, width 4, lanes 29, cost 7
+PASS  hashN, width 4, lanes 29, cost 8
+PASS  hashN, width 5, lanes 59, cost 4
+PASS  hashN, width 5, lanes 47, cost 5
+PASS  hashN, width 5, lanes 55, cost 6
+PASS  hashN, width 5, lanes 47, cost 7
+PASS  hashN, width 5, lanes 61, cost 8
+PASS  hashN, width 6, lanes 63, cost 4
+PASS  hashN, width 6, lanes 63, cost 5
+PASS  hashN, width 6, lanes 63, cost 6
+PASS  hashN, width 6, lanes 63, cost 7
+PASS  hashN, width 6, lanes 63, cost 8
+PASS  hashN, width 3, lanes 19, cost 10
+PASS  hashN, width 6, lanes 63, cost 10
+PASS  hashN, lane 0 alone
+PASS  verifyN = verify, width 1, lanes 1
+PASS  verifyN = verify, lane 5 wrong, width 1
+PASS  verifyN = verify, width 2, lanes 33
+PASS  verifyN = verify, lane 5 wrong, width 2
+PASS  verifyN = verify, width 3, lanes 37
+PASS  verifyN = verify, lane 5 wrong, width 3
+PASS  verifyN = verify, width 4, lanes 29
+PASS  verifyN = verify, lane 5 wrong, width 4
+PASS  verifyN = verify, width 5, lanes 47
+PASS  verifyN = verify, lane 5 wrong, width 5
+PASS  verifyN = verify, width 6, lanes 63
+PASS  verifyN = verify, lane 5 wrong, width 6
+PASS  verifyN: crypt_blowfish's vector in all six lanes
+PASS  a malformed lane 0 is an Err naming it
+PASS  a malformed lane 1 is an Err naming it
+PASS  and is not read when lane 1 is null
+PASS  a malformed lane 2 is an Err naming it
+PASS  and is not read when lane 2 is null
+PASS  a malformed lane 3 is an Err naming it
+PASS  and is not read when lane 3 is null
+PASS  a malformed lane 4 is an Err naming it
+PASS  and is not read when lane 4 is null
+PASS  a malformed lane 5 is an Err naming it
+PASS  and is not read when lane 5 is null
+PASS  a short hash in lane 2 is an Err naming it
+PASS  a bad salt character in lane 4 is an Err naming it
+PASS  95 bytes of salt are refused
+PASS  cost 3 is refused
+PASS  cost 32 is refused
+PASS  a batch is six hashes
+PASS  bcryptCalibrate answers 1 to 6
+PASS  and again
+bcrypt width: 60 passed, 0 failed, 0 skipped

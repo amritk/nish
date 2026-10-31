@@ -1,9 +1,11 @@
 # WP37: The OS sandbox — holding a running process to its capabilities
 
-**Status: stage 1 built** — `--sandbox` and `--sandbox=best-effort`, the
-wrapper calls and `runtime/runtime-sandbox.c`, recorded in
-[`security/sandbox.md`](security/sandbox.md); the directory scopes and open
-question 13 are stage 2. Every `file:line` anchor, figure
+**Status: stages 1 and 2 built** — `--sandbox` and `--sandbox=best-effort`,
+the wrapper calls and `runtime/runtime-sandbox.c` (stage 1), and the
+`fs.read=<dir>` and `fs.write=<dir>` scopes with open question 13's widening
+of an `ffi` main (stage 2, answers 1(a) and 13(a)), recorded in
+[`security/sandbox.md`](security/sandbox.md); scopes in the manifest are
+not built. Every `file:line` anchor, figure
 and code number in this note is true of `main` at `c8a00d6`; a later edit that
 moves an anchor names the commit its own anchors are at.
 
@@ -769,6 +771,14 @@ unstated.
    whenever ABI 6 is present; (b) leave them. *Recommendation: (a): Nish has
    no builtin that signals another process or uses an abstract socket, so the
    scope costs nothing, and best-effort names it when the ABI is older.*
+   Since `nish:net` gained `unixListen` and `unixConnect`, a program does use
+   abstract sockets; the scope still costs it nothing it should keep, since
+   its own abstract listeners and connects to them work, and only a connect
+   to a listener outside the sandbox is -1 (`docs/security/sandbox.md`).
+   A pathname connect is not scoped: the sandbox does not ask for the later
+   ABI's `LANDLOCK_ACCESS_FS_RESOLVE_UNIX`, the right that covers connecting
+   to a socket file, so `net` reaches every pathname listener the user may
+   write to, recorded open in `docs/security/sandbox.md`.
 9. **A new unit or a define.** (a) `runtime-sandbox.c`, always built, dropped
    by `--gc-sections` when unused; (b) a `-DNISH_SANDBOX` define in an existing
    unit, as #451's draft had, which moves `runtimeCacheKey` and the build

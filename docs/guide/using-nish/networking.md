@@ -5,7 +5,9 @@ whichever of them is ready. It is a thin layer: every socket is non-blocking,
 there is no `async` and no callback, and your `main` is the loop. The protocol
 stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 [standard library](standard-library.md); this page is about the sockets
-themselves. The rules are in the reference,
+themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
+listeners, connections and pairs, passing a descriptor over one, and naming
+the process at the other end. The rules are in the reference,
 [`nish:net`](../../LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
 
 Every function is also a global, as every `nish:` export is, but importing them
@@ -144,7 +146,7 @@ one of five ids `nish:net` exports, and any other number answers `-22`:
 | Option | `value` |
 | --- | --- |
 | `NET_TCP_NODELAY` | `1` sends small writes at once, `0` lets Nagle batch them |
-| `NET_TCP_QUICKACK` | `1` acknowledges what arrives at once; Linux only, `-95` on macOS |
+| `NET_TCP_QUICKACK` | `1` acknowledges what arrives at once, `0` delays the ACK; Linux only, `-95` on macOS |
 | `NET_SO_KEEPALIVE` | `1` probes a connection that has gone quiet |
 | `NET_SO_SNDBUF` | the send buffer, in bytes (Linux stores twice the value) |
 | `NET_SO_RCVBUF` | the receive buffer, in bytes (Linux stores twice the value) |
@@ -152,25 +154,76 @@ one of five ids `nish:net` exports, and any other number answers `-22`:
 It answers `0`, or a negative error: `-9` for a closed descriptor, `-88` for
 one that is not a socket.
 
-Linux does not keep quick-ACK mode. The kernel leaves it on its own, by its
-own reading of the traffic, so a server that wants every request
-acknowledged at once sets it again after each response:
+On Linux a keep-alive connection already delays its ACKs: once the server
+has sent its first response, the kernel waits to acknowledge the next request
+until it can ride on that request's response. Most servers need no call at
+all. Setting `NET_TCP_QUICKACK` changes that, and the trade runs both ways:
+
+- **`1` after each response** turns delayed ACKs off until the kernel next
+  turns them on, so every request is acknowledged at once in a segment of its
+  own. That is one more system call and one more packet per request, worth it
+  only for a peer that waits on the ACK before it sends more.
+- **`0` once, after accept,** keeps delayed ACKs on from the first request.
+  It costs one call per connection. The kernel still switches them off for
+  the next request when a response took longer than its ACK timer (tens of
+  milliseconds) or a segment arrived out of order, and nothing short of a
+  call after each response turns them back on that early. On a connection
+  answered quickly, that call after each response changes nothing.
+- **No call** behaves like `0` once from the second request on.
+
+`bench/quickack/` in the repository measures each way. On a 4-vCPU Xeon VM
+running Linux 6.18, at 256 keep-alive connections over loopback, `1` after
+each response added one system call and one segment per request and served
+13 to 18% fewer requests per second than no call. `0` after each response and
+`0` once stayed within the noise, since `0` saves an ACK only after a slow
+response. A server that wants the delayed ACKs from the
+first request sets the option once, as it accepts:
 
 ```ts nish:ok
-import { NET_TCP_QUICKACK, netSetOption, netWrite } from "nish:net";
+import { NET_TCP_QUICKACK, netSetOption, tcpAccept } from "nish:net";
 
-export const respond = (conn: i32, answer: u8[]): i32 => {
-  const n = netWrite(conn, answer, 0, answer.length);
-  // Quick-ACK may be off again by now: turn it back on for the next request.
-  // On macOS this answers -95, which a server can ignore.
-  netSetOption(conn, NET_TCP_QUICKACK, 1);
-  return n;
+export const acceptOne = (listener: i32, peer: u8[]): i32 => {
+  const conn = tcpAccept(listener, peer);
+  if (conn >= 0) {
+    // Delay ACKs from the first request, so each one rides on its response.
+    // On macOS this answers -95, which a server can ignore.
+    netSetOption(conn, NET_TCP_QUICKACK, 0);
+  }
+  return conn;
 };
 ```
 
 The ids are plain `i32`s you pass straight to the call. They are not module
 constants, so `const MODE = NET_TCP_QUICKACK;` at the top of a module is an
 error; write the id where you call `netSetOption`.
+
+## A connection's segment size: `netMss`
+
+`netMss(fd)` answers how many bytes of payload one TCP segment on a connected
+socket carries, the maximum segment size the kernel is sending with now. A
+program that batches writes can size each batch to whole segments. It
+answers `-1` when there is no MSS to read: a socket that is not connected yet,
+a listener, a UDP socket, a closed descriptor or one that is not a socket.
+`-1` is not an error code, so check for a positive answer and fall back to a
+size of your own:
+
+```ts nish:ok
+import { netMss } from "nish:net";
+
+// Bytes to gather before one write: four full segments, or 4096 when the
+// socket has no MSS to tell.
+export const batchSize = (conn: i32): i32 => {
+  const mss = netMss(conn);
+  return mss > 0 ? mss * 4 : 4096;
+};
+```
+
+The kernel can change the MSS during a connection, as it learns the path, so
+read it again rather than keeping the first answer. On Linux it comes from
+`TCP_INFO`, on macOS from `TCP_MAXSEG`; over loopback it is large (tens of
+kilobytes), and over Ethernet about 1,448. A wasm build, which has no sockets,
+compiles `netMss` to `-1`, so the same code builds there and takes the
+fallback.
 
 ## A server on every core: `nish/net/prefork`
 
@@ -371,5 +424,5 @@ a client against its per-address cap only from that point.
 
 A program that uses `nish:net` type-checks with `npm run check`, but it has no
 reading under Node: Node's sockets become ready only to Node's own event loop,
-which a program that owns its loop never returns to, so each call throws there.
-Run it natively.
+which a program that owns its loop never returns to, so each call throws there,
+`netMss` included. Run it natively.

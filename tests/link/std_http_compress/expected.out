@@ -26,7 +26,7 @@ PASS  accept: other parameters are ignored
 PASS  accept: empty elements
 PASS  accept: junk between elements
 PASS  accept: a window inside a buffer
-PASS  compressor: 5221 bytes of JSON become 838
+PASS  compressor: 5221 bytes of JSON become 1326
 PASS  compressor: and gunzip back
 PASS  compressor: identity is not compressed
 PASS  compressor: deflate is not produced
@@ -44,7 +44,7 @@ PASS  h1 gzip: respondEncoded queues it
 PASS  h1 gzip: status 200
 PASS  h1 gzip: content-encoding: gzip
 PASS  h1 gzip: vary: accept-encoding
-PASS  h1 gzip: content-length is the compressed length, 838
+PASS  h1 gzip: content-length is the compressed length, 1326
 PASS  h1 gzip: the program's field
 PASS  h1 gzip: the body gunzips to the JSON
 PASS  h1 gzip: byte for byte
@@ -57,6 +57,8 @@ PASS  h1 none: content-length 5221
 PASS  h1 small: the request is read
 PASS  h1 small: respondEncoded
 PASS  h1 small: a body under the threshold is sent as it is
+PASS  h1 small: the decision says why
+PASS  h1 small: and no vary, as every client gets the same
 PASS  h1 head: the request is read
 PASS  h1 head: respondEncoded
 PASS  h1 head: the head says gzip
@@ -81,4 +83,143 @@ PASS  h1 half sent: a second request
 PASS  h1 half sent: a body that does not fit is H1_AGAIN
 PASS  h1 half sent: only the unsent rest is queued
 PASS  h1 half sent: and it is those bytes
-http-compress: 83 passed, 0 failed, 0 skipped
+PASS  fixed: random JSON of 0 to 30000 bytes gunzips back
+PASS  fixed: random bytes gunzip back
+PASS  fixed: long runs gunzip back
+PASS  fixed: a window at an offset
+PASS  fixed: a match 16000 back
+PASS  fixed: 5221 bytes of JSON become 1326
+PASS  fixed: too little room is DEFLATE_NO_ROOM
+PASS  fixed: room under the gzip framing is DEFLATE_NO_ROOM
+PASS  fixed: exactly the room it needs
+PASS  policy: no decision yet reads as not accepted
+PASS  policy: sent
+PASS  policy: and it varies
+PASS  policy: by size the fixed encoder (1326 bytes), larger than the level's (838)
+PASS  policy: the level's gunzips
+PASS  policy: HTTP_ENCODER_FIXED is the fixed encoder's
+PASS  policy: whatever fixedLimit says
+PASS  policy: auto above fixedLimit is the level's
+PASS  policy: identity
+PASS  policy: is not accepted
+PASS  policy: which varies
+PASS  policy: too small
+PASS  policy: is TOO_SMALL
+PASS  policy: which does not vary
+PASS  policy: too small, whatever the coding
+PASS  policy: is TOO_SMALL still
+PASS  policy: too large
+PASS  policy: is TOO_LARGE
+PASS  policy: a saving of exactly minSaving is sent
+PASS  policy: one byte short is not
+PASS  policy: is TOO_LITTLE_SAVED
+PASS  policy: which does not vary
+PASS  policy: 74% saved is sent
+PASS  policy: 75% is not
+PASS  policy: 100% never is
+PASS  policy: below 0% counts as 0
+PASS  policy: leastSaving is at least 1
+PASS  policy: 10% of 1001 rounds up to 101
+PASS  policy: the larger of the two
+PASS  policy: random bytes save nothing
+PASS  policy: TOO_LITTLE_SAVED
+PASS  policy: by the level's too
+PASS  segments: none for nothing
+PASS  segments: one byte
+PASS  segments: one full
+PASS  segments: one over
+PASS  segments: 1449 to 1448 is fewer
+PASS  segments: 1448 to 10 is not
+PASS  segments: NO_FEWER_SEGMENTS
+PASS  segments: which does not vary
+PASS  segments: at a 500-byte mss it is
+PASS  refused: identity;q=0
+PASS  refused: *;q=0
+PASS  refused: not *;q=0 with identity listed
+PASS  refused: not gzip;q=0
+PASS  refused: not an empty field
+PASS  refused: compressAnyway gzips 40 bytes into 60
+PASS  refused: and says sent
+PASS  refused: random bytes too
+PASS  refused: but not past maxLength
+PASS  refused: nor a coding not gzip
+PASS  h1 segments: the request is read
+PASS  h1 segments: respondEncoded
+PASS  h1 segments: fewer segments, so gzip
+PASS  h1 segments: with vary
+PASS  h1 one segment: the request is read
+PASS  h1 one segment: respondEncoded
+PASS  h1 one segment: sent as it is
+PASS  h1 one segment: NO_FEWER_SEGMENTS
+PASS  h1 one segment: no vary
+PASS  h1 one segment: the body
+PASS  h1 one segment: http1IdentityHead is the head written
+PASS  h1 small segment: the request is read
+PASS  h1 small segment: respondEncoded
+PASS  h1 small segment: sent as it is
+PASS  h1 no segments: the request is read
+PASS  h1 no segments: respondEncoded
+PASS  h1 no segments: gzip
+PASS  h1 behind: the request is read
+PASS  h1 behind: the first answer
+PASS  h1 behind: the first request ends
+PASS  h1 behind: a second request
+PASS  h1 behind: respondEncoded
+PASS  h1 behind: the second is whole, as it is
+PASS  h1 refused: the request is read
+PASS  h1 refused: the connection reads it
+PASS  h1 refused: respondEncoded
+PASS  h1 refused: 100 bytes gzipped all the same
+PASS  h1 refused: and they gunzip
+PASS  h1 q0: the request is read
+PASS  h1 q0: not refused
+PASS  h1 q0: respondEncoded
+PASS  h1 q0: sent as it is, with vary
+PASS  h1 none acceptable: the request is read
+PASS  h1 none acceptable: HTTP_CODING_NONE
+PASS  h1 none acceptable: respondEncoded
+PASS  h1 none acceptable: identity, with vary
+PASS  skip: 1448 bytes fit the default segment
+PASS  skip: 1449 do not
+PASS  skip: the connection's mss wins over the compressor's
+PASS  skip: not under minLength
+PASS  skip: not for a client without gzip
+PASS  skip one: the request is read
+PASS  skip one: respondEncoded
+PASS  skip one: NO_FEWER_SEGMENTS
+PASS  skip one: sent as it is
+PASS  skip one: no vary
+PASS  skip one: and no encoder ran
+PASS  skip exact: the request is read
+PASS  skip exact: respondEncoded
+PASS  skip exact: a 709-byte response in a 709-byte segment is sent as it is
+PASS  skip exact: no encoder ran
+PASS  skip over: the request is read
+PASS  skip over: respondEncoded
+PASS  skip over: a 709-byte response in a 708-byte segment is gzipped
+PASS  skip over: in one segment
+PASS  skip over: and gunzips
+PASS  skip over: one encoder run
+PASS  skip full: the request is read
+PASS  skip full: respondEncoded
+PASS  skip full: 1448 bytes and a head are gzipped
+PASS  skip full: one encoder run more
+PASS  skip past: the request is read
+PASS  skip past: respondEncoded
+PASS  skip past: 1449 bytes are gzipped
+PASS  skip past: one encoder run more
+PASS  skip not accepted: the request is read
+PASS  skip not accepted: respondEncoded
+PASS  skip not accepted: NOT_ACCEPTED
+PASS  skip not accepted: as it is, with vary
+PASS  skip short: the request is read
+PASS  skip short: respondEncoded
+PASS  skip short: TOO_SMALL
+PASS  skip refused: the request is read
+PASS  skip refused: respondEncoded
+PASS  skip refused: gzipped
+PASS  skip refused: one encoder run more
+PASS  runs: compress at 2^31 - 1 runs
+PASS  runs: wraps to -2^31
+PASS  runs: so does compressAnyway
+http-compress: 224 passed, 0 failed, 0 skipped

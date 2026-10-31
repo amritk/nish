@@ -628,6 +628,12 @@ What the rows say, read against that band:
 - The benchmarked build is `5ee6e7c`. The head adds only the listener's pause when an accept runs out of descriptors, which this run never reached: with `ulimit -n` at 20000, no accept failed for want of one.
 <!-- techempower:end -->
 
+<!-- syscall-cost:begin -->
+## Syscall cost
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bash bench/syscall-cost/run.sh` times a syscall's entry and exit (`syscall(SYS_getppid)`) against the TCP work of a loopback request/response, pinned to one CPU; [bench/README.md](../bench/README.md#syscall-cost) describes it and splits a keep-alive request's system time. 2026-10-30, `ce8f92ce`, Intel Xeon @ 2.10 GHz, KVM VM, Linux 6.18.44 (eIBRS, no KPTI), 7 interleaved rounds of 10^6 calls: entry and exit 106.0 ns (101.9–113.2), `recv` with nothing queued 173.7 ns, `setsockopt(TCP_QUICKACK, 0)` 179.7 ns, `getsockopt(TCP_INFO)` 283.0 ns, and 653 to 673 ns of TCP work per send or recv in a round. For `bench/http1-server.ts` at 2.07 syscalls a request that is 0.22 µs of about 5 µs of system time, about 4%: under the 0.5 µs line, so io_uring is not worth building on this evidence. The reported workload ran on a Xeon Platinum 8260 VM on Linux 6.8, which this run did not measure.
+<!-- syscall-cost:end -->
+
 <!-- tls-handshake:begin -->
 ## TLS handshake
 

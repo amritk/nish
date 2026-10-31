@@ -1,0 +1,76 @@
+PASS  the default target is maxCount
+PASS  nothing waits, no deadline
+PASS  nothing waits, nothing is due
+PASS  the deadline is the oldest plus maxWaitUs
+PASS  31 is short of the count
+PASS  so the timer starts it
+PASS  the last reason
+PASS  the oldest's wait
+PASS  32 starts by count at once
+PASS  idle never bypasses by default
+PASS  however quiet
+PASS  the target does not move
+PASS  one start by the timer
+PASS  one by count
+PASS  before a batch, minCount
+PASS  4 or more start by count
+PASS  the first batch sets the average
+PASS  the average times 1.5, capped at maxCount
+PASS  15 is short of 16
+PASS  16 starts by the average
+PASS  the average moves halfway
+PASS  last size
+PASS  last reason
+PASS  two are not due
+PASS  until the timer
+PASS  the average falls
+PASS  so does the target
+PASS  and falls
+PASS  the target rounds up
+PASS  the average nears the batches
+PASS  the target never falls below minCount
+PASS  a backlog starts by the average 0
+PASS  a backlog starts by the average 1
+PASS  full batches keep the average
+PASS  8 left is short of the target
+PASS  the timer started none of the backlog
+PASS  two by the average
+PASS  and the first by count
+PASS  a lone item with nothing in flight goes at once
+PASS  not with a batch in flight
+PASS  the reason is recorded
+PASS  three in the window is not light
+PASS  once the first leaves the window it is
+PASS  an arrival
+PASS  one that steps back counts as the last
+PASS  a third is refused when queueSize wait
+PASS  two wait
+PASS  a start before the arrival waited 0
+PASS  the stepped-back one sits at 500
+PASS  a zero wait is due at once
+PASS  three are short of the count
+PASS  so nothing is bound
+PASS  four take a run
+PASS  all four taken
+PASS  the clock saw four
+PASS  by count
+PASS  and mirrors the batcher
+PASS  a new pool has nothing in flight
+PASS  the collector is slot 0
+PASS  an item is not due
+PASS  nor a second
+PASS  nor a third
+PASS  the fourth wakes the collector
+PASS  the fifth wakes no one again
+PASS  starting all five names no one
+PASS  slot 1 collects
+PASS  one in flight
+PASS  eight are due: wake slot 1
+PASS  slot 1 starts, none collects
+PASS  so a due push wakes no one
+PASS  eight, short of ten, wait on the timer
+PASS  which wakes the free slot
+PASS  a wake given back can be named again
+PASS  the deadline is the clock's
+PASS  a full clock refuses a push
+postgres batch clock: 75 passed, 0 failed, 0 skipped

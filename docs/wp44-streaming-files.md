@@ -244,12 +244,13 @@ is `netClose`'s job.
   `--deny fs.read`, or under an `--allow` that leaves `fs.read` out, and it
   does so per exposed function, exactly as it refuses `readFileSync` today.
   There is no new flag and no new manifest field.
-- **WP37** (no note yet) is where `fs.read=<dir>` would be accepted, enforced
-  by Landlock in the native `main` wrapper. This design suits that: the only
+- **WP37** ([wp37-os-sandbox.md](wp37-os-sandbox.md)) is where
+  `fs.read=<dir>` is accepted, under `--sandbox`, enforced by Landlock in the
+  native `main` wrapper. This design suits that: the only
   way to a path is `fileOpen`, which is one `open(2)`, and Landlock checks at
   open time. A positional read on a descriptor already open needs no second
-  check. WP36 refuses the directory scope today, and this package does not
-  change that.
+  check. WP36 refuses the directory scope without `--sandbox`, and this
+  package does not change that.
 
 ## 5. The TypeScript reading (class A)
 

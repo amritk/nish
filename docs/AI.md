@@ -845,10 +845,14 @@ export const main = (): i32 => {
 - **Call it, or pass it on to another function parameter. Nothing else**:
   `const g = f`, `return f` and `[f]` are
   `` `f` is a function parameter and can only be called or passed on as a function argument ``.
-- **An arrow captures nothing.** It sees its own parameters and top-level
-  names; reading a local of the function around it is
-  `` The arrow reads `k`, which belongs to the function it is written in ``.
-  Pass the value in as another argument of the template instead.
+- **An arrow may read the `const` locals and parameters of the function it is
+  written in**, and write through a captured reference
+  (`(x) => { if (x > limit) { hits.push(x) } }`); each capture becomes one more
+  argument of the direct call. It may not assign to one, read a `let`
+  (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
+  read `this` (bind `const self = this`), or read a function parameter of its
+  function. An arrow inside another arrow, or given to a method, a
+  constructor, `expose` or `exposeWith`, captures nothing.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -858,12 +862,13 @@ export const main = (): i32 => {
 - **Only a top-level function** may have one: not a method, a constructor, a
   field, a local, a return type or an alias.
 
-```ts nish:err NL2335
+```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
 export const main = (): i32 => {
-  const k = 3;
-  return apply((x) => x + k, 1);   // captures `k`: pass it to `apply` instead
+  let k = 3;
+  k = k + 1;
+  return apply((x) => x + k, 1);   // reads the `let` `k`: bind `const kNow = k` before the call
 };
 ```
 
@@ -976,6 +981,11 @@ export const main = (): i32 => {
   (NL2388): `using s = scope()`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
+- **A task that recurses deeply gets a bigger stack from `scopeWithStack`.**
+  `using s = scopeWithStack(64 * 1024 * 1024)` is a scope whose tasks each run
+  on a new thread with a 64 MiB stack; a thread's default is 8 MiB. Ask for at
+  least 131072 bytes: a number below it is refused (NL2584). Under Node the size
+  is ignored, so run Node with `--stack-size` too.
 - **The task is a top-level function named in the `spawn`, or an arrow written
   there.** `s.spawn(entry, arg)` with no destination runs an entry that
   answers `void`; `s.spawn(() => work(a, b))` runs an arrow that reads the
@@ -2181,6 +2191,10 @@ also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
 a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
 `totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
 the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
+`spawnWithFds(argv, fds)` is `spawn` that hands the child `fds[i]` as
+descriptor `3 + i` (systemd's `LISTEN_FDS` numbering); every other descriptor
+still closes at exec. More than 64, or a negative one, is `-22`; it needs
+`process.spawn` under `--sandbox`, refuses a wasm target and throws under Node.
 `setNice(n)` sets the nice value, and it is lower-only even as root: `n` takes
 0..19 (`-22` outside it) and a value below the current one is `-13`, with no
 system call either way. `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
@@ -2230,8 +2244,42 @@ unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM.
 `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF` and `NET_SO_RCVBUF`, `i32` ids exported
 beside it; any other id is `-22`. Linux drops quick-ACK mode on its own, so set
 it again after each response. The ids are not module constants: pass them
-directly. None
-exists on a wasm target, and under Node each throws.
+directly. `netMss(fd)` answers a connected TCP socket's send MSS, the payload
+bytes one segment carries, and `-1` for anything else (never an errno), so size
+writes by it with a fallback. None but `netMss` exists on a wasm target (there
+it is always `-1`), and under Node each throws.
+
+Unix-domain stream sockets: `unixListen(path, backlog, flags)` listens on a
+socket file left at 0600 (`unixListenMode(path, backlog, flags, mode)` for
+another mode), `unixConnect(path)` and `unixAccept(fd)` answer descriptors
+that `netRead`, `netWrite`, `netShutdown`, `netClose` and the loop take as
+they are, and `unixSocketPair(NET_UNIX_STREAM, fds)` fills `fds: i32[]` with
+two connected ends (`NET_UNIX_SEQPACKET` keeps message boundaries; Linux
+only, `-95` on Darwin). A path starting with `@` is Linux's abstract
+namespace and makes no file (`-95` on Darwin); write `./@name` for a socket
+file so named. A path that exists is `-98`; flag `NET_UNIX_UNLINK_STALE`
+first removes a socket file nobody listens on (Linux; on Darwin it is `-95`
+at a socket file, since a full backlog and a dead file both refuse there).
+`NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM` and `NET_TCP_NODELAY` are all `1`,
+so pass the constant each call names. A path as written is at most 107
+bytes (103 on Darwin) and an abstract name at most 107 after its `@`; longer
+is `-36`. A full backlog makes `unixConnect`
+`-11` on Linux and `-111` on Darwin. Under `--sandbox`, a listener on a path
+also needs `fs.write` (`-13` without it); an abstract name does not, and a
+connect to a path is not confined. `sendFd(sock, fd, buf, off, len)` sends
+`buf[off, off + len)` with descriptor `fd` attached (`len` 0 is `-22`) and
+answers the bytes sent, which on a stream socket can be short: the descriptor
+went with the first bytes, so send the rest with `netWrite`; `recvFd(sock, buf, off, len, fd)` reads into the
+range and sets `fd[0]` to the descriptor that came with it, or `-1`; the
+descriptor arrives close-on-exec, its status flags (`O_NONBLOCK` among them)
+the open file's, which the sender shares, any beyond the first are closed,
+and `fd` shorter than 1 is `-22`. `peerCredentials(sock, out)` writes
+`[pid, uid, gid]` of the process that made the connection, as it was at
+connect time, into an `out` of length 3 or more (`-22` shorter, `-107` for a
+listener or a socket never connected); on Darwin the
+pid can be `-1`. All three answer `-88` or `-95` for a socket that is not
+Unix-domain. The Unix calls are refused on a wasm target, and under Node each
+throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
 `Arena.release(m)` and `Arena.reset()` were removed before 1.0: write
@@ -2619,7 +2667,8 @@ negative `DEFLATE_ERR_*` / `GZIP_ERR_*` code for any malformed stream, so test
 it before reading `out`. `GzipWriter` and `GzipReader` stream. On HTTP/1.1,
 `conn.respondEncoded(status, names, values, body, off, len, enc,
 conn.acceptEncoding())` with an `HttpCompressor` from `nish/net/http-compress`
-negotiates, compresses and sets the fields. Do not compress a secret beside
+negotiates, compresses when it pays (`minLength`, `minSavingPercent`,
+`segmentMode`; `enc.decision` says why not) and sets the fields. Do not compress a secret beside
 text the client chose (BREACH). (No block, as for `nish/text`;
 `tests/link/std_compress` is its program, and the user guide's
 [compression page](guide/using-nish/compression.md) its walk-through.)
@@ -2665,7 +2714,7 @@ or `PG_LOST` to `fail(run)` (on a spent handle these do nothing and count in
 `stray`), and after each call `next(run)` until
 `PG_BATCH_NONE`: `PG_BATCH_ROW` (the connection's row answers request `tag`),
 then one of `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED` per
-request. It reads no clock: when to take is the loop's choice. (No block;
+request. It reads no clock: when to take is the loop's choice, or a `PgBatchClock`'s (`PgBatchClockConfig`: `minCount`, `factor` × the moving average of batch sizes, `maxWaitUs`, the idle bypass `lightCount`; defaults are a fixed window), which `takeDue(conn, clock, nowUs, pool.inFlight())` consults after `clock.arrived(nowUs)` per add; `PgBatchTurns` wakes one collecting connection only when its batch is due. (No block;
 `tests/postgres/live`'s `batch` scenario runs it against a server, and the user
 guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
@@ -2830,7 +2879,13 @@ like a missing permission; a refused process or socket call ends the program
 with `SIGSYS` (status 159); a kernel that cannot apply it exits 126 before
 `main` unless built with `--sandbox=best-effort`. A darwin target, a library
 with no `main` and `--emit-napi` refuse the flag
-([LANGUAGE.md](LANGUAGE.md#the-sandbox)).
+([LANGUAGE.md](LANGUAGE.md#the-sandbox)). Only under `--sandbox` may an
+`--allow` list scope `fs.read` or `fs.write` to a directory
+(`--allow fs.read=/srv/data`): the directory must exist at build time, and
+the kernel grants the capability beneath it alone — except that a `main`
+reaching `process.spawn` can still read every file beneath `/`, so that
+`exec` can load a program. Any other scope, a scope
+in `--deny` and a scope without `--sandbox` are usage errors, exit 2.
 
 ## Before you say it compiles
 

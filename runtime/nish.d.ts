@@ -334,6 +334,14 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  */
 declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
 /**
+ * `spawn` with the child holding `fds[i]` as descriptor `3 + i`, inherited
+ * across the exec; every other descriptor stays close-on-exec. The child's pid,
+ * or a negative errno: -22 more than 64 descriptors or a negative one, -9 one
+ * that is not open, -24 (or -22 above the descriptor limit) a scratch
+ * descriptor the system cannot give. No reading under Node, which throws.
+ */
+declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
+/**
  * Start `argv[0]` through `PATH` without waiting: the child's pid, or a
  * negative errno. The child is the program's until `waitPid` reaps it. No
  * reading under Node, which throws.
@@ -460,6 +468,11 @@ declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
  * a negative errno (-9 a closed descriptor, -88 not a socket).
  */
 declare function netSetOption(fd: i32, option: i32, value: i32): i32;
+/**
+ * A connected TCP socket's send MSS, the payload bytes one segment carries;
+ * -1, never an errno, for anything else, and always on wasm.
+ */
+declare function netMss(fd: i32): i32;
 /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
 declare const NET_TCP_NODELAY: i32;
 /**
@@ -474,6 +487,57 @@ declare const NET_SO_KEEPALIVE: i32;
 declare const NET_SO_SNDBUF: i32;
 /** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
 declare const NET_SO_RCVBUF: i32;
+/**
+ * A listening Unix stream socket at `path` (`@name`: Linux's abstract
+ * namespace), its file mode 0600. A path that exists is -98, unless `flags`
+ * holds `NET_UNIX_UNLINK_STALE`; -36 a path too long, -22 an empty one.
+ */
+declare function unixListen(path: string, backlog: i32, flags: i32): i32;
+/** `unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`. */
+declare function unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32;
+/** A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening. */
+declare function unixConnect(path: string): i32;
+/** The next connection on a Unix listener, non-blocking; -11 when none is waiting. */
+declare function unixAccept(fd: i32): i32;
+/**
+ * Two connected sockets into `fds[0]` and `fds[1]`, and 0: `kind` is
+ * `NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin); -22 another kind
+ * or an `fds` shorter than 2.
+ */
+declare function unixSocketPair(kind: i32, fds: i32[]): i32;
+/**
+ * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
+ * descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a
+ * zero `len` or a negative `fd`, -9 a closed `sock` or `fd`, -88 a `sock`
+ * that is not a socket, -95 one that is not Unix. A stream socket can send
+ * short: the descriptor travels with the first bytes, so send the rest with
+ * `netWrite`.
+ */
+declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+/**
+ * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and
+ * the first descriptor that came with them into `fd[0]`, or -1: the bytes read,
+ * or a negative errno. Every other descriptor in the message is closed; the
+ * one kept is close-on-exec and keeps the sender's blocking mode. -22 a zero
+ * `len` or an empty `fd`, -9 a closed `sock`, -88 not a socket, -95 not
+ * Unix.
+ */
+declare function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
+/**
+ * The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid
+ * and gid, and the answer is 0; the pid is -1 where Darwin has no
+ * `LOCAL_PEERPID`. A uid or gid of 2^31 or above wraps (-2 is uid
+ * 4294967294). -22 an `out` shorter than 3, -9 a closed `fd`, -88 not a
+ * socket, -95 not Unix, -107 a socket with no peer (a listener, or one never
+ * connected).
+ */
+declare function peerCredentials(fd: i32, out: i32[]): i32;
+/** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
+declare const NET_UNIX_UNLINK_STALE: i32;
+/** `unixSocketPair` kind: a byte stream. */
+declare const NET_UNIX_STREAM: i32;
+/** `unixSocketPair` kind: each write one message (`SOCK_SEQPACKET`). */
+declare const NET_UNIX_SEQPACKET: i32;
 
 // ---- `nish:term` ------------------------------------------------------------------
 //
@@ -580,6 +644,13 @@ declare module "nish:process" {
   export function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
   /** Start a child without waiting: its pid, or a negative errno. */
   export function spawn(argv: string[]): i32;
+  /**
+   * `spawn` with the child holding `fds[i]` as descriptor `3 + i`: its pid, or
+   * a negative errno; -22 more than 64 descriptors or a negative one, -9 one
+   * that is not open, -24 (or -22 above the descriptor limit) a scratch
+   * descriptor the system cannot give.
+   */
+  export function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
   /** Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22. */
   export function kill(pid: i32, sig: i32): i32;
   /** `[pid, status]` for a child that exited, `[0, 0]` under WNOHANG (flag 1) with none, or `[-errno, 0]`. */
@@ -667,6 +738,11 @@ declare module "nish:net" {
    * a negative errno (-9 a closed descriptor, -88 not a socket).
    */
   export function netSetOption(fd: i32, option: i32, value: i32): i32;
+  /**
+   * A connected TCP socket's send MSS, the payload bytes one segment carries;
+   * -1, never an errno, for anything else, and always on wasm.
+   */
+  export function netMss(fd: i32): i32;
   /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
   export const NET_TCP_NODELAY: i32;
   /**
@@ -681,6 +757,57 @@ declare module "nish:net" {
   export const NET_SO_SNDBUF: i32;
   /** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
   export const NET_SO_RCVBUF: i32;
+  /**
+   * A listening Unix stream socket at `path` (`@name`: Linux's abstract
+   * namespace), its file mode 0600. A path that exists is -98, unless `flags`
+   * holds `NET_UNIX_UNLINK_STALE`; -36 a path too long, -22 an empty one.
+   */
+  export function unixListen(path: string, backlog: i32, flags: i32): i32;
+  /** `unixListen` with the socket file's mode chosen (0 to 0o777); -22 for an `@name`. */
+  export function unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32;
+  /** A non-blocking socket connected to the listener at `path`; -11 a full backlog on Linux (-111 on Darwin), -111 nothing listening. */
+  export function unixConnect(path: string): i32;
+  /** The next connection on a Unix listener, non-blocking; -11 when none is waiting. */
+  export function unixAccept(fd: i32): i32;
+  /**
+   * Two connected sockets into `fds[0]` and `fds[1]`, and 0: `kind` is
+   * `NET_UNIX_STREAM` or `NET_UNIX_SEQPACKET` (-95 on Darwin); -22 another kind
+   * or an `fds` shorter than 2.
+   */
+  export function unixSocketPair(kind: i32, fds: i32[]): i32;
+  /**
+   * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
+   * descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a
+   * zero `len` or a negative `fd`, -9 a closed `sock` or `fd`, -88 a `sock`
+   * that is not a socket, -95 one that is not Unix. A stream socket can send
+   * short: the descriptor travels with the first bytes, so send the rest with
+   * `netWrite`.
+   */
+  export function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+  /**
+   * Read at most `len` bytes into `buf[off..]` from the Unix socket `sock`, and
+   * the first descriptor that came with them into `fd[0]`, or -1: the bytes read,
+   * or a negative errno. Every other descriptor in the message is closed; the
+   * one kept is close-on-exec and keeps the sender's blocking mode. -22 a zero
+   * `len` or an empty `fd`, -9 a closed `sock`, -88 not a socket, -95 not
+   * Unix.
+   */
+  export function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
+  /**
+   * The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid
+   * and gid, and the answer is 0; the pid is -1 where Darwin has no
+   * `LOCAL_PEERPID`. A uid or gid of 2^31 or above wraps (-2 is uid
+   * 4294967294). -22 an `out` shorter than 3, -9 a closed `fd`, -88 not a
+   * socket, -95 not Unix, -107 a socket with no peer (a listener, or one never
+   * connected).
+   */
+  export function peerCredentials(fd: i32, out: i32[]): i32;
+  /** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
+  export const NET_UNIX_UNLINK_STALE: i32;
+  /** `unixSocketPair` kind: a byte stream. */
+  export const NET_UNIX_STREAM: i32;
+  /** `unixSocketPair` kind: each write one message (`SOCK_SEQPACKET`). */
+  export const NET_UNIX_SEQPACKET: i32;
 }
 
 declare module "nish:unsafe" {

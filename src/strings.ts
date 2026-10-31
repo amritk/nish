@@ -180,6 +180,12 @@ export const addJsonQuoted = (out: StringBuilder, s: string): void => {
  */
 export const irEscape = (s: string): string => {
   const out = new StringBuilder()
+  irEscapeInto(out, s)
+  return out.toText()
+}
+
+/** `irEscape(s)` appended to `out`, for a caller building one constant from several strings. */
+export const irEscapeInto = (out: StringBuilder, s: string): void => {
   let i = 0
   while (i < s.length) {
     const c = s.charCodeAt(i)
@@ -192,7 +198,6 @@ export const irEscape = (s: string): string => {
     }
     i = i + 1
   }
-  return out.toText()
 }
 
 /**

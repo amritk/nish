@@ -132,14 +132,15 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
- * CPU's AES instructions, `runtime-checksum.c` CRC-32 on its carry-less
+ * CPU's AES instructions, `runtime-sha256.c` the SHA-256 block on its SHA
+ * instructions, `runtime-checksum.c` CRC-32 on its carry-less
  * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
  * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes`,
  * `runtime-sandbox.c` the `--sandbox` confinement and `runtime-shm.c` the
  * shared-memory regions of `nish/sync/shm`, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same thirteen:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fourteen:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -158,6 +159,7 @@ const RUNTIME_C = [
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
+  "runtime/runtime-sha256.c",
   "runtime/runtime-checksum.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
@@ -2411,26 +2413,35 @@ if (dealtHere("termIo")) {
     // size: the play run looks for the image's deletion at close, and the reopen runs
     // draw in ascii, whose frames are small enough to keep both openings. The stage
     // run pauses before F4 so the reopened stage can be held to the one it left;
-    // 120 frames is past the title's outro at any rate the relay draws.
+    // 120 frames is past the title's outro at any rate the relay draws. The play and
+    // stage runs skip the opening (the help falling apart) with a space at frame 2,
+    // so the title is up by frame 5. Each run keeps its settings in a config
+    // directory of its own, never the real `~/.config/nish/break`.
+    const configs = [0, 1, 2].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-")))
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
-        keys: wallKeys([3, "\r"], [120, " "], [125, "\x1bOR"], [130, "p"], [135, "q"], [150, "q"]),
+        env: { XDG_CONFIG_HOME: configs[0] },
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-reopen"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[1] },
         keys: wallKeys([3, "\x1b[17~"], [10, "\x1bOS"], [30, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-stage"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
-        keys: wallKeys([3, "\r"], [120, " "], [130, "p"], [140, "\x1bOS"], [170, "q"], [180, "q"], [190, "q"]),
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[2] },
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
-    ])
+    ]).finally(() => {
+      for (const config of configs) {
+        fs.rmSync(config, { recursive: true, force: true })
+      }
+    })
     const restored = (r) => r.status === 0 && r.sameStty && r.out.endsWith("\x1b[?1049l") && r.err === ""
     check(
       "nish break on a terminal: draws kitty images, and q quits with the screen restored, exit 0",
@@ -2444,7 +2455,7 @@ if (dealtHere("termIo")) {
     )
     const opened = staged.out.lastIndexOf("\x1b[?1049h")
     const leftAt = staged.out.slice(0, opened).split("\x1b[5n").length - 1
-    const [title, paused, back] = [2, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
+    const [title, paused, back] = [5, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
     const [asTitle, asPaused] = [wallSame(paused, title, 40), wallSame(paused, back, 40)]
     const seen = `${said(staged)}\nthe paused screen matches the title in ${asTitle.toFixed(3)}, the reopened in ${asPaused.toFixed(3)}`
     check(
@@ -2778,6 +2789,129 @@ if (!only || "net_set_option".includes(only)) {
     loudSet.status !== 0 && loudSet.stderr.includes("`netSetOption` has no synchronous reading under Node"),
     shown(loudSet)
   )
+}
+
+// The Unix-domain calls under the prelude, by their global spellings: each of
+// the eight throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls`,
+// `net_unix_paths` and `net_unix_scm` are the native half).
+if (!only || "net_unix".includes(only)) {
+  const unixDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(unixDir, { recursive: true })
+  const kindsEntry = path.join(unixDir, "unix-kinds.ts")
+  fs.writeFileSync(
+    kindsEntry,
+    "export const main = (): number => {\n" +
+      "  console.log(`${NET_UNIX_UNLINK_STALE} ${NET_UNIX_STREAM} ${NET_UNIX_SEQPACKET}`);\n" +
+      "  return 0;\n};\n"
+  )
+  const kinds = runUnderPrelude(kindsEntry, [])
+  check(
+    "net_unix: under the prelude the flag and the pair kinds read 1, 1 and 2, as natively",
+    kinds.status === 0 && kinds.stdout === "1 1 2\n",
+    shown(kinds)
+  )
+  const calls = [
+    ["unixListen", 'unixListen("@nish", 4, 0)'],
+    ["unixListenMode", 'unixListenMode("nish.sock", 4, 0, 384)'],
+    ["unixConnect", 'unixConnect("@nish")'],
+    ["unixAccept", "unixAccept(3)"],
+    ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+    ["sendFd", "sendFd(3, 0, [1], 0, 1)"],
+    ["recvFd", "recvFd(3, [0], 0, 1, [0])"],
+    ["peerCredentials", "peerCredentials(3, [0, 0, 0])"],
+  ]
+  for (const [name, call] of calls) {
+    const entry = path.join(unixDir, `${name}.ts`)
+    fs.writeFileSync(entry, `export const main = (): number => ${call};\n`)
+    const loud = runUnderPrelude(entry, [])
+    check(
+      `net_unix: under the prelude ${name} fails loudly rather than answering`,
+      loud.status !== 0 && loud.stderr.includes(`\`${name}\` has no synchronous reading under Node`),
+      shown(loud)
+    )
+  }
+}
+
+// `spawnWithFds` under the prelude, by its global spelling: it starts a child
+// as `spawn` does, so it throws, naming itself, for `spawn`'s reason
+// (`tests/cases/spawn_fds_child` is the native half). `--emit-ts` imports it
+// from `nish/runtime`, which throws the same way, as it imports `spawnPiped`:
+// without its `AMBIENT_NAMES` entry the module calls a global Node never had.
+if (!only || "spawn_fds".includes(only)) {
+  const fdsDir = path.join(buildDir, "spawn-fds-prelude")
+  fs.mkdirSync(fdsDir, { recursive: true })
+  const entry = path.join(fdsDir, "spawn-with-fds.ts")
+  fs.writeFileSync(entry, 'export const main = (): number => spawnWithFds(["true"], [0]);\n')
+  const loud = runUnderPrelude(entry, [])
+  check(
+    "spawn_fds: under the prelude spawnWithFds fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`spawnWithFds` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const emitted = path.join(fdsDir, "emitted")
+  fs.rmSync(emitted, { recursive: true, force: true })
+  const ts = spawnSync(NISH, [entry, "--emit-ts", emitted], { cwd: root, encoding: "utf8" })
+  const module = path.join(emitted, "spawn-with-fds.ts")
+  const text = ts.status === 0 && fs.existsSync(module) ? fs.readFileSync(module, "utf8") : ""
+  check(
+    "spawn_fds: --emit-ts imports spawnWithFds from nish/runtime",
+    text.startsWith('import { spawnWithFds } from "nish/runtime"\n'),
+    `exit ${ts.status}\n${ts.stderr}\n${text}`
+  )
+}
+
+// `netMss` where there is no socket to ask. Under the prelude it throws, naming
+// itself, as the other `nish:net` calls do; a `wasm32` build compiles it to
+// the constant -1, with no runtime symbol for the freestanding link to miss,
+// and the `--profile wasi` build runs and prints that -1
+// (`tests/cases/net_mss` is the native half).
+if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
+  const mssDir = path.join(buildDir, "net-mss")
+  fs.rmSync(mssDir, { recursive: true, force: true })
+  fs.mkdirSync(mssDir, { recursive: true })
+  const preludeEntry = path.join(mssDir, "prelude.ts")
+  fs.writeFileSync(preludeEntry, "export const main = (): number => netMss(3);\n")
+  const loud = runUnderPrelude(preludeEntry, [])
+  check(
+    "net_mss: under the prelude netMss fails loudly rather than answering -1",
+    loud.status !== 0 && loud.stderr.includes("`netMss` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const entry = path.join(mssDir, "net_mss_wasm.ts")
+  fs.writeFileSync(
+    entry,
+    'import { netMss } from "nish:net";\n\n' +
+      "export const main = (): number => {\n  console.log(netMss(0));\n  return 0;\n};\n"
+  )
+  const ll = path.join(mssDir, "net_mss_wasm.ll")
+  const wasm32 = spawnSync(NISH, [entry, "-o", ll, "--target", "wasm32"], { cwd: root, encoding: "utf8" })
+  const ir = wasm32.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+  check(
+    "net_mss: a wasm32 build compiles netMss to -1, with no call into runtime-net.c",
+    wasm32.status === 0 && !ir.includes("nish_net_mss") && ir.includes("i32 -1"),
+    shown(wasm32)
+  )
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const module = path.join(mssDir, "net_mss_wasm.wasm")
+    const built = spawnSync(NISH, [entry, "-o", mssDir + path.sep, "--link", module, "--profile", "wasi"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+        : built
+    check(
+      `net_mss: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) links and prints -1`,
+      ran.status === 0 && ran.stdout === "-1\n",
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: net_mss: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of netMss is not run`
+    )
+  }
 }
 
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
@@ -8970,7 +9104,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's thirteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's fourteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9025,6 +9159,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-net.c",
       "runtime-simd.c",
       "runtime-aes.c",
+      "runtime-sha256.c",
       "runtime-checksum.c",
       "runtime-term.c",
       "runtime-bytes.c",
@@ -9037,7 +9172,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the thirteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fourteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9046,7 +9181,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the thirteen runtime units once",
+      "runtime cache: the miss compiled each of the fourteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -10764,6 +10899,80 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
   }
 }
 
+// `scopeWithStack` gives a scope's tasks the stack it names, and the default it
+// replaces is the one that fails. Each of thread_stack_deep's million-deep
+// chains needs at least 16 MB. Under `ulimit -s 8192`, which fixes glibc's
+// default thread stack and main's at 8 MiB on any host, the program written
+// with `scope()` (tests/link/thread_stack_fixtures/default.ts) faults on one
+// thread and on eight; with a 256 MiB stack it prints its two sums; with
+// 128 KiB (guard.ts) it faults on the guard page below the stack; under a
+// 128 MiB `ulimit -v` the 256 MiB stack cannot be mapped, and the program ends
+// with nish_stack_fail's out-of-memory message before any task runs. The link
+// harness counts a death by signal as a failure, so the faults are read here,
+// as `spawnSync`'s signal.
+if (!only || "thread_stack".includes(only)) {
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("thread_stack: the faults are read under a Linux ulimit, and this host is not Linux with clang")
+  } else {
+    const dir = path.join(buildDir, "thread_stack")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const programs = [
+      ["deep", path.join(linkDir, "thread_stack_deep", "main.ts")],
+      ["default", path.join(linkDir, "thread_stack_fixtures", "default.ts")],
+      ["guard", path.join(linkDir, "thread_stack_fixtures", "guard.ts")],
+    ]
+    const exes = new Map()
+    for (const [name, src] of programs) {
+      const exe = path.join(dir, name)
+      const c = spawnSync(NISH, [src, "--link", exe], { cwd: root, encoding: "utf8" })
+      if (c.status !== 0) check(`thread_stack: ${path.relative(root, src)} compiles and links`, false, shown(c))
+      exes.set(name, c.status === 0 ? exe : null)
+    }
+    const run = (name, threads, limit = "") => {
+      const exe = exes.get(name)
+      return exe === null
+        ? null
+        : spawnSync("bash", ["-c", `ulimit -S -s 8192 ${limit}&& exec "$0"`, exe], {
+            encoding: "utf8",
+            timeout: 60000,
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+    }
+    const said = (r) => (r === null ? "not built" : `signal ${r.signal}\n${shown(r)}`)
+    for (const threads of ["1", "8"]) {
+      const deep = run("deep", threads)
+      check(
+        `thread_stack: a 256 MiB scopeWithStack runs two million-deep chains on ${threads} thread(s)`,
+        deep !== null && deep.status === 0 && deep.stdout === "960218 256782\n",
+        said(deep)
+      )
+      const dflt = run("default", threads)
+      check(
+        `thread_stack: the same chains on scope()'s default 8 MiB stack fault on ${threads} thread(s)`,
+        dflt !== null && dflt.signal === "SIGSEGV",
+        said(dflt)
+      )
+      const guard = run("guard", threads)
+      check(
+        `thread_stack: a 128 KiB scopeWithStack faults on its guard page on ${threads} thread(s)`,
+        guard !== null && guard.signal === "SIGSEGV",
+        said(guard)
+      )
+      const room = run("deep", threads, "&& ulimit -S -v 131072 ")
+      check(
+        `thread_stack: a 256 MiB stack under a 128 MiB address space ends with the out-of-memory message on ${threads} thread(s)`,
+        room !== null &&
+          room.status === 1 &&
+          room.stdout === "" &&
+          room.stderr ===
+            "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n",
+        said(room)
+      )
+    }
+  }
+}
+
 // WP37 stage 1: `--sandbox` confines a native program to main's capability set
 // (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
 // Nish programs whose main reaches a chosen set of capabilities and hands its
@@ -11013,6 +11222,187 @@ if (!only || "sandbox".includes(only)) {
         said(to)
       )
 
+      // The Unix-domain calls (tests/link/net_unix_sandbox): granted `net`
+      // alone, abstract names work and a pathname bind is -13, since Landlock
+      // counts making the socket file as a write; granted `fs.write` too, it
+      // binds. On ABI 6 a connect to an abstract listener outside the sandbox
+      // is -1, the scope's EPERM; below it the connect goes through. The
+      // listener outside is the same fixture built without the sandbox,
+      // waiting in `pollWait` until it is killed, under a name with this
+      // run's pid, and the check needs it seen in /proc/net/unix first.
+      const unixBuild = (name, fixture, flags) =>
+        build(name, `../net_unix_sandbox/${fixture}`, flags, { driver: null })
+      const serveExe = unixBuild("unix-net-plain", "net", [])
+      const netExe = unixBuild("unix-net-sandbox", "net", ["--sandbox"])
+      const writeExe = unixBuild("unix-write-sandbox", "write", ["--sandbox"])
+      const outside = `@nish-net-unix-sandbox-outside-${process.pid}`
+      const server = serveExe !== null ? spawn(serveExe, ["serve", outside], { stdio: "ignore" }) : null
+      const pause = new Int32Array(new SharedArrayBuffer(4))
+      let serving = false
+      for (let k = 0; k < 200 && server !== null && !serving; k++) {
+        serving = fs.readFileSync("/proc/net/unix", "utf8").includes(outside)
+        if (!serving) Atomics.wait(pause, 0, 0, 50)
+      }
+      const unixNet = run(netExe, ["probe", outside])
+      if (server !== null) server.kill()
+      check(
+        `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13, and an abstract listener outside is ${abi >= 6 ? "-1" : "reached (ABI <6)"}`,
+        serving &&
+          unixNet !== null &&
+          unixNet.status === 0 &&
+          unixNet.stdout === `abstract true true\npathname -13\noutside ${abi >= 6 ? "-1" : "connected"}\n` &&
+          !fs.existsSync(path.join(W, "net.sock")),
+        `listener outside seen: ${serving}\n${said(unixNet)}`
+      )
+      const unixWrite = run(writeExe, [])
+      check(
+        "sandbox: granted net and fs.write, a pathname Unix listener binds and is unlinked",
+        unixWrite !== null &&
+          unixWrite.status === 0 &&
+          unixWrite.stdout === "pathname true true\nunlink 0\n" &&
+          !fs.existsSync(path.join(W, "write.sock")),
+        said(unixWrite)
+      )
+
+      // The scopes: `--allow fs.read=<dir>` grants reading beneath the
+      // directory and nothing beside it. A main that reaches ffi alone is
+      // widened by the policy's grant (open question 13), so the probe's own
+      // open is held to the scope too.
+      const scopeDir = (name, file) => {
+        const d = path.join(W, name)
+        fs.mkdirSync(d, { recursive: true })
+        if (file) fs.writeFileSync(path.join(d, file), "x")
+        return d
+      }
+      const inside = scopeDir("scope-read", "in.txt")
+      const insideFile = path.join(inside, "in.txt")
+      const outsideFile = path.join(W, "out.txt")
+      fs.writeFileSync(outsideFile, "x")
+      const readScoped = build("read-scoped", "read", ["--sandbox", "--allow", `ffi,fs.read=${inside}`])
+      const rIn = run(readScoped, ["open", insideFile])
+      const rOut = run(readScoped, ["open", outsideFile])
+      const rEtc = run(readScoped, ["open", "/etc/passwd"])
+      check(
+        "sandbox: fs.read=<dir> reads inside and not outside",
+        rIn !== null &&
+          rIn.status === 0 &&
+          rIn.stdout === "open: ok\n" &&
+          rOut !== null &&
+          rOut.stdout === "open: EACCES\n" &&
+          rEtc !== null &&
+          rEtc.stdout === "open: EACCES\n",
+        `${said(rIn)}\n--- outside\n${said(rOut)}\n--- /etc/passwd\n${said(rEtc)}`
+      )
+      const ffiScoped = build("none-scoped", "none", ["--sandbox", "--allow", `ffi,fs.read=${inside}`])
+      const fIn = run(ffiScoped, ["open", insideFile])
+      const fOut = run(ffiScoped, ["open", outsideFile])
+      check(
+        "sandbox: an ffi main is widened by the policy's fs.read=<dir>, and held to it",
+        fIn !== null && fIn.stdout === "open: ok\n" && fOut !== null && fOut.stdout === "open: EACCES\n",
+        `${said(fIn)}\n--- outside\n${said(fOut)}`
+      )
+
+      // A scope is the directory's real path, resolved at build time: a path
+      // through `..`, one relative to the compiler's working directory and a
+      // symbolic link to a directory each name the target itself, in the
+      // constant and in the rule, so a read through the link is granted.
+      const target = scopeDir("scope-target", "t.txt")
+      const targetReal = fs.realpathSync(target)
+      const targetConst = targetReal.replace(/\\/g, "\\5C").replace(/"/g, "\\22")
+      const link = path.join(W, "scope-link")
+      fs.symlinkSync(target, link)
+      for (const [form, scope] of [
+        ["`..`", path.join(inside, "..", "scope-target")],
+        ["relative", path.relative(root, target)],
+        ["symlinked", link],
+      ]) {
+        const name = `read-canon-${form.replace(/`/g, "").replace(".", "dot")}`
+        const exe = build(name, "read", ["--sandbox", "--allow", `ffi,fs.read=${scope}`])
+        const ll = exe === null ? "" : fs.readFileSync(path.join(dir, `${name}.ll`), "utf8")
+        const viaLink = run(exe, ["open", path.join(link, "t.txt")])
+        const direct = run(exe, ["open", path.join(targetReal, "t.txt")])
+        const beside = run(exe, ["open", insideFile])
+        check(
+          `sandbox: a ${form} fs.read=<dir> is its real path, in the IR and at run time`,
+          ll.includes(`c"${targetConst}\\00\\00"`) &&
+            viaLink !== null &&
+            viaLink.stdout === "open: ok\n" &&
+            direct !== null &&
+            direct.stdout === "open: ok\n" &&
+            beside !== null &&
+            beside.stdout === "open: EACCES\n",
+          `${scope}\n${ll
+            .split("\n")
+            .filter((l) => l.startsWith("@.sandbox"))
+            .join("\n")}\n--- through the link\n${said(viaLink)}\n--- the target\n${said(direct)}\n--- beside\n${said(beside)}`
+        )
+      }
+
+      // A scope directory gone between the build and the run: strict refuses
+      // naming it, best-effort names it once and grants nothing beneath it.
+      const gone = scopeDir("scope-gone")
+      const goneStrict = build("read-gone", "read", ["--sandbox", "--allow", `ffi,fs.read=${gone}`])
+      const goneLenient = build("read-gone-be", "read", [
+        "--sandbox=best-effort",
+        "--allow",
+        `ffi,fs.read=${gone}`,
+      ])
+      fs.rmSync(gone, { recursive: true, force: true })
+      const gs = run(goneStrict, ["open", insideFile])
+      check(
+        "sandbox: a missing scope directory refuses strict, naming it",
+        gs !== null &&
+          gs.status === 126 &&
+          gs.stdout === "" &&
+          gs.stderr === `nish: --sandbox: cannot open the directory ${gone} (ENOENT)\n`,
+        said(gs)
+      )
+      const gl = run(goneLenient, ["open", insideFile])
+      const goneLine =
+        `nish: --sandbox: the scope directory ${gone} cannot be opened, ` +
+        "so the program gets no access beneath it\n"
+      check(
+        "sandbox: best-effort names a missing scope directory once and reads nothing",
+        gl !== null &&
+          gl.status === 0 &&
+          gl.stdout === "open: EACCES\n" &&
+          gl.stderr.split(goneLine).length === 2,
+        said(gl)
+      )
+
+      // `--allow fs.write=<dir>`: a file is created inside and not beside it,
+      // and the metadata calls stay EPERM inside it (open question 1). Strict
+      // needs TRUNCATE, which a scope cannot grant beneath `/` below ABI 3.
+      if (abi < 3) {
+        skip(`sandbox: this kernel's Landlock is ABI ${abi} (<3); the fs.write=<dir> checks did not run`)
+      } else {
+        const out = scopeDir("scope-write", "meta.txt")
+        const writeScoped = build("write-scoped", "write", ["--sandbox", "--allow", `ffi,fs.write=${out}`])
+        const made = path.join(out, "made.txt")
+        const beside = path.join(W, "beside.txt")
+        const wIn = run(writeScoped, ["create", made])
+        const wOut = run(writeScoped, ["create", beside])
+        check(
+          "sandbox: fs.write=<dir> creates inside and not outside",
+          wIn !== null &&
+            wIn.status === 0 &&
+            wIn.stdout === "create: ok\n" &&
+            fs.existsSync(made) &&
+            wOut !== null &&
+            wOut.stdout === "create: EACCES\n" &&
+            !fs.existsSync(beside),
+          `${said(wIn)}\n--- outside\n${said(wOut)}`
+        )
+        const metaIn = run(writeScoped, ["meta", path.join(out, "meta.txt")])
+        check(
+          "sandbox: chmod, utimensat and setxattr inside an fs.write=<dir> scope still fail EPERM",
+          metaIn !== null &&
+            metaIn.status === 0 &&
+            metaIn.stdout === "chmod: EPERM\nutimensat: EPERM\nsetxattr: EPERM\n",
+          said(metaIn)
+        )
+      }
+
       // What main is granted runs the same: a file written and read back, a
       // child and the CPU count, with and without the sandbox and the pool.
       const grantedDir = (name) => {
@@ -11092,6 +11482,20 @@ if (!only || "sandbox".includes(only)) {
         "sandbox: strict runs below ABI 3 with fs.write, which grants TRUNCATE anyway (ABI 2)",
         writeAbi2 !== null && writeAbi2.status === 0 && writeAbi2.stderr === "",
         said(writeAbi2)
+      )
+      const scopedAbi2 = run(
+        build("write-scoped-abi2", "write", ["--sandbox", "--allow", `ffi,fs.write=${W}`], {
+          defines: ["-DNISH_SANDBOX_SIMULATE_ABI=2"],
+        }),
+        ["ctor"]
+      )
+      check(
+        "sandbox: strict refuses below ABI 3 with fs.write=<dir>, which grants nothing beneath / (ABI 2)",
+        scopedAbi2 !== null &&
+          scopedAbi2.status === 126 &&
+          scopedAbi2.stdout === "" &&
+          scopedAbi2.stderr === noTruncate,
+        said(scopedAbi2)
       )
     }
 
@@ -11308,6 +11712,53 @@ if (!only || "sandbox".includes(only)) {
     refused.status === 2 &&
       refused.stderr.includes("was compiled with --sandbox, and a wasm module has no sandbox"),
     shown(refused)
+  )
+  // The scopes in the IR: each list is the resolved directories, each ended
+  // by a NUL, and one NUL more; a capability granted whole passes null. The
+  // directory's name has a quote and a backslash, which the constant escapes.
+  // The probe's main reaches ffi, so the policy widens its set by fs.read and
+  // fs.write (open question 13): 16 | 32 | 64.
+  const odd = path.join(dir, 'scope "q\\')
+  fs.mkdirSync(odd, { recursive: true })
+  const oddReal = fs.realpathSync(odd)
+  const scopedLl = path.join(dir, "hello-scoped.ll")
+  const sc = spawnSync(
+    NISH,
+    [
+      path.join(linkDir, "sandbox_fixtures", "read.ts"),
+      "--sandbox",
+      "--allow",
+      `ffi,fs.read=${oddReal},fs.write=${oddReal}`,
+      "--allow",
+      "fs.write",
+      "-o",
+      scopedLl,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const scopedText = sc.status === 0 ? fs.readFileSync(scopedLl, "utf8") : ""
+  const escaped = oddReal.replace(/\\/g, "\\5C").replace(/"/g, "\\22")
+  const bytes = Buffer.byteLength(oddReal) + 2
+  const as =
+    HAS_LLVM_AS && sc.status === 0
+      ? spawnSync("llvm-as", [scopedLl, "-o", "/dev/null"], { encoding: "utf8" })
+      : null
+  const operand = `getelementptr inbounds ([${bytes} x i8], [${bytes} x i8]* @.sandbox.read, i64 0, i64 0)`
+  check(
+    "sandbox: a scope is a NUL-ended list constant passed to nish_sandbox, and llvm-as accepts it",
+    sc.status === 0 &&
+      scopedText.includes(
+        `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
+      ) &&
+      !scopedText.includes("@.sandbox.write") &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null)`) &&
+      (as === null || as.status === 0),
+    sc.status === 0
+      ? `${scopedText
+          .split("\n")
+          .filter((l) => l.includes("sandbox"))
+          .join("\n")}\n${as === null ? "" : shown(as)}`
+      : shown(sc)
   )
   const plainHello = path.join(dir, "hello-plain.ll")
   const ph = spawnSync(NISH, [hello, "-o", plainHello], {
@@ -14010,7 +14461,8 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // 8-bit bytes and keys past 72 bytes among them) and salts at cost 4 to 6, both
 // ways: Nish makes crypt_r's `$2b$` hash, crypt_r accepts Nish's, and Nish
 // answers crypt_r's `$2a$`, `$2b$` and `$2y$` hashes and a wrong password as
-// crypt_r does (tests/differential/bcrypt.js). Without a C compiler or
+// crypt_r does, one at a time and batched two to six at a time through
+// `bcryptHashN` and `bcryptVerifyN` (tests/differential/bcrypt.js). Without a C compiler or
 // libxcrypt it skips and says which.
 if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includes(only))) {
   const r = spawnSync("node", [path.join(root, "tests", "differential", "bcrypt.js"), "--compiler", NISH], {
@@ -14029,11 +14481,57 @@ if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includ
   }
 }
 
-// The bcrypt vectors of tests/link/crypto_bcrypt, and the four-lane batch of
-// tests/link/crypto_bcrypt_batch, as `--profile wasi` modules under Node's
-// WASI: both are pure, so they build for wasm32 and answer every case there as
-// natively.
-for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
+// The single path's half-rounds keep `x ^ P[n]` off the critical path
+// (std/crypto/bcrypt.ts, `bcryptBody`; docs/security/crypto-bcrypt.md,
+// "Speed"): it sits behind the value barrier as `ctSelect(0xffffffff, x ^ P[n],
+// 0)`, and after `opt -O3`, which unrolls the 16 half-rounds as the speed
+// profile's `-O3` does, each still ends in one XOR of `F(y)` with an `and` of
+// the barrier's answer: 16 of them, from one hoisted barrier. A plain
+// `x ^ P[n] ^ F(y)` leaves no barrier and no such `and`, so the count is 0.
+if (!only || ["bcrypt barrier", "crypto_bcrypt"].some((name) => name.includes(only))) {
+  if (!HAS_OPT) {
+    skip("bcrypt barrier: no opt, so nothing shows the barrier keeps P off bcryptBody's critical path")
+  } else {
+    const dir = path.join(buildDir, "bcrypt-barrier")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(NISH, [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const o =
+      c.status === 0
+        ? spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "bcrypt.ll")], {
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+          })
+        : c
+    const body = String(o.stdout).match(/^define [^\n]*@nish\.bcryptBody\([\s\S]*?\n\}/m)?.[0] ?? ""
+    const hidden = new Set([...body.matchAll(/(%[\w.]+) = (?:tail )?call i32 asm ""/g)].map((m) => m[1]))
+    const masked = new Set(
+      [...body.matchAll(/(%[\w.]+) = and i32 (%[\w.]+), (%[\w.]+)/g)]
+        .filter((m) => hidden.has(m[2]) || hidden.has(m[3]))
+        .map((m) => m[1])
+    )
+    const closing = [...body.matchAll(/= xor i32 (%[\w.]+), (%[\w.]+)/g)].filter(
+      (m) => masked.has(m[1]) || masked.has(m[2])
+    ).length
+    check(
+      `bcrypt barrier: after opt -O3 all 16 of bcryptBody's half-rounds end in one XOR with the barrier's \`and\` (${closing})`,
+      o.status === 0 && closing === 16,
+      o.status !== 0 ? o.stderr : body
+    )
+  }
+}
+
+// The bcrypt vectors of tests/link/crypto_bcrypt, the four-lane batch of
+// tests/link/crypto_bcrypt_batch and the widths one to six of
+// tests/link/crypto_bcrypt_width, as `--profile wasi` modules under Node's
+// WASI: all three build for wasm32 and answer every case there as natively.
+for (const [program, what] of [
+  ["crypto_bcrypt", "the bcrypt vectors"],
+  ["crypto_bcrypt_batch", "the bcrypt batch"],
+  ["crypto_bcrypt_width", "the bcrypt widths"],
+]) {
   if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
     continue
   }
@@ -14057,7 +14555,7 @@ for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
     )
   } else {
     skip(
-      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program === "crypto_bcrypt" ? "the bcrypt vectors" : "the bcrypt batch"} is not run`
+      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${what} is not run`
     )
   }
 }
@@ -17518,7 +18016,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c and runtime-shm.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c and runtime-shm.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -18358,6 +18856,34 @@ if (!only || "runtime-parallel".includes(only)) {
 // the same: 1..8 positions of random sets with the window anywhere in them, every
 // planted position of every length 0..300, and the resolver's pick, on the same
 // targets.
+/** The CPU feature words /proc/cpuinfo names (`flags` on x86-64, `Features` on AArch64); none off Linux. */
+const cpuFeatures = new Set(
+  ((fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : "").match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "")
+    .trim()
+    .split(/\s+/)
+)
+/** Whether /proc/cpuinfo names the instructions runtime-sha256.c's kernel runs on. */
+const cpuHasSha =
+  (process.arch === "x64" && cpuFeatures.has("sha_ni") && cpuFeatures.has("sse4_1") && cpuFeatures.has("ssse3")) ||
+  (process.arch === "arm64" && cpuFeatures.has("sha2"))
+/** The modules of tests/link/<program> compiled into a directory of their own, or none with the reason. */
+const compileLinkModules = (program, dir, flags) => {
+  const r = spawnSync(NISH, [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
+  })
+  const lls =
+    r.status === 0
+      ? fs
+          .readdirSync(dir)
+          .filter((f) => f.endsWith(".ll"))
+          .sort()
+          .map((f) => path.join(dir, f))
+      : []
+  return { lls, why: r.status === 0 ? "" : r.stderr }
+}
+
 if (!only || "simd".includes(only)) {
   const simdDir = path.join(buildDir, "simd")
   fs.mkdirSync(simdDir, { recursive: true })
@@ -18370,7 +18896,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|crc32): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|crc32): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -18416,8 +18942,7 @@ if (!only || "simd".includes(only)) {
     native,
     "tests/simd/aes-gcm.c"
   )
-  const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
-  const features = new Set((cpuinfo.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
+  const features = cpuFeatures
   let wantPath = null
   if (process.arch === "x64" && features.has("aes") && features.has("pclmulqdq")) {
     wantPath = "aesni-pclmul"
@@ -18433,6 +18958,27 @@ if (!only || "simd".includes(only)) {
       `simd: aes-gcm ran the ${wantPath} path, which /proc/cpuinfo says this CPU has`,
       new RegExp(`cases agree across ${wantPath};`).test(aesSaid),
       aesSaid
+    )
+  }
+
+  // runtime/runtime-sha256.c runs SHA-256's block on SHA-NI or the ARMv8 SHA-256
+  // instructions, in place of std/crypto/sha256.ts's `sha256Compress`, by what the CPU
+  // has. tests/simd/sha256.c includes the file and holds the kernel to FIPS 180-4's
+  // block function written out word by word -- NIST's digests first, then 20,000
+  // seeded blocks at random offsets and the guard's every edge -- and checks
+  // `nish_sha256_hw` under each `NISH_SHA256`. As with AES, /proc/cpuinfo's word
+  // decides whether the line must name the path.
+  const shaSaid = agree(`sha256 native ${process.arch}`, [], path.join(simdDir, "sha256"), native, "tests/simd/sha256.c")
+  const wantSha = cpuHasSha ? (process.arch === "x64" ? "sha-ni" : "armv8-sha2") : null
+  if (wantSha === null) {
+    skip(
+      `simd: sha256: /proc/cpuinfo names no SHA-256 instructions for ${process.platform}-${process.arch}, so no kernel path is required to run`
+    )
+  } else {
+    check(
+      `simd: sha256 ran the ${wantSha} path, which /proc/cpuinfo says this CPU has`,
+      new RegExp(`cases agree across ${wantSha};`).test(shaSaid),
+      shaSaid
     )
   }
 
@@ -18512,9 +19058,10 @@ if (!only || "simd".includes(only)) {
         `simd: an empty program does not link statically for aarch64-linux-gnu here (${why}): the NEON path is not run`
       )
     } else {
-      // The NEON path of the byte search, and the ARMv8 AES and PMULL path of
-      // runtime-aes.c. qemu-user takes its CPU from QEMU_CPU, and `max` has AES and
-      // PMULL, so the AES driver's line must name that path: a soft-only run that
+      // The NEON path of the byte search, the ARMv8 AES and PMULL path of
+      // runtime-aes.c and the ARMv8 SHA-256 path of runtime-sha256.c. qemu-user takes
+      // its CPU from QEMU_CPU, and `max` has AES, PMULL and SHA2, so those drivers'
+      // lines must name their paths: a soft-only run that
       // agreed would otherwise pass as the hardware one.
       for (const [label, source, out, what, wantLine] of [
         ["aarch64 through binfmt, the NEON path", driver, a64, "the NEON path", null],
@@ -18540,6 +19087,13 @@ if (!only || "simd".includes(only)) {
           /cases agree across armv8-aes-pmull;/,
         ],
         [
+          "sha256 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 SHA-256 path",
+          "tests/simd/sha256.c",
+          path.join(simdDir, "sha256.aarch64"),
+          "the ARMv8 SHA-256 path",
+          /cases agree across armv8-sha2;/,
+        ],
+        [
           "crc32 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 CRC32 path",
           "tests/simd/crc32.c",
           path.join(simdDir, "crc32.aarch64"),
@@ -18556,7 +19110,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|crc32:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|crc32:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -18606,7 +19160,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
@@ -18616,7 +19170,7 @@ if (!only || "simd".includes(only)) {
     const crcControl = crcPath === null ? null : "nish_crc32_hw: 1\ncbf43926\n"
     /** The runtime as it was before build.sh paired `unit`: every file but that one. */
     const runtimeWithout = (unit) => {
-      const dir = path.join(simdDir, `runtime-without-${unit}`)
+      const dir = path.join(simdDir, `runtime-without-${unit.replace(/^runtime-|\.c$/g, "")}`)
       fs.rmSync(dir, { recursive: true, force: true })
       fs.mkdirSync(dir, { recursive: true })
       for (const file of fs.readdirSync(path.join(root, "runtime"))) {
@@ -18627,6 +19181,11 @@ if (!only || "simd".includes(only)) {
       return dir
     }
     const noAesDir = runtimeWithout("runtime-aes.c")
+    const shaControl =
+      wantSha === null
+        ? null
+        : "nish_sha256_hw: 1\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n"
+    const noShaDir = runtimeWithout("runtime-sha256.c")
     const noCrcDir = runtimeWithout("runtime-checksum.c")
     for (const profile of ["speed", "size"]) {
       const quiet =
@@ -18681,6 +19240,34 @@ if (!only || "simd".includes(only)) {
           `the control keeps: ${aesCtrl.names.join(" ") || "(none)"} ${aesCtrl.why}\nthe control printed: ${printed || "(not run)"}`
       )
 
+      const withoutSha =
+        compiled.status === 0
+          ? kept(
+              [helloLl],
+              path.join(simdDir, `hello-no-sha256.${profile}`),
+              profile,
+              path.join(noShaDir, "runtime.c")
+            )
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      const shaExe = path.join(simdDir, `sha256-calls.${profile}`)
+      const shaCtrl = kept(["tests/simd/sha256-calls.c"], shaExe, profile)
+      const shaRan = shaCtrl.ok ? spawnSync(shaExe, [], { encoding: "utf8" }) : null
+      const shaPrinted = shaRan === null ? "" : String(shaRan.stdout)
+      check(
+        `simd: --profile ${profile} links hello with runtime-sha256.c to the same bytes as without it, and a program that calls the kernel runs it`,
+        withoutSha.ok &&
+          quiet.ok &&
+          withoutSha.bytes.equals(quiet.bytes) &&
+          shaCtrl.ok &&
+          shaCtrl.names.includes("nish_sha256_compress") &&
+          !shaCtrl.names.includes("__cpu_model") &&
+          shaRan.status === 0 &&
+          (shaControl === null ? /^nish_sha256_hw: [01]\n/.test(shaPrinted) : shaPrinted === shaControl),
+        `hello with runtime-sha256.c: ${quiet.bytes?.length ?? "(not linked)"} bytes ${quiet.why}\n` +
+          `hello without: ${withoutSha.bytes?.length ?? "(not linked)"} bytes ${withoutSha.why}\n` +
+          `the control keeps: ${shaCtrl.names.join(" ") || "(none)"} ${shaCtrl.why}\nthe control printed: ${shaPrinted || "(not run)"}`
+      )
+
       // runtime-checksum.c, the same way: hello is the same bytes without it, and its
       // control keeps the kernel and gives the check value where the CPU runs it.
       const withoutCrc =
@@ -18729,6 +19316,21 @@ if (!only || "simd".includes(only)) {
       ran !== null && ran.status === 0 && ran.stdout === "nish_aes_hw: 0\n",
       b.status !== 0 ? b.stderr : `${ran.stdout}${ran.stderr}`
     )
+    const shaWasm = path.join(simdDir, "sha256-calls.wasm")
+    const shaB = spawnSync(
+      "bash",
+      ["scripts/build.sh", "tests/simd/sha256-calls.c", "runtime/runtime.c", "-o", shaWasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+    )
+    const shaRan =
+      shaB.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", shaWasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      "simd: --profile wasi links runtime-sha256.c, and nish_sha256_hw answers 0 there",
+      shaRan !== null && shaRan.status === 0 && shaRan.stdout === "nish_sha256_hw: 0\n",
+      shaB.status !== 0 ? shaB.stderr : `${shaRan.stdout}${shaRan.stderr}`
+    )
     const crcWasm = path.join(simdDir, "calls-crc32.wasm")
     const cb = spawnSync(
       "bash",
@@ -18745,7 +19347,9 @@ if (!only || "simd".includes(only)) {
       cb.status !== 0 ? cb.stderr : `${crcRan.stdout}${crcRan.stderr}`
     )
   } else {
-    skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's and runtime-checksum.c's wasm32 builds are not linked")
+    skip(
+      "simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's, runtime-sha256.c's and runtime-checksum.c's wasm32 builds are not linked"
+    )
   }
 
   // The freestanding `wasm` profile links runtime-wasm.c, not runtime.c, so nothing
@@ -18917,22 +19521,71 @@ if (!only || "simd runtime-aes wipe survives -O2".includes(only)) {
   }
 }
 
-// The constant-time reading of runtime/runtime-aes.c (tests/ct-asm-runtime.js): every
-// kernel function's `clang -O2` assembly, for x86-64 and aarch64, holds no branch on a
-// secret, no call, no load or store at a secret address and no divide of one, and
-// reads at least one loop branch; tests/simd/aes-leaky.c's two leaks are each refused.
-if (!only || "ct_asm constant time assembly runtime-aes".includes(only)) {
+// The constant-time reading of runtime/runtime-aes.c and runtime-sha256.c
+// (tests/ct-asm-runtime.js): every kernel function's `clang -O2` assembly, for x86-64
+// and aarch64, holds no branch on a secret, no call, no load or store at a secret
+// address and no divide of one, and reads at least one loop branch; tests/simd/aes-leaky.c's two leaks are each refused.
+if (!only || "ct_asm constant time assembly runtime-aes runtime-sha256".includes(only)) {
   if (!HAS_CLANG) {
-    skip("ct_asm: no clang to compile runtime-aes.c to assembly")
+    skip("ct_asm: no clang to compile runtime-aes.c and runtime-sha256.c to assembly")
   } else {
     // x86-64 is read again at the one `--cpu` level, as the fixtures are (CT-16).
     for (const r of [...runtimeChecks(root), ...runtimeChecks(root, "x86-64-v3")]) {
       const promises = {
-        exports: "exports exactly the kernels read here and nish_aes_hw",
+        exports: `exports exactly the kernels read here and ${r.resolver}`,
         kernel: "no branch on a secret, call, secret-indexed access or secret-dependent latency",
         leak: `refused for ${r.expect}`,
       }
       check(`ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, r.ok, r.detail)
+    }
+  }
+}
+
+// runtime/runtime-sha256.c for both Darwin targets, compiled here because no macOS
+// job runs the whole suite. The file declares `getenv` and `sysctlbyname` itself and
+// includes only stddef.h, stdint.h and the intrinsics headers, all of which clang
+// ships, so `-ffreestanding` (clang's stdint.h rather than this host's glibc one)
+// compiles it without an SDK. The aarch64 build must hold the kernel's SHA-256
+// rounds and ask sysctlbyname, never getauxval, which Darwin lacks; the x86-64 build
+// must hold SHA-NI rounds and CPUID. A clang without the target is a skip, any other
+// error a failure.
+if (!only || "runtime-sha256 darwin sha256 cross".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("runtime-sha256 darwin: no clang to compile runtime-sha256.c for x86_64-apple-darwin and aarch64-apple-darwin")
+  } else {
+    for (const [target, rounds, resolver, why] of [
+      ["x86_64-apple-darwin", /\bsha256rnds2\b/, (asm) => /\bcpuid\b/.test(asm), "a CPUID resolver"],
+      [
+        "aarch64-apple-darwin",
+        /\bsha256h2?\b/,
+        (asm) => /\b_sysctlbyname\b/.test(asm) && !/getauxval/.test(asm),
+        "a sysctlbyname resolver",
+      ],
+    ]) {
+      const built = spawnSync(
+        "clang",
+        [`--target=${target}`, "-ffreestanding", "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-S", "-o", "-", "runtime/runtime-sha256.c"],
+        { cwd: root, encoding: "utf8" }
+      )
+      if (built.status !== 0 && /unknown target|no available targets|unable to create target/i.test(built.stderr)) {
+        skip(`runtime-sha256 darwin: this clang cannot target ${target} (${built.stderr.trim().split("\n")[0]})`)
+        continue
+      }
+      const asm = built.status === 0 ? built.stdout : ""
+      check(
+        `runtime-sha256 darwin: runtime-sha256.c compiles warning-free for ${target}, with _nish_sha256_compress, its SHA-256 rounds and ${why}`,
+        built.status === 0 &&
+          /^_nish_sha256_compress:/m.test(asm) &&
+          /^_nish_sha256_hw:/m.test(asm) &&
+          rounds.test(asm) &&
+          resolver(asm),
+        built.status !== 0
+          ? built.stderr
+          : asm
+              .split("\n")
+              .filter((l) => /sha256|sysctl|getauxval|cpuid/.test(l))
+              .join("\n")
+      )
     }
   }
 }
@@ -18968,32 +19621,9 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
   const kernelDir = path.join(buildDir, "aes-kernel")
   fs.rmSync(kernelDir, { recursive: true, force: true })
   fs.mkdirSync(kernelDir, { recursive: true })
-  const cpuFlags = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
-  const cpuFeatures = new Set((cpuFlags.match(/^(flags|Features)\s*:(.*)$/m)?.[2] ?? "").trim().split(/\s+/))
   const cpuHasAes =
     (process.arch === "x64" && cpuFeatures.has("aes") && cpuFeatures.has("pclmulqdq")) ||
     (process.arch === "arm64" && cpuFeatures.has("aes") && cpuFeatures.has("pmull"))
-  /** The modules of tests/link/<program> compiled into a directory of their own, or null with the reason. */
-  const compileAes = (program, dir, flags) => {
-    const r = spawnSync(
-      NISH,
-      [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
-      {
-        cwd: root,
-        encoding: "utf8",
-        env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
-      }
-    )
-    const lls =
-      r.status === 0
-        ? fs
-            .readdirSync(dir)
-            .filter((f) => f.endsWith(".ll"))
-            .sort()
-            .map((f) => path.join(dir, f))
-        : []
-    return { lls, why: r.status === 0 ? "" : r.stderr }
-  }
 
   if (!HAS_CLANG) {
     skip("aes kernel: no clang to link the AES programs against runtime-aes.c")
@@ -19041,7 +19671,7 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
     delete unset.NISH_AES
     for (const program of ["crypto_aes", "crypto_aes_agree"]) {
       const dir = path.join(kernelDir, program)
-      const compiled = compileAes(program, dir, [])
+      const compiled = compileLinkModules(program, dir, [])
       const exe = path.join(kernelDir, `${program}.counted`)
       const linked =
         compiled.lls.length > 0
@@ -19228,9 +19858,9 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
 
   if (WASI_SYSROOT && has("wasm-ld")) {
     const wasiDir = path.join(kernelDir, "wasi")
-    const wasi = compileAes("crypto_aes_agree", wasiDir, ["--profile", "wasi"])
+    const wasi = compileLinkModules("crypto_aes_agree", wasiDir, ["--profile", "wasi"])
     const nativeDir = path.join(kernelDir, "native")
-    const native = compileAes("crypto_aes_agree", nativeDir, [])
+    const native = compileLinkModules("crypto_aes_agree", nativeDir, [])
     const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_aes_"))
     /** The modules linked for wasm32-wasi with every AES symbol traced, and what the linker said. */
     const traced = (lls, out) =>
@@ -19289,6 +19919,228 @@ if (!only || "aes kernel wasi crypto_aes_agree".includes(only)) {
     skip(
       "aes kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of crypto_aes_agree is not checked for kernel references"
     )
+  }
+}
+
+// ---- The SHA-256 kernel against std/crypto/sha256.ts, end to end ---------------------
+// The compiler lowers every call of std/crypto/sha256.ts's `sha256Compress` to a branch
+// on `nish_sha256_hw`: runtime-sha256.c's `nish_sha256_compress` on one arm, the Nish
+// function on the other, and the walker again when the kernel's own copy of the
+// function's guard refuses the block, so a block outside its buffer panics with the
+// Nish message on either path (src/kernels.ts). `tests/link/sha256_hw_vectors` holds
+// both arms to FIPS 180-4's digests and RFC 4231's HMAC-SHA-256 tags, and
+// `tests/link/sha256_hw_agree` to Node's digests of a seeded corpus hashed whole and
+// in pieces. Each is linked with the kernel wrapped (`-Wl,--wrap`) by a counter that
+// reports its calls on exit, then run with `NISH_SHA256` unset and set to `soft`: the
+// two stdouts must be each other's and `expected.out`, the soft run must call no
+// kernel, and where /proc/cpuinfo says the CPU has the instructions the unset run
+// must call it. The debug profile links them, for the reason the AES section gives.
+//
+// A wasm32 build has no kernel to branch to, so the lowering is skipped there: a
+// `--profile wasi` build must reference no `nish_sha256_` symbol, in its IR or in the
+// link, where the native IR linked the same way is the trace's control. The
+// freestanding `wasm` profile links IR compiled for the host, so build.sh adds
+// runtime-sha256.c for it, whose wasm32 build answers 0, and the walker runs.
+if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
+  const shaDir = path.join(buildDir, "sha256-kernel")
+  fs.rmSync(shaDir, { recursive: true, force: true })
+  fs.mkdirSync(shaDir, { recursive: true })
+  const programs = ["sha256_hw_vectors", "sha256_hw_agree"]
+  const expected = (program) => fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+
+  if (!HAS_CLANG) {
+    skip("sha256 kernel: no clang to link the SHA-256 programs against runtime-sha256.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `sha256 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    const counter = path.join(shaDir, "count.c")
+    const arr = "struct nish_array"
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        `${arr};`,
+        "static unsigned long nish_sha256_calls;",
+        `int32_t __real_nish_sha256_compress(${arr} *h, const ${arr} *w, const ${arr} *src, int32_t at);`,
+        `int32_t __wrap_nish_sha256_compress(${arr} *h, const ${arr} *w, const ${arr} *src, int32_t at) { nish_sha256_calls++; return __real_nish_sha256_compress(h, w, src, at); }`,
+        "__attribute__((destructor)) static void nish_sha256_report(void) {",
+        '  fprintf(stderr, "sha256 kernel calls: %lu\\n", nish_sha256_calls);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_SHA256
+    for (const program of programs) {
+      const compiled = compileLinkModules(program, path.join(shaDir, program), [])
+      const exe = path.join(shaDir, `${program}.counted`)
+      const linked =
+        compiled.lls.length > 0
+          ? spawnSync(
+              "bash",
+              [
+                "scripts/build.sh",
+                ...compiled.lls,
+                "runtime/runtime.c",
+                counter,
+                "-Wl,--wrap=nish_sha256_compress",
+                "-o",
+                exe,
+                "--profile",
+                "debug",
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : null
+      if (linked === null || linked.status !== 0) {
+        check(`sha256 kernel: ${program} links with the kernel counted`, false, linked === null ? compiled.why : linked.stderr)
+        continue
+      }
+      const want = expected(program)
+      const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_SHA256: "soft" } })
+      /** The count the wrapper printed, or null. */
+      const calls = (r) => {
+        const m = /^sha256 kernel calls: (\d+)$/m.exec(r.stderr)
+        return m === null ? null : Number(m[1])
+      }
+      check(
+        `sha256 kernel: ${program} prints the same bytes with NISH_SHA256 unset and with NISH_SHA256=soft, and they are its expected.out`,
+        hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_SHA256 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_SHA256=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      check(`sha256 kernel: ${program} under NISH_SHA256=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+      if (cpuHasSha) {
+        check(
+          `sha256 kernel: ${program} with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+          (calls(hw) ?? 0) > 0,
+          hw.stderr
+        )
+      } else {
+        check(
+          `sha256 kernel: ${program} with NISH_SHA256 unset calls no kernel on a CPU /proc/cpuinfo names no SHA-256 instructions for`,
+          calls(hw) === 0,
+          hw.stderr
+        )
+      }
+    }
+  }
+
+  // The freestanding `wasm` profile, as the AES section has it: host IR links with
+  // runtime-wasm.c, build.sh adds runtime-sha256.c once, and the walker hashes as Node.
+  if (has("wasm-ld")) {
+    const freeDir = path.join(shaDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "digest.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { sha256 } from "nish/crypto/sha256"',
+        "",
+        "export const digestByte = (n: i32, at: i32): i32 => {",
+        "  const msg: u8[] = []",
+        "  for (let i: i32 = 0; i < n; i += 1) {",
+        "    msg.push(toU8(i * 7))",
+        "  }",
+        "  const d: u8[] = sha256(msg)",
+        "  if (at < 0 || at >= toI32(d.length)) {",
+        "    return -1",
+        "  }",
+        "  return toI32(d[at])",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const ir = path.join(freeDir, "ir")
+    const r = spawnSync(NISH, [source, "-o", `${ir}${path.sep}`], { cwd: root, encoding: "utf8" })
+    const lls = r.status === 0 ? fs.readdirSync(ir).filter((f) => f.endsWith(".ll")).map((f) => path.join(ir, f)) : []
+    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_sha256_hw("))
+    const wasm = path.join(freeDir, "digest.wasm")
+    const linked =
+      lls.length > 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", ...lls, "runtime/runtime-wasm.c", "-Wl,--trace-symbol=nish_sha256_hw", "-o", wasm, "--profile", "wasm"],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    const definitions =
+      linked === null ? 0 : `${linked.stdout}${linked.stderr}`.split("\n").filter((l) => /definition of nish_sha256_hw/.test(l)).length
+    const lengths = [0, 55, 64, 200]
+    const want = lengths.map((n) =>
+      [...crypto.createHash("sha256").update(Buffer.from(Array.from({ length: n }, (_, i) => (i * 7) & 255))).digest()].join(",")
+    )
+    let got = []
+    let trapped = ""
+    if (linked !== null && linked.status === 0) {
+      try {
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env: {} })
+        got = lengths.map((n) => Array.from({ length: 32 }, (_, at) => instance.exports.digestByte(n, at)).join(","))
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
+    }
+    check(
+      "sha256 kernel: the freestanding --profile wasm link of a SHA-256 module compiled for the host adds runtime-sha256.c once, and hashes as Node does",
+      lowered && linked.status === 0 && definitions === 1 && trapped === "" && got.join(";") === want.join(";"),
+      `${r.stderr}IR calls nish_sha256_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.stderr}objects defining nish_sha256_hw: ${definitions}\n`}${trapped}got  ${got.join(";")}\nwant ${want.join(";")}`
+    )
+  } else {
+    skip("sha256 kernel: no wasm-ld, so the freestanding wasm link of a SHA-256 module is not checked")
+  }
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const program = "sha256_hw_vectors"
+    const wasi = compileLinkModules(program, path.join(shaDir, "wasi"), ["--profile", "wasi"])
+    const native = compileLinkModules(program, path.join(shaDir, "native"), [])
+    const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_sha256_"))
+    /** The modules linked for wasm32-wasi with both SHA-256 symbols traced. */
+    const traced = (lls, out) =>
+      spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...lls,
+          "runtime/runtime.c",
+          "-Wl,--trace-symbol=nish_sha256_hw,--trace-symbol=nish_sha256_compress",
+          "-o",
+          out,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+    const wasm = path.join(shaDir, `${program}.wasm`)
+    const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+    const control = native.lls.length > 0 ? traced(native.lls, path.join(shaDir, "native.wasm")) : null
+    const refs = (r) =>
+      r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_sha256_/.test(l))
+    const ran =
+      linked !== null && linked.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      `sha256 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_sha256_ symbol, and it prints its expected.out`,
+      wasi.lls.length > 0 &&
+        named.length === 0 &&
+        linked.status === 0 &&
+        refs(linked).length === 0 &&
+        control !== null &&
+        control.status === 0 &&
+        refs(control).length > 0 &&
+        ran !== null &&
+        ran.status === 0 &&
+        ran.stdout === expected(program),
+      `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+        `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+        `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+        `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+    )
+  } else {
+    skip(`sha256 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of sha256_hw_vectors is not checked for kernel references`)
   }
 }
 
@@ -22379,11 +23231,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
     riddle.stderr
   )
-  const secret = inSecret(["break"])
+  // The refused run gets a config directory of its own, so it can be shown to
+  // write no settings, and never touches the real `~/.config/nish/break`.
+  const secretConfig = fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-"))
+  const secret = spawnSync(NISH, ["break"], {
+    cwd: secretDir,
+    encoding: "utf8",
+    env: { ...process.env, ...plainEnv, XDG_CONFIG_HOME: secretConfig },
+  })
+  const secretWrote = fs.readdirSync(secretConfig)
+  fs.rmSync(secretConfig, { recursive: true, force: true })
   check(
     "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
     secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
+  )
+  check(
+    "nish break, refused on a pipe: writes no settings file",
+    secretWrote.length === 0,
+    secretWrote.join(", ")
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
   const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])
@@ -23677,9 +24543,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all thirteen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fourteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 12 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 13 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -24418,6 +25284,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-simd.c",
       // And the seventh (WP38 S5): AES-GCM on the CPU's AES instructions.
       "runtime/runtime-aes.c",
+      // And the eleventh: the SHA-256 block on the CPU's SHA instructions.
+      "runtime/runtime-sha256.c",
       // And the tenth (WP38 S6a): the byte-class runs of `nish/bytes`, which
       // std/json's tokenizer calls.
       "runtime/runtime-bytes.c",
