@@ -109,6 +109,7 @@ const ALLOC_COST: i32 = 32
 const DEFAULT_TRIPS: i32 = 64
 const COPIED_NONE_REMEDY: string = "keep the data the `Mutex` holds as numbers and strings, `class Shared { n: i32 = 0 }` behind `new Mutex<Shared>(new Shared())`"
 const DESTINATION_ELEMENTS: string = "|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|number|boolean|"
+const MIN_STACK: f64 = 131072
 const REGION_TAIL: string = ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read"
 const MUTEX: string = "Mutex"
 const MUTEX_GUARD: string = "MutexGuard"
@@ -1262,6 +1263,10 @@ function scopeNotUsingMessage(name: string): string -> @scopeNotUsingMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function stackBelowMinimumMessage(bytes: f64): string -> @stackBelowMinimumMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_f64
+  stackSites=0 stackLocals=0
 function scopeEscapesMessage(): string -> @scopeEscapesMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -1597,6 +1602,20 @@ function isScopeCall(program: CheckedProgram, call: Node, scopeType: i32): boole
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: FunctionSig | null (const)
+function constantStack(program: CheckedProgram, call: Node): f64 -> @constantStack
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_eq numericLiteralValue unwrapParens
+  pointer program: size=656 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 callee: FunctionSig | null (const)
+  local +1:9 args: Node[] (const)
+  local +5:9 arg: Node (const)
+  callee +5:15 unwrapParens -> @unwrapParens
+  callee +7:12 numericLiteralValue -> @numericLiteralValue
+  callee +9:51 unwrapParens -> @unwrapParens
+  callee +10:13 numericLiteralValue -> @numericLiteralValue
+  callee +10:33 unwrapParens -> @unwrapParens
 function isSpawnReceiver(node: Node, parents: Node[], n: i32): boolean -> @isSpawnReceiver
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -1618,9 +1637,9 @@ function walkScopes(program: CheckedProgram, node: Node, parents: Node[], table:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: node scopeType
-  calls: ScopeFinding.constructor arenaBindingMessage arenaNotUsingMessage boundNameOf fixedFinding isArenaCall isLockCall isScopeCall isSpawnReceiver isUsingInitialiser nish_alloc_struct nish_array_grow nish_panic_index openedHandle scopeEscapesMessage scopeNotUsingMessage sourceLocal unwrapParens usingEdits usingNotScopeMessage usingPlaceMessage walkScopes
-  pointer program: size=656 writesThrough=false captured=false passedTo=isArenaCall#0 isScopeCall#0 isLockCall#0 openedHandle#0 isArenaCall#0 isScopeCall#0 usingEdits#0 walkScopes#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=ScopeFinding.constructor#1 isArenaCall#1 ScopeFinding.constructor#1 ScopeFinding.constructor#1 isScopeCall#1 fixedFinding#0 ScopeFinding.constructor#1
+  calls: ScopeFinding.constructor arenaBindingMessage arenaNotUsingMessage boundNameOf constantStack fixedFinding isArenaCall isLockCall isScopeCall isSpawnReceiver isUsingInitialiser nish_alloc_struct nish_array_grow nish_panic_index openedHandle scopeEscapesMessage scopeNotUsingMessage sourceLocal stackBelowMinimumMessage unwrapParens usingEdits usingNotScopeMessage usingPlaceMessage walkScopes
+  pointer program: size=656 writesThrough=false captured=false passedTo=isArenaCall#0 isScopeCall#0 isLockCall#0 openedHandle#0 isArenaCall#0 isScopeCall#0 constantStack#0 usingEdits#0 walkScopes#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=ScopeFinding.constructor#1 isArenaCall#1 ScopeFinding.constructor#1 ScopeFinding.constructor#1 isScopeCall#1 constantStack#1 ScopeFinding.constructor#1 fixedFinding#0 ScopeFinding.constructor#1
   pointer parents: size=0 writesThrough=true captured=false passedTo=isUsingInitialiser#1 isUsingInitialiser#1 boundNameOf#1 usingEdits#2 isSpawnReceiver#1 walkScopes#2
   pointer table: size=96 writesThrough=false captured=false passedTo=openedHandle#1 walkScopes#3
   pointer arenas: size=0 writesThrough=true captured=false passedTo=walkScopes#5
@@ -1652,16 +1671,20 @@ function walkScopes(program: CheckedProgram, node: Node, parents: Node[], table:
   callee +33:14 new ScopeFinding -> @ScopeFinding.constructor
   callee +33:37 arenaBindingMessage -> @arenaBindingMessage
   callee +36:33 isScopeCall -> @isScopeCall
-  callee +37:12 isUsingInitialiser -> @isUsingInitialiser
-  callee +39:11 fixedFinding -> @fixedFinding
-  callee +41:13 scopeNotUsingMessage -> @scopeNotUsingMessage
-  callee +41:34 boundNameOf -> @boundNameOf
-  callee +42:13 usingEdits -> @usingEdits
-  callee +46:43 isSpawnReceiver -> @isSpawnReceiver
-  callee +47:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee +47:39 scopeEscapesMessage -> @scopeEscapesMessage
-  local +51:14 child: Node (const)
-  callee +52:5 walkScopes -> @walkScopes
+  local +37:13 stack: f64 (const)
+  callee +37:21 constantStack -> @constantStack
+  callee +39:18 new ScopeFinding -> @ScopeFinding.constructor
+  callee +39:41 stackBelowMinimumMessage -> @stackBelowMinimumMessage
+  callee +41:12 isUsingInitialiser -> @isUsingInitialiser
+  callee +43:11 fixedFinding -> @fixedFinding
+  callee +45:13 scopeNotUsingMessage -> @scopeNotUsingMessage
+  callee +45:34 boundNameOf -> @boundNameOf
+  callee +46:13 usingEdits -> @usingEdits
+  callee +50:43 isSpawnReceiver -> @isSpawnReceiver
+  callee +51:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee +51:39 scopeEscapesMessage -> @scopeEscapesMessage
+  local +55:14 child: Node (const)
+  callee +56:5 walkScopes -> @walkScopes
 function scopeFindings(programs: CheckedProgram[], program: CheckedProgram, table: TypeTable, facts: FactsTable, summaries: ChannelSummaries): ScopeFinding[] -> @scopeFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.structOf
