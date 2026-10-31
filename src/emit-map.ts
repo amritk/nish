@@ -255,7 +255,8 @@ const hashKeyWord = (i: i32, key: string): string =>
 const INT_HASH_KEY: string = "@nish_int_hash_key"
 /** SipHash's key, `HASH_KEY_GLOBAL`, which only strings use. */
 const STRING_HASH_KEY: string = "@nish_hash_key"
-const INT_HASH_KEY_GLOBAL: string = "@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8"
+const INT_HASH_KEY_GLOBAL: string =
+  "@nish_int_hash_key = linkonce_odr global [2 x i64] zeroinitializer, align 8"
 
 /** One SipHash compression of the word `m`: `v3 ^= m`, `rounds` rounds, `v0 ^= m`. */
 const compress = (emitter: Emitter, slots: string[], m: string, rounds: i32): void => {
