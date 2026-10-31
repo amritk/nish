@@ -393,12 +393,15 @@ function TypeTable.tagNameOf(this: TypeTable, type: i32): string -> @TypeTable.t
 function TypeTable.hasVariant(this: TypeTable, type: i32, variant: i32): boolean -> @TypeTable.hasVariant [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.variantsOf
+  calls: TypeTable.variantsOf nish_panic_index nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0
   stackSites=0 stackLocals=0
   local +0:11 variants: i32[] (const)
   callee +0:22 TypeTable.variantsOf -> @TypeTable.variantsOf
-  local +1:9 i: i32 (let)
+  local +1:9 lo: i32 (let)
+  local +2:9 hi: i32 (let)
+  local +4:13 mid: i32 (const)
+  local +5:13 at: i32 (const)
 function TypeTable.unionWithin(this: TypeTable, from: i32, to: i32): boolean -> @TypeTable.unionWithin [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
@@ -603,23 +606,25 @@ function TypeTable.elementName(this: TypeTable, element: i32): string -> @TypeTa
   callee +1:12 TypeTable.isUnion -> @TypeTable.isUnion
   callee +1:25 TypeTable.stripNull -> @TypeTable.stripNull
 function TypeTable.unionName(this: TypeTable, type: i32): string -> @TypeTable.unionName [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.joinedNames TypeTable.variantsOf
-  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.joinedNames#0 TypeTable.variantsOf#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0 TypeTable.joinedNames#0
   stackSites=0 stackLocals=0
-  callee +0:12 TypeTable.joinedNames -> @TypeTable.joinedNames
-  callee +0:29 TypeTable.variantsOf -> @TypeTable.variantsOf
-function TypeTable.joinedNames(this: TypeTable, variants: i32[], at: i32): string -> @TypeTable.joinedNames [exported method]
+  local +0:11 variants: i32[] (const)
+  callee +0:22 TypeTable.variantsOf -> @TypeTable.variantsOf
+  callee +1:12 TypeTable.joinedNames -> @TypeTable.joinedNames
+function TypeTable.joinedNames(this: TypeTable, variants: i32[], from: i32, to: i32): string -> @TypeTable.joinedNames [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: at
-  calls: TypeTable.joinedNames TypeTable.typeName nish_str_concat
-  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.joinedNames#0
-  pointer variants: size=0 writesThrough=true captured=false passedTo=TypeTable.joinedNames#1
+  escaping: from to
+  calls: TypeTable.joinedNames TypeTable.typeName nish_panic_index nish_panic_overflow nish_str_concat
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.joinedNames#0 TypeTable.joinedNames#0
+  pointer variants: size=0 writesThrough=true captured=false passedTo=TypeTable.joinedNames#1 TypeTable.joinedNames#1
   stackSites=0 stackLocals=0
-  local +0:11 head: string (const)
-  callee +0:18 TypeTable.typeName -> @TypeTable.typeName
-  callee +1:52 TypeTable.joinedNames -> @TypeTable.joinedNames
+  callee +0:14 TypeTable.typeName -> @TypeTable.typeName
+  local +2:11 mid: i32 (const)
+  callee +3:15 TypeTable.joinedNames -> @TypeTable.joinedNames
+  callee +3:58 TypeTable.joinedNames -> @TypeTable.joinedNames
 function TypeTable.resultStructName(this: TypeTable, type: i32): string -> @TypeTable.resultStructName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
