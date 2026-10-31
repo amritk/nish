@@ -345,6 +345,26 @@ const jsonPresenceMisuse = (ctx: CheckContext, info: StructInfo, node: Node, det
 }
 
 /**
+ * The presence misuse that names the flag's type. It is a function of its own
+ * because it returns nothing, so the type's name it makes is released when it
+ * returns rather than kept for every pass of the caller's loop.
+ */
+const jsonPresenceNotBoolean = (
+  ctx: CheckContext,
+  info: StructInfo,
+  to: Node,
+  field: FieldInfo,
+  flag: FieldInfo
+): void => {
+  jsonPresenceMisuse(
+    ctx,
+    info,
+    to,
+    `gives \`${field.name}\` the field \`${flag.name}\`, which is \`${ctx.table.typeName(flag.type)}\``
+  )
+}
+
+/**
  * `presence: { field: "hasField", ... }`: for each field, the `boolean` field
  * a decoding sets to whether its key was given. The presence field leaves the
  * wire: neither route reads or writes it.
@@ -401,12 +421,7 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
       return
     }
     if (flag.type !== T_BOOL) {
-      jsonPresenceMisuse(
-        ctx,
-        info,
-        to,
-        `gives \`${field.name}\` the field \`${flag.name}\`, which is \`${ctx.table.typeName(flag.type)}\``
-      )
+      jsonPresenceNotBoolean(ctx, info, to, field, flag)
       return
     }
     if (flag.readonly) {

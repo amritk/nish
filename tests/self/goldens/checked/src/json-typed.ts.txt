@@ -180,32 +180,43 @@ function jsonPresenceMisuse(ctx: CheckContext, info: StructInfo, node: Node, det
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
+function jsonPresenceNotBoolean(ctx: CheckContext, info: StructInfo, to: Node, field: FieldInfo, flag: FieldInfo): void -> @jsonPresenceNotBoolean
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via jsonPresenceMisuse
+  calls: TypeTable.typeName jsonPresenceMisuse nish_str_concat
+  pointer ctx: size=280 writesThrough=true captured=false passedTo=jsonPresenceMisuse#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=jsonPresenceMisuse#1
+  pointer to: size=40 writesThrough=false captured=false passedTo=jsonPresenceMisuse#2
+  pointer field: size=72 writesThrough=false captured=false
+  pointer flag: size=72 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 jsonPresenceMisuse -> @jsonPresenceMisuse
+  callee +4:71 TypeTable.typeName -> @TypeTable.typeName
 function jsonReadPresence(ctx: CheckContext, info: StructInfo, value: Node): void -> @jsonReadPresence
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: TypeTable.typeName jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonPresenceMisuse jsonStringLiteral nish_panic_index nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonOptionField#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0
-  pointer info: size=168 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonNotLiteral#1 jsonOptionField#1 jsonOptionField#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1
+  calls: jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonPresenceMisuse jsonPresenceNotBoolean jsonStringLiteral nish_panic_index nish_str_concat
+  pointer ctx: size=280 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonOptionField#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceNotBoolean#0 jsonPresenceMisuse#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonNotLiteral#1 jsonOptionField#1 jsonOptionField#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceNotBoolean#1 jsonPresenceMisuse#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=0 stackLocals=0
-  callee -57:5 jsonNotLiteral -> @jsonNotLiteral
-  local -54:14 prop: Node (const)
-  local -46:11 to: Node (const)
-  callee -45:10 jsonIsStringLiteral -> @jsonIsStringLiteral
-  callee -44:7 jsonNotLiteral -> @jsonNotLiteral
-  local -41:11 field: FieldInfo | null (const)
-  callee -41:19 jsonOptionField -> @jsonOptionField
-  local -37:11 flag: FieldInfo | null (const)
-  callee -37:18 jsonOptionField -> @jsonOptionField
-  callee -37:61 jsonStringLiteral -> @jsonStringLiteral
-  callee -32:7 jsonPresenceMisuse -> @jsonPresenceMisuse
-  callee -28:7 jsonPresenceMisuse -> @jsonPresenceMisuse
-  callee -24:7 jsonPresenceMisuse -> @jsonPresenceMisuse
-  callee -20:7 jsonPresenceMisuse -> @jsonPresenceMisuse
-  callee -16:7 jsonPresenceMisuse -> @jsonPresenceMisuse
-  callee -12:7 jsonPresenceMisuse -> @jsonPresenceMisuse
-  callee -8:75 TypeTable.typeName -> @TypeTable.typeName
-  callee -3:7 jsonPresenceMisuse -> @jsonPresenceMisuse
+  callee -62:5 jsonNotLiteral -> @jsonNotLiteral
+  local -59:14 prop: Node (const)
+  local -51:11 to: Node (const)
+  callee -50:10 jsonIsStringLiteral -> @jsonIsStringLiteral
+  callee -49:7 jsonNotLiteral -> @jsonNotLiteral
+  local -46:11 field: FieldInfo | null (const)
+  callee -46:19 jsonOptionField -> @jsonOptionField
+  local -42:11 flag: FieldInfo | null (const)
+  callee -42:18 jsonOptionField -> @jsonOptionField
+  callee -42:61 jsonStringLiteral -> @jsonStringLiteral
+  callee -37:7 jsonPresenceMisuse -> @jsonPresenceMisuse
+  callee -33:7 jsonPresenceMisuse -> @jsonPresenceMisuse
+  callee -29:7 jsonPresenceMisuse -> @jsonPresenceMisuse
+  callee -25:7 jsonPresenceMisuse -> @jsonPresenceMisuse
+  callee -21:7 jsonPresenceMisuse -> @jsonPresenceMisuse
+  callee -12:7 jsonPresenceNotBoolean -> @jsonPresenceNotBoolean
+  callee -8:7 jsonPresenceMisuse -> @jsonPresenceMisuse
 function checkJsonOptions(ctx: CheckContext, info: StructInfo): void -> @checkJsonOptions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -233,13 +244,13 @@ function checkJsonOptions(ctx: CheckContext, info: StructInfo): void -> @checkJs
   local +54:14 field: FieldInfo (const)
   local +56:13 what: string (const)
   callee +57:7 jsonPresenceMisuse -> @jsonPresenceMisuse
-  local +63:9 keys: StringSet (const)
-  callee +63:16 new StringSet -> @StringSet.constructor
-  local +64:14 field: FieldInfo (const)
-  callee +65:32 StringSet.add -> @StringSet.add
-  local +66:11 other: string (let)
-  local +67:18 f: FieldInfo (const)
-  callee +72:7 jsonDuplicate -> @jsonDuplicate
+  local +68:9 keys: StringSet (const)
+  callee +68:16 new StringSet -> @StringSet.constructor
+  local +69:14 field: FieldInfo (const)
+  callee +70:32 StringSet.add -> @StringSet.add
+  local +71:11 other: string (let)
+  local +72:18 f: FieldInfo (const)
+  callee +77:7 jsonDuplicate -> @jsonDuplicate
 function jsonRouteRole(template: TemplateInfo): i32 -> @jsonRouteRole [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.isJsonTyped nish_str_eq
