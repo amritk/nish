@@ -423,7 +423,9 @@ export class Checker {
         return
       }
     }
-    this.program.imports.push(new ImportBinding(SORT_SPECIFIER, "sortWith", SORT_LOCAL, this.program.file, this.program.file))
+    this.program.imports.push(
+      new ImportBinding(SORT_SPECIFIER, "sortWith", SORT_LOCAL, this.program.file, this.program.file)
+    )
   }
 
   /**
