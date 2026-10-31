@@ -154,6 +154,10 @@ const BAD_ALG_TWICE: string =
   "eyJhbGciOiJIUzI1NiIsImFsZyI6IkhTMjU2In0.eyJleHAiOjIwMDAwMDAwMDB9.ZWGNq4EwepMi42Bo56w7KdrNybN7n6nCEjJW-wWyaog";
 const BAD_ALG_TWICE_NONE: string =
   "eyJhbGciOiJIUzI1NiIsImFsZyI6Im5vbmUifQ.eyJleHAiOjIwMDAwMDAwMDB9.gCpM1IhRz6vU2GaDOafPAqtTVxIYLJiHAgSdH8aaoWo";
+const BAD_ALG_ESCAPED: string =
+  "eyJhbGciOiJIUzI1NiIsImFsZyI6Im5vbmUifQ.eyJleHAiOjIwMDAwMDAwMDB9.gCpM1IhRz6vU2GaDOafPAqtTVxIYLJiHAgSdH8aaoWo";
+const BAD_EXP_ESCAPED: string =
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsImV4cCI6MX0.PMJz0F7p2wKnsb2dZpeGxZH43PhIu0IYfrm2hjBmDIw";
 const BAD_CRIT: string =
   "eyJhbGciOiJIUzI1NiIsImNyaXQiOlsiZXhwIl19.eyJleHAiOjIwMDAwMDAwMDB9.Dia-bxt3JTdKaDXA4Xm6ILgoJJjxeBPLrYn7UsqJSic";
 const BAD_B64: string =
@@ -315,6 +319,7 @@ export const jwtChecks = (): i32 => {
   t.eqStr("an alg that is not a string is refused", codeOf(v.verifyString(hs, BAD_ALG_NUMBER, NOW)), codeOf(JWT_ERR_ALG));
   t.eqStr("alg twice is refused, even agreeing", codeOf(v.verifyString(hs, BAD_ALG_TWICE, NOW)), codeOf(JWT_ERR_HEADER));
   t.eqStr("alg twice, the second none, is refused", codeOf(v.verifyString(hs, BAD_ALG_TWICE_NONE, NOW)), codeOf(JWT_ERR_HEADER));
+  t.eqStr("alg twice, the second spelled with an escape, is refused", codeOf(v.verifyString(hs, BAD_ALG_ESCAPED, NOW)), codeOf(JWT_ERR_HEADER));
   t.eqStr("crit is refused", codeOf(v.verifyString(hs, BAD_CRIT, NOW)), codeOf(JWT_ERR_HEADER));
   t.eqStr("b64 is refused", codeOf(v.verifyString(hs, BAD_B64, NOW)), codeOf(JWT_ERR_HEADER));
   t.eqStr("a typ that is not a string is refused", codeOf(v.verifyString(hs, BAD_TYP_NUMBER, NOW)), codeOf(JWT_ERR_HEADER));
@@ -347,6 +352,7 @@ export const jwtChecks = (): i32 => {
   t.eqStr("claims: issued in the future", codeOf(c.verifyString(hs, BAD_IAT, NOW)), codeOf(JWT_ERR_IAT));
   t.eqStr("claims: no exp", codeOf(v.verifyString(hs, BAD_NO_EXP, NOW)), codeOf(JWT_ERR_CLAIMS));
   t.eqStr("claims: exp twice", codeOf(v.verifyString(hs, BAD_EXP_TWICE, NOW)), codeOf(JWT_ERR_CLAIMS));
+  t.eqStr("claims: exp twice, the second spelled with an escape", codeOf(v.verifyString(hs, BAD_EXP_ESCAPED, NOW)), codeOf(JWT_ERR_CLAIMS));
   t.eqStr("claims: exp as a string", codeOf(v.verifyString(hs, BAD_EXP_STRING, NOW)), codeOf(JWT_ERR_CLAIMS));
   t.eqStr("claims: exp with a fraction", codeOf(v.verifyString(hs, BAD_EXP_FRACTION, NOW)), codeOf(JWT_ERR_CLAIMS));
   t.eqStr("claims: the wrong issuer", codeOf(c.verifyString(hs, BAD_ISS, NOW)), codeOf(JWT_ERR_ISSUER));

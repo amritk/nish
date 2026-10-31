@@ -79,6 +79,7 @@ the record that found it. The notes below the table name each such finding.
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
+| JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁵ |
 | **Total** ⁸ | | | **3 / 10 / 46 / 144** | **0 / 0 / 2 / 30** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -303,6 +304,11 @@ the record that found it. The notes below the table name each such finding.
     tracks PKI-26 to PKI-28.
     PKI-29 (Informational), a common name not checked against the SANs, is
     not counted. PKI-1 to PKI-16 are properties checked and found to hold.
+25. JWT-1 to JWT-5 (Low) are accepted, with the reason in their record, and
+    are not counted: public-key verifies allocate, the public token is read
+    in variable time, unregistered members may repeat, `peekKid`'s `kid` is
+    unauthenticated by design, and what the wipes cannot reach. JWT-P1 to
+    JWT-P8 are properties checked and found to hold.
 
 ## Fuzzed
 
@@ -327,6 +333,7 @@ building the runtime for the harness, not by a target.
 | [http1-client.md](http1-client.md) | `http1-client` |
 | [http2.md](http2.md) | `hpack` |
 | [crypto-x509.md](crypto-x509.md) | `x509-der`, `x509-pem` |
+| [crypto-jwt.md](crypto-jwt.md) | `jwt` |
 
 ## Not yet audited
 
