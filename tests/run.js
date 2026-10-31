@@ -133,14 +133,15 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, `runtime-sha256.c` the SHA-256 block on its SHA
- * instructions, `runtime-checksum.c` CRC-32 on its carry-less
+ * instructions, `runtime-bcrypt.c` bcrypt's cost loop on x86-64's BMI1
+ * and BMI2, `runtime-checksum.c` CRC-32 on its carry-less
  * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
  * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes`,
  * `runtime-sandbox.c` the `--sandbox` confinement and `runtime-shm.c` the
  * shared-memory regions of `nish/sync/shm`, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fourteen:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fifteen:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -160,6 +161,7 @@ const RUNTIME_C = [
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
   "runtime/runtime-sha256.c",
+  "runtime/runtime-bcrypt.c",
   "runtime/runtime-checksum.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
@@ -9104,7 +9106,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's fourteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's fifteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9160,6 +9162,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-simd.c",
       "runtime-aes.c",
       "runtime-sha256.c",
+      "runtime-bcrypt.c",
       "runtime-checksum.c",
       "runtime-term.c",
       "runtime-bytes.c",
@@ -9172,7 +9175,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fourteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fifteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9181,7 +9184,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the fourteen runtime units once",
+      "runtime cache: the miss compiled each of the fifteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -18016,7 +18019,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c and runtime-shm.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-bcrypt.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c and runtime-shm.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -18955,7 +18958,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|crc32): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|bcrypt|crc32): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -19038,6 +19041,25 @@ if (!only || "simd".includes(only)) {
       `simd: sha256 ran the ${wantSha} path, which /proc/cpuinfo says this CPU has`,
       new RegExp(`cases agree across ${wantSha};`).test(shaSaid),
       shaSaid
+    )
+  }
+
+  // runtime/runtime-bcrypt.c runs bcrypt's cost loop, 2 to 6 lanes at once, on
+  // x86-64's BMI1 and BMI2, in place of std/crypto/bcrypt.ts's `bcryptBodyN`.
+  // tests/simd/bcrypt.c includes the file and holds every generated kernel -- both
+  // index styles at every width from 1 to 6 -- to bcrypt's expand0 body written out
+  // in C on random states, checks the guard's every refused width and short state,
+  // that each kernel zeroes its frame and the caller-saved registers it wrote, and
+  // `nish_bcrypt_hw` under each `NISH_BCRYPT`. /proc/cpuinfo's `bmi1` and `bmi2`
+  // decide whether the line must name the path.
+  const bcryptSaid = agree(`bcrypt native ${process.arch}`, [], path.join(simdDir, "bcrypt"), native, "tests/simd/bcrypt.c")
+  if (process.arch !== "x64" || !cpuFeatures.has("bmi1") || !cpuFeatures.has("bmi2")) {
+    skip(`simd: bcrypt: /proc/cpuinfo names no BMI1 and BMI2 for ${process.platform}-${process.arch}, so no kernel is required to run`)
+  } else {
+    check(
+      "simd: bcrypt ran the bmi2 path, which /proc/cpuinfo says this CPU has",
+      /cases agree across bmi2;/.test(bcryptSaid),
+      bcryptSaid
     )
   }
 
@@ -19169,7 +19191,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|crc32:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|bcrypt:|crc32:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -19219,7 +19241,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_bcrypt\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
@@ -19246,6 +19268,7 @@ if (!only || "simd".includes(only)) {
         : "nish_sha256_hw: 1\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n"
     const noShaDir = runtimeWithout("runtime-sha256.c")
     const noCrcDir = runtimeWithout("runtime-checksum.c")
+    const noBcryptDir = runtimeWithout("runtime-bcrypt.c")
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
@@ -19325,6 +19348,20 @@ if (!only || "simd".includes(only)) {
         `hello with runtime-sha256.c: ${quiet.bytes?.length ?? "(not linked)"} bytes ${quiet.why}\n` +
           `hello without: ${withoutSha.bytes?.length ?? "(not linked)"} bytes ${withoutSha.why}\n` +
           `the control keeps: ${shaCtrl.names.join(" ") || "(none)"} ${shaCtrl.why}\nthe control printed: ${shaPrinted || "(not run)"}`
+      )
+
+      // runtime-bcrypt.c: every kernel sits in a section of its own, so hello, which
+      // calls none, links to the same bytes without the file. tests/simd/bcrypt.c and
+      // the bcrypt programs under tests/link run the kernels.
+      const withoutBcrypt =
+        compiled.status === 0
+          ? kept([helloLl], path.join(simdDir, `hello-no-bcrypt.${profile}`), profile, path.join(noBcryptDir, "runtime.c"))
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      check(
+        `simd: --profile ${profile} links hello with runtime-bcrypt.c to the same bytes as without it`,
+        withoutBcrypt.ok && quiet.ok && quiet.names.length === 0 && withoutBcrypt.bytes.equals(quiet.bytes),
+        `hello with runtime-bcrypt.c: ${quiet.bytes?.length ?? "(not linked)"} bytes, keeps ${quiet.names.join(" ") || "(none)"} ${quiet.why}\n` +
+          `hello without: ${withoutBcrypt.bytes?.length ?? "(not linked)"} bytes ${withoutBcrypt.why}`
       )
 
       // runtime-checksum.c, the same way: hello is the same bytes without it, and its
@@ -19646,6 +19683,121 @@ if (!only || "runtime-sha256 darwin sha256 cross".includes(only)) {
               .join("\n")
       )
     }
+  }
+}
+
+// ---- The bcrypt kernel against std/crypto/bcrypt.ts, end to end --------------------
+// The compiler lowers every call of std/crypto/bcrypt.ts's `bcryptBodyN` to a branch on
+// `nish_bcrypt_hw`: runtime-bcrypt.c's `nish_bcrypt_body_n` on one arm, the Nish loop
+// on the other (src/kernels.ts). Every bcrypt program under tests/link is linked here
+// with the kernel wrapped (`-Wl,--wrap`) by a counter that reports its calls on exit,
+// then run with `NISH_BCRYPT` unset and with `NISH_BCRYPT=soft`: the two stdouts must
+// be each other's and `expected.out`, byte for byte, and the soft run must call no
+// kernel. Where /proc/cpuinfo names BMI1 and BMI2, the programs that hash a batch must
+// call it with `NISH_BCRYPT` unset, so an agreement that only ever ran the Nish loop
+// cannot pass. bcryptHash's one lane stays in Nish, so the others call it nowhere.
+// A `--profile wasi` build references no `nish_bcrypt_` symbol in its IR.
+if (!only || "bcrypt kernel wasi crypto_bcrypt thread_bcrypt".includes(only)) {
+  const bcDir = path.join(buildDir, "bcrypt-kernel")
+  fs.rmSync(bcDir, { recursive: true, force: true })
+  fs.mkdirSync(bcDir, { recursive: true })
+  const batched = ["crypto_bcrypt_batch", "crypto_bcrypt_width", "thread_bcrypt_batch"]
+  const programs = ["crypto_bcrypt", "crypto_bcrypt_f64", "thread_bcrypt_task", ...batched]
+  const cpuHasBmi = process.arch === "x64" && cpuFeatures.has("bmi1") && cpuFeatures.has("bmi2")
+  if (!HAS_CLANG) {
+    skip("bcrypt kernel: no clang to link the bcrypt programs against runtime-bcrypt.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `bcrypt kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    const counter = path.join(bcDir, "count.c")
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        "struct nish_array;",
+        "static unsigned long nish_bcrypt_calls;",
+        "int32_t __real_nish_bcrypt_body_n(struct nish_array *st, int32_t width);",
+        "int32_t __wrap_nish_bcrypt_body_n(struct nish_array *st, int32_t width) { __atomic_add_fetch(&nish_bcrypt_calls, 1, __ATOMIC_RELAXED); return __real_nish_bcrypt_body_n(st, width); }",
+        "__attribute__((destructor)) static void nish_bcrypt_report(void) {",
+        '  fprintf(stderr, "bcrypt kernel calls: %lu\\n", nish_bcrypt_calls);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_BCRYPT
+    /** The count the wrapper printed, or null. */
+    const calls = (r) => {
+      const m = /^bcrypt kernel calls: (\d+)$/m.exec(r.stderr)
+      return m === null ? null : Number(m[1])
+    }
+    for (const program of programs) {
+      const dir = path.join(linkDir, program)
+      const args = fs.existsSync(path.join(dir, "args")) ? fs.readFileSync(path.join(dir, "args"), "utf8").trim().split(/\s+/) : []
+      const compiled = compileLinkModules(program, path.join(bcDir, program), args)
+      const exe = path.join(bcDir, `${program}.counted`)
+      const linked =
+        compiled.lls.length > 0
+          ? spawnSync(
+              "bash",
+              [
+                "scripts/build.sh",
+                ...compiled.lls,
+                "runtime/runtime.c",
+                counter,
+                "-Wl,--wrap=nish_bcrypt_body_n",
+                "-o",
+                exe,
+                ...(args.includes("--threads") ? ["--threads"] : []),
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : null
+      if (linked === null || linked.status !== 0) {
+        check(`bcrypt kernel: ${program} links with the kernel counted`, false, linked === null ? compiled.why : linked.stderr)
+        continue
+      }
+      const want = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+      const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_BCRYPT: "soft" } })
+      check(
+        `bcrypt kernel: ${program} prints the same bytes with NISH_BCRYPT unset and with NISH_BCRYPT=soft, and they are its expected.out`,
+        hw.status === soft.status && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_BCRYPT unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_BCRYPT=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      check(`bcrypt kernel: ${program} under NISH_BCRYPT=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+      if (!batched.includes(program)) {
+        check(`bcrypt kernel: ${program}, which hashes one lane at a time, calls no kernel`, calls(hw) === 0, hw.stderr)
+      } else if (cpuHasBmi) {
+        check(
+          `bcrypt kernel: ${program} with NISH_BCRYPT unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+          (calls(hw) ?? 0) > 0,
+          hw.stderr
+        )
+      } else {
+        check(
+          `bcrypt kernel: ${program} with NISH_BCRYPT unset calls no kernel on a CPU /proc/cpuinfo names no BMI1 and BMI2 for`,
+          calls(hw) === 0,
+          hw.stderr
+        )
+      }
+    }
+  }
+  if (WASI_SYSROOT) {
+    const program = "crypto_bcrypt_width"
+    const wasi = compileLinkModules(program, path.join(bcDir, "wasi"), ["--profile", "wasi"])
+    const native = compileLinkModules(program, path.join(bcDir, "native"), [])
+    const named = (lls) => lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_bcrypt_"))
+    check(
+      "bcrypt kernel: a --profile wasi build of crypto_bcrypt_width names no nish_bcrypt_ symbol in its IR, where the native build does",
+      wasi.lls.length > 0 && named(wasi.lls).length === 0 && named(native.lls).length > 0,
+      `${wasi.why}${native.why}wasi modules naming one: ${named(wasi.lls).join(" ") || "(none)"}\nnative modules naming one: ${named(native.lls).join(" ") || "(none)"}`
+    )
+  } else {
+    skip("bcrypt kernel: no WASI sysroot (set WASI_SYSROOT), so the wasi build of crypto_bcrypt_width is not read")
   }
 }
 
@@ -24602,9 +24754,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fourteen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fifteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 14 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 15 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")

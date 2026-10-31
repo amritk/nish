@@ -689,14 +689,15 @@ case "$profile" in
     fi
     # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
     # AES kernels behind `nish_aes_hw`, std/crypto/sha256.ts's block function behind
-    # `nish_sha256_hw` and std/compress/checksum.ts's CRC-32 kernel behind
-    # `nish_crc32_hw` (src/kernels.ts). runtime-aes.c's, runtime-sha256.c's and
+    # `nish_sha256_hw`, std/crypto/bcrypt.ts's cost loop behind `nish_bcrypt_hw` and
+    # std/compress/checksum.ts's CRC-32 kernel behind `nish_crc32_hw` (src/kernels.ts).
+    # runtime-aes.c's, runtime-sha256.c's, runtime-bcrypt.c's and
     # runtime-checksum.c's wasm32 builds answer 0 there, so the Nish code runs, and
     # each is added only for such IR: every other module links the bytes it always did.
     # Each pair is a unit and the kernel its probe names.
     # A caller that names the unit itself is left alone, as `halves` leaves it:
     # one object named twice is a duplicate-symbol error.
-    for pair in aes:aes sha256:sha256 checksum:crc32; do
+    for pair in aes:aes sha256:sha256 bcrypt:bcrypt checksum:crc32; do
       unit=${pair%%:*}
       kernel=${pair#*:}
       named=0

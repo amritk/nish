@@ -147,6 +147,7 @@ const RUNTIME_C = [
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
   "runtime/runtime-sha256.c",
+  "runtime/runtime-bcrypt.c",
   "runtime/runtime-checksum.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
