@@ -28,9 +28,6 @@ NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`
 NL2040  retired: inheritance, removed
 NL2042  retired: the long form of the WP15 §8 allocation warning; the live one is NL9001
 NL2047  retired: inheritance, removed
-NL2166  retired: a `case` clause had to end in `break`, `return`, `continue` or `process.exit`; a clause falls into the next as in TypeScript now (tests/cases/cf_switch_fallthrough)
-NL2217  retired: the checker's refusal of a labelled `break`; one compiles now (tests/cases/cf_label_loops)
-NL2218  retired: the checker's refusal of a labelled `continue`; one compiles now (tests/cases/cf_label_loops)
 NL2049  retired: inheritance, removed
 NL2050  retired: inheritance, removed
 NL2051  retired: inheritance, removed
@@ -50,6 +47,9 @@ NL2156  retired: `super(...)`, removed with inheritance
 NL2157  retired: `super`, removed with inheritance
 NL2158  retired: `super`, removed with inheritance
 NL2159  retired: `super`, removed with inheritance
+NL2166  retired: a `case` clause had to end in `break`, `return`, `continue` or `process.exit`; a clause falls into the next as in TypeScript now (tests/cases/cf_switch_fallthrough)
+NL2217  retired: the checker's refusal of a labelled `break`; one compiles now (tests/cases/cf_label_loops)
+NL2218  retired: the checker's refusal of a labelled `continue`; one compiles now (tests/cases/cf_label_loops)
 NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
 NL2227  retired: `Only relative import specifiers are supported`, from before WP21 S2 made a package name one of the four legal forms; the live rule is NL2320
 NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2321, itself retired for NL2538

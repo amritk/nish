@@ -1,6 +1,7 @@
 // A labelled `break` or `continue` that leaves a `using arena()` block
 // releases its region on the way out, as a `return` does, so the next pass
-// opens a fresh one. The `Mutex` guard and `scope()` exits are
+// opens a fresh one. Stdout cannot see the release; the .ll golden pins it
+// before each labelled branch. The `Mutex` guard and `scope()` exits are
 // tests/link/cf_label_dispose_threads, since a case cannot import
 // `nish/threads`.
 const arenas = (): i32 => {

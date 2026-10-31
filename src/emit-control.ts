@@ -401,11 +401,11 @@ export const emitContinue = (emitter: Emitter, stmt: Node): void => {
   if (stmt.text !== "") {
     at = labelled(emitter, stmt.text)
   } else {
-    while (emitter.loops[at].continueBlock === null) {
+    while (at >= 0 && emitter.loops[at].continueBlock === null) {
       at = at - 1
     }
   }
-  const target = emitter.loops[at].continueBlock
+  const target = at >= 0 ? emitter.loops[at].continueBlock : null
   if (target === null) {
     process.exit(internalErrorFor(`emitter: \`continue ${stmt.text}\` names no loop`, emitter.opts.json))
   }
