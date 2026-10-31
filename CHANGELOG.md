@@ -26,6 +26,47 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-30
+
+### Added
+
+- runtime: Record each value's source range in JsonDocument with parseRanged ([#1051](https://github.com/amritk/nish/pull/1051))
+- runtime: Client side of the WebSocket opening handshake ([#1067](https://github.com/amritk/nish/pull/1067))
+- std: JSON Pointer, value equality and exact decimals for JSON Schema ([#1054](https://github.com/amritk/nish/pull/1054))
+- std: The JSON Schema format checks ([#1052](https://github.com/amritk/nish/pull/1052))
+- std: Load a YAML document into a JsonDocument with its source ranges ([#1072](https://github.com/amritk/nish/pull/1072))
+- cli: --sandbox confines a native program to main's capability set ([#912](https://github.com/amritk/nish/pull/912))
+- std: Unicode property escapes and case folding in nish/regex ([#1053](https://github.com/amritk/nish/pull/1053))
+- checker: Nish:simd's vector types, with load, store, splat and lanes ([#1068](https://github.com/amritk/nish/pull/1068))
+- runtime: Add PgBatchClock, an adaptive batch timer for nish/net/postgres ([#1090](https://github.com/amritk/nish/pull/1090))
+- cli: Fs.read= and fs.write= scopes under --sandbox ([#1080](https://github.com/amritk/nish/pull/1080))
+- net: Compression that pays for itself in nish/net/http-compress ([#1095](https://github.com/amritk/nish/pull/1095))
+
+### Performance
+
+- runtime: CRC-32 on PCLMULQDQ and the ARMv8 CRC32 instructions ([#1062](https://github.com/amritk/nish/pull/1062))
+- crypto: Keep P off bcrypt's critical path in the single-hash rounds ([#1083](https://github.com/amritk/nish/pull/1083))
+- crypto: SHA-256 on SHA-NI and the ARMv8 Cryptography Extension ([#1055](https://github.com/amritk/nish/pull/1055))
+- runtime: Measure syscall entry cost against TCP work per request ([#1085](https://github.com/amritk/nish/pull/1085))
+- runtime: Measure the cheaper ways to keep delayed ACKs ([#1088](https://github.com/amritk/nish/pull/1088))
+- crypto: Bcrypt at any width from one to six lanes, and a calibrate that picks it ([#1091](https://github.com/amritk/nish/pull/1091))
+
+### Documentation
+
+- wp38: Record S3's decision and surface, and close the open WP38 housekeeping ([#1065](https://github.com/amritk/nish/pull/1065))
+- runtime: A measured verdict on SSSE3 and NEON Adler-32 ([#1078](https://github.com/amritk/nish/pull/1078))
+- Check a new type kind at every nesting depth ([#1081](https://github.com/amritk/nish/pull/1081))
+
+### Build
+
+- Regenerate package-lock.json for v0.27.2 ([#1075](https://github.com/amritk/nish/pull/1075))
+- Let a commit keep itself, or others, out of the changelog ([#1063](https://github.com/amritk/nish/pull/1063))
+
+### CI
+
+- self: Run the Nish golden runner's slices in parallel itself ([#1076](https://github.com/amritk/nish/pull/1076))
+
+
 ## [0.27.2] - 2026-10-30
 
 ### Fixed
@@ -1377,3 +1418,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.27.0]: https://github.com/amritk/nish/releases/tag/v0.27.0
 [0.27.1]: https://github.com/amritk/nish/releases/tag/v0.27.1
 [0.27.2]: https://github.com/amritk/nish/releases/tag/v0.27.2
+[0.28.0]: https://github.com/amritk/nish/releases/tag/v0.28.0

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 730
+export const RULE_COUNT: i32 = 731
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -102,7 +102,7 @@ const diagnosticRules = (): string[] => [
   "` cannot declare `[Symbol.dispose]`: in this version `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, so a disposal method of any other class would never be called",
   "NL2393",
   "The arrow reads `this`: an arrow argument may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the arrow needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
-  "NL2584",
+  "NL2590",
   "The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` (`const self = this`, `const k = this.k`)",
   "NL2507",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",
@@ -377,6 +377,8 @@ const diagnosticRules = (): string[] => [
   "NL2436",
   ": a handle class has no type parameters, no `implements` and no `export`, so no other type and no other module can name it",
   "NL2565",
+  ": no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least ",
+  "NL2584",
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
   "NL4011",
   "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
@@ -1319,6 +1321,8 @@ const diagnosticRules = (): string[] => [
   "NL2297",
   "` returns before field `",
   "NL2104",
+  "` takes an `i32[]`, got ",
+  "NL2584",
   "`, which share no member",
   "NL2531",
   "`unwrapOr(...)` expects ",

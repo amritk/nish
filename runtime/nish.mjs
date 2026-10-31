@@ -104,9 +104,11 @@ provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
 provide("spawnPiped", shim.spawnPiped);
-// WP34 N12. `spawn` and `waitPid` throw, naming themselves: a child is reaped
-// by Node's event loop. `kill`, `availableParallelism` and `totalMemory` answer.
+// WP34 N12. `spawn`, `spawnWithFds` and `waitPid` throw, naming themselves: a
+// child is reaped by Node's event loop. `kill`, `availableParallelism` and
+// `totalMemory` answer.
 provide("spawn", shim.spawn);
+provide("spawnWithFds", shim.spawnWithFds);
 provide("kill", shim.kill);
 provide("waitPid", shim.waitPid);
 provide("availableParallelism", shim.availableParallelism);
@@ -147,16 +149,28 @@ for (const name of [
   "pollRemove",
   "pollWait",
   "netSetOption",
+  "netMss",
+  "unixListen",
+  "unixListenMode",
+  "unixConnect",
+  "unixAccept",
+  "unixSocketPair",
+  "sendFd",
+  "recvFd",
+  "peerCredentials",
 ]) {
   provide(name, () => shim.noNetReading(name));
 }
-// `netSetOption`'s option ids are plain numbers, so they read the same here
-// as natively: only the call that takes one throws.
+// `netSetOption`'s option ids and the `NET_UNIX_` flag and kinds are plain
+// numbers, so they read the same here as natively: only a call throws.
 provide("NET_TCP_NODELAY", 1);
 provide("NET_TCP_QUICKACK", 2);
 provide("NET_SO_KEEPALIVE", 3);
 provide("NET_SO_SNDBUF", 4);
 provide("NET_SO_RCVBUF", 5);
+provide("NET_UNIX_UNLINK_STALE", 1);
+provide("NET_UNIX_STREAM", 1);
+provide("NET_UNIX_SEQPACKET", 2);
 
 // `nish:term`. Whether a descriptor is a terminal and how big stdout's is have
 // Node's answers; reading stdin, waiting for it and raw mode throw, each naming

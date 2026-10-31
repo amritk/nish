@@ -4,12 +4,13 @@ entry: examples/tasks.ts
 module std/threads.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
-unsafe import 50:10 wrappingAdd from "nish:unsafe"
-unsafe import 50:23 wrappingSub from "nish:unsafe"
-unsafe call 442:18 wrappingAdd (node 1283)
-unsafe call 449:18 wrappingSub (node 1312)
+unsafe import 54:10 wrappingAdd from "nish:unsafe"
+unsafe import 54:23 wrappingSub from "nish:unsafe"
+unsafe call 474:18 wrappingAdd (node 1332)
+unsafe call 481:18 wrappingSub (node 1361)
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
+const MIN_STACK: i32 = 131072
 struct ThreadScope (class) size=4 align=4 exported
   field tag: i32 index=0 offset=0 initialized
 struct AtomicI32 (class) size=4 align=4 exported
@@ -58,6 +59,14 @@ function scope(): ThreadScope -> @nish.scope [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
+function scopeWithStack(bytes: i32): ThreadScope -> @nish.scopeWithStack [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=4
+  sharedWrite: +0:3
+  escaping: bytes
+  calls: nish.scope nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local -1:9 s: ThreadScope (const)
+  callee -1:13 scope -> @nish.scope
 function AtomicI32.constructor(this: AtomicI32, value: i32): void -> @nish.AtomicI32.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: value

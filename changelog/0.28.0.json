@@ -1,0 +1,473 @@
+{
+  "version": "0.28.0",
+  "date": "2026-10-30",
+  "tag": "v0.28.0",
+  "range": {
+    "from": "v0.27.2",
+    "to": "0bde02cb"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-27-2",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.27.2",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7f13676"
+      ],
+      "pr": 1075,
+      "author": "github-actions[bot]",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "crc-32-on-pclmulqdq-and-the-armv8-crc32",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "CRC-32 on PCLMULQDQ and the ARMv8 CRC32 instructions",
+      "body": "Crc32.update in native x86-64 and AArch64 builds now runs a hardware kernel when the CPU has one, and the Nish table walk everywhere else, with bit-identical results. x86-64 folds with PCLMULQDQ and finishes with a Barrett reduction; AArch64 uses the ARMv8 CRC32 instructions (a PMULL fold measured 17-22% slower and was dropped). The path is chosen once per process in the new runtime/runtime-checksum.c, with per-function target attributes and no -march; NISH_CRC32=soft forces the tables. Targets without a kernel (i686, armv7, wasm, Node) keep the walk.\n\nMeasured: 7.6-9.2x on 4 KiB-1 MiB on x86-64 (band 2-7%), 6.3-7.5x on AArch64 (band under 1%); gzip decompress 1.11-1.12x\nRefs: docs/wp38-simd.md, docs/security/compress.md (COMP-13)\nTests: tests/simd/crc32.c, tests/link/std_compress_crc_paths, tests/link/std_compress_crc_diff, tests/link/std_compress_gzip_files\n\nPart of #1059",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "83eed4b"
+      ],
+      "pr": 1062,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "record-each-value-s-source-range-in-jsondocument",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "record each value's source range in JsonDocument with parseRanged",
+      "body": "JsonDocument.parseRanged and parseTextRanged parse as parse and parseText do, and also record the byte range of every value and of every member key, so a schema validator can point a diagnostic at the bytes a value came from. start, end, keyStart and keyEnd read the ranges (-1 where none was recorded), and setRange and setKeyRange give built values one, for a loader that builds a document from another format.\n\nA plain parse costs nothing for this. Ranges are stamped with the generation they were written in, so parse writes and resets nothing, and clear changes only on the one step in 511 that wraps the generation. The range arrays live in a holder made on first use, so a document that never keeps ranges never allocates them. parseRanged has its own copies of the hot helpers, so the originals still inline into parse.",
+      "metrics": [
+        "retired instructions against main (cachegrind, copy band 0.000%): plain parse -25/-17/-19/-11,723 on twitter/citm/canada/sample, builders -1,232,984 (-0.14%), http1-server -1,992 over 2,000 requests, typed +28 inside its copy gap; parseRanged +4.1% to +10.4% over parse"
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md#json-value-ranges"
+      ],
+      "tests": [
+        "tests/link/std_json_value_ranges"
+      ],
+      "commits": [
+        "1c8a173"
+      ],
+      "pr": 1051,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "client-side-of-the-websocket-opening-handshake-1067",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "client side of the WebSocket opening handshake",
+      "body": "nish/net/websocket now does both halves of the RFC 6455 opening handshake. A client calls websocketClientKey on 16 bytes from crypto.getRandomValues. websocketUpgradeRequest writes the GET upgrade request over nish/net/http1-client's request writer. websocketCheckResponse checks the 101, refusing each of RFC 6455 §4.1's client requirements with its own WS_HS_* code; a non-101 status stays readable. The bytes the parser kept after the head are the decoder's first input. A server can now choose a subprotocol from websocketOfferedProtocols.\n\nnish/net/websocket still draws no randomness. The caller supplies the handshake nonce and every frame's mask, so the module stays sans-IO and keeps compiling to wasm32.\n\nnish/net/http1-client gains an explicit per-request upgrade opt-in: http1UpgradeRequestHead, and Http1ResponseParser.expectUpgrade(), under which a 101 answers HTTP1_UPGRADE with tunnelBytes(). Without the opt-in, a Connection that lists upgrade and every 101 are still refused.\n\nThe loopback suite drops its hand-written GET and fixed key. It runs the client over plain TCP against Http1Server and over the std TLS client against Http1TlsServer, with random keys and masks, chat/superchat negotiation and a 1000 close. The response check gets a fuzz target with 18 seeds, recorded in docs/security/http1.md as not yet run under libFuzzer. The guide adds a /websocket page.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/websocket.md",
+        "docs/security/http1.md",
+        "docs/security/http1-client.md"
+      ],
+      "tests": [
+        "tests/link/net_websocket",
+        "tests/link/net_http1_client",
+        "tests/link/net_loopback",
+        "tests/fuzz/targets/websocket-client.ts"
+      ],
+      "commits": [
+        "579ca15"
+      ],
+      "pr": 1067,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "record-s3-s-decision-and-surface-and-close",
+      "type": "docs",
+      "scope": "wp38",
+      "breaking": false,
+      "title": "record S3's decision and surface, and close the open WP38 housekeeping",
+      "body": "WP38 records the owner's decision of 2026-10-30 (Q10) to build S3, nish:simd, on S3a's figures. §3.2 now gives the surface being built. u16x8 replaces i16x8, since Nish has no i16 scalar. There are four value-only mask types and an operation table. Conversions, shifts and saturating arithmetic are left for later. The Status line is current, and the CRC-32 kernel is part of it. S1b is recorded as superseded by S6c, which measured the same classifier as not reachable. #662's two acceptance criteria stand as shipped: the offset-index panic is native-only because Node does not check indexing, and a baseline capability report carries no cpu key. Earlier WP38 plan files now show which stages merged and which were cancelled, and pre-squash anchors name their PRs.\n\nRefs: docs/wp38-simd.md#8-decisions\nCloses #662\nPart of #1064",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "47ede44"
+      ],
+      "pr": 1065,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "run-the-nish-golden-runner-s-slices-in",
+      "type": "ci",
+      "scope": "self",
+      "breaking": false,
+      "title": "run the Nish golden runner's slices in parallel itself",
+      "body": "`build/nish-runner --jobs <p>` runs its `--shard` slice as `p` processes (one per core by default, at most 8), so CI's runner job no longer needs `scripts/nish-runner-parallel.mjs`, the Node wrapper that started one runner per core. The runner step is started under `env --default-signal`, because the Actions runner gives step shells an ignored SIGPIPE that Node used to reset. The `net_http_fetch` test proxy no longer closes an authorised CONNECT tunnel before reading the ClientHello, which had turned the close into a reset.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js nish-runner",
+        "tests/link/net_http_fetch"
+      ],
+      "commits": [
+        "2a5207c"
+      ],
+      "pr": 1076,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "json-pointer-value-equality-and-exact-decimals-for",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "JSON Pointer, value equality and exact decimals for JSON Schema",
+      "body": "Three std modules a JSON Schema validator needs. nish/json-pointer parses, escapes and resolves RFC 6901 pointers over a JsonDocument, and checks pointer and relative-pointer syntax without allocating. nish/json-equal compares two values by JSON Schema's rules (1 equals 1.0, object members in any order) on an explicit stack, with a hash that agrees with it and a first-duplicate finder for uniqueItems. nish/json-number compares numbers and answers multipleOf exactly on their decimal text, never through f64, and refuses an exponent gap too wide to divide in bounded steps.\n\nThe const, enum, uniqueItems, multipleOf, minimum, maximum, exclusiveMinimum and exclusiveMaximum groups of JSON-Schema-Test-Suite draft2020-12 (MIT) are vendored under tests/json-schema-suite and pass.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_json_pointer",
+        "tests/link/std_json_equal",
+        "tests/link/std_json_number"
+      ],
+      "commits": [
+        "d4b2798"
+      ],
+      "pr": 1054,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "the-json-schema-format-checks-1052",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "the JSON Schema format checks",
+      "body": "nish/json-format answers valid, invalid or unknown for each JSON Schema draft 2020-12 format it implements: date-time, date, time and duration (RFC 3339), email (RFC 5321 Mailbox), hostname, ipv4, ipv6, uuid, uri, uri-reference, iri, iri-reference, uri-template and regex. Every other format, json-pointer and the idn ones included, answers unknown.\n\nEvery check but regex is linear in its string, allocates nothing and cannot panic; regex compiles through nish/regex, so a pattern that needs lookaround or backreferences is a known false negative. The URI and IRI checks walk the RFC 3986/3987 grammar, because nish/net/url is deliberately stricter than the RFC.\n\nThe draft 2020-12 optional/format files of JSON-Schema-Test-Suite (MIT) are vendored under tests/json-schema-suite-format, and every string case of every implemented format gives the suite's answer.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_json_format"
+      ],
+      "commits": [
+        "48b5309"
+      ],
+      "pr": 1052,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "load-a-yaml-document-into-a-jsondocument-with",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "load a YAML document into a JsonDocument with its source ranges",
+      "body": "nish/yaml-json's YamlJsonLoader.load turns one document of a YamlStream into a JsonDocument, with every value's and key's range pointing at the YAML source, so one validator and one YamlLineIndex serve JSON and YAML alike. Scalars follow the YAML 1.2 core schema; hex and octal integers become exact decimal text; .inf and .nan, which JSON cannot hold, are refused with a code and the node's range. A failed load leaves the document as it was.\n\nAliases are expanded, and the expansion is sized before anything is built, so an alias bomb is refused at the alias against maxValues. Merge keys apply with the map's own keys winning, each map merged into a given map at most once, and every merge visit and merge-sequence walk is charged to a budget of maxValues plus the stream's node count, so a merge bomb is refused rather than run: a 60-level doubling chain that took 2^60 steps now loads in under a second. The parser's own merge check, in std/yaml.ts, still walks a shared merge sequence once per merge key; that is recorded open in docs/security/yaml.md.\n\nstd/yaml.ts is unchanged, and bench/yaml-compare runs the same code as main.",
+      "metrics": [
+        "parse + load is 1.94x the parse in wall clock (2.27x in instructions) on a 1.1 MB OpenAPI document; the load step alone is 0.94x the parse (1.27x in instructions)"
+      ],
+      "refs": [
+        "docs/security/yaml.md"
+      ],
+      "tests": [
+        "tests/link/std_yaml_json"
+      ],
+      "commits": [
+        "793d6fd"
+      ],
+      "pr": 1072,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "sandbox-confines-a-native-program-to-main-s",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "--sandbox confines a native program to main's capability set",
+      "body": "With --sandbox, a native program confines itself to the capability set the checker computes for main, before any of its code runs. A .preinit_array entry sets no_new_privs and drops capabilities. It applies Landlock to the fs rights main reaches and loads a seccomp denylist for the calls behind what it does not reach. A capability main does not reach is then withheld by the kernel, not only by the type checker, so neither FFI nor linked C can widen it. --sandbox=best-effort runs on where the kernel's Landlock is missing or too old, and says what it cannot withhold. darwin is refused with NL3044. Directory scopes are the next stage.",
+      "metrics": [],
+      "refs": [
+        "docs/wp37-os-sandbox.md"
+      ],
+      "tests": [
+        "tests/cases/sandbox_hello"
+      ],
+      "commits": [
+        "2bdc089"
+      ],
+      "pr": 912,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "unicode-property-escapes-and-case-folding-in-nish",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "Unicode property escapes and case folding in nish/regex",
+      "body": "regexCompile accepts the u flag, \\p{…} and \\P{…} (General_Category, Script, Script_Extensions and ECMA-262's binary properties, named as JavaScript names them, at Unicode 16.0.0), and Unicode simple case folding under i: σ matches Σ and ς, and classes are closed under folding. JSON Schema's pattern keyword is ECMA-262 with u, so schemas need all three. Lookaround and backreferences are still refused, so matching stays linear.\n\nOne deliberate difference from JavaScript: nothing folds across the ASCII boundary, so the Kelvin sign and ſ match no k or s. That keeps an ASCII pattern under i free of the tables. Patterns that use none of the new features compile to the same program as before.\n\nThe tables are generated from the UCD by scripts/gen-regex-unicode.mjs (--check verifies them against the UCD and Node's RegExp) and carry the Unicode License v3. They add 84,624 bytes to any program that imports nish/regex.",
+      "metrics": [
+        "retired instructions a pass against main: literal, class, alternation, group, icase-ascii and icase-class 1.000x, anchored 0.992x, exec 0.926x; compiling a pattern that folds non-ASCII letters costs about 12 µs more for a large class and 0.2 µs for one é"
+      ],
+      "refs": [
+        "docs/security/regex.md"
+      ],
+      "tests": [
+        "tests/link/std_regex_unicode",
+        "tests/link/std_regex"
+      ],
+      "commits": [
+        "4073fd0"
+      ],
+      "pr": 1053,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "a-measured-verdict-on-ssse3-and-neon-adler",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a measured verdict on SSSE3 and NEON Adler-32",
+      "body": "* perf(runtime): bench a vector Adler-32 against adler32Update\n\nbench/adler32.mjs builds bench/adler32.ts (the Nish adler32Update) and\nbench/adler32/kernel.c (SSSE3 on x86-64, NEON on AArch64, and the scalar\nreference), holds the kernel to the reference, and times every column at\n64 KiB and 1 MiB in interleaved rounds with a copy column for the noise band.\n\nRefs: docs/wp38-simd.md\nTests: node bench/adler32.mjs --check\n\n* ci: time the NEON Adler-32 on the simd-arm64 runner\n\nTests: node bench/adler32.mjs --check\n\n* perf(runtime): pin the Adler-32 bench's check checksum\n\nzlib.adler32 answers the same chain with 1480580821.\n\nTests: node bench/adler32.mjs --check\n\n* docs(runtime): record the SSSE3 Adler-32 against adler32Update\n\ndocs/wp38-simd.md §3.1 and bench/README.md hold the x86-64 figures, the\nnoise band and the verdict against the 20% bar: SSSE3 clears it about\nsixfold at 64 KiB and 1 MiB. The driver's last line now says whether the\nkernel clears the bar, and its comments point at §3.1.\n\nRefs: docs/wp38-simd.md#31-a-runtime-kernels\n\n* docs(runtime): record the NEON Adler-32 from the AArch64 runner\n\nCI's simd-arm64 job measured the NEON kernel at 7.5x and 7.2x\nadler32Update's speed at 64 KiB and 1 MiB, against a band of 0.2% or\nless, so both architectures clear the 20% bar. The record says what a\nfollow-up ships on CRC-32's seam.\n\nRefs: docs/wp38-simd.md#31-a-runtime-kernels\n\n* docs(runtime): answer review round 1 on the Adler-32 record\n\nState kernel.c's provenance in its header (written from RFC 1950 and the\nintrinsic references, nothing copied). Verify the lengths either side of the\nkernel's 5,536-byte stretch, and correct the 16-bit column-sum bound. Drop\nbench/README.md's repeated paragraph.\n\n* docs(runtime): name the Adler-32 follow-up's resolver and correct its gain wording\n\n* test(self): record bench/adler32.ts's checked golden",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "eb94964"
+      ],
+      "pr": 1078,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "check-a-new-type-kind-at-every-nesting",
+      "type": "docs",
+      "breaking": false,
+      "title": "check a new type kind at every nesting depth",
+      "body": ".claude/architecture.md gains a rule for adding a type kind. Before review, try the kind nested at every depth a value can sit: a field, an array element, an inline array, a Result arm, a generic argument, a Map value, a parallel or task capture. Check it there against every place a type is laid out, aligned, zeroed or described. Each of #1068's five blocking code findings was a nish:simd vector getting one of these wrong, found one nesting per review round.",
+      "metrics": [],
+      "refs": [
+        "#1064"
+      ],
+      "tests": [],
+      "commits": [
+        "bf622b3"
+      ],
+      "pr": 1081,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "nish-simd-s-vector-types-with-load-store",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "nish:simd's vector types, with load, store, splat and lanes",
+      "body": "* feat(checker): nish:simd's vector types, with load, store, splat and lanes\n\nWork in progress: the checker, the lowering and the Node runtime.\n\n* feat(checker): diagnostic codes, refusal cases and the guide page for nish:simd\n\nRefs: docs/guide/language/simd.md\nTests: tests/cases/reject_simd_*\n\n* test(checker): pin nish:simd's vector layout against clang, and document the module\n\ntests/layout/simd.ts holds every vector type in a class, beside an inline\narray of vectors; simd.c asserts clang's vector_size(16) layout of the same\nstruct and reads it lane by lane.\n\nRefs: docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors\nTests: tests/layout/simd.ts\n\n* test(checker): run nish:simd natively, under WASI and under Node, and pin every refusal\n\nThe simd section of tests/run.js holds each simd_* program's native, wasi and\nNode output to one .out, the out-of-range load's panic to the native words\non both sides, the interop skip of a vector signature, and the goldens to\ngeneric IR. The .d.ts now says a vector is not carried by the wasm bridge,\nrather than that it needs the runtime.\n\nRefs: docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors\nTests: tests/cases/simd_lanes, tests/cases/reject_simd_nullable\n\n* docs(checker): show nish:simd's IR in the cookbook and its Node reading\n\nThe IR cookbook gains the constructor, splat, lane and load/store entries\nregenerated by docs/cookbook/regen.sh; RUN_UNDER_NODE.md says how nish:simd\nreads under Node, and the types page points at the vectors page. Three\nsrc/ files take biome's formatting.\n\nRefs: docs/IR_COOKBOOK.md, docs/RUN_UNDER_NODE.md\n\n* test(self): regenerate the checked goldens for nish:simd\n\nEach src/ module's entry list now includes src/simd.ts, and the simd_*\ncases and simd-* cookbook entries gain their checked goldens. No golden\nof a program that does not import nish:simd moved.\n\nTests: tests/self/goldens/checked/\n\n* test(checker): register the simd_* cases with the differential goldens\n\nTests: tests/differential/goldens/unfrozen.txt\n\n* fix(codegen): name the overrunning lane in a nish:simd bounds panic\n\nA load or store whose first lane is in range and whose last lane is not\nused to panic with \"index out of range: i >= len\", which was false. It\nnow names the last lane, natively (a select) and under Node. A vector\naccess carries `align` only under optimizeAttributes, as every other\narray access does. A `Map` with a vector value gets `zeroinitializer`\nfor the value of a missing key, not the integer literal 0, which\nllvm-as refused.\n\nTests: tests/cases/simd_access_oob, tests/cases/simd_values\n\n* test(checker): regenerate the simd_* IR goldens and the cookbook after the panic and Map fixes\n\nTests: tests/cases/simd_access, tests/cases/simd_access_oob, tests/cases/simd_values\n\n* test(self): regenerate the checked goldens after the panic and Map fixes\n\nTests: tests/self/goldens/checked/\n\n* refactor(checker): name nish:simd's load once and drop a one-use callee helper\n\nThe load test was spelled as \"an access that is not store\" in two places\nin attributes.ts; isSimdLoad says it once. simdCallees had one caller and\nbuilt an array for a single push, so the caller returns the panic itself.\nUnder Node, a vector is built and loaded straight into its typed array,\nwithout the intermediate copy.\n\nRefs: docs/LANGUAGE.md\nTests: tests/cases/simd_access, tests/cases/simd_values\n\n* test(self): regenerate the checked goldens after the nish:simd cleanup\n\nOnly the three modules the cleanup edited move.\n\nTests: tests/self/goldens/checked\n\n* fix(checker): give nish:simd's builtins callee-table branches the scan can read\n\nThe allocating-builtins check reads identifierBuiltinCalleesNamed by its\nname === branches, so store, extract, replace and the six constructors\neach get one; the callees they report are unchanged.\n\nTests: src/builtins.ts and src/emit-builtins.ts still read as a builtin list and a callee table\n\n* fix(codegen): state a vector access's alignment with the attributes off\n\nUnder --no-elision (and any build without optimizeAttributes) a vector\nload or store went out with no align, so LLVM took the vector's ABI\nsixteen while an array element or an arena block is only lane- or\neight-aligned; the program crashed. A vector access now always states\nits alignment. The scan's empty branches are split onto single lines it\ncan read.\n\nTests: cases/simd_access, cases/simd_values (soundness, --no-elision)\n\n* test(self): regenerate the checked goldens after the vector alignment fix\n\n* fix(checker): keep nish:simd vectors aligned and out of the C and JS bridges\n\nAn inline array of vectors in a class now sizes and aligns its slots to 16\nbytes, so the field no longer overflows its allocation. The parallel ctx and\npayload slots that hold a vector state `align 8`, as every other vector access\ndoes. `--emit-header` declares a class that holds a vector opaque, and an array\nof vectors, like a vector, has no C spelling, so `--emit-header`, `--emit-napi`\nand `--emit-dts` leave the function out and say why.\n\nThe tests now cover the bridges' refusals, arity and lane-type refusals for\nevery simd function, a call to a simd name with no import, all six vector types\nin the pinned layout, and float lanes holding NaN, -0 and 0.1, compared bit for\nbit between native and Node.\n\nTests: tests/cases/simd_lanes, tests/cases/reject_simd_no_import_call, tests/layout/simd\n\n* fix(checker): keep a nested nish:simd vector out of every bridge, and pin parallel captures\n\nA type that holds a vector at any depth -- an array element, a Result arm,\na class it points at -- is now caught by one recursive rule. The header,\nnapi and dts/wasm bridges skip a signature holding one and name the type.\nA class holding one is opaque in the header, and a bare pointer to it still\ncrosses. A Result with a vector arm gets no C struct.\n\ntests/link/simd_parallel_capture adds the missing pin for parallel regions.\nA parallelMap arrow and a spawned task each capture an i32x4, and the IR\nstates align 8 on each context and payload slot that holds it. The\nout-of-range cases now cover a negative index, a first lane past the end\nand a store, natively and under Node. The cookbook's nish:simd entry moves\nout of \"Optimisation flags\".\n\nTests: tests/link/simd_parallel_capture, tests/cases/simd_store_oob\n\n* test(self): lower the performance baseline where the bridges' vector rule proved warnings away\n\nThe recursive vector check removed one NL9011 from src/interop-dts.ts and the\nlast one from src/interop-wasm.ts; the ratchet asks the baseline to follow.\n\n* fix(checker): zero-fill nish:simd vector arrays under --emit-ts, name the vector in wasm skips\n\n`new Array<i32x4>(n)` reads the zero vector natively, but --emit-ts filled\nits slots with \"\" and the prelude leaves holes. --emit-ts now gives each slot\nits own zero vector. The prelude erases the type argument, so it cannot do\nthe same; RUN_UNDER_NODE.md records that. The wasm bridge's skip reason now\nnames a record that holds a vector, using the full set of such records.\n\nTests: tests/cases/simd_zero_fill\n\n* test(self): regenerate the emit-ts-records golden",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1d34720"
+      ],
+      "pr": 1068,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "let-a-commit-keep-itself-or-others-out",
+      "type": "build",
+      "breaking": false,
+      "title": "let a commit keep itself, or others, out of the changelog",
+      "body": "changelog-gen turned every conventional commit in a release range into an\nentry, so internal or unannounced work could not be kept out of the release\nnotes. Two trailers now do it: `Changelog: skip` drops the commit carrying it,\nand `Changelog-Skip: <sha>[, <sha>...]` on any commit in the range drops the\nnamed commits. Dropped commits never appear by subject, not even on stderr,\nwhich prints only a count, and their type does not move the version. Two\ninternal entries are removed from the 0.27.0 record, and one sentence from a\n0.22.0 entry.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "scripts/changelog-gen.test.mjs"
+      ],
+      "commits": [
+        "be8e623"
+      ],
+      "pr": 1063,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "keep-p-off-bcrypt-s-critical-path-in",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "keep P off bcrypt's critical path in the single-hash rounds",
+      "body": "Each bcrypt half-round is x ^ P[n] ^ F(y), and only F(y) waits on the\nprevious half-round. LLVM's Reassociate and InstCombine put P[n] after\nF(y) in 15 of 16 half-rounds, leaving two dependent XORs after the last\nS-box add where gcc's build of the reference C has one. bcryptBody and\nbcryptEncrypt now write each half-round as\nctSelect(0xffffffff, x ^ P[n], 0) ^ F(y): an identity on the value whose\nall-ones mask sits behind the constant-time value barrier, so the XOR\nwith P cannot be folded into the chain and runs off the critical path.\nEvery hash and verify answer is unchanged, nothing secret-dependent is\nadded, and the wipes are as they were. The four-lane batch keeps the\nplain form, where the barrier measured as a loss.",
+      "metrics": [
+        "bcryptHash at cost 10, 73.1 (72.0-84.1) and 74.6 (72.1-76.9) ms on main against 67.8 (66.5-69.0) and 68.9 (66.6-71.0) ms, 7.3% and 7.6% faster, noise band about 2%; level with OpenBSD's gcc -O2 build"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md#speed"
+      ],
+      "tests": [
+        "bcrypt barrier (tests/run.js)"
+      ],
+      "commits": [
+        "6584fe3"
+      ],
+      "pr": 1083,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "sha-256-on-sha-ni-and-the-armv8",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "SHA-256 on SHA-NI and the ARMv8 Cryptography Extension",
+      "body": "* perf(crypto): SHA-256 on SHA-NI and the ARMv8 Cryptography Extension (wip)\n\n* perf(crypto): regenerate the cookbook prelude and the checked goldens\n\n* test(crypto): hold the SHA-256 kernel to the reference in the simd section\n\n* test(crypto): count the SHA-256 kernel's calls under each NISH_SHA256 pin\n\nTwo link programs hold both arms of the lowering to FIPS 180-4 digests,\nRFC 4231 HMAC-SHA-256 tags and a seeded corpus hashed whole and in pieces;\nthe 'sha256 kernel' section links them with the kernel wrapped and proves\nNISH_SHA256=soft leaves it unused, and that wasm32 builds reference none.\n\nTests: tests/link/sha256_hw_vectors, tests/link/sha256_hw_agree\n\n* test(crypto): read the SHA-256 kernel's assembly for constant time\n\ntests/ct-asm-runtime.js reads each runtime kernel unit with its resolver, so\nruntime-sha256.c's nish_sha256_compress is held to the same model as the AES\nkernels on x86-64, x86-64-v3 and aarch64.\n\n* ci: run the SHA-256 kernel's paths on x86-64, AArch64 and Apple silicon\n\nThe x86-64 shard 1 requires the SHA-NI driver line and the lowered programs'\nkernel calls; the AArch64 job runs the sha256 kernel section; the macOS job\nholds the sysctl detection to the ARMv8 path and runs the SHA-256 link\nprograms under both pins. Each runner measures throughput per path once\nbench/sha256 lands.\n\n* fix(crypto): refuse a SHA-256 block past toI32's saturated length in the kernel\n\nThe kernel's guard read the source's real length, where sha256Compress's\nreads it through toI32, which saturates at 2^31 - 1; a block ending past\nthat offset was refused by the walker and read by the kernel. The\naarch64 constant-time model also read sha256h, sha256h2, sha256su0 and\nsha256su1 as overwriting their destination, which they accumulate into.\n\nTests: tests/simd/sha256.c, AUDIT_CORNERS in tests/ct-asm.js\n\n* docs(crypto): record the SHA-256 block kernel's security review\n\nThe record says what runtime/runtime-sha256.c and its lowering were\nchecked for, how, and which test pins each property: SHA256HW-1, the\nguard that read the source's length past toI32's saturation, fixed;\nSHA256HW-2, the registers and spills no wipe reaches, open; and CT-20,\nthe aarch64 model's SHA-256 instructions, fixed. The guide, INSTALL.md\nand std/README.md name NISH_SHA256, and the runtime is eleven units.\n\nRefs: docs/security/crypto-sha256-hw.md\n\n* docs(crypto): record the SHA-256 kernel's stage and figures in wp38-simd\n\nAdds stage S8 to the SIMD plan: SHA-256's block function on SHA-NI and the\nARMv8 SHA-256 instructions, measured against the base and a byte-identical\ncopy of it, and why the SSSE3 and AVX2 message schedules for CPUs without\nthe instructions were not built.\n\nMeasured: x86-64 SHA-NI, 9 interleaved rounds, min: 1 MiB 228.5 to 1442.8 MB/s (6.31x), 1 KiB 5.72x, 64 B 2.37x, HS256 sign+verify 4520 to 1915 ns/op (2.36x); NISH_SHA256=soft within the base copy's band (<=4.7%)\nRefs: docs/wp38-simd.md\n\n* fix(crypto): count runtime-sha256.c among the runtime's eleven units\n\nThe --cpu check's unit regex skipped a file name with digits, so it never\ncounted runtime-sha256.c; it now counts all eleven. The comments, docs and\nsecurity records that still said ten now say eleven. The macOS SHA-256 step\nallows only the `sha256 kernel` section's own Darwin SKIP lines, and requires\nboth link programs' expected output.\n\nTests: tests/run.js cpu-level, runtime cache\n\n* refactor(runtime): share the kernel units' link and test helpers\n\nbuild.sh's wasm profile adds runtime-aes.c and runtime-sha256.c from one\nloop over the kernels rather than two copies of it. tests/run.js reads\n/proc/cpuinfo once for the simd, aes kernel and sha256 kernel sections,\ncompiles their link programs with one helper, and builds the runtime copies\nwithout a unit with one. tests/ct-asm.js's CT-20 corner is formatted as\nbiome prints it.\n\n* fix(crypto): quote the kernel name in build.sh's case pattern\n\nshellcheck SC2254: an unquoted expansion in a case pattern matches as a glob.\n\n* test(crypto): strip the sha256 driver's own prefix from the simd line\n\nThe line read \"sha256 native arm64: sha256: N cases agree\", which CI's\nsimd-arm64 grep for the armv8-sha2 path did not match.\n\n* ci(crypto): run the SHA-256 checks on a macOS job of their own and compile runtime-sha256.c for darwin\n\nThe runtime-net job is disabled, so the Apple-silicon steps it carried never\nran. They move to a sha256-macos job on macos-latest, and tests/run.js gains a\n`runtime-sha256 darwin` check that compiles the kernel freestanding for\nx86_64-apple-darwin and aarch64-apple-darwin on Linux, so the Apple detection\npath is compiled on every push. The throughput steps fail when a driver prints\nnothing. tests/ct-asm.js pins x86-64's sha256msg1, sha256msg2 and sha256rnds2\nas reading their destination.\n\nTests: tests/run.js (runtime-sha256 darwin), tests/ct-asm.js (AUDIT_CORNERS)\n\n* docs(crypto): name sha256Compress's helpers as main has them in K1's scope\n\n* ci(crypto): pass the macOS SHA-256 job on its skips and bench with the suite's compiler\n\nThe sha256-macos job required a summary line of \"N passed, 0 failed.\", so\nthe two environmental skips on Apple silicon (\"N passed, 0 failed, 2\nskipped.\") failed the step though nothing failed. The summary check now\naccepts a skip count; the PASS lines for both vector checks, the\narmv8-sha2 line and the refusal of any other SKIP line stay.\n\nThe throughput steps ran bench/sha256/run.mjs on its default build/nish,\nwhich the simd-arm64 and macOS jobs never build. Each copy now passes\n--compiler build/nish-test, the compiler tests/run.js linked, and the\nguard for a missing bench script is gone now that the bench is on main.\n\n* docs: count thirteen runtime units wherever the runtime is counted",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8f046c5"
+      ],
+      "pr": 1055,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "measure-syscall-entry-cost-against-tcp-work-per",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "measure syscall entry cost against TCP work per request",
+      "body": "Add bench/syscall-cost: a C microbenchmark and its run script. They time a raw syscall's entry and exit (syscall(SYS_getppid)), recv with nothing queued, setsockopt(TCP_QUICKACK, 0), getsockopt(TCP_INFO), and a loopback request/response round at the bench server's bytes. Every figure is pinned to one CPU, reported as the median and min-max of interleaved rounds, and printed with the box's CPU, kernel and mitigation state. bench/README.md \"Syscall cost\" splits a keep-alive request's system time into (a) entry and exit and (b) the rest, for bench/http1-server.ts and as an estimate for a 3.6-syscall production mix. It records the verdict: on a Xeon @ 2.10 GHz VM on Linux 6.18 (eIBRS, no KPTI), entry and exit cost 106 ns. That is under the 0.5 µs line and about 4% of a request's 5 µs of system time, so io_uring is not worth building on this evidence. Run bench/syscall-cost/run.sh to re-measure on another box.\n\nMeasured: entry and exit 106.0 ns (101.9-113.2, 7 rounds of 10^6); (a) 0.22 µs of 4.89-5.51 µs sys per plaintext request, inside the h1/copy noise band of ~0.6 µs\nRefs: bench/README.md#syscall-cost, docs/wp39-http-server.md\nPart of #1084",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "34728d5"
+      ],
+      "pr": 1085,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "measure-the-cheaper-ways-to-keep-delayed-acks",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "measure the cheaper ways to keep delayed ACKs",
+      "body": "A keep-alive server that sets TCP_QUICKACK to 0 after every response, to keep delayed ACKs, pays one setsockopt per request for nothing. Linux keeps the delayed-ACK (pingpong) mode by itself. On 6.8 and 6.18 the tcp_pingpong_thresh sysctl defaults to 1, so tcp_event_data_sent enters pingpong on the first quick reply. Setting the option to 0 only enters that mode, and the mode is left only when a delayed-ACK timer fires. bench/quickack/README.md cites the kernel source by file and line. It tabulates each alternative: ip route quickack, TCP_CONGESTION, sysctls, BPF sockops, once at accept, no call, and a TCP_INFO check. It also gives the measured modes.\n\nbench/http1-server.ts gains a BENCH_QUICKACK mode. Unset, the default, makes no call, as before. reset0, once0 and reset1 are the other modes. bench/http.mjs gains --acks, off by default, which reads the OutSegs and TcpExtDelayedACKs counters around each run. bench/quickack/probe.c measures the ACKs on one connection. The \"Socket options\" section of the networking guide now states the trade-off in both directions with the measured figures. No API is added. Setting the option once at accept, or not at all, needs only netSetOption. A TCP_INFO check would cost a getsockopt dearer than the setsockopt it replaces.\n\nMeasured: on a 4-vCPU Xeon @ 2.10 GHz VM on Linux 6.18 at c=256, reset1 costs +1.0 syscall and +1.000 segment per request and 12.9-18.3% fewer req/s, against a copy-vs-base noise band of -2.4% to +4.7%. reset0 adds +1.0 syscall per request and saves an ACK only after a slow response.\nRefs: bench/quickack/README.md, docs/guide/using-nish/networking.md\nPart of #1084",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ec52568"
+      ],
+      "pr": 1088,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "add-pgbatchclock-an-adaptive-batch-timer-for-nish",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add PgBatchClock, an adaptive batch timer for nish/net/postgres",
+      "body": "A fixed batching window costs latency when traffic is quiet and buys nothing\nnear saturation. PgBatchClock decides when to start a batch from the times the\nprogram passes in: once max(minCount, the moving average of recent batch sizes\ntimes factor) items wait, once the oldest has waited maxWaitUs, or, with the\nidle bypass on, at once when nothing is in flight and fewer than lightCount\nitems arrived in the last window. Under a backlog the count is already\nwaiting, so nothing waits on the timer and batches do not shrink. Its\naverage, last size, last wait and the reason each batch started (count,\naverage, timer, idle) are exposed for metrics.\n\nPgBatcher.takeDue takes only when its clock says so, PgPool.inFlight gives the\nclock its in-flight count, and PgBatchTurns lets one free connection collect\nwhile the others execute, woken only once its batch is due. None reads a\nclock or allocates per item. PgBatchClockConfig's defaults are the existing\nfixed window; the adaptive settings are documented, and stay opt-in until a\nlive server's measurements say otherwise.\n\nbench/pg-batch-clock.ts simulates a 4-connection pool at three steady rates\nand compares fixed 10 ms and 30 ms windows with adaptive.",
+      "metrics": [
+        "simulated, deterministic; adaptive p95 10.00/9.51/7.73 ms against the better fixed window's 10.00/9.62/7.74 ms at 5/42/84 % busy, server CPU per item within 2 % of the cheaper fixed window at 42 and 84 %"
+      ],
+      "refs": [
+        "docs/guide/using-nish/postgres.md#when-to-take-pgbatchclock"
+      ],
+      "tests": [
+        "tests/link/std_postgres_batch_clock"
+      ],
+      "commits": [
+        "e971684"
+      ],
+      "pr": 1090,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "bcrypt-at-any-width-from-one-to-six",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "bcrypt at any width from one to six lanes, and a calibrate that picks it",
+      "body": "nish/crypto/bcrypt gains bcryptHashN and bcryptVerifyN, which hash or\nverify one to six passwords interleaved on one core, and bcryptCalibrate,\nwhich times every width at cost 4 on throwaway keys and returns the fastest\nfor the CPU it runs on. It measures rather than guesses and keeps nothing\nbetween calls, so a service calls it once at startup. Every lane gives\nbcryptHash's output byte for byte. bcryptHash4 and bcryptVerify4 keep their\nsignatures, outputs and errors and now run through the width-N path; the\nsingle path is unchanged.\n\nA single hash is one serial chain of 17,083,536 half-rounds, so it is bound\nby latency: about 11 cycles per half-round, 173 cycles per Blowfish block,\nlevel with libxcrypt's crypt_r. Lanes are the remaining lever. The security\nrecord now gives cycles per block for the single path and per lane, the\nlatency floor and load-port bound, a verdict on each suspected overhead\n(none of bounds checks, overflow checks, state reloads or wipes is in the\nround loop), and why the kernel stays portable Nish rather than runtime C:\nNish's four lanes already match clang's four-lane C.\n\nOn a 4-core x86-64 Xeon at cost 10, the best width (four lanes) takes\n22.2 ms per hash against 57.6 ms for bcryptHash and 59.0 ms for crypt_r.\nAMD and AArch64 were not measured.",
+      "metrics": [
+        "bcryptHashN 4 lanes 22.2 (21.9-25.2) ms/hash vs bcryptHash 57.6 (56.4-59.0), 2.6x throughput on one core; median and spread of 9 rounds, cost 10, 4-core x86-64 Xeon",
+        "bcryptHash 57.6 (56.4-59.0) vs libxcrypt crypt_r 59.0 (58.0-60.1), 0.98x"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md#speed"
+      ],
+      "tests": [
+        "tests/link/crypto_bcrypt_width",
+        "tests/differential/bcrypt.js"
+      ],
+      "commits": [
+        "2638d31"
+      ],
+      "pr": 1091,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "fs-read-and-fs-write-scopes-under-sandbox",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "fs.read= and fs.write= scopes under --sandbox",
+      "body": "`--allow fs.read=<dir>` and `--allow fs.write=<dir>` now work beside `--sandbox`. Each directory is resolved to its real path at build time and must exist. Landlock then grants the capability beneath those directories only, not beneath `/`, with one exception: a `main` that reaches `process.spawn` keeps read access beneath `/` so that `exec` can load a program.\n\nThe command exits 2 for any of these:\n- a scope without `--sandbox`;\n- a scope in `--deny`;\n- a scope of any other capability;\n- a directory that does not exist.\n\nAt run time, a scope directory that cannot be opened makes strict mode exit 126. Best-effort mode names the directory once and grants nothing beneath it. Strict mode refuses a write scope below Landlock ABI 3.\n\nRefs: docs/wp37-os-sandbox.md\nTests: tests/run.js sandbox, tests/nish/cli.ts checkSandboxScopes\nFixes #451",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "90c7955"
+      ],
+      "pr": 1080,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "compression-that-pays-for-itself-in-nish-net",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "compression that pays for itself in nish/net/http-compress",
+      "body": "HttpCompressor now sends gzip only when it is worth sending. Besides\nminLength, minSaving and minSavingPercent refuse a body whose gzip saves\ntoo few bytes or too small a share, and segmentMode sends gzip only when the\nwhole response, head included, needs fewer TCP segments of `mss` (the\nconnection's, or HTTP_DEFAULT_MSS, 1448) than it would as it is. Otherwise\nthe body goes as it is. `decision` reports why: SENT, NOT_ACCEPTED,\nTOO_SMALL, TOO_LARGE, TOO_LITTLE_SAVED or NO_FEWER_SEGMENTS, so an\napplication can count them. Http1Connection.respondEncoded applies the\npolicy, withdrawing a gzip head with unrespond when segment mode decides\nagainst it.\n\nBodies up to fixedLimit (16 KB) go through a new small-body encoder,\nFixedDeflater / GzipFixedCompressor: one fixed-Huffman block, a 16 KB\nwindow and no state kept between calls. On 0.5 to 16 KB of JSON it takes\n0.22 to 0.44 times DEFLATE_FAST's time for about 1.35 times its bytes.\n`encoder` picks it by size (HTTP_ENCODER_AUTO) or forces one encoder.\n\nVary: Accept-Encoding goes on every response whose form depended on the\nrequest: a compressed one, or one sent as it is because gzip was not\naccepted. A body that was too small, too large or did not pay is the same\nfor every client and carries none. identity;q=0 is honoured: such a request\ngets gzip whatever the policy says. Compression stays off unless the\nprogram asks for it, and nothing is cached between responses.\n\nThe MSS is configured, or set per connection (`conn.mss`). Reading it from\nTCP_INFO or TCP_MAXSEG needs a nish:net builtin that does not exist yet.",
+      "metrics": [
+        "fixed encoder 0.22-0.44x DEFLATE_FAST time at 1.33-1.38x its size, 560 B to 16 KB JSON, 9 rounds (bench/gzip/small.mjs)",
+        "50,000 responses of 0.5-8 KB JSON, MSS 1448, server CPU ±1 µs (10 ms ticks): none 19.0 µs, 2.44 segments; DEFLATE_FAST always 38.4 µs, 1.38 segments; fixed always 26.0 µs, 1.56 segments; segment mode 28.0 µs, 1.56 segments with 43% sent as is (bench/http-compress)"
+      ],
+      "refs": [
+        "docs/guide/using-nish/compression.md",
+        "docs/security/compress.md"
+      ],
+      "tests": [
+        "tests/link/std_http_compress",
+        "tests/link/std_compress_node"
+      ],
+      "commits": [
+        "0bde02c"
+      ],
+      "pr": 1095,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    }
+  ]
+}

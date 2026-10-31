@@ -206,11 +206,15 @@ function preforkWorkers(args: string[]): i32 -> @nish.preforkWorkers [exported]
 module std/net/http1-server.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
+import HTTP_CODING_GZIP from "nish/net/http-compress" -> const HTTP_CODING_GZIP
 import HTTP_CODING_IDENTITY from "nish/net/http-compress" -> const HTTP_CODING_IDENTITY
+import HTTP_CODING_NONE from "nish/net/http-compress" -> const HTTP_CODING_NONE
+import HTTP_DEFAULT_MSS from "nish/net/http-compress" -> const HTTP_DEFAULT_MSS
 import HTTP_OFFER_GZIP from "nish/net/http-compress" -> const HTTP_OFFER_GZIP
 import HttpCompressor from "nish/net/http-compress" -> struct HttpCompressor
 import httpAcceptEncoding from "nish/net/http-compress" -> function @nish.httpAcceptEncoding
 import netClose from "nish:net" -> builtin netClose
+import netMss from "nish:net" -> builtin netMss
 import netRead from "nish:net" -> builtin netRead
 import netWrite from "nish:net" -> builtin netWrite
 import tcpAccept from "nish:net" -> builtin tcpAccept
@@ -311,7 +315,7 @@ struct Http1OutputPool (class) size=16 align=8 exported
   constructor -> @nish.Http1OutputPool.constructor
   method take -> @nish.Http1OutputPool.take
   method give -> @nish.Http1OutputPool.give
-struct Http1Connection (class) size=176 align=8 exported
+struct Http1Connection (class) size=184 align=8 exported
   field config: Http1Config index=0 offset=0
   field date: HttpDate index=1 offset=8
   field parser: Http1Parser index=2 offset=16
@@ -347,6 +351,8 @@ struct Http1Connection (class) size=176 align=8 exported
   field pongPending: boolean index=32 offset=166 initialized
   field inputEnded: boolean index=33 offset=167 initialized
   field headTimed: boolean index=34 offset=168 initialized
+  field mss: i32 index=35 offset=172 initialized
+  field socketMss: i32 index=36 offset=176 initialized
   constructor -> @nish.Http1Connection.constructor
   method restart -> @nish.Http1Connection.restart
   method park -> @nish.Http1Connection.park
@@ -375,7 +381,11 @@ struct Http1Connection (class) size=176 align=8 exported
   method write -> @nish.Http1Connection.write
   method end -> @nish.Http1Connection.end
   method acceptEncoding -> @nish.Http1Connection.acceptEncoding
+  method identityRefused -> @nish.Http1Connection.identityRefused
+  method acceptEncodingOf -> @nish.Http1Connection.acceptEncodingOf
+  method segmentMss -> @nish.Http1Connection.segmentMss
   method respondEncoded -> @nish.Http1Connection.respondEncoded
+  method unrespond -> @nish.Http1Connection.unrespond
   method acceptWebSocket -> @nish.Http1Connection.acceptWebSocket
   method sendFrame -> @nish.Http1Connection.sendFrame
   method closeWebSocket -> @nish.Http1Connection.closeWebSocket
@@ -538,7 +548,7 @@ function Http1Connection.constructor(this: Http1Connection, config: Http1Config)
   sharedWrite: +0:5
   escaping: config
   calls: nish.Http1Connection.restart nish.Http1Parser.constructor nish.HttpDate.constructor nish.http1ServerCheckCap nish_alloc_struct nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.restart#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.restart#0
   pointer config: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -27:11 big: i32 (const)
@@ -563,18 +573,18 @@ function Http1Connection.restart(this: Http1Connection): void -> @nish.Http1Conn
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Connection.park nish.Http1Connection.release nish.Http1Parser.restart nish.WsDecoder.reset
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0 nish.Http1Connection.park#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0 nish.Http1Connection.park#0
   stackSites=0 stackLocals=0
   callee -5:5 Http1Parser.restart -> @nish.Http1Parser.restart
   local -4:11 ws: WsDecoder | null (const)
   callee -2:7 WsDecoder.reset -> @nish.WsDecoder.reset
-  callee +22:5 Http1Connection.release -> @nish.Http1Connection.release
-  callee +23:5 Http1Connection.park -> @nish.Http1Connection.park
+  callee +24:5 Http1Connection.release -> @nish.Http1Connection.release
+  callee +25:5 Http1Connection.park -> @nish.Http1Connection.park
 function Http1Connection.park(this: Http1Connection): void -> @nish.Http1Connection.park [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1OutputPool.give nish.Http1Parser.resting
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -8:11 inputs: Http1OutputPool | null (const)
   local -7:11 heads: Http1OutputPool | null (const)
@@ -586,7 +596,7 @@ function Http1Connection.unpark(this: Http1Connection): void -> @nish.Http1Conne
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1OutputPool.take
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -4:11 inputs: Http1OutputPool | null (const)
   local -3:11 heads: Http1OutputPool | null (const)
@@ -596,12 +606,12 @@ function Http1Connection.unpark(this: Http1Connection): void -> @nish.Http1Conne
 function Http1Connection.inputLimit(this: Http1Connection): i32 -> @nish.Http1Connection.inputLimit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.inputRoom(this: Http1Connection): i32 -> @nish.Http1Connection.inputRoom [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.inputLimit nish.Http1Parser.buffered nish_panic_overflow
-  pointer this: size=176 writesThrough=false captured=false passedTo=nish.Http1Connection.inputLimit#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.Http1Connection.inputLimit#0
   stackSites=0 stackLocals=0
   local +0:11 ws: WsDecoder | null (const)
   local +1:11 held: i32 (const)
@@ -613,7 +623,7 @@ function Http1Connection.feed(this: Http1Connection, buf: u8[], off: i32, len: i
   sharedWrite: via nish.WsDecoder.feed
   escaping: len off
   calls: nish.Http1Connection.decoder nish.Http1Connection.inputRoom nish.Http1Connection.unpark nish.Http1Parser.feed nish.WsDecoder.feed nish.http1ServerCheckWindow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.inputRoom#0 nish.Http1Connection.decoder#0 nish.Http1Connection.unpark#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.inputRoom#0 nish.Http1Connection.decoder#0 nish.Http1Connection.unpark#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.WsDecoder.feed#1 nish.Http1Parser.feed#1
   stackSites=0 stackLocals=0
   callee +0:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
@@ -627,20 +637,20 @@ function Http1Connection.feed(this: Http1Connection, buf: u8[], off: i32, len: i
 function Http1Connection.endInput(this: Http1Connection): void -> @nish.Http1Connection.endInput [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=176 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.abort(this: Http1Connection): void -> @nish.Http1Connection.abort [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Connection.release
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0
   stackSites=0 stackLocals=0
   callee +5:5 Http1Connection.release -> @nish.Http1Connection.release
 function Http1Connection.acquire(this: Http1Connection): void -> @nish.Http1Connection.acquire [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1OutputPool.take nish_panic
-  pointer this: size=176 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 pool: Http1OutputPool | null (const)
   callee +0:35 Http1OutputPool.take -> @nish.Http1OutputPool.take
@@ -648,7 +658,7 @@ function Http1Connection.release(this: Http1Connection): void -> @nish.Http1Conn
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1OutputPool.give
-  pointer this: size=176 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -10:11 pool: Http1OutputPool | null (const)
   callee -1:5 Http1OutputPool.give -> @nish.Http1OutputPool.give
@@ -656,24 +666,24 @@ function Http1Connection.consume(this: Http1Connection, n: i32): void -> @nish.H
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 pending: i32 (const)
 function Http1Connection.wantsWrite(this: Http1Connection): boolean -> @nish.Http1Connection.wantsWrite [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.isDone(this: Http1Connection): boolean -> @nish.Http1Connection.isDone [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.wantsWrite
-  pointer this: size=176 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
   stackSites=0 stackLocals=0
   callee +0:71 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
 function Http1Connection.room(this: Http1Connection): i32 -> @nish.Http1Connection.room [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1Connection.acquire nish.copyBytes nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.acquire#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.acquire#0
   stackSites=0 stackLocals=0
   callee -7:5 Http1Connection.acquire -> @nish.Http1Connection.acquire
   local -6:11 output: u8[] (const)
@@ -683,7 +693,7 @@ function Http1Connection.bodyRoom(this: Http1Connection): i32 -> @nish.Http1Conn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Connection.room
   calls: nish.Http1Connection.room nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   local +0:11 r: i32 (const)
   callee +0:20 Http1Connection.room -> @nish.Http1Connection.room
@@ -691,7 +701,7 @@ function Http1Connection.next(this: Http1Connection): i32 -> @nish.Http1Connecti
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1Connection.bodyRoom nish.Http1Connection.nextFrame nish.Http1Connection.nextRequest nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.nextRequest#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.nextRequest#0
   stackSites=0 stackLocals=0
   callee -3:11 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
   callee +7:14 Http1Connection.nextFrame -> @nish.Http1Connection.nextFrame
@@ -700,7 +710,7 @@ function Http1Connection.nextRequest(this: Http1Connection): i32 -> @nish.Http1C
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.Http1Connection.decoder nish.Http1Connection.fail nish.Http1Connection.headArrived nish.Http1Connection.nextFrame nish.Http1Parser.buffered nish.Http1Parser.declineUpgrade nish.Http1Parser.next nish.WsDecoder.feed nish.WsDecoder.reset
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.decoder#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.headArrived#0 nish.Http1Connection.fail#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.decoder#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.headArrived#0 nish.Http1Connection.fail#0
   stackSites=0 stackLocals=0
   local +4:17 p: Http1Parser (const)
   local +5:17 ws: WsDecoder (const)
@@ -719,7 +729,7 @@ function Http1Connection.fail(this: Http1Connection, status: i32): i32 -> @nish.
   sharedWrite: +0:5
   escaping: status
   calls: nish.Http1Connection.room nish.HttpDate.current nish.http1ServerReason nish.http1WriteResponseHead
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   callee +3:7 Http1Connection.room -> @nish.Http1Connection.room
   local +4:13 end: i32 (const)
@@ -730,7 +740,7 @@ function Http1Connection.decoder(this: Http1Connection): WsDecoder -> @nish.Http
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=88
   sharedWrite: +0:5
   calls: nish.WsDecoder.constructor nish_alloc_struct
-  pointer this: size=176 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 ws: WsDecoder | null (const)
   local -1:11 made: WsDecoder (const)
@@ -739,7 +749,7 @@ function Http1Connection.nextFrame(this: Http1Connection): i32 -> @nish.Http1Con
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.Http1Connection.decoder nish.Http1Connection.sendClose nish.Http1Connection.sendPong nish.WsDecoder.next nish_panic
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.sendPong#0 nish.Http1Connection.decoder#0 nish.Http1Connection.sendClose#0 nish.Http1Connection.sendClose#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.sendPong#0 nish.Http1Connection.decoder#0 nish.Http1Connection.sendClose#0 nish.Http1Connection.sendClose#0
   stackSites=0 stackLocals=0
   callee -6:32 Http1Connection.sendPong -> @nish.Http1Connection.sendPong
   local -3:13 ws: WsDecoder (const)
@@ -754,7 +764,7 @@ function Http1Connection.sendPong(this: Http1Connection): boolean -> @nish.Http1
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Connection.room nish.websocketWriteFrame
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   callee -14:5 Http1Connection.room -> @nish.Http1Connection.room
   local -13:11 end: i32 (const)
@@ -764,7 +774,7 @@ function Http1Connection.sendClose(this: Http1Connection, code: i32): void -> @n
   sharedWrite: +0:7
   escaping: code
   calls: nish.Http1Connection.room nish.websocketClosePayload nish.websocketWriteFrame
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   callee -17:5 Http1Connection.room -> @nish.Http1Connection.room
   local -16:11 payload: u8[] | null (const)
@@ -775,14 +785,14 @@ function Http1Connection.sendClose(this: Http1Connection, code: i32): void -> @n
   callee -11:22 websocketWriteFrame -> @nish.websocketWriteFrame
 function Http1Connection.answerable(this: Http1Connection): boolean -> @nish.Http1Connection.answerable [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.respond(this: Http1Connection, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 -> @nish.Http1Connection.respond [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: bodyLength status
   calls: nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.Http1Parser.methodIs nish.HttpDate.current nish.http1ServerReason nish.http1ServerReserved nish.http1WriteResponseHead nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.bodyRoom#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.bodyRoom#0
   pointer names: size=0 writesThrough=true captured=false passedTo=nish.http1WriteResponseHead#4
   pointer values: size=0 writesThrough=true captured=false passedTo=nish.http1WriteResponseHead#5
   stackSites=0 stackLocals=0
@@ -806,7 +816,7 @@ function Http1Connection.write(this: Http1Connection, buf: u8[], off: i32, len: 
   sharedWrite: +0:7
   escaping: len off
   calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.http1ServerCopy nish.http1WriteChunk nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.http1WriteChunk#2 nish.http1ServerCopy#2
   stackSites=0 stackLocals=0
   callee -21:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
@@ -820,14 +830,27 @@ function Http1Connection.end(this: Http1Connection): i32 -> @nish.Http1Connectio
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1Connection.bodyRoom nish.http1WriteLastChunk
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
   stackSites=0 stackLocals=0
   callee +8:11 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
   callee +12:24 http1WriteLastChunk -> @nish.http1WriteLastChunk
 function Http1Connection.acceptEncoding(this: Http1Connection): i32 -> @nish.Http1Connection.acceptEncoding [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.Http1Connection.acceptEncodingOf
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.Http1Connection.acceptEncodingOf#0
+  stackSites=0 stackLocals=0
+  callee +0:12 Http1Connection.acceptEncodingOf -> @nish.Http1Connection.acceptEncodingOf
+function Http1Connection.identityRefused(this: Http1Connection): boolean -> @nish.Http1Connection.identityRefused [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.Http1Connection.acceptEncodingOf
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.Http1Connection.acceptEncodingOf#0
+  stackSites=0 stackLocals=0
+  callee +0:12 Http1Connection.acceptEncodingOf -> @nish.Http1Connection.acceptEncodingOf
+function Http1Connection.acceptEncodingOf(this: Http1Connection, offered: i32): i32 -> @nish.Http1Connection.acceptEncodingOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: offered
   calls: nish.Http1Parser.headerIndex nish.httpAcceptEncoding nish_panic_index nish_panic_overflow
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 parser: Http1Parser (const)
   local +1:11 i: i32 (const)
@@ -836,41 +859,71 @@ function Http1Connection.acceptEncoding(this: Http1Connection): i32 -> @nish.Htt
   local +6:11 start: i32 (const)
   local +7:11 end: i32 (const)
   callee +11:12 httpAcceptEncoding -> @nish.httpAcceptEncoding
+function Http1Connection.segmentMss(this: Http1Connection, enc: HttpCompressor): i32 -> @nish.Http1Connection.segmentMss [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=184 writesThrough=false captured=false
+  pointer enc: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function Http1Connection.respondEncoded(this: Http1Connection, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32, enc: HttpCompressor, coding: i32): i32 -> @nish.Http1Connection.respondEncoded [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: coding len off status
-  calls: nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.room nish.Http1Connection.write nish.HttpCompressor.addFields nish.HttpCompressor.compress nish.HttpCompressor.identityFields nish.http1ServerCheckWindow nish_panic nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.room#0 nish.Http1Connection.respond#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
-  pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.addFields#1 nish.HttpCompressor.identityFields#1
-  pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.addFields#2 nish.HttpCompressor.identityFields#2
-  pointer body: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.HttpCompressor.compress#2 nish.Http1Connection.write#1
-  pointer enc: size=80 writesThrough=false captured=false passedTo=nish.HttpCompressor.compress#0 nish.HttpCompressor.addFields#0 nish.HttpCompressor.identityFields#0
+  calls: nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.Http1Connection.end nish.Http1Connection.identityRefused nish.Http1Connection.respond nish.Http1Connection.room nish.Http1Connection.segmentMss nish.Http1Connection.unrespond nish.Http1Connection.write nish.HttpCompressor.addFields nish.HttpCompressor.compress nish.HttpCompressor.compressAnyway nish.HttpCompressor.fewerSegments nish.HttpCompressor.http1IdentityHead nish.HttpCompressor.identityFields nish.HttpCompressor.oneSegment nish.HttpCompressor.segmentSize nish.http1ServerCheckWindow nish_panic nish_panic_overflow
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.identityRefused#0 nish.Http1Connection.room#0 nish.Http1Connection.segmentMss#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.identityFields#1 nish.HttpCompressor.addFields#1 nish.HttpCompressor.identityFields#1 nish.HttpCompressor.identityFields#1
+  pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.identityFields#2 nish.HttpCompressor.addFields#2 nish.HttpCompressor.identityFields#2 nish.HttpCompressor.identityFields#2
+  pointer body: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.HttpCompressor.compressAnyway#2 nish.HttpCompressor.compress#2 nish.Http1Connection.write#1
+  pointer enc: size=112 writesThrough=true captured=false passedTo=nish.Http1Connection.segmentMss#1 nish.HttpCompressor.oneSegment#0 nish.HttpCompressor.identityFields#0 nish.HttpCompressor.segmentSize#0 nish.HttpCompressor.compressAnyway#0 nish.HttpCompressor.compress#0 nish.HttpCompressor.addFields#0 nish.HttpCompressor.identityFields#0 nish.HttpCompressor.http1IdentityHead#0 nish.HttpCompressor.fewerSegments#0 nish.HttpCompressor.identityFields#0
   stackSites=0 stackLocals=0
-  callee -25:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
-  callee -24:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
-  local -21:11 packed: i32 (const)
-  callee -21:25 HttpCompressor.compress -> @nish.HttpCompressor.compress
-  local -20:9 n: i32 (let)
-  callee -18:7 HttpCompressor.addFields -> @nish.HttpCompressor.addFields
-  callee -15:7 HttpCompressor.identityFields -> @nish.HttpCompressor.identityFields
-  callee -9:5 Http1Connection.room -> @nish.Http1Connection.room
-  local -8:11 outputEnd: i32 (const)
-  local -7:11 closeAfter: boolean (const)
-  local -6:11 r: i32 (const)
-  callee -6:20 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee -2:36 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
-  local -1:13 fits: boolean (const)
-  local +12:11 w: i32 (const)
-  callee +12:34 Http1Connection.write -> @nish.Http1Connection.write
-  callee +12:72 Http1Connection.write -> @nish.Http1Connection.write
-  callee +16:12 Http1Connection.end -> @nish.Http1Connection.end
+  callee -65:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
+  callee -64:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
+  local -61:11 required: boolean (const)
+  callee -61:62 Http1Connection.identityRefused -> @nish.Http1Connection.identityRefused
+  callee -56:5 Http1Connection.room -> @nish.Http1Connection.room
+  local -55:11 outputEnd: i32 (const)
+  local -54:11 closeAfter: boolean (const)
+  local -53:9 packed: i32 (let)
+  local -52:9 n: i32 (let)
+  local -51:9 r: i32 (let)
+  local -50:9 queued: boolean (let)
+  local -49:11 mss: i32 (const)
+  callee -49:22 Http1Connection.segmentMss -> @nish.Http1Connection.segmentMss
+  callee -48:41 HttpCompressor.oneSegment -> @nish.HttpCompressor.oneSegment
+  callee -44:7 HttpCompressor.identityFields -> @nish.HttpCompressor.identityFields
+  callee -43:11 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee -39:52 HttpCompressor.segmentSize -> @nish.HttpCompressor.segmentSize
+  callee -37:9 Http1Connection.unrespond -> @nish.Http1Connection.unrespond
+  callee -33:27 HttpCompressor.compressAnyway -> @nish.HttpCompressor.compressAnyway
+  callee -33:72 HttpCompressor.compress -> @nish.HttpCompressor.compress
+  callee -31:9 HttpCompressor.addFields -> @nish.HttpCompressor.addFields
+  callee -28:9 HttpCompressor.identityFields -> @nish.HttpCompressor.identityFields
+  callee -26:11 Http1Connection.respond -> @nish.Http1Connection.respond
+  local -19:13 head: i32 (const)
+  local -18:13 plain: i32 (const)
+  callee -18:26 HttpCompressor.http1IdentityHead -> @nish.HttpCompressor.http1IdentityHead
+  callee -17:12 HttpCompressor.fewerSegments -> @nish.HttpCompressor.fewerSegments
+  callee -16:9 Http1Connection.unrespond -> @nish.Http1Connection.unrespond
+  callee -15:9 HttpCompressor.identityFields -> @nish.HttpCompressor.identityFields
+  callee -12:13 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee -6:36 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
+  local -5:13 fits: boolean (const)
+  callee -4:7 Http1Connection.unrespond -> @nish.Http1Connection.unrespond
+  local +3:11 w: i32 (const)
+  callee +3:34 Http1Connection.write -> @nish.Http1Connection.write
+  callee +3:72 Http1Connection.write -> @nish.Http1Connection.write
+  callee +7:12 Http1Connection.end -> @nish.Http1Connection.end
+function Http1Connection.unrespond(this: Http1Connection, outputEnd: i32, closeAfter: boolean): void -> @nish.Http1Connection.unrespond [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: closeAfter outputEnd
+  pointer this: size=184 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function Http1Connection.acceptWebSocket(this: Http1Connection, protocol: string): i32 -> @nish.Http1Connection.acceptWebSocket [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: protocol
   calls: nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.http1ServerCopy nish.websocketRequestKey nish.websocketUpgradeResponse
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.bodyRoom#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.bodyRoom#0
   stackSites=0 stackLocals=0
   callee -13:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
   local -10:11 key: string | null (const)
@@ -885,7 +938,7 @@ function Http1Connection.sendFrame(this: Http1Connection, fin: boolean, opcode: 
   sharedWrite: +0:7
   escaping: fin len off opcode
   calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.websocketFrameSize nish.websocketWriteFrame nish_panic_overflow
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.websocketWriteFrame#4
   stackSites=0 stackLocals=0
   callee -8:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
@@ -898,25 +951,25 @@ function Http1Connection.closeWebSocket(this: Http1Connection, code: i32): i32 -
   sharedWrite: +0:5
   escaping: code
   calls: nish.Http1Connection.sendClose nish.websocketClosePayload
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.sendClose#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.sendClose#0
   stackSites=0 stackLocals=0
   callee -4:9 websocketClosePayload -> @nish.websocketClosePayload
   callee -1:5 Http1Connection.sendClose -> @nish.Http1Connection.sendClose
 function Http1Connection.isWebSocket(this: Http1Connection): boolean -> @nish.Http1Connection.isWebSocket [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.idle(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.idle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.headArrived(this: Http1Connection, now: i64): void -> @nish.Http1Connection.headArrived [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Connection.headAwaited
   escaping: now
   calls: nish.Http1Connection.headAwaited nish.Http1Parser.buffered
-  pointer this: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.headAwaited#0
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.headAwaited#0
   stackSites=0 stackLocals=0
   callee +0:9 Http1Parser.buffered -> @nish.Http1Parser.buffered
   callee +1:7 Http1Connection.headAwaited -> @nish.Http1Connection.headAwaited
@@ -924,18 +977,18 @@ function Http1Connection.headAwaited(this: Http1Connection, now: i64): void -> @
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: now
-  pointer this: size=176 writesThrough=true captured=false
+  pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.headLate(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.headLate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.expired(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.expired [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish.Http1Connection.headLate nish.Http1Connection.idle
-  pointer this: size=176 writesThrough=false captured=false passedTo=nish.Http1Connection.idle#0 nish.Http1Connection.headLate#0
+  pointer this: size=184 writesThrough=false captured=false passedTo=nish.Http1Connection.idle#0 nish.Http1Connection.headLate#0
   stackSites=0 stackLocals=0
   callee +0:12 Http1Connection.idle -> @nish.Http1Connection.idle
   callee +0:30 Http1Connection.headLate -> @nish.Http1Connection.headLate
@@ -943,7 +996,7 @@ function Http1Connection.expiresNoSooner(this: Http1Connection, now: i64): i64 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish_panic_overflow
-  pointer this: size=176 writesThrough=false captured=false
+  pointer this: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 idle: i64 (const)
   local +1:9 start: i64 (let)
@@ -967,7 +1020,7 @@ function Http1Server.constructor(this: Http1Server, config: Http1Config, listene
   callee +2:18 new Http1OutputPool -> @nish.Http1OutputPool.constructor
   callee +3:17 new HttpDate -> @nish.HttpDate.constructor
 function Http1Server.build(this: Http1Server): Http1Connection -> @nish.Http1Server.build [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: +0:5
   calls: nish.Http1Connection.constructor nish_alloc_struct nish_array_grow
   pointer this: size=112 writesThrough=false captured=false
@@ -998,7 +1051,7 @@ function Http1Server.fd(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.
   stackSites=0 stackLocals=0
   callee +0:12 Http1Server.holds -> @nish.Http1Server.holds
 function Http1Server.connection(this: Http1Server, slot: i32): Http1Connection -> @nish.Http1Server.connection [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: via nish.Http1Server.build
   escaping: slot
   calls: nish.Http1Server.build
@@ -1008,7 +1061,7 @@ function Http1Server.connection(this: Http1Server, slot: i32): Http1Connection -
 function Http1Server.accept(this: Http1Server): i32 -> @nish.Http1Server.accept [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:21
-  calls: nish.Http1Connection.restart nish.Http1Server.build nish_array_grow nish_monotonic_nanos nish_net_close nish_panic_index nish_tcp_accept
+  calls: nish.Http1Connection.restart nish.Http1Server.build nish_array_grow nish_monotonic_nanos nish_net_close nish_net_mss nish_panic_index nish_tcp_accept
   pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.build#0
   stackSites=0 stackLocals=0
   local +0:11 fd: i32 (const)
@@ -1016,6 +1069,7 @@ function Http1Server.accept(this: Http1Server): i32 -> @nish.Http1Server.accept 
   local +20:11 conn: Http1Connection (const)
   callee +20:94 Http1Server.build -> @nish.Http1Server.build
   callee +23:5 Http1Connection.restart -> @nish.Http1Connection.restart
+  local +26:11 mss: i32 (const)
 function Http1Server.readable(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.readable [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22
@@ -1135,7 +1189,7 @@ function Http1TlsServer.constructor(this: Http1TlsServer, tlsConfig: TlsServerCo
   callee +4:18 new Http1OutputPool -> @nish.Http1OutputPool.constructor
   callee +5:17 new HttpDate -> @nish.HttpDate.constructor
 function Http1TlsServer.build(this: Http1TlsServer): Http1Connection -> @nish.Http1TlsServer.build [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: +0:5
   calls: nish.Http1TlsServer.make nish_array_grow
   pointer this: size=88 writesThrough=false captured=false passedTo=nish.Http1TlsServer.make#0
@@ -1143,7 +1197,7 @@ function Http1TlsServer.build(this: Http1TlsServer): Http1Connection -> @nish.Ht
   local -1:11 conn: Http1Connection (const)
   callee -1:35 Http1TlsServer.make -> @nish.Http1TlsServer.make
 function Http1TlsServer.make(this: Http1TlsServer): Http1Connection -> @nish.Http1TlsServer.make [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: via nish.Http1Connection.constructor
   calls: nish.Http1Connection.constructor nish_alloc_struct
   pointer this: size=88 writesThrough=false captured=false
@@ -1184,7 +1238,7 @@ function Http1TlsServer.live(this: Http1TlsServer, slot: i32): boolean -> @nish.
   stackSites=0 stackLocals=0
   callee +0:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
 function Http1TlsServer.connection(this: Http1TlsServer, slot: i32): Http1Connection -> @nish.Http1TlsServer.connection [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: +0:5
   escaping: slot
   calls: nish.Http1TlsServer.make nish.TlsTcpServer.size
@@ -1983,30 +2037,73 @@ module std/net/http-compress.ts [package nish]
 import DEFLATE_FAST from "nish/compress/deflate" -> const DEFLATE_FAST
 import compressBound from "nish/compress/deflate" -> function @nish.compressBound
 import GzipCompressor from "nish/compress/gzip" -> struct GzipCompressor
+import GzipFixedCompressor from "nish/compress/gzip" -> struct GzipFixedCompressor
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+unsafe import 74:10 wrappingAdd from "nish:unsafe"
+unsafe call 477:26 wrappingAdd (node 1741)
+unsafe call 509:24 wrappingAdd (node 1889)
 const HTTP_CODING_IDENTITY: i32 = 0 [exported]
 const HTTP_CODING_GZIP: i32 = 1 [exported]
 const HTTP_CODING_DEFLATE: i32 = 2 [exported]
 const HTTP_CODING_NONE: i32 = -1 [exported]
 const HTTP_OFFER_GZIP: i32 = 1 [exported]
 const HTTP_OFFER_DEFLATE: i32 = 2 [exported]
+const HTTP_COMPRESS_SENT: i32 = 0 [exported]
+const HTTP_COMPRESS_NOT_ACCEPTED: i32 = 1 [exported]
+const HTTP_COMPRESS_TOO_SMALL: i32 = 2 [exported]
+const HTTP_COMPRESS_TOO_LARGE: i32 = 3 [exported]
+const HTTP_COMPRESS_TOO_LITTLE_SAVED: i32 = 4 [exported]
+const HTTP_COMPRESS_NO_FEWER_SEGMENTS: i32 = 5 [exported]
+const HTTP_ENCODER_AUTO: i32 = 0 [exported]
+const HTTP_ENCODER_FIXED: i32 = 1 [exported]
+const HTTP_ENCODER_LEVEL: i32 = 2 [exported]
+const HTTP_DEFAULT_MSS: i32 = 1448 [exported]
+const HTTP1_GZIP_FIELD_BYTES: i32 = 24 [exported]
 const HTTP_Q_ONE: i32 = 1000
-struct HttpCompressor (class) size=80 align=8 exported
+struct HttpCompressor (class) size=112 align=8 exported
   field gzip: GzipCompressor index=0 offset=0 readonly
-  field output: u8[] index=1 offset=8 readonly
-  field names: u8[][] index=2 offset=16 readonly
-  field values: u8[][] index=3 offset=24 readonly
-  field contentEncodingName: u8[] index=4 offset=32 readonly
-  field gzipValue: u8[] index=5 offset=40 readonly
-  field varyName: u8[] index=6 offset=48 readonly
-  field acceptEncodingValue: u8[] index=7 offset=56 readonly
-  field minLength: i32 index=8 offset=64 readonly
-  field maxLength: i32 index=9 offset=68 readonly
-  field vary: boolean index=10 offset=72
+  field fixed: GzipFixedCompressor index=1 offset=8 readonly
+  field output: u8[] index=2 offset=16 readonly
+  field names: u8[][] index=3 offset=24 readonly
+  field values: u8[][] index=4 offset=32 readonly
+  field contentEncodingName: u8[] index=5 offset=40 readonly
+  field gzipValue: u8[] index=6 offset=48 readonly
+  field varyName: u8[] index=7 offset=56 readonly
+  field acceptEncodingValue: u8[] index=8 offset=64 readonly
+  field minLength: i32 index=9 offset=72 readonly
+  field maxLength: i32 index=10 offset=76 readonly
+  field minSaving: i32 index=11 offset=80
+  field minSavingPercent: i32 index=12 offset=84
+  field vary: boolean index=13 offset=88
+  field segmentMode: boolean index=14 offset=89
+  field mss: i32 index=15 offset=92
+  field encoder: i32 index=16 offset=96
+  field fixedLimit: i32 index=17 offset=100
+  field decision: i32 index=18 offset=104
+  field encoderRuns: i32 index=19 offset=108
   constructor -> @nish.HttpCompressor.constructor
   method compress -> @nish.HttpCompressor.compress
+  method compressAnyway -> @nish.HttpCompressor.compressAnyway
+  method leastSaving -> @nish.HttpCompressor.leastSaving
+  method fewerSegments -> @nish.HttpCompressor.fewerSegments
+  method segmentSize -> @nish.HttpCompressor.segmentSize
+  method oneSegment -> @nish.HttpCompressor.oneSegment
+  method http1IdentityHead -> @nish.HttpCompressor.http1IdentityHead
+  method varies -> @nish.HttpCompressor.varies
   method addFields -> @nish.HttpCompressor.addFields
   method addVary -> @nish.HttpCompressor.addVary
   method identityFields -> @nish.HttpCompressor.identityFields
+function httpSegments(bytes: i32, mss: i32): i32 -> @nish.httpSegments [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic nish_panic_overflow
+  stackSites=0 stackLocals=0
+function httpDecimalDigits(n: i32): i32 -> @nish.httpDecimalDigits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 digits: i32 (let)
+  local +1:7 rest: i32 (let)
 function httpCodingChar(c: i32): boolean -> @nish.httpCodingChar
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -2073,6 +2170,13 @@ function httpAcceptEncoding(buf: u8[], start: i32, end: i32, offered: i32): i32 
   local +75:7 identity: i32 (let)
   local +81:7 coding: i32 (let)
   local +82:7 codingQ: i32 (let)
+function httpIdentityRefused(buf: u8[], start: i32, end: i32): boolean -> @nish.httpIdentityRefused [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end start
+  calls: nish.httpAcceptEncoding
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.httpAcceptEncoding#0
+  stackSites=0 stackLocals=0
+  callee +0:3 httpAcceptEncoding -> @nish.httpAcceptEncoding
 function httpCompressBytes(text: string): u8[] -> @nish.httpCompressBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
@@ -2082,48 +2186,109 @@ function httpCompressBytes(text: string): u8[] -> @nish.httpCompressBytes
 function HttpCompressor.constructor(this: HttpCompressor, level: i32, minLength: i32, maxLength: i32): void -> @nish.HttpCompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: level maxLength minLength
-  calls: nish.GzipCompressor.constructor nish.compressBound nish.httpCompressBytes nish_alloc_struct nish_panic
-  pointer this: size=80 writesThrough=true captured=false
+  calls: nish.GzipCompressor.constructor nish.GzipFixedCompressor.constructor nish.compressBound nish.httpCompressBytes nish_alloc_struct nish_panic
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:17 new GzipCompressor -> @nish.GzipCompressor.constructor
-  callee +1:33 compressBound -> @nish.compressBound
-  callee +4:32 httpCompressBytes -> @nish.httpCompressBytes
-  callee +5:22 httpCompressBytes -> @nish.httpCompressBytes
-  callee +6:21 httpCompressBytes -> @nish.httpCompressBytes
-  callee +7:32 httpCompressBytes -> @nish.httpCompressBytes
+  callee +1:18 new GzipFixedCompressor -> @nish.GzipFixedCompressor.constructor
+  callee +2:33 compressBound -> @nish.compressBound
+  callee +5:32 httpCompressBytes -> @nish.httpCompressBytes
+  callee +6:22 httpCompressBytes -> @nish.httpCompressBytes
+  callee +7:21 httpCompressBytes -> @nish.httpCompressBytes
+  callee +8:32 httpCompressBytes -> @nish.httpCompressBytes
 function HttpCompressor.compress(this: HttpCompressor, coding: i32, body: u8[], off: i32, len: i32): i32 -> @nish.HttpCompressor.compress [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.GzipCompressor.compress
+  sharedWrite: +0:7
   escaping: len off
-  calls: nish.GzipCompressor.compress nish_panic
-  pointer this: size=80 writesThrough=false captured=false
-  pointer body: size=0 writesThrough=false captured=false passedTo=nish.GzipCompressor.compress#1
+  calls: nish.GzipCompressor.compress nish.GzipFixedCompressor.compress nish.HttpCompressor.leastSaving nish_panic nish_panic_overflow
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.HttpCompressor.leastSaving#0
+  pointer body: size=0 writesThrough=false captured=false passedTo=nish.GzipFixedCompressor.compress#1 nish.GzipCompressor.compress#1
   stackSites=0 stackLocals=0
-  local +0:11 n: i32 (const)
-  callee +0:20 GzipCompressor.compress -> @nish.GzipCompressor.compress
+  local +12:11 keep: i32 (const)
+  callee +12:29 HttpCompressor.leastSaving -> @nish.HttpCompressor.leastSaving
+  local +13:9 n: i32 (let)
+  local +15:13 fixed: boolean (const)
+  callee +19:11 GzipFixedCompressor.compress -> @nish.GzipFixedCompressor.compress
+  callee +20:11 GzipCompressor.compress -> @nish.GzipCompressor.compress
+function HttpCompressor.compressAnyway(this: HttpCompressor, coding: i32, body: u8[], off: i32, len: i32): i32 -> @nish.HttpCompressor.compressAnyway [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: len off
+  calls: nish.GzipCompressor.compress nish.GzipFixedCompressor.compress nish_panic
+  pointer this: size=112 writesThrough=true captured=false
+  pointer body: size=0 writesThrough=false captured=false passedTo=nish.GzipFixedCompressor.compress#1 nish.GzipCompressor.compress#1
+  stackSites=0 stackLocals=0
+  local +8:9 n: i32 (let)
+  callee +13:11 GzipFixedCompressor.compress -> @nish.GzipFixedCompressor.compress
+  callee +16:11 GzipCompressor.compress -> @nish.GzipCompressor.compress
+function HttpCompressor.leastSaving(this: HttpCompressor, len: i32): i32 -> @nish.HttpCompressor.leastSaving [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_div
+  pointer this: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 least: i32 (let)
+  local +1:9 pct: i32 (let)
+  local +7:11 share: i32 (const)
+function HttpCompressor.fewerSegments(this: HttpCompressor, identityBytes: i32, encodedBytes: i32, mss: i32): boolean -> @nish.HttpCompressor.fewerSegments [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: encodedBytes identityBytes mss
+  calls: nish.HttpCompressor.segmentSize nish.httpSegments
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.HttpCompressor.segmentSize#0
+  stackSites=0 stackLocals=0
+  local -4:11 size: i32 (const)
+  callee -4:23 HttpCompressor.segmentSize -> @nish.HttpCompressor.segmentSize
+  callee -3:9 httpSegments -> @nish.httpSegments
+  callee -3:44 httpSegments -> @nish.httpSegments
+function HttpCompressor.segmentSize(this: HttpCompressor, mss: i32): i32 -> @nish.HttpCompressor.segmentSize [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: mss
+  pointer this: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function HttpCompressor.oneSegment(this: HttpCompressor, coding: i32, len: i32, mss: i32): boolean -> @nish.HttpCompressor.oneSegment [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: mss
+  calls: nish.HttpCompressor.segmentSize
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.HttpCompressor.segmentSize#0
+  stackSites=0 stackLocals=0
+  callee -4:13 HttpCompressor.segmentSize -> @nish.HttpCompressor.segmentSize
+function HttpCompressor.http1IdentityHead(this: HttpCompressor, encodedHead: i32, encodedLength: i32, length: i32): i32 -> @nish.HttpCompressor.http1IdentityHead [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: encodedLength length
+  calls: nish.httpDecimalDigits nish_panic_overflow
+  pointer this: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 head: i32 (let)
+  callee +4:19 httpDecimalDigits -> @nish.httpDecimalDigits
+  callee +4:54 httpDecimalDigits -> @nish.httpDecimalDigits
+function HttpCompressor.varies(this: HttpCompressor): boolean -> @nish.HttpCompressor.varies [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function HttpCompressor.addFields(this: HttpCompressor, names: u8[][], values: u8[][]): void -> @nish.HttpCompressor.addFields [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.HttpCompressor.addVary nish_array_grow
-  pointer this: size=80 writesThrough=false captured=false passedTo=nish.HttpCompressor.addVary#0
+  calls: nish_array_grow
+  pointer this: size=112 writesThrough=false captured=false
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +5:14 i: i32 (let)
   local +7:15 name: u8[] (const)
   local +8:15 value: u8[] (const)
-  callee +15:5 HttpCompressor.addVary -> @nish.HttpCompressor.addVary
 function HttpCompressor.addVary(this: HttpCompressor): void -> @nish.HttpCompressor.addVary [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_array_grow
-  pointer this: size=80 writesThrough=false captured=false
+  calls: nish.HttpCompressor.varies nish_array_grow
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.HttpCompressor.varies#0
   stackSites=0 stackLocals=0
+  callee -1:22 HttpCompressor.varies -> @nish.HttpCompressor.varies
 function HttpCompressor.identityFields(this: HttpCompressor, names: u8[][], values: u8[][]): void -> @nish.HttpCompressor.identityFields [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.HttpCompressor.addVary nish_array_grow
-  pointer this: size=80 writesThrough=false captured=false passedTo=nish.HttpCompressor.addVary#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.HttpCompressor.addVary#0
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -2132,7 +2297,7 @@ function HttpCompressor.identityFields(this: HttpCompressor, names: u8[][], valu
   local +8:15 value: u8[] (const)
   callee +13:5 HttpCompressor.addVary -> @nish.HttpCompressor.addVary
 function httpCompressorDefault(): HttpCompressor -> @nish.httpCompressorDefault [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=80
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=112
   calls: nish.HttpCompressor.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
   callee +0:60 new HttpCompressor -> @nish.HttpCompressor.constructor
@@ -2146,235 +2311,255 @@ unsafe import 55:10 uncheckedGet from "nish:unsafe"
 unsafe import 55:24 uncheckedSet from "nish:unsafe"
 unsafe import 55:38 wrappingAdd from "nish:unsafe"
 unsafe import 55:51 wrappingSub from "nish:unsafe"
-unsafe call 226:9 uncheckedGet (node 565)
-unsafe call 227:10 uncheckedGet (node 574)
-unsafe call 228:10 uncheckedGet (node 588)
-unsafe call 229:10 uncheckedGet (node 602)
-unsafe call 238:9 uncheckedGet (node 632)
-unsafe call 239:10 uncheckedGet (node 641)
-unsafe call 240:10 uncheckedGet (node 658)
-unsafe call 241:10 uncheckedGet (node 675)
-unsafe call 242:10 uncheckedGet (node 692)
-unsafe call 243:10 uncheckedGet (node 709)
-unsafe call 244:10 uncheckedGet (node 726)
-unsafe call 245:10 uncheckedGet (node 743)
-unsafe call 249:3 uncheckedSet (node 779)
-unsafe call 250:3 uncheckedSet (node 789)
-unsafe call 251:3 uncheckedSet (node 806)
-unsafe call 252:3 uncheckedSet (node 823)
-unsafe call 253:3 uncheckedSet (node 840)
-unsafe call 254:3 uncheckedSet (node 857)
-unsafe call 255:3 uncheckedSet (node 874)
-unsafe call 256:3 uncheckedSet (node 891)
-unsafe call 291:21 uncheckedGet (node 1135)
-unsafe call 291:50 uncheckedGet (node 1142)
-unsafe call 509:7 uncheckedSet (node 2165)
-unsafe call 510:7 uncheckedSet (node 2172)
-unsafe call 535:7 uncheckedSet (node 2312)
-unsafe call 542:23 uncheckedGet (node 2392)
-unsafe call 543:7 uncheckedSet (node 2402)
-unsafe call 543:32 uncheckedGet (node 2407)
-unsafe call 547:22 uncheckedGet (node 2442)
-unsafe call 548:7 uncheckedSet (node 2448)
-unsafe call 552:22 uncheckedGet (node 2479)
-unsafe call 554:23 uncheckedGet (node 2502)
-unsafe call 555:7 uncheckedSet (node 2508)
-unsafe call 556:7 uncheckedSet (node 2517)
-unsafe call 556:32 uncheckedGet (node 2522)
-unsafe call 557:7 uncheckedSet (node 2528)
-unsafe call 562:5 uncheckedSet (node 2550)
-unsafe call 562:27 uncheckedGet (node 2555)
-unsafe call 563:5 uncheckedSet (node 2561)
-unsafe call 563:27 uncheckedGet (node 2566)
-unsafe call 567:3 uncheckedSet (node 2572)
-unsafe call 567:25 uncheckedGet (node 2577)
-unsafe call 567:49 uncheckedGet (node 2582)
-unsafe call 571:25 uncheckedGet (node 2623)
-unsafe call 571:52 uncheckedGet (node 2628)
-unsafe call 572:7 uncheckedSet (node 2637)
-unsafe call 572:32 uncheckedGet (node 2642)
-unsafe call 573:7 uncheckedSet (node 2648)
-unsafe call 576:7 uncheckedSet (node 2660)
-unsafe call 576:32 uncheckedGet (node 2665)
-unsafe call 579:41 uncheckedGet (node 2682)
-unsafe call 579:68 uncheckedGet (node 2687)
-unsafe call 580:7 uncheckedSet (node 2697)
-unsafe call 580:32 uncheckedGet (node 2702)
-unsafe call 580:59 uncheckedGet (node 2707)
-unsafe call 581:7 uncheckedSet (node 2714)
-unsafe call 584:7 uncheckedSet (node 2726)
-unsafe call 584:32 uncheckedGet (node 2731)
-unsafe call 584:59 uncheckedGet (node 2736)
-unsafe call 589:3 uncheckedSet (node 2747)
-unsafe call 591:5 uncheckedSet (node 2773)
-unsafe call 591:30 uncheckedGet (node 2778)
-unsafe call 591:49 uncheckedGet (node 2782)
-unsafe call 603:25 uncheckedGet (node 2855)
-unsafe call 647:24 uncheckedGet (node 3102)
-unsafe call 929:7 uncheckedSet (node 4507)
-unsafe call 949:7 uncheckedSet (node 4623)
-unsafe call 950:7 uncheckedSet (node 4638)
-unsafe call 951:7 uncheckedSet (node 4661)
-unsafe call 952:7 uncheckedSet (node 4684)
-unsafe call 973:7 uncheckedSet (node 4793)
-unsafe call 1084:20 wrappingAdd (node 5412)
-unsafe call 1085:21 uncheckedGet (node 5423)
-unsafe call 1086:5 uncheckedSet (node 5429)
-unsafe call 1087:5 uncheckedSet (node 5436)
-unsafe call 1107:11 uncheckedGet (node 5595)
-unsafe call 1107:44 uncheckedGet (node 5602)
-unsafe call 1126:14 uncheckedGet (node 5725)
-unsafe call 1152:5 uncheckedSet (node 5887)
-unsafe call 1152:50 uncheckedGet (node 5897)
-unsafe call 1153:5 uncheckedSet (node 5903)
-unsafe call 1170:5 uncheckedSet (node 6003)
-unsafe call 1172:21 uncheckedGet (node 6030)
-unsafe call 1174:5 uncheckedSet (node 6048)
-unsafe call 1174:32 uncheckedGet (node 6055)
-unsafe call 1177:11 uncheckedGet (node 6074)
-unsafe call 1178:11 uncheckedGet (node 6082)
-unsafe call 1180:5 uncheckedSet (node 6106)
-unsafe call 1180:26 uncheckedGet (node 6111)
-unsafe call 1190:5 uncheckedSet (node 6174)
-unsafe call 1193:5 uncheckedSet (node 6197)
-unsafe call 1193:25 uncheckedGet (node 6202)
-unsafe call 1237:25 uncheckedGet (node 6509)
-unsafe call 1238:9 uncheckedSet (node 6515)
-unsafe call 1239:9 uncheckedSet (node 6522)
-unsafe call 1270:18 uncheckedGet (node 6784)
-unsafe call 1275:9 uncheckedSet (node 6805)
-unsafe call 1277:31 uncheckedGet (node 6830)
-unsafe call 1278:9 uncheckedSet (node 6839)
-unsafe call 1278:30 uncheckedGet (node 6844)
-unsafe call 1280:29 uncheckedGet (node 6861)
-unsafe call 1280:64 uncheckedGet (node 6868)
-unsafe call 1281:9 uncheckedSet (node 6882)
-unsafe call 1281:30 uncheckedGet (node 6887)
-unsafe call 1285:23 wrappingAdd (node 6923)
-unsafe call 1289:16 wrappingAdd (node 6987)
-unsafe call 1290:11 uncheckedSet (node 6993)
-unsafe call 1290:57 uncheckedGet (node 7003)
-unsafe call 1291:11 uncheckedSet (node 7009)
-unsafe call 1295:30 uncheckedGet (node 7029)
-unsafe call 1296:9 uncheckedSet (node 7035)
-unsafe call 1298:9 uncheckedSet (node 7046)
-unsafe call 1298:29 uncheckedGet (node 7051)
-unsafe call 1320:31 uncheckedGet (node 7163)
-unsafe call 1328:35 uncheckedGet (node 7240)
-unsafe call 1391:7 uncheckedSet (node 7597)
-unsafe call 1392:7 uncheckedSet (node 7609)
-unsafe call 1393:7 uncheckedSet (node 7623)
-unsafe call 1394:7 uncheckedSet (node 7638)
-unsafe call 1421:33 uncheckedGet (node 7804)
-unsafe call 1421:55 uncheckedGet (node 7809)
-unsafe call 1425:27 uncheckedGet (node 7836)
-unsafe call 1425:55 uncheckedGet (node 7843)
-unsafe call 1433:11 uncheckedSet (node 7887)
-unsafe call 1439:11 uncheckedSet (node 7921)
-unsafe call 1445:9 uncheckedSet (node 7952)
-unsafe call 1448:11 uncheckedSet (node 7972)
-unsafe call 1448:33 uncheckedGet (node 7977)
-unsafe call 1453:11 uncheckedSet (node 8007)
-unsafe call 1460:9 uncheckedSet (node 8041)
-unsafe call 1463:11 uncheckedSet (node 8061)
-unsafe call 1463:33 uncheckedGet (node 8066)
-unsafe call 1508:22 uncheckedGet (node 8376)
-unsafe call 1509:22 uncheckedGet (node 8385)
-unsafe call 1510:22 uncheckedGet (node 8396)
-unsafe call 1512:22 uncheckedGet (node 8412)
-unsafe call 1516:22 uncheckedGet (node 8443)
-unsafe call 1517:22 uncheckedGet (node 8452)
-unsafe call 1519:20 uncheckedGet (node 8469)
-unsafe call 1610:22 uncheckedGet (node 9158)
-unsafe call 1612:32 uncheckedGet (node 9179)
-unsafe call 1613:15 uncheckedGet (node 9193)
-unsafe call 1617:24 uncheckedGet (node 9226)
-unsafe call 1618:32 uncheckedGet (node 9242)
-unsafe call 1619:15 uncheckedGet (node 9258)
-unsafe call 1620:43 uncheckedGet (node 9279)
-unsafe call 1621:15 uncheckedGet (node 9294)
-unsafe call 1624:11 uncheckedSet (node 9312)
-unsafe call 1625:11 uncheckedSet (node 9322)
-unsafe call 1626:11 uncheckedSet (node 9339)
-unsafe call 1627:11 uncheckedSet (node 9356)
-unsafe call 1633:25 uncheckedGet (node 9400)
-unsafe call 1633:56 uncheckedGet (node 9407)
-unsafe call 1634:32 uncheckedGet (node 9431)
-unsafe call 1635:15 uncheckedGet (node 9445)
-unsafe call 1636:39 uncheckedGet (node 9462)
-unsafe call 1637:15 uncheckedGet (node 9477)
-unsafe call 1641:9 uncheckedSet (node 9495)
-unsafe call 1642:9 uncheckedSet (node 9505)
-unsafe call 1643:9 uncheckedSet (node 9522)
-unsafe call 1644:9 uncheckedSet (node 9539)
-unsafe call 1700:5 uncheckedSet (node 9740)
-unsafe call 1700:30 uncheckedGet (node 9745)
-unsafe call 1875:22 uncheckedGet (node 10761)
-unsafe call 1878:18 wrappingAdd (node 10786)
-unsafe call 1906:22 uncheckedGet (node 10955)
-unsafe call 1911:17 wrappingAdd (node 10998)
-unsafe call 1930:9 uncheckedSet (node 11098)
-unsafe call 1935:32 uncheckedGet (node 11143)
-unsafe call 1941:15 uncheckedSet (node 11218)
-unsafe call 1968:9 uncheckedSet (node 11332)
-unsafe call 2019:9 uncheckedSet (node 11620)
-unsafe call 2029:9 uncheckedSet (node 11718)
-unsafe call 2099:26 uncheckedGet (node 12162)
-unsafe call 2152:26 uncheckedGet (node 12438)
-unsafe call 2181:30 uncheckedGet (node 12679)
-unsafe call 2215:30 uncheckedGet (node 12900)
-unsafe call 2221:22 uncheckedGet (node 12926)
-unsafe call 2362:34 uncheckedGet (node 13649)
-unsafe call 2362:66 uncheckedGet (node 13658)
-unsafe call 2363:35 uncheckedGet (node 13677)
-unsafe call 2363:71 uncheckedGet (node 13688)
-unsafe call 2465:14 wrappingAdd (node 14207)
-unsafe call 2467:22 uncheckedGet (node 14235)
-unsafe call 2473:18 wrappingSub (node 14268)
-unsafe call 2474:13 uncheckedSet (node 14274)
-unsafe call 2475:18 wrappingAdd (node 14288)
-unsafe call 2476:17 uncheckedGet (node 14296)
-unsafe call 2479:20 wrappingSub (node 14326)
-unsafe call 2480:15 uncheckedSet (node 14332)
-unsafe call 2481:20 wrappingAdd (node 14346)
-unsafe call 2482:19 uncheckedGet (node 14354)
-unsafe call 2485:22 wrappingSub (node 14384)
-unsafe call 2486:17 uncheckedSet (node 14390)
-unsafe call 2487:22 wrappingAdd (node 14404)
-unsafe call 2488:21 uncheckedGet (node 14412)
-unsafe call 2495:20 wrappingSub (node 14447)
-unsafe call 2496:19 uncheckedGet (node 14455)
-unsafe call 2505:18 wrappingSub (node 14515)
-unsafe call 2508:17 uncheckedSet (node 14541)
-unsafe call 2509:22 wrappingAdd (node 14555)
-unsafe call 2510:21 uncheckedGet (node 14563)
-unsafe call 2524:20 wrappingSub (node 14656)
-unsafe call 2525:28 uncheckedGet (node 14667)
-unsafe call 2528:22 wrappingSub (node 14699)
-unsafe call 2529:21 uncheckedGet (node 14707)
-unsafe call 2538:20 wrappingSub (node 14766)
-unsafe call 2542:20 wrappingSub (node 14827)
-unsafe call 2549:19 uncheckedGet (node 14848)
-unsafe call 2550:33 wrappingAdd (node 14864)
-unsafe call 2563:24 wrappingAdd (node 14921)
-unsafe call 2564:26 wrappingAdd (node 14929)
-unsafe call 2567:19 uncheckedSet (node 14940)
-unsafe call 2567:41 uncheckedGet (node 14945)
-unsafe call 2568:24 wrappingAdd (node 14953)
-unsafe call 2569:26 wrappingAdd (node 14961)
-unsafe call 2573:41 uncheckedGet (node 14980)
-unsafe call 2578:24 wrappingAdd (node 15037)
-unsafe call 2581:19 uncheckedSet (node 15048)
-unsafe call 2582:24 wrappingAdd (node 15060)
-unsafe call 2588:19 uncheckedSet (node 15088)
-unsafe call 2588:41 uncheckedGet (node 15093)
-unsafe call 2589:24 wrappingAdd (node 15101)
-unsafe call 2590:26 wrappingAdd (node 15109)
-unsafe call 2601:16 wrappingAdd (node 15165)
-unsafe call 2620:28 uncheckedGet (node 15282)
-unsafe call 2654:9 uncheckedSet (node 15433)
-unsafe call 2707:11 uncheckedSet (node 15766)
-unsafe call 2707:33 uncheckedGet (node 15771)
+unsafe call 232:9 uncheckedGet (node 579)
+unsafe call 233:10 uncheckedGet (node 588)
+unsafe call 234:10 uncheckedGet (node 602)
+unsafe call 235:10 uncheckedGet (node 616)
+unsafe call 244:9 uncheckedGet (node 646)
+unsafe call 245:10 uncheckedGet (node 655)
+unsafe call 246:10 uncheckedGet (node 672)
+unsafe call 247:10 uncheckedGet (node 689)
+unsafe call 248:10 uncheckedGet (node 706)
+unsafe call 249:10 uncheckedGet (node 723)
+unsafe call 250:10 uncheckedGet (node 740)
+unsafe call 251:10 uncheckedGet (node 757)
+unsafe call 255:3 uncheckedSet (node 793)
+unsafe call 256:3 uncheckedSet (node 803)
+unsafe call 257:3 uncheckedSet (node 820)
+unsafe call 258:3 uncheckedSet (node 837)
+unsafe call 259:3 uncheckedSet (node 854)
+unsafe call 260:3 uncheckedSet (node 871)
+unsafe call 261:3 uncheckedSet (node 888)
+unsafe call 262:3 uncheckedSet (node 905)
+unsafe call 297:21 uncheckedGet (node 1149)
+unsafe call 297:50 uncheckedGet (node 1156)
+unsafe call 515:7 uncheckedSet (node 2179)
+unsafe call 516:7 uncheckedSet (node 2186)
+unsafe call 541:7 uncheckedSet (node 2326)
+unsafe call 548:23 uncheckedGet (node 2406)
+unsafe call 549:7 uncheckedSet (node 2416)
+unsafe call 549:32 uncheckedGet (node 2421)
+unsafe call 553:22 uncheckedGet (node 2456)
+unsafe call 554:7 uncheckedSet (node 2462)
+unsafe call 558:22 uncheckedGet (node 2493)
+unsafe call 560:23 uncheckedGet (node 2516)
+unsafe call 561:7 uncheckedSet (node 2522)
+unsafe call 562:7 uncheckedSet (node 2531)
+unsafe call 562:32 uncheckedGet (node 2536)
+unsafe call 563:7 uncheckedSet (node 2542)
+unsafe call 568:5 uncheckedSet (node 2564)
+unsafe call 568:27 uncheckedGet (node 2569)
+unsafe call 569:5 uncheckedSet (node 2575)
+unsafe call 569:27 uncheckedGet (node 2580)
+unsafe call 573:3 uncheckedSet (node 2586)
+unsafe call 573:25 uncheckedGet (node 2591)
+unsafe call 573:49 uncheckedGet (node 2596)
+unsafe call 577:25 uncheckedGet (node 2637)
+unsafe call 577:52 uncheckedGet (node 2642)
+unsafe call 578:7 uncheckedSet (node 2651)
+unsafe call 578:32 uncheckedGet (node 2656)
+unsafe call 579:7 uncheckedSet (node 2662)
+unsafe call 582:7 uncheckedSet (node 2674)
+unsafe call 582:32 uncheckedGet (node 2679)
+unsafe call 585:41 uncheckedGet (node 2696)
+unsafe call 585:68 uncheckedGet (node 2701)
+unsafe call 586:7 uncheckedSet (node 2711)
+unsafe call 586:32 uncheckedGet (node 2716)
+unsafe call 586:59 uncheckedGet (node 2721)
+unsafe call 587:7 uncheckedSet (node 2728)
+unsafe call 590:7 uncheckedSet (node 2740)
+unsafe call 590:32 uncheckedGet (node 2745)
+unsafe call 590:59 uncheckedGet (node 2750)
+unsafe call 595:3 uncheckedSet (node 2761)
+unsafe call 597:5 uncheckedSet (node 2787)
+unsafe call 597:30 uncheckedGet (node 2792)
+unsafe call 597:49 uncheckedGet (node 2796)
+unsafe call 609:25 uncheckedGet (node 2869)
+unsafe call 653:24 uncheckedGet (node 3116)
+unsafe call 935:7 uncheckedSet (node 4521)
+unsafe call 955:7 uncheckedSet (node 4637)
+unsafe call 956:7 uncheckedSet (node 4652)
+unsafe call 957:7 uncheckedSet (node 4675)
+unsafe call 958:7 uncheckedSet (node 4698)
+unsafe call 979:7 uncheckedSet (node 4807)
+unsafe call 1090:20 wrappingAdd (node 5426)
+unsafe call 1091:21 uncheckedGet (node 5437)
+unsafe call 1092:5 uncheckedSet (node 5443)
+unsafe call 1093:5 uncheckedSet (node 5450)
+unsafe call 1113:11 uncheckedGet (node 5609)
+unsafe call 1113:44 uncheckedGet (node 5616)
+unsafe call 1132:14 uncheckedGet (node 5739)
+unsafe call 1158:5 uncheckedSet (node 5901)
+unsafe call 1158:50 uncheckedGet (node 5911)
+unsafe call 1159:5 uncheckedSet (node 5917)
+unsafe call 1176:5 uncheckedSet (node 6017)
+unsafe call 1178:21 uncheckedGet (node 6044)
+unsafe call 1180:5 uncheckedSet (node 6062)
+unsafe call 1180:32 uncheckedGet (node 6069)
+unsafe call 1183:11 uncheckedGet (node 6088)
+unsafe call 1184:11 uncheckedGet (node 6096)
+unsafe call 1186:5 uncheckedSet (node 6120)
+unsafe call 1186:26 uncheckedGet (node 6125)
+unsafe call 1196:5 uncheckedSet (node 6188)
+unsafe call 1199:5 uncheckedSet (node 6211)
+unsafe call 1199:25 uncheckedGet (node 6216)
+unsafe call 1243:25 uncheckedGet (node 6523)
+unsafe call 1244:9 uncheckedSet (node 6529)
+unsafe call 1245:9 uncheckedSet (node 6536)
+unsafe call 1276:18 uncheckedGet (node 6798)
+unsafe call 1281:9 uncheckedSet (node 6819)
+unsafe call 1283:31 uncheckedGet (node 6844)
+unsafe call 1284:9 uncheckedSet (node 6853)
+unsafe call 1284:30 uncheckedGet (node 6858)
+unsafe call 1286:29 uncheckedGet (node 6875)
+unsafe call 1286:64 uncheckedGet (node 6882)
+unsafe call 1287:9 uncheckedSet (node 6896)
+unsafe call 1287:30 uncheckedGet (node 6901)
+unsafe call 1291:23 wrappingAdd (node 6937)
+unsafe call 1295:16 wrappingAdd (node 7001)
+unsafe call 1296:11 uncheckedSet (node 7007)
+unsafe call 1296:57 uncheckedGet (node 7017)
+unsafe call 1297:11 uncheckedSet (node 7023)
+unsafe call 1301:30 uncheckedGet (node 7043)
+unsafe call 1302:9 uncheckedSet (node 7049)
+unsafe call 1304:9 uncheckedSet (node 7060)
+unsafe call 1304:29 uncheckedGet (node 7065)
+unsafe call 1326:31 uncheckedGet (node 7177)
+unsafe call 1334:35 uncheckedGet (node 7254)
+unsafe call 1397:7 uncheckedSet (node 7611)
+unsafe call 1398:7 uncheckedSet (node 7623)
+unsafe call 1399:7 uncheckedSet (node 7637)
+unsafe call 1400:7 uncheckedSet (node 7652)
+unsafe call 1427:33 uncheckedGet (node 7818)
+unsafe call 1427:55 uncheckedGet (node 7823)
+unsafe call 1431:27 uncheckedGet (node 7850)
+unsafe call 1431:55 uncheckedGet (node 7857)
+unsafe call 1439:11 uncheckedSet (node 7901)
+unsafe call 1445:11 uncheckedSet (node 7935)
+unsafe call 1451:9 uncheckedSet (node 7966)
+unsafe call 1454:11 uncheckedSet (node 7986)
+unsafe call 1454:33 uncheckedGet (node 7991)
+unsafe call 1459:11 uncheckedSet (node 8021)
+unsafe call 1466:9 uncheckedSet (node 8055)
+unsafe call 1469:11 uncheckedSet (node 8075)
+unsafe call 1469:33 uncheckedGet (node 8080)
+unsafe call 1514:22 uncheckedGet (node 8390)
+unsafe call 1515:22 uncheckedGet (node 8399)
+unsafe call 1516:22 uncheckedGet (node 8410)
+unsafe call 1518:22 uncheckedGet (node 8426)
+unsafe call 1522:22 uncheckedGet (node 8457)
+unsafe call 1523:22 uncheckedGet (node 8466)
+unsafe call 1525:20 uncheckedGet (node 8483)
+unsafe call 1616:22 uncheckedGet (node 9172)
+unsafe call 1618:32 uncheckedGet (node 9193)
+unsafe call 1619:15 uncheckedGet (node 9207)
+unsafe call 1623:24 uncheckedGet (node 9240)
+unsafe call 1624:32 uncheckedGet (node 9256)
+unsafe call 1625:15 uncheckedGet (node 9272)
+unsafe call 1626:43 uncheckedGet (node 9293)
+unsafe call 1627:15 uncheckedGet (node 9308)
+unsafe call 1630:11 uncheckedSet (node 9326)
+unsafe call 1631:11 uncheckedSet (node 9336)
+unsafe call 1632:11 uncheckedSet (node 9353)
+unsafe call 1633:11 uncheckedSet (node 9370)
+unsafe call 1639:25 uncheckedGet (node 9414)
+unsafe call 1639:56 uncheckedGet (node 9421)
+unsafe call 1640:32 uncheckedGet (node 9445)
+unsafe call 1641:15 uncheckedGet (node 9459)
+unsafe call 1642:39 uncheckedGet (node 9476)
+unsafe call 1643:15 uncheckedGet (node 9491)
+unsafe call 1647:9 uncheckedSet (node 9509)
+unsafe call 1648:9 uncheckedSet (node 9519)
+unsafe call 1649:9 uncheckedSet (node 9536)
+unsafe call 1650:9 uncheckedSet (node 9553)
+unsafe call 1804:24 uncheckedGet (node 10509)
+unsafe call 1805:9 uncheckedSet (node 10519)
+unsafe call 1820:25 uncheckedGet (node 10649)
+unsafe call 1820:53 uncheckedGet (node 10656)
+unsafe call 1825:25 uncheckedGet (node 10698)
+unsafe call 1832:11 uncheckedSet (node 10745)
+unsafe call 1833:11 uncheckedSet (node 10755)
+unsafe call 1834:11 uncheckedSet (node 10772)
+unsafe call 1835:11 uncheckedSet (node 10789)
+unsafe call 1841:25 uncheckedGet (node 10833)
+unsafe call 1841:56 uncheckedGet (node 10840)
+unsafe call 1842:32 uncheckedGet (node 10864)
+unsafe call 1842:66 uncheckedGet (node 10872)
+unsafe call 1843:19 uncheckedGet (node 10891)
+unsafe call 1850:11 uncheckedSet (node 10953)
+unsafe call 1858:9 uncheckedSet (node 10982)
+unsafe call 1859:9 uncheckedSet (node 10992)
+unsafe call 1860:9 uncheckedSet (node 11009)
+unsafe call 1861:9 uncheckedSet (node 11026)
+unsafe call 1874:7 uncheckedSet (node 11104)
+unsafe call 1924:5 uncheckedSet (node 11270)
+unsafe call 1924:30 uncheckedGet (node 11275)
+unsafe call 2099:22 uncheckedGet (node 12291)
+unsafe call 2102:18 wrappingAdd (node 12316)
+unsafe call 2130:22 uncheckedGet (node 12485)
+unsafe call 2135:17 wrappingAdd (node 12528)
+unsafe call 2154:9 uncheckedSet (node 12628)
+unsafe call 2159:32 uncheckedGet (node 12673)
+unsafe call 2165:15 uncheckedSet (node 12748)
+unsafe call 2192:9 uncheckedSet (node 12862)
+unsafe call 2243:9 uncheckedSet (node 13150)
+unsafe call 2253:9 uncheckedSet (node 13248)
+unsafe call 2323:26 uncheckedGet (node 13692)
+unsafe call 2376:26 uncheckedGet (node 13968)
+unsafe call 2405:30 uncheckedGet (node 14209)
+unsafe call 2439:30 uncheckedGet (node 14430)
+unsafe call 2445:22 uncheckedGet (node 14456)
+unsafe call 2586:34 uncheckedGet (node 15179)
+unsafe call 2586:66 uncheckedGet (node 15188)
+unsafe call 2587:35 uncheckedGet (node 15207)
+unsafe call 2587:71 uncheckedGet (node 15218)
+unsafe call 2689:14 wrappingAdd (node 15737)
+unsafe call 2691:22 uncheckedGet (node 15765)
+unsafe call 2697:18 wrappingSub (node 15798)
+unsafe call 2698:13 uncheckedSet (node 15804)
+unsafe call 2699:18 wrappingAdd (node 15818)
+unsafe call 2700:17 uncheckedGet (node 15826)
+unsafe call 2703:20 wrappingSub (node 15856)
+unsafe call 2704:15 uncheckedSet (node 15862)
+unsafe call 2705:20 wrappingAdd (node 15876)
+unsafe call 2706:19 uncheckedGet (node 15884)
+unsafe call 2709:22 wrappingSub (node 15914)
+unsafe call 2710:17 uncheckedSet (node 15920)
+unsafe call 2711:22 wrappingAdd (node 15934)
+unsafe call 2712:21 uncheckedGet (node 15942)
+unsafe call 2719:20 wrappingSub (node 15977)
+unsafe call 2720:19 uncheckedGet (node 15985)
+unsafe call 2729:18 wrappingSub (node 16045)
+unsafe call 2732:17 uncheckedSet (node 16071)
+unsafe call 2733:22 wrappingAdd (node 16085)
+unsafe call 2734:21 uncheckedGet (node 16093)
+unsafe call 2748:20 wrappingSub (node 16186)
+unsafe call 2749:28 uncheckedGet (node 16197)
+unsafe call 2752:22 wrappingSub (node 16229)
+unsafe call 2753:21 uncheckedGet (node 16237)
+unsafe call 2762:20 wrappingSub (node 16296)
+unsafe call 2766:20 wrappingSub (node 16357)
+unsafe call 2773:19 uncheckedGet (node 16378)
+unsafe call 2774:33 wrappingAdd (node 16394)
+unsafe call 2787:24 wrappingAdd (node 16451)
+unsafe call 2788:26 wrappingAdd (node 16459)
+unsafe call 2791:19 uncheckedSet (node 16470)
+unsafe call 2791:41 uncheckedGet (node 16475)
+unsafe call 2792:24 wrappingAdd (node 16483)
+unsafe call 2793:26 wrappingAdd (node 16491)
+unsafe call 2797:41 uncheckedGet (node 16510)
+unsafe call 2802:24 wrappingAdd (node 16567)
+unsafe call 2805:19 uncheckedSet (node 16578)
+unsafe call 2806:24 wrappingAdd (node 16590)
+unsafe call 2812:19 uncheckedSet (node 16618)
+unsafe call 2812:41 uncheckedGet (node 16623)
+unsafe call 2813:24 wrappingAdd (node 16631)
+unsafe call 2814:26 wrappingAdd (node 16639)
+unsafe call 2825:16 wrappingAdd (node 16695)
+unsafe call 2844:28 uncheckedGet (node 16812)
+unsafe call 2878:9 uncheckedSet (node 16963)
+unsafe call 2931:11 uncheckedSet (node 17296)
+unsafe call 2931:33 uncheckedGet (node 17301)
 const DEFLATE_STORE: i32 = 0 [exported]
 const DEFLATE_FAST: i32 = 1 [exported]
 const DEFLATE_DEFAULT: i32 = 6 [exported]
@@ -2398,6 +2583,8 @@ const DEFLATE_BLOCK_TOKENS: i32 = 16384
 const DEFLATE_REBASE: i32 = 1073741824
 const DEFLATE_STORED_MAX: i32 = 65535
 const DEFLATE_HASH_MUL: i64 = 2654435761
+const FIXED_WINDOW: i32 = 16384
+const FIXED_HASH_BITS: i32 = 14
 const INF_LITERAL: i32 = 0
 const INF_LENGTH: i32 = 1
 const INF_END: i32 = 2
@@ -2486,6 +2673,16 @@ struct Deflater (class) size=256 align=8 exported
   method buildRle -> @nish.Deflater.buildRle
   method writeBlock -> @nish.Deflater.writeBlock
   method writeSymbols -> @nish.Deflater.writeSymbols
+struct FixedDeflater (class) size=56 align=8 exported
+  field head: i32[] index=0 offset=0 readonly
+  field literal: i32[] index=1 offset=8 readonly
+  field length: i32[] index=2 offset=16 readonly
+  field distSymbol: i32[] index=3 offset=24 readonly
+  field distCode: i32[] index=4 offset=32 readonly
+  field distBase: i32[] index=5 offset=40 readonly
+  field distExtra: i32[] index=6 offset=48 readonly
+  constructor -> @nish.FixedDeflater.constructor
+  method compress -> @nish.FixedDeflater.compress
 struct InflateTable (class) size=32 align=8 exported
   field entries: i32[] index=0 offset=0 readonly
   field bits: i32 index=1 offset=8 readonly
@@ -3141,6 +3338,90 @@ function Deflater.writeSymbols(this: Deflater, lc: i32[], ll: i32[], dc: i32[], 
   local +8:15 d: i32 (const)
   callee +16:9 deflateRoom -> @nish.deflateRoom
   callee +28:12 Deflater.putBits -> @nish.Deflater.putBits
+function fixedDeflateBound(n: i32): i32 -> @nish.fixedDeflateBound [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function FixedDeflater.constructor(this: FixedDeflater): void -> @nish.FixedDeflater.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.deflateCanonical nish.deflateDistBase nish.deflateDistExtra nish.deflateFixedLitLength nish.deflateLengthBase nish.deflateLengthExtra nish.deflateReverse nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=4 stackLocals=4
+  local +0:11 lens: i32[] (const)
+  local +1:11 codes: i32[] (const)
+  local +2:11 count: i32[] (const)
+  local +3:11 next: i32[] (const)
+  local +4:14 s: i32 (let)
+  callee +5:17 deflateFixedLitLength -> @nish.deflateFixedLitLength
+  callee +7:5 deflateCanonical -> @nish.deflateCanonical
+  local +8:14 b: i32 (let)
+  local +11:14 s: i32 (let)
+  local +12:13 base: i32 (const)
+  callee +12:25 deflateLengthBase -> @nish.deflateLengthBase
+  local +13:13 extra: i32 (const)
+  callee +13:26 deflateLengthExtra -> @nish.deflateLengthExtra
+  local +15:13 top: i32 (const)
+  callee +15:41 deflateLengthBase -> @nish.deflateLengthBase
+  local +16:16 l: i32 (let)
+  local +17:15 n: i32 (const)
+  local +21:14 d: i32 (let)
+  callee +22:26 deflateReverse -> @nish.deflateReverse
+  callee +23:26 deflateDistBase -> @nish.deflateDistBase
+  callee +24:27 deflateDistExtra -> @nish.deflateDistExtra
+  local +27:14 d: i32 (let)
+  local +28:13 lo: i32 (const)
+  local +29:13 hi: i32 (const)
+  local +30:16 dist: i32 (let)
+  local +34:17 at: i32 (const)
+function FixedDeflater.compress(this: FixedDeflater, src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32 -> @nish.FixedDeflater.compress [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at len off room
+  calls: nish.deflateCtz64 nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength nish.deflateWindow nish_panic nish_panic_overflow
+  pointer this: size=56 writesThrough=false captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateWindow#1 nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateMatchLength#0 nish.deflateLoad32#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.deflateWindow#1
+  stackSites=0 stackLocals=0
+  callee -26:5 deflateWindow -> @nish.deflateWindow
+  callee -25:5 deflateWindow -> @nish.deflateWindow
+  local -24:11 head: i32[] (const)
+  local -23:11 literal: i32[] (const)
+  local -22:11 length: i32[] (const)
+  local -21:11 dsym: i32[] (const)
+  local -20:11 dcode: i32[] (const)
+  local -19:11 dbase: i32[] (const)
+  local -18:11 dextra: i32[] (const)
+  local -4:9 bits: i32 (let)
+  local +1:11 shift: u32 (const)
+  local +2:11 end: i32 (const)
+  local +4:11 last: i32 (const)
+  local +7:11 oe: i32 (const)
+  local +9:9 bb: u64 (let)
+  local +10:9 bc: i32 (let)
+  local +11:9 o: i32 (let)
+  local +12:9 p: i32 (let)
+  local +14:11 matched: i32 (let)
+  local +15:11 dist: i32 (let)
+  local +17:15 pi: integer<0, 2147483639> (const)
+  local +18:15 w: u64 (const)
+  callee +18:24 deflateLoad64 -> @nish.deflateLoad64
+  local +19:15 h: i32 (const)
+  local +20:15 c: i32 (const)
+  local +24:17 ci: integer<0, 2147483639> (const)
+  local +25:17 x: u64 (const)
+  callee +25:26 deflateLoad64 -> @nish.deflateLoad64
+  local +27:19 max: i32 (const)
+  callee +30:19 deflateCtz64 -> @nish.deflateCtz64
+  callee +31:30 deflateMatchLength -> @nish.deflateMatchLength
+  local +36:15 lc: i32 (const)
+  local +41:15 lc: i32 (const)
+  local +56:15 d: i32 (const)
+  local +62:15 q: i32 (const)
+  local +64:17 qi: integer<0, 2147483639> (const)
+  local +65:17 hq: i32 (const)
+  callee +65:34 deflateLoad32 -> @nish.deflateLoad32
+  local +85:11 bytes: i32 (const)
+  local +89:14 i: i32 (let)
 function InflateTable.constructor(this: InflateTable, bits: i32, symbols: i32, capacity: i32): void -> @nish.InflateTable.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: bits capacity symbols
@@ -3496,11 +3777,13 @@ import DEFLATE_ERR_OUTPUT_LIMIT from "nish/compress/deflate" -> const DEFLATE_ER
 import DEFLATE_ERR_TRUNCATED from "nish/compress/deflate" -> const DEFLATE_ERR_TRUNCATED
 import DEFLATE_NO_ROOM from "nish/compress/deflate" -> const DEFLATE_NO_ROOM
 import Deflater from "nish/compress/deflate" -> struct Deflater
+import FixedDeflater from "nish/compress/deflate" -> struct FixedDeflater
 import INFLATE_DONE from "nish/compress/deflate" -> const INFLATE_DONE
 import INFLATE_NEED_INPUT from "nish/compress/deflate" -> const INFLATE_NEED_INPUT
 import INFLATE_NEED_OUTPUT from "nish/compress/deflate" -> const INFLATE_NEED_OUTPUT
 import Inflater from "nish/compress/deflate" -> struct Inflater
 import deflateBound from "nish/compress/deflate" -> function @nish.deflateBound
+import fixedDeflateBound from "nish/compress/deflate" -> function @nish.fixedDeflateBound
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 const GZIP_ERR_HEADER: i32 = -9 [exported]
 const GZIP_ERR_CRC: i32 = -10 [exported]
@@ -3519,6 +3802,11 @@ struct GzipCompressor (class) size=16 align=8 exported
   field crc: Crc32 index=1 offset=8 readonly
   constructor -> @nish.GzipCompressor.constructor
   method compress -> @nish.GzipCompressor.compress
+struct GzipFixedCompressor (class) size=16 align=8 exported
+  field deflater: FixedDeflater index=0 offset=0 readonly
+  field crc: Crc32 index=1 offset=8 readonly
+  constructor -> @nish.GzipFixedCompressor.constructor
+  method compress -> @nish.GzipFixedCompressor.compress
 struct GzipDecompressor (class) size=16 align=8 exported
   field inflater: Inflater index=0 offset=0 readonly
   field crc: Crc32 index=1 offset=8 readonly
@@ -3639,6 +3927,36 @@ function GzipCompressor.compress(this: GzipCompressor, src: u8[], off: i32, len:
   callee +10:5 gzipPut32 -> @nish.gzipPut32
   callee +10:25 Crc32.update -> @nish.Crc32.update
   callee +11:5 gzipPut32 -> @nish.gzipPut32
+function gzipFixedBound(n: i32): i32 -> @nish.gzipFixedBound [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: nish.fixedDeflateBound nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee +0:48 fixedDeflateBound -> @nish.fixedDeflateBound
+function GzipFixedCompressor.constructor(this: GzipFixedCompressor): void -> @nish.GzipFixedCompressor.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Crc32.constructor nish.FixedDeflater.constructor nish_alloc_struct
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:21 new FixedDeflater -> @nish.FixedDeflater.constructor
+  callee +1:16 new Crc32 -> @nish.Crc32.constructor
+function GzipFixedCompressor.compress(this: GzipFixedCompressor, src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32 -> @nish.GzipFixedCompressor.compress [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.gzipWriteHeader
+  escaping: at len off room
+  calls: nish.Crc32.update nish.FixedDeflater.compress nish.gzipPut32 nish.gzipWindow nish.gzipWriteHeader nish_panic_overflow
+  pointer this: size=16 writesThrough=false captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.gzipWindow#1 nish.FixedDeflater.compress#1 nish.Crc32.update#2
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.gzipWriteHeader#0 nish.FixedDeflater.compress#4 nish.gzipPut32#0 nish.gzipPut32#0
+  stackSites=0 stackLocals=0
+  callee +0:5 gzipWindow -> @nish.gzipWindow
+  callee +1:5 gzipWindow -> @nish.gzipWindow
+  callee +5:5 gzipWriteHeader -> @nish.gzipWriteHeader
+  local +6:11 end: i32 (const)
+  callee +6:22 FixedDeflater.compress -> @nish.FixedDeflater.compress
+  callee +17:5 gzipPut32 -> @nish.gzipPut32
+  callee +17:25 Crc32.update -> @nish.Crc32.update
+  callee +18:5 gzipPut32 -> @nish.gzipPut32
 function GzipDecompressor.constructor(this: GzipDecompressor): void -> @nish.GzipDecompressor.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Crc32.constructor nish.Inflater.constructor nish_alloc_struct
@@ -4153,7 +4471,8 @@ struct Http1Parser (class) size=200 align=8 exported
   field chunked: boolean index=37 offset=192 initialized
   field keepAlive: boolean index=38 offset=193 initialized
   field upgrading: boolean index=39 offset=194 initialized
-  field keepText: boolean index=40 offset=195 initialized
+  field headHeld: boolean index=40 offset=195 initialized
+  field keepText: boolean index=41 offset=196 initialized
   constructor -> @nish.Http1Parser.constructor
   method feed -> @nish.Http1Parser.feed
   method next -> @nish.Http1Parser.next
@@ -4584,8 +4903,9 @@ function http1Next(p: Http1Parser): i32 -> @nish.http1Next
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.http1BodyWindow nish.http1ChunkSize nish.http1EndOfHead nish.http1Fail nish.http1FieldLine nish.http1MethodOverrun nish.http1RequestLine nish.http1StartRequest nish.http1TakeLine nish_panic_overflow
-  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1MethodOverrun#0 nish.http1Fail#0 nish.http1TakeLine#0 nish.http1RequestLine#0 nish.http1TakeLine#0 nish.http1Fail#0 nish.http1EndOfHead#0 nish.http1FieldLine#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1ChunkSize#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1StartRequest#0
+  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1StartRequest#0 nish.http1MethodOverrun#0 nish.http1Fail#0 nish.http1TakeLine#0 nish.http1RequestLine#0 nish.http1TakeLine#0 nish.http1Fail#0 nish.http1EndOfHead#0 nish.http1FieldLine#0 nish.http1BodyWindow#0 nish.http1TakeLine#0 nish.http1ChunkSize#0 nish.http1BodyWindow#0 nish.http1TakeLine#0
   stackSites=0 stackLocals=0
+  callee -25:11 http1StartRequest -> @nish.http1StartRequest
   callee -21:13 http1MethodOverrun -> @nish.http1MethodOverrun
   callee -20:18 http1Fail -> @nish.http1Fail
   local -16:15 got: i32 (const)
@@ -4604,7 +4924,6 @@ function http1Next(p: Http1Parser): i32 -> @nish.http1Next
   callee +30:16 http1BodyWindow -> @nish.http1BodyWindow
   local +34:15 got: i32 (const)
   callee +34:26 http1TakeLine -> @nish.http1TakeLine
-  callee +47:11 http1StartRequest -> @nish.http1StartRequest
 function http1BytesOf(text: string): u8[] -> @nish.http1BytesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
@@ -38725,7 +39044,7 @@ function Bench.begin(this: Bench, slot: i32, conn: Http1Connection): void -> @Be
   escaping: slot
   calls: Bench.answer nish.Router.match nish_panic nish_panic_index
   pointer this: size=224 writesThrough=true captured=false passedTo=Bench.answer#0
-  pointer conn: size=176 writesThrough=true captured=false passedTo=Bench.answer#1
+  pointer conn: size=184 writesThrough=true captured=false passedTo=Bench.answer#1
   stackSites=0 stackLocals=0
   local -10:11 p: Http1Parser (const)
   local -9:11 route: i32 (const)
@@ -38737,7 +39056,7 @@ function Bench.gather(this: Bench, slot: i32, conn: Http1Connection): void -> @B
   escaping: slot
   calls: nish_panic_index nish_panic_overflow
   pointer this: size=224 writesThrough=false captured=false
-  pointer conn: size=176 writesThrough=false captured=false
+  pointer conn: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -3:11 have: i32 (const)
   local -2:11 n: i32 (const)
@@ -38750,7 +39069,7 @@ function Bench.finish(this: Bench, slot: i32, conn: Http1Connection): void -> @B
   escaping: slot
   calls: Bench.echo Bench.echoDoc Bench.reply Bench.rewrite nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.JsonWriter.reset nish_panic_index nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=Bench.reply#0 Bench.echo#0 Bench.echoDoc#0 Bench.rewrite#0 Bench.reply#0
-  pointer conn: size=176 writesThrough=true captured=false passedTo=Bench.reply#1 Bench.reply#1 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer conn: size=184 writesThrough=true captured=false passedTo=Bench.reply#1 Bench.reply#1 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
   local -4:11 route: i32 (const)
   local +2:11 length: i32 (const)
@@ -38819,7 +39138,7 @@ function Bench.reply(this: Bench, conn: Http1Connection, status: i32, body: u8[]
   escaping: status
   calls: nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write
   pointer this: size=224 writesThrough=false captured=false
-  pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer conn: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.Http1Connection.write#1
   stackSites=0 stackLocals=0
   callee +0:5 Http1Connection.respond -> @nish.Http1Connection.respond
@@ -38831,7 +39150,7 @@ function Bench.answer(this: Bench, conn: Http1Connection, route: i32): void -> @
   escaping: route
   calls: Bench.deep Bench.query Bench.reply nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish_panic_overflow
   pointer this: size=224 writesThrough=true captured=false passedTo=Bench.reply#0 Bench.query#0 Bench.deep#0 Bench.reply#0 Bench.reply#0
-  pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 Bench.reply#1 Bench.query#1 Bench.deep#1 Bench.reply#1 Bench.reply#1
+  pointer conn: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 Bench.reply#1 Bench.query#1 Bench.deep#1 Bench.reply#1 Bench.reply#1
   stackSites=0 stackLocals=0
   callee +3:9 Http1Connection.respond -> @nish.Http1Connection.respond
   callee +4:9 Http1Connection.write -> @nish.Http1Connection.write
@@ -38857,7 +39176,7 @@ function Bench.query(this: Bench, conn: Http1Connection): void -> @Bench.query [
   sharedWrite: via nish.Http1Connection.respond
   calls: indexOf nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic_index nish_panic_overflow
   pointer this: size=224 writesThrough=false captured=false
-  pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer conn: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
   local +0:11 head: u8[] (const)
   local +1:11 end: i32 (const)
@@ -38880,7 +39199,7 @@ function Bench.deep(this: Bench, conn: Http1Connection): void -> @Bench.deep [me
   sharedWrite: via nish.Http1Connection.respond
   calls: nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic_index nish_panic_overflow
   pointer this: size=224 writesThrough=false captured=false
-  pointer conn: size=176 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer conn: size=184 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
   local +0:11 head: u8[] (const)
   local +1:11 p: i32[] (const)

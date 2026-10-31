@@ -1119,9 +1119,13 @@ the OpenBSD tree into `build/bench/bcrypt/` and builds with `gcc -O2` and
 `clang -O2` behind a small shim for what OpenBSD's libc adds. It also times
 `bcryptHash4` with four lanes against the four-lane C of the tigokraft
 submission (`bc_hash_n`, pinned to one commit, MIT), fetched the same way and
-built with `gcc` and `clang` at `-O2 -march=native`, one lane and four; a
-four-lane row is per hash, a batch's time over four. Every lane of a
-four-lane program must print the single hash's output, not lane 0 alone. The
+built with `gcc` and `clang` at `-O2 -march=native`, one lane and four, and
+`bcryptHashN` at every width from one lane to six. A row of w lanes is per
+hash, a batch's time over w, and every lane of a batch program must print the
+single hash's output, not lane 0 alone. It closes with the single path's
+cycles per Blowfish block (2^cost × 1042 + 713 blocks a hash), at the clock
+`/proc/cpuinfo` names unless `--ghz` gives a measured one; on a VM cpuinfo
+often names the nominal clock rather than the one the core runs at. The
 Nish programs are built for baseline x86-64, without `-march=native`. It is not a
 `crypto/` family (it has no `family.json`) and is not in this suite's tables;
 [docs/security/crypto-bcrypt.md](../docs/security/crypto-bcrypt.md#speed)
@@ -1131,6 +1135,7 @@ carries its figures.
 npm run build
 node bench/crypto/bcrypt/run.mjs                    # 8 hashes a round, 5 rounds, cost 10
 node bench/crypto/bcrypt/run.mjs --rounds 9 --cost 12
+node bench/crypto/bcrypt/run.mjs --rounds 9 --ghz 3.2   # cycles at a measured clock
 ```
 
 Each program hashes "U*U" under an all-zero salt and prints its last hash; the
@@ -2196,3 +2201,11 @@ Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
   every round, so a machine drifting under the run drifts under all three. On a
   busy box, pin it and read the ratio rather than the milliseconds.
 - `rss.c`: the peak-RSS helper the runner compiles into `build/bench/rss`.
+- `gzip/`: one-shot gzip of a JSON response against zlib, libdeflate and other
+  languages, and (`small.mjs`) the fixed-Huffman small-body encoder against
+  `DEFLATE_FAST` on 0.5 to 16 KB bodies. Results in
+  [gzip/README.md](gzip/README.md).
+- `http-compress/`: what `HttpCompressor`'s policy costs and saves on the
+  wire, an HTTP/1.1 server answering 0.5 to 8 KB JSON under five settings, in
+  CPU, bytes, TCP segments and ACKs per response.
+  Results in [http-compress/README.md](http-compress/README.md).

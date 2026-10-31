@@ -11,12 +11,12 @@ program the build would have compiled without one.
 
 **The living reference is [LANGUAGE.md](LANGUAGE.md#the-capability-policy)**,
 under "Capabilities"; where this note disagrees with it, LANGUAGE.md wins.
-**Holding a running process to the same set is WP37's**, proposed in
-[wp37-os-sandbox.md](wp37-os-sandbox.md) and not built: `--sandbox`, where
-the native `main` wrapper confines the process with Landlock and seccomp to
-the set the compiler computed, and which is where the `fs.read=<dir>` scopes
-this package refuses (§2) would be accepted, because there something can
-enforce them.
+**Holding a running process to the same set is WP37's**, built in
+[wp37-os-sandbox.md](wp37-os-sandbox.md): `--sandbox`, where the native
+`main` wrapper confines the process with Landlock and seccomp to the set the
+compiler computed, and which accepts the `fs.read=<dir>` and
+`fs.write=<dir>` scopes this package refuses on their own (§2), because
+there something enforces them.
 
 ## 1. Semantics
 
@@ -47,12 +47,14 @@ a contradiction rather than accepted as a no-op.
 takes both and refuses before it links; `--fix` and `--emit-ast` refuse them.
 A usage error (exit 2) is: a name that is not one of WP35's, `--allow unsafe`,
 a capability both allowed and denied, either flag with no value, and **a
-directory scope, `fs.read=<dir>`**. The compiler cannot prove which path a
-program opens — a path is a runtime string, and WP35 rules out argument-level
-precision — and nothing at run time holds the program to it yet, so a scope
-accepted here would be a promise nobody keeps. WP37, proposed and unbuilt,
-would accept the suffix together with `--sandbox`
-([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags)). The policy is not
+directory scope, `fs.read=<dir>`, without `--sandbox`**. The compiler cannot
+prove which path a program opens — a path is a runtime string, and WP35 rules
+out argument-level precision — so without something at run time holding the
+program to it, a scope accepted here would be a promise nobody keeps. WP37's
+`--sandbox` is that something: with it, `--allow fs.read=<dir>` and
+`--allow fs.write=<dir>` are accepted and enforced by Landlock
+([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags),
+[LANGUAGE.md](LANGUAGE.md#the-sandbox)). The policy is not
 part of `nish run`'s cache key: a refused program writes no entry, and an
 accepted one writes the IR it would without the policy.
 
@@ -108,7 +110,8 @@ compile anyway, so a policy costs only the walk over the refused bits.
   ([wp37-os-sandbox.md](wp37-os-sandbox.md)), confining the process to
   `main`'s *computed* set. A policy narrower than that set has already been
   refused here.
-- Directory scopes (`fs.read=<dir>`), refused as §2 says until WP37
+- Directory scopes (`fs.read=<dir>`, `fs.write=<dir>`), refused as §2 says
+  except under WP37's `--sandbox`
   ([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags)).
 - Per-dependency policies: WP40's grants
   ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)), which

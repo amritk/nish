@@ -51,6 +51,8 @@ export const INPUTS = {
   one: Buffer.from([65]),
   text: text(12000),
   json: json(5221),
+  json700: json(700),
+  json16k: json(16384),
   noise: noise(2000),
   zeros: Buffer.alloc(70000),
   mixed: mixed(),

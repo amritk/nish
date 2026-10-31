@@ -2411,11 +2411,13 @@ if (dealtHere("termIo")) {
     // size: the play run looks for the image's deletion at close, and the reopen runs
     // draw in ascii, whose frames are small enough to keep both openings. The stage
     // run pauses before F4 so the reopened stage can be held to the one it left;
-    // 120 frames is past the title's outro at any rate the relay draws.
+    // 120 frames is past the title's outro at any rate the relay draws. The play and
+    // stage runs skip the opening (the help falling apart) with a space at frame 2,
+    // so the title is up by frame 5.
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
-        keys: wallKeys([3, "\r"], [120, " "], [125, "\x1bOR"], [130, "p"], [135, "q"], [150, "q"]),
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
@@ -2427,7 +2429,7 @@ if (dealtHere("termIo")) {
       relay(NISH, "break", {
         dir: at("wall-stage"),
         env: { NISH_TERM_GRAPHICS: "ascii" },
-        keys: wallKeys([3, "\r"], [120, " "], [130, "p"], [140, "\x1bOS"], [170, "q"], [180, "q"], [190, "q"]),
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
     ])
@@ -2444,7 +2446,7 @@ if (dealtHere("termIo")) {
     )
     const opened = staged.out.lastIndexOf("\x1b[?1049h")
     const leftAt = staged.out.slice(0, opened).split("\x1b[5n").length - 1
-    const [title, paused, back] = [2, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
+    const [title, paused, back] = [5, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
     const [asTitle, asPaused] = [wallSame(paused, title, 40), wallSame(paused, back, 40)]
     const seen = `${said(staged)}\nthe paused screen matches the title in ${asTitle.toFixed(3)}, the reopened in ${asPaused.toFixed(3)}`
     check(
@@ -2778,6 +2780,129 @@ if (!only || "net_set_option".includes(only)) {
     loudSet.status !== 0 && loudSet.stderr.includes("`netSetOption` has no synchronous reading under Node"),
     shown(loudSet)
   )
+}
+
+// The Unix-domain calls under the prelude, by their global spellings: each of
+// the eight throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls`,
+// `net_unix_paths` and `net_unix_scm` are the native half).
+if (!only || "net_unix".includes(only)) {
+  const unixDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(unixDir, { recursive: true })
+  const kindsEntry = path.join(unixDir, "unix-kinds.ts")
+  fs.writeFileSync(
+    kindsEntry,
+    "export const main = (): number => {\n" +
+      "  console.log(`${NET_UNIX_UNLINK_STALE} ${NET_UNIX_STREAM} ${NET_UNIX_SEQPACKET}`);\n" +
+      "  return 0;\n};\n"
+  )
+  const kinds = runUnderPrelude(kindsEntry, [])
+  check(
+    "net_unix: under the prelude the flag and the pair kinds read 1, 1 and 2, as natively",
+    kinds.status === 0 && kinds.stdout === "1 1 2\n",
+    shown(kinds)
+  )
+  const calls = [
+    ["unixListen", 'unixListen("@nish", 4, 0)'],
+    ["unixListenMode", 'unixListenMode("nish.sock", 4, 0, 384)'],
+    ["unixConnect", 'unixConnect("@nish")'],
+    ["unixAccept", "unixAccept(3)"],
+    ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+    ["sendFd", "sendFd(3, 0, [1], 0, 1)"],
+    ["recvFd", "recvFd(3, [0], 0, 1, [0])"],
+    ["peerCredentials", "peerCredentials(3, [0, 0, 0])"],
+  ]
+  for (const [name, call] of calls) {
+    const entry = path.join(unixDir, `${name}.ts`)
+    fs.writeFileSync(entry, `export const main = (): number => ${call};\n`)
+    const loud = runUnderPrelude(entry, [])
+    check(
+      `net_unix: under the prelude ${name} fails loudly rather than answering`,
+      loud.status !== 0 && loud.stderr.includes(`\`${name}\` has no synchronous reading under Node`),
+      shown(loud)
+    )
+  }
+}
+
+// `spawnWithFds` under the prelude, by its global spelling: it starts a child
+// as `spawn` does, so it throws, naming itself, for `spawn`'s reason
+// (`tests/cases/spawn_fds_child` is the native half). `--emit-ts` imports it
+// from `nish/runtime`, which throws the same way, as it imports `spawnPiped`:
+// without its `AMBIENT_NAMES` entry the module calls a global Node never had.
+if (!only || "spawn_fds".includes(only)) {
+  const fdsDir = path.join(buildDir, "spawn-fds-prelude")
+  fs.mkdirSync(fdsDir, { recursive: true })
+  const entry = path.join(fdsDir, "spawn-with-fds.ts")
+  fs.writeFileSync(entry, 'export const main = (): number => spawnWithFds(["true"], [0]);\n')
+  const loud = runUnderPrelude(entry, [])
+  check(
+    "spawn_fds: under the prelude spawnWithFds fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`spawnWithFds` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const emitted = path.join(fdsDir, "emitted")
+  fs.rmSync(emitted, { recursive: true, force: true })
+  const ts = spawnSync(NISH, [entry, "--emit-ts", emitted], { cwd: root, encoding: "utf8" })
+  const module = path.join(emitted, "spawn-with-fds.ts")
+  const text = ts.status === 0 && fs.existsSync(module) ? fs.readFileSync(module, "utf8") : ""
+  check(
+    "spawn_fds: --emit-ts imports spawnWithFds from nish/runtime",
+    text.startsWith('import { spawnWithFds } from "nish/runtime"\n'),
+    `exit ${ts.status}\n${ts.stderr}\n${text}`
+  )
+}
+
+// `netMss` where there is no socket to ask. Under the prelude it throws, naming
+// itself, as the other `nish:net` calls do; a `wasm32` build compiles it to
+// the constant -1, with no runtime symbol for the freestanding link to miss,
+// and the `--profile wasi` build runs and prints that -1
+// (`tests/cases/net_mss` is the native half).
+if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
+  const mssDir = path.join(buildDir, "net-mss")
+  fs.rmSync(mssDir, { recursive: true, force: true })
+  fs.mkdirSync(mssDir, { recursive: true })
+  const preludeEntry = path.join(mssDir, "prelude.ts")
+  fs.writeFileSync(preludeEntry, "export const main = (): number => netMss(3);\n")
+  const loud = runUnderPrelude(preludeEntry, [])
+  check(
+    "net_mss: under the prelude netMss fails loudly rather than answering -1",
+    loud.status !== 0 && loud.stderr.includes("`netMss` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const entry = path.join(mssDir, "net_mss_wasm.ts")
+  fs.writeFileSync(
+    entry,
+    'import { netMss } from "nish:net";\n\n' +
+      "export const main = (): number => {\n  console.log(netMss(0));\n  return 0;\n};\n"
+  )
+  const ll = path.join(mssDir, "net_mss_wasm.ll")
+  const wasm32 = spawnSync(NISH, [entry, "-o", ll, "--target", "wasm32"], { cwd: root, encoding: "utf8" })
+  const ir = wasm32.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+  check(
+    "net_mss: a wasm32 build compiles netMss to -1, with no call into runtime-net.c",
+    wasm32.status === 0 && !ir.includes("nish_net_mss") && ir.includes("i32 -1"),
+    shown(wasm32)
+  )
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const module = path.join(mssDir, "net_mss_wasm.wasm")
+    const built = spawnSync(NISH, [entry, "-o", mssDir + path.sep, "--link", module, "--profile", "wasi"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+        : built
+    check(
+      `net_mss: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) links and prints -1`,
+      ran.status === 0 && ran.stdout === "-1\n",
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: net_mss: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of netMss is not run`
+    )
+  }
 }
 
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
@@ -10764,6 +10889,80 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
   }
 }
 
+// `scopeWithStack` gives a scope's tasks the stack it names, and the default it
+// replaces is the one that fails. Each of thread_stack_deep's million-deep
+// chains needs at least 16 MB. Under `ulimit -s 8192`, which fixes glibc's
+// default thread stack and main's at 8 MiB on any host, the program written
+// with `scope()` (tests/link/thread_stack_fixtures/default.ts) faults on one
+// thread and on eight; with a 256 MiB stack it prints its two sums; with
+// 128 KiB (guard.ts) it faults on the guard page below the stack; under a
+// 128 MiB `ulimit -v` the 256 MiB stack cannot be mapped, and the program ends
+// with nish_stack_fail's out-of-memory message before any task runs. The link
+// harness counts a death by signal as a failure, so the faults are read here,
+// as `spawnSync`'s signal.
+if (!only || "thread_stack".includes(only)) {
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("thread_stack: the faults are read under a Linux ulimit, and this host is not Linux with clang")
+  } else {
+    const dir = path.join(buildDir, "thread_stack")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const programs = [
+      ["deep", path.join(linkDir, "thread_stack_deep", "main.ts")],
+      ["default", path.join(linkDir, "thread_stack_fixtures", "default.ts")],
+      ["guard", path.join(linkDir, "thread_stack_fixtures", "guard.ts")],
+    ]
+    const exes = new Map()
+    for (const [name, src] of programs) {
+      const exe = path.join(dir, name)
+      const c = spawnSync(NISH, [src, "--link", exe], { cwd: root, encoding: "utf8" })
+      if (c.status !== 0) check(`thread_stack: ${path.relative(root, src)} compiles and links`, false, shown(c))
+      exes.set(name, c.status === 0 ? exe : null)
+    }
+    const run = (name, threads, limit = "") => {
+      const exe = exes.get(name)
+      return exe === null
+        ? null
+        : spawnSync("bash", ["-c", `ulimit -S -s 8192 ${limit}&& exec "$0"`, exe], {
+            encoding: "utf8",
+            timeout: 60000,
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+    }
+    const said = (r) => (r === null ? "not built" : `signal ${r.signal}\n${shown(r)}`)
+    for (const threads of ["1", "8"]) {
+      const deep = run("deep", threads)
+      check(
+        `thread_stack: a 256 MiB scopeWithStack runs two million-deep chains on ${threads} thread(s)`,
+        deep !== null && deep.status === 0 && deep.stdout === "960218 256782\n",
+        said(deep)
+      )
+      const dflt = run("default", threads)
+      check(
+        `thread_stack: the same chains on scope()'s default 8 MiB stack fault on ${threads} thread(s)`,
+        dflt !== null && dflt.signal === "SIGSEGV",
+        said(dflt)
+      )
+      const guard = run("guard", threads)
+      check(
+        `thread_stack: a 128 KiB scopeWithStack faults on its guard page on ${threads} thread(s)`,
+        guard !== null && guard.signal === "SIGSEGV",
+        said(guard)
+      )
+      const room = run("deep", threads, "&& ulimit -S -v 131072 ")
+      check(
+        `thread_stack: a 256 MiB stack under a 128 MiB address space ends with the out-of-memory message on ${threads} thread(s)`,
+        room !== null &&
+          room.status === 1 &&
+          room.stdout === "" &&
+          room.stderr ===
+            "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n",
+        said(room)
+      )
+    }
+  }
+}
+
 // WP37 stage 1: `--sandbox` confines a native program to main's capability set
 // (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
 // Nish programs whose main reaches a chosen set of capabilities and hands its
@@ -11013,6 +11212,187 @@ if (!only || "sandbox".includes(only)) {
         said(to)
       )
 
+      // The Unix-domain calls (tests/link/net_unix_sandbox): granted `net`
+      // alone, abstract names work and a pathname bind is -13, since Landlock
+      // counts making the socket file as a write; granted `fs.write` too, it
+      // binds. On ABI 6 a connect to an abstract listener outside the sandbox
+      // is -1, the scope's EPERM; below it the connect goes through. The
+      // listener outside is the same fixture built without the sandbox,
+      // waiting in `pollWait` until it is killed, under a name with this
+      // run's pid, and the check needs it seen in /proc/net/unix first.
+      const unixBuild = (name, fixture, flags) =>
+        build(name, `../net_unix_sandbox/${fixture}`, flags, { driver: null })
+      const serveExe = unixBuild("unix-net-plain", "net", [])
+      const netExe = unixBuild("unix-net-sandbox", "net", ["--sandbox"])
+      const writeExe = unixBuild("unix-write-sandbox", "write", ["--sandbox"])
+      const outside = `@nish-net-unix-sandbox-outside-${process.pid}`
+      const server = serveExe !== null ? spawn(serveExe, ["serve", outside], { stdio: "ignore" }) : null
+      const pause = new Int32Array(new SharedArrayBuffer(4))
+      let serving = false
+      for (let k = 0; k < 200 && server !== null && !serving; k++) {
+        serving = fs.readFileSync("/proc/net/unix", "utf8").includes(outside)
+        if (!serving) Atomics.wait(pause, 0, 0, 50)
+      }
+      const unixNet = run(netExe, ["probe", outside])
+      if (server !== null) server.kill()
+      check(
+        `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13, and an abstract listener outside is ${abi >= 6 ? "-1" : "reached (ABI <6)"}`,
+        serving &&
+          unixNet !== null &&
+          unixNet.status === 0 &&
+          unixNet.stdout === `abstract true true\npathname -13\noutside ${abi >= 6 ? "-1" : "connected"}\n` &&
+          !fs.existsSync(path.join(W, "net.sock")),
+        `listener outside seen: ${serving}\n${said(unixNet)}`
+      )
+      const unixWrite = run(writeExe, [])
+      check(
+        "sandbox: granted net and fs.write, a pathname Unix listener binds and is unlinked",
+        unixWrite !== null &&
+          unixWrite.status === 0 &&
+          unixWrite.stdout === "pathname true true\nunlink 0\n" &&
+          !fs.existsSync(path.join(W, "write.sock")),
+        said(unixWrite)
+      )
+
+      // The scopes: `--allow fs.read=<dir>` grants reading beneath the
+      // directory and nothing beside it. A main that reaches ffi alone is
+      // widened by the policy's grant (open question 13), so the probe's own
+      // open is held to the scope too.
+      const scopeDir = (name, file) => {
+        const d = path.join(W, name)
+        fs.mkdirSync(d, { recursive: true })
+        if (file) fs.writeFileSync(path.join(d, file), "x")
+        return d
+      }
+      const inside = scopeDir("scope-read", "in.txt")
+      const insideFile = path.join(inside, "in.txt")
+      const outsideFile = path.join(W, "out.txt")
+      fs.writeFileSync(outsideFile, "x")
+      const readScoped = build("read-scoped", "read", ["--sandbox", "--allow", `ffi,fs.read=${inside}`])
+      const rIn = run(readScoped, ["open", insideFile])
+      const rOut = run(readScoped, ["open", outsideFile])
+      const rEtc = run(readScoped, ["open", "/etc/passwd"])
+      check(
+        "sandbox: fs.read=<dir> reads inside and not outside",
+        rIn !== null &&
+          rIn.status === 0 &&
+          rIn.stdout === "open: ok\n" &&
+          rOut !== null &&
+          rOut.stdout === "open: EACCES\n" &&
+          rEtc !== null &&
+          rEtc.stdout === "open: EACCES\n",
+        `${said(rIn)}\n--- outside\n${said(rOut)}\n--- /etc/passwd\n${said(rEtc)}`
+      )
+      const ffiScoped = build("none-scoped", "none", ["--sandbox", "--allow", `ffi,fs.read=${inside}`])
+      const fIn = run(ffiScoped, ["open", insideFile])
+      const fOut = run(ffiScoped, ["open", outsideFile])
+      check(
+        "sandbox: an ffi main is widened by the policy's fs.read=<dir>, and held to it",
+        fIn !== null && fIn.stdout === "open: ok\n" && fOut !== null && fOut.stdout === "open: EACCES\n",
+        `${said(fIn)}\n--- outside\n${said(fOut)}`
+      )
+
+      // A scope is the directory's real path, resolved at build time: a path
+      // through `..`, one relative to the compiler's working directory and a
+      // symbolic link to a directory each name the target itself, in the
+      // constant and in the rule, so a read through the link is granted.
+      const target = scopeDir("scope-target", "t.txt")
+      const targetReal = fs.realpathSync(target)
+      const targetConst = targetReal.replace(/\\/g, "\\5C").replace(/"/g, "\\22")
+      const link = path.join(W, "scope-link")
+      fs.symlinkSync(target, link)
+      for (const [form, scope] of [
+        ["`..`", path.join(inside, "..", "scope-target")],
+        ["relative", path.relative(root, target)],
+        ["symlinked", link],
+      ]) {
+        const name = `read-canon-${form.replace(/`/g, "").replace(".", "dot")}`
+        const exe = build(name, "read", ["--sandbox", "--allow", `ffi,fs.read=${scope}`])
+        const ll = exe === null ? "" : fs.readFileSync(path.join(dir, `${name}.ll`), "utf8")
+        const viaLink = run(exe, ["open", path.join(link, "t.txt")])
+        const direct = run(exe, ["open", path.join(targetReal, "t.txt")])
+        const beside = run(exe, ["open", insideFile])
+        check(
+          `sandbox: a ${form} fs.read=<dir> is its real path, in the IR and at run time`,
+          ll.includes(`c"${targetConst}\\00\\00"`) &&
+            viaLink !== null &&
+            viaLink.stdout === "open: ok\n" &&
+            direct !== null &&
+            direct.stdout === "open: ok\n" &&
+            beside !== null &&
+            beside.stdout === "open: EACCES\n",
+          `${scope}\n${ll
+            .split("\n")
+            .filter((l) => l.startsWith("@.sandbox"))
+            .join("\n")}\n--- through the link\n${said(viaLink)}\n--- the target\n${said(direct)}\n--- beside\n${said(beside)}`
+        )
+      }
+
+      // A scope directory gone between the build and the run: strict refuses
+      // naming it, best-effort names it once and grants nothing beneath it.
+      const gone = scopeDir("scope-gone")
+      const goneStrict = build("read-gone", "read", ["--sandbox", "--allow", `ffi,fs.read=${gone}`])
+      const goneLenient = build("read-gone-be", "read", [
+        "--sandbox=best-effort",
+        "--allow",
+        `ffi,fs.read=${gone}`,
+      ])
+      fs.rmSync(gone, { recursive: true, force: true })
+      const gs = run(goneStrict, ["open", insideFile])
+      check(
+        "sandbox: a missing scope directory refuses strict, naming it",
+        gs !== null &&
+          gs.status === 126 &&
+          gs.stdout === "" &&
+          gs.stderr === `nish: --sandbox: cannot open the directory ${gone} (ENOENT)\n`,
+        said(gs)
+      )
+      const gl = run(goneLenient, ["open", insideFile])
+      const goneLine =
+        `nish: --sandbox: the scope directory ${gone} cannot be opened, ` +
+        "so the program gets no access beneath it\n"
+      check(
+        "sandbox: best-effort names a missing scope directory once and reads nothing",
+        gl !== null &&
+          gl.status === 0 &&
+          gl.stdout === "open: EACCES\n" &&
+          gl.stderr.split(goneLine).length === 2,
+        said(gl)
+      )
+
+      // `--allow fs.write=<dir>`: a file is created inside and not beside it,
+      // and the metadata calls stay EPERM inside it (open question 1). Strict
+      // needs TRUNCATE, which a scope cannot grant beneath `/` below ABI 3.
+      if (abi < 3) {
+        skip(`sandbox: this kernel's Landlock is ABI ${abi} (<3); the fs.write=<dir> checks did not run`)
+      } else {
+        const out = scopeDir("scope-write", "meta.txt")
+        const writeScoped = build("write-scoped", "write", ["--sandbox", "--allow", `ffi,fs.write=${out}`])
+        const made = path.join(out, "made.txt")
+        const beside = path.join(W, "beside.txt")
+        const wIn = run(writeScoped, ["create", made])
+        const wOut = run(writeScoped, ["create", beside])
+        check(
+          "sandbox: fs.write=<dir> creates inside and not outside",
+          wIn !== null &&
+            wIn.status === 0 &&
+            wIn.stdout === "create: ok\n" &&
+            fs.existsSync(made) &&
+            wOut !== null &&
+            wOut.stdout === "create: EACCES\n" &&
+            !fs.existsSync(beside),
+          `${said(wIn)}\n--- outside\n${said(wOut)}`
+        )
+        const metaIn = run(writeScoped, ["meta", path.join(out, "meta.txt")])
+        check(
+          "sandbox: chmod, utimensat and setxattr inside an fs.write=<dir> scope still fail EPERM",
+          metaIn !== null &&
+            metaIn.status === 0 &&
+            metaIn.stdout === "chmod: EPERM\nutimensat: EPERM\nsetxattr: EPERM\n",
+          said(metaIn)
+        )
+      }
+
       // What main is granted runs the same: a file written and read back, a
       // child and the CPU count, with and without the sandbox and the pool.
       const grantedDir = (name) => {
@@ -11092,6 +11472,20 @@ if (!only || "sandbox".includes(only)) {
         "sandbox: strict runs below ABI 3 with fs.write, which grants TRUNCATE anyway (ABI 2)",
         writeAbi2 !== null && writeAbi2.status === 0 && writeAbi2.stderr === "",
         said(writeAbi2)
+      )
+      const scopedAbi2 = run(
+        build("write-scoped-abi2", "write", ["--sandbox", "--allow", `ffi,fs.write=${W}`], {
+          defines: ["-DNISH_SANDBOX_SIMULATE_ABI=2"],
+        }),
+        ["ctor"]
+      )
+      check(
+        "sandbox: strict refuses below ABI 3 with fs.write=<dir>, which grants nothing beneath / (ABI 2)",
+        scopedAbi2 !== null &&
+          scopedAbi2.status === 126 &&
+          scopedAbi2.stdout === "" &&
+          scopedAbi2.stderr === noTruncate,
+        said(scopedAbi2)
       )
     }
 
@@ -11308,6 +11702,53 @@ if (!only || "sandbox".includes(only)) {
     refused.status === 2 &&
       refused.stderr.includes("was compiled with --sandbox, and a wasm module has no sandbox"),
     shown(refused)
+  )
+  // The scopes in the IR: each list is the resolved directories, each ended
+  // by a NUL, and one NUL more; a capability granted whole passes null. The
+  // directory's name has a quote and a backslash, which the constant escapes.
+  // The probe's main reaches ffi, so the policy widens its set by fs.read and
+  // fs.write (open question 13): 16 | 32 | 64.
+  const odd = path.join(dir, 'scope "q\\')
+  fs.mkdirSync(odd, { recursive: true })
+  const oddReal = fs.realpathSync(odd)
+  const scopedLl = path.join(dir, "hello-scoped.ll")
+  const sc = spawnSync(
+    NISH,
+    [
+      path.join(linkDir, "sandbox_fixtures", "read.ts"),
+      "--sandbox",
+      "--allow",
+      `ffi,fs.read=${oddReal},fs.write=${oddReal}`,
+      "--allow",
+      "fs.write",
+      "-o",
+      scopedLl,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const scopedText = sc.status === 0 ? fs.readFileSync(scopedLl, "utf8") : ""
+  const escaped = oddReal.replace(/\\/g, "\\5C").replace(/"/g, "\\22")
+  const bytes = Buffer.byteLength(oddReal) + 2
+  const as =
+    HAS_LLVM_AS && sc.status === 0
+      ? spawnSync("llvm-as", [scopedLl, "-o", "/dev/null"], { encoding: "utf8" })
+      : null
+  const operand = `getelementptr inbounds ([${bytes} x i8], [${bytes} x i8]* @.sandbox.read, i64 0, i64 0)`
+  check(
+    "sandbox: a scope is a NUL-ended list constant passed to nish_sandbox, and llvm-as accepts it",
+    sc.status === 0 &&
+      scopedText.includes(
+        `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
+      ) &&
+      !scopedText.includes("@.sandbox.write") &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null)`) &&
+      (as === null || as.status === 0),
+    sc.status === 0
+      ? `${scopedText
+          .split("\n")
+          .filter((l) => l.includes("sandbox"))
+          .join("\n")}\n${as === null ? "" : shown(as)}`
+      : shown(sc)
   )
   const plainHello = path.join(dir, "hello-plain.ll")
   const ph = spawnSync(NISH, [hello, "-o", plainHello], {
@@ -14010,7 +14451,8 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // 8-bit bytes and keys past 72 bytes among them) and salts at cost 4 to 6, both
 // ways: Nish makes crypt_r's `$2b$` hash, crypt_r accepts Nish's, and Nish
 // answers crypt_r's `$2a$`, `$2b$` and `$2y$` hashes and a wrong password as
-// crypt_r does (tests/differential/bcrypt.js). Without a C compiler or
+// crypt_r does, one at a time and batched two to six at a time through
+// `bcryptHashN` and `bcryptVerifyN` (tests/differential/bcrypt.js). Without a C compiler or
 // libxcrypt it skips and says which.
 if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includes(only))) {
   const r = spawnSync("node", [path.join(root, "tests", "differential", "bcrypt.js"), "--compiler", NISH], {
@@ -14071,11 +14513,15 @@ if (!only || ["bcrypt barrier", "crypto_bcrypt"].some((name) => name.includes(on
   }
 }
 
-// The bcrypt vectors of tests/link/crypto_bcrypt, and the four-lane batch of
-// tests/link/crypto_bcrypt_batch, as `--profile wasi` modules under Node's
-// WASI: both are pure, so they build for wasm32 and answer every case there as
-// natively.
-for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
+// The bcrypt vectors of tests/link/crypto_bcrypt, the four-lane batch of
+// tests/link/crypto_bcrypt_batch and the widths one to six of
+// tests/link/crypto_bcrypt_width, as `--profile wasi` modules under Node's
+// WASI: all three build for wasm32 and answer every case there as natively.
+for (const [program, what] of [
+  ["crypto_bcrypt", "the bcrypt vectors"],
+  ["crypto_bcrypt_batch", "the bcrypt batch"],
+  ["crypto_bcrypt_width", "the bcrypt widths"],
+]) {
   if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
     continue
   }
@@ -14099,7 +14545,7 @@ for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
     )
   } else {
     skip(
-      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program === "crypto_bcrypt" ? "the bcrypt vectors" : "the bcrypt batch"} is not run`
+      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${what} is not run`
     )
   }
 }

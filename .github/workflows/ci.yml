@@ -441,6 +441,20 @@ jobs:
         run: |
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/test.log"
 
+      # WP37 stage 2: the `sandbox` section's directory-scope checks skip on a
+      # kernel without Landlock, or below ABI 3 for fs.write=<dir>, and the
+      # section stays green. These runners' kernels have Landlock ABI 3 or
+      # later, so the lines that say a scope held are required here.
+      - name: The Landlock directory scopes ran
+        if: matrix.shard == 1
+        run: |
+          uname -r
+          printf '#include <stdio.h>\n#include <sys/syscall.h>\n#include <unistd.h>\nint main(void) { printf("Landlock ABI %%ld\\n", syscall(444, NULL, 0, 1)); return 0; }\n' \
+            | clang -x c - -o "$RUNNER_TEMP/landlock-abi" && "$RUNNER_TEMP/landlock-abi" || true
+          grep -E '^SKIP  sandbox: .*Landlock' "$RUNNER_TEMP/test.log" || true
+          grep -E '^PASS  sandbox: fs.read=<dir> reads inside and not outside' "$RUNNER_TEMP/test.log"
+          grep -E '^PASS  sandbox: fs.write=<dir> creates inside and not outside' "$RUNNER_TEMP/test.log"
+
       # The SHA-256 kernel, likewise: the `simd` section passes with the reference
       # alone on a CPU without SHA-NI, and the `sha256 kernel` section takes its
       # other arm there. These runners have it, so the driver must name the

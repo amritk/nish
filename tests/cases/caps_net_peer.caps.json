@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "entry": "caps_net_peer.ts",
+  "deterministic": false,
+  "capabilities": ["net"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["net"],
+      "modules": [
+        {
+          "path": "caps_net_peer.ts",
+          "capabilities": ["net"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["net"],
+              "witnesses": {
+                "net": [
+                  { "function": "main", "at": "caps_net_peer.ts:11:15", "calls": "peer" },
+                  { "function": "peer", "at": "caps_net_peer.ts:8:32", "calls": "peerCredentials" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_net_peer.ts:11:3", "allowed": true }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

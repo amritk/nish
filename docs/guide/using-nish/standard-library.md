@@ -63,6 +63,29 @@ It is `process.spawn` in the capability report, and refused when compiling for
 WebAssembly. See
 [Directories and subprocesses](../../LANGUAGE.md#directories-and-subprocesses).
 
+`spawnWithFds(argv, fds)` starts a child as `spawn` does and hands it the
+descriptors in `fds`: `fds[0]` is the child's descriptor 3, `fds[1]` its 4,
+and so on, which is where a program started by a supervisor looks for a
+listener it did not open. It answers the pid, or a negative errno: -22 for
+more than 64 descriptors or a negative one, -9 for one that is not open. No
+other descriptor of the program reaches the child but its three streams, and
+the child shares each one it is handed, offset and flags included. Reap it
+with `waitPid`:
+
+```ts
+import { spawnWithFds, waitPid } from "nish:process"
+import { tcpListen } from "nish:net"
+
+const listener = tcpListen("127.0.0.1", 8080, 64)
+const pid = spawnWithFds(["./worker"], [listener])
+if (pid > 0) {
+  waitPid(pid, 0)
+}
+```
+
+It is `process.spawn` in the capability report too. See
+[Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+
 `nish:fs` is where a program replaces a file in one step: write the new
 contents beside the target, then `renameSync` the temporary over it, so a
 reader sees the old file or the new one and never half of either.
@@ -2293,7 +2316,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
-| `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`, and `bcryptHash4`/`bcryptVerify4` for up to four at once: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
+| `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`, `bcryptHashN`/`bcryptVerifyN` for up to six at once at a width `bcryptCalibrate` picks, and `bcryptHash4`/`bcryptVerify4` for up to four: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
 | `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded; `base64StdPadEncode` and a strict `base64StdPadDecode`, padded, in the standard alphabet, constant-time (`nish/base64` encodes the same alphabet for pixels, without the constant-time guarantee) |
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
 | `nish/crypto/aes` | `aesKey` for AES-128 and AES-256, `aesGcmSeal` and `aesGcmOpen` |

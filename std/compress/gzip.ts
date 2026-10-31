@@ -40,11 +40,13 @@ import {
   DEFLATE_ERR_TRUNCATED,
   DEFLATE_NO_ROOM,
   Deflater,
+  FixedDeflater,
   INFLATE_DONE,
   INFLATE_NEED_INPUT,
   INFLATE_NEED_OUTPUT,
   Inflater,
   deflateBound,
+  fixedDeflateBound,
 } from "nish/compress/deflate"
 import { copyBytes } from "nish/bytes"
 
@@ -195,6 +197,56 @@ export class GzipCompressor {
     gzipWriteHeader(out, at, this.deflater.level)
     const end: i32 = this.deflater.compress(src, off, len, out, at + GZIP_HEADER_SIZE)
     if (end < 0 || toI32(out.length) - end < GZIP_TRAILER_SIZE) {
+      return DEFLATE_NO_ROOM
+    }
+    gzipPut32(out, end, this.crc.update(toU32(0), src, off, len))
+    gzipPut32(out, end + 4, toU32(len))
+    return end + GZIP_TRAILER_SIZE
+  }
+}
+
+/** The most bytes `GzipFixedCompressor.compress` writes for `n` bytes of input. */
+export const gzipFixedBound = (n: i32): i32 => fixedDeflateBound(n) + GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE
+
+/**
+ * A gzip compressor for short inputs: a `FixedDeflater` (one fixed-Huffman
+ * block, 16 KB window) and the CRC-32 tables, allocated once. Each call
+ * depends on its input alone. Not shared between threads.
+ */
+export class GzipFixedCompressor {
+  readonly deflater: FixedDeflater
+  readonly crc: Crc32
+
+  /** Builds the tables. */
+  constructor() {
+    this.deflater = new FixedDeflater()
+    this.crc = new Crc32()
+  }
+
+  /**
+   * Compresses `src[off .. off + len)` into `out[at .. at + room)` as one gzip
+   * member, and answers where it ends, or `DEFLATE_NO_ROOM` (-1) as soon as
+   * it would need more than `room` bytes, so a caller passing the most it
+   * will take stops early on an input that does not shrink.
+   * `gzipFixedBound(len)` always fits. A window outside its array panics.
+   * Allocates nothing.
+   */
+  compress(src: u8[], off: i32, len: i32, out: u8[], at: i32, room: i32): i32 {
+    gzipWindow("GzipFixedCompressor.compress", src, off, len)
+    gzipWindow("GzipFixedCompressor.compress", out, at, room)
+    if (room < GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE) {
+      return DEFLATE_NO_ROOM
+    }
+    gzipWriteHeader(out, at, 1)
+    const end: i32 = this.deflater.compress(
+      src,
+      off,
+      len,
+      out,
+      at + GZIP_HEADER_SIZE,
+      room - GZIP_HEADER_SIZE - GZIP_TRAILER_SIZE
+    )
+    if (end < 0) {
       return DEFLATE_NO_ROOM
     }
     gzipPut32(out, end, this.crc.update(toU32(0), src, off, len))

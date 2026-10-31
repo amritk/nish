@@ -2643,6 +2643,26 @@ export class Compilation {
     return !unit.checker.program.writesNoOutput()
   }
 
+  /**
+   * WP37 OQ13: an `ffi` call may reach the network, the files or a child
+   * through C the compiler never sees, so `main`'s mask alone would leave it
+   * no room. When a policy lists what the program may do, its `net`,
+   * `fs.read`, `fs.write` and `process.spawn` grants widen the sandbox to that
+   * list (scopes included); with no allowlist the mask stays as computed.
+   */
+  sandboxWidened(caps: i32): i32 {
+    const allow = this.opts.allowCapabilities & this.manifestAllow
+    if ((caps & (1 << capabilityIndex("ffi"))) === 0 || allow === -1) {
+      return caps
+    }
+    let reachable = 0
+    for (const name of ["net", "fs.read", "fs.write", "process.spawn"]) {
+      reachable = reachable | (1 << capabilityIndex(name))
+    }
+    const deny = this.opts.denyCapabilities | this.manifestDeny
+    return caps | (allow & ~deny & reachable)
+  }
+
   /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
     const facts = this.analyze()
@@ -2652,7 +2672,7 @@ export class Compilation {
     const main = this.entry().checker.program.entryMain
     if (this.opts.sandbox !== 0 && main !== null) {
       const fact = facts.get(main.name)
-      this.opts.sandboxCapabilities = fact === null ? 0 : fact.caps
+      this.opts.sandboxCapabilities = this.sandboxWidened(fact === null ? 0 : fact.caps)
     }
     const units = this.analysisUnits
     const stems = this.outputStems()

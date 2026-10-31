@@ -1,4 +1,4 @@
-// NL2584: an arrow argument reads `this`, which is neither a `const` local
+// NL2590: an arrow argument reads `this`, which is neither a `const` local
 // nor a parameter of the function it is written in.
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 class Scaler {

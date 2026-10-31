@@ -309,6 +309,10 @@ export function spawn() {
   return noProcessReading("spawn");
 }
 
+export function spawnWithFds() {
+  return noProcessReading("spawnWithFds");
+}
+
 export function waitPid() {
   return noProcessReading("waitPid");
 }
