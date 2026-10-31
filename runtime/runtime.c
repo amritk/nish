@@ -1274,7 +1274,8 @@ static void nish_put_digits(char *end, uint64_t v) {
   else end[-1] = (char)('0' + v);
 }
 
-/* runtime/nish.h states the same size for the callers that include it. */
+/* runtime/nish.h and tests/runtime-test.c state the same size; tests/run.js
+   (`f64_format_oracle`) fails if the three disagree. */
 #define NISH_F64_MAX 32
 
 /* JS Number#toString: shortest round-trip digits, e-form outside (-6, 21].

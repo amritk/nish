@@ -18042,7 +18042,7 @@ if (!only || "runtime_test".includes(only)) {
 // (powers of two, subnormals, exact ties, the 1e21 and 1e-7 layout boundaries)
 // and two million seeded random bit patterns, and every line must be what
 // `String(x)` prints for the same bits. The first difference fails the check
-// and names the bits, so `f64-format-oracle 0` reproduces it. The program
+// and names the bits, which is all it takes to reproduce it. The program
 // itself exits 2 on a length outside 1..25 or a byte written past it, which
 // is runtime-test.c's buffer claim held over the whole stream.
 if (!only || "f64_format_oracle".includes(only)) {
@@ -18073,6 +18073,26 @@ if (!only || "f64_format_oracle".includes(only)) {
     "nish_f64_format prints what Node's String(x) prints, over every edge class and two million random doubles",
     run !== null && run.status === 0 && first === "" && lines > 2000000,
     String(cc.stderr) + (run ? `exit ${run.status} ${run.signal ?? ""} ${run.stderr}\n${lines} lines\n${first}` : "")
+  )
+  // The power-of-ten table is derived, not transcribed: the generator's output
+  // must appear in runtime.c byte for byte.
+  const gen = spawnSync("python3", ["-I", "scripts/gen-pow10-table.py"], { cwd: root, encoding: "utf8" })
+  const runtimeC = fs.readFileSync(path.join(root, "runtime/runtime.c"), "utf8")
+  check(
+    "runtime.c's NISH_POW10_SIG is what scripts/gen-pow10-table.py prints",
+    gen.status === 0 && gen.stdout.length > 0 && runtimeC.includes(gen.stdout),
+    gen.status === 0 ? "the generated block is not in runtime/runtime.c; paste it over NISH_POW10_SIG" : `${gen.error ?? ""} ${gen.stderr}`
+  )
+  // NISH_F64_MAX is stated three times, in three files no one compile sees
+  // together; they must agree.
+  const sizes = ["runtime/runtime.c", "runtime/nish.h", "tests/runtime-test.c"].map((f) => {
+    const m = /^#define NISH_F64_MAX (\d+)$/m.exec(fs.readFileSync(path.join(root, f), "utf8"))
+    return `${f}: ${m ? m[1] : "missing"}`
+  })
+  check(
+    "runtime.c, nish.h and runtime-test.c state one NISH_F64_MAX",
+    new Set(sizes.map((s) => s.split(": ")[1])).size === 1 && !sizes[0].endsWith("missing"),
+    sizes.join("\n")
   )
 }
 

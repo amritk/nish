@@ -181,7 +181,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 
 | File | Subject | Budget (constant) | Measured 2026-10-05 |
 | --- | --- | ---: | ---: |
-| `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,698 (`RUNTIME_TEXT_BUDGET`) | 3,698 (2026-10-23) |
+| `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,698 (`RUNTIME_TEXT_BUDGET`) | 3,369 (2026-10-31) |
 | `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,899 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,899 (2026-10-23) |
 | `runtime/runtime-os.c` | syscall wrappers: files (and `renameSync`, `unlinkSync`, `writeFileBytesSync`, `writeBytes`, `writeFileSyncMode`, `createFileExclusiveSync`), directories (and `mkdirSyncMode`), subprocesses (`spawnSync`, `spawnPiped`, and `spawn`, `kill`, `waitPid`), `getenv`, the two clocks, `realpath`, platform, the CPU count and physical memory | 4,608 (`RUNTIME_OS_TEXT_BUDGET`) | 4,450 (2026-10-29) |
 | `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 610 (2026-10-16) |

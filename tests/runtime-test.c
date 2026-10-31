@@ -2028,9 +2028,6 @@ int main(void) {
   expect_f64(1e20, "100000000000000000000");
   expect_f64(123456789012345680000.0, "123456789012345680000");
   expect_f64(1.5e300, "1.5e+300");
-  /* WP15: the shortest string that round-trips at this length is not the
-     correctly-rounded one, so the old snprintf/strtod search printed all
-     seventeen digits of each of these. Node prints sixteen. */
   /* `indexOf` moved into the runtime (WP15): the edge cases the inline loop
      used to define, and the repeated-first-byte case the memchr fallback
      walks. `tests/run.js` runs this file against both paths. */
@@ -2046,6 +2043,9 @@ int main(void) {
   expect_i64(nish_str_index_of(lit("aaaa"), lit("aaaaa")), -1, "indexOf needle one longer");
   expect_i64(nish_str_index_of(lit("h\xc3\xa9llo"), lit("\xc3\xa9")), 1, "indexOf utf-8 byte offset");
 
+  /* WP15: the shortest string that round-trips at this length is not the
+     correctly-rounded one, so the old snprintf/strtod search printed all
+     seventeen digits of each of these. Node prints sixteen. */
   expect_f64(7.120236347223045e-307, "7.120236347223045e-307");
   expect_f64(7.291122019556398e-304, "7.291122019556398e-304");
   expect_f64(8.209073602596753e-289, "8.209073602596753e-289");
