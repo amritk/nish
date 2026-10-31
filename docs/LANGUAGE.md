@@ -9763,6 +9763,10 @@ without one grants the capability whole, as before:
   grant past them — a new directory, program or host for a capability the
   row records narrowed — is NL2593 until the lock is updated; a row that
   records the capability whole accepts any argument (`caps_lock_args`).
+- `@nish_sandbox` takes a fifth operand for the programs a
+  `process.spawn=<program>` grant allows, null when none is named:
+  `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
+  The four-operand call in "The sandbox" below predates it.
 
 ##### The capability lockfile
 
