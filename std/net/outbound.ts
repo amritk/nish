@@ -44,6 +44,7 @@
  * Written from RFC 6890, RFC 4291, RFC 6052, RFC 3056, RFC 4380 and the IANA
  * special-purpose address registries, not ported from another implementation.
  */
+import { copyBytes } from "nish/bytes"
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
 import { dnsParseAddress } from "nish/net/dns-config"
 
@@ -102,7 +103,7 @@ export class OutboundPolicy {
     const end: i32 = slash >= 0 ? slash : n
     const text: u8[] = new Array<u8>(end)
     let v4: boolean = true
-    for (let i: i32 = 0; i < end; i += 1) {
+    for (let i: i32 = 0; i < toI32(text.length) && i < n; i += 1) {
       const c: i32 = toI32(cidr.charCodeAt(i))
       if (c > 127) {
         return false
@@ -122,7 +123,7 @@ export class OutboundPolicy {
         return false
       }
     }
-    for (let i: i32 = 0; i < 16; i += 1) {
+    for (let i: i32 = 0; i < 16 && i < toI32(address.length); i += 1) {
       this.permitted.push(address[i])
     }
     this.permitted.push(toU8(v4 ? bits + 96 : bits))
@@ -138,22 +139,14 @@ export const outboundAddressPublic = (addr: u8[], off: i32): boolean => {
   if (off < 0 || off > toI32(addr.length) - 16) {
     panic("outboundAddressPublic: sixteen bytes do not fit at off")
   }
+  const carried: i32 = outboundCarriedV4(addr, off)
+  if (carried >= 0) {
+    return outboundV4Public(addr, carried)
+  }
   const b0: i32 = toI32(addr[off])
   const b1: i32 = toI32(addr[off + 1])
   const b2: i32 = toI32(addr[off + 2])
   const b3: i32 = toI32(addr[off + 3])
-  if (outboundZeros(addr, off, 10) && addr[off + 10] === toU8(255) && addr[off + 11] === toU8(255)) {
-    // ::ffff:a.b.c.d, how nish:net writes every IPv4 address.
-    return outboundV4Public(addr, off + OUTBOUND_V4_AT)
-  }
-  if (b0 === 0 && b1 === 0x64 && b2 === 0xff && b3 === 0x9b && outboundZeros(addr, off + 4, 8)) {
-    // 64:ff9b::/96, the NAT64 well-known prefix (RFC 6052): the IPv4 address is its last four bytes.
-    return outboundV4Public(addr, off + OUTBOUND_V4_AT)
-  }
-  if (b0 === 0x20 && b1 === 0x02) {
-    // 2002::/16, 6to4 (RFC 3056): the IPv4 address is the next four bytes.
-    return outboundV4Public(addr, off + 2)
-  }
   if ((b0 & 0xe0) !== 0x20) {
     // Outside 2000::/3: loopback, unspecified, unique local, link-local, multicast, the rest.
     return false
@@ -172,9 +165,17 @@ export const outboundAddressPublic = (addr: u8[], off: i32): boolean => {
 
 /** Whether `policy` lets a connection go to the sixteen address bytes at `addr[off]`. */
 export const outboundAddressAllowed = (policy: OutboundPolicy, addr: u8[], off: i32): boolean => {
-  const p: u8[] = policy.permitted
-  for (let at: i32 = 0; at + OUTBOUND_PERMIT_BYTES <= toI32(p.length); at += OUTBOUND_PERMIT_BYTES) {
-    if (outboundPrefixMatch(p, at, toI32(p[at + 16]), addr, off)) {
+  if (outboundPermitted(policy, addr, off)) {
+    return true
+  }
+  const carried: i32 = outboundCarriedV4(addr, off)
+  if (carried >= 0 && toI32(policy.permitted.length) > 0) {
+    // A permit names an IPv4 prefix in its ::ffff: form, so try the address a NAT64 or 6to4 one carries in that form too.
+    const mapped: u8[] = new Array<u8>(16)
+    mapped[10] = toU8(255)
+    mapped[11] = toU8(255)
+    copyBytes(mapped, OUTBOUND_V4_AT, addr, carried, 4)
+    if (outboundPermitted(policy, mapped, 0)) {
       return true
     }
   }
@@ -198,7 +199,7 @@ export const outboundFilter = (policy: OutboundPolicy, addresses: u8[], count: i
     }
     if (i !== kept) {
       // Swap, so the refused record stays in the list for an error to name.
-      for (let k: i32 = 0; k < DNS_ADDRESS_BYTES; k += 1) {
+      for (let k: i32 = 0; k < toI32(held.length); k += 1) {
         held[k] = addresses[kept * DNS_ADDRESS_BYTES + k]
         addresses[kept * DNS_ADDRESS_BYTES + k] = addresses[i * DNS_ADDRESS_BYTES + k]
         addresses[i * DNS_ADDRESS_BYTES + k] = held[k]
@@ -242,22 +243,68 @@ export const outboundAddressText = (addr: u8[], off: i32): string => {
     const at: i32 = off + OUTBOUND_V4_AT
     return `${addr[at]}.${addr[at + 1]}.${addr[at + 2]}.${addr[at + 3]}`
   }
-  const digits: string = "0123456789abcdef"
-  const parts: string[] = []
+  // Eight groups of at most four digits and seven colons.
+  const out: u8[] = new Array<u8>(39)
+  let at: i32 = 0
   for (let g: i32 = 0; g < 8; g += 1) {
-    let v: i32 = toI32(addr[off + 2 * g]) * 256 + toI32(addr[off + 2 * g + 1])
-    let hex: string = ""
-    while (v > 0 || hex.length === 0) {
-      const d: i32 = v & 15
-      hex = `${digits.substring(d, d + 1)}${hex}`
-      v = v >> 4
+    const v: i32 = toI32(addr[off + 2 * g]) * 256 + toI32(addr[off + 2 * g + 1])
+    if (g > 0 && at < toI32(out.length)) {
+      out[at] = toU8(58)
+      at += 1
     }
-    parts.push(hex)
+    for (let shift: i32 = 12; shift >= 0; shift -= 4) {
+      const d: i32 = (v >> shift) & 15
+      if (v >> shift !== 0 || shift === 0) {
+        if (at < toI32(out.length)) {
+          out[at] = toU8(d < 10 ? 48 + d : 87 + d)
+          at += 1
+        }
+      }
+    }
   }
-  return parts.join(":")
+  return String.fromBytes(out, 0, at)
 }
 
 // --- helpers -----------------------------------------------------------------
+
+/** Whether one of `policy`'s permits covers the sixteen address bytes at `addr[off]`. */
+const outboundPermitted = (policy: OutboundPolicy, addr: u8[], off: i32): boolean => {
+  const p: u8[] = policy.permitted
+  for (let at: i32 = 0; at + OUTBOUND_PERMIT_BYTES <= toI32(p.length); at += OUTBOUND_PERMIT_BYTES) {
+    const bitsAt: i32 = at + 16
+    if (bitsAt >= 0 && bitsAt < toI32(p.length) && outboundPrefixMatch(p, at, toI32(p[bitsAt]), addr, off)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Where the IPv4 address that the sixteen address bytes at `addr[off]` carry
+ * starts, or -1 for none: `::ffff:a.b.c.d`, how nish:net writes every IPv4
+ * address; `64:ff9b::/96`, the NAT64 well-known prefix (RFC 6052), in its
+ * last four bytes; `2002::/16`, 6to4 (RFC 3056), in the four after the prefix.
+ */
+const outboundCarriedV4 = (addr: u8[], off: i32): i32 => {
+  if (outboundZeros(addr, off, 10) && addr[off + 10] === toU8(255) && addr[off + 11] === toU8(255)) {
+    return off + OUTBOUND_V4_AT
+  }
+  const b0: i32 = toI32(addr[off])
+  const b1: i32 = toI32(addr[off + 1])
+  if (
+    b0 === 0 &&
+    b1 === 0x64 &&
+    addr[off + 2] === toU8(0xff) &&
+    addr[off + 3] === toU8(0x9b) &&
+    outboundZeros(addr, off + 4, 8)
+  ) {
+    return off + OUTBOUND_V4_AT
+  }
+  if (b0 === 0x20 && b1 === 0x02) {
+    return off + 2
+  }
+  return -1
+}
 
 /** Whether the IPv4 address in the four bytes at `addr[at]` is public. */
 const outboundV4Public = (addr: u8[], at: i32): boolean => {
@@ -342,7 +389,7 @@ const outboundIsLiteral = (name: string): boolean => {
 const outboundLower = (s: string): string => {
   const n: i32 = toI32(s.length)
   const out: u8[] = new Array<u8>(n)
-  for (let i: i32 = 0; i < n; i += 1) {
+  for (let i: i32 = 0; i < toI32(out.length) && i < n; i += 1) {
     const c: i32 = toI32(s.charCodeAt(i))
     out[i] = c >= 65 && c <= 90 ? toU8(c + 32) : toU8(c)
   }

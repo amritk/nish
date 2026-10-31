@@ -309,6 +309,8 @@ const pureChecks = (t: Tally): void => {
   t.check(p.permit("fe80::7") && allowed(p, "fe80::7") && !allowed(p, "fe80::8"), "an address without a length is the address alone");
   const all4: OutboundPolicy = new OutboundPolicy();
   t.check(all4.permit("0.0.0.0/0") && allowed(all4, "192.168.1.1") && !allowed(all4, "::1"), "0.0.0.0/0 is every IPv4 address and no IPv6 one");
+  const nat: OutboundPolicy = new OutboundPolicy();
+  t.check(nat.permit("10.20.0.0/16") && allowed(nat, "64:ff9b::a14:5") && allowed(nat, "2002:a14:5::1") && !allowed(nat, "64:ff9b::a15:5") && !allowed(nat, "2002:a15:5::1"), "a permitted IPv4 prefix covers its NAT64 and 6to4 forms too");
   const bad: OutboundPolicy = new OutboundPolicy();
   t.check(
     !bad.permit("10.0.0.0/33") && !bad.permit("::/129") && !bad.permit("nope") && !bad.permit("10.0.0.0/") && !bad.permit("/8") && !bad.permit("10.0.0.0/8x") && !bad.permit("127.1/32") && bad.permitted.length === 0,
@@ -464,6 +466,12 @@ const fetchChecks = (t: Tally, port: i32): void => {
   const other: HttpClient = client(named());
   t.check(fetchText(other, `http://localhost:${port}/hello`).indexOf("does not allow") >= 0 && other.error === HTTP_E_BLOCKED, "a URL naming a host not on it is blocked before the lookup");
   beforeAfter(t, base, `http://allowed.test@127.0.0.1:${port}/hello`, "ok hello", trick(), "does not allow", 0, "an allowed name in the userinfo");
+
+  // A connection kept from before a policy was set never skips its address check.
+  const kept: HttpClient = client(null);
+  t.check(fetchText(kept, `${base}/hello`) === "ok hello" && fetchText(kept, `${base}/hello`) === "ok hello" && kept.reused, "without a policy, a kept connection is reused");
+  kept.options.outbound = policy();
+  t.check(fetchText(kept, `${base}/hello`).indexOf("127.0.0.1 resolves to 127.0.0.1") >= 0 && kept.error === HTTP_E_BLOCKED, "once a policy is set, the connection kept from before it is not reused, and the fetch is HTTP_E_BLOCKED");
 
   // A proxy looks the name up itself, so under a policy none is used.
   const viaProxy: HttpClient = client(null);

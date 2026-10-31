@@ -21,16 +21,17 @@ the IANA special-purpose registries read strictly; IPv4-mapped, NAT64 and
 6to4 addresses are judged by the IPv4 address they carry. A policy turns off
 the proxy, which would otherwise resolve and connect on the client's behalf,
 and caps redirects, total time and body size at the stricter of its own
-limits and the options'. Four findings were fixed while the module was
-written (OB-1 High, OB-2 Medium, OB-3 and OB-4 Low); three are open
-(OB-5 to OB-7, Low).
+limits and the options'. A kept connection is reused only under the policy
+it was dialled under. Five findings were fixed while the module was written
+(OB-1 High, OB-2 and OB-8 Medium, OB-3 and OB-4 Low); four are open
+(OB-5 to OB-7 and OB-9, Low).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/outbound.ts` | `OutboundPolicy` (`allowHost`, `permit`), `outboundAddressPublic`, `outboundAddressAllowed`, `outboundFilter`, `outboundHostAllowed`, `outboundAddressText`; and the helpers (`outboundV4Public`, `outboundZeros`, `outboundPrefixMatch`, `outboundDecimal`, `outboundIsLiteral`, `outboundLower`, `outboundTrimDot`) |
-| `std/net/http-client.ts` | The policy's hooks only: `HttpOptions.outbound`, `HTTP_E_BLOCKED`, `HttpClient.hostAllowed`, the policy branch of `HttpClient.dial`, the proxy choice in `HttpClient.open`, the hop check in `HttpClient.fetch`, and `httpClientBodyCap`, `httpClientTotalMs`, `httpClientMaxRedirects`. The rest of the client is [`http-client.md`](http-client.md)'s |
+| `std/net/outbound.ts` | `OutboundPolicy` (`allowHost`, `permit`), `outboundAddressPublic`, `outboundAddressAllowed`, `outboundFilter`, `outboundHostAllowed`, `outboundAddressText`; and the helpers (`outboundPermitted`, `outboundCarriedV4`, `outboundV4Public`, `outboundZeros`, `outboundPrefixMatch`, `outboundDecimal`, `outboundIsLiteral`, `outboundLower`, `outboundTrimDot`) |
+| `std/net/http-client.ts` | The policy's hooks only: `HttpOptions.outbound`, `HTTP_E_BLOCKED`, `HttpClient.hostRefusal`, the policy branch of `HttpClient.dial`, the proxy choice and the kept-connection reuse test in `HttpClient.open` (`HttpClient.routePolicy`, `httpClientSamePolicy`), the hop check in `HttpClient.fetch`, and `httpClientBodyCap`, `httpClientTotalMs`, `httpClientMaxRedirects`. The rest of the client is [`http-client.md`](http-client.md)'s |
 
 Out of scope: the stub resolver of `std/net/dns-resolver.ts` and the address
 parser `dnsParseAddress` ([`dns.md`](dns.md)), whose answer the policy
@@ -62,12 +63,14 @@ unreachable one.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | OB-1 | High | `HttpClient.open` | A program that set `useEnvProxy` sent a policed fetch to its proxy, which resolves and connects for it: the address check never saw an address, so a URL naming `127.0.0.1` reached whatever the proxy could. | **Fixed** before the module shipped: a policy turns the proxy off and the fetch goes direct, through `dial`'s check. Before, `with one, the proxy is ignored and the fetch goes direct` failed; after, it passes. |
-| OB-2 | Medium | `HttpClient.fetch` | The host allowlist was checked on the URL the caller passed, not on a redirect's target, so an allowed host that redirects (an open redirect is enough) took the fetch to any public host. | **Fixed** before the module shipped: every hop's URL goes through `hostAllowed` before it is dialled. Before, `with one, a redirect to a host not on the allowlist is HTTP_E_BLOCKED, naming does not allow` and `and no connection past the first hop` failed; after, they pass. |
-| OB-3 | Low | `outboundAddressPublic` | A 6to4 address (`2002::/16`) was judged as the global IPv6 address it looks like, so `2002:7f00:1::` (6to4 for `127.0.0.1`) and the like passed wherever a 6to4 relay delivers them. | **Fixed** before the module shipped: a 6to4 address is public only when the IPv4 address in its bits 16 to 47 is. Before, `6to4 2002::/16 is judged by the IPv4 address in it` failed; after, it passes. |
+| OB-2 | Medium | `HttpClient.fetch` | The host allowlist was checked on the URL the caller passed, not on a redirect's target, so an allowed host that redirects (an open redirect is enough) took the fetch to any public host. | **Fixed** before the module shipped: every hop's URL goes through `hostRefusal` before it is dialled. Before, `with one, a redirect to a host not on the allowlist is HTTP_E_BLOCKED, naming does not allow` and `and no connection past the first hop` failed; after, they pass. |
+| OB-3 | Low | `outboundCarriedV4` | A 6to4 address (`2002::/16`) was judged as the global IPv6 address it looks like, so `2002:7f00:1::` (6to4 for `127.0.0.1`) and the like passed wherever a 6to4 relay delivers them. | **Fixed** before the module shipped: a 6to4 address is public only when the IPv4 address in its bits 16 to 47 is. Before, `6to4 2002::/16 is judged by the IPv4 address in it` failed; after, it passes. |
 | OB-4 | Low | `outboundHostAllowed` | A leading-dot entry matched by suffix whatever the host was, so an entry such as `.0.0.1` allowed the IPv4 literal `127.0.0.1`. | **Fixed** before the module shipped: an IPv4 literal matches only an entry equal to it. Before, `a dotted entry is never a suffix of an IPv4 literal` failed; after, it passes. |
 | OB-5 | Low | `HttpClient.dial` | A name the attacker chose is still looked up, so the lookup itself reaches their nameserver, and a label of it can carry data out (DNS exfiltration) even when every address it answers is refused. | **Open, accepted.** The check needs the answer. `allowHost` refuses a name before any lookup (`a URL naming a host not on it is blocked before the lookup`), which is the remedy where the set of hosts is known. |
 | OB-6 | Low | `std/net` | The policy covers `nish/net/http-client` alone. A program that opens a connection to an attacker's URL another way (`tcpConnect`, the HTTP/2, HTTP/3 or WebSocket clients) has no address check. | **Open, accepted.** Recorded so a program does not assume otherwise; the guide page says which client takes a policy. |
 | OB-7 | Low | `OutboundPolicy.permit` | A permitted prefix is permitted for every name, so an attacker's name that resolves into it reaches the internal service it was opened for. | **Open, by design.** A permit is an address decision; pairing it with `allowHost` ties it to names. Pinned by `a redirect to a name is followed when an address it resolves to is permitted`, so a change to this is a decision, not an accident. |
+| OB-8 | Medium | `HttpClient.open` | A client kept its connection from a fetch made before a policy was set and reused it for the next fetch to the same origin, so a policy set on a client that had already reached `127.0.0.1` sent the policed fetch down that connection without `dial`'s check. | **Fixed** before the module shipped: a connection remembers the policy it was dialled under (`routePolicy`) and is reused only under the same one. Before, `once a policy is set, the connection kept from before it is not reused, and the fetch is HTTP_E_BLOCKED` failed; after, it passes. |
+| OB-9 | Low | `outboundCarriedV4` | Only the well-known NAT64 prefix `64:ff9b::/96` is read as carrying an IPv4 address. A network that translates through a prefix of its own (RFC 6052 network-specific prefixes) delivers `<prefix>:7f00:1` to `127.0.0.1`, and the policy judges it as the global IPv6 address it looks like. | **Open, accepted.** The prefix is the network's choice and cannot be seen from the address; an operator on such a network can refuse it with `allowHost`, or the resolver that synthesises it can be left out of the policed path. |
 
 ## Fuzzing
 
@@ -103,7 +106,9 @@ the refused one made none.
   address is judged as the IPv4 address it maps`, `NAT64 64:ff9b::/96 is
   judged by the IPv4 address in it, and the local 64:ff9b:1::/48 is not
   public`, `6to4 2002::/16 is judged by the IPv4 address in it`, `and each is
-  public when that address, or the address itself, is`.
+  public when that address, or the address itself, is`; and a `permit` of an
+  IPv4 prefix follows it into those forms: `a permitted IPv4 prefix covers its
+  NAT64 and 6to4 forms too`.
 - **The check is on the resolved address, and the connection goes to it.**
   `with one, localhost is HTTP_E_BLOCKED, naming resolves to` and its `and no
   connection was made`; `outboundFilter keeps a lookup's public addresses, in
@@ -130,6 +135,8 @@ the refused one made none.
   the same way`, `a bracketed IPv6 entry matches the URL's host`, `a dotted
   entry is never a suffix of an IPv4 literal`, and `with one, an allowed name
   in the userinfo is HTTP_E_BLOCKED, naming does not allow`.
+- **A kept connection does not outlive the policy it was dialled under.**
+  OB-8's check, after `without a policy, a kept connection is reused`.
 - **A policy turns the proxy off.** OB-1's check, after `without a policy, a
   fetch goes to the proxy (here one nothing listens on)`.
 - **The caps are the stricter of the policy's and the options'.** `a new

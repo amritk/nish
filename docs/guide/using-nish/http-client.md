@@ -185,7 +185,8 @@ not allow`, and no connection was opened. Under a policy:
   connects only to the addresses it kept, without looking the name up again.
   A name whose answer changes between the check and the connect cannot move
   the connection. An IPv4 address written inside IPv6 (`::ffff:127.0.0.1`,
-  `64:ff9b::7f00:1`, `2002:7f00:1::`) is judged as the IPv4 address it holds.
+  `64:ff9b::7f00:1`, `2002:7f00:1::`) is judged as the IPv4 address it holds;
+  a NAT64 prefix of your network's own choosing is not recognised.
   A name with no public address is `HTTP_E_BLOCKED`.
 - **Every redirect hop is checked the same way**, so a public URL that answers
   with a redirect to `http://localhost/` fails at the hop.
@@ -198,7 +199,7 @@ not allow`, and no connection was opened. Under a policy:
 
 Two methods change what gets through. `policy.permit("10.20.0.0/16")` lets
 a prefix you trust through anyway, such as an internal API the program is
-meant to reach; it answers false for text that is not an address and a prefix
+meant to reach (its IPv4-mapped, NAT64 and 6to4 forms too); it answers false for text that is not an address and a prefix
 length. `policy.allowHost("api.example.com")` limits the names a URL, or any
 hop, may carry: once one is added, a host that is not on the list is
 `HTTP_E_BLOCKED` before it is looked up. A name is matched exactly, in any
@@ -209,7 +210,10 @@ resolve to an allowed address.
 Only this client takes a policy: a connection opened another way, with
 `tcpConnect` or another protocol's client, has no address check. A name you
 did not choose is still looked up, so its nameserver sees the query; an
-allowlist is the way to refuse a name before that.
+allowlist is the way to refuse a name before that. Set the policy before the
+client's first fetch: a connection the client keeps from a fetch made under
+another policy is closed rather than reused, so changing it costs a new
+connection.
 
 The policy decides where a fetch may go; it does not make the response safe to
 trust. Read the body under your own limits, as for any server you do not run.

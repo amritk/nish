@@ -381,6 +381,8 @@ export class HttpClient {
   noProxy: string = ""
   /** Where `fd` leads: an origin, or the proxy an http request went through. */
   route: string = ""
+  /** The outbound policy `fd` was dialled under; a connection is reused only under the same one. */
+  routePolicy: OutboundPolicy | null = null
   parser: Http1ResponseParser
   /** The TLS connection over `fd` to an https origin; null over plain http. */
   tls: TlsRecordClient | null = null
@@ -459,7 +461,9 @@ export class HttpClient {
       this.fail(HTTP_E_URL, `not an absolute http or https URL: ${httpClientRedact(url)}`)
       return null
     }
-    if (!this.hostAllowed(url)) {
+    const refusal: string = this.hostRefusal(url)
+    if (refusal !== "") {
+      this.fail(HTTP_E_BLOCKED, refusal)
       return null
     }
     let method: string = req.method
@@ -500,9 +504,9 @@ export class HttpClient {
           `a redirect from https to http (${httpClientRedact(next)})`
         )
       }
-      if (!this.hostAllowed(next)) {
-        this.drop()
-        return null
+      const hopRefusal: string = this.hostRefusal(next)
+      if (hopRefusal !== "") {
+        return this.refuse(HTTP_E_BLOCKED, hopRefusal)
       }
       const from: string | null = urlOrigin(url)
       const to: string | null = urlOrigin(next)
@@ -535,14 +539,13 @@ export class HttpClient {
     return null
   }
 
-  /** Whether the outbound policy, if any, lets a URL name `url`'s host; false with the error set. */
-  hostAllowed(url: Url): boolean {
+  /** Why the outbound policy refuses to let a URL name `url`'s host; "" when there is no policy or it allows the host. */
+  hostRefusal(url: Url): string {
     const policy: OutboundPolicy | null = this.options.outbound
     if (policy === null || outboundHostAllowed(policy, url.host)) {
-      return true
+      return ""
     }
-    this.fail(HTTP_E_BLOCKED, `${httpClientRedact(url)} names a host the outbound policy does not allow`)
-    return false
+    return `${httpClientRedact(url)} names a host the outbound policy does not allow`
   }
 
   /** Closes the connection; the client can still fetch, on a new one. */
@@ -617,7 +620,12 @@ export class HttpClient {
     } else if (proxy !== null) {
       route = `${origin} via ${httpClientHostText(proxy.host)}:${proxy.port}`
     }
-    if (this.fd >= 0 && this.route === route && this.quiet()) {
+    if (
+      this.fd >= 0 &&
+      this.route === route &&
+      httpClientSamePolicy(this.routePolicy, this.options.outbound) &&
+      this.quiet()
+    ) {
       this.reused = true
       return true
     }
@@ -635,6 +643,7 @@ export class HttpClient {
     }
     this.fd = fd
     this.route = route
+    this.routePolicy = this.options.outbound
     this.parser = httpClientParser(this.options)
     if (url.scheme === "https") {
       let early: u8[] = []
@@ -1509,6 +1518,14 @@ const httpClientParser = (options: HttpOptions): Http1ResponseParser =>
     httpClientBodyCap(options),
     options.maxHeaderBytes
   )
+
+/** Whether `a` and `b` are the same outbound policy, or both none. */
+const httpClientSamePolicy = (a: OutboundPolicy | null, b: OutboundPolicy | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null
+  }
+  return a === b
+}
 
 /** `maxBodyBytes`, or the outbound policy's cap when it is lower. */
 const httpClientBodyCap = (options: HttpOptions): i64 => {

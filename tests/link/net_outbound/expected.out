@@ -20,6 +20,7 @@ PASS  a prefix ending inside a byte matches on its bits
 PASS  an IPv6 prefix
 PASS  an address without a length is the address alone
 PASS  0.0.0.0/0 is every IPv4 address and no IPv6 one
+PASS  a permitted IPv4 prefix covers its NAT64 and 6to4 forms too
 PASS  a prefix too long for its address, a bad address or length, or a short IPv4 form, is refused and adds nothing
 PASS  a policy with no allowed hosts allows any
 PASS  an allowed name matches in any case, with or without its trailing dot
@@ -52,6 +53,8 @@ PASS  a URL naming a host not on it is blocked before the lookup
 PASS  without a policy, an allowed name in the userinfo is reached
 PASS  with one, an allowed name in the userinfo is HTTP_E_BLOCKED, naming does not allow
 PASS    and no connection was made
+PASS  without a policy, a kept connection is reused
+PASS  once a policy is set, the connection kept from before it is not reused, and the fetch is HTTP_E_BLOCKED
 PASS  without a policy, a fetch goes to the proxy (here one nothing listens on)
 PASS  with one, the proxy is ignored and the fetch goes direct
 PASS  without a policy, three redirects are followed
@@ -61,4 +64,4 @@ PASS  without a policy, a 40-byte body is read
 PASS  under a policy capping bodies at 10 bytes, it is HTTP_E_BODY_TOO_LARGE
 PASS  without a policy, a body dripped over most of a second is read
 PASS  under a policy of 200 ms with no total timeout of the options', it is HTTP_E_TOTAL_TIMEOUT
-outbound: 63 passed, 0 failed, 0 skipped
+outbound: 66 passed, 0 failed, 0 skipped
