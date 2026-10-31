@@ -325,6 +325,7 @@ export const jwtChecks = (): i32 => {
   t.eqStr("two parts are refused", codeOf(v.verifyString(hs, "eyJhbGciOiJIUzI1NiJ9.e30", NOW)), codeOf(JWT_ERR_FORMAT));
   t.eqStr("four parts are refused", codeOf(v.verifyString(hs, OK_AUD_STRING + ".AA", NOW)), codeOf(JWT_ERR_FORMAT));
   t.eqStr("a + in the header is refused", codeOf(v.verifyString(hs, swapAt(OK_AUD_STRING, 3, "+"), NOW)), codeOf(JWT_ERR_FORMAT));
+  t.eqStr("a character outside ASCII is refused", codeOf(v.verifyString(hs, swapAt(OK_AUD_STRING, toI32(OK_AUD_STRING.indexOf(".")), "\u012e"), NOW)), codeOf(JWT_ERR_FORMAT));
   t.eqStr("padding is refused", codeOf(v.verifyString(hs, OK_AUD_STRING + "=", NOW)), codeOf(JWT_ERR_FORMAT));
   t.eqStr("a stray bit in the signature's last character is refused", codeOf(v.verifyString(hs, swapAt(RFC_HS256_TOKEN, toI32(RFC_HS256_TOKEN.length) - 1, "l"), RFC_NOW)), codeOf(JWT_ERR_FORMAT));
   t.eqStr("an empty header is refused", codeOf(v.verifyString(hs, "..", NOW)), codeOf(JWT_ERR_FORMAT));

@@ -4,7 +4,7 @@
  * RFC 7518 (the HS, RS and ES algorithms), RFC 8037 (EdDSA) and the RFC 8725
  * best current practice.
  *
- *     import { JWT_ALG_HS256, JWT_OK, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt";
+ *     import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt";
  *
  *     const key = jwtHmacKey(JWT_ALG_HS256, secretKey);       // once; null for a short key
  *     const v = new JwtVerifier(JWT_MAX_TOKEN);               // once, per thread
@@ -12,7 +12,7 @@
  *     v.audience = "api";
  *     v.leeway = toI64(30);
  *     if (key !== null && v.verifyString(key, token, now) === JWT_OK) {
- *       // v.claims[0 .. v.claimsLen) is the payload's JSON; v.exp, v.sub ... are read
+ *       // v.claims[0 .. v.claimsLen) is the payload's JSON; v.exp, v.nbf, v.iat are read
  *     }
  *     const minted: string | null = key === null ? null : jwtSignString(key, "{\"sub\":\"ana\"}");
  *
@@ -45,14 +45,16 @@
  * Each registered claim may appear once; the time claims are integers
  * (seconds since 1970). `now` is the caller's, so a test passes its own clock.
  *
- * **Bounded and allocation-free once made.** A `JwtVerifier` holds its decode
- * buffers, its tokenizer and its results, sized once from the largest token it
- * takes (`JWT_MAX_TOKEN` by default, 8 KiB); a longer token is refused before
- * a byte is decoded. An HS token is checked against `HmacKey`'s pads, keyed
+ * **Bounded once made.** A `JwtVerifier` holds its decode buffers, its
+ * tokenizer and its results, sized once from the largest token it takes
+ * (`JWT_MAX_TOKEN` by default, 8 KiB); a longer token is refused before a
+ * byte is decoded. An HS token is checked against `HmacKey`'s pads, keyed
  * once when the key was made, through `hmacKeyedVerify`, and the tag is
- * compared in constant time. An RS, ES or EdDSA token is checked inside an
- * arena block whose copies are released when it ends. One verifier is one
- * thread's: it is not safe to share while a `verify` runs.
+ * compared in constant time: an HS verify allocates nothing past its arena
+ * block. An RS, ES or EdDSA verify allocates the signed input's copy and
+ * whatever the public-key check itself allocates (bignums, points), which
+ * the caller's scope releases. One verifier is one thread's: it is not safe
+ * to share while a `verify` runs.
  *
  * **Base64url is strict**, as `nish/crypto/base64url`: no padding, no
  * whitespace, no character outside `A-Z a-z 0-9 - _`, and no stray bits in the
@@ -610,7 +612,8 @@ export class JwtVerifier {
 
   /**
    * `verify` on the bytes of `token`, copied into the verifier's own buffer
-   * first; a token longer than `maxToken` is refused before the copy.
+   * first (a string's UTF-8 bytes); a token longer than `maxToken` is refused
+   * before the copy.
    */
   verifyString(key: JwtKey, token: string, now: i64): i32 {
     if (toI32(token.length) > this.maxToken) {

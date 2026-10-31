@@ -46,6 +46,13 @@
  * stores nothing of its own and an arena scope around it releases all it
  * allocated (see "Caller-owned scratch" below).
  *
+ * `HmacKey` keys a `Secret<u8[]>` once, for a key MACed with many times (a
+ * JWT verifier's HS key): it keeps the inner and outer midstates (RFC 2104
+ * §4) as a `Secret<u64[]>`, and `hmacKeyedVerify` / `hmacKeyedInto` copy them
+ * into the key's own hashers per message instead of absorbing the key again.
+ * Each call wipes the copy, the hashers and the inner digest before it
+ * answers; `HmacKey.wipe()` zeroes the pads (see "A key held keyed" below).
+ *
  * `pbkdf2HmacSha256` is PBKDF2 with HMAC-SHA-256 (RFC 8018 §5.2), the key
  * derivation SCRAM-SHA-256 runs over a password: the password goes in as a
  * `Secret<u8[]>` and the derived key comes out as one, and every U_j and T_i

@@ -33,6 +33,7 @@ PASS  a header with trailing JSON is refused
 PASS  two parts are refused
 PASS  four parts are refused
 PASS  a + in the header is refused
+PASS  a character outside ASCII is refused
 PASS  padding is refused
 PASS  a stray bit in the signature's last character is refused
 PASS  an empty header is refused
@@ -95,4 +96,4 @@ PASS  jwtEcKey: a P-256 point under ES384 is refused
 PASS  jwtEd25519Key: 31 bytes are refused
 PASS  one verifier answers the same over 200 tokens
 PASS  a wiped key verifies nothing
-nish/crypto/jwt: 97 passed, 0 failed, 0 skipped
+nish/crypto/jwt: 98 passed, 0 failed, 0 skipped
