@@ -5521,33 +5521,35 @@ function outboundAddressPublic(addr: u8[], off: i32): boolean -> @nish.outboundA
 function outboundAddressAllowed(policy: OutboundPolicy, addr: u8[], off: i32): boolean -> @nish.outboundAddressAllowed [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.copyBytes nish.outboundAddressPublic nish.outboundCarriedV4 nish.outboundPermitted
+  calls: nish.copyBytes nish.outboundAddressPublic nish.outboundCarriedV4 nish.outboundMapped nish.outboundPermitted nish.outboundV4Public
   pointer policy: size=32 writesThrough=false captured=false passedTo=nish.outboundPermitted#0 nish.outboundPermitted#0
-  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.outboundPermitted#1 nish.outboundCarriedV4#0 nish.copyBytes#2 nish.outboundAddressPublic#0
+  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.outboundPermitted#1 nish.outboundCarriedV4#0 nish.outboundAddressPublic#0 nish.outboundMapped#0 nish.copyBytes#2 nish.outboundV4Public#0
   stackSites=1 stackLocals=1
   callee +0:7 outboundPermitted -> @nish.outboundPermitted
   local +3:9 carried: i32 (const)
   callee +3:24 outboundCarriedV4 -> @nish.outboundCarriedV4
-  local +6:11 mapped: u8[] (const)
-  callee +9:5 copyBytes -> @nish.copyBytes
-  callee +10:9 outboundPermitted -> @nish.outboundPermitted
-  callee +14:10 outboundAddressPublic -> @nish.outboundAddressPublic
+  callee +5:12 outboundAddressPublic -> @nish.outboundAddressPublic
+  callee +7:8 outboundMapped -> @nish.outboundMapped
+  local +9:11 mapped: u8[] (const)
+  callee +12:5 copyBytes -> @nish.copyBytes
+  callee +13:9 outboundPermitted -> @nish.outboundPermitted
+  callee +17:10 outboundV4Public -> @nish.outboundV4Public
 function outboundFilter(policy: OutboundPolicy, addresses: u8[], count: i32): i32 -> @nish.outboundFilter [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish.outboundAddressAllowed nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow
+  calls: nish.outboundAddressAllowed nish_panic nish_panic_index nish_panic_overflow
   pointer policy: size=32 writesThrough=false captured=false passedTo=nish.outboundAddressAllowed#0
   pointer addresses: size=0 writesThrough=true captured=false passedTo=nish.outboundAddressAllowed#1
   stackSites=0 stackLocals=0
-  local -10:9 held: u8[] (const)
   local -9:7 kept: i32 (let)
   local -8:12 i: i32 (let)
   callee -7:10 outboundAddressAllowed -> @nish.outboundAddressAllowed
   local -2:16 k: i32 (let)
+  local -1:15 held: u8 (const)
 function outboundHostAllowed(policy: OutboundPolicy, host: string): boolean -> @nish.outboundHostAllowed [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: host
-  calls: nish.outboundIsLiteral nish.outboundLower nish.outboundTrimDot nish_arena_release nish_str_at nish_str_eq nish_str_new
+  calls: nish.outboundIsLiteral nish.outboundLower nish.outboundTrimDot nish_panic_overflow nish_str_at nish_str_eq
   pointer policy: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -5560,10 +5562,10 @@ function outboundHostAllowed(policy: OutboundPolicy, host: string): boolean -> @
 function outboundAddressText(addr: u8[], off: i32): string -> @nish.outboundAddressText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: off
-  calls: nish.outboundZeros nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_u64 nish_str_new
-  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.outboundZeros#0
+  calls: nish.outboundMapped nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_u64 nish_str_new
+  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.outboundMapped#0
   stackSites=1 stackLocals=1
-  callee +0:7 outboundZeros -> @nish.outboundZeros
+  callee +0:7 outboundMapped -> @nish.outboundMapped
   local +1:11 at: i32 (const)
   local +5:9 out: u8[] (const)
   local +6:7 at: i32 (let)
@@ -5582,13 +5584,20 @@ function outboundPermitted(policy: OutboundPolicy, addr: u8[], off: i32): boolea
   local +1:12 at: i32 (let)
   local +2:11 bitsAt: i32 (const)
   callee +3:52 outboundPrefixMatch -> @nish.outboundPrefixMatch
-function outboundCarriedV4(addr: u8[], off: i32): i32 -> @nish.outboundCarriedV4
+function outboundMapped(addr: u8[], off: i32): boolean -> @nish.outboundMapped
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
   calls: nish.outboundZeros nish_panic_index nish_panic_overflow
-  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.outboundZeros#0 nish.outboundZeros#0
+  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.outboundZeros#0
   stackSites=0 stackLocals=0
-  callee +0:7 outboundZeros -> @nish.outboundZeros
+  callee +0:3 outboundZeros -> @nish.outboundZeros
+function outboundCarriedV4(addr: u8[], off: i32): i32 -> @nish.outboundCarriedV4
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.outboundMapped nish.outboundZeros nish_panic_index nish_panic_overflow
+  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.outboundMapped#0 nish.outboundZeros#0
+  stackSites=0 stackLocals=0
+  callee +0:7 outboundMapped -> @nish.outboundMapped
   local +3:9 b0: i32 (const)
   local +4:9 b1: i32 (const)
   callee +10:5 outboundZeros -> @nish.outboundZeros
