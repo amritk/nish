@@ -18151,6 +18151,65 @@ if (!only || "runtime_test".includes(only)) {
   )
 }
 
+// The f64 formatter against Node: tests/f64-format-oracle.c prints
+// `nish_f64_format` for every edge class a shortest-digits algorithm gets wrong
+// (powers of two, subnormals, exact ties, the 1e21 and 1e-7 layout boundaries)
+// and two million seeded random bit patterns, and every line must be what
+// `String(x)` prints for the same bits. The first difference fails the check
+// and names the bits, which is all it takes to reproduce it. The program
+// itself exits 2 on a length outside 1..25 or a byte written past it, which
+// is runtime-test.c's buffer claim held over the whole stream.
+if (!only || "f64_format_oracle".includes(only)) {
+  const exe = path.join(buildDir, "f64_format_oracle")
+  const cc = spawnSync(
+    "clang",
+    ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-Iruntime", ...RUNTIME_C, "tests/f64-format-oracle.c", "-o", exe, "-lm"],
+    { cwd: root }
+  )
+  const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "latin1", maxBuffer: 512 * 1024 * 1024 }) : null
+  let lines = 0
+  let first = ""
+  if (run !== null && run.status === 0) {
+    const view = new DataView(new ArrayBuffer(8))
+    const out = run.stdout
+    for (let at = 0; at < out.length && first === ""; ) {
+      const end = out.indexOf("\n", at)
+      const hex = out.slice(at, at + 16)
+      const got = out.slice(at + 17, end)
+      view.setBigUint64(0, BigInt(`0x${hex}`))
+      const want = String(view.getFloat64(0))
+      if (got !== want) first = `bits ${hex}: runtime prints ${got}, Node prints ${want}`
+      lines++
+      at = end + 1
+    }
+  }
+  check(
+    "nish_f64_format prints what Node's String(x) prints, over every edge class and two million random doubles",
+    run !== null && run.status === 0 && first === "" && lines > 2000000,
+    String(cc.stderr) + (run ? `exit ${run.status} ${run.signal ?? ""} ${run.stderr}\n${lines} lines\n${first}` : "")
+  )
+  // The power-of-ten table is derived, not transcribed: the generator's output
+  // must appear in runtime.c byte for byte.
+  const gen = spawnSync("python3", ["-I", "scripts/gen-pow10-table.py"], { cwd: root, encoding: "utf8" })
+  const runtimeC = fs.readFileSync(path.join(root, "runtime/runtime.c"), "utf8")
+  check(
+    "runtime.c's NISH_POW10_SIG is what scripts/gen-pow10-table.py prints",
+    gen.status === 0 && gen.stdout.length > 0 && runtimeC.includes(gen.stdout),
+    gen.status === 0 ? "the generated block is not in runtime/runtime.c; paste it over NISH_POW10_SIG" : `${gen.error ?? ""} ${gen.stderr}`
+  )
+  // NISH_F64_MAX is stated three times, in three files no one compile sees
+  // together; they must agree.
+  const sizes = ["runtime/runtime.c", "runtime/nish.h", "tests/runtime-test.c"].map((f) => {
+    const m = /^#define NISH_F64_MAX (\d+)$/m.exec(fs.readFileSync(path.join(root, f), "utf8"))
+    return `${f}: ${m ? m[1] : "missing"}`
+  })
+  check(
+    "runtime.c, nish.h and runtime-test.c state one NISH_F64_MAX",
+    new Set(sizes.map((s) => s.split(": ")[1])).size === 1 && !sizes[0].endsWith("missing"),
+    sizes.join("\n")
+  )
+}
+
 if (!only) {
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
@@ -25391,10 +25450,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js",
       "bin/packaging.js",
       "runtime/runtime.c",
-      // Ryu's licence, which runtime.c's formatter is adapted under: the Boost
+      // Zmij's licence, which runtime.c's formatter is adapted under: the Boost
       // licence asks for it in every source copy, and the tarball is one
       // (THIRD_PARTY_NOTICES.md).
-      "runtime/LICENSE-ryu",
+      "runtime/LICENSE-zmij",
       // The runtime is two translation units since the operating-system half was
       // split out for its own size budget, and `--link` compiles both. A tarball
       // with only the core would install a compiler that cannot link any program
@@ -27893,7 +27952,7 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- Third-party code keeps its own licence -------------------------------------------
-// Some files are copied, ported or adapted from code written elsewhere: Ryu in
+// Some files are copied, ported or adapted from code written elsewhere: Zmij in
 // runtime/runtime.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
 // Yet ports and the tests that reproduce parts of them. Their licences ask for the
 // upstream notice in every copy, and a copy is easy to make without it, so
@@ -29333,6 +29392,309 @@ if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
     bare !== null && bare.includes("readonly"),
     bare
   )
+}
+
+// ---- `nish run`'s module cache: each module's object, kept between links -------------
+// The debug recipe keeps the object every module compiles to in
+// `$XDG_CACHE_HOME/nish/module/<sha256 of the key>/` beside its key, and a later
+// link copies it rather than compiling that module again (src/build-cache.ts,
+// docs/security/cli.md CLI-12). What a link compiled is read off a `CC` wrapper on
+// PATH that logs every `.ll` it is handed, so "reused" means the module never
+// reached the compiler.
+if (
+  !only ||
+  "nish run".includes(only) ||
+  "nish-run".includes(only) ||
+  "run-command".includes(only) ||
+  "module-cache".includes(only)
+) {
+  if (!HAS_CLANG) {
+    skip("module cache: clang not on PATH, so nothing can be linked")
+  } else {
+    const mcDir = path.join(buildDir, "module-cache")
+    fs.rmSync(mcDir, { recursive: true, force: true })
+    const tools = path.join(mcDir, "tools")
+    const app = path.join(mcDir, "app")
+    fs.mkdirSync(tools, { recursive: true })
+    fs.mkdirSync(app, { recursive: true })
+    const ccLog = path.join(mcDir, "cc.log")
+    fs.writeFileSync(
+      path.join(tools, "cc-log"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.ll) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 },
+    )
+    const compiled = () => {
+      const seen = fs.existsSync(ccLog)
+        ? fs
+            .readFileSync(ccLog, "utf8")
+            .split("\n")
+            .filter((l) => l.length > 0)
+            .map((l) => path.basename(l))
+            .sort()
+        : []
+      fs.rmSync(ccLog, { force: true })
+      return seen
+    }
+    const cache = path.join(mcDir, "cache")
+    const moduleRoot = path.join(cache, "nish", "module")
+    const moduleEntries = () => (fs.existsSync(moduleRoot) ? fs.readdirSync(moduleRoot).sort() : [])
+    const entryOf = (stem) => moduleEntries().find((e) => fs.existsSync(path.join(moduleRoot, e, `${stem}.o`))) ?? ""
+    const main = path.join(app, "main.ts")
+    const writeMain = (n) =>
+      fs.writeFileSync(
+        main,
+        `import { square } from "./math"\n\nexport const main = (): number => {\n  console.log(\`square ${n}: \${square(${n})}\`)\n  return 0\n}\n`,
+      )
+    fs.writeFileSync(path.join(app, "math.ts"), "export const square = (n: number): number => n * n\n")
+    const run = (flags = []) =>
+      spawnSync(NISH, ["run", ...flags, main], {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          XDG_CACHE_HOME: cache,
+          CC: "cc-log",
+          PATH: `${tools}:${process.env.PATH}`,
+        },
+      })
+
+    writeMain(3)
+    const first = run()
+    const firstCompiled = compiled()
+    check(
+      "module cache: the first run prints what the program says",
+      first.status === 0 && first.stdout === "square 3: 9\n",
+      first.stdout + first.stderr,
+    )
+    const afterFirst = moduleEntries()
+    const shaped = afterFirst.every((e) => {
+      const files = fs.readdirSync(path.join(moduleRoot, e)).sort()
+      return (
+        /^[0-9a-f]{64}$/.test(e) &&
+        files.length === 2 &&
+        files[0] === "key" &&
+        files[1].endsWith(".o") &&
+        fs.readFileSync(path.join(moduleRoot, e, "key"), "utf8").length > 0
+      )
+    })
+    check(
+      "module cache: the first link keeps one entry per module it compiled, named by 64 hex digits and holding the object and its key",
+      afterFirst.length > 0 &&
+        afterFirst.length === firstCompiled.length &&
+        shaped &&
+        entryOf("main") !== "" &&
+        entryOf("math") !== "",
+      `${afterFirst.join(",")} / compiled ${firstCompiled.join(",")}`,
+    )
+    check(
+      "module cache: the root is private to its owner (0700)",
+      fs.existsSync(moduleRoot) && (fs.statSync(moduleRoot).mode & 0o777) === 0o700,
+      fs.existsSync(moduleRoot) ? (fs.statSync(moduleRoot).mode & 0o777).toString(8) : "missing",
+    )
+
+    writeMain(4)
+    const edited = run()
+    const editedCompiled = compiled()
+    check(
+      "module cache: a rebuild after an edit to one module compiles that module alone and links the others from the cache",
+      edited.status === 0 && edited.stdout === "square 4: 16\n" && editedCompiled.join(",") === "main.ll",
+      `compiled ${editedCompiled.join(",")}: ${edited.stdout}${edited.stderr}`,
+    )
+
+    // An entry whose key is not this module's is not linked: a planted object
+    // under the right name, beside a wrong key, is compiled over.
+    const mathEntry = path.join(moduleRoot, entryOf("math"))
+    const mathKey = fs.readFileSync(path.join(mathEntry, "key"), "utf8")
+    fs.copyFileSync(path.join(moduleRoot, entryOf("main"), "main.o"), path.join(mathEntry, "math.o"))
+    fs.writeFileSync(path.join(mathEntry, "key"), mathKey.replace("module math", "module mathx"))
+    writeMain(5)
+    const planted = run()
+    const plantedCompiled = compiled()
+    check(
+      "module cache: an entry whose stored key differs is not linked; the module is compiled and the entry rewritten",
+      planted.status === 0 &&
+        planted.stdout === "square 5: 25\n" &&
+        plantedCompiled.join(",") === "main.ll,math.ll" &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey,
+      `compiled ${plantedCompiled.join(",")}: ${planted.stdout}${planted.stderr}`,
+    )
+
+    // An empty key is an entry a link was still writing: compiled again.
+    fs.writeFileSync(path.join(mathEntry, "key"), "")
+    writeMain(6)
+    const torn = run()
+    const tornCompiled = compiled()
+    check(
+      "module cache: an entry with an empty key is compiled again, not linked",
+      torn.status === 0 &&
+        torn.stdout === "square 6: 36\n" &&
+        tornCompiled.join(",") === "main.ll,math.ll" &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey,
+      `compiled ${tornCompiled.join(",")}: ${torn.stdout}${torn.stderr}`,
+    )
+
+    // A key whose object is gone, as a cache cleaner leaves it, does not turn
+    // the cache off: that module is compiled, its key dropped, and the next
+    // link keeps it again, while the other modules come from the cache.
+    fs.rmSync(path.join(mathEntry, "math.o"))
+    writeMain(8)
+    const cleaned = run()
+    const cleanedCompiled = compiled()
+    const keyDropped = !fs.existsSync(path.join(mathEntry, "key"))
+    writeMain(9)
+    const repaired = run()
+    const repairedCompiled = compiled()
+    const settled = run()
+    const settledCompiled = compiled()
+    check(
+      "module cache: an entry whose object is missing is compiled and repaired by the next link, and the other modules still come from the cache",
+      cleaned.status === 0 &&
+        cleaned.stdout === "square 8: 64\n" &&
+        cleanedCompiled.join(",") === "main.ll,math.ll" &&
+        keyDropped &&
+        repaired.stdout === "square 9: 81\n" &&
+        repairedCompiled.join(",") === "main.ll,math.ll" &&
+        fs.existsSync(path.join(mathEntry, "math.o")) &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey &&
+        settled.status === 0 &&
+        settledCompiled.length === 0,
+      `compiled ${cleanedCompiled.join(",")} (key dropped: ${keyDropped}), then ${repairedCompiled.join(",")}, then ${settledCompiled.join(",")}: ${cleaned.stderr}${repaired.stderr}`,
+    )
+
+    // The key names the IR by its SHA-256, so an entry does not hold the module twice.
+    check(
+      "module cache: a key holds the IR's SHA-256, not the IR",
+      /\nir \d+ [0-9a-f]{64}\n$/.test(mathKey) && !mathKey.includes("define ") && mathKey.length < 65536,
+      `${mathKey.length} bytes, ends ${JSON.stringify(mathKey.slice(-90))}`,
+    )
+
+    // The speed recipe compiles to LTO bitcode and keeps no module objects, so
+    // its binary is exactly what scripts/build.sh links without a cache.
+    const beforeSpeed = moduleEntries().join(",")
+    writeMain(7)
+    const speed = run(["--profile", "speed"])
+    const speedCompiled = compiled()
+    check(
+      "module cache: `--profile speed` neither reads nor writes the module cache",
+      speed.status === 0 &&
+        speed.stdout === "square 7: 49\n" &&
+        moduleEntries().join(",") === beforeSpeed &&
+        speedCompiled.includes("main.ll") &&
+        speedCompiled.includes("math.ll"),
+      `compiled ${speedCompiled.join(",")}: ${speed.stdout}${speed.stderr}`,
+    )
+
+    // The recipe is part of the key: the same source under another `CC` is
+    // compiled afresh, module for module, and the first `CC`'s entries still hit.
+    fs.writeFileSync(
+      path.join(tools, "cc-log2"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.ll) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 },
+    )
+    writeMain(9)
+    const otherCc = spawnSync(NISH, ["run", main], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: cache, CC: "cc-log2", PATH: `${tools}:${process.env.PATH}` },
+    })
+    const otherCcCompiled = compiled()
+    const backCc = run(["-g"])
+    const backCcCompiled = compiled()
+    writeMain(10)
+    const backPlain = run()
+    const backPlainCompiled = compiled()
+    check(
+      "module cache: a change to the recipe (another CC, or -g) compiles every module again; the old recipe's entries still hit",
+      otherCc.status === 0 &&
+        otherCc.stdout === "square 9: 81\n" &&
+        otherCcCompiled.join(",") === "main.ll,math.ll" &&
+        backCc.status === 0 &&
+        backCcCompiled.join(",") === "main.ll,math.ll" &&
+        backPlain.stdout === "square 10: 100\n" &&
+        backPlainCompiled.join(",") === "main.ll",
+      `CC: ${otherCcCompiled.join(",")}; -g: ${backCcCompiled.join(",")}; back: ${backPlainCompiled.join(",")}: ${otherCc.stderr}${backCc.stderr}`,
+    )
+
+    // An edit that keeps the IR's length still misses: the digest, not the
+    // length, decides. `square 2` and the earlier `square 9` differ in one digit.
+    const mainKeys = () =>
+      moduleEntries()
+        .filter((e) => fs.existsSync(path.join(moduleRoot, e, "main.o")))
+        .map((e) => fs.readFileSync(path.join(moduleRoot, e, "key"), "utf8"))
+    const keysBefore = new Set(mainKeys())
+    writeMain(2)
+    const sameLength = run()
+    const sameLengthCompiled = compiled()
+    const twoKey = mainKeys().find((k) => !keysBefore.has(k)) ?? ""
+    const irLine = (k) => k.slice(k.lastIndexOf("\nir ") + 1)
+    check(
+      "module cache: an edit that keeps the IR's length is a miss, because the key holds the IR's digest",
+      sameLength.status === 0 &&
+        sameLength.stdout === "square 2: 4\n" &&
+        sameLengthCompiled.join(",") === "main.ll" &&
+        twoKey.length > 0 &&
+        [...keysBefore].some((k) => irLine(k).split(" ")[1] === irLine(twoKey).split(" ")[1]),
+      `compiled ${sameLengthCompiled.join(",")}: ${JSON.stringify(irLine(twoKey))} ${sameLength.stderr}`,
+    )
+
+    // A root someone left open to others is made private again before a link
+    // reads an entry from it.
+    fs.chmodSync(moduleRoot, 0o777)
+    writeMain(1)
+    const reopened = run()
+    const reopenedCompiled = compiled()
+    check(
+      "module cache: a root left group- and world-writable is made 0700 again before it is read",
+      reopened.status === 0 &&
+        reopened.stdout === "square 1: 1\n" &&
+        reopenedCompiled.join(",") === "main.ll" &&
+        (fs.statSync(moduleRoot).mode & 0o777) === 0o700,
+      `${(fs.statSync(moduleRoot).mode & 0o777).toString(8)}, compiled ${reopenedCompiled.join(",")}: ${reopened.stderr}`,
+    )
+
+    const speedObjects = spawnSync(
+      "bash",
+      [
+        path.join(root, "scripts", "build.sh"),
+        "--profile",
+        "speed",
+        "--runtime-from",
+        mcDir,
+        "--module-objects",
+        mcDir,
+        "-o",
+        path.join(mcDir, "x"),
+        path.join(mcDir, "x.ll"),
+      ],
+      { cwd: root, encoding: "utf8" },
+    )
+    check(
+      "module cache: scripts/build.sh refuses --module-objects outside the debug profile (exit 2)",
+      speedObjects.status === 2 && speedObjects.stderr.includes("--module-objects takes the debug profile"),
+      `${speedObjects.status}: ${speedObjects.stderr}`,
+    )
+
+    const lonely = spawnSync(
+      "bash",
+      [
+        path.join(root, "scripts", "build.sh"),
+        "--module-objects",
+        mcDir,
+        "-o",
+        path.join(mcDir, "x"),
+        path.join(mcDir, "x.ll"),
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    )
+    check(
+      "module cache: scripts/build.sh refuses --module-objects without --runtime-from (exit 2)",
+      lonely.status === 2 && lonely.stderr.includes("--module-objects takes --runtime-from"),
+      `${lonely.status}: ${lonely.stderr}`,
+    )
+  }
 }
 
 summarise()

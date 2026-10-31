@@ -8,7 +8,7 @@ with NL2576, naming the dependency, the capability and the function; of the
 capability lockfile after it, which refuses a dependency that reaches a
 capability `nish-capabilities.lock.json` does not record for it with NL2577;
 and of the arguments a grant may carry (a directory, a program, a host or a Unix socket path),
-which refuse a literal outside them with NL2592 and a lockfile row they
+which refuse a literal outside them with NL2594 and a lockfile row they
 outgrow with NL2593. It says what the check covers,
 what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.
@@ -51,7 +51,7 @@ time, since seccomp cannot read a socket's address (CAPS-19).
 | `src/manifest.ts` | `manifestReadGrants` |
 | `src/capability-lock.ts` | `readCapabilityLock` (NL3043), `capabilityLockText` |
 | `src/compilation.ts` | `checkCapabilityLock`, `reportLockGrowth` (NL2577) |
-| `src/compilation.ts` | `grantArgument` (NL3045 to NL3048), `grantArguments`, `refuseNarrowGrants`, `reportNarrowGrant` (NL2592), `reportArgumentGrowth` (NL2593), `narrowSandbox` |
+| `src/compilation.ts` | `grantArgument` (NL3045 to NL3048), `grantArguments`, `refuseNarrowGrants`, `reportNarrowGrant` (NL2594), `reportArgumentGrowth` (NL2593), `narrowSandbox` |
 | `src/capability-report.ts` | `literalReaches`, `reachArguments`, `numericHost` |
 | `src/capability-lock.ts` | `recorded` |
 

@@ -200,6 +200,12 @@ extern void (*nish_fatal_hook)(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);
+/* The bytes `nish_str_from_f64` would hold, written into `out` with no NUL;
+   returns the length. 32 bytes is room to spare: the longest spelling,
+   -0.0000012345678901234567, is 25 (runtime.c says why, and runtime-test.c
+   pins it). For a caller that writes numbers into its own buffer. */
+#define NISH_F64_MAX 32
+int nish_f64_format(double v, char out[NISH_F64_MAX]);
 nish_str *nish_str_from_i64(int64_t v);
 /* Unsigned decimal (WP15). u8/u16/u32 are zero-extended by the caller, so one
    symbol serves every unsigned width. */

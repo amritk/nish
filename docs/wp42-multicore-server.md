@@ -20,6 +20,21 @@ differs from this note:
 - A second `SIGTERM` or `SIGINT` during the grace period sends `SIGKILL` at
   once.
 - A `NISH_WORKERS` of anything but ASCII digits is ignored; it has no cap.
+- The `prefork-channels` stage (§5) adds what §6 left out, a channel between
+  processes, though still no shared state: `PreforkConfig.supervisorChannels`
+  gives each worker a `unixSocketPair` to the supervisor, and
+  `serviceWorker` gives every other worker a pair to that one. The plan named
+  accessors with no arguments; nothing in a `std/` module can hold
+  `process.argv`, so `preforkSupervisorChannel(args)`,
+  `preforkServiceChannel(args)` and `preforkServiceChannelOf(args, index)`
+  take it, and read where the ends landed from a
+  `--nish-prefork-channels=` argument just before the worker flag. The
+  supervisor hears its ends through `preforkSupervise(args, config, state,
+  onChannel)`; `preforkWith` drops what they carry. With a service worker
+  the workers restart as one group, since a pair cannot reach a process
+  already running: any worker's exit sends the rest SIGTERM, SIGKILL after
+  `graceMs`, and once none runs they all start again on fresh pairs, after
+  the backoff of the one that exited first.
 
 A Nish server today runs on one core. [WP39](wp39-http-server.md) E1 named
 the way out, `SO_REUSEPORT` on TCP, and left its second half, the process that
@@ -252,7 +267,12 @@ runs under a uid of its own. The tcp-reuseport stage records this in
 accepted connections or its signal pipe, since each is close-on-exec
 (§2.1; `runtime/runtime-host.c:186-195`, with Darwin's window between `pipe`
 and `fcntl` noted at `:190-191`), and the files the runtime opens are
-`O_CLOEXEC` (RT-12, fixed). Environment: all of it, because `posix_spawnp` is
+`O_CLOEXEC` (RT-12, fixed). With channels on, each worker also holds exactly
+its own channel ends from descriptor 3, handed through `spawnWithFds`
+(RT-40). The supervisor closes its copy of a worker's supervisor-channel end
+once that worker has started, and its own end when the worker is reaped; it
+holds its copies of the service pairs until the whole group has been started,
+then closes them all. Environment: all of it, because `posix_spawnp` is
 passed `environ` (`runtime/runtime-os.c:258`); a secret in the supervisor's
 environment is in every worker's. Signals: default dispositions, as §2.4
 says.
@@ -271,6 +291,7 @@ stage pins it with a link test.
 | `process-n12` | `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory` in `nish:process` |
 | `prefork` | `std/net/prefork.ts`, `examples/prefork-server.ts`, and link tests for the spread, a dead worker, `SIGTERM`, a flat arena per worker and the crash-loop backoff |
 | `bench-measure` | `bench/http1-server.ts` reads `BENCH_CORES`; `bench/README.md` gets tables at 1, 2 and 4 cores |
+| `prefork-channels` | `supervisorChannels`, `serviceWorker` and `channelKind` in `PreforkConfig`, `preforkSupervise` and the three channel accessors, the group restart, and `tests/link/net_prefork_channels` for the layout, each worker's descriptors, a restart and the supervisor's descriptor count |
 
 **The bench's method.** Today `bench/http.mjs` pins each server to CPU 0
 through `taskset -c 0` (`bench/http.mjs:112-119`), and the twins are held to

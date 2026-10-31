@@ -1,0 +1,21 @@
+PASS  present: decodes
+PASS  present: every field is recorded as given
+PASS  present: and holds the input's value
+PASS  present: the enum holds its member
+PASS  present: the nested class records its own field
+PASS  present: each element records its own
+PASS  absent: decodes
+PASS  absent: no field is recorded as given
+PASS  absent: each holds its initializer
+PASS  absent: a `| null` field holds its initializer
+PASS  null: decodes
+PASS  null: a key given as null is recorded as given
+PASS  null: and its field holds null
+PASS  null: on a field that is not `| null` is a type error
+PASS  again: decodes
+PASS  again: only the second input's key is recorded
+PASS  encode: writes no presence field
+PASS  required: decodes
+PASS  required: a renamed field is recorded under its own name
+PASS  required: encode leaves the presence field out
+json_presence: 20 passed, 0 failed, 0 skipped

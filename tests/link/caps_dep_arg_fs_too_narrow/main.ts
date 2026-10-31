@@ -1,4 +1,4 @@
-// WP40 §2a: a grant too narrow is refused at build (NL2592): `pkg_conf` is
+// WP40 §2a: a grant too narrow is refused at build (NL2594): `pkg_conf` is
 // granted `fs.read` beneath `./data` and names `/etc/passwd`.
 import { configSize } from "pkg_conf";
 

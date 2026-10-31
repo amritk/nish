@@ -165,6 +165,7 @@ cases/enum_loop_join_gap added after R6: no rewriter to freeze it with
 cases/enum_narrowing added after R6: no rewriter to freeze it with
 cases/export_memory_native added after R6: no rewriter to freeze it with
 cases/f32_to_bits added after R6: no rewriter to freeze it with
+cases/f64_shortest_digits stale since R6: tests/cases/f64_shortest_digits.ts changed since the rewrite was frozen (24e59407d3b91ebb -> d37080d88f89dc4f)
 cases/ffi_buffer_call_sites added after R6: no rewriter to freeze it with
 cases/ffi_buffer_count_proved added after R6: no rewriter to freeze it with
 cases/ffi_buffer_declared added after R6: no rewriter to freeze it with
@@ -260,12 +261,14 @@ cases/map_iter_set_new added after R6: no rewriter to freeze it with
 cases/map_iter_values added after R6: no rewriter to freeze it with
 cases/map_key_bool added after R6: no rewriter to freeze it with
 cases/map_key_class added after R6: no rewriter to freeze it with
+cases/map_key_composite added after R6: no rewriter to freeze it with
 cases/map_key_enum added after R6: no rewriter to freeze it with
 cases/map_key_f32 added after R6: no rewriter to freeze it with
 cases/map_key_f32_negzero added after R6: no rewriter to freeze it with
 cases/map_key_f64 added after R6: no rewriter to freeze it with
 cases/map_key_i32 added after R6: no rewriter to freeze it with
 cases/map_key_i64 added after R6: no rewriter to freeze it with
+cases/map_key_int_collide added after R6: no rewriter to freeze it with
 cases/map_key_negzero added after R6: no rewriter to freeze it with
 cases/map_key_str added after R6: no rewriter to freeze it with
 cases/map_key_u16 added after R6: no rewriter to freeze it with

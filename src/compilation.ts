@@ -1795,7 +1795,7 @@ export class Compilation {
 
   /**
    * WP40 §2a: refuse each string literal a dependency hands a gated builtin
-   * that its grant's arguments do not cover (NL2592), for a capability it is
+   * that its grant's arguments do not cover (NL2594), for a capability it is
    * granted only with arguments. Only what the compiler sees is checked: an
    * absolute path inside or beneath a granted directory, a program a granted
    * one is (by name, or as found on `PATH`), a host a granted one is. A

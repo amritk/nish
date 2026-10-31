@@ -72,7 +72,7 @@ module hands a builtin that reaches the capability — `readFileSync` and its
 kin for a path, `spawnSync` and its kin for the program (an array's first
 element), `netAddress` for the host and the `unix*` calls for the socket path
 (`caps_dep_arg_unix_granted`, `caps_dep_arg_unix_too_narrow`) — is held to the arguments, and one
-outside them is NL2592, spanned at the literal. An absolute path is
+outside them is NL2594, spanned at the literal. An absolute path is
 normalized and compared by its real path and its parent's; a relative path
 and a computed value are not seen.
 

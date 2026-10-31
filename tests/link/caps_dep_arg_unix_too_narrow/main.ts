@@ -1,4 +1,4 @@
-// WP40 §2a: a socket-path grant too narrow is refused at build (NL2592):
+// WP40 §2a: a socket-path grant too narrow is refused at build (NL2594):
 // `pkg_http` is granted `net` to `/run/app.sock` and connects to
 // `/run/other.sock`.
 import { fetchText } from "pkg_http";

@@ -1,4 +1,4 @@
-// WP40 §2a: a grant too narrow is refused at build (NL2592): `pkg_http` is
+// WP40 §2a: a grant too narrow is refused at build (NL2594): `pkg_http` is
 // granted `net` to `127.0.0.1` and dials `10.0.0.1`.
 import { fetchText } from "pkg_http";
 
