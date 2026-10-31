@@ -495,7 +495,12 @@ export class HttpHandler {
     this.draining = true
     pollRemove(this.loop, this.listener)
     for (let s: i32 = 0; s < toI32(this.open.length) && s < toI32(this.current.length); s++) {
-      if (this.open[s] && this.server.holds(s) && this.current[s] === -1 && !this.server.connection(s).wantsWrite()) {
+      if (
+        this.open[s] &&
+        this.server.holds(s) &&
+        this.current[s] === -1 &&
+        !this.server.connection(s).wantsWrite()
+      ) {
         this.closeSlot(s)
       }
     }
@@ -1066,7 +1071,15 @@ export class HttpHandler {
     if (r.route === ROUTER_METHOD_NOT_ALLOWED) {
       const length: i32 = this.writeProblem(toI32(405), "Method Not Allowed", "")
       this.allowValues[1] = this.allowFor(r)
-      return this.sendFields(r, toI32(405), this.allowNames, this.allowValues, this.scratch, HANDLER_ZERO, length)
+      return this.sendFields(
+        r,
+        toI32(405),
+        this.allowNames,
+        this.allowValues,
+        this.scratch,
+        HANDLER_ZERO,
+        length
+      )
     }
     return this.problem(r, toI32(404), "Not Found", "")
   }

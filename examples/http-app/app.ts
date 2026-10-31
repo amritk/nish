@@ -2,7 +2,7 @@
 // it answers each one, apart from `main` so that `tests/link/net_http_app`
 // drives the same code over loopback.
 import { JsonWriter, jsonField } from "nish/json"
-import { HttpHandler, HandlerLimits, HttpRequest } from "nish/net/handler"
+import { HttpHandler, HttpRequest } from "nish/net/handler"
 import { http1Text } from "nish/net/http1"
 import { ROUTER_METHOD_NOT_ALLOWED, Router, RouterLimits } from "nish/net/router"
 import { Notes } from "./notes"
@@ -143,12 +143,17 @@ export class App {
       case CREATE: {
         const text: string | null = jsonField(String.fromBytes(req.body, ZERO, req.bodyLength), "text")
         if (text === null) {
-          h.problem(req, BAD_REQUEST, "Bad Request", "the body is a JSON object with a string field \"text\"")
+          h.problem(req, BAD_REQUEST, "Bad Request", 'the body is a JSON object with a string field "text"')
           return BAD_REQUEST
         }
         const id: i32 = this.notes.add(text)
         if (id < 0) {
-          h.problem(req, INSUFFICIENT_STORAGE, "Insufficient Storage", `the store holds ${this.notes.capacity} notes`)
+          h.problem(
+            req,
+            INSUFFICIENT_STORAGE,
+            "Insufficient Storage",
+            `the store holds ${this.notes.capacity} notes`
+          )
           return INSUFFICIENT_STORAGE
         }
         writeNote(h.json(), id, text)

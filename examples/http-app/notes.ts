@@ -47,7 +47,11 @@ export class Notes {
       return false
     }
     const last: i32 = toI32(this.ids.length) - 1
-    for (let k: i32 = at; k < last && k + 1 < toI32(this.ids.length) && k + 1 < toI32(this.texts.length); k++) {
+    for (
+      let k: i32 = at;
+      k < last && k + 1 < toI32(this.ids.length) && k + 1 < toI32(this.texts.length);
+      k++
+    ) {
       this.ids[k] = this.ids[k + 1]
       this.texts[k] = this.texts[k + 1]
     }
