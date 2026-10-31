@@ -917,7 +917,7 @@ jobs:
       # that leaves it out. Each `npm view` is cut at a minute, so a hung
       # request cannot carry the wait past the deadline; the step's own
       # timeout is only the backstop. "Re-run failed jobs" retries this alone.
-      # The wait was five minutes until 0.28.0, whose x86_64-linux package
+      # The wait was five minutes until 0.28.0, whose Linux x64 package
       # took longer than that to appear: the job failed, no lockfile pull
       # request opened, and main stayed red until a human re-ran it. Waiting
       # here is that re-run without the human.
