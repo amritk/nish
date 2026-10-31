@@ -17,7 +17,7 @@ A file is a copy when it is **ported, translated, adapted, or structurally close
 to code someone else wrote**: the same identifiers, the same constants, the same
 branches in the same order, the same comments. A port from JavaScript to Nish is
 a copy. A C twin of that port is a copy. Ten lines of a benchmark pasted into a
-golden case are a copy. Ryu's `d2d()` rewritten with `nish_` prefixes is a copy.
+golden case are a copy. Zmij's `to_decimal_double()` rewritten with `nish_` prefixes is a copy.
 
 An **idea is not a copy**. Implementing an algorithm from a paper, a textbook
 or a description, in your own structure and names, needs a citation in a
@@ -44,7 +44,7 @@ which happened twice in WP34's crypto lane.
    `THIRD_PARTY_NOTICES.md`'s "Notices" section; reuse the one that fits,
    because the check matches it.
 2. **The licence text, in the repository.** Verbatim from upstream, beside the
-   code (`runtime/LICENSE-ryu`, `bench/LICENSE-benchmarksgame.md`,
+   code (`runtime/LICENSE-zmij`, `bench/LICENSE-benchmarksgame.md`,
    `bench/awfy/LICENSE.md`).
 3. **The licence text in the package, when the file ships.** If
    `package.json`'s `files`, the release tarball or the platform packages carry
@@ -68,7 +68,7 @@ condition on which it may be used at all.
 Only licences whose code can sit in an MIT repository and ship in an MIT
 package: **MIT, BSD (2- and 3-clause), Apache-2.0, BSL-1.0, ISC, zlib, and
 public domain / CC0 / Unlicense**. Where upstream offers a choice, take the one
-with the lighter obligation for what ships: Ryu is Apache-2.0 *or* BSL-1.0, and
+with the lighter obligation for what ships: Zmij is MIT *or* BSL-1.0, and
 this repository takes BSL-1.0 because it exempts compiled object code, so
 neither `nish` nor a program it links needs a notice.
 The **Unicode License v3** is allowed for Unicode's data files (the UCD tables in `std/regex.ts`); the owner allowed it at sign-off on 2026-10-30.

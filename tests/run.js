@@ -18034,6 +18034,45 @@ if (!only || "runtime_test".includes(only)) {
   )
 }
 
+// The f64 formatter against Node: tests/f64-format-oracle.c prints
+// `nish_f64_format` for every edge class a shortest-digits algorithm gets wrong
+// (powers of two, subnormals, exact ties, the 1e21 and 1e-7 layout boundaries)
+// and two million seeded random bit patterns, and every line must be what
+// `String(x)` prints for the same bits. The first difference fails the check
+// and names the bits, so `f64-format-oracle 0` reproduces it. The program
+// itself exits 2 on a length outside 1..25 or a byte written past it, which
+// is runtime-test.c's buffer claim held over the whole stream.
+if (!only || "f64_format_oracle".includes(only)) {
+  const exe = path.join(buildDir, "f64_format_oracle")
+  const cc = spawnSync(
+    "clang",
+    ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-Iruntime", ...RUNTIME_C, "tests/f64-format-oracle.c", "-o", exe, "-lm"],
+    { cwd: root }
+  )
+  const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "latin1", maxBuffer: 512 * 1024 * 1024 }) : null
+  let lines = 0
+  let first = ""
+  if (run !== null && run.status === 0) {
+    const view = new DataView(new ArrayBuffer(8))
+    const out = run.stdout
+    for (let at = 0; at < out.length && first === ""; ) {
+      const end = out.indexOf("\n", at)
+      const hex = out.slice(at, at + 16)
+      const got = out.slice(at + 17, end)
+      view.setBigUint64(0, BigInt(`0x${hex}`))
+      const want = String(view.getFloat64(0))
+      if (got !== want) first = `bits ${hex}: runtime prints ${got}, Node prints ${want}`
+      lines++
+      at = end + 1
+    }
+  }
+  check(
+    "nish_f64_format prints what Node's String(x) prints, over every edge class and two million random doubles",
+    run !== null && run.status === 0 && first === "" && lines > 2000000,
+    String(cc.stderr) + (run ? `exit ${run.status} ${run.signal ?? ""} ${run.stderr}\n${lines} lines\n${first}` : "")
+  )
+}
+
 if (!only) {
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
@@ -25257,10 +25296,10 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js",
       "bin/packaging.js",
       "runtime/runtime.c",
-      // Ryu's licence, which runtime.c's formatter is adapted under: the Boost
+      // Zmij's licence, which runtime.c's formatter is adapted under: the Boost
       // licence asks for it in every source copy, and the tarball is one
       // (THIRD_PARTY_NOTICES.md).
-      "runtime/LICENSE-ryu",
+      "runtime/LICENSE-zmij",
       // The runtime is two translation units since the operating-system half was
       // split out for its own size budget, and `--link` compiles both. A tarball
       // with only the core would install a compiler that cannot link any program
@@ -27757,7 +27796,7 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- Third-party code keeps its own licence -------------------------------------------
-// Some files are copied, ported or adapted from code written elsewhere: Ryu in
+// Some files are copied, ported or adapted from code written elsewhere: Zmij in
 // runtime/runtime.c, the Benchmarks Game's n-body and spectral-norm, and the Are We Fast
 // Yet ports and the tests that reproduce parts of them. Their licences ask for the
 // upstream notice in every copy, and a copy is easy to make without it, so

@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -53,6 +54,10 @@ uint64_t nish_str_len(const nish_str *);
 nish_str *nish_str_from_i32(int32_t);
 nish_str *nish_str_from_i64(int64_t);
 nish_str *nish_str_from_f64(double);
+/* The formatter under `nish_str_from_f64`: its length, no NUL, into a buffer
+   of NISH_F64_MAX (runtime/nish.h) bytes. */
+#define NISH_F64_MAX 32
+int nish_f64_format(double, char[NISH_F64_MAX]);
 int64_t nish_str_index_of(const nish_str *, const nish_str *);
 double nish_random(void);
 /* runtime-parallel.c. Declared here like every other symbol this file calls:
@@ -88,6 +93,17 @@ static void expect_str(const nish_str *s, const char *want, const char *what) {
 }
 
 static void expect_f64(double v, const char *want) { expect_str(nish_str_from_f64(v), want, want); }
+
+/* The double with these bits, and 2^e for -1074 <= e <= 1023, built from bits
+   so the test needs no libm. */
+static double f64_of_bits(uint64_t bits) {
+  double v;
+  memcpy(&v, &bits, sizeof v);
+  return v;
+}
+static double pow2(int e) {
+  return f64_of_bits(e >= -1022 ? (uint64_t)(e + 1023) << 52 : 1ull << (e + 1074));
+}
 
 static void expect_i64(int64_t got, int64_t want, const char *what) {
   if (got != want) {
@@ -2042,6 +2058,76 @@ int main(void) {
   expect_f64(0.000001234, "0.000001234");
   expect_f64(123e-20, "1.23e-18");
   expect_f64(1234.5678, "1234.5678");
+
+  /* Zmij's edge classes (tests/f64-format-oracle.c holds all of them against
+     Node; these are the ones a reader checks by eye). Powers of two take the
+     irregular branch, where the lower neighbour is half as far away; 2^-1022
+     is the smallest normal, whose lower neighbour is a subnormal at the same
+     spacing, so it is regular -- V8 says so too. */
+  expect_f64(pow2(-1074), "5e-324");
+  expect_f64(pow2(-1073), "1e-323");
+  expect_f64(pow2(-1023), "1.1125369292536007e-308");
+  expect_f64(pow2(-1022), "2.2250738585072014e-308");
+  expect_f64(pow2(-1000), "9.332636185032189e-302");
+  expect_f64(pow2(-500), "3.054936363499605e-151");
+  expect_f64(pow2(-1), "0.5");
+  expect_f64(pow2(52), "4503599627370496");
+  expect_f64(pow2(63), "9223372036854776000");
+  expect_f64(pow2(64), "18446744073709552000");
+  expect_f64(pow2(500), "3.273390607896142e+150");
+  expect_f64(pow2(1000), "1.0715086071862673e+301");
+  expect_f64(pow2(1023), "8.98846567431158e+307");
+  /* Either side of the subnormal/normal boundary. */
+  expect_f64(f64_of_bits(0x000fffffffffffffull), "2.225073858507201e-308");
+  expect_f64(f64_of_bits(0x0010000000000001ull), "2.225073858507202e-308");
+  /* Exact ties: 2^50 + 1/4 and + 3/4 have a 17th digit of exactly 5 after
+     sixteen, and round it half to even. 2^40 + 1/32 is the same at a
+     shorter length. */
+  expect_f64(pow2(50) + 0.25, "1125899906842624.2");
+  expect_f64(pow2(50) + 0.75, "1125899906842624.8");
+  expect_f64(pow2(40) + 0.03125, "1099511627776.0312");
+  /* The largest double under 1e21 is the last one spelled as an integer. */
+  expect_f64(999999999999999868928.0, "999999999999999900000");
+  expect_f64(9007199254740991.0, "9007199254740991");
+  expect_f64(9007199254740994.0, "9007199254740994");
+
+  /* Every power of two, and the integers up to 2^53 by a stride that steps
+     through each digit count: each must read back as itself, and an integer
+     must print as its own digits. */
+  for (int e = -1074; e <= 1023; e++) {
+    double v = pow2(e);
+    char out[NISH_F64_MAX + 1];
+    int n = nish_f64_format(v, out);
+    out[n] = 0;
+    if (n < 1 || n > 25 || strtod(out, NULL) != v) {
+      fprintf(stderr, "runtime_test: 2^%d printed \"%s\", which does not read back\n", e, out);
+      assert(0);
+    }
+  }
+  for (int64_t i = 0; i <= 9007199254740992; i = i < 1000 ? i + 1 : i + i / 7 + 3) {
+    char want[24];
+    snprintf(want, sizeof want, "%lld", (long long)i);
+    expect_f64((double)i, want);
+  }
+
+  /* The buffer claim: 25 bytes at most, nothing written past them, no NUL.
+     The longest spelling is a sign, "0.", five zeros and seventeen digits;
+     runtime.c says why nothing is longer. */
+  {
+    char out[NISH_F64_MAX];
+    memset(out, '#', sizeof out);
+    int n = nish_f64_format(-0.0000012345678901234567, out);
+    if (n != 25 || memcmp(out, "-0.0000012345678901234567", 25) != 0) {
+      fprintf(stderr, "runtime_test: the longest spelling is %d bytes, not 25\n", n);
+      assert(0);
+    }
+    for (int i = 25; i < NISH_F64_MAX; i++) {
+      if (out[i] != '#') {
+        fprintf(stderr, "runtime_test: nish_f64_format wrote byte %d past its 25\n", i);
+        assert(0);
+      }
+    }
+  }
 
   /* Math.random: doubles in [0, 1) that are not all equal. */
   double first = nish_random(), r;

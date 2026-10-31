@@ -51,7 +51,7 @@ fi
 # It was reported here as the `text` *column* of `size` once, which also counts `.rodata`
 # and the `.eh_frame` entries the size profile strips -- so this row read 4,696 against a
 # 4,096 budget while the code it is about was at 2,775. Read-only data ships too, so it
-# gets its own row rather than being folded in: Ryu's two power-of-five tables are 9,888
+# gets its own row rather than being folded in: Zmij's power-of-ten table is 9,872
 # bytes of it, and section GC keeps them out of any binary that never formats a double (WP15).
 # `.text.unlikely.` is summed with `.text` because a linked binary pays for both, and a ceiling
 # on `.text` alone can be met by moving code to another section instead of by shrinking it.
@@ -67,7 +67,7 @@ while IFS=$'\t' read -r label src budget constant flags; do
   row "$label" "$(text_sum "$obj")" \
     "clang -Oz ${flags:+$flags }-c $src && size -A (.text*; budget $budget, $constant)"
 done <<< "$budgets"
-row rodata "$(sect .rodata build/size/runtime_c.o)" "the core object's .rodata (no budget; the Ryu tables live here)"
+row rodata "$(sect .rodata build/size/runtime_c.o)" "the core object's .rodata (no budget; the Zmij table lives here)"
 if [ "$budgets_only" = 1 ]; then exit 0; fi
 # `scripts/build.sh` compiles runtime-os.c beside any runtime.c it is handed, so naming the
 # core here builds the whole runtime -- and `--gc-sections` then drops whatever this module
