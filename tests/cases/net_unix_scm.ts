@@ -27,7 +27,8 @@ import {
 } from "nish:net";
 import { unlinkSync } from "nish:fs";
 
-const PATH: string = "build/test/nus-peer.sock";
+/** The socket file `connected` makes, keyed by the driver's pid as its other scratch files are. */
+const pathOf = (pid: i32): string => `build/test/nus-peer-${pid}.sock`;
 
 /** A stream pair whose end 1 is closed: what end 0 sends meets a peer that has gone. */
 const widowed = (): i32 => {
@@ -188,14 +189,14 @@ export const peer = (fd: i32, k: i32): i32 => {
   return answer < 0 ? answer : out[k];
 };
 
-/** The `k`th of a listener at `PATH`, a connect to it and the accept of that connect on `listener`. */
-export const connected = (k: i32, listener: i32): i32 => {
+/** The `k`th of a listener at `pid`'s path, a connect to it and the accept of that connect on `listener`. */
+export const connected = (k: i32, listener: i32, pid: i32): i32 => {
   if (k === 0) {
-    unlinkSync(PATH);
-    return unixListen(PATH, 4, 0);
+    unlinkSync(pathOf(pid));
+    return unixListen(pathOf(pid), 4, 0);
   }
-  return k === 1 ? unixConnect(PATH) : unixAccept(listener);
+  return k === 1 ? unixConnect(pathOf(pid)) : unixAccept(listener);
 };
 
-/** Remove the socket file `connected` made. */
-export const release = (): i32 => unlinkSync(PATH);
+/** Remove the socket file `connected` made for `pid`. */
+export const release = (pid: i32): i32 => unlinkSync(pathOf(pid));
