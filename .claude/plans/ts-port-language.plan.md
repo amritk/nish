@@ -172,6 +172,16 @@ So no stage adds syntax TypeScript lacks, and no stage gives an existing TypeScr
 - `Map` keeps JavaScript's key semantics. A key compared by value would diverge from Node, so composite keys are an idiom (pack into one integer), not a change to `Map`.
 - Inline fields and compressed references change layout only, never meaning, and need no new syntax.
 
+## The performance rule: top performance on everything this run adds
+
+Performance is the point of the port, so it is a gate, not a nice-to-have. Every stage:
+
+- **Lowers to the IR a hand-written equivalent gets.** A labelled break is a `br`, not a flag; a fall-through is a `br` to the next clause; a comparator or default value is a direct call or a constant, never an indirect call; nothing allocates that the hand-written version would not, and nothing the escape analysis could keep on the stack goes to the arena. Show that IR in the PR body.
+- **Keeps every existing proof.** No construct may cost a bounds proof, an arena loop scope, a `switch` jump table, an attribute the fixpoint emits, or vectorisation it had before. Check the goldens diff for lost `nocapture`/`readonly`/`willreturn`, new `nish_arena` calls, new bounds-check blocks and new performance warnings.
+- **Costs nothing when unused.** A program that does not use the new feature compiles to byte-identical IR (the goldens prove it).
+- **Is measured.** Each stage that adds run-time code carries a `Measured:` trailer against the hand-written or previous-release baseline, with its noise band (`.claude/testing.md`). `node tests/run.js performance` stays green with no new warnings.
+- **In review, a performance regression outside the noise band, a lost proof, or an avoidable allocation or indirect call is a blocking finding.**
+
 ## Shared files
 
 Each stage owns its compiler and runtime files exclusively while it runs (the `Owns` lines below, and the wave order). These files are shared, edited by appending a stage's own section or row, and conflicts in them are resolved by the worker next to merge: [docs/LANGUAGE.md](../../docs/LANGUAGE.md), [docs/AI.md](../../docs/AI.md), `docs/guide/**`, [docs/IR_COOKBOOK.md](../../docs/IR_COOKBOOK.md), `docs/cookbook/**`, [docs/MASTER_PLAN.md](../../docs/MASTER_PLAN.md), [src/codes.ts](../../src/codes.ts) (new codes only, each the next free number in its band), [runtime/nish.d.ts](../../runtime/nish.d.ts), [README.md](../../README.md), [std/README.md](../../std/README.md), [llms.txt](../../llms.txt), [scalar.config.json](../../scalar.config.json). Generated files are regenerated, never merged by hand: `tests/self/goldens/checked/**`, the differential goldens, `tests/differential/emit-ts-known.txt` (only under the CI-pinned Node).
