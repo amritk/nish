@@ -69,6 +69,26 @@ fail:
   call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.7 to i8*))
   unreachable
 mark:
+  %r0 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %r0.s1 = lshr i64 %r0, 30
+  %r0.x1 = xor i64 %r0, %r0.s1
+  %r0.m1 = mul i64 %r0.x1, -4658895280553007687
+  %r0.s2 = lshr i64 %r0.m1, 27
+  %r0.x2 = xor i64 %r0.m1, %r0.s2
+  %r0.m2 = mul i64 %r0.x2, -7723592293110705685
+  %r0.s3 = lshr i64 %r0.m2, 31
+  %r0.x3 = xor i64 %r0.m2, %r0.s3
+  store i64 %r0.x3, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
+  %r1 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 1), align 8
+  %r1.s1 = lshr i64 %r1, 30
+  %r1.x1 = xor i64 %r1, %r1.s1
+  %r1.m1 = mul i64 %r1.x1, -4658895280553007687
+  %r1.s2 = lshr i64 %r1.m1, 27
+  %r1.x2 = xor i64 %r1.m1, %r1.s2
+  %r1.m2 = mul i64 %r1.x2, -7723592293110705685
+  %r1.s3 = lshr i64 %r1.m2, 31
+  %r1.x3 = xor i64 %r1.m2, %r1.s3
+  store i64 %r1.x3, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 1), align 8
   %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8
   %set = or i64 %w, 1
   store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_int_hash_key, i64 0, i64 0), align 8

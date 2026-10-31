@@ -354,14 +354,19 @@ function seedHashKey(emitter: Emitter, key: string): void -> @seedHashKey
   callee +9:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
   callee +22:13 spreadIntKey -> @spreadIntKey
 function spreadIntKey(key: string): string -> @spreadIntKey
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: key
+  calls: nish_str_concat spreadIntWord
+  stackSites=0 stackLocals=0
+  callee +0:50 spreadIntWord -> @spreadIntWord
+  callee +0:74 spreadIntWord -> @spreadIntWord
+function spreadIntWord(i: i32, key: string): string -> @spreadIntWord
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: i key
   calls: hashKeyWord nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-  local +0:7 out: string (let)
-  local +1:12 i: i32 (let)
-  local +2:11 at: string (const)
-  callee +2:16 hashKeyWord -> @hashKeyWord
+  local +0:9 at: string (const)
+  callee +0:14 hashKeyWord -> @hashKeyWord
 function loadIntKey(emitter: Emitter): string[] -> @loadIntKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via seedHashKey

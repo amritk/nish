@@ -288,6 +288,15 @@ before any thread exists, and is not thread-local. Every program with an
 integer-keyed map now calls `getentropy` before `main`, as a program with a
 string-keyed one already did.
 
+The constructor does not use those bytes as they come: it passes each word
+through splitmix64's finalizer before setting bit 0. A bijection leaves a
+uniform word uniform, so nothing above changes for a real entropy source, but a
+source whose bytes have structure no longer hands the multiply a structured
+`a`. The instruction-count gate's `bench/fixed-key.c` answers with sixteen
+`0x5a` bytes, and taken raw they left 9 home buckets for `map-presize`'s 65536
+keys `i * 2654435761`, a run 263 times its baseline; spread, the same keys fill
+57914.
+
 Two limits carry over from the string key. A wasm32 reactor whose host calls an
 export before `_initialize` runs the constructors probes under an all-zero key,
 which is JSON-13's open caveat in `docs/security/json.md`, now reaching integer
