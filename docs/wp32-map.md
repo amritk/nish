@@ -28,7 +28,7 @@ the evidence behind each, and the trigger that would reopen §10.
 | 5 | Names | `class Map<K, V>`, `class Set<T>`, mangled like any template; a module with its own `Map` gets no implicit import; one program with both is refused. | 4.2 | a reserved IR prefix |
 | 6 | Keys | Strings, every integer width, `number`, `f64`, `f32`, `boolean`, enums, class instances by identity. Not interfaces, arrays, `T \| null` or `Result`. | 5 | records by value |
 | 7 | Values | Anything but an `interface` (stored inline, so copied) and `void`. | 5.1 | copying records in |
-| 8 | Hashing | SipHash-1-3 under a per-process random key for strings (JSON-13), `fmix32`/`fmix64` for integers, pointers and floats; floats normalised, equality SameValueZero; a hash of 0 moved to 1. | 5.2 | an unkeyed string hash; raw float bits |
+| 8 | Hashing | Under one per-process random key: SipHash-1-3 for strings (JSON-13), multiply-add-shift for ≤ 32-bit integers, booleans and enums, a folded multiply for 64-bit integers; `fmix64` for pointers and floats; floats normalised, equality SameValueZero; a hash of 0 moved to 1. | 5.2 | an unkeyed string or integer hash; raw float bits |
 | 9 | `delete` | A tombstone and a stored hash of 0; at the load bound, compact in place when more than half are dead, double otherwise; never shrink. | 6.1 | backward-shift deletion |
 | 10 | Mutation during iteration | Exact JavaScript semantics; a live-walk counter defers compaction. | 6.2 | weaker semantics, or a refusal |
 | 11 | `Set` | The same table with no values. | 6.3 | — |
@@ -218,11 +218,11 @@ Nish literal cannot spell.
 | `K` | `hashKey` | `sameKey` |
 | --- | --- | --- |
 | `string` | SipHash-1-3 of the UTF-8 bytes under `nish_hash_key`, halves XORed | `nish_str_eq` |
-| ≤ 32-bit integer, `boolean`, enum | `fmix32` of the zero-extended value | `icmp eq` |
-| `i64`, `u64` | `fmix64`, halves XORed | `icmp eq` |
-| `f64` | normalise, then its bits as `i64` | `fcmp oeq`, or both NaN |
+| ≤ 32-bit integer, `boolean`, enum | multiply-add-shift of the zero-extended value under `nish_int_hash_key` | `icmp eq` |
+| `i64`, `u64` | a folded 128-bit multiply under `nish_int_hash_key`, halves XORed | `icmp eq` |
+| `f64` | normalise, then `fmix64` of its bits, halves XORed | `fcmp oeq`, or both NaN |
 | `f32` | normalise, `fpext`, then as `f64` | as `f64` |
-| a class | the pointer as `i64` | pointer `icmp eq` |
+| a class | `fmix64` of the pointer, halves XORed | pointer `icmp eq` |
 
 Normalising makes −0 into +0 and every NaN the canonical one, so keys
 SameValueZero calls equal hash equal; `storedKey` stores a −0 key as +0, as
@@ -231,7 +231,85 @@ flooding (JSON-13 in `docs/security/json.md`): `@nish_hash_key` is filled from
 `getentropy` before `main`, so whoever chooses the keys cannot choose their
 buckets (`map_hash_collide`), and `map_hash_kat` pins the hash to reference
 SipHash-1-3. Insertion order decides iteration order, so the key never reaches
-a program's output. The integer, float and pointer hashes stay unkeyed.
+a program's output.
+
+**Integer keys are keyed too.** A program that counts by user id, port or
+packet field takes integer keys from whoever sends them, and an unkeyed integer
+hash is a bijection anyone can invert: murmur3's `fmix32`, which these keys
+used through 0.28, maps a chosen set of keys to one home bucket as easily as an
+unkeyed string hash did, and a probe then walks all of them. A key below 2^32
+(every integer of 32 bits or fewer, a `boolean`, an enum) now hashes by
+Dietzfelbinger's multiply-add-shift, `((a·x + b) mod 2^64) >> 32`, with `a` and
+`b` the two words of `@nish_int_hash_key`. For random `a` and `b` that family is
+strongly universal onto 32 bits (Thorup, "High Speed Hashing for Integers and
+Strings", 2015): any two distinct keys get independent, uniform hashes. The
+home bucket is a bijection of the hash (`h ^ (h >>> 16)`) masked to its low
+bits, so two keys chosen by an attacker who never sees the key share a home
+bucket with chance 1/m in a table of m buckets, which is what a random function
+would give. Word 0's low bit is forced to 1 (`seedHashKey`), which leaves bits
+32 to 63 of `a·(x − y)` uniform for any `x ≠ y` below 2^32, so the bound holds.
+
+A 64-bit key has no provable family in two words of key: a strongly universal
+one onto 32 bits needs three (vector multiply-shift, or Thorup's
+pair-multiply-shift), and `@nish_int_hash_key` is two words.
+`i64` and `u64` keys therefore take foldhash's mixer, the 128-bit product of
+`x ^ a` and `b` with its halves XORed: keyed, so which keys share a bucket is
+not known in advance and `fmix64`'s precomputed collisions are gone, but with
+no proof against an adaptive attacker who can time probes. Growing the key to
+three words would make the 64-bit hash provable at the cost of one more load.
+Floats and class instances stay on unkeyed `fmix64`: a float key is rarely
+attacker-chosen, and an address is not chosen by the program's input at all.
+
+The integer hashes cost what `fmix32` did (`bench/map-keys`, 9 rounds against
+0.28.0, with a byte-identical copy of one binary as the noise band): on
+`insert`, `hit` and `miss` for `i32`, packed-`i64` and enum keys, at L1, L2
+and past-L3 table sizes, one run put them at 0.83 to 1.09 of 0.28.0 with a
+band of 0.86 to 1.09, and a later run on this change's head inside a band of
+0.78 to 1.33. The string rows did not move. Rust's `FxHashMap` is up to 8
+times faster on most integer rows. Most of that gap is the table: this layout
+keeps insertion order, so a hit reads a bucket, the entry's stored hash, its
+key and its value from four arrays through a probe call, where SwissTable
+reads one slot. An Fx-style multiply in place of the keyed hash took something
+like a fifth off, measured once inside a wide band. And the unkeyed multiply
+has a cliff of its own: its low bits depend only on the key's low bits, so
+packed `i64` keys sharing 1,024 low words fill 1,024 buckets, and Fx ran 34 to
+131 times slower than Nish past L3. The table is in
+[bench/map-keys/README.md](../bench/map-keys/README.md#result).
+
+**The integer key is not the string key.** Multiply-add-shift is linear in its
+key: an attacker who can time probes of an integer-keyed table learns which of
+their keys collide, and each collision is a linear relation on `a` and `b`. A
+key shared with SipHash would let that leak become colliding *strings*, undoing
+JSON-13 for every string-keyed table in the process. So the integer hashes read
+`@nish_int_hash_key`, 16 bytes of their own from a second `getentropy` call in
+a second constructor (`@nish.int.hash.seed`), and what they reveal says nothing
+about `@nish_hash_key`. It is a `linkonce_odr` global each module that hashes
+an integer defines, so the linker keeps one copy and a table built in one module
+is probed in another under the same key; like `nish_hash_key` it is written once
+before any thread exists, and is not thread-local. Every program with an
+integer-keyed map now calls `getentropy` before `main`, as a program with a
+string-keyed one already did.
+
+The constructor does not use those bytes as they come: it passes each word
+through splitmix64's finalizer before setting bit 0. A bijection leaves a
+uniform word uniform, so nothing above changes for a real entropy source, but a
+source whose bytes have structure no longer hands the multiply a structured
+`a`. The instruction-count gate's `bench/fixed-key.c` answers with sixteen
+`0x5a` bytes, and taken raw they left 9 home buckets for `map-presize`'s 65536
+keys `i * 2654435761`, a run 263 times its baseline; spread, the same keys fill
+57914.
+
+Two limits carry over from the string key. A wasm32 reactor whose host calls an
+export before `_initialize` runs the constructors probes under an all-zero key,
+which is JSON-13's open caveat in `docs/security/json.md`, now reaching integer
+keys too. And the 64-bit hash's 128-bit multiply is one instruction pair on
+x86-64 and AArch64 but a call to compiler-rt's `__multi3` on wasm32, which
+`bench/map-keys` has not measured there. `tests/cases/map_key_int_collide`
+pins the flood itself: 8,192 keys built to share one bucket under 0.28's
+`fmix32` must run within 8 times as long as ordinary keys, which the keyed hash
+does and 0.28 does not. A collision count depends on the random key, so the
+bound for every key, beyond that one flood, rests on the proof above, and
+`tests/cases/map_key_*` pin the hash's IR and every key width's behaviour.
 
 ## 6. Deletion, iteration and `Set`
 
