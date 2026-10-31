@@ -42,6 +42,7 @@ import {
   N_LIST,
   N_MEMBER,
   N_NEW,
+  N_OBJECT,
   N_PAREN,
   N_THIS,
   N_TYPE_ARRAY,
@@ -53,6 +54,7 @@ import {
   N_VAR,
   N_VAR_DECL,
   N_WHILE,
+  FLAG_GATHERED,
   FLAG_USING,
   Node,
 } from "./nodes"
@@ -132,7 +134,35 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
   if (secretAt !== null) {
     return ctx.errorType(secretAt, secretContainerMessage(`${ctx.table.typeName(secretType)}[]`))
   }
+  if (elem >= 0 && (expr.flags & FLAG_GATHERED) !== 0 && refuseGatheredRecord(ctx, expr, elem)) {
+    return T_ERROR
+  }
   return elem < 0 ? T_ERROR : ctx.table.arrayOf(elem)
+}
+
+/**
+ * A rest parameter's gathered arguments (`gatherRest` in
+ * `src/declarations.ts`) of an inline record type: the array copies each
+ * record into its slot, so the callee's `cs[0].v = 1` would not reach the
+ * caller's `p` as it does in TypeScript, and the call shows no `[...]` that
+ * says so. A fresh object literal has no other name, so its copy is unseen.
+ * `false` when nothing was refused.
+ */
+const refuseGatheredRecord = (ctx: CheckContext, expr: Node, elem: i32): boolean => {
+  const record = inlineElementStruct(ctx.program, ctx.table, elem)
+  if (record === null) {
+    return false
+  }
+  for (const element of expr.children) {
+    if (unwrapParens(element).kind !== N_OBJECT) {
+      ctx.error(
+        element,
+        `A rest parameter copies each \`${record.name}\` record it gathers, so a write through the copy would not reach this one as it does in TypeScript; take a \`${record.name}[]\` parameter and pass \`[...]\`, which copies the same way and says so`
+      )
+      return true
+    }
+  }
+  return false
 }
 
 /** `a[i]`, which is also the target of `a[i] = v`. */

@@ -122,6 +122,11 @@ a `NaN` fails; `nearF64` carries the tolerance.
 
 ### 3d. There are no optional or default parameters
 
+> **Status:** written before default parameters landed. A parameter now takes
+> a constant default (`docs/LANGUAGE.md`, "Default and rest parameters");
+> `x?: T` is still refused. The `std/testing` signatures below predate it and
+> are kept as they are.
+
 So `skip` takes its reason, `nearF64` its tolerance and `fail` its detail, with
 the empty string meaning "the name already says it". In this language an
 optional argument is a second name, which is also why `spawnSyncTo` is a second

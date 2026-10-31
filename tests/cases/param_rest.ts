@@ -38,8 +38,7 @@ export function main(): void {
   console.log(count(true))
   console.log(count(false, 1.5, 2.5))
   console.log(sumX({ x: 1, y: 2 }, { x: 3, y: 4 }))
-  const q: Point = { x: 10, y: 0 }
-  console.log(sumX(q, q))
+  console.log(sumX({ x: 10, y: 0 }, { x: 10, y: 0 }))
   let acc = 0
   for (let i = 0; i < 4; i = i + 1) {
     acc = acc + total(i, i * 2)

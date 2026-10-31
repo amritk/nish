@@ -512,6 +512,9 @@ Still refused, each by name, each with a `reject_*` case:
 - Variadic C functions (`printf`): the C variadic convention is a different
   call lowering on most targets, and the TypeScript spelling (`...args`) is
   already refused in every signature (`Rest parameters are not supported`).
+  *Status:* a Nish function, method or constructor now ends in a rest
+  parameter; a `declare function` still may not, so a variadic C function
+  stays out of reach.
 - Any other `CPtr` widening from §7a: no field, no element, no program
   parameter or return.
 

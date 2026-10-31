@@ -1606,6 +1606,14 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
   arguments into one array of exactly that many elements, on the stack unless
   the callee lets it escape — the same array an explicit literal
   `total([1, 2, 3])` builds.
+- **A rest of records takes only fresh object literals.** The array copies each
+  inline record (an interface no class implements) into its slot, so a named
+  record passed through a rest would be a copy the callee's write never
+  reaches, where TypeScript would write the caller's own: `bumpAll(p)` is
+  `` A rest parameter copies each `Cell` record it gathers, ... ``
+  (`reject_param_rest_record`). Pass `[p]` to a `Cell[]` parameter, where the
+  copy is written out. A class instance is a reference, so a rest of class
+  instances gathers the caller's objects.
 - **Not on a function-typed parameter**, which a call names by value
   (`reject_param_function_default`, `reject_param_function_type`), and a
   function with a rest parameter is never passed as a function value
@@ -1616,6 +1624,17 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
   to a parameter of array type.
 - Too few or too many arguments name the range the function takes
   (`reject_param_arity`).
+- **A host sees neither.** Defaults and rest are filled in by a Nish call
+  site, so an exported function's symbol takes every parameter: the
+  `--emit-dts` typings, the `--emit-header` prototype and the `--emit-napi`
+  shim require each argument, and take a rest parameter as one plain array
+  ([wp8-interop.md](wp8-interop.md#the-c-abi)).
+- What a call evaluates is what TypeScript evaluates: each argument once, left
+  to right, whether it fills a default's place or gathers into a rest
+  (`tests/cases/param_eval_order`). A rest array the callee returns, stores in
+  a field or lets a caller keep is allocated in the arena, not on the stack
+  (`param_rest_escape`); a default on an imported class's constructor or method
+  is filled in by the importing module (`tests/link/param_default_import`).
 
 ### Module constants
 

@@ -274,8 +274,8 @@ entry:
   %Point.obj.1 = alloca %struct.Point, align 8
   %arr.hdr.7 = alloca %struct.nish_array, align 8
   %arr.data.4 = alloca [2 x %struct.Point], align 8
-  %q.addr = alloca %struct.Point*, align 8
   %Point.obj.2 = alloca %struct.Point, align 8
+  %Point.obj.3 = alloca %struct.Point, align 8
   %arr.hdr.8 = alloca %struct.nish_array, align 8
   %arr.data.5 = alloca [2 x %struct.Point], align 8
   %acc.addr = alloca i32, align 4
@@ -407,9 +407,10 @@ entry:
   store i32 10, i32* %72, align 4
   %73 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.2, i32 0, i32 1
   store i32 0, i32* %73, align 4
-  store %struct.Point* %Point.obj.2, %struct.Point** %q.addr, align 8
-  %74 = load %struct.Point*, %struct.Point** %q.addr, align 8
-  %75 = load %struct.Point*, %struct.Point** %q.addr, align 8
+  %74 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.3, i32 0, i32 0
+  store i32 10, i32* %74, align 4
+  %75 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj.3, i32 0, i32 1
+  store i32 0, i32* %75, align 4
   %76 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.8, i64 0, i32 0
   store i64 2, i64* %76, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.8, i64 0, i32 1
@@ -420,11 +421,11 @@ entry:
   %80 = bitcast i8* %78 to %struct.Point*
   %81 = getelementptr inbounds %struct.Point, %struct.Point* %80, i64 0
   %82 = bitcast %struct.Point* %81 to i8*
-  %83 = bitcast %struct.Point* %74 to i8*
+  %83 = bitcast %struct.Point* %Point.obj.2 to i8*
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %82, i8* align 4 %83, i64 8, i1 false), !alias.scope !4, !noalias !3
   %84 = getelementptr inbounds %struct.Point, %struct.Point* %80, i64 1
   %85 = bitcast %struct.Point* %84 to i8*
-  %86 = bitcast %struct.Point* %75 to i8*
+  %86 = bitcast %struct.Point* %Point.obj.3 to i8*
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %85, i8* align 4 %86, i64 8, i1 false), !alias.scope !4, !noalias !3
   %87 = call i32 @sumX(%struct.nish_array* %arr.hdr.8)
   %88 = call i8* @nish_str_from_i32(i32 %87)

@@ -82,6 +82,27 @@ The call fills both in, so a function with a default costs nothing when it is
 given every argument. Methods and constructors take them too. A function
 has a default or a rest parameter, not both.
 
+A rest parameter of records copies each record into its array, as `[p, q]`
+does, so it takes only fresh object literals: given a named record, the
+callee's write would not reach it as it does in TypeScript. Pass `[p, q]` to a
+parameter of array type instead, where the copy is written out. A class
+instance is the caller's object, so a rest of class instances takes any:
+
+```ts nish:err NL2608
+interface Cell {
+  v: i32;
+}
+const bumpAll = (...cs: Cell[]): void => {
+  for (const c of cs) {
+    c.v = c.v + 100;
+  }
+};
+export const main = (): void => {
+  const p: Cell = { v: 1 };
+  bumpAll(p);
+};
+```
+
 Optional parameters (`n?: i32`) are refused; write a default instead:
 
 ```ts nish:err NL2605

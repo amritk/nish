@@ -32,7 +32,7 @@ function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: count joinAll nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 sumX total
-  stackSites=13 stackLocals=1
+  stackSites=14 stackLocals=0
   callee +0:15 total -> @total
   callee +1:15 total -> @total
   callee +2:15 total -> @total
@@ -41,8 +41,7 @@ function main(): void -> @nish_main [exported entry]
   callee +5:15 count -> @count
   callee +6:15 count -> @count
   callee +7:15 sumX -> @sumX
-  local +8:9 q: Point (const)
-  callee +9:15 sumX -> @sumX
-  local +10:7 acc: i32 (let)
-  local +11:12 i: i32 (let)
-  callee +12:17 total -> @total
+  callee +8:15 sumX -> @sumX
+  local +9:7 acc: i32 (let)
+  local +10:12 i: i32 (let)
+  callee +11:17 total -> @total
