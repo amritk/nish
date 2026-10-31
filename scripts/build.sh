@@ -112,6 +112,12 @@
 #   --sqlite-from <dir>      link <dir>/<unit>.o in place of compiling
 #                            runtime/sqlite/, when the IR calls SQLite.
 # All four refuse the wasm, wasi and napi profiles and --pgo-*, with exit 2.
+#   --module-objects <dir>   with --runtime-from only: the object of each
+#                            input X.ll is <dir>/X.o, linked as it stands when
+#                            the file is there and compiled into it when it is
+#                            not, so the caller keeps every object it compiled
+#                            (`nish run`'s module cache, src/build-cache.ts).
+#                            The inputs' file names must differ.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
@@ -128,6 +134,7 @@ objects_from=""                        # --runtime-from <dir>: link against the 
 cpu=""                                 # --cpu x86-64-v3: the one CPU level above the baseline (WP38 S2)
 sqlite_to=""                           # --sqlite-objects <dir>: compile runtime/sqlite/ alone, into <dir>
 sqlite_from=""                         # --sqlite-from <dir>: link runtime/sqlite/ compiled there
+modules_at=""                          # --module-objects <dir>: each X.ll's object is <dir>/X.o
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -141,6 +148,7 @@ while [ $# -gt 0 ]; do
     --runtime-from) objects_from="$2"; shift 2 ;;
     --sqlite-objects) sqlite_to="$2"; shift 2 ;;
     --sqlite-from) sqlite_from="$2"; shift 2 ;;
+    --module-objects) modules_at="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
@@ -194,6 +202,10 @@ if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
   esac
   [ ${#pgo[@]} -eq 0 ] || { echo "error: --runtime-objects and --runtime-from do not take --pgo-*" >&2; exit 2; }
   [ -z "$objects_to" ] || [ -z "$objects_from" ] || { echo "error: --runtime-objects and --runtime-from are two different builds" >&2; exit 2; }
+fi
+if [ -n "$modules_at" ]; then
+  [ -n "$objects_from" ] || { echo "error: --module-objects takes --runtime-from" >&2; exit 2; }
+  [ -d "$modules_at" ] || { echo "error: --module-objects: $modules_at is not a directory" >&2; exit 2; }
 fi
 if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
   # The cached SQLite objects sit beside the cached runtime and take what it takes.
@@ -262,11 +274,15 @@ if [ -n "$sqlite_to" ]; then
   fi
   sqlite_wanted=1
 fi
+# One grep reads every module, not one grep each: a program of forty modules
+# spent a third of a second here starting greps.
+lls=()
 for i in ${inputs[@]+"${inputs[@]}"}; do
-  case "$i" in
-    *.ll) if grep -Eq '^declare [^"]*@(sqlite3|nishsqlite)_' "$i"; then sqlite_wanted=1; fi ;;
-  esac
+  case "$i" in *.ll) lls+=("$i") ;; esac
 done
+if [ ${#lls[@]} -gt 0 ] && grep -Eq '^declare [^"]*@(sqlite3|nishsqlite)_' "${lls[@]}"; then
+  sqlite_wanted=1
+fi
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     *.c) if [ -n "$sqlite_dir" ] && [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
@@ -611,9 +627,19 @@ if [ -n "$objects_from" ]; then
   for i in "${inputs[@]}"; do
     case "$i" in */runtime.c|runtime.c) echo "error: --runtime-from links the runtime in $objects_from, so $i is not an input" >&2; exit 2 ;; esac
     n=$((n + 1))
-    "$CC" "${module_compile[@]}" -c "$i" -o "$work/$n.o" &
+    object="$work/$n.o"
+    if [ -n "$modules_at" ]; then
+      case "$i" in
+        *.ll)
+          name=${i##*/}
+          object="$modules_at/${name%.ll}.o"
+          # An object the caller left there is this module's, compiled before.
+          if [ -f "$object" ]; then objects+=("$object"); continue; fi ;;
+      esac
+    fi
+    "$CC" "${module_compile[@]}" -c "$i" -o "$object" &
     pids+=("$!")
-    objects+=("$work/$n.o")
+    objects+=("$object")
   done
   join_jobs || { echo "error: a module did not compile" >&2; exit 1; }
   # In the order the one-command link names them: the inputs, then runtime.c

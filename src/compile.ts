@@ -83,6 +83,7 @@ import { EmittedProgram, emitTypeScript } from "./emit-ts"
 import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
 import {
   anyCallsSqlite,
   runBinaryName,
@@ -1351,6 +1352,7 @@ export const main = (): number => {
   }
   return linkProgram(
     outputs,
+    [],
     pkg,
     link,
     profile,
@@ -1873,14 +1875,17 @@ const buildIntoCache = (
     return 1
   }
   const outputs: string[] = []
+  const irs: string[] = []
   for (const module of emitted) {
     const file = `${work}/${module.stem}.ll`
     writeFileSync(file, module.ir)
     outputs.push(file)
+    irs.push(module.ir)
   }
   const built = `${work}/${name}`
   let status = linkProgram(
     outputs,
+    irs,
     pkg,
     built,
     profile,
@@ -1918,9 +1923,13 @@ const buildIntoCache = (
  * caller as it happens rather than after the link has finished. `quiet` drops
  * that line for `run`, whose stderr belongs to the program it is about to
  * start.
+ *
+ * `irs` is the IR of each of `outputs`, in their order, when the caller wants
+ * the module cache (`nish run`), and empty otherwise; see `stageModules`.
  */
 const linkProgram = (
   outputs: string[],
+  irs: string[],
   pkg: PackageSearch,
   link: string,
   profile: string,
@@ -1978,6 +1987,16 @@ const linkProgram = (
   } else {
     argv.push(`${root}/runtime/runtime.c`)
   }
+  // The module cache takes build.sh's `--module-objects`, which only a link
+  // against the cached runtime has, and only the debug recipe uses it.
+  let staged: StagedModules | null = null
+  if (profile === "debug" && runtime.length > 0 && irs.length > 0 && irs.length === outputs.length) {
+    staged = stageModules(outputs, irs, cached.key)
+  }
+  if (staged !== null) {
+    argv.push("--module-objects")
+    argv.push(staged.dir)
+  }
   if (cached.sqlite.length > 0) {
     argv.push("--sqlite-from")
     argv.push(cached.sqlite)
@@ -1990,6 +2009,9 @@ const linkProgram = (
     const why = status < 0 ? "could not run bash" : `exit ${status}`
     reportToolchainFailure(`--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}`, json)
     return 3
+  }
+  if (staged !== null) {
+    keepModules(staged)
   }
   if (quiet) {
     return 0
@@ -2042,9 +2064,12 @@ const pushRecipeFlags = (
 class CachedObjects {
   runtime: string
   sqlite: string
-  constructor(runtime: string, sqlite: string) {
+  /** The runtime entry's key, which the module cache keys its recipe on; empty with no entry. */
+  key: string
+  constructor(runtime: string, sqlite: string, key: string) {
     this.runtime = runtime
     this.sqlite = sqlite
+    this.key = key
   }
 }
 
@@ -2099,7 +2124,7 @@ const cachedRuntime = (
   sqliteLines: string,
   json: boolean
 ): CachedObjects | null => {
-  const none = new CachedObjects("", "")
+  const none = new CachedObjects("", "", "")
   const cacheRoot = runtimeCacheRoot()
   if (!(profile === "debug" || profile === "speed" || profile === "size") || cacheRoot.length === 0) {
     return none
@@ -2148,11 +2173,11 @@ const cachedRuntime = (
     return null
   }
   if (!sqlite || runtime.length === 0) {
-    return new CachedObjects(runtime, "")
+    return new CachedObjects(runtime, "", key)
   }
   const sqliteDir = realpathSync(`${root}/runtime/sqlite`)
   if (sqliteDir === null) {
-    return new CachedObjects(runtime, "")
+    return new CachedObjects(runtime, "", key)
   }
   const sqliteKey = sqliteCacheKey(
     root,
@@ -2180,7 +2205,121 @@ const cachedRuntime = (
     threads,
     json
   )
-  return objects === null ? null : new CachedObjects(runtime, objects)
+  return objects === null ? null : new CachedObjects(runtime, objects, key)
+}
+
+/**
+ * What `stageModules` left for `keepModules`: the directory build.sh reads
+ * and writes each module's object in, and for every module it found no entry
+ * for, the object build.sh will compile there, the entry it goes to, and the
+ * key that entry gets.
+ */
+class StagedModules {
+  dir: string
+  objects: string[]
+  entries: string[]
+  keys: string[]
+  constructor(dir: string) {
+    this.dir = dir
+    this.objects = []
+    this.entries = []
+    this.keys = []
+  }
+}
+
+/**
+ * The module cache's lookup (src/build-cache.ts): each of `outputs` whose IR,
+ * in `irs`, has an entry under this recipe (`recipe`, the runtime entry's key)
+ * gets that entry's object copied beside it as `<stem>.o`, which
+ * `scripts/build.sh --module-objects` links as it stands; every other module
+ * is compiled there by the link, and `keepModules` moves its object into a
+ * new entry once the link succeeded. The outputs are one scratch directory's
+ * `<stem>.ll` files, so the stems differ.
+ *
+ * The root is made, `chmod 700`'d and its owner and mode checked first, as the
+ * runtime cache's is on every link (docs/security/cli.md, CLI-12), because a
+ * hit links whatever object stands beside a matching key. Null, and the link
+ * compiles every module as it did without the cache, when the root is not
+ * there and cannot be made private to this user, or when the copy failed.
+ */
+const stageModules = (outputs: string[], irs: string[], recipe: string): StagedModules | null => {
+  const cacheRoot = moduleCacheRoot()
+  if (recipe.length === 0 || cacheRoot.length === 0 || !makeDirectory(cacheRoot)) {
+    return null
+  }
+  const privateRoot: string[] = ["chmod", "700", cacheRoot]
+  if (spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
+    return null
+  }
+  if (distrustOf(cacheRoot, false, true).length > 0) {
+    return null
+  }
+  const staged = new StagedModules(dirname(outputs[0]))
+  const copy: string[] = ["cp", "-f", "--"]
+  let i = 0
+  while (i < outputs.length) {
+    const stem = basenameWithout(outputs[i], ".ll")
+    const key = moduleCacheKey(recipe, stem, irs[i])
+    const entry = `${cacheRoot}/${sha256Hex(key)}`
+    const stored = readFileSyncOrNull(`${entry}/key`)
+    if (stored !== null && stored === key) {
+      copy.push(`${entry}/${stem}.o`)
+    } else {
+      staged.objects.push(`${staged.dir}/${stem}.o`)
+      staged.entries.push(entry)
+      staged.keys.push(key)
+    }
+    i = i + 1
+  }
+  if (copy.length > 3) {
+    copy.push(`${staged.dir}/`)
+    if (spawnSyncTo(copy, "/dev/null", "/dev/null") !== 0) {
+      return null
+    }
+  }
+  return staged
+}
+
+/**
+ * After a link that succeeded, each object build.sh compiled for a module
+ * `stageModules` found no entry for is moved into that entry: its key emptied
+ * first, the object moved in by one `mv` (a `rename` inside the cache's
+ * filesystem when the scratch directory shares it), the key written last, so a
+ * key on disk always stands beside a whole object of its own (CLI-5's rule).
+ * The moves are one `sh` running one `mv` each, not one spawn per module, and
+ * when any fails no key is written: those entries are then misses, compiled
+ * again by the next link. Nothing here can fail the link, which already did
+ * its work.
+ */
+const keepModules = (staged: StagedModules): void => {
+  if (staged.objects.length === 0) {
+    return
+  }
+  const move: string[] = [
+    "sh",
+    "-c",
+    'while [ $# -gt 0 ]; do mv -f -- "$1" "$2" || exit 1; shift 2; done',
+    "sh",
+  ]
+  let i = 0
+  while (i < staged.objects.length) {
+    const entry = staged.entries[i]
+    if (!makeDirectory(entry)) {
+      return
+    }
+    writeFileSync(`${entry}/key`, "")
+    move.push(staged.objects[i])
+    move.push(`${entry}/`)
+    i = i + 1
+  }
+  if (spawnSyncTo(move, "/dev/null", "/dev/null") !== 0) {
+    return
+  }
+  i = 0
+  while (i < staged.entries.length) {
+    writeFileSync(`${staged.entries[i]}/key`, staged.keys[i])
+    i = i + 1
+  }
 }
 
 /**

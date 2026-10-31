@@ -29178,4 +29178,178 @@ if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
   )
 }
 
+// ---- `nish run`'s module cache: each module's object, kept between links -------------
+// The debug recipe keeps the object every module compiles to in
+// `$XDG_CACHE_HOME/nish/module/<sha256 of the key>/` beside its key, and a later
+// link copies it rather than compiling that module again (src/build-cache.ts,
+// docs/security/cli.md CLI-12). What a link compiled is read off a `CC` wrapper on
+// PATH that logs every `.ll` it is handed, so "reused" means the module never
+// reached the compiler.
+if (
+  !only ||
+  "nish run".includes(only) ||
+  "nish-run".includes(only) ||
+  "run-command".includes(only) ||
+  "module-cache".includes(only)
+) {
+  if (!HAS_CLANG) {
+    skip("module cache: clang not on PATH, so nothing can be linked")
+  } else {
+    const mcDir = path.join(buildDir, "module-cache")
+    fs.rmSync(mcDir, { recursive: true, force: true })
+    const tools = path.join(mcDir, "tools")
+    const app = path.join(mcDir, "app")
+    fs.mkdirSync(tools, { recursive: true })
+    fs.mkdirSync(app, { recursive: true })
+    const ccLog = path.join(mcDir, "cc.log")
+    fs.writeFileSync(
+      path.join(tools, "cc-log"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.ll) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 },
+    )
+    const compiled = () => {
+      const seen = fs.existsSync(ccLog)
+        ? fs
+            .readFileSync(ccLog, "utf8")
+            .split("\n")
+            .filter((l) => l.length > 0)
+            .map((l) => path.basename(l))
+            .sort()
+        : []
+      fs.rmSync(ccLog, { force: true })
+      return seen
+    }
+    const cache = path.join(mcDir, "cache")
+    const moduleRoot = path.join(cache, "nish", "module")
+    const moduleEntries = () => (fs.existsSync(moduleRoot) ? fs.readdirSync(moduleRoot).sort() : [])
+    const entryOf = (stem) => moduleEntries().find((e) => fs.existsSync(path.join(moduleRoot, e, `${stem}.o`))) ?? ""
+    const main = path.join(app, "main.ts")
+    const writeMain = (n) =>
+      fs.writeFileSync(
+        main,
+        `import { square } from "./math"\n\nexport const main = (): number => {\n  console.log(\`square ${n}: \${square(${n})}\`)\n  return 0\n}\n`,
+      )
+    fs.writeFileSync(path.join(app, "math.ts"), "export const square = (n: number): number => n * n\n")
+    const run = (flags = []) =>
+      spawnSync(NISH, ["run", ...flags, main], {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          XDG_CACHE_HOME: cache,
+          CC: "cc-log",
+          PATH: `${tools}:${process.env.PATH}`,
+        },
+      })
+
+    writeMain(3)
+    const first = run()
+    const firstCompiled = compiled()
+    check(
+      "module cache: the first run prints what the program says",
+      first.status === 0 && first.stdout === "square 3: 9\n",
+      first.stdout + first.stderr,
+    )
+    const afterFirst = moduleEntries()
+    const shaped = afterFirst.every((e) => {
+      const files = fs.readdirSync(path.join(moduleRoot, e)).sort()
+      return (
+        /^[0-9a-f]{64}$/.test(e) &&
+        files.length === 2 &&
+        files[0] === "key" &&
+        files[1].endsWith(".o") &&
+        fs.readFileSync(path.join(moduleRoot, e, "key"), "utf8").length > 0
+      )
+    })
+    check(
+      "module cache: the first link keeps one entry per module it compiled, named by 64 hex digits and holding the object and its key",
+      afterFirst.length > 0 &&
+        afterFirst.length === firstCompiled.length &&
+        shaped &&
+        entryOf("main") !== "" &&
+        entryOf("math") !== "",
+      `${afterFirst.join(",")} / compiled ${firstCompiled.join(",")}`,
+    )
+    check(
+      "module cache: the root is private to its owner (0700)",
+      fs.existsSync(moduleRoot) && (fs.statSync(moduleRoot).mode & 0o777) === 0o700,
+      fs.existsSync(moduleRoot) ? (fs.statSync(moduleRoot).mode & 0o777).toString(8) : "missing",
+    )
+
+    writeMain(4)
+    const edited = run()
+    const editedCompiled = compiled()
+    check(
+      "module cache: a rebuild after an edit to one module compiles that module alone and links the others from the cache",
+      edited.status === 0 && edited.stdout === "square 4: 16\n" && editedCompiled.join(",") === "main.ll",
+      `compiled ${editedCompiled.join(",")}: ${edited.stdout}${edited.stderr}`,
+    )
+
+    // An entry whose key is not this module's is not linked: a planted object
+    // under the right name, beside a wrong key, is compiled over.
+    const mathEntry = path.join(moduleRoot, entryOf("math"))
+    const mathKey = fs.readFileSync(path.join(mathEntry, "key"), "utf8")
+    fs.copyFileSync(path.join(moduleRoot, entryOf("main"), "main.o"), path.join(mathEntry, "math.o"))
+    fs.writeFileSync(path.join(mathEntry, "key"), mathKey.replace("module math", "module mathx"))
+    writeMain(5)
+    const planted = run()
+    const plantedCompiled = compiled()
+    check(
+      "module cache: an entry whose stored key differs is not linked; the module is compiled and the entry rewritten",
+      planted.status === 0 &&
+        planted.stdout === "square 5: 25\n" &&
+        plantedCompiled.join(",") === "main.ll,math.ll" &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey,
+      `compiled ${plantedCompiled.join(",")}: ${planted.stdout}${planted.stderr}`,
+    )
+
+    // An empty key is an entry a link was still writing: compiled again.
+    fs.writeFileSync(path.join(mathEntry, "key"), "")
+    writeMain(6)
+    const torn = run()
+    const tornCompiled = compiled()
+    check(
+      "module cache: an entry with an empty key is compiled again, not linked",
+      torn.status === 0 &&
+        torn.stdout === "square 6: 36\n" &&
+        tornCompiled.join(",") === "main.ll,math.ll" &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey,
+      `compiled ${tornCompiled.join(",")}: ${torn.stdout}${torn.stderr}`,
+    )
+
+    // The speed recipe compiles to LTO bitcode and keeps no module objects, so
+    // its binary is exactly what scripts/build.sh links without a cache.
+    const beforeSpeed = moduleEntries().join(",")
+    writeMain(7)
+    const speed = run(["--profile", "speed"])
+    compiled()
+    check(
+      "module cache: `--profile speed` neither reads nor writes the module cache",
+      speed.status === 0 && speed.stdout === "square 7: 49\n" && moduleEntries().join(",") === beforeSpeed,
+      `${speed.stdout}${speed.stderr}`,
+    )
+
+    const lonely = spawnSync(
+      "bash",
+      [
+        path.join(root, "scripts", "build.sh"),
+        "--module-objects",
+        mcDir,
+        "-o",
+        path.join(mcDir, "x"),
+        path.join(mcDir, "x.ll"),
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    )
+    check(
+      "module cache: scripts/build.sh refuses --module-objects without --runtime-from (exit 2)",
+      lonely.status === 2 && lonely.stderr.includes("--module-objects takes --runtime-from"),
+      `${lonely.status}: ${lonely.stderr}`,
+    )
+  }
+}
+
 summarise()
