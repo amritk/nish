@@ -405,7 +405,10 @@ export const emitContinue = (emitter: Emitter, stmt: Node): void => {
       at = at - 1
     }
   }
-  const target = at >= 0 ? emitter.loops[at].continueBlock : null
+  if (at < 0) {
+    process.exit(internalErrorFor("emitter: `continue` has no enclosing loop", emitter.opts.json))
+  }
+  const target = emitter.loops[at].continueBlock
   if (target === null) {
     process.exit(internalErrorFor(`emitter: \`continue ${stmt.text}\` names no loop`, emitter.opts.json))
   }
