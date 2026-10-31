@@ -6,7 +6,8 @@
 // It is pure: `stepBreakMenu` reads one step of input and answers what the
 // director should do next, `drawBreakMenu` paints a framebuffer, and neither
 // touches the terminal. The director owns the terminal, applies settings and
-// switches to the game.
+// switches to the game. The one file this module touches is the settings file
+// (`loadBreakSettings`, `saveBreakSettings`), which the director names.
 //
 // Like the game it follows two rules. Every array is made in `newBreakMenu`
 // and reused, so a step or a frame allocates nothing. And anything that moves
@@ -63,6 +64,8 @@ import {
   TermEvent,
 } from "nish/term"
 import { TermInput } from "nish/term-io"
+import { CLI } from "./branding"
+import { dirname } from "./paths"
 
 // ---- The interface the director reads ---------------------------------------
 
@@ -82,12 +85,12 @@ export const MENU_APPLY: i32 = -2
 /** How many frame rates Settings offers; `fpsChoice` reads them (a module may not hold an array constant). */
 export const FPS_CHOICE_COUNT: i32 = 5
 
-/** How many resolutions Settings offers; `resolutionChoice` reads them. */
-export const RESOLUTION_CHOICE_COUNT: i32 = 5
+/** How many resolutions Settings offers, auto included; `resolutionChoice` reads them. */
+export const RESOLUTION_CHOICE_COUNT: i32 = 6
 
 /**
  * The frame rate at `index` of the choices 0, 30, 60, 120 and 240, where 0 is
- * adaptive (up to 120) and the rest are fixed. An index out of range reads as
+ * adaptive (starting at 120) and the rest are fixed. An index out of range reads as
  * the nearest end, so a stale setting still names a rate.
  */
 export const fpsChoice = (index: i32): i32 => {
@@ -105,28 +108,32 @@ export const fpsChoice = (index: i32): i32 => {
 }
 
 /**
- * The framebuffer height at `index` of the choices 270, 360, 540, 720 and
- * 1080 (16:9), clamped like `fpsChoice`.
+ * The framebuffer height at `index` of the choices auto, 270, 360, 540, 720
+ * and 1080 (16:9), clamped like `fpsChoice`. Auto is 0: the director starts it
+ * at the most the screen holds and steps it down while frames fall behind.
  */
 export const resolutionChoice = (index: i32): i32 => {
   const i: i32 = Math.min(Math.max(index, 0), RESOLUTION_CHOICE_COUNT - 1)
   if (i === 0) {
-    return 270
+    return 0
   }
   if (i === 1) {
-    return 360
+    return 270
   }
   if (i === 2) {
+    return 360
+  }
+  if (i === 3) {
     return 540
   }
-  return i === 3 ? 720 : 1080
+  return i === 4 ? 720 : 1080
 }
 
 /** What the Settings screen edits; the director reads it and applies it. */
 export class BreakSettings {
   /** An index for `fpsChoice`: 0 is adaptive. */
   fps: i32
-  /** An index for `resolutionChoice`: 2 is 540. */
+  /** An index for `resolutionChoice`: 0 is auto. */
   resolution: i32
   /** -1 lets the terminal choose; otherwise a `GRAPHICS_*` from `std/term-pixels`. */
   graphics: i32
@@ -136,16 +143,130 @@ export class BreakSettings {
   smoothing: boolean
   /** Whether the frame-rate overlay is shown. */
   stats: boolean
+  /** Whether the game's sounds play; off unless asked for. */
+  sound: boolean
 
-  /** The defaults: adaptive frame rate, 540 lines, automatic graphics, smoothing on, high effects, no stats. */
+  /** The defaults: adaptive frame rate and resolution, automatic graphics, smoothing on, high effects, no stats, no sound. */
   constructor() {
     this.fps = 0
-    this.resolution = 2
+    this.resolution = 0
     this.graphics = -1
     this.smoothing = true
     this.effects = 1
     this.stats = false
+    this.sound = false
   }
+}
+
+/** `s` as the director keeps it between runs: one `name=value` a line, in field order. */
+export const formatBreakSettings = (s: BreakSettings): string =>
+  `fps=${s.fps}\nresolution=${s.resolution}\ngraphics=${s.graphics}\neffects=${s.effects}\nsmoothing=${s.smoothing}\nstats=${s.stats}\nsound=${s.sound}\n`
+
+/**
+ * `v` as one of the whole numbers `lo` to `hi` written plainly, or `lo - 1`.
+ * It is compared against each of them rather than parsed, so no value can
+ * overflow.
+ */
+const settingInt = (v: string, lo: i32, hi: i32): i32 => {
+  for (let i: i32 = lo; i <= hi; i++) {
+    if (v === `${i}`) {
+      return i
+    }
+  }
+  return lo - 1
+}
+
+/** Apply one line of a settings file to `s`, when its name is a field and its value one that field takes. */
+const applySettingLine = (s: BreakSettings, line: string): void => {
+  const eq: i32 = toI32(line.indexOf("="))
+  if (eq < 0) {
+    return
+  }
+  const name: string = line.slice(0, eq)
+  const v: string = line.slice(eq + 1)
+  const yes: boolean = v === "true"
+  const flag: boolean = yes || v === "false"
+  if (name === "fps") {
+    const n: i32 = settingInt(v, 0, FPS_CHOICE_COUNT - 1)
+    s.fps = n >= 0 ? n : s.fps
+  } else if (name === "resolution") {
+    const n: i32 = settingInt(v, 0, RESOLUTION_CHOICE_COUNT - 1)
+    s.resolution = n >= 0 ? n : s.resolution
+  } else if (name === "graphics") {
+    const n: i32 = settingInt(v, -1, 3)
+    s.graphics = n >= -1 ? n : s.graphics
+  } else if (name === "effects") {
+    const n: i32 = settingInt(v, 0, 1)
+    s.effects = n >= 0 ? n : s.effects
+  } else if (name === "smoothing") {
+    s.smoothing = flag ? yes : s.smoothing
+  } else if (name === "stats") {
+    s.stats = flag ? yes : s.stats
+  } else if (name === "sound") {
+    s.sound = flag ? yes : s.sound
+  }
+}
+
+/**
+ * The settings a file of `formatBreakSettings` holds. Any line it does not
+ * take (no `=`, an unknown name, a value out of range, a `\r` left on it) is
+ * skipped and its field keeps the default, so no text is an error; a name
+ * given twice takes the last value accepted.
+ */
+export const parseBreakSettings = (text: string): BreakSettings => {
+  const s: BreakSettings = new BreakSettings()
+  let start: i32 = 0
+  for (let i: i32 = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) {
+      applySettingLine(s, text.slice(start, i))
+      start = i + 1
+    }
+  }
+  applySettingLine(s, text.slice(start))
+  return s
+}
+
+/**
+ * Where `nish break` keeps its settings: `${xdg}/nish/break` when `xdg` is
+ * absolute, else `${home}/.config/nish/break` when `home` is, else "" for
+ * nowhere — `runCacheRoot`'s rules, given the two variables' values.
+ */
+export const breakSettingsPath = (xdg: string, home: string): string => {
+  if (xdg.startsWith("/")) {
+    return `${xdg}/${CLI}/break`
+  }
+  return home.startsWith("/") ? `${home}/.config/${CLI}/break` : ""
+}
+
+/** The settings kept at `path`; the defaults when `path` is "" or cannot be read as a file. */
+export const loadBreakSettings = (path: string): BreakSettings => {
+  const text: string | null = path === "" ? null : readFileSyncOrNull(path)
+  if (text === null) {
+    return new BreakSettings()
+  }
+  return parseBreakSettings(text)
+}
+
+/**
+ * Keep `s` at `path`, making its directory and that directory's parent when
+ * they are missing. It is written beside `path` and renamed over it, so a
+ * failed write leaves the old file. Answers whether it was kept; a failure
+ * anywhere answers false and says nothing.
+ */
+export const saveBreakSettings = (path: string, s: BreakSettings): boolean => {
+  if (path === "") {
+    return false
+  }
+  const dir: string = dirname(path)
+  if (!mkdirSync(dirname(dir)) || !mkdirSync(dir)) {
+    return false
+  }
+  const temp: string = `${path}.tmp`
+  if (writeFileSyncMode(temp, formatBreakSettings(s), 0o644) < 0 || renameSync(temp, path) < 0) {
+    unlinkSync(temp)
+    return false
+  }
+  return true
 }
 
 // ---- Screens and layout -----------------------------------------------------
@@ -175,14 +296,15 @@ const ITEM_HOWTO: i32 = 2
 const ITEM_SETTINGS: i32 = 3
 
 /** The Settings rows, top to bottom; the last is Back. */
-const ROW_COUNT: i32 = 7
+const ROW_COUNT: i32 = 8
 const ROW_FPS: i32 = 0
 const ROW_RESOLUTION: i32 = 1
 const ROW_GRAPHICS: i32 = 2
 const ROW_SMOOTHING: i32 = 3
 const ROW_EFFECTS: i32 = 4
 const ROW_STATS: i32 = 5
-const ROW_BACK: i32 = 6
+const ROW_SOUND: i32 = 6
+const ROW_BACK: i32 = 7
 
 /** The outro's length in steps (1 s): the step it reaches is the one that answers the level. */
 export const OUTRO_STEPS: i32 = 120
@@ -198,8 +320,8 @@ const ITEM_TOP: f64 = 82.0
 const ITEM_GAP: f64 = 13.0
 
 /** The world y of the first Settings row, and the step to the next. */
-const ROW_TOP: f64 = 86.0
-const ROW_GAP: f64 = 10.0
+const ROW_TOP: f64 = 80.0
+const ROW_GAP: f64 = 9.0
 
 /** The panel Settings and How to play draw over the lower half of the world. */
 const PANEL_X: f64 = 16.0
@@ -243,12 +365,12 @@ const OUTRO_GRAVITY: f64 = 540.0
 
 // ---- The attract wall -------------------------------------------------------
 
-/** The background wall: 16 columns of 20-unit bricks across the world, 6 rows deep. */
-const WALL_COLS: i32 = 16
-const WALL_ROWS: i32 = 6
-const WALL_BRICK_W: f64 = 20.0
-const WALL_BRICK_H: f64 = 8.0
-const WALL_TOP: f64 = 6.0
+/** The background wall: 16 columns of 20-unit bricks across the world, 6 rows deep; the intro lays it too. */
+export const WALL_COLS: i32 = 16
+export const WALL_ROWS: i32 = 6
+export const WALL_BRICK_W: f64 = 20.0
+export const WALL_BRICK_H: f64 = 8.0
+export const WALL_TOP: f64 = 6.0
 
 /** The steps a knocked-out brick stays away before it grows back: 4 s and up to 2 s more. */
 const REGROW_STEPS: i32 = 480
@@ -267,11 +389,11 @@ const SPARK_CAPACITY: i32 = 160
 
 // ---- Colours ----------------------------------------------------------------
 
-const BG_TOP: i32 = 0x0a0820
-const BG_BOTTOM: i32 = 0x1e0c30
+export const BG_TOP: i32 = 0x0a0820
+export const BG_BOTTOM: i32 = 0x1e0c30
 /** What a fading item fades into: the background where the items sit. */
 const BG_MID: i32 = 0x160a2a
-const LETTERBOX: i32 = 0x05040c
+export const LETTERBOX: i32 = 0x05040c
 const WIPE: i32 = 0x05040c
 const PANEL: i32 = 0x0c0a1c
 const WHITE: i32 = 0xf4f2ff
@@ -673,6 +795,8 @@ export const cycleSetting = (settings: BreakSettings, row: i32, by: i32): void =
     settings.effects = settings.effects === 0 ? 1 : 0
   } else if (row === ROW_STATS) {
     settings.stats = !settings.stats
+  } else if (row === ROW_SOUND) {
+    settings.sound = !settings.sound
   }
 }
 
@@ -923,8 +1047,8 @@ const itemsFade = (menu: BreakMenu, time: f64, alpha: f64): f64 => {
   return fadeIn * (1.0 - out)
 }
 
-/** A wall row's face: the rainbow, dimmed well back so the menu reads over it. */
-const wallColour = (row: i32): i32 => dim(hue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
+/** A wall row's face: the rainbow, dimmed well back so the menu reads over it; `break-intro.ts` lays the same wall. */
+export const wallColour = (row: i32): i32 => dim(hue((toF64(row) / toF64(WALL_ROWS)) * 0.6 + 0.55), 0.3)
 
 /** The attract wall: every brick there, and returning ones growing from their centre. */
 const menuDrawWall = (menu: BreakMenu, view: View, alpha: f64): void => {
@@ -1152,7 +1276,10 @@ const rowName = (r: i32): string => {
   if (r === ROW_EFFECTS) {
     return "effects"
   }
-  return r === ROW_STATS ? "stats" : "back"
+  if (r === ROW_STATS) {
+    return "stats"
+  }
+  return r === ROW_SOUND ? "sound" : "back"
 }
 
 /** Settings row `r`'s value as it reads on screen. */
@@ -1175,6 +1302,9 @@ export const rowValue = (settings: BreakSettings, r: i32): string => {
   if (r === ROW_STATS) {
     return settings.stats ? "on" : "off"
   }
+  if (r === ROW_SOUND) {
+    return settings.sound ? "on" : "off"
+  }
   return ""
 }
 
@@ -1196,6 +1326,9 @@ const fpsLabel = (i: i32): string => {
 /** The resolution at choice `i` as text. */
 const resolutionLabel = (i: i32): string => {
   const lines: i32 = resolutionChoice(i)
+  if (lines === 0) {
+    return "auto"
+  }
   if (lines === 270) {
     return "270p"
   }
@@ -1226,11 +1359,13 @@ const graphicsLabel = (slot: i32): string => {
 export const rowHint = (settings: BreakSettings, r: i32): string => {
   if (r === ROW_FPS) {
     return settings.fps <= 0
-      ? "adaptive: up to 120, less when it must"
+      ? "adaptive: starts at 120, less when it must"
       : "fixed rates turn the adaptive controller off"
   }
   if (r === ROW_RESOLUTION) {
-    return "the largest frame; a slow terminal gets less"
+    return settings.resolution <= 0
+      ? "adaptive: the most that keeps up"
+      : "the largest frame; a slow terminal gets less"
   }
   if (r === ROW_GRAPHICS) {
     return settings.graphics < 0 ? "the best the terminal answers for" : "forced, if the terminal can show it"
@@ -1243,6 +1378,9 @@ export const rowHint = (settings: BreakSettings, r: i32): string => {
   }
   if (r === ROW_STATS) {
     return "frame rate and backend in a corner"
+  }
+  if (r === ROW_SOUND) {
+    return "beeps through the system audio player"
   }
   return "frame rate and graphics reopen the terminal"
 }

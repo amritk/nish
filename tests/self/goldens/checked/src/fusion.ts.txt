@@ -36,7 +36,7 @@ function recordUpdateFusion(ctx: CheckContext, call: Node): void -> @recordUpdat
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via isInert
   calls: CheckedProgram.isCollections FusionTable.record collectionOwnerOf isFusableKey isFusablePlace isInert nish_panic_index sameCallTarget
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isInert#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=isInert#0
   pointer call: size=40 writesThrough=false captured=false passedTo=collectionOwnerOf#1
   stackSites=1 stackLocals=1
   local +0:9 owner: StructInfo | null (const)
@@ -60,7 +60,7 @@ function recordGuardFusion(ctx: CheckContext, stmt: Node): void -> @recordGuardF
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via isInert
   calls: CheckedProgram.isCollections FusionTable.record collectionOwnerOf firstCallOf isFusableKey isFusablePlace isInert isMapOwner nish_panic_index nish_str_eq sameCallTarget unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isInert#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=isInert#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   callee +0:7 CheckedProgram.isCollections -> @CheckedProgram.isCollections
@@ -154,7 +154,7 @@ function isInert(ctx: CheckContext, node: Node, calls: Node[]): boolean -> @isIn
   sharedWrite: +0:7
   escaping: node
   calls: CheckedProgram.isEnumMember isAssignmentOperator isInert nish_array_grow nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0
   pointer node: size=40 writesThrough=true captured=true passedTo=CheckedProgram.isEnumMember#2
   pointer calls: size=0 writesThrough=true captured=false passedTo=isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2
   stackSites=0 stackLocals=0

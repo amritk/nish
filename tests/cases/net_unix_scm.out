@@ -1,0 +1,35 @@
+attempt 0: -22, descriptors +0
+attempt 1: -22, descriptors +0
+attempt 2: -88, descriptors +0
+attempt 3: -95, descriptors +0
+attempt 4: -9, descriptors +0
+attempt 5: -9, descriptors +0
+attempt 6: -32, descriptors +0
+attempt 7: -22, descriptors +0
+attempt 8: -22, descriptors +0
+attempt 9: -88, descriptors +0
+attempt 10: -95, descriptors +0
+attempt 11: -9, descriptors +0
+attempt 12: -111, descriptors +0
+attempt 13: -1, descriptors +0
+attempt 14: 19, descriptors +0
+attempt 15: 1002, descriptors +0
+attempt 16: 0, descriptors +0
+attempt 17: -22, descriptors +0
+attempt 18: -88, descriptors +0
+attempt 19: -95, descriptors +0
+attempt 20: -9, descriptors +0
+attempt 21: 0, descriptors +0
+attempt 22: 0, descriptors +0
+attempt 23: 1011, descriptors +0
+attempt 24: 11001, descriptors +0
+file 1: cloexec 1 nonblock 0 same 1
+non-blocking socket 1: cloexec 1 nonblock 1 same 1
+blocking socket 1: cloexec 1 nonblock 0 same 1
+3 sent (1): read 1, kept 1, descriptors +1
+12 sent (1): read 1, kept 1, descriptors +1
+pair: pid 1 uid 1 gid 1
+connect: pid 1 uid 1 gid 1
+accept: pid 1 uid 1 gid 1
+listen: refused 1
+release 0

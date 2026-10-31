@@ -73,7 +73,7 @@ function wasmSkipReason(table: TypeTable, sig: FunctionSig, vectored: StringSet)
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 wasmCrosses wasmMissing
   pointer table: size=96 writesThrough=false captured=false passedTo=wasmCrosses#0 wasmMissing#0 wasmCrosses#0 wasmMissing#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer vectored: size=8 writesThrough=false captured=false passedTo=wasmMissing#2 wasmMissing#2
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
@@ -210,7 +210,7 @@ function wasmTakesPacked(table: TypeTable, sig: FunctionSig): boolean -> @wasmTa
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.resultByValue
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.resultByValue#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.resultByValue -> @TypeTable.resultByValue
   local +3:7 i: i32 (let)
@@ -249,7 +249,7 @@ function wasmRangeIn(table: TypeTable, sig: FunctionSig, param: string, i: i32):
   escaping: i
   calls: TypeTable.isRanged TypeTable.rangeHi TypeTable.rangeLo jsExportName nish_panic_index nish_str_concat nish_str_from_i32
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.rangeLo#0 TypeTable.rangeHi#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=jsExportName#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=jsExportName#0
   stackSites=0 stackLocals=0
   local +0:9 t: i32 (const)
   callee +1:8 TypeTable.isRanged -> @TypeTable.isRanged
@@ -262,7 +262,7 @@ function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i3
   escaping: i
   calls: TypeTable.resultByValue nish_panic_index nish_str_concat wasmRangeIn wasmResultPack wasmUnsignedIn
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 wasmResultPack#0 wasmRangeIn#0 wasmUnsignedIn#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=wasmRangeIn#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=wasmRangeIn#1
   pointer params: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:9 t: i32 (const)
@@ -277,7 +277,7 @@ function wasmReturned(table: TypeTable, sig: FunctionSig, ret: TypedView | null,
   escaping: call
   calls: TypeTable.resultByValue nish_str_concat wasmResultUnpack wasmUnsignedOut
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 wasmResultUnpack#0 wasmUnsignedOut#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer ret: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.resultByValue -> @TypeTable.resultByValue
@@ -286,7 +286,7 @@ function wasmReturned(table: TypeTable, sig: FunctionSig, ret: TypedView | null,
 function wasmRaw(sig: FunctionSig): string -> @wasmRaw
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_index_of nish_str_index_of_from
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] -> @wasmWrapper
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false

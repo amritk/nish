@@ -2824,15 +2824,15 @@ function RateController.constructor(this: RateController, options: RateOptions):
   local +11:9 minTier: i32 (let)
   local +12:16 t: i32 (const)
   local +19:11 remote: boolean (const)
-  local +21:11 want: i32 (const)
-  local +22:9 start: i32 (let)
-  local +23:16 t: i32 (const)
-  local +28:11 floored: i32 (const)
-  callee +31:18 new FixedStep -> @nish.FixedStep.constructor
-  callee +41:48 rateFinite -> @nish.rateFinite
-  callee +70:20 new RateDecision -> @nish.RateDecision.constructor
-  callee +71:21 new TermStats -> @nish.TermStats.constructor
-  callee +72:5 RateController.publish -> @nish.RateController.publish
+  local +21:9 want: i32 (let)
+  local +27:9 start: i32 (let)
+  local +28:16 t: i32 (const)
+  local +33:11 floored: i32 (const)
+  callee +36:18 new FixedStep -> @nish.FixedStep.constructor
+  callee +46:48 rateFinite -> @nish.rateFinite
+  callee +75:20 new RateDecision -> @nish.RateDecision.constructor
+  callee +76:21 new TermStats -> @nish.TermStats.constructor
+  callee +77:5 RateController.publish -> @nish.RateController.publish
 function RateController.unacked(this: RateController): i32 -> @nish.RateController.unacked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
@@ -3163,6 +3163,22 @@ const INTRO_STEPS: i32 = 180 [exported]
 const TALLY_STEPS: i32 = 180 [exported]
 const CLEAR_HOLD_STEPS: i32 = 90 [exported]
 const DISMISS_STEPS: i32 = 120 [exported]
+const SOUND_PADDLE: i32 = 0 [exported]
+const SOUND_WALL: i32 = 1 [exported]
+const SOUND_CRACK: i32 = 2 [exported]
+const SOUND_STEEL: i32 = 3 [exported]
+const SOUND_EXPLODE: i32 = 4 [exported]
+const SOUND_CAPSULE: i32 = 5 [exported]
+const SOUND_LAUNCH: i32 = 6 [exported]
+const SOUND_LOSE: i32 = 7 [exported]
+const SOUND_ADVANCE: i32 = 8 [exported]
+const SOUND_CLEAR: i32 = 9 [exported]
+const SOUND_OVER: i32 = 10 [exported]
+const SOUND_FIREWORK: i32 = 11 [exported]
+const SOUND_BREAK: i32 = 12 [exported]
+const BREAK_PITCHES: i32 = 6 [exported]
+const SOUND_COUNT: i32 = 18 [exported]
+const MAX_STEP_SOUNDS: i32 = 6
 const CAPSULE_WIDE: i32 = 0 [exported]
 const CAPSULE_MULTI: i32 = 1 [exported]
 const CAPSULE_SLOW: i32 = 2 [exported]
@@ -3234,7 +3250,7 @@ struct Floater (class) size=40 align=8 exported
   field value: i32 index=4 offset=32
   field colour: i32 index=5 offset=36
   constructor -> @Floater.constructor
-struct BreakGame (class) size=312 align=8 exported
+struct BreakGame (class) size=320 align=8 exported
   field tuning: LevelTuning index=0 offset=0
   field rng: Rng index=1 offset=8
   field fxRng: Rng index=2 offset=16
@@ -3243,49 +3259,50 @@ struct BreakGame (class) size=312 align=8 exported
   field floaters: Floater[] index=5 offset=40
   field particles: Particles index=6 offset=48
   field view: View index=7 offset=56
-  field kinds: i32[] index=8 offset=64
-  field hits: i32[] index=9 offset=72
-  field fullHits: i32[] index=10 offset=80
-  field flashes: f64[] index=11 offset=88
-  field paddleX: f64 index=12 offset=96
-  field prevPaddleX: f64 index=13 offset=104
-  field paddleV: f64 index=14 offset=112
-  field widthScale: f64 index=15 offset=120
-  field prevWidthScale: f64 index=16 offset=128
-  field speed: f64 index=17 offset=136
-  field speedScale: f64 index=18 offset=144
-  field wallOffset: f64 index=19 offset=152
-  field prevWallOffset: f64 index=20 offset=160
-  field wallTarget: f64 index=21 offset=168
-  field shakeX: f64 index=22 offset=176
-  field shakeY: f64 index=23 offset=184
-  field prevShakeX: f64 index=24 offset=192
-  field prevShakeY: f64 index=25 offset=200
-  field shake: f64 index=26 offset=208
-  field effects: i32 index=27 offset=216
-  field level: i32 index=28 offset=220
-  field rows: i32 index=29 offset=224
-  field bricksLeft: i32 index=30 offset=228
-  field score: i32 index=31 offset=232
-  field lives: i32 index=32 offset=236
-  field combo: i32 index=33 offset=240
-  field phase: i32 index=34 offset=244
-  field phaseTime: i32 index=35 offset=248
-  field pausedFrom: i32 index=36 offset=252
-  field playSteps: i32 index=37 offset=256
-  field wideSteps: i32 index=38 offset=260
-  field slowSteps: i32 index=39 offset=264
-  field catchSteps: i32 index=40 offset=268
-  field fireSteps: i32 index=41 offset=272
-  field advanceSteps: i32 index=42 offset=276
-  field timeBonus: i32 index=43 offset=280
-  field livesBonus: i32 index=44 offset=284
-  field scoreBefore: i32 index=45 offset=288
-  field result: i32 index=46 offset=292
-  field ticks: i32 index=47 offset=296
-  field hitNx: i32 index=48 offset=300
-  field hitNy: i32 index=49 offset=304
-  field launched: boolean index=50 offset=308
+  field sounds: i32[] index=8 offset=64
+  field kinds: i32[] index=9 offset=72
+  field hits: i32[] index=10 offset=80
+  field fullHits: i32[] index=11 offset=88
+  field flashes: f64[] index=12 offset=96
+  field paddleX: f64 index=13 offset=104
+  field prevPaddleX: f64 index=14 offset=112
+  field paddleV: f64 index=15 offset=120
+  field widthScale: f64 index=16 offset=128
+  field prevWidthScale: f64 index=17 offset=136
+  field speed: f64 index=18 offset=144
+  field speedScale: f64 index=19 offset=152
+  field wallOffset: f64 index=20 offset=160
+  field prevWallOffset: f64 index=21 offset=168
+  field wallTarget: f64 index=22 offset=176
+  field shakeX: f64 index=23 offset=184
+  field shakeY: f64 index=24 offset=192
+  field prevShakeX: f64 index=25 offset=200
+  field prevShakeY: f64 index=26 offset=208
+  field shake: f64 index=27 offset=216
+  field effects: i32 index=28 offset=224
+  field level: i32 index=29 offset=228
+  field rows: i32 index=30 offset=232
+  field bricksLeft: i32 index=31 offset=236
+  field score: i32 index=32 offset=240
+  field lives: i32 index=33 offset=244
+  field combo: i32 index=34 offset=248
+  field phase: i32 index=35 offset=252
+  field phaseTime: i32 index=36 offset=256
+  field pausedFrom: i32 index=37 offset=260
+  field playSteps: i32 index=38 offset=264
+  field wideSteps: i32 index=39 offset=268
+  field slowSteps: i32 index=40 offset=272
+  field catchSteps: i32 index=41 offset=276
+  field fireSteps: i32 index=42 offset=280
+  field advanceSteps: i32 index=43 offset=284
+  field timeBonus: i32 index=44 offset=288
+  field livesBonus: i32 index=45 offset=292
+  field scoreBefore: i32 index=46 offset=296
+  field result: i32 index=47 offset=300
+  field ticks: i32 index=48 offset=304
+  field hitNx: i32 index=49 offset=308
+  field hitNy: i32 index=50 offset=312
+  field launched: boolean index=51 offset=316
   constructor -> @BreakGame.constructor
 function Ball.constructor(this: Ball): void -> @Ball.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -3305,7 +3322,7 @@ function BreakGame.constructor(this: BreakGame, seed: i32): void -> @BreakGame.c
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: seed
   calls: Ball.constructor Capsule.constructor Floater.constructor LevelTuning.constructor Particles.constructor View.constructor nish.Rng.constructor nish_alloc_struct nish_array_grow nish_panic
-  pointer this: size=312 writesThrough=true captured=false
+  pointer this: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:19 new LevelTuning -> @LevelTuning.constructor
   callee +1:16 new Rng -> @nish.Rng.constructor
@@ -3318,12 +3335,12 @@ function BreakGame.constructor(this: BreakGame, seed: i32): void -> @BreakGame.c
   callee +13:26 new Floater -> @Floater.constructor
   callee +15:22 new Particles -> @Particles.constructor
   callee +16:17 new View -> @View.constructor
-  local +17:11 cells: i32 (const)
+  local +18:11 cells: i32 (const)
 function seedBits(seed: i64): i32 -> @seedBits
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function newBreakGame(level: i32, seed: i64): BreakGame -> @newBreakGame [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=312
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=320
   sharedWrite: via loadLevel
   escaping: level seed
   calls: BreakGame.constructor clampLevel loadLevel nish_alloc_struct seedBits
@@ -3338,7 +3355,7 @@ function loadLevel(game: BreakGame, level: i32): void -> @loadLevel [exported]
   sharedWrite: +0:3
   escaping: level
   calls: GfxTrail.clear breakable brickHits brickKind clampLevel clearPowers enterPhase levelMap levelRows levelTuning llvm.smin.i32 nish_panic_overflow serve
-  pointer game: size=312 writesThrough=true captured=false passedTo=clearPowers#0 serve#0 enterPhase#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=clearPowers#0 serve#0 enterPhase#0
   stackSites=0 stackLocals=0
   local -1:9 n: i32 (const)
   callee -1:18 clampLevel -> @clampLevel
@@ -3365,48 +3382,55 @@ function breakable(kind: i32): boolean -> @breakable
 function clearPowers(game: BreakGame): void -> @clearPowers
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function serve(game: BreakGame): void -> @serve
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: GfxTrail.clear nish_panic_index
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:14 b: Ball (const)
   local +2:9 b: Ball (const)
   callee +12:3 GfxTrail.clear -> @GfxTrail.clear
+function sound(game: BreakGame, id: i32): void -> @sound
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: id
+  calls: nish_array_grow
+  pointer game: size=320 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function enterPhase(game: BreakGame, phase: i32): void -> @enterPhase
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: phase
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function paddleWidth(game: BreakGame): f64 -> @paddleWidth [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function ballSpeed(game: BreakGame): f64 -> @ballSpeed [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function liveBalls(game: BreakGame): i32 -> @liveBalls [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 n: i32 (let)
   local +1:14 b: Ball (const)
 function brickAt(game: BreakGame, col: i32, row: i32): i32 -> @brickAt [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (const)
 function hitsAt(game: BreakGame, col: i32, row: i32): i32 -> @hitsAt [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (const)
 function brickX(col: i32): f64 -> @brickX [exported]
@@ -3414,7 +3438,7 @@ function brickX(col: i32): f64 -> @brickX [exported]
   stackSites=0 stackLocals=0
 function brickY(game: BreakGame, row: i32): f64 -> @brickY [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function pressed(input: TermInput, key: i32, code: i32): boolean -> @pressed
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -3448,25 +3472,25 @@ function heldDirection(input: TermInput): i32 -> @heldDirection
   callee +2:66 TermInput.isDown -> @nish.TermInput.isDown
 function stepBreakGame(game: BreakGame, input: TermInput): i32 -> @stepBreakGame [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
+  sharedWrite: +0:5
   calls: anyPress enterPhase nish_panic_overflow remember stepClear stepEffects stepLastScreen stepPause stepPlay
-  pointer game: size=312 writesThrough=true captured=false passedTo=remember#0 stepPause#0 remember#0 enterPhase#0 stepPlay#0 stepClear#0 stepLastScreen#0 stepEffects#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=remember#0 stepPause#0 remember#0 enterPhase#0 stepPlay#0 stepClear#0 stepLastScreen#0 stepEffects#0
   pointer input: size=16 writesThrough=false captured=false passedTo=stepPause#1 anyPress#0 stepPlay#1 stepClear#1 stepLastScreen#1
   stackSites=0 stackLocals=0
-  callee -4:5 remember -> @remember
-  callee -3:5 stepPause -> @stepPause
-  callee +2:3 remember -> @remember
-  callee +4:9 anyPress -> @anyPress
-  callee +5:7 enterPhase -> @enterPhase
-  callee +8:5 stepPlay -> @stepPlay
-  callee +10:5 stepClear -> @stepClear
-  callee +12:5 stepLastScreen -> @stepLastScreen
-  callee +14:3 stepEffects -> @stepEffects
+  callee +8:5 remember -> @remember
+  callee +9:5 stepPause -> @stepPause
+  callee +14:3 remember -> @remember
+  callee +16:9 anyPress -> @anyPress
+  callee +17:7 enterPhase -> @enterPhase
+  callee +20:5 stepPlay -> @stepPlay
+  callee +22:5 stepClear -> @stepClear
+  callee +24:5 stepLastScreen -> @stepLastScreen
+  callee +26:3 stepEffects -> @stepEffects
 function remember(game: BreakGame): void -> @remember
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: nish_panic_index
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +5:14 b: Ball (const)
   local +9:14 c: Capsule (const)
@@ -3477,7 +3501,7 @@ function stepPause(game: BreakGame, input: TermInput): void -> @stepPause
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: confirmPressed pressed
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   pointer input: size=16 writesThrough=false captured=false passedTo=pressed#0 pressed#0 pressed#0 confirmPressed#0
   stackSites=0 stackLocals=0
   callee -1:7 pressed -> @pressed
@@ -3485,10 +3509,10 @@ function stepPause(game: BreakGame, input: TermInput): void -> @stepPause
   callee +1:14 pressed -> @pressed
   callee +1:47 confirmPressed -> @confirmPressed
 function stepPlay(game: BreakGame, input: TermInput): void -> @stepPlay
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: enterClear heldDirection launch liveBalls loseLife movePaddle nish_panic_overflow pressed stepBall stepCapsules stepPowers stepWall
-  pointer game: size=312 writesThrough=true captured=false passedTo=movePaddle#0 launch#0 stepPowers#0 stepBall#0 stepCapsules#0 stepWall#0 enterClear#0 liveBalls#0 loseLife#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=movePaddle#0 launch#0 stepPowers#0 stepBall#0 stepCapsules#0 stepWall#0 enterClear#0 liveBalls#0 loseLife#0
   pointer input: size=16 writesThrough=false captured=false passedTo=pressed#0 pressed#0 pressed#0 heldDirection#0 pressed#0 pressed#0
   stackSites=0 stackLocals=0
   callee -1:7 pressed -> @pressed
@@ -3511,7 +3535,7 @@ function movePaddle(game: BreakGame, dir: i32): void -> @movePaddle
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: clamp llvm.fabs.f64 llvm.minimum.f64 paddleWidth
-  pointer game: size=312 writesThrough=true captured=false passedTo=paddleWidth#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=paddleWidth#0
   stackSites=0 stackLocals=0
   local +2:11 d: f64 (const)
   local +9:9 half: f64 (const)
@@ -3519,10 +3543,10 @@ function movePaddle(game: BreakGame, dir: i32): void -> @movePaddle
   callee +10:18 clamp -> @clamp
   local +14:14 b: Ball (const)
 function launch(game: BreakGame): void -> @launch
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: aim clamp nish.Rng.nextF64 paddleWidth
-  pointer game: size=312 writesThrough=true captured=false passedTo=paddleWidth#0
+  calls: aim clamp nish.Rng.nextF64 paddleWidth sound
+  pointer game: size=320 writesThrough=true captured=false passedTo=paddleWidth#0 sound#0
   stackSites=0 stackLocals=0
   local -4:14 b: Ball (const)
   local +1:11 half: f64 (const)
@@ -3531,6 +3555,7 @@ function launch(game: BreakGame): void -> @launch
   callee +2:18 clamp -> @clamp
   callee +4:12 Rng.nextF64 -> @nish.Rng.nextF64
   callee +6:5 aim -> @aim
+  callee +7:5 sound -> @sound
 function aim(b: Ball, angle: f64): void -> @aim
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -3549,15 +3574,15 @@ function stepPowers(game: BreakGame): void -> @stepPowers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: llvm.smax.i32 nish_panic_overflow
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +4:9 wide: f64 (const)
   local +6:9 slow: f64 (const)
 function stepBall(game: BreakGame, b: Ball): void -> @stepBall
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: GfxTrail.clear ballSpeed breakBrick breakable brickAt brickX cellIndex hitBrick llvm.maximum.f64 llvm.minimum.f64 nish_panic_index nish_panic_overflow overPaddle paddleBounce paddleWidth pushTrail reflect sweep
-  pointer game: size=312 writesThrough=true captured=false passedTo=overPaddle#0 paddleBounce#0 ballSpeed#0 brickAt#0 sweep#0 paddleWidth#0 sweep#0 paddleBounce#0 breakBrick#0 hitBrick#0
+  calls: GfxTrail.clear ballSpeed breakBrick breakable brickAt brickX cellIndex hitBrick llvm.maximum.f64 llvm.minimum.f64 nish_panic_index nish_panic_overflow overPaddle paddleBounce paddleWidth pushTrail reflect sound sweep
+  pointer game: size=320 writesThrough=true captured=false passedTo=overPaddle#0 paddleBounce#0 ballSpeed#0 brickAt#0 sweep#0 paddleWidth#0 sweep#0 sound#0 paddleBounce#0 sound#0 breakBrick#0 hitBrick#0
   pointer b: size=72 writesThrough=true captured=false passedTo=paddleBounce#1 paddleBounce#1 reflect#0 reflect#0 reflect#0
   stackSites=0 stackLocals=0
   callee +2:5 pushTrail -> @pushTrail
@@ -3598,15 +3623,17 @@ function stepBall(game: BreakGame, b: Ball): void -> @stepBall
   callee +79:25 paddleWidth -> @paddleWidth
   local +80:13 t: f64 (const)
   callee +80:22 sweep -> @sweep
-  callee +110:13 paddleBounce -> @paddleBounce
-  callee +114:9 reflect -> @reflect
-  callee +117:7 reflect -> @reflect
-  callee +120:11 breakable -> @breakable
-  callee +121:9 breakBrick -> @breakBrick
-  callee +124:7 reflect -> @reflect
-  callee +125:7 hitBrick -> @hitBrick
-  callee +130:5 GfxTrail.clear -> @GfxTrail.clear
-  callee +133:3 pushTrail -> @pushTrail
+  callee +109:7 sound -> @sound
+  callee +111:13 paddleBounce -> @paddleBounce
+  callee +115:9 reflect -> @reflect
+  callee +118:7 sound -> @sound
+  callee +119:7 reflect -> @reflect
+  callee +122:11 breakable -> @breakable
+  callee +123:9 breakBrick -> @breakBrick
+  callee +126:7 reflect -> @reflect
+  callee +127:7 hitBrick -> @hitBrick
+  callee +132:5 GfxTrail.clear -> @GfxTrail.clear
+  callee +135:3 pushTrail -> @pushTrail
 function cellIndex(x: f64, count: i32): i32 -> @cellIndex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: clamp llvm.fptosi.sat.i32.f64 llvm.smax.i32 nish_floor nish_panic_overflow
@@ -3623,7 +3650,7 @@ function sweep(game: BreakGame, x: f64, y: f64, mx: f64, my: f64, x0: f64, y0: f
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: llvm.maximum.f64 llvm.minimum.f64
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -30:7 xIn: f64 (let)
   local -29:7 xOut: f64 (let)
@@ -3638,7 +3665,7 @@ function sweep(game: BreakGame, x: f64, y: f64, mx: f64, my: f64, x0: f64, y0: f
 function overPaddle(game: BreakGame, x: f64, y: f64): boolean -> @overPaddle
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: paddleWidth
-  pointer game: size=312 writesThrough=false captured=false passedTo=paddleWidth#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=paddleWidth#0
   stackSites=0 stackLocals=0
   local +0:9 half: f64 (const)
   callee +0:21 paddleWidth -> @paddleWidth
@@ -3646,7 +3673,7 @@ function paddleBounce(game: BreakGame, b: Ball): boolean -> @paddleBounce
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: aim clamp llvm.minimum.f64 paddleWidth
-  pointer game: size=312 writesThrough=true captured=false passedTo=paddleWidth#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=paddleWidth#0
   pointer b: size=72 writesThrough=true captured=false passedTo=aim#0
   stackSites=0 stackLocals=0
   local -3:9 half: f64 (const)
@@ -3658,28 +3685,30 @@ function brickPoints(game: BreakGame, i: i32): i32 -> @brickPoints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: llvm.smax.i32 nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 kind: i32 (const)
 function hitBrick(game: BreakGame, i: i32): void -> @hitBrick
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: i
-  calls: breakBrick breakable brickX brickY burst gfxRgb nish_panic_overflow
-  pointer game: size=312 writesThrough=true captured=false passedTo=breakBrick#0 burst#0 brickY#0
+  calls: breakBrick breakable brickX brickY burst gfxRgb nish_panic_overflow sound
+  pointer game: size=320 writesThrough=true captured=false passedTo=sound#0 breakBrick#0 sound#0 burst#0 brickY#0
   stackSites=0 stackLocals=0
   callee +1:8 breakable -> @breakable
-  callee +6:5 breakBrick -> @breakBrick
-  callee +8:5 burst -> @burst
-  callee +10:7 brickX -> @brickX
-  callee +11:7 brickY -> @brickY
-  callee +13:7 gfxRgb -> @gfxRgb
+  callee +2:5 sound -> @sound
+  callee +7:5 breakBrick -> @breakBrick
+  callee +9:5 sound -> @sound
+  callee +10:5 burst -> @burst
+  callee +12:7 brickX -> @brickX
+  callee +13:7 brickY -> @brickY
+  callee +15:7 gfxRgb -> @gfxRgb
 function breakBrick(game: BreakGame, i: i32): void -> @breakBrick
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: i
-  calls: breakBrick breakable brickAt brickColour brickPoints brickX brickY burst dropCapsule floatScore gfxRgb llvm.minimum.f64 llvm.smin.i32 nish.Rng.nextF64 nish_panic_overflow
-  pointer game: size=312 writesThrough=true captured=false passedTo=brickY#0 brickColour#0 brickPoints#0 floatScore#0 dropCapsule#0 burst#0 burst#0 brickAt#0 breakBrick#0 burst#0
+  calls: breakBrick breakable brickAt brickColour brickPoints brickX brickY burst dropCapsule floatScore gfxRgb llvm.minimum.f64 llvm.smin.i32 nish.Rng.nextF64 nish_panic_overflow sound
+  pointer game: size=320 writesThrough=true captured=false passedTo=brickY#0 brickColour#0 brickPoints#0 sound#0 floatScore#0 dropCapsule#0 sound#0 burst#0 burst#0 brickAt#0 breakBrick#0 burst#0
   stackSites=0 stackLocals=0
   local -9:9 kind: i32 (const)
   callee -8:8 breakable -> @breakable
@@ -3693,27 +3722,29 @@ function breakBrick(game: BreakGame, i: i32): void -> @breakBrick
   callee -1:23 brickColour -> @brickColour
   local +1:9 points: i32 (const)
   callee +1:23 brickPoints -> @brickPoints
-  callee +6:3 floatScore -> @floatScore
-  callee +6:54 gfxRgb -> @gfxRgb
-  callee +6:77 gfxRgb -> @gfxRgb
-  callee +7:33 Rng.nextF64 -> @nish.Rng.nextF64
-  callee +8:5 dropCapsule -> @dropCapsule
-  callee +11:5 burst -> @burst
-  callee +11:29 gfxRgb -> @gfxRgb
-  callee +12:5 burst -> @burst
-  callee +12:29 gfxRgb -> @gfxRgb
-  local +14:14 dr: i32 (let)
-  local +15:16 dc: i32 (let)
-  callee +16:13 breakable -> @breakable
-  callee +16:23 brickAt -> @brickAt
-  callee +17:11 breakBrick -> @breakBrick
-  callee +22:5 burst -> @burst
+  callee +6:3 sound -> @sound
+  callee +7:3 floatScore -> @floatScore
+  callee +7:54 gfxRgb -> @gfxRgb
+  callee +7:77 gfxRgb -> @gfxRgb
+  callee +8:33 Rng.nextF64 -> @nish.Rng.nextF64
+  callee +9:5 dropCapsule -> @dropCapsule
+  callee +12:5 sound -> @sound
+  callee +13:5 burst -> @burst
+  callee +13:29 gfxRgb -> @gfxRgb
+  callee +14:5 burst -> @burst
+  callee +14:29 gfxRgb -> @gfxRgb
+  local +16:14 dr: i32 (let)
+  local +17:16 dc: i32 (let)
+  callee +18:13 breakable -> @breakable
+  callee +18:23 brickAt -> @brickAt
+  callee +19:11 breakBrick -> @breakBrick
+  callee +24:5 burst -> @burst
 function dropCapsule(game: BreakGame, x: f64, y: f64): void -> @dropCapsule
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Rng.nextInt
   escaping: x y
   calls: nish.Rng.nextInt spawnCapsule
-  pointer game: size=312 writesThrough=false captured=false passedTo=spawnCapsule#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=spawnCapsule#0
   stackSites=0 stackLocals=0
   local +0:9 roll: i32 (const)
   callee +0:21 Rng.nextInt -> @nish.Rng.nextInt
@@ -3723,36 +3754,37 @@ function spawnCapsule(game: BreakGame, x: f64, y: f64, kind: i32): void -> @spaw
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: kind x y
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:14 c: Capsule (const)
 function stepCapsules(game: BreakGame): void -> @stepCapsules
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: applyPower burst capsuleColour floatScore nish_panic_overflow paddleWidth
-  pointer game: size=312 writesThrough=true captured=false passedTo=paddleWidth#0 applyPower#0 floatScore#0 burst#0
+  calls: applyPower burst capsuleColour floatScore nish_panic_overflow paddleWidth sound
+  pointer game: size=320 writesThrough=true captured=false passedTo=paddleWidth#0 sound#0 applyPower#0 floatScore#0 burst#0
   stackSites=0 stackLocals=0
   local -5:9 half: f64 (const)
   callee -5:21 paddleWidth -> @paddleWidth
   local -4:14 c: Capsule (const)
   local +1:11 caught: boolean (const)
-  callee +8:7 applyPower -> @applyPower
-  callee +10:7 floatScore -> @floatScore
-  callee +10:49 capsuleColour -> @capsuleColour
-  callee +11:7 burst -> @burst
-  callee +11:38 capsuleColour -> @capsuleColour
+  callee +8:7 sound -> @sound
+  callee +9:7 applyPower -> @applyPower
+  callee +11:7 floatScore -> @floatScore
+  callee +11:49 capsuleColour -> @capsuleColour
+  callee +12:7 burst -> @burst
+  callee +12:38 capsuleColour -> @capsuleColour
 function applyPower(game: BreakGame, kind: i32): void -> @applyPower [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: llvm.smin.i32 multiball nish_panic_overflow
-  pointer game: size=312 writesThrough=true captured=false passedTo=multiball#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=multiball#0
   stackSites=0 stackLocals=0
   callee +2:5 multiball -> @multiball
 function multiball(game: BreakGame): void -> @multiball
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: aim nish_panic_index splitBall
-  pointer game: size=312 writesThrough=true captured=false passedTo=splitBall#0 splitBall#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=splitBall#0 splitBall#0
   stackSites=0 stackLocals=0
   local -11:7 from: i32 (let)
   local -10:12 i: i32 (let)
@@ -3765,7 +3797,7 @@ function splitBall(game: BreakGame, src: Ball, angle: f64): void -> @splitBall
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: GfxTrail.clear llvm.cos.f64 llvm.sin.f64 steepen
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   pointer src: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -4:14 b: Ball (const)
@@ -3774,32 +3806,36 @@ function splitBall(game: BreakGame, src: Ball, angle: f64): void -> @splitBall
   callee +10:5 steepen -> @steepen
   callee +11:5 GfxTrail.clear -> @GfxTrail.clear
 function stepWall(game: BreakGame): void -> @stepWall
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: enterPhase llvm.minimum.f64 nish_panic_overflow wallBottom
-  pointer game: size=312 writesThrough=true captured=false passedTo=wallBottom#0 enterPhase#0
+  calls: enterPhase llvm.minimum.f64 nish_panic_overflow sound wallBottom
+  pointer game: size=320 writesThrough=true captured=false passedTo=sound#0 wallBottom#0 sound#0 enterPhase#0
   stackSites=0 stackLocals=0
-  callee +8:7 wallBottom -> @wallBottom
-  callee +11:5 enterPhase -> @enterPhase
+  callee +5:7 sound -> @sound
+  callee +9:7 wallBottom -> @wallBottom
+  callee +12:5 sound -> @sound
+  callee +13:5 enterPhase -> @enterPhase
 function wallBottom(game: BreakGame): f64 -> @wallBottom [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: brickAt brickY nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false passedTo=brickAt#0 brickY#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=brickAt#0 brickY#0
   stackSites=0 stackLocals=0
   local +0:12 row: i32 (let)
   local +1:14 col: i32 (let)
   callee +2:11 brickAt -> @brickAt
   callee +3:16 brickY -> @brickY
 function loseLife(game: BreakGame): void -> @loseLife
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: clearPowers enterPhase llvm.minimum.f64 llvm.smax.i32 nish_panic_overflow serve
-  pointer game: size=312 writesThrough=true captured=false passedTo=clearPowers#0 enterPhase#0 serve#0
+  calls: clearPowers enterPhase llvm.minimum.f64 llvm.smax.i32 nish_panic_overflow serve sound
+  pointer game: size=320 writesThrough=true captured=false passedTo=clearPowers#0 sound#0 enterPhase#0 sound#0 serve#0
   stackSites=0 stackLocals=0
   callee +3:3 clearPowers -> @clearPowers
   local +4:14 c: Capsule (const)
-  callee +8:5 enterPhase -> @enterPhase
-  callee +11:3 serve -> @serve
+  callee +8:5 sound -> @sound
+  callee +9:5 enterPhase -> @enterPhase
+  callee +12:3 sound -> @sound
+  callee +13:3 serve -> @serve
 function timeBonusFor(level: i32, seconds: i32): i32 -> @timeBonusFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.smax.i32 nish_panic_overflow
@@ -3809,10 +3845,10 @@ function livesBonusFor(level: i32, lives: i32): i32 -> @livesBonusFor [exported]
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function enterClear(game: BreakGame): void -> @enterClear
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: burst enterPhase gfxRgb livesBonusFor timeBonusFor
-  pointer game: size=312 writesThrough=true captured=false passedTo=burst#0 enterPhase#0
+  calls: burst enterPhase gfxRgb livesBonusFor sound timeBonusFor
+  pointer game: size=320 writesThrough=true captured=false passedTo=burst#0 sound#0 enterPhase#0
   stackSites=0 stackLocals=0
   callee +1:20 timeBonusFor -> @timeBonusFor
   callee +2:21 livesBonusFor -> @livesBonusFor
@@ -3820,18 +3856,19 @@ function enterClear(game: BreakGame): void -> @enterClear
   local +6:14 b: Ball (const)
   callee +9:3 burst -> @burst
   callee +9:32 gfxRgb -> @gfxRgb
-  callee +10:3 enterPhase -> @enterPhase
+  callee +10:3 sound -> @sound
+  callee +11:3 enterPhase -> @enterPhase
 function tallied(game: BreakGame): i32 -> @tallied [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i32.f64 nish_floor nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 total: i32 (const)
 function stepClear(game: BreakGame, input: TermInput): void -> @stepClear
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: confirmPressed enterPhase loadLevel nish_panic_overflow tallied
-  pointer game: size=312 writesThrough=true captured=false passedTo=tallied#0 enterPhase#0 loadLevel#0
+  pointer game: size=320 writesThrough=true captured=false passedTo=tallied#0 enterPhase#0 loadLevel#0
   pointer input: size=16 writesThrough=false captured=false passedTo=confirmPressed#0
   stackSites=0 stackLocals=0
   callee -1:7 confirmPressed -> @confirmPressed
@@ -3839,31 +3876,32 @@ function stepClear(game: BreakGame, input: TermInput): void -> @stepClear
   callee +7:5 enterPhase -> @enterPhase
   callee +9:5 loadLevel -> @loadLevel
 function stepLastScreen(game: BreakGame, input: TermInput): void -> @stepLastScreen
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: confirmPressed firework hue nish.Rng.nextF64
-  pointer game: size=312 writesThrough=true captured=false passedTo=firework#0
+  calls: confirmPressed firework hue nish.Rng.nextF64 sound
+  pointer game: size=320 writesThrough=true captured=false passedTo=firework#0 sound#0
   pointer input: size=16 writesThrough=false captured=false passedTo=confirmPressed#0
   stackSites=0 stackLocals=0
-  local -5:11 x: f64 (const)
+  local -6:11 x: f64 (const)
+  callee -6:20 Rng.nextF64 -> @nish.Rng.nextF64
+  local -5:11 y: f64 (const)
   callee -5:20 Rng.nextF64 -> @nish.Rng.nextF64
-  local -4:11 y: f64 (const)
-  callee -4:20 Rng.nextF64 -> @nish.Rng.nextF64
-  callee -3:5 firework -> @firework
-  callee -3:26 hue -> @hue
-  callee -3:30 Rng.nextF64 -> @nish.Rng.nextF64
+  callee -4:5 firework -> @firework
+  callee -4:26 hue -> @hue
+  callee -4:30 Rng.nextF64 -> @nish.Rng.nextF64
+  callee -3:5 sound -> @sound
   callee -1:42 confirmPressed -> @confirmPressed
 function particleCount(game: BreakGame, n: i32): i32 -> @particleCount
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function burst(game: BreakGame, x: f64, y: f64, n: i32, colour: i32): void -> @burst
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Rng.nextF64
   escaping: colour n x y
   calls: llvm.cos.f64 llvm.sin.f64 nish.Rng.nextF64 particleCount spawnParticle
-  pointer game: size=312 writesThrough=false captured=false passedTo=particleCount#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=particleCount#0
   stackSites=0 stackLocals=0
   local +0:9 count: i32 (const)
   callee +0:22 particleCount -> @particleCount
@@ -3881,7 +3919,7 @@ function firework(game: BreakGame, x: f64, y: f64, colour: i32): void -> @firewo
   sharedWrite: via nish.Rng.nextF64
   escaping: colour x y
   calls: gfxRgb llvm.cos.f64 llvm.sin.f64 nish.Rng.nextF64 particleCount spawnParticle
-  pointer game: size=312 writesThrough=false captured=false passedTo=particleCount#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=particleCount#0
   stackSites=0 stackLocals=0
   local +0:9 count: i32 (const)
   callee +0:22 particleCount -> @particleCount
@@ -3898,7 +3936,7 @@ function floatScore(game: BreakGame, x: f64, y: f64, points: i32, colour: i32): 
   sharedWrite: +0:3
   escaping: colour points x y
   calls: nish_panic_index
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:7 slot: Floater (let)
   local -5:14 f: Floater (const)
@@ -3906,7 +3944,7 @@ function stepEffects(game: BreakGame): void -> @stepEffects
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: llvm.maximum.f64 nish.Rng.nextF64 stepParticles
-  pointer game: size=312 writesThrough=true captured=false
+  pointer game: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -3:3 stepParticles -> @stepParticles
   local -2:14 f: Floater (const)
@@ -3917,14 +3955,14 @@ function drawnBallX(game: BreakGame, i: i32, alpha: f64): f64 -> @drawnBallX [ex
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: alpha i
   calls: lerp
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:10 lerp -> @lerp
 function drawnBallY(game: BreakGame, i: i32, alpha: f64): f64 -> @drawnBallY [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: alpha i
   calls: lerp
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:10 lerp -> @lerp
 function levelHue(level: i32): f64 -> @levelHue
@@ -3948,7 +3986,7 @@ function brickColour(game: BreakGame, i: i32): i32 -> @brickColour
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: dim gfxMix gfxRgb hue levelHue llvm.sin.f64 nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 kind: i32 (const)
   local +1:9 t: f64 (const)
@@ -4023,7 +4061,7 @@ function phaseSeconds(game: BreakGame, alpha: f64): f64 -> @phaseSeconds
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: alpha
   calls: clamp llvm.maximum.f64 nish_panic_overflow
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:40 clamp -> @clamp
 function drawBreakGame(game: BreakGame, fb: Framebuffer, alpha: f64): void -> @drawBreakGame [exported]
@@ -4031,7 +4069,7 @@ function drawBreakGame(game: BreakGame, fb: Framebuffer, alpha: f64): void -> @d
   sharedWrite: via viewFor
   escaping: alpha
   calls: clamp drawBalls drawCapsules drawField drawFloaters drawHud drawPaddle drawParticles drawScreen drawWall fillLetterbox gfxMix gfxRgb gradient hue lerp levelHue viewFor
-  pointer game: size=312 writesThrough=false captured=false passedTo=drawWall#0 drawCapsules#0 drawPaddle#0 drawBalls#0 drawFloaters#0 drawHud#0 drawScreen#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=drawWall#0 drawCapsules#0 drawPaddle#0 drawBalls#0 drawFloaters#0 drawHud#0 drawScreen#0
   pointer fb: size=16 writesThrough=true captured=true passedTo=viewFor#1
   stackSites=0 stackLocals=0
   local +0:9 a: f64 (const)
@@ -4097,7 +4135,7 @@ function drawWall(game: BreakGame, view: View, alpha: f64): void -> @drawWall
   sharedWrite: via bevelBrick
   escaping: alpha
   calls: bevelBrick brickAt brickColour brickX clamp dim disc drawTextCentred fillRect fontScaleFor gfxMix gfxRgb lerp nish_panic_overflow outBounce phaseSeconds
-  pointer game: size=312 writesThrough=false captured=false passedTo=phaseSeconds#0 brickAt#0 brickColour#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=phaseSeconds#0 brickAt#0 brickColour#0
   pointer view: size=64 writesThrough=false captured=false passedTo=fontScaleFor#0 bevelBrick#0 disc#0 disc#0 drawTextCentred#0 fillRect#0
   stackSites=0 stackLocals=0
   local +0:9 wall: f64 (const)
@@ -4138,7 +4176,7 @@ function drawCapsules(game: BreakGame, view: View, alpha: f64): void -> @drawCap
   sharedWrite: via glow
   escaping: alpha
   calls: capsuleColour capsuleLetter disc drawTextCentred fillRect fontScaleFor gfxMix gfxRgb glow lerp
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   pointer view: size=64 writesThrough=false captured=false passedTo=fontScaleFor#0 glow#0 fillRect#0 disc#0 disc#0 fillRect#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   local +0:9 glyph: i32 (const)
@@ -4161,11 +4199,11 @@ function drawCapsules(game: BreakGame, view: View, alpha: f64): void -> @drawCap
   callee +23:73 gfxRgb -> @gfxRgb
 function drawPaddle(game: BreakGame, view: View, alpha: f64): void -> @drawPaddle
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via glow
+  sharedWrite: via disc
   escaping: alpha
-  calls: bevelBrick clamp dim disc gfxRgb glow lerp llvm.maximum.f64 outCubic phaseSeconds
-  pointer game: size=312 writesThrough=false captured=false passedTo=phaseSeconds#0
-  pointer view: size=64 writesThrough=false captured=false passedTo=glow#0 disc#0 disc#0 bevelBrick#0
+  calls: bevelBrick clamp dim disc gfxRgb lerp llvm.maximum.f64 outCubic phaseSeconds
+  pointer game: size=320 writesThrough=false captured=false passedTo=phaseSeconds#0
+  pointer view: size=64 writesThrough=false captured=false passedTo=disc#0 disc#0 bevelBrick#0
   stackSites=0 stackLocals=0
   local +0:9 x: f64 (const)
   callee +0:18 lerp -> @lerp
@@ -4179,19 +4217,18 @@ function drawPaddle(game: BreakGame, view: View, alpha: f64): void -> @drawPaddl
   callee +6:21 gfxRgb -> @gfxRgb
   callee +8:14 gfxRgb -> @gfxRgb
   callee +10:14 gfxRgb -> @gfxRgb
-  callee +13:5 glow -> @glow
-  local +15:9 r: f64 (const)
-  callee +16:3 disc -> @disc
-  callee +16:41 dim -> @dim
-  callee +17:3 disc -> @disc
-  callee +17:41 dim -> @dim
-  callee +18:3 bevelBrick -> @bevelBrick
+  local +12:9 r: f64 (const)
+  callee +13:3 disc -> @disc
+  callee +13:41 dim -> @dim
+  callee +14:3 disc -> @disc
+  callee +14:41 dim -> @dim
+  callee +15:3 bevelBrick -> @bevelBrick
 function drawBalls(game: BreakGame, view: View, alpha: f64): void -> @drawBalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via drawTrail
   escaping: alpha
   calls: disc drawTrail drawnBallX drawnBallY gfxMix gfxRgb glow hue levelHue
-  pointer game: size=312 writesThrough=false captured=false passedTo=drawnBallX#0 drawnBallY#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=drawnBallX#0 drawnBallY#0
   pointer view: size=64 writesThrough=false captured=false passedTo=drawTrail#0 glow#0 disc#0
   stackSites=0 stackLocals=0
   local +0:9 fire: boolean (const)
@@ -4218,7 +4255,7 @@ function drawFloaters(game: BreakGame, view: View, alpha: f64): void -> @drawFlo
   sharedWrite: via drawNumberCentred
   escaping: alpha
   calls: clamp dim drawNumberCentred fontScale lerp
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   pointer view: size=64 writesThrough=false captured=false passedTo=fontScale#0 drawNumberCentred#0
   stackSites=0 stackLocals=0
   local +0:9 scale: i32 (const)
@@ -4233,7 +4270,7 @@ function drawHud(game: BreakGame, view: View): void -> @drawHud
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via drawNumber
   calls: clamp dim disc drawNumber drawNumberAt drawPower drawText drawTextCentred fontScaleFor gfxRgb levelLabel llvm.fptosi.sat.i32.f64 llvm.smax.i32 llvm.smin.i32 nish_floor nish_panic_overflow numberWidth pixelX
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   pointer view: size=64 writesThrough=false captured=false passedTo=fontScaleFor#0 drawNumber#0 disc#0 drawPower#0 drawPower#0 drawPower#0 drawPower#0 pixelX#0 drawText#0 drawNumberAt#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   local +0:9 fit: i32 (const)
@@ -4292,7 +4329,7 @@ function drawScreen(game: BreakGame, view: View, alpha: f64): void -> @drawScree
   sharedWrite: via drawCompactScreen
   escaping: alpha
   calls: blendRect clamp dim drawCompactScreen drawNumberCentred drawTextCentred fontScale fontScaleFor gfxRgb lerp levelLabel levelName llvm.smin.i32 nish_panic_overflow outBack outBounce phaseSeconds tallied
-  pointer game: size=312 writesThrough=false captured=false passedTo=phaseSeconds#0 drawCompactScreen#0 tallied#0
+  pointer game: size=320 writesThrough=false captured=false passedTo=phaseSeconds#0 drawCompactScreen#0 tallied#0
   pointer view: size=64 writesThrough=false captured=false passedTo=fontScale#0 fontScale#0 fontScaleFor#0 drawCompactScreen#1 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0 drawNumberCentred#0 blendRect#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   local +0:9 t: f64 (const)
@@ -4366,7 +4403,7 @@ function drawCompactScreen(game: BreakGame, view: View, t: f64, big: i32, small:
   sharedWrite: via drawTextCentred
   escaping: big small
   calls: blendRect clamp dim drawNumberCentred drawTextCentred gfxRgb lerp levelLabel levelName lineHeight outBack outBounce
-  pointer game: size=312 writesThrough=false captured=false
+  pointer game: size=320 writesThrough=false captured=false
   pointer view: size=64 writesThrough=false captured=false passedTo=lineHeight#0 lineHeight#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawTextCentred#0 drawTextCentred#0 blendRect#0 drawTextCentred#0 drawNumberCentred#0 blendRect#0 drawTextCentred#0 drawNumberCentred#0 drawTextCentred#0
   stackSites=0 stackLocals=0
   local +0:9 shadow: i32 (const)

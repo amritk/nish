@@ -27,9 +27,10 @@
  *   (`docs/AI.md`, "unknown method"), so these are its ranged accesses.
  * - `alias` — two names for one array, an array in a field, and an array a
  *   callee grows or shrinks between a length read and an access.
- * - `closure` — an arrow capturing a `const` array. The only arrow that
- *   captures in Nish is one passed to a `nish/threads` call (`docs/AI.md`,
- *   "An arrow captures nothing"), so this shape is a parallel one too.
+ * - `closure` — an arrow capturing a `const` array, passed to a
+ *   `nish/threads` call. An arrow passed to an ordinary function parameter
+ *   may capture too (`docs/LANGUAGE.md`, "Function parameters"), but the
+ *   generator writes only the parallel shape.
  * - `arena` — a `using a = arena()` block filling and reading a fresh array.
  * - `threads` — `parallelMapInto` into a destination of the source's length
  *   or one short, and `parallelReduce` over the answer.

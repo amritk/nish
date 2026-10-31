@@ -2411,26 +2411,35 @@ if (dealtHere("termIo")) {
     // size: the play run looks for the image's deletion at close, and the reopen runs
     // draw in ascii, whose frames are small enough to keep both openings. The stage
     // run pauses before F4 so the reopened stage can be held to the one it left;
-    // 120 frames is past the title's outro at any rate the relay draws.
+    // 120 frames is past the title's outro at any rate the relay draws. The play and
+    // stage runs skip the opening (the help falling apart) with a space at frame 2,
+    // so the title is up by frame 5. Each run keeps its settings in a config
+    // directory of its own, never the real `~/.config/nish/break`.
+    const configs = [0, 1, 2].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-")))
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
-        keys: wallKeys([3, "\r"], [120, " "], [125, "\x1bOR"], [130, "p"], [135, "q"], [150, "q"]),
+        env: { XDG_CONFIG_HOME: configs[0] },
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-reopen"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[1] },
         keys: wallKeys([3, "\x1b[17~"], [10, "\x1bOS"], [30, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
         dir: at("wall-stage"),
-        env: { NISH_TERM_GRAPHICS: "ascii" },
-        keys: wallKeys([3, "\r"], [120, " "], [130, "p"], [140, "\x1bOS"], [170, "q"], [180, "q"], [190, "q"]),
+        env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[2] },
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
-    ])
+    ]).finally(() => {
+      for (const config of configs) {
+        fs.rmSync(config, { recursive: true, force: true })
+      }
+    })
     const restored = (r) => r.status === 0 && r.sameStty && r.out.endsWith("\x1b[?1049l") && r.err === ""
     check(
       "nish break on a terminal: draws kitty images, and q quits with the screen restored, exit 0",
@@ -2444,7 +2453,7 @@ if (dealtHere("termIo")) {
     )
     const opened = staged.out.lastIndexOf("\x1b[?1049h")
     const leftAt = staged.out.slice(0, opened).split("\x1b[5n").length - 1
-    const [title, paused, back] = [2, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
+    const [title, paused, back] = [5, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
     const [asTitle, asPaused] = [wallSame(paused, title, 40), wallSame(paused, back, 40)]
     const seen = `${said(staged)}\nthe paused screen matches the title in ${asTitle.toFixed(3)}, the reopened in ${asPaused.toFixed(3)}`
     check(
@@ -2778,6 +2787,129 @@ if (!only || "net_set_option".includes(only)) {
     loudSet.status !== 0 && loudSet.stderr.includes("`netSetOption` has no synchronous reading under Node"),
     shown(loudSet)
   )
+}
+
+// The Unix-domain calls under the prelude, by their global spellings: each of
+// the eight throws, naming itself, and the flag and the two pair kinds read as
+// the numbers a native build folds them to (`tests/cases/net_unix_calls`,
+// `net_unix_paths` and `net_unix_scm` are the native half).
+if (!only || "net_unix".includes(only)) {
+  const unixDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(unixDir, { recursive: true })
+  const kindsEntry = path.join(unixDir, "unix-kinds.ts")
+  fs.writeFileSync(
+    kindsEntry,
+    "export const main = (): number => {\n" +
+      "  console.log(`${NET_UNIX_UNLINK_STALE} ${NET_UNIX_STREAM} ${NET_UNIX_SEQPACKET}`);\n" +
+      "  return 0;\n};\n"
+  )
+  const kinds = runUnderPrelude(kindsEntry, [])
+  check(
+    "net_unix: under the prelude the flag and the pair kinds read 1, 1 and 2, as natively",
+    kinds.status === 0 && kinds.stdout === "1 1 2\n",
+    shown(kinds)
+  )
+  const calls = [
+    ["unixListen", 'unixListen("@nish", 4, 0)'],
+    ["unixListenMode", 'unixListenMode("nish.sock", 4, 0, 384)'],
+    ["unixConnect", 'unixConnect("@nish")'],
+    ["unixAccept", "unixAccept(3)"],
+    ["unixSocketPair", "unixSocketPair(NET_UNIX_STREAM, [0, 0])"],
+    ["sendFd", "sendFd(3, 0, [1], 0, 1)"],
+    ["recvFd", "recvFd(3, [0], 0, 1, [0])"],
+    ["peerCredentials", "peerCredentials(3, [0, 0, 0])"],
+  ]
+  for (const [name, call] of calls) {
+    const entry = path.join(unixDir, `${name}.ts`)
+    fs.writeFileSync(entry, `export const main = (): number => ${call};\n`)
+    const loud = runUnderPrelude(entry, [])
+    check(
+      `net_unix: under the prelude ${name} fails loudly rather than answering`,
+      loud.status !== 0 && loud.stderr.includes(`\`${name}\` has no synchronous reading under Node`),
+      shown(loud)
+    )
+  }
+}
+
+// `spawnWithFds` under the prelude, by its global spelling: it starts a child
+// as `spawn` does, so it throws, naming itself, for `spawn`'s reason
+// (`tests/cases/spawn_fds_child` is the native half). `--emit-ts` imports it
+// from `nish/runtime`, which throws the same way, as it imports `spawnPiped`:
+// without its `AMBIENT_NAMES` entry the module calls a global Node never had.
+if (!only || "spawn_fds".includes(only)) {
+  const fdsDir = path.join(buildDir, "spawn-fds-prelude")
+  fs.mkdirSync(fdsDir, { recursive: true })
+  const entry = path.join(fdsDir, "spawn-with-fds.ts")
+  fs.writeFileSync(entry, 'export const main = (): number => spawnWithFds(["true"], [0]);\n')
+  const loud = runUnderPrelude(entry, [])
+  check(
+    "spawn_fds: under the prelude spawnWithFds fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`spawnWithFds` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const emitted = path.join(fdsDir, "emitted")
+  fs.rmSync(emitted, { recursive: true, force: true })
+  const ts = spawnSync(NISH, [entry, "--emit-ts", emitted], { cwd: root, encoding: "utf8" })
+  const module = path.join(emitted, "spawn-with-fds.ts")
+  const text = ts.status === 0 && fs.existsSync(module) ? fs.readFileSync(module, "utf8") : ""
+  check(
+    "spawn_fds: --emit-ts imports spawnWithFds from nish/runtime",
+    text.startsWith('import { spawnWithFds } from "nish/runtime"\n'),
+    `exit ${ts.status}\n${ts.stderr}\n${text}`
+  )
+}
+
+// `netMss` where there is no socket to ask. Under the prelude it throws, naming
+// itself, as the other `nish:net` calls do; a `wasm32` build compiles it to
+// the constant -1, with no runtime symbol for the freestanding link to miss,
+// and the `--profile wasi` build runs and prints that -1
+// (`tests/cases/net_mss` is the native half).
+if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
+  const mssDir = path.join(buildDir, "net-mss")
+  fs.rmSync(mssDir, { recursive: true, force: true })
+  fs.mkdirSync(mssDir, { recursive: true })
+  const preludeEntry = path.join(mssDir, "prelude.ts")
+  fs.writeFileSync(preludeEntry, "export const main = (): number => netMss(3);\n")
+  const loud = runUnderPrelude(preludeEntry, [])
+  check(
+    "net_mss: under the prelude netMss fails loudly rather than answering -1",
+    loud.status !== 0 && loud.stderr.includes("`netMss` has no synchronous reading under Node"),
+    shown(loud)
+  )
+  const entry = path.join(mssDir, "net_mss_wasm.ts")
+  fs.writeFileSync(
+    entry,
+    'import { netMss } from "nish:net";\n\n' +
+      "export const main = (): number => {\n  console.log(netMss(0));\n  return 0;\n};\n"
+  )
+  const ll = path.join(mssDir, "net_mss_wasm.ll")
+  const wasm32 = spawnSync(NISH, [entry, "-o", ll, "--target", "wasm32"], { cwd: root, encoding: "utf8" })
+  const ir = wasm32.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+  check(
+    "net_mss: a wasm32 build compiles netMss to -1, with no call into runtime-net.c",
+    wasm32.status === 0 && !ir.includes("nish_net_mss") && ir.includes("i32 -1"),
+    shown(wasm32)
+  )
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const module = path.join(mssDir, "net_mss_wasm.wasm")
+    const built = spawnSync(NISH, [entry, "-o", mssDir + path.sep, "--link", module, "--profile", "wasi"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+        : built
+    check(
+      `net_mss: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) links and prints -1`,
+      ran.status === 0 && ran.stdout === "-1\n",
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: net_mss: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of netMss is not run`
+    )
+  }
 }
 
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
@@ -10764,6 +10896,80 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
   }
 }
 
+// `scopeWithStack` gives a scope's tasks the stack it names, and the default it
+// replaces is the one that fails. Each of thread_stack_deep's million-deep
+// chains needs at least 16 MB. Under `ulimit -s 8192`, which fixes glibc's
+// default thread stack and main's at 8 MiB on any host, the program written
+// with `scope()` (tests/link/thread_stack_fixtures/default.ts) faults on one
+// thread and on eight; with a 256 MiB stack it prints its two sums; with
+// 128 KiB (guard.ts) it faults on the guard page below the stack; under a
+// 128 MiB `ulimit -v` the 256 MiB stack cannot be mapped, and the program ends
+// with nish_stack_fail's out-of-memory message before any task runs. The link
+// harness counts a death by signal as a failure, so the faults are read here,
+// as `spawnSync`'s signal.
+if (!only || "thread_stack".includes(only)) {
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("thread_stack: the faults are read under a Linux ulimit, and this host is not Linux with clang")
+  } else {
+    const dir = path.join(buildDir, "thread_stack")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const programs = [
+      ["deep", path.join(linkDir, "thread_stack_deep", "main.ts")],
+      ["default", path.join(linkDir, "thread_stack_fixtures", "default.ts")],
+      ["guard", path.join(linkDir, "thread_stack_fixtures", "guard.ts")],
+    ]
+    const exes = new Map()
+    for (const [name, src] of programs) {
+      const exe = path.join(dir, name)
+      const c = spawnSync(NISH, [src, "--link", exe], { cwd: root, encoding: "utf8" })
+      if (c.status !== 0) check(`thread_stack: ${path.relative(root, src)} compiles and links`, false, shown(c))
+      exes.set(name, c.status === 0 ? exe : null)
+    }
+    const run = (name, threads, limit = "") => {
+      const exe = exes.get(name)
+      return exe === null
+        ? null
+        : spawnSync("bash", ["-c", `ulimit -S -s 8192 ${limit}&& exec "$0"`, exe], {
+            encoding: "utf8",
+            timeout: 60000,
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+    }
+    const said = (r) => (r === null ? "not built" : `signal ${r.signal}\n${shown(r)}`)
+    for (const threads of ["1", "8"]) {
+      const deep = run("deep", threads)
+      check(
+        `thread_stack: a 256 MiB scopeWithStack runs two million-deep chains on ${threads} thread(s)`,
+        deep !== null && deep.status === 0 && deep.stdout === "960218 256782\n",
+        said(deep)
+      )
+      const dflt = run("default", threads)
+      check(
+        `thread_stack: the same chains on scope()'s default 8 MiB stack fault on ${threads} thread(s)`,
+        dflt !== null && dflt.signal === "SIGSEGV",
+        said(dflt)
+      )
+      const guard = run("guard", threads)
+      check(
+        `thread_stack: a 128 KiB scopeWithStack faults on its guard page on ${threads} thread(s)`,
+        guard !== null && guard.signal === "SIGSEGV",
+        said(guard)
+      )
+      const room = run("deep", threads, "&& ulimit -S -v 131072 ")
+      check(
+        `thread_stack: a 256 MiB stack under a 128 MiB address space ends with the out-of-memory message on ${threads} thread(s)`,
+        room !== null &&
+          room.status === 1 &&
+          room.stdout === "" &&
+          room.stderr ===
+            "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n",
+        said(room)
+      )
+    }
+  }
+}
+
 // WP37 stage 1: `--sandbox` confines a native program to main's capability set
 // (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
 // Nish programs whose main reaches a chosen set of capabilities and hands its
@@ -11011,6 +11217,48 @@ if (!only || "sandbox".includes(only)) {
         "sandbox: a spawn redirect without fs.write fails in the child",
         to !== null && to.status === 0 && to.stdout === "status -1\n" && !fs.existsSync(redirect),
         said(to)
+      )
+
+      // The Unix-domain calls (tests/link/net_unix_sandbox): granted `net`
+      // alone, abstract names work and a pathname bind is -13, since Landlock
+      // counts making the socket file as a write; granted `fs.write` too, it
+      // binds. On ABI 6 a connect to an abstract listener outside the sandbox
+      // is -1, the scope's EPERM; below it the connect goes through. The
+      // listener outside is the same fixture built without the sandbox,
+      // waiting in `pollWait` until it is killed, under a name with this
+      // run's pid, and the check needs it seen in /proc/net/unix first.
+      const unixBuild = (name, fixture, flags) =>
+        build(name, `../net_unix_sandbox/${fixture}`, flags, { driver: null })
+      const serveExe = unixBuild("unix-net-plain", "net", [])
+      const netExe = unixBuild("unix-net-sandbox", "net", ["--sandbox"])
+      const writeExe = unixBuild("unix-write-sandbox", "write", ["--sandbox"])
+      const outside = `@nish-net-unix-sandbox-outside-${process.pid}`
+      const server = serveExe !== null ? spawn(serveExe, ["serve", outside], { stdio: "ignore" }) : null
+      const pause = new Int32Array(new SharedArrayBuffer(4))
+      let serving = false
+      for (let k = 0; k < 200 && server !== null && !serving; k++) {
+        serving = fs.readFileSync("/proc/net/unix", "utf8").includes(outside)
+        if (!serving) Atomics.wait(pause, 0, 0, 50)
+      }
+      const unixNet = run(netExe, ["probe", outside])
+      if (server !== null) server.kill()
+      check(
+        `sandbox: granted net alone, abstract Unix sockets work and a pathname bind is -13, and an abstract listener outside is ${abi >= 6 ? "-1" : "reached (ABI <6)"}`,
+        serving &&
+          unixNet !== null &&
+          unixNet.status === 0 &&
+          unixNet.stdout === `abstract true true\npathname -13\noutside ${abi >= 6 ? "-1" : "connected"}\n` &&
+          !fs.existsSync(path.join(W, "net.sock")),
+        `listener outside seen: ${serving}\n${said(unixNet)}`
+      )
+      const unixWrite = run(writeExe, [])
+      check(
+        "sandbox: granted net and fs.write, a pathname Unix listener binds and is unlinked",
+        unixWrite !== null &&
+          unixWrite.status === 0 &&
+          unixWrite.stdout === "pathname true true\nunlink 0\n" &&
+          !fs.existsSync(path.join(W, "write.sock")),
+        said(unixWrite)
       )
 
       // The scopes: `--allow fs.read=<dir>` grants reading beneath the
@@ -22980,11 +23228,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
     riddle.stderr
   )
-  const secret = inSecret(["break"])
+  // The refused run gets a config directory of its own, so it can be shown to
+  // write no settings, and never touches the real `~/.config/nish/break`.
+  const secretConfig = fs.mkdtempSync(path.join(os.tmpdir(), "nish-break-config-"))
+  const secret = spawnSync(NISH, ["break"], {
+    cwd: secretDir,
+    encoding: "utf8",
+    env: { ...process.env, ...plainEnv, XDG_CONFIG_HOME: secretConfig },
+  })
+  const secretWrote = fs.readdirSync(secretConfig)
+  fs.rmSync(secretConfig, { recursive: true, force: true })
   check(
     "nish break, with no such file and stdin a pipe: refused in one line, exit 1",
     secret.status === 1 && secret.stderr === "the wall is only visible in a terminal.\n" && secret.stdout === "",
     secret.stdout + secret.stderr
+  )
+  check(
+    "nish break, refused on a pipe: writes no settings file",
+    secretWrote.length === 0,
+    secretWrote.join(", ")
   )
   fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
   const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])
@@ -24422,7 +24684,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
    * Type-check `files` against the ambient declarations with a project of their
    * own: `tsc -p` on the config written here, in this process (tests/typecheck.js).
    */
-  const typeCheck = (name, files) => {
+  const typeCheck = (name, files, fallthrough = false) => {
     const config = path.join(ambientDir, `tsconfig.${name}.json`)
     fs.writeFileSync(
       config,
@@ -24430,9 +24692,16 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // `include: []` drops its file list for this project's own. The two
       // unused-name checks are lint for the compiler's own source, not typing:
       // a golden case declares a function it never calls on purpose.
+      // `fallthrough` lifts the fallthrough check for the cases that pin a
+      // clause running on into the next, which TypeScript the language
+      // accepts (docs/LANGUAGE.md, `switch`); every other case keeps it.
       JSON.stringify({
         extends: path.join(root, "tsconfig.json"),
-        compilerOptions: { noUnusedLocals: false, noUnusedParameters: false },
+        compilerOptions: {
+          noUnusedLocals: false,
+          noUnusedParameters: false,
+          ...(fallthrough ? { noFallthroughCasesInSwitch: false } : {}),
+        },
         include: [],
         files: [declarations, ...files],
       })
@@ -24523,17 +24792,27 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
   ])
+  // The cases whose clauses fall through on purpose, checked in a project
+  // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
+  // that falls through is added here on purpose and every other keeps the check.
+  const FALLTHROUGH_CASES = new Set(["cf_switch_fallthrough.ts", "cf_label_walks.ts"])
   const acceptedCases = fs
     .readdirSync(casesDir)
     .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f))
   const everyCase = typeCheck(
     "accepted",
-    acceptedCases.map((f) => path.join(casesDir, f))
+    acceptedCases.filter((f) => !FALLTHROUGH_CASES.has(f)).map((f) => path.join(casesDir, f))
+  )
+  const fallthroughCases = acceptedCases.filter((f) => FALLTHROUGH_CASES.has(f))
+  const fallingThrough = typeCheck(
+    "fallthrough",
+    fallthroughCases.map((f) => path.join(casesDir, f)),
+    true
   )
   check(
-    `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences)`,
-    everyCase.ok,
-    everyCase.output
+    `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences, ${fallthroughCases.length} without the fallthrough check)`,
+    everyCase.ok && fallingThrough.ok && fallthroughCases.length === FALLTHROUGH_CASES.size,
+    everyCase.output + fallingThrough.output
   )
 
   // And on the largest Nish program there is: the compiler itself.

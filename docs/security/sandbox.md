@@ -196,7 +196,36 @@ recorded rather than counted.
   `ioctl` there; strict runs anyway, since a terminal already on fd 0 gives
   the same on every ABI (open question 12).
 - **The scopes below ABI 6.** Signals to the same uid and abstract Unix
-  sockets are not scoped; strict runs anyway (open question 8).
+  sockets are not scoped; strict runs anyway (open question 8). `nish:net`'s
+  `unixConnect` reaches abstract names, so below ABI 6 a sandboxed program
+  granted `net` can connect to an abstract listener outside the sandbox; from
+  ABI 6 that connect is -1 (`EPERM`), and its own abstract listeners still
+  work.
+- **A pathname Unix listener needs `fs.write`.** Landlock counts binding a
+  socket file as MAKE_SOCK, a write, so `unixListen` on a path under `net`
+  alone is -13 and leaves no file. The capability pass grants `net` for the
+  call and does not infer `fs.write`, since the path is data; a program that
+  listens on a path asks for both, or uses an abstract name. Pinned by the
+  two `sandbox: granted net …` checks in `tests/run.js`.
+- **A pathname Unix connect is not confined.** The sandbox uses no Landlock
+  right that covers connecting to a pathname socket: a later ABI adds
+  `LANDLOCK_ACCESS_FS_RESOLVE_UNIX`, which `runtime/runtime-sandbox.c` does
+  not ask for, and the abstract-socket scope covers abstract names only. A sandboxed program granted `net` can therefore
+  `unixConnect` to any pathname listener outside the sandbox whose file it
+  may write and whose directories it may search, such as a system daemon's
+  socket; `fs.read` and `fs.write` do not govern it. Recorded open: what
+  bounds it is the socket file's mode and its directory's, which the listener
+  sets, and a program that must not reach a host's daemons should not be
+  granted `net`. Not pinned by a test.
+- **A passed descriptor is not checked.** Landlock rules apply when a path
+  is opened, and `sendmsg` and `recvmsg` are not in the seccomp filter, so a
+  file another process opens and sends with `sendFd` reaches a sandboxed
+  `recvFd` usable as it was opened, whatever `fs.read` and `fs.write` grant;
+  only making the socket it arrives on needs `net`. A child started with
+  `spawnWithFds` likewise holds what its parent handed it. This is the first
+  bullet of "What the adversary keeps", now reachable from the language
+  (`docs/security/runtime.md`, RT-37 and RT-40): what bounds it is who is at
+  the other end, which `peerCredentials` names (RT-39). Not pinned by a test.
 - **Scopes are resolved at build time.** The directory is the realpath the
   compiler saw; the binary opens that path when it starts, so a directory
   renamed, removed or replaced by a symlink in between is opened as it then

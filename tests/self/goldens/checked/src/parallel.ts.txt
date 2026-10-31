@@ -95,6 +95,7 @@ import K_NULLABLE from "./types" -> const K_NULLABLE
 import K_RESULT from "./types" -> const K_RESULT
 import K_STRUCT from "./types" -> const K_STRUCT
 import T_BOOL from "./types" -> const T_BOOL
+import T_CPTR from "./types" -> const T_CPTR
 import T_I32 from "./types" -> const T_I32
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
@@ -103,12 +104,17 @@ const THREAD_SCOPE: string = "ThreadScope"
 const DISPOSE_METHOD: string = "[Symbol.dispose]" [exported]
 const SPAWN_WITH: string = "spawnWith"
 const SPAWN_THUNK: string = "spawnThunk"
+const CAPTURE_NONE: i32 = 0 [exported]
+const CAPTURE_CALL: i32 = 1 [exported]
+const CAPTURE_PARALLEL: i32 = 2 [exported]
+const CAPTURE_TASK: i32 = 3 [exported]
 const REGION_COST: i32 = 2097152
 const CALL_COST: i32 = 4
 const ALLOC_COST: i32 = 32
 const DEFAULT_TRIPS: i32 = 64
 const COPIED_NONE_REMEDY: string = "keep the data the `Mutex` holds as numbers and strings, `class Shared { n: i32 = 0 }` behind `new Mutex<Shared>(new Shared())`"
 const DESTINATION_ELEMENTS: string = "|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|number|boolean|"
+const MIN_STACK: f64 = 131072
 const REGION_TAIL: string = ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read"
 const MUTEX: string = "Mutex"
 const MUTEX_GUARD: string = "MutexGuard"
@@ -274,7 +280,7 @@ function isVoidSpawnTemplate(template: TemplateInfo): boolean -> @isVoidSpawnTem
 function isVoidSpawn(sig: FunctionSig): boolean -> @isVoidSpawn [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +1:9 template: TemplateInfo | null (const)
@@ -282,7 +288,7 @@ function isVoidSpawn(sig: FunctionSig): boolean -> @isVoidSpawn [exported]
 function taskArgTypeOf(sig: FunctionSig): i32 -> @taskArgTypeOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +1:9 template: TemplateInfo | null (const)
@@ -296,19 +302,19 @@ function parallelRole(template: TemplateInfo): i32 -> @parallelRole [exported]
   local +13:9 name: string (const)
 function parallelRoleOf(sig: FunctionSig): i32 -> @parallelRoleOf [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
 function parallelBodyOf(sig: FunctionSig): FunctionSig | null -> @parallelBodyOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
 function taskStoreOf(task: FunctionSig): FunctionSig | null -> @taskStoreOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.body nish_panic_index
-  pointer task: size=136 writesThrough=false captured=false passedTo=FunctionSig.body#0
+  pointer task: size=144 writesThrough=false captured=false passedTo=FunctionSig.body#0
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +1:9 body: Node | null (const)
@@ -316,34 +322,34 @@ function taskStoreOf(task: FunctionSig): FunctionSig | null -> @taskStoreOf [exp
 function isSpawnEntry(sig: FunctionSig): boolean -> @isSpawnEntry [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: parallelRoleOf
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
   callee +0:60 parallelRoleOf -> @parallelRoleOf
 function isParallelEntry(sig: FunctionSig): boolean -> @isParallelEntry [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: parallelRoleOf
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
   local +0:9 role: i32 (const)
   callee +0:16 parallelRoleOf -> @parallelRoleOf
 function isMapEntry(sig: FunctionSig): boolean -> @isMapEntry [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: parallelRoleOf
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
   local +0:9 role: i32 (const)
   callee +0:16 parallelRoleOf -> @parallelRoleOf
 function isRegionEntry(sig: FunctionSig): boolean -> @isRegionEntry [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: parallelRoleOf
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
   local +0:9 role: i32 (const)
   callee +0:16 parallelRoleOf -> @parallelRoleOf
 function chunkDstIndex(sig: FunctionSig): i32 -> @chunkDstIndex [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq parallelRoleOf
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +1:9 template: TemplateInfo | null (const)
@@ -354,7 +360,7 @@ function recordParallelCall(program: CheckedProgram, node: Node, sig: FunctionSi
   calls: ParallelCall.constructor isParallelEntry isSpawnEntry namedLocal nish_alloc_struct nish_array_grow nish_panic_index parallelRoleOf
   pointer program: size=656 writesThrough=false captured=false passedTo=namedLocal#0
   pointer node: size=40 writesThrough=true captured=true passedTo=ParallelCall.constructor#1
-  pointer sig: size=136 writesThrough=true captured=true passedTo=isSpawnEntry#0 isParallelEntry#0 isSpawnEntry#0 parallelRoleOf#0 ParallelCall.constructor#2
+  pointer sig: size=144 writesThrough=true captured=true passedTo=isSpawnEntry#0 isParallelEntry#0 isSpawnEntry#0 parallelRoleOf#0 ParallelCall.constructor#2
   stackSites=0 stackLocals=0
   local -15:9 calls: ParallelCall[] (const)
   callee -15:17 isSpawnEntry -> @isSpawnEntry
@@ -368,7 +374,7 @@ function recordParallelCall(program: CheckedProgram, node: Node, sig: FunctionSi
 function positionIn(fn: FunctionSig, node: Node): string -> @positionIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.columnOf SourceFile.lineOf nish_str_concat nish_str_from_i32
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer fn: size=144 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 origin: SourceFile | null (const)
@@ -377,7 +383,7 @@ function positionIn(fn: FunctionSig, node: Node): string -> @positionIn
 function intrinsicName(sig: FunctionSig): string -> @intrinsicName
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: parallelRoleOf
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
   local +0:9 role: i32 (const)
   callee +0:16 parallelRoleOf -> @parallelRoleOf
@@ -387,8 +393,8 @@ function sharedWriteMessage(program: CheckedProgram, table: TypeTable, sig: Func
   calls: FactsTable.get intrinsicName nish_panic_index nish_panic_overflow nish_str_concat parallelRoleOf positionIn serialRemedy withSerial
   pointer program: size=656 writesThrough=false captured=false passedTo=serialRemedy#0
   pointer table: size=96 writesThrough=false captured=false passedTo=serialRemedy#1
-  pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0 parallelRoleOf#0 intrinsicName#0
-  pointer fn: size=136 writesThrough=false captured=false passedTo=positionIn#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=intrinsicName#0 parallelRoleOf#0 intrinsicName#0
+  pointer fn: size=144 writesThrough=false captured=false passedTo=positionIn#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
   pointer call: size=40 writesThrough=false captured=false passedTo=serialRemedy#3
   stackSites=0 stackLocals=0
@@ -416,8 +422,8 @@ function recyclesPerElement(f: FunctionFacts): boolean -> @recyclesPerElement [e
 function arenaMessage(sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string -> @arenaMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get intrinsicName nish_str_concat
-  pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false passedTo=intrinsicName#0
+  pointer fn: size=144 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
   local +0:9 own: FunctionFacts | null (const)
@@ -429,8 +435,8 @@ function escapeMessage(program: CheckedProgram, table: TypeTable, sig: FunctionS
   calls: FactsTable.get intrinsicName nish_panic_index nish_panic_overflow nish_str_concat positionIn serialRemedy withSerial
   pointer program: size=656 writesThrough=false captured=false passedTo=serialRemedy#0
   pointer table: size=96 writesThrough=false captured=false passedTo=serialRemedy#1
-  pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0 intrinsicName#0
-  pointer fn: size=136 writesThrough=false captured=false passedTo=positionIn#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=intrinsicName#0 intrinsicName#0
+  pointer fn: size=144 writesThrough=false captured=false passedTo=positionIn#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer call: size=40 writesThrough=false captured=false passedTo=serialRemedy#3
   stackSites=0 stackLocals=0
@@ -452,8 +458,8 @@ function allocationWarning(table: TypeTable, sig: FunctionSig, fn: FunctionSig, 
   escaping: type
   calls: FactsTable.get TypeTable.typeName crossesByCopy intrinsicName nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=crossesByCopy#0 TypeTable.typeName#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false passedTo=intrinsicName#0
+  pointer fn: size=144 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
   local +0:9 own: FunctionFacts | null (const)
@@ -611,7 +617,7 @@ function resultWording(table: TypeTable, intrinsic: string, fn: FunctionSig, typ
   escaping: serial type
   calls: TypeTable.typeName isScalarArgument nish_str_concat withSerial
   pointer table: size=96 writesThrough=false captured=false passedTo=isScalarArgument#0 TypeTable.typeName#0
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer fn: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 isScalarArgument -> @isScalarArgument
   callee +4:39 TypeTable.typeName -> @TypeTable.typeName
@@ -630,7 +636,7 @@ function crossingWording(table: TypeTable, intrinsic: string, fn: FunctionSig, t
   escaping: serial type
   calls: TypeTable.typeName crossesByCopy isScalarArgument nish_str_concat withSerial
   pointer table: size=96 writesThrough=false captured=false passedTo=isScalarArgument#0 crossesByCopy#0 TypeTable.typeName#0
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer fn: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 isScalarArgument -> @isScalarArgument
   callee +0:40 crossesByCopy -> @crossesByCopy
@@ -643,8 +649,8 @@ function resultMessage(program: CheckedProgram, table: TypeTable, sig: FunctionS
   calls: crossingWording intrinsicName parallelRoleOf resultWording serialRemedy
   pointer program: size=656 writesThrough=false captured=false passedTo=serialRemedy#0
   pointer table: size=96 writesThrough=false captured=false passedTo=serialRemedy#1 resultWording#0 crossingWording#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0 parallelRoleOf#0
-  pointer fn: size=136 writesThrough=false captured=false passedTo=resultWording#2 crossingWording#2
+  pointer sig: size=144 writesThrough=false captured=false passedTo=intrinsicName#0 parallelRoleOf#0
+  pointer fn: size=144 writesThrough=false captured=false passedTo=resultWording#2 crossingWording#2
   pointer call: size=40 writesThrough=false captured=false passedTo=serialRemedy#3
   stackSites=0 stackLocals=0
   local +0:9 intrinsic: string (const)
@@ -661,7 +667,7 @@ function taskResultMessage(program: CheckedProgram, table: TypeTable, fn: Functi
   calls: crossingWording serialRemedy
   pointer program: size=656 writesThrough=false captured=false passedTo=serialRemedy#0
   pointer table: size=96 writesThrough=false captured=false passedTo=crossingWording#0 serialRemedy#1
-  pointer fn: size=136 writesThrough=false captured=false passedTo=crossingWording#2
+  pointer fn: size=144 writesThrough=false captured=false passedTo=crossingWording#2
   pointer call: size=40 writesThrough=false captured=false passedTo=serialRemedy#3
   stackSites=0 stackLocals=0
   callee +0:14 crossingWording -> @crossingWording
@@ -727,8 +733,8 @@ function reachesDstMessage(table: TypeTable, program: CheckedProgram, sig: Funct
   calls: StringSet.constructor TypeTable.typeName nish_panic_index nish_str_concat reachingPath
   pointer table: size=96 writesThrough=false captured=false passedTo=reachingPath#0 TypeTable.typeName#0
   pointer program: size=656 writesThrough=false captured=false passedTo=reachingPath#1
-  pointer sig: size=136 writesThrough=false captured=false
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
+  pointer fn: size=144 writesThrough=false captured=false
   stackSites=1 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +4:9 element: i32 (const)
@@ -741,7 +747,7 @@ function reachesDstMessage(table: TypeTable, program: CheckedProgram, sig: Funct
 function combiningOperator(fn: FunctionSig): string -> @combiningOperator
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.writtenArity nish_panic_index nish_str_eq unwrapParens
-  pointer fn: size=136 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
+  pointer fn: size=144 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
   stackSites=0 stackLocals=0
   callee +0:21 FunctionSig.writtenArity -> @FunctionSig.writtenArity
   local +3:7 body: Node (let)
@@ -774,8 +780,8 @@ function isLiteral(node: Node, want: string): boolean -> @isLiteral
 function reduceMessage(sig: FunctionSig, fn: FunctionSig, identity: Node, identityText: string): string -> @reduceMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: combiningOperator identityOf isLiteral isNonAssociative nish_str_concat parallelRoleOf
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
-  pointer fn: size=136 writesThrough=false captured=false passedTo=combiningOperator#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer fn: size=144 writesThrough=false captured=false passedTo=combiningOperator#0
   pointer identity: size=40 writesThrough=true captured=true passedTo=isLiteral#0
   stackSites=0 stackLocals=0
   callee +0:7 parallelRoleOf -> @parallelRoleOf
@@ -789,7 +795,7 @@ function CaptureSlot.constructor(this: CaptureSlot, arrow: FunctionSig, index: i
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: arrow index
   pointer this: size=16 writesThrough=true captured=false
-  pointer arrow: size=136 writesThrough=true captured=true
+  pointer arrow: size=144 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function CaptureSlot.type(this: CaptureSlot): i32 -> @CaptureSlot.type [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -801,7 +807,7 @@ function collectCaptures(sig: FunctionSig, out: CaptureSlot[]): void -> @collect
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: CaptureSlot.constructor collectCaptures nish_alloc_struct nish_array_grow
-  pointer sig: size=136 writesThrough=true captured=true passedTo=CaptureSlot.constructor#1
+  pointer sig: size=144 writesThrough=true captured=true passedTo=CaptureSlot.constructor#1
   pointer out: size=0 writesThrough=true captured=false passedTo=collectCaptures#1
   stackSites=0 stackLocals=0
   local -2:9 k: i32 (let)
@@ -813,7 +819,7 @@ function capturesOf(sig: FunctionSig): CaptureSlot[] -> @capturesOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectCaptures
   calls: collectCaptures
-  pointer sig: size=136 writesThrough=true captured=true passedTo=collectCaptures#0
+  pointer sig: size=144 writesThrough=true captured=true passedTo=collectCaptures#0
   stackSites=0 stackLocals=0
   local +0:9 out: CaptureSlot[] (const)
   callee +1:3 collectCaptures -> @collectCaptures
@@ -842,6 +848,22 @@ function taskCaptureWriteMessage(name: string): string -> @taskCaptureWriteMessa
   calls: nish_str_concat
   stackSites=0 stackLocals=0
 function captureWriteMessage(name: string, remedy: string): string -> @captureWriteMessage [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function callThisCaptureMessage(): string -> @callThisCaptureMessage [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function callLetCaptureMessage(name: string): string -> @callLetCaptureMessage [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function callCaptureWriteMessage(name: string): string -> @callCaptureWriteMessage [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function functionParamCaptureMessage(name: string): string -> @functionParamCaptureMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
@@ -906,46 +928,50 @@ function isThreadsLayout(info: StructInfo): boolean -> @isThreadsLayout
   local +0:9 instance: StructInstantiation | null (const)
   callee +2:12 isThreadsModule -> @isThreadsModule
   callee +4:31 threadsModuleName -> @threadsModuleName
-function captureObstacle(program: CheckedProgram, table: TypeTable, type: i32, seen: StringSet, task: boolean): string -> @captureObstacle
+function captureObstacle(program: CheckedProgram, table: TypeTable, type: i32, seen: StringSet, mode: i32): string -> @captureObstacle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via captureObstacle
-  escaping: task type
-  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.isMaybe TypeTable.isSecret TypeTable.kindOf TypeTable.nameOf TypeTable.refOf captureObstacle isThreadsClass isThreadsLayout nish_str_concat
+  escaping: mode type
+  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.isMaybe TypeTable.isSecret TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.stripNull captureObstacle isThreadsClass isThreadsLayout nish_str_concat
   pointer program: size=656 writesThrough=false captured=false passedTo=captureObstacle#0 CheckedProgram.struct#0 captureObstacle#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isMaybe#0 TypeTable.isSecret#0 TypeTable.kindOf#0 captureObstacle#1 TypeTable.refOf#0 TypeTable.nameOf#0 captureObstacle#1
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isMaybe#0 TypeTable.isSecret#0 TypeTable.kindOf#0 captureObstacle#1 TypeTable.refOf#0 TypeTable.nameOf#0 captureObstacle#1
   pointer seen: size=8 writesThrough=false captured=false passedTo=captureObstacle#3 StringSet.has#0 StringSet.add#0 captureObstacle#3
   stackSites=0 stackLocals=0
-  callee +0:7 TypeTable.isMaybe -> @TypeTable.isMaybe
-  callee +3:7 TypeTable.isSecret -> @TypeTable.isSecret
-  local +6:9 kind: i32 (const)
-  callee +6:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +11:12 captureObstacle -> @captureObstacle
-  callee +11:44 TypeTable.refOf -> @TypeTable.refOf
-  local +16:9 name: string (const)
-  callee +16:16 TypeTable.nameOf -> @TypeTable.nameOf
-  callee +17:7 StringSet.has -> @StringSet.has
-  callee +20:3 StringSet.add -> @StringSet.add
-  local +21:9 info: StructInfo | null (const)
-  callee +21:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +25:15 isThreadsClass -> @isThreadsClass
-  callee +28:15 isThreadsLayout -> @isThreadsLayout
-  callee +34:7 isThreadsLayout -> @isThreadsLayout
-  local +37:14 field: FieldInfo (const)
-  local +38:11 inner: string (const)
-  callee +38:19 captureObstacle -> @captureObstacle
-function captureTypeMessage(program: CheckedProgram, table: TypeTable, name: string, type: i32, task: boolean): string -> @captureTypeMessage [exported]
+  local +0:9 task: boolean (const)
+  local +1:9 call: boolean (const)
+  callee +2:15 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +5:7 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee +8:7 TypeTable.isSecret -> @TypeTable.isSecret
+  local +11:9 kind: i32 (const)
+  callee +11:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +16:12 captureObstacle -> @captureObstacle
+  callee +16:44 TypeTable.refOf -> @TypeTable.refOf
+  local +21:9 name: string (const)
+  callee +21:16 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +22:7 StringSet.has -> @StringSet.has
+  callee +25:3 StringSet.add -> @StringSet.add
+  local +26:9 info: StructInfo | null (const)
+  callee +26:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +33:15 isThreadsClass -> @isThreadsClass
+  callee +36:15 isThreadsLayout -> @isThreadsLayout
+  callee +42:7 isThreadsLayout -> @isThreadsLayout
+  local +45:14 field: FieldInfo (const)
+  local +46:11 inner: string (const)
+  callee +46:19 captureObstacle -> @captureObstacle
+function captureTypeMessage(program: CheckedProgram, table: TypeTable, name: string, type: i32, mode: i32): string -> @captureTypeMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via captureObstacle
-  escaping: task type
+  escaping: mode type
   calls: StringSet.constructor TypeTable.typeName captureObstacle nish_str_concat
   pointer program: size=656 writesThrough=false captured=false passedTo=captureObstacle#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=captureObstacle#1 TypeTable.typeName#0 TypeTable.typeName#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=captureObstacle#1 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0
   stackSites=1 stackLocals=0
   local +0:9 why: string (const)
   callee +0:15 captureObstacle -> @captureObstacle
   callee +0:53 new StringSet -> @StringSet.constructor
   callee +5:55 TypeTable.typeName -> @TypeTable.typeName
-  callee +8:48 TypeTable.typeName -> @TypeTable.typeName
+  callee +9:50 TypeTable.typeName -> @TypeTable.typeName
+  callee +14:48 TypeTable.typeName -> @TypeTable.typeName
 function isFreshConst(local: Local): boolean -> @isFreshConst
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer local: size=64 writesThrough=false captured=false
@@ -1038,7 +1064,7 @@ function dstUnshared(program: CheckedProgram, sig: FunctionSig, dst: Local | nul
   sharedWrite: via dstUnsharedAt
   calls: dstUnsharedAt isFreshConst
   pointer program: size=656 writesThrough=false captured=false passedTo=dstUnsharedAt#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer dst: size=64 writesThrough=false captured=false passedTo=isFreshConst#0 dstUnsharedAt#2
   stackSites=0 stackLocals=0
   callee +0:24 isFreshConst -> @isFreshConst
@@ -1052,8 +1078,8 @@ function captureReachesDstMessage(table: TypeTable, program: CheckedProgram, sig
   calls: StringSet.constructor TypeTable.typeName dstUnshared knownApart nish_panic_index nish_str_concat nish_str_eq reachingPath sourceLocal
   pointer table: size=96 writesThrough=false captured=false passedTo=reachingPath#0 TypeTable.typeName#0
   pointer program: size=656 writesThrough=false captured=false passedTo=reachingPath#1 dstUnshared#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=dstUnshared#1
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false passedTo=dstUnshared#1
+  pointer fn: size=144 writesThrough=false captured=false
   pointer dstLocal: size=64 writesThrough=false captured=false passedTo=knownApart#1 dstUnshared#2
   stackSites=1 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
@@ -1115,7 +1141,7 @@ function costOf(node: Node): i32 -> @costOf
 function mapGrain(fn: FunctionSig): i32 -> @mapGrain [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.body costOf nish_panic_div
-  pointer fn: size=136 writesThrough=false captured=false passedTo=FunctionSig.body#0
+  pointer fn: size=144 writesThrough=false captured=false passedTo=FunctionSig.body#0
   stackSites=0 stackLocals=0
   local +0:9 body: Node | null (const)
   callee +0:16 FunctionSig.body -> @FunctionSig.body
@@ -1262,6 +1288,10 @@ function scopeNotUsingMessage(name: string): string -> @scopeNotUsingMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function stackBelowMinimumMessage(bytes: f64): string -> @stackBelowMinimumMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_f64
+  stackSites=0 stackLocals=0
 function scopeEscapesMessage(): string -> @scopeEscapesMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -1324,7 +1354,7 @@ function destinationEdits(program: CheckedProgram, table: TypeTable, parents: Pa
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   pointer parents: size=8 writesThrough=false captured=false passedTo=ParentTable.parentOf#0 ParentTable.parentOf#0 ParentTable.parentOf#0
   pointer call: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer fn: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 edits: Edit[] (const)
   local +1:9 element: string (const)
@@ -1482,7 +1512,7 @@ function hoistArrowEdits(program: CheckedProgram, sig: FunctionSig, arrow: Node,
   sharedWrite: via capturesOf
   calls: Edit.constructor capturesOf commentLineAbove dedentAfterFirst hoistedName indentBefore indentOfLine nish_alloc_struct nish_array_grow nish_panic_index nish_panic_slice nish_str_at nish_str_concat nish_str_new templateSpans
   pointer program: size=656 writesThrough=false captured=false passedTo=hoistedName#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=hoistedName#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=hoistedName#1
   pointer arrow: size=40 writesThrough=false captured=false passedTo=templateSpans#0
   pointer parents: size=0 writesThrough=true captured=false passedTo=hoistedName#2
   stackSites=1 stackLocals=1
@@ -1518,7 +1548,7 @@ function hoistedName(program: CheckedProgram, sig: FunctionSig, parents: Node[])
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: containsWord isIdentifier nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 spawnCallee
   pointer program: size=656 writesThrough=false captured=false passedTo=spawnCallee#0
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer parents: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:8 isIdentifier -> @isIdentifier
@@ -1542,7 +1572,7 @@ function voidTaskResultMessage(program: CheckedProgram, table: TypeTable, fn: Fu
   calls: TypeTable.typeName nish_str_concat voidTaskRemedy
   pointer program: size=656 writesThrough=false captured=false passedTo=voidTaskRemedy#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer fn: size=144 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=voidTaskRemedy#2
   stackSites=0 stackLocals=0
   local +0:9 shown: string (const)
@@ -1569,7 +1599,7 @@ function taskArgumentMessage(table: TypeTable, sig: FunctionSig): string -> @tas
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.resultByValue TypeTable.typeName nish_str_concat taskArgTypeOf
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.typeName#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=taskArgTypeOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=taskArgTypeOf#0
   stackSites=0 stackLocals=0
   local +0:9 arg: i32 (const)
   callee +0:15 taskArgTypeOf -> @taskArgTypeOf
@@ -1597,6 +1627,20 @@ function isScopeCall(program: CheckedProgram, call: Node, scopeType: i32): boole
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: FunctionSig | null (const)
+function constantStack(program: CheckedProgram, call: Node): f64 -> @constantStack
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_eq numericLiteralValue unwrapParens
+  pointer program: size=656 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 callee: FunctionSig | null (const)
+  local +1:9 args: Node[] (const)
+  local +5:9 arg: Node (const)
+  callee +5:15 unwrapParens -> @unwrapParens
+  callee +7:12 numericLiteralValue -> @numericLiteralValue
+  callee +9:51 unwrapParens -> @unwrapParens
+  callee +10:13 numericLiteralValue -> @numericLiteralValue
+  callee +10:33 unwrapParens -> @unwrapParens
 function isSpawnReceiver(node: Node, parents: Node[], n: i32): boolean -> @isSpawnReceiver
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -1618,9 +1662,9 @@ function walkScopes(program: CheckedProgram, node: Node, parents: Node[], table:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: node scopeType
-  calls: ScopeFinding.constructor arenaBindingMessage arenaNotUsingMessage boundNameOf fixedFinding isArenaCall isLockCall isScopeCall isSpawnReceiver isUsingInitialiser nish_alloc_struct nish_array_grow nish_panic_index openedHandle scopeEscapesMessage scopeNotUsingMessage sourceLocal unwrapParens usingEdits usingNotScopeMessage usingPlaceMessage walkScopes
-  pointer program: size=656 writesThrough=false captured=false passedTo=isArenaCall#0 isScopeCall#0 isLockCall#0 openedHandle#0 isArenaCall#0 isScopeCall#0 usingEdits#0 walkScopes#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=ScopeFinding.constructor#1 isArenaCall#1 ScopeFinding.constructor#1 ScopeFinding.constructor#1 isScopeCall#1 fixedFinding#0 ScopeFinding.constructor#1
+  calls: ScopeFinding.constructor arenaBindingMessage arenaNotUsingMessage boundNameOf constantStack fixedFinding isArenaCall isLockCall isScopeCall isSpawnReceiver isUsingInitialiser nish_alloc_struct nish_array_grow nish_panic_index openedHandle scopeEscapesMessage scopeNotUsingMessage sourceLocal stackBelowMinimumMessage unwrapParens usingEdits usingNotScopeMessage usingPlaceMessage walkScopes
+  pointer program: size=656 writesThrough=false captured=false passedTo=isArenaCall#0 isScopeCall#0 isLockCall#0 openedHandle#0 isArenaCall#0 isScopeCall#0 constantStack#0 usingEdits#0 walkScopes#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=ScopeFinding.constructor#1 isArenaCall#1 ScopeFinding.constructor#1 ScopeFinding.constructor#1 isScopeCall#1 constantStack#1 ScopeFinding.constructor#1 fixedFinding#0 ScopeFinding.constructor#1
   pointer parents: size=0 writesThrough=true captured=false passedTo=isUsingInitialiser#1 isUsingInitialiser#1 boundNameOf#1 usingEdits#2 isSpawnReceiver#1 walkScopes#2
   pointer table: size=96 writesThrough=false captured=false passedTo=openedHandle#1 walkScopes#3
   pointer arenas: size=0 writesThrough=true captured=false passedTo=walkScopes#5
@@ -1652,16 +1696,20 @@ function walkScopes(program: CheckedProgram, node: Node, parents: Node[], table:
   callee +33:14 new ScopeFinding -> @ScopeFinding.constructor
   callee +33:37 arenaBindingMessage -> @arenaBindingMessage
   callee +36:33 isScopeCall -> @isScopeCall
-  callee +37:12 isUsingInitialiser -> @isUsingInitialiser
-  callee +39:11 fixedFinding -> @fixedFinding
-  callee +41:13 scopeNotUsingMessage -> @scopeNotUsingMessage
-  callee +41:34 boundNameOf -> @boundNameOf
-  callee +42:13 usingEdits -> @usingEdits
-  callee +46:43 isSpawnReceiver -> @isSpawnReceiver
-  callee +47:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee +47:39 scopeEscapesMessage -> @scopeEscapesMessage
-  local +51:14 child: Node (const)
-  callee +52:5 walkScopes -> @walkScopes
+  local +37:13 stack: f64 (const)
+  callee +37:21 constantStack -> @constantStack
+  callee +39:18 new ScopeFinding -> @ScopeFinding.constructor
+  callee +39:41 stackBelowMinimumMessage -> @stackBelowMinimumMessage
+  callee +41:12 isUsingInitialiser -> @isUsingInitialiser
+  callee +43:11 fixedFinding -> @fixedFinding
+  callee +45:13 scopeNotUsingMessage -> @scopeNotUsingMessage
+  callee +45:34 boundNameOf -> @boundNameOf
+  callee +46:13 usingEdits -> @usingEdits
+  callee +50:43 isSpawnReceiver -> @isSpawnReceiver
+  callee +51:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee +51:39 scopeEscapesMessage -> @scopeEscapesMessage
+  local +55:14 child: Node (const)
+  callee +56:5 walkScopes -> @walkScopes
 function scopeFindings(programs: CheckedProgram[], program: CheckedProgram, table: TypeTable, facts: FactsTable, summaries: ChannelSummaries): ScopeFinding[] -> @scopeFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.structOf
@@ -2020,7 +2068,7 @@ function writesThroughMessage(program: CheckedProgram, table: TypeTable, facts: 
   pointer table: size=96 writesThrough=false captured=false passedTo=isChannelParam#1
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer node: size=40 writesThrough=false captured=false passedTo=lockCallName#0 lockCallName#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=lockCallName#1 isChannelParam#2 lockCallName#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=lockCallName#1 isChannelParam#2 lockCallName#1
   pointer state: size=48 writesThrough=false captured=false passedTo=regionWriteMessage#0 regionWriteMessage#0
   stackSites=0 stackLocals=0
   local +0:9 constructing: boolean (const)
@@ -2048,7 +2096,7 @@ function isChannelParam(program: CheckedProgram, table: TypeTable, sig: Function
   calls: isChannelType nish_panic_index nish_str_eq
   pointer program: size=656 writesThrough=false captured=false passedTo=isChannelType#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isChannelType#1
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
   callee +1:21 isChannelType -> @isChannelType
@@ -2412,25 +2460,25 @@ function isChannelType(program: CheckedProgram, table: TypeTable, type: i32): bo
 function isChannelMethod(sig: FunctionSig, name: string): boolean -> @isChannelMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsClass nish_panic_index nish_str_eq
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isThreadsClass -> @isThreadsClass
 function isChannelSend(sig: FunctionSig): boolean -> @isChannelSend [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isChannelMethod
-  pointer sig: size=136 writesThrough=false captured=false passedTo=isChannelMethod#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=isChannelMethod#0
   stackSites=0 stackLocals=0
   callee +0:61 isChannelMethod -> @isChannelMethod
 function isChannelReader(sig: FunctionSig): boolean -> @isChannelReader [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isChannelMethod
-  pointer sig: size=136 writesThrough=false captured=false passedTo=isChannelMethod#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=isChannelMethod#0
   stackSites=0 stackLocals=0
   callee +0:63 isChannelMethod -> @isChannelMethod
 function isLockMethod(sig: FunctionSig): boolean -> @isLockMethod [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsClass nish_panic_index nish_str_eq
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isThreadsClass -> @isThreadsClass
 function markAtomicClass(program: CheckedProgram, info: StructInfo): void -> @markAtomicClass [exported]
@@ -2474,7 +2522,7 @@ function isThreadsObjectType(program: CheckedProgram, table: TypeTable, type: i3
 function isAtomicMethod(sig: FunctionSig): boolean -> @isAtomicMethod [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAtomicClass
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isAtomicClass -> @isAtomicClass
 function isLockCall(program: CheckedProgram, node: Node): boolean -> @isLockCall [exported]
@@ -2664,8 +2712,8 @@ function spawnWithArgument(program: CheckedProgram, spawn: Node, arg: string): s
 function bodyLockMessage(sig: FunctionSig, fn: FunctionSig, remedy: string): string -> @bodyLockMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: intrinsicName nish_str_concat
-  pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false passedTo=intrinsicName#0
+  pointer fn: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:59 intrinsicName -> @intrinsicName
 function bodyLockRemedy(program: CheckedProgram, table: TypeTable, sig: FunctionSig, node: Node): string -> @bodyLockRemedy
@@ -2673,7 +2721,7 @@ function bodyLockRemedy(program: CheckedProgram, table: TypeTable, sig: Function
   calls: TypeTable.typeName freshName nish_panic_index nish_panic_overflow nish_str_concat oneLine parallelRoleOf scopeTasks
   pointer program: size=656 writesThrough=false captured=false passedTo=oneLine#0 oneLine#0 oneLine#0 oneLine#0 oneLine#0 oneLine#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=parallelRoleOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -2768,7 +2816,7 @@ function takesLock(facts: FactsTable, fn: FunctionSig): boolean -> @takesLock
   sharedWrite: via reachesWait
   calls: StringSet.constructor reachesWait
   pointer facts: size=24 writesThrough=false captured=false passedTo=reachesWait#0
-  pointer fn: size=136 writesThrough=false captured=false
+  pointer fn: size=144 writesThrough=false captured=false
   stackSites=1 stackLocals=0
   callee +0:3 reachesWait -> @reachesWait
   callee +0:41 new StringSet -> @StringSet.constructor
@@ -2779,8 +2827,8 @@ function bodyLockMessageFor(program: CheckedProgram, table: TypeTable, node: Nod
   pointer program: size=656 writesThrough=false captured=false passedTo=bodyLockRemedy#0
   pointer table: size=96 writesThrough=false captured=false passedTo=bodyLockRemedy#1
   pointer node: size=40 writesThrough=false captured=false passedTo=bodyLockRemedy#3
-  pointer sig: size=136 writesThrough=false captured=false passedTo=bodyLockMessage#0 bodyLockRemedy#2
-  pointer fn: size=136 writesThrough=false captured=false passedTo=takesLock#1 bodyLockMessage#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=bodyLockMessage#0 bodyLockRemedy#2
+  pointer fn: size=144 writesThrough=false captured=false passedTo=takesLock#1 bodyLockMessage#1
   pointer facts: size=24 writesThrough=false captured=false passedTo=takesLock#0
   stackSites=0 stackLocals=0
   callee +0:15 takesLock -> @takesLock
@@ -2845,7 +2893,7 @@ function taskMutexMessageFor(table: TypeTable, program: CheckedProgram, sig: Fun
   calls: CaptureSlot.type capturesOf nish_panic_index spawnWithArgument taskArgTypeOf taskCaptureMutexMessage taskMutexMessage taskMutexPath
   pointer table: size=96 writesThrough=false captured=false passedTo=taskMutexPath#0 taskMutexMessage#0 taskMutexPath#0 taskCaptureMutexMessage#0
   pointer program: size=656 writesThrough=false captured=false passedTo=taskMutexPath#1 spawnWithArgument#0 taskMutexPath#1
-  pointer sig: size=136 writesThrough=true captured=true passedTo=taskArgTypeOf#0 capturesOf#0
+  pointer sig: size=144 writesThrough=true captured=true passedTo=taskArgTypeOf#0 capturesOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=spawnWithArgument#1
   stackSites=1 stackLocals=1
   local +0:9 arg: i32 (const)
@@ -3046,7 +3094,7 @@ function lockCallName(node: Node, callee: FunctionSig): string -> @lockCallName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_concat
   pointer node: size=40 writesThrough=false captured=false
-  pointer callee: size=136 writesThrough=false captured=false
+  pointer callee: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function heldWhat(program: CheckedProgram, facts: FactsTable, node: Node, scopeType: i32, scopeName: string): string -> @heldWhat
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -3152,7 +3200,7 @@ function regionAtomicMessageFor(program: CheckedProgram, table: TypeTable, facts
   pointer table: size=96 writesThrough=false captured=false passedTo=heldPath#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=reachesAtomic#0
   pointer node: size=40 writesThrough=false captured=false passedTo=lockCallName#0 oneLine#1
-  pointer callee: size=136 writesThrough=false captured=false passedTo=lockCallName#1 isAtomicMethod#0
+  pointer callee: size=144 writesThrough=false captured=false passedTo=lockCallName#1 isAtomicMethod#0
   pointer state: size=48 writesThrough=false captured=false passedTo=regionAtomicMessage#0
   stackSites=2 stackLocals=0
   local +0:7 want: i32 (let)
@@ -3215,7 +3263,7 @@ function channelArrowMessage(program: CheckedProgram, table: TypeTable, sig: Fun
   calls: freshName hoistedArrow hoistedName nish_str_concat
   pointer program: size=656 writesThrough=false captured=false passedTo=hoistedName#0 hoistedArrow#0
   pointer table: size=96 writesThrough=false captured=false passedTo=hoistedArrow#1
-  pointer sig: size=136 writesThrough=false captured=false passedTo=hoistedName#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=hoistedName#1
   pointer arrow: size=40 writesThrough=false captured=false passedTo=hoistedArrow#2
   pointer parents: size=0 writesThrough=true captured=false passedTo=hoistedName#2
   stackSites=0 stackLocals=0
@@ -3324,7 +3372,7 @@ function channelRef(program: CheckedProgram, sig: FunctionSig, expr: Node, field
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: ChannelRef.constructor channelRef nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 unwrapParens
   pointer program: size=656 writesThrough=false captured=false passedTo=channelRef#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=channelRef#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=channelRef#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -3422,7 +3470,7 @@ function operandFor(node: Node, callee: FunctionSig, k: i32): Node | null -> @op
   escaping: k
   calls: nish_panic_index nish_panic_overflow nish_str_eq
   pointer node: size=40 writesThrough=false captured=false
-  pointer callee: size=136 writesThrough=false captured=false
+  pointer callee: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
   local +1:7 at: i32 (let)
@@ -3431,9 +3479,9 @@ function mappedRef(program: CheckedProgram, sig: FunctionSig, node: Node, callee
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: channelRef llvm.fptosi.sat.i32.f64 nish_panic_overflow nish_parse_number nish_str_index_of nish_str_index_of_from nish_str_new operandFor
   pointer program: size=656 writesThrough=false captured=false passedTo=channelRef#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=channelRef#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=channelRef#1
   pointer node: size=40 writesThrough=false captured=false passedTo=operandFor#0
-  pointer callee: size=136 writesThrough=false captured=false passedTo=operandFor#1
+  pointer callee: size=144 writesThrough=false captured=false passedTo=operandFor#1
   stackSites=0 stackLocals=0
   local +0:9 dot: i32 (const)
   local +1:9 k: i32 (const)
@@ -3445,9 +3493,9 @@ function addCalleeOps(program: CheckedProgram, sig: FunctionSig, node: Node, cal
   sharedWrite: via ChannelOps.add
   calls: ChannelOps.add ChannelRef.constructor ChannelSummaries.at StringSet.at StringSet.size channelRef mappedRef nish_alloc_struct nish_panic_index operandFor
   pointer program: size=656 writesThrough=false captured=false passedTo=mappedRef#0 channelRef#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=mappedRef#1 channelRef#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=mappedRef#1 channelRef#1
   pointer node: size=40 writesThrough=true captured=true passedTo=mappedRef#2 ChannelOps.add#1 ChannelOps.add#1 operandFor#0 ChannelOps.add#1
-  pointer callee: size=136 writesThrough=false captured=false passedTo=mappedRef#3 operandFor#1
+  pointer callee: size=144 writesThrough=false captured=false passedTo=mappedRef#3 operandFor#1
   pointer summaries: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.at#0
   pointer ops: size=24 writesThrough=false captured=false passedTo=ChannelOps.add#0 ChannelOps.add#0 ChannelOps.add#0
   stackSites=0 stackLocals=0
@@ -3476,7 +3524,7 @@ function collectChannelOps(program: CheckedProgram, sig: FunctionSig, node: Node
   sharedWrite: via ChannelOps.add
   calls: ChannelOps.add addCalleeOps channelRef collectChannelOps isChannelReader isChannelSend isSpawnEntry nish_panic_index
   pointer program: size=656 writesThrough=false captured=false passedTo=channelRef#0 channelRef#0 addCalleeOps#0 collectChannelOps#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=channelRef#1 channelRef#1 addCalleeOps#1 collectChannelOps#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=channelRef#1 channelRef#1 addCalleeOps#1 collectChannelOps#1
   pointer node: size=40 writesThrough=true captured=true passedTo=ChannelOps.add#1 ChannelOps.add#1 addCalleeOps#2
   pointer summaries: size=40 writesThrough=false captured=false passedTo=addCalleeOps#4 collectChannelOps#3
   pointer ops: size=24 writesThrough=false captured=false passedTo=ChannelOps.add#0 ChannelOps.add#0 addCalleeOps#5 collectChannelOps#4
@@ -3498,7 +3546,7 @@ function channelOpsOf(program: CheckedProgram, sig: FunctionSig, summaries: Chan
   sharedWrite: via CheckedProgram.enterInstance
   calls: ChannelOps.constructor CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body collectChannelOps nish_alloc_struct
   pointer program: size=656 writesThrough=true captured=false passedTo=CheckedProgram.enterInstance#0 collectChannelOps#0 CheckedProgram.leaveInstance#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.body#0 collectChannelOps#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.body#0 collectChannelOps#1
   pointer summaries: size=40 writesThrough=false captured=false passedTo=collectChannelOps#3
   stackSites=0 stackLocals=0
   local +0:9 ops: ChannelOps (const)
@@ -3568,7 +3616,7 @@ function walkChannelUses(program: CheckedProgram, table: TypeTable, sig: Functio
   calls: ScopeFinding.constructor arrowChannel channelArrowMessage channelUseFinding channelUseMessage fixedFinding hoistArrowEdits isChannelType liftedTakesChannel nish_alloc_struct nish_array_grow nish_panic_index walkChannelUses
   pointer program: size=656 writesThrough=false captured=false passedTo=arrowChannel#0 channelArrowMessage#0 hoistArrowEdits#0 liftedTakesChannel#0 channelArrowMessage#0 hoistArrowEdits#0 isChannelType#0 channelUseFinding#0 walkChannelUses#0
   pointer table: size=96 writesThrough=false captured=false passedTo=arrowChannel#1 channelArrowMessage#1 liftedTakesChannel#1 channelArrowMessage#1 isChannelType#1 channelUseFinding#1 walkChannelUses#1
-  pointer sig: size=136 writesThrough=false captured=false passedTo=channelArrowMessage#2 hoistArrowEdits#1 channelArrowMessage#2 hoistArrowEdits#1 channelUseFinding#2 walkChannelUses#2
+  pointer sig: size=144 writesThrough=false captured=false passedTo=channelArrowMessage#2 hoistArrowEdits#1 channelArrowMessage#2 hoistArrowEdits#1 channelUseFinding#2 walkChannelUses#2
   pointer node: size=40 writesThrough=true captured=true passedTo=arrowChannel#2 channelArrowMessage#3 hoistArrowEdits#2 liftedTakesChannel#2 channelArrowMessage#3 fixedFinding#0 hoistArrowEdits#2 channelUseFinding#3 ScopeFinding.constructor#1
   pointer parents: size=0 writesThrough=true captured=false passedTo=channelArrowMessage#4 hoistArrowEdits#3 channelArrowMessage#4 hoistArrowEdits#3 channelUseFinding#5 walkChannelUses#4
   pointer locals: size=0 writesThrough=false captured=false passedTo=channelUseFinding#7 walkChannelUses#5
@@ -3626,7 +3674,7 @@ function channelUseFinding(program: CheckedProgram, table: TypeTable, sig: Funct
   calls: boundNameOf channelDeclareMessage channelElement channelElementMessage channelSendersMessage channelUseMessage isAssignmentOperator isChannelLocal isConstDeclaration isFieldFromParam isScalarArgument isTaskArgument nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq ownChannelRemedy spawnCallee takesChannelParameter
   pointer program: size=656 writesThrough=false captured=false passedTo=channelElement#0 isChannelLocal#0 isFieldFromParam#0 spawnCallee#0 isChannelLocal#0 ownChannelRemedy#0 takesChannelParameter#0 isTaskArgument#0 isChannelLocal#0 ownChannelRemedy#0
   pointer table: size=96 writesThrough=false captured=false passedTo=channelElement#1 isScalarArgument#0 channelElementMessage#0 channelDeclareMessage#0 ownChannelRemedy#1 takesChannelParameter#1 ownChannelRemedy#1
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=isChannelLocal#1 isChannelLocal#1 ownChannelRemedy#2 isChannelLocal#1 ownChannelRemedy#2
   pointer at: size=40 writesThrough=false captured=false passedTo=boundNameOf#0 boundNameOf#0 takesChannelParameter#3
   pointer parents: size=0 writesThrough=true captured=false passedTo=boundNameOf#1 boundNameOf#1 isTaskArgument#2
@@ -3874,7 +3922,7 @@ function checkChannels(program: CheckedProgram, table: TypeTable, summaries: Cha
   pointer program: size=656 writesThrough=false captured=false passedTo=checkChannelTypes#0 holdsChannelDeep#0 findThisEscapes#0 collectChannelLocals#0 walkChannelUses#0 collectSpawns#0 recordSenders#0 handsNullableChannel#0 findScopeReceives#0 collectChannelOps#0 checkChannel#0
   pointer table: size=96 writesThrough=false captured=false passedTo=checkChannelTypes#1 holdsChannelDeep#1 findThisEscapes#1 collectChannelLocals#1 walkChannelUses#1 recordSenders#1 handsNullableChannel#1 checkChannel#1
   pointer summaries: size=40 writesThrough=false captured=false passedTo=recordSenders#2 findScopeReceives#1 collectChannelOps#3 checkChannel#2
-  pointer sig: size=136 writesThrough=false captured=false passedTo=checkChannelTypes#2 walkChannelUses#2 collectChannelOps#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=checkChannelTypes#2 walkChannelUses#2 collectChannelOps#1
   pointer body: size=40 writesThrough=true captured=true passedTo=checkChannelTypes#3 findThisEscapes#2 collectChannelLocals#2 walkChannelUses#3 collectSpawns#1 findScopeReceives#2 collectChannelOps#2 checkChannel#3
   pointer out: size=0 writesThrough=true captured=false passedTo=checkChannelTypes#4 findThisEscapes#4 walkChannelUses#6 findScopeReceives#4 checkChannel#9
   stackSites=6 stackLocals=5
@@ -3943,7 +3991,7 @@ function checkChannelTypes(program: CheckedProgram, table: TypeTable, sig: Funct
   calls: ScopeFinding.constructor checkLocalTypes nish_alloc_struct nish_array_grow nish_panic_index wrappedChannelMessage wrapsChannel
   pointer program: size=656 writesThrough=false captured=false passedTo=wrapsChannel#0 wrapsChannel#0 checkLocalTypes#0
   pointer table: size=96 writesThrough=false captured=false passedTo=wrapsChannel#1 wrappedChannelMessage#0 wrapsChannel#1 wrappedChannelMessage#0 checkLocalTypes#1
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer body: size=40 writesThrough=true captured=true passedTo=checkLocalTypes#2
   pointer out: size=0 writesThrough=true captured=false passedTo=checkLocalTypes#3
   stackSites=0 stackLocals=0

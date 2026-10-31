@@ -18,7 +18,7 @@
  * here answers the failure's errno, negated. The codes a loop branches on are Linux's numbers on every platform (-11
  * would block, -95 unsupported, -32 the peer is gone, -104 reset, -98 the
  * address is in use, -111 refused, -110 timed out, -22 a bad argument, -88
- * not a socket), so
+ * not a socket, -107 not connected), so
  * `nish_net_err` translates Darwin's; any other failure is the host's own
  * `-errno`. Nothing here allocates: the addresses a call reads or writes are
  * the caller's `u8[]`.
@@ -30,20 +30,26 @@
  * (`EAFNOSUPPORT`, as in many containers) `::` falls back to IPv4's
  * `0.0.0.0`.
  *
- * Linux and Darwin differ in six places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
+ * Linux and Darwin differ in nine places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
  * `accept4` against a `socket` or `accept` followed by `fcntl`, `MSG_NOSIGNAL`
  * against the `SO_NOSIGPIPE` socket option (a write to a gone peer is -32 on
  * both, never SIGPIPE), the errno numbers, UDP's segmentation offload
  * (`UDP_SEGMENT`, `UDP_GRO`) and ECN marks, which Linux has and for which
  * Darwin answers -95, and the readiness loop, which is epoll on Linux and
- * kqueue on Darwin, and `TCP_QUICKACK`, which only Linux has (-95 on
- * Darwin). Only the sending side and the GRO bind say -95 there: a
+ * kqueue on Darwin, `TCP_QUICKACK`, which only Linux has (-95 on
+ * Darwin), and the MSS, which `netMss` reads from Linux's `TCP_INFO` and from
+ * `TCP_MAXSEG` on Darwin, a descriptor `recvFd` keeps, which Linux's
+ * `MSG_CMSG_CLOEXEC` makes close-on-exec as it arrives and Darwin marks with
+ * `fcntl` after `recvmsg` returns (the window RT-38 records), and
+ * `peerCredentials`, which reads Linux's `SO_PEERCRED` and Darwin's
+ * `getpeereid` with `LOCAL_PEERPID` (pid -1 where that refuses). Of the UDP calls, only the sending side and
+ * the GRO bind say -95 on Darwin: a
  * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
  * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
  * rows and run by its `runtime-net (macos-latest)` job: tests/runtime-test.c and
  * the `net_` sections of tests/run.js, on a mac. A WASI build has none of this (the checker refuses
- * every `nish:net` call under a wasm target), so there the file is empty.
+ * every `nish:net` call on wasm but `netMss`, folded to -1), so the file is empty.
  */
 #if defined(__wasi__) || defined(__wasm__)
 /* ISO C wants at least one declaration in a translation unit. */
@@ -58,9 +64,13 @@ typedef int nish_net_unused;
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
 #if defined(__linux__)
 #include <netinet/udp.h>
@@ -103,6 +113,9 @@ static int32_t nish_net_err(int e) {
   if (e == ECONNREFUSED) return -111;
   if (e == ETIMEDOUT) return -110;
   if (e == ENOTSOCK) return -88;
+  if (e == ENAMETOOLONG) return -36;
+  if (e == ELOOP) return -40;
+  if (e == ENOTCONN) return -107;
 #endif
   return -e;
 }
@@ -424,6 +437,35 @@ int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value) {
   return setsockopt(fd, level, name, &value, sizeof value) != 0 ? nish_net_fail() : 0;
 }
 
+/* `netMss(fd)`: the segment size a connected TCP socket sends, the bytes of
+   payload one packet carries, or a plain -1 when there is none to read: not
+   an errno, because "no MSS" is one answer whatever the reason. A socket
+   with no peer is -1 first, as a fresh one answers the default 536 to both
+   options below. Linux's `TCP_INFO` answers the current `tcpi_snd_mss`; the
+   kernel copies at most the struct it has and says how much, so an answer
+   too short to reach the field is not read. `TCP_MAXSEG` is the fallback,
+   and Darwin's only reading. */
+int32_t nish_net_mss(int32_t fd) {
+  struct sockaddr_storage peer;
+  socklen_t len = sizeof peer;
+  if (getpeername(fd, (struct sockaddr *)&peer, &len) != 0) return -1;
+#if defined(TCP_INFO) && defined(__linux__)
+  struct tcp_info info;
+  memset(&info, 0, sizeof info);
+  len = sizeof info;
+  if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &info, &len) == 0 &&
+      len >= offsetof(struct tcp_info, tcpi_snd_mss) + sizeof info.tcpi_snd_mss &&
+      info.tcpi_snd_mss > 0 && info.tcpi_snd_mss <= INT32_MAX)
+    return (int32_t)info.tcpi_snd_mss;
+#endif
+#if defined(TCP_MAXSEG)
+  int mss = 0;
+  len = sizeof mss;
+  if (getsockopt(fd, IPPROTO_TCP, TCP_MAXSEG, &mss, &len) == 0 && len == sizeof mss && mss > 0) return mss;
+#endif
+  return -1;
+}
+
 /* `udpBind(host, port, flags)`: a datagram socket, non-blocking and
    close-on-exec, bound like `tcpListen`'s, with `SO_REUSEPORT` for flag 1
    and `UDP_GRO` for flag 2; any other bit is -22. */
@@ -688,5 +730,344 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   }
   return n;
 #endif
+}
+
+/* The Unix-domain address `path` names into `s`, its length into `n`, and 1
+   or 0 for whether it is abstract; or the failure, before any socket exists.
+   An empty path or one with a NUL inside is -22, and so is a bare `@`. A path
+   too long for `sun_path` with its NUL is -36: the kernel would cut it short
+   or refuse it, and a cut one binds a file the program never named
+   (docs/security/runtime.md, RT-33). A leading `@` is Linux's abstract
+   namespace: the rest, at most `sizeof sun_path - 1` bytes, follows a NUL,
+   and the length is exact, because the name is every byte the length covers.
+   Darwin has no abstract namespace, so there `@` is -95. */
+static int32_t nish_unix_addr(const nish_str *path, struct sockaddr_un *s, socklen_t *n) {
+  const char *p = path->data;
+  uint64_t len = path->len;
+  memset(s, 0, sizeof *s);
+  s->sun_family = AF_UNIX;
+  if (len == 0 || strlen(p) != len || (len == 1 && p[0] == '@')) return -22;
+  int abstract = p[0] == '@';
+#if !defined(__linux__)
+  if (abstract) return -95;
+#endif
+  if (len + !abstract > sizeof s->sun_path) return -36;
+  memcpy(s->sun_path, p, len);
+  if (abstract) s->sun_path[0] = 0;
+  *n = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + len + !abstract);
+#if !defined(__linux__)
+  s->sun_len = (unsigned char)*n;
+#endif
+  return abstract;
+}
+
+/* Whether the socket file at `s` (`n` bytes) is stale, for `unixListen` flag
+   1 after a bind found the path taken: 0 once it is unlinked, else the
+   failure. Anything but a socket is -17 and left alone. A probe connects to
+   it: a refusal means nothing listens, and only then is the file unlinked; a
+   connect that succeeds or would wait (a full backlog) is a live listener,
+   -98. The probe is a connection the live listener sees and that closes at
+   once. Between the probe and the unlink another process may bind the path,
+   and that file is the one unlinked: the socket's directory is the trust
+   boundary (RT-34). Darwin refuses a connect to a listener whose backlog is
+   full with the same `ECONNREFUSED` as one to a dead file, so the probe
+   cannot tell them apart there, and a socket file in the way is -95 and left
+   alone: the flag never removes a live listener's file. */
+static int32_t nish_unix_stale(const struct sockaddr_un *s, socklen_t n) {
+  struct stat st;
+  if (lstat(s->sun_path, &st) != 0) return errno == ENOENT ? 0 : nish_net_fail();
+  if (!S_ISSOCK(st.st_mode)) return -17;
+#if !defined(__linux__)
+  (void)n;
+  return -95;
+#else
+  int probe = nish_net_socket(AF_UNIX, SOCK_STREAM);
+  if (probe < 0) return nish_net_fail();
+  int e = connect(probe, (const struct sockaddr *)s, n) == 0 ? 0 : errno;
+  close(probe);
+  if (e != ECONNREFUSED) return e == 0 || e == EAGAIN || e == EINPROGRESS ? -98 : nish_net_err(e);
+  return unlink(s->sun_path) != 0 && errno != ENOENT ? nish_net_fail() : 0;
+#endif
+}
+
+/* A listening Unix stream socket at `path`, or the failure. A path that
+   exists is -98, unless flag 1 asks `nish_unix_stale` to clear a socket file
+   nothing listens on, after which the bind is tried once more; any other bit
+   is -22, and an abstract name ignores the flag, since no file is left
+   behind. A pathname socket's file gets `mode` between the bind and the
+   listen: a connect needs write permission on it, and until the listen every
+   connect is refused, so the umask's mode the bind gave it never admits
+   anyone (RT-35; `tests/cases/net_unix_paths` checks the order under umask
+   0). A failure after the bind closes the socket and unlinks the
+   file it made, so no failure leaves a descriptor or a file behind
+   (RT-36). */
+static int32_t nish_unix_bound(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode) {
+  if ((uint32_t)flags > 1) return -22;
+  struct sockaddr_un s;
+  socklen_t n;
+  int32_t abstract = nish_unix_addr(path, &s, &n);
+  if (abstract < 0) return abstract;
+  int fd = nish_net_socket(AF_UNIX, SOCK_STREAM);
+  if (fd < 0) return nish_net_fail();
+  int bound = bind(fd, (struct sockaddr *)&s, n);
+  if (bound != 0 && errno == EADDRINUSE && (flags & 1) && !abstract) {
+    int32_t stale = nish_unix_stale(&s, n);
+    if (stale != 0) {
+      close(fd);
+      return stale;
+    }
+    bound = bind(fd, (struct sockaddr *)&s, n);
+  }
+  if (bound != 0) {
+    int e = errno;
+    close(fd);
+    return nish_net_err(e);
+  }
+  if ((!abstract && chmod(s.sun_path, (mode_t)mode) != 0) || listen(fd, backlog) != 0) {
+    int e = errno;
+    close(fd);
+    if (!abstract) unlink(s.sun_path);
+    return nish_net_err(e);
+  }
+  return fd;
+}
+
+/* `unixListen(path, backlog, flags)`: a listening Unix stream socket whose
+   file only its owner may connect to (0600). */
+int32_t nish_unix_listen(const nish_str *path, int32_t backlog, int32_t flags) {
+  return nish_unix_bound(path, backlog, flags, 0600);
+}
+
+/* `unixListenMode(path, backlog, flags, mode)`: the same with the file's mode
+   chosen, 0 to 0o777 and no other bits; an abstract name has no file to give
+   one, so it is -22, as a mode outside the range is. */
+int32_t nish_unix_listen_mode(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode) {
+  if ((uint32_t)mode > 0777) return -22;
+  if (path->len > 0 && path->data[0] == '@') return -22;
+  return nish_unix_bound(path, backlog, flags, mode);
+}
+
+/* `unixConnect(path)`: a new socket, non-blocking and close-on-exec,
+   connecting to the listener at `path`. A Unix connect finishes at once or
+   fails; a full backlog is -11 on Linux (`EAGAIN`) and -111 on Darwin, which
+   answers it as it answers a dead file, and either closes the socket, so the
+   caller tries again later. `EINPROGRESS` is answered as `tcpConnect`
+   answers it: the descriptor, with `connectResult` to say how it went once it
+   is writable. Any other failure closes the socket and is answered. */
+int32_t nish_unix_connect(const nish_str *path) {
+  struct sockaddr_un s;
+  socklen_t n;
+  int32_t abstract = nish_unix_addr(path, &s, &n);
+  if (abstract < 0) return abstract;
+  int fd = nish_net_socket(AF_UNIX, SOCK_STREAM);
+  if (fd < 0) return nish_net_fail();
+  if (connect(fd, (struct sockaddr *)&s, n) != 0 && errno != EINPROGRESS) {
+    int e = errno;
+    close(fd);
+    return nish_net_err(e);
+  }
+  return fd;
+}
+
+/* `unixAccept(fd)`: the next connection, non-blocking and close-on-exec; -11
+   when none is waiting. A Unix peer has no address worth the name (a client
+   is seldom bound), so none is written. */
+int32_t nish_unix_accept(int32_t fd) {
+#if defined(__linux__)
+  int c = accept4(fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+#else
+  int c = nish_net_setup(accept(fd, NULL, NULL));
+#endif
+  return c < 0 ? nish_net_fail() : c;
+}
+
+/* `unixSocketPair(kind, fds)`: two connected sockets into `fds[0]` and
+   `fds[1]`, non-blocking and close-on-exec, and 0. Kind 1 is a byte stream,
+   kind 2 keeps each write one message (`SOCK_SEQPACKET`), and any other kind,
+   or an `fds` shorter than two, is -22 before any socket exists. Darwin has
+   no Unix `SOCK_SEQPACKET`, so kind 2 there is -95. */
+int32_t nish_unix_socket_pair(int32_t kind, nish_array *fds) {
+  if ((kind != 1 && kind != 2) || fds->len < 2) return -22;
+  int sv[2];
+#if defined(__linux__)
+  if (socketpair(AF_UNIX, (kind == 1 ? SOCK_STREAM : SOCK_SEQPACKET) | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, sv) != 0)
+    return nish_net_fail();
+#else
+  if (socketpair(AF_UNIX, kind == 1 ? SOCK_STREAM : SOCK_SEQPACKET, 0, sv) != 0)
+    return errno == EPROTONOSUPPORT || errno == EPROTOTYPE ? -95 : nish_net_fail();
+  nish_net_setup(sv[0]);
+  nish_net_setup(sv[1]);
+#endif
+  int32_t *out = (int32_t *)fds->data;
+  out[0] = sv[0];
+  out[1] = sv[1];
+  return 0;
+}
+
+/* 0 when `fd` is a Unix-domain socket, the one kind a descriptor or a
+   credential passes over; else the refusal: -88 for a descriptor that is not
+   a socket, -95 for a socket of another family, and the host's failure for a
+   descriptor that is not open (-9). Asked before the call rather than read
+   from it, because a TCP socket does not refuse `SCM_RIGHTS` as such: Linux
+   answers -22 for the control message, and `SO_PEERCRED` on one succeeds with
+   no peer behind it. */
+static int32_t nish_unix_only(int32_t fd) {
+  struct sockaddr_un s;
+  socklen_t n = sizeof s;
+  if (getsockname(fd, (struct sockaddr *)&s, &n) != 0) return nish_net_fail();
+  return s.sun_family == AF_UNIX ? 0 : -95;
+}
+
+/* The most descriptors one `recvFd` makes room for: one is kept and every
+   other is closed, so the room only decides how many the kernel installs to
+   be closed rather than drops itself (docs/security/runtime.md, RT-37). */
+#define NISH_RECV_FDS 8
+
+/* Linux marks a received descriptor close-on-exec as it arrives; Darwin has
+   no such flag, and `nish_recv_fd` marks it after (RT-38). */
+#if defined(__linux__)
+#define NISH_RECV_CLOEXEC MSG_CMSG_CLOEXEC
+#else
+#define NISH_RECV_CLOEXEC 0
+#endif
+
+/* `sendFd(sock, fd, buf, off, len)`: `len` bytes of `buf` from `off`, with
+   one `SCM_RIGHTS` copy of `fd` riding on them, and the bytes sent or the
+   failure. A descriptor travels with data, so `len` 0 is -22, and so is a
+   negative `fd`; one that is not open is the kernel's -9. Only a Unix socket
+   carries one (`nish_unix_only`). A gone peer is -32, as `netWrite`'s is.
+   The descriptor stays open here: the receiver gets its own. */
+int32_t nish_send_fd(int32_t sock, int32_t fd, const nish_array *buf, int64_t off, int64_t len) {
+  if (len == 0 || fd < 0) return -22;
+  int32_t kind = nish_unix_only(sock);
+  if (kind != 0) return kind;
+  union {
+    struct cmsghdr h;
+    char room[CMSG_SPACE(sizeof(int))];
+  } c;
+  memset(&c, 0, sizeof c);
+  struct iovec v = {buf->data + off, (size_t)len};
+  struct msghdr m;
+  memset(&m, 0, sizeof m);
+  m.msg_iov = &v;
+  m.msg_iovlen = 1;
+  m.msg_control = c.room;
+  m.msg_controllen = sizeof c.room;
+  struct cmsghdr *h = CMSG_FIRSTHDR(&m);
+  h->cmsg_level = SOL_SOCKET;
+  h->cmsg_type = SCM_RIGHTS;
+  h->cmsg_len = CMSG_LEN(sizeof(int));
+  int one = fd;
+  memcpy(CMSG_DATA(h), &one, sizeof one);
+  ssize_t n = sendmsg(sock, &m, NISH_NOSIGNAL);
+  return n < 0 ? nish_net_fail() : (int32_t)n;
+}
+
+/* `recvFd(sock, buf, off, len, fd)`: at most `len` bytes into `buf` from
+   `off`, and the bytes read (0 at end of stream) or the failure. `fd[0]` is
+   the first descriptor the message carried, or -1 when it carried none; every
+   further one is closed before the answer, so a peer cannot make this process
+   hold descriptors it never asked for (RT-37). A message carrying more than
+   NISH_RECV_FDS has the rest dropped by the kernel (`MSG_CTRUNC`), and the
+   bytes and the first descriptor are answered under the same rule. `len` 0 is
+   -22, as `sendFd`'s is, and so is an empty `fd`, both before anything is
+   read. The descriptor kept is close-on-exec: from the receive on Linux
+   (`MSG_CMSG_CLOEXEC`), and from the `fcntl` after it on Darwin, where a child
+   another thread spawns in between inherits it (RT-38); a Darwin `fcntl`
+   that fails closes it and answers the failure, so no descriptor is handed
+   out without the flag. It is not made
+   non-blocking: its status flags are the open file's, which the sender
+   shares. */
+int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, nish_array *fd) {
+  if (len == 0 || fd->len < 1) return -22;
+  int32_t *out = (int32_t *)fd->data;
+  out[0] = -1;
+  int32_t kind = nish_unix_only(sock);
+  if (kind != 0) return kind;
+  union {
+    struct cmsghdr h;
+    char room[CMSG_SPACE(NISH_RECV_FDS * sizeof(int))];
+  } c;
+  struct iovec v = {buf->data + off, (size_t)len};
+  struct msghdr m;
+  memset(&m, 0, sizeof m);
+  m.msg_iov = &v;
+  m.msg_iovlen = 1;
+  m.msg_control = c.room;
+  m.msg_controllen = sizeof c.room;
+  ssize_t n = recvmsg(sock, &m, NISH_RECV_CLOEXEC);
+  if (n < 0) return nish_net_fail();
+  int32_t err = 0;
+  int kept = 0;
+  for (struct cmsghdr *h = CMSG_FIRSTHDR(&m); h; h = CMSG_NXTHDR(&m, h)) {
+    if (h->cmsg_level != SOL_SOCKET || h->cmsg_type != SCM_RIGHTS) continue;
+    /* Counted from the header, but never past the room the kernel filled:
+       a truncated message's last header may claim more than arrived. */
+    size_t room = (size_t)((char *)m.msg_control + m.msg_controllen - (char *)CMSG_DATA(h));
+    size_t claim = h->cmsg_len > CMSG_LEN(0) ? h->cmsg_len - CMSG_LEN(0) : 0;
+    size_t count = (claim < room ? claim : room) / sizeof(int);
+    for (size_t k = 0; k < count; k++) {
+      int got;
+      memcpy(&got, CMSG_DATA(h) + k * sizeof(int), sizeof got);
+      if (!kept) {
+        kept = 1;
+#if !defined(__linux__)
+        if (fcntl(got, F_SETFD, FD_CLOEXEC) != 0) {
+          err = nish_net_fail();
+          close(got);
+          continue;
+        }
+#endif
+        out[0] = got;
+      } else {
+        close(got);
+      }
+    }
+  }
+  return err != 0 ? err : (int32_t)n;
+}
+
+/* `peerCredentials(fd, out)`: the process at the other end of a connected
+   Unix socket, as `out[0..2]` = pid, uid, gid, and 0; an `out` shorter than
+   three is -22 before anything is asked. The kernel recorded them when the
+   connection was made (`connect`, or `socketpair` for a pair), so a peer that
+   has since changed its uid, or passed the socket to another process, still
+   reads as it was then (RT-39). A socket with no peer, listening or never
+   connected, is -107 (ENOTCONN) on both: Linux's `SO_PEERCRED` would answer
+   the listener's own credentials, or none, so `getpeername` is asked first;
+   a peer that has since closed keeps its connect-time answer. Linux reads
+   `SO_PEERCRED`. Darwin reads uid
+   and gid from `getpeereid` and the pid from `LOCAL_PEERPID` where the SDK
+   names it, else -1. */
+int32_t nish_peer_credentials(int32_t fd, nish_array *out) {
+  if (out->len < 3) return -22;
+  int32_t kind = nish_unix_only(fd);
+  if (kind != 0) return kind;
+  int32_t *o = (int32_t *)out->data;
+#if defined(__linux__)
+  struct sockaddr_un a;
+  socklen_t an = sizeof a;
+  if (getpeername(fd, (struct sockaddr *)&a, &an) != 0) return nish_net_fail();
+  struct ucred c;
+  socklen_t n = sizeof c;
+  if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &c, &n) != 0) return nish_net_fail();
+  o[0] = (int32_t)c.pid;
+  o[1] = (int32_t)c.uid;
+  o[2] = (int32_t)c.gid;
+#else
+  uid_t uid;
+  gid_t gid;
+  if (getpeereid(fd, &uid, &gid) != 0) return nish_net_fail();
+  int32_t pid = -1;
+#if defined(LOCAL_PEERPID)
+  pid_t p;
+  socklen_t n = sizeof p;
+  if (getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &p, &n) == 0) pid = (int32_t)p;
+#endif
+  o[0] = pid;
+  o[1] = (int32_t)uid;
+  o[2] = (int32_t)gid;
+#endif
+  return 0;
 }
 #endif

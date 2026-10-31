@@ -1078,6 +1078,71 @@ under Linux 6.8 differ from this box's, so run the benchmark there with
 
 Verdict: on this box (Intel Xeon @ 2.10 GHz, KVM VM, Linux 6.18.44, eIBRS, no KPTI), syscall entry and exit cost 106 ns, under the 0.5 µs per syscall line, and they are about 4% of a keep-alive request's 5 µs of system time, so io_uring is not worth building on this evidence.
 
+## Unix sockets against loopback TCP
+
+What does a round trip between two processes on one machine cost over a Unix
+socket rather than loopback TCP? [`unix-ipc.ts`](unix-ipc.ts) is an echo, client
+and peer in one program, and [`unix-ipc.mjs`](unix-ipc.mjs) runs it:
+
+```bash
+npm run build
+node bench/unix-ipc.mjs                 # 12 rounds after a warm-up, client on CPU 1, peer on CPU 2
+node bench/unix-ipc.mjs --rounds 3      # about a minute
+node bench/unix-ipc.mjs --cpus none     # unpinned
+```
+
+- **The transports.** `tcp` is 127.0.0.1 with TCP_NODELAY on both ends
+  (`tcpListenFlags` flag 2 on the accepted socket, `tcpConnect`'s own on the
+  peer). `stream` and `seqpacket` are a `unixSocketPair` of that kind, whose
+  one end `spawnWithFds` hands the peer as descriptor 3. Each runs at 64 B and
+  4 KB a message.
+- **A run.** The client starts the peer, 2,000 untimed round trips go first,
+  then 20,000 timed ones. Both sides are non-blocking and wait in epoll before
+  every read, as a server does, so neither spins. The client checks every byte
+  of every reply, whose first eight bytes are its round trip's number, so a
+  transport that drops, reorders or merges messages fails the run.
+- **The figures.** The round trip's median and 99th percentile, from a 10 ns
+  histogram of `monotonicNanos` around each one, and each side's user + system
+  CPU per round trip, `getrusage` over its own timed loop (the peer sends its
+  figure back over the socket).
+- **The protocol.** Each round runs every transport and size twice, run a and
+  run b, the transports in a fixed cyclic order (tcp, stream, seqpacket) that
+  rotates by round, so each always follows the same one and the a/b band cannot
+  show what one leaves the next. The report is the median of every figure over
+  all runs, its min-max and IQR. The noise band is
+  |median(a) − median(b)|, two runs of the very same thing, the largest of the
+  three transports at that size. A transport differs from TCP in a figure only
+  when the medians differ by more than the band and both IQRs; the script
+  prints which side of that line every difference falls.
+
+2026-10-31, 12 rounds, Intel Xeon @ 2.80 GHz, 4 CPUs, KVM VM, Linux 6.18.44,
+client pinned to CPU 1 and peer to CPU 2 (median, IQR, µs):
+
+| size | transport | round trip | p99 | client CPU/trip | peer CPU/trip |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 64 B | tcp | 51.16 (3.98) | 110.93 (17.86) | 27.25 (1.61) | 27.12 (2.28) |
+| | stream | 42.59 (4.03) | 99.08 (8.52) | 21.49 (1.99) | 20.52 (1.75) |
+| | seqpacket | 44.61 (3.57) | 101.94 (7.89) | 22.13 (2.16) | 21.25 (2.09) |
+| | noise band | 1.29 | 2.34 | 0.76 | 1.22 |
+| 4 KB | tcp | 53.07 (4.98) | 114.47 (18.43) | 35.54 (3.14) | 28.15 (2.92) |
+| | stream | 47.78 (4.84) | 107.02 (13.00) | 31.74 (3.39) | 24.01 (2.23) |
+| | seqpacket | 47.11 (2.68) | 106.49 (10.45) | 30.27 (1.80) | 23.24 (1.68) |
+| | noise band | 0.93 | 3.53 | 0.95 | 0.67 |
+
+A Unix socket saves each side 4 to 7 µs of CPU a round trip (11 to 24 %), and
+the median round trip 5 to 9 µs (10 to 17 %); every one of those is outside
+the noise band and both IQRs. The p99 is 7.5 to 12 µs lower too, but inside
+TCP's IQR at both sizes, so it is not a difference this machine shows.
+The client's CPU per round trip includes making each message and checking the
+reply byte by byte, inside the timed loop: the same cost on every transport,
+which the peer, echoing only, does not pay. That is why the client's figure is
+above the peer's at 4 KB (by 7 to 8 µs), and why its percentages are the
+smaller; the peer's column is the transport alone.
+Stream against seqpacket is inside the noise in every figure. Most of a round
+trip here is the wakeup of the other CPU: the VM's 40 to 50 µs is far above
+bare metal's, so the absolute figures are this box's, and the savings are the
+loopback TCP stack's work the Unix socket skips.
+
 ## P-256
 
 `p256.ts` times ECDSA over P-256 on the three calls a key's life makes:
@@ -1762,6 +1827,49 @@ twin's 8.35 µs (−44.9 %). The difference is the kernel's: the module's system
 time drops to 3.68 µs, from 6.30 with Nagle off, while its user time stays
 near 0.9 µs. Its qps is 3.2 % under the twin's. The benchmark keeps Nagle off
 on both sides, as libpq does.
+
+### Over the Unix socket (`--unix`)
+
+`node bench/postgres/run.mjs --unix [--rounds N]` asks what the module saves by
+reaching the server over its Unix socket instead of TCP. It runs two workloads
+with one query in flight, on the build and its byte-identical copy, each over
+TCP to 127.0.0.1 (TCP_NODELAY) and over `unixConnect` to the cluster's
+`sock/.s.PGSQL.<port>`, the four sides rotating by round; the twin is not built.
+
+| Workload | Queries in a timed run | In flight | What one query answers |
+| --- | --- | --- | --- |
+| `one` | 20,000 | 1 | `SELECT 1`: the transport, next to no server work. |
+| `rows` | 5,000 | 1 | 100 users from a random id up: 100 rows of five columns. |
+
+Each run asks `pg_backend_pid()` untimed and reads that backend's
+`/proc/<pid>/schedstat` (its time on a CPU, in ns) around the timed loop, so
+the report has the server's CPU per query beside the client's and the wall
+time per query; `/proc/<pid>/stat`'s utime + stime, in 10 ms ticks, must agree
+with it. The conduit role signs in over the socket with SCRAM, by
+`setup.sh`'s `local all all scram-sha-256` line; `run.mjs --unix` refuses a
+cluster without it (re-run `setup.sh`). The noise band is the build against its
+copy on the same transport, the larger of the two.
+
+2026-10-31, 12 rounds, PostgreSQL 18.6 (the PostgreSQL project's
+`postgresql-18`, 18.6-1.pgdg24.04+2, from the pgdg repository `setup.sh`
+adds), Intel Xeon @ 2.80 GHz, 4 CPUs, KVM VM, Linux 6.18.44, unpinned (median,
+IQR, µs/query):
+
+| Workload | transport | wall | client CPU | server CPU |
+| --- | --- | ---: | ---: | ---: |
+| `one` | tcp | 66.13 (2.81) | 28.13 (1.38) | 37.39 (2.15) |
+| | unix | 56.60 (1.78) | 21.95 (1.27) | 30.71 (1.48) |
+| | noise band | 1.38 | 0.40 | 1.21 |
+| `rows` | tcp | 191.59 (16.27) | 70.59 (3.91) | 159.13 (13.33) |
+| | unix | 173.30 (14.16) | 61.00 (3.82) | 141.08 (14.61) |
+| | noise band | 1.85 | 1.52 | 0.24 |
+
+The socket saves `SELECT 1` 9.5 µs of wall time (14 %), 6.2 µs of client CPU
+(22 %) and 6.7 µs of the backend's (18 %), and the 100-row read 18 µs of wall
+time (10 %), 9.6 µs of client CPU (14 %) and 18 µs of the backend's (11 %): all
+outside the band and both IQRs, the `rows` wall time by 2 µs only. The client
+saving is about what [`unix-ipc`](#unix-sockets-against-loopback-tcp) measures
+for a bare echo, so it is the TCP stack's work, not the module's.
 
 ### When to start a batch
 

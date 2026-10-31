@@ -96,6 +96,13 @@
  * next decision. Falling fast and rising slowly keeps a flickering link from
  * flipping the rate.
  *
+ * It starts at the best tier on a local terminal: the probe answered under
+ * 5 ms, or no `SSH_*` hint and no slow answer. Falling costs half a second and
+ * rising one tier costs three, so a terminal that keeps up is never made to
+ * climb. A probe that took 5 ms or more starts at 30, and a remote session
+ * (the hint, and no fast answer) at 15, as a backlog on a slow link takes far
+ * longer to drain than to avoid.
+ *
  * Below the floor tier (the least tier at or above `minFps`, under
  * `RATE_FIRST`) the controller cuts bytes instead of frames, one step at a
  * time: half the resolution, a quarter, the backend capped at half blocks, 256
@@ -431,7 +438,12 @@ export class RateController {
     this.floorFps = this.prefer === DETAIL_FIRST ? 5 : minTier
     const remote: boolean =
       options.remoteHint && !(options.probeRttMs > 0.0 && options.probeRttMs < rateLocalRttMs)
-    const want: i32 = remote ? 15 : 30
+    let want: i32 = this.tiers[0]
+    if (remote) {
+      want = 15
+    } else if (options.probeRttMs >= rateLocalRttMs) {
+      want = 30
+    }
     let start: i32 = this.tiers[this.tiers.length - 1]
     for (const t of this.tiers) {
       if (t <= want && t > start) {

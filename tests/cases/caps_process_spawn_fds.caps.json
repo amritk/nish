@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "entry": "caps_process_spawn_fds.ts",
+  "deterministic": false,
+  "capabilities": ["process.spawn"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["process.spawn"],
+      "modules": [
+        {
+          "path": "caps_process_spawn_fds.ts",
+          "capabilities": ["process.spawn"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["process.spawn"],
+              "witnesses": {
+                "process.spawn": [
+                  { "function": "main", "at": "caps_process_spawn_fds.ts:10:15", "calls": "run" },
+                  { "function": "run", "at": "caps_process_spawn_fds.ts:5:15", "calls": "spawnWithFds" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_process_spawn_fds.ts:10:3", "allowed": true },
+                { "kind": "call", "at": "caps_process_spawn_fds.ts:10:15", "callee": "run", "via": "index" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
