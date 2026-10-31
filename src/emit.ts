@@ -861,15 +861,19 @@ export class Emitter {
     const caps = this.opts.sandboxCapabilities
     const read = this.sandboxDirs("read", this.opts.sandboxRead, caps, "fs.read")
     const write = this.sandboxDirs("write", this.opts.sandboxWrite, caps, "fs.write")
+    const exec = this.sandboxDirs("exec", this.opts.sandboxExec, caps, "process.spawn")
     const apply = new IRFunction(".sandbox.apply", [], "void")
     apply.linkage = "internal"
-    apply.emit(`call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write})`)
+    apply.emit(
+      `call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write}, i8* ${exec})`
+    )
     apply.emit("ret void")
     this.module.addFunction(apply)
   }
 
   /**
-   * WP37 §2: the directories a scoped capability is held to, as one constant
+   * WP37 §2: the directories a scoped capability is held to (for
+   * `process.spawn`, the programs it may run), as one constant
    * of NUL-terminated paths ended by an empty one, and the operand that points
    * at it; `null` when `main` does not reach the capability or it is granted
    * whole, which the runtime reads as a rule beneath `/`.

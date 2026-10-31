@@ -12,7 +12,7 @@
  * before any constructor in the executable, an `ffi` object or a shared
  * library:
  *
- *   nish_sandbox(caps, mode, read_dirs, write_dirs)
+ *   nish_sandbox(caps, mode, read_dirs, write_dirs, exec_paths)
  *
  * `caps` is `main`'s capability mask (src/capabilities.ts numbers the bits),
  * `mode` is 1 for `--sandbox` and 2 for `--sandbox=best-effort`. The two
@@ -20,6 +20,9 @@
  * scopes, each a run of NUL-terminated absolute paths ended by an empty one,
  * or null when the capability is granted whole or not at all; a list moves
  * its capability's rights from the rule on `/` to one rule per directory.
+ * `exec_paths` is the `--allow process.spawn=<program>` list and the grants'
+ * programs, in the same shape: with it, `EXECUTE` leaves the rule on `/` and
+ * each program (and its interpreter) gets a rule of its own.
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -169,27 +172,28 @@ static const uint16_t nish_sb_uring[] = {425, 426, 427}; /* io_uring_setup, _ent
 /* Set by step 6 and read by `nish_sandbox_check`. */
 static int nish_sb_applied = 0;
 
-/* The errno names a failure prints; a number for any other. */
+/* The errno a failure prints, as the line's parenthesized tail: its name, or
+ * its number for any other. */
 static const char *nish_sb_errno_name(int e, char *buf) {
   switch (e) {
-  case EPERM: return "EPERM";
-  case ENOSYS: return "ENOSYS";
-  case EOPNOTSUPP: return "EOPNOTSUPP";
-  case EINVAL: return "EINVAL";
-  case EACCES: return "EACCES";
-  case ENOENT: return "ENOENT";
-  case EFAULT: return "EFAULT";
-  case E2BIG: return "E2BIG";
-  case ENOMEM: return "ENOMEM";
-  case EBUSY: return "EBUSY";
+  case EPERM: return " (EPERM)";
+  case ENOSYS: return " (ENOSYS)";
+  case EOPNOTSUPP: return " (EOPNOTSUPP)";
+  case EINVAL: return " (EINVAL)";
+  case EACCES: return " (EACCES)";
+  case ENOENT: return " (ENOENT)";
+  case EFAULT: return " (EFAULT)";
+  case E2BIG: return " (E2BIG)";
+  case ENOMEM: return " (ENOMEM)";
+  case EBUSY: return " (EBUSY)";
   }
   char digits[12];
   int n = 0;
   unsigned u = (unsigned)e;
   do digits[n++] = (char)('0' + u % 10); while ((u /= 10) != 0 && n < 11);
-  memcpy(buf, "errno ", 6);
-  for (int i = 0; i < n; i++) buf[6 + i] = digits[n - 1 - i];
-  buf[6 + n] = 0;
+  memcpy(buf, " (errno ", 8);
+  for (int i = 0; i < n; i++) buf[8 + i] = digits[n - 1 - i];
+  memcpy(buf + 8 + n, ")", 2);
   return buf;
 }
 
@@ -205,12 +209,7 @@ static void nish_sb_say(const char *a, const char *b, const char *c) {
  * named after `what`. */
 static void nish_sb_fail_at(const char *what, const char *path) {
   char buf[24];
-  char tail[40] = " (";
-  const char *name = nish_sb_errno_name(errno, buf);
-  size_t len = strlen(name);
-  memcpy(tail + 2, name, len);
-  memcpy(tail + 2 + len, ")", 2);
-  nish_sb_say(what, path, tail);
+  nish_sb_say(what, path, nish_sb_errno_name(errno, buf));
   _exit(126);
 }
 
@@ -287,7 +286,7 @@ static size_t nish_sb_name(char *line, size_t at, const char *name) {
 static void nish_sb_rule(int ruleset, const char *path, uint64_t rights, int32_t mode) {
   struct nish_ll_path_beneath rule = {rights, -1};
   if (!rights) return;
-  rule.parent_fd = open(path, O_PATH | O_CLOEXEC | O_DIRECTORY);
+  rule.parent_fd = open(path, O_PATH | O_CLOEXEC);
   if (rule.parent_fd < 0) {
     if (mode != 2) nish_sb_fail_at("cannot open the directory ", path);
     nish_sb_say("the scope directory ", path, " cannot be opened, so the program gets no access beneath it");
@@ -307,7 +306,7 @@ static void nish_sb_scope(int ruleset, const char *dirs, uint64_t rights, int32_
  * everywhere or nowhere; a scoped capability's rights are granted beneath its
  * directories alone. Returns with nothing done when there is no Landlock and
  * the mode is best-effort. */
-static void nish_sb_landlock(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs) {
+static void nish_sb_landlock(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
   int abi = nish_sb_landlock_abi();
   if (abi < 0) {
     /* EPERM is a container runtime's own seccomp profile refusing the call;
@@ -331,6 +330,9 @@ static void nish_sb_landlock(int32_t caps, int32_t mode, const char *read_dirs, 
   if (read_dirs) whole &= ~CAP_BIT_FS_READ;
   if (write_dirs) whole &= ~CAP_BIT_FS_WRITE;
   uint64_t granted = nish_sb_granted(whole);
+  /* An exec allowlist (a dependency's process.spawn grant, WP40 §2a) keeps
+   * EXECUTE off `/` and grants it on each listed file alone. */
+  if (exec_paths) granted &= ~LL_EXECUTE;
   uint64_t lost = ~granted & ~known & (LL_TRUNCATE | LL_IOCTL_DEV);
   int unscoped = abi < 6;
   /* Strict runs without IOCTL_DEV and without the ABI 6 scopes: a terminal
@@ -355,6 +357,7 @@ static void nish_sb_landlock(int32_t caps, int32_t mode, const char *read_dirs, 
   nish_sb_rule(ruleset, "/", granted & known, 1);
   if (read_dirs && (caps & CAP_BIT_FS_READ)) nish_sb_scope(ruleset, read_dirs, nish_sb_granted(CAP_BIT_FS_READ) & known, mode);
   if (write_dirs && (caps & CAP_BIT_FS_WRITE)) nish_sb_scope(ruleset, write_dirs, nish_sb_granted(CAP_BIT_FS_WRITE) & known, mode);
+  if (caps & CAP_BIT_SPAWN) nish_sb_scope(ruleset, exec_paths, LL_EXECUTE, mode);
   if (syscall(LL_RESTRICT, ruleset, 0) != 0) nish_sb_fail("cannot apply the Landlock ruleset");
   close(ruleset);
 }
@@ -428,11 +431,11 @@ static void nish_sb_seccomp(int32_t caps) {
   if (loaded != 0) nish_sb_fail("cannot load the seccomp filter");
 }
 
-void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs) {
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
   nish_cpu_prime();
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) nish_sb_fail("cannot set no_new_privs");
   nish_sb_drop_capabilities();
-  nish_sb_landlock(caps, mode, read_dirs, write_dirs);
+  nish_sb_landlock(caps, mode, read_dirs, write_dirs, exec_paths);
   /* Metadata writes stay EPERM inside a scoped write directory (open
    * question 1): Landlock has no right for chmod, chown or xattrs. */
   nish_sb_seccomp(write_dirs ? caps & ~CAP_BIT_FS_WRITE : caps);
@@ -457,11 +460,12 @@ static void nish_sb_none(void) {
   _exit(126);
 }
 
-void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs) {
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
   (void)caps;
   (void)mode;
   (void)read_dirs;
   (void)write_dirs;
+  (void)exec_paths;
   nish_sb_none();
 }
 

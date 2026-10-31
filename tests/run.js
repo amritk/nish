@@ -24038,8 +24038,8 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     rewritten.status === 0 && fs.readFileSync(path.join(updated, lockName), "utf8") === writtenLock,
     shown(rewritten)
   )
-  // A row is every capability the dependency reaches, not only the four the
-  // dependency policy gates: `fs.read` is written beside the granted `net`.
+  // A row is every capability the dependency reaches, not only the ones the
+  // dependency policy gates: `env` is written beside the granted `net`.
   const ungatedLock = lockCopy("caps_lock_ungated")
   const ungatedRun = lockBuild(ungatedLock, ["--update-capability-lock"])
   const ungatedWritten = fs.existsSync(path.join(ungatedLock, lockName))
@@ -24047,7 +24047,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     : ""
   check(
     "capability lock: --update-capability-lock records a capability the dependency policy does not gate",
-    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"fs\.read"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
+    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"env"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
     `${shown(ungatedRun)}\n--- written\n${ungatedWritten}`
   )
   check(

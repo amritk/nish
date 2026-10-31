@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 725
+export const RULE_COUNT: i32 = 732
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -233,6 +233,8 @@ const diagnosticRules = (): string[] => [
   "NL2419",
   "` is made here and nobody owns it: a `Secret` leaves the function that made it returned or wiped, so bind it to a local (`const s = ...`) and `wipe(s)` once done, or return it",
   "NL2439",
+  "` is not a gated capability: a dependency is granted only `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` and `unsafe`, and reaches every other capability without a grant",
+  "NL3042",
   "`: the block releases what it allocated when it ends, and nothing proves the array it is stored into ends with it (allocate what must outlive the block before the block opens)",
   "NL2420",
   "An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in ",
@@ -279,8 +281,6 @@ const diagnosticRules = (): string[] => [
   "NL2449",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2441",
-  "` is not a gated capability: a dependency is granted only `ffi`, `net`, `process.spawn` and `unsafe`, and reaches every other capability without a grant",
-  "NL3042",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
@@ -343,6 +343,8 @@ const diagnosticRules = (): string[] => [
   "NL2558",
   "` cannot be handed a `Secret`: a builtin reaches the outside world or reads the bytes, and a `Secret` is read only through `expose`",
   "NL2432",
+  "` names no program: a grant's program is found on `PATH`, or as a path from the root package's directory, when the program is built",
+  "NL3046",
   "A `Secret` cannot be a condition: a branch taken on key material is a timing channel, and a `Secret` is read only through `expose`",
   "NL2434",
   " can only be the iterable of a `for...of`, which walks the entries in insertion order: an iterator is not a value in this version",
@@ -359,10 +361,14 @@ const diagnosticRules = (): string[] => [
   "NL2499",
   ", and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target",
   "NL2551",
+  "` an argument, which only `fs.read` and `fs.write` (a directory), `process.spawn` (a program) and `net` (a host) take: grant `",
+  "NL3048",
   "` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: ",
   "NL2457",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",
   "NL2442",
+  "` names no directory: a grant's directory is resolved from the root package's directory and exists when the program is built",
+  "NL3047",
   "` of a `Secret` is read only by `nish:secret` itself: compute with the value inside `expose(key, f)`, which runs `f` with it",
   "NL2436",
   ": a handle class has no type parameters, no `implements` and no `export`, so no other type and no other module can name it",
@@ -405,6 +411,8 @@ const diagnosticRules = (): string[] => [
   "NL2534",
   ", so the references the C library and the runtime make to that name would reach this function instead; rename it",
   "NL3037",
+  "` names no numeric host: `net` is granted for the IPv4 or IPv6 addresses `nish:net` takes, one entry per address",
+  "NL3045",
   "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
   "NL2285",
   "; a class or interface name must be unique across the program, and an instantiation is named after its template",
@@ -669,6 +677,8 @@ const diagnosticRules = (): string[] => [
   "NL2215",
   " (use `if` / `else`; only an integer switch lowers to a jump table)",
   "NL2009",
+  "); review the grant, then record it with `--update-capability-lock`",
+  "NL2587",
   "` expects a number (i32, i64, u8, u16, u32, u64, f32, or f64), got ",
   "NL2057",
   "` is not supported: inherited fields are read and written as `this.",
@@ -1019,6 +1029,8 @@ const diagnosticRules = (): string[] => [
   "NL2236",
   " (fields must match exactly, in order)",
   "NL2004",
+  "` grant does not cover: it is granted ",
+  "NL2586",
   "`, whose length is fixed: declare it `",
   "NL2415",
   "`slice` expects 1 or 2 arguments, got ",
@@ -1310,7 +1322,7 @@ const diagnosticRules = (): string[] => [
   "` returns before field `",
   "NL2104",
   "` takes an `i32[]`, got ",
-  "NL2584",
+  "NL2585",
   "`, which share no member",
   "NL2531",
   "`unwrapOr(...)` expects ",

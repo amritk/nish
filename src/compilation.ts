@@ -75,6 +75,7 @@ import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./
 import { arenaJson } from "./arena-report"
 import {
   allCapabilities,
+  argumentCapabilities,
   CAPABILITY_COUNT,
   capabilityIndex,
   capabilityName,
@@ -86,8 +87,13 @@ import {
   dependencyMasks,
   dependencyPackages,
   dependencyWitness,
+  findProgram,
   functionIndex,
   gatedCapabilities,
+  literalReaches,
+  numericHost,
+  programInterpreter,
+  rootReach,
   witnessChain,
 } from "./capability-report"
 import { capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
@@ -426,6 +432,19 @@ export class Compilation {
   grantNames: string[]
   grantMasks: i32[]
   /**
+   * WP40 §2a: the part of each grant (beside `grantNames`) given only with
+   * arguments, and every argument, flat: its grant's place in `grantNames`,
+   * its capability, what it resolved to when the program was built (a
+   * directory's or a program's real path, or a host) and how the lockfile
+   * spells it (`fs.read=data`). A bit granted whole as well is not in
+   * `grantScoped`, and its arguments are not read.
+   */
+  grantScoped: i32[]
+  grantArgOwners: i32[]
+  grantArgCaps: i32[]
+  grantArgValues: string[]
+  grantArgTexts: string[]
+  /**
    * WP40: the capability lockfile's path and, under `--update-capability-lock`,
    * the text `checkCapabilityLock` computed for it, which the driver writes
    * once the build has passed (`src/capability-lock.ts`).
@@ -454,6 +473,11 @@ export class Compilation {
     this.manifestDeny = 0
     this.grantNames = []
     this.grantMasks = []
+    this.grantScoped = []
+    this.grantArgOwners = []
+    this.grantArgCaps = []
+    this.grantArgValues = []
+    this.grantArgTexts = []
     this.capabilityLockPath = ""
     this.capabilityLockText = ""
     this.validationErrors = 0
@@ -1270,6 +1294,7 @@ export class Compilation {
     }
     this.refuseCapabilities()
     this.refuseDependencyCapabilities()
+    this.refuseNarrowGrants()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -1423,42 +1448,161 @@ export class Compilation {
     let k = 0
     while (k < policy.grantees.length && k < policy.grants.length) {
       this.grantNames.push(policy.grantees[k])
-      this.grantMasks.push(this.grantMask(source, policy.grants[k]))
+      this.grantMasks.push(this.grantMask(source, policy.grants[k], this.grantNames.length - 1))
       k = k + 1
     }
   }
 
-  /** One dependency's grant as a mask, refusing each entry that names no capability or one that is not gated. */
-  grantMask(source: SourceFile, list: ManifestList): i32 {
+  /**
+   * One dependency's grant as a mask, refusing each entry that names no
+   * capability or one that is not gated. An entry `cap=arg` grants `cap` only
+   * as far as its argument reaches (WP40 §2a), and is kept beside the grant,
+   * whose place in `grantNames` is `owner`; an argument on a capability that
+   * takes none, or one that resolves to nothing, is refused (NL3045 to NL3048). A bare
+   * name grants the capability whole, whatever arguments it is also given.
+   */
+  grantMask(source: SourceFile, list: ManifestList, owner: i32): i32 {
     const names = everyCapabilityName()
     const gated = gatedCapabilities()
-    let mask = 0
+    const takes = argumentCapabilities()
+    const base = dirname(source.path)
+    let whole = 0
+    let scoped = 0
     let k = 0
     while (k < list.entries.length && k < list.offsets.length) {
       const entry = list.entries[k]
       const at = list.offsets[k]
       const end = k < list.ends.length ? list.ends[k] : at + 1
-      const index = capabilityIndex(entry)
+      const equals = entry.indexOf("=")
+      const name = equals >= 0 ? entry.slice(0, equals) : entry
+      const index = capabilityIndex(name)
       if (index < 0) {
         this.sink.report(
           source,
           at,
           end,
-          `\`${entry}\` is no capability: a policy names capabilities as \`--emit-capabilities\` reports them, one of ${names}`
+          `\`${name}\` is no capability: a policy names capabilities as \`--emit-capabilities\` reports them, one of ${names}`
         )
       } else if ((gated & (1 << index)) === 0) {
         this.sink.report(
           source,
           at,
           end,
-          `\`${entry}\` is not a gated capability: a dependency is granted only \`ffi\`, \`net\`, \`process.spawn\` and \`unsafe\`, and reaches every other capability without a grant`
+          `\`${name}\` is not a gated capability: a dependency is granted only \`ffi\`, \`fs.read\`, \`fs.write\`, \`net\`, \`process.spawn\` and \`unsafe\`, and reaches every other capability without a grant`
+        )
+      } else if (equals < 0) {
+        whole = whole | (1 << index)
+      } else if ((takes & (1 << index)) === 0) {
+        this.sink.report(
+          source,
+          at,
+          end,
+          `\`${entry}\` gives \`${name}\` an argument, which only \`fs.read\` and \`fs.write\` (a directory), \`process.spawn\` (a program) and \`net\` (a host) take: grant \`${name}\` whole`
         )
       } else {
-        mask = mask | (1 << index)
+        const arg = entry.slice(equals + 1)
+        const value = this.grantArgument(source, at, end, entry, index, arg, base)
+        if (value !== null) {
+          scoped = scoped | (1 << index)
+          const text =
+            index === capabilityIndex("fs.read") || index === capabilityIndex("fs.write")
+              ? `${name}=${normalizePath(arg)}`
+              : entry
+          let known = false
+          let j = 0
+          while (j < this.grantArgTexts.length && j < this.grantArgOwners.length) {
+            known = known || (this.grantArgOwners[j] === owner && this.grantArgTexts[j] === text)
+            j = j + 1
+          }
+          if (!known) {
+            this.grantArgOwners.push(owner)
+            this.grantArgCaps.push(index)
+            this.grantArgValues.push(value)
+            this.grantArgTexts.push(text)
+          }
+        }
       }
       k = k + 1
     }
-    return mask
+    this.grantScoped.push(scoped & ~whole)
+    return whole | scoped
+  }
+
+  /**
+   * What the argument `arg` of grant entry `entry`, for capability `c`, is
+   * resolved to, or null once it is refused (NL3045 to NL3047): a directory, against
+   * the root package's directory `base`, to its real path; a program, found
+   * on `PATH` or as a path from `base`, to its real path; a host, checked to
+   * be the numeric address `nish:net` takes, as written.
+   */
+  grantArgument(
+    source: SourceFile,
+    at: i32,
+    end: i32,
+    entry: string,
+    c: i32,
+    arg: string,
+    base: string
+  ): string | null {
+    if (c === capabilityIndex("net")) {
+      if (!numericHost(arg)) {
+        this.sink.report(
+          source,
+          at,
+          end,
+          `\`${entry}\` names no numeric host: \`net\` is granted for the IPv4 or IPv6 addresses \`nish:net\` takes, one entry per address`
+        )
+        return null
+      }
+      return arg
+    }
+    if (c === capabilityIndex("process.spawn")) {
+      let found: string | null = null
+      if (arg.length > 0) {
+        found = findProgram(arg, base)
+      }
+      if (found === null) {
+        this.sink.report(
+          source,
+          at,
+          end,
+          `\`${entry}\` names no program: a grant's program is found on \`PATH\`, or as a path from the root package's directory, when the program is built`
+        )
+      }
+      return found
+    }
+    const real: string | null = arg.length === 0 ? null : realpathSync(resolvePath(base, arg))
+    if (real === null || !isDirectorySync(real)) {
+      this.sink.report(
+        source,
+        at,
+        end,
+        `\`${entry}\` names no directory: a grant's directory is resolved from the root package's directory and exists when the program is built`
+      )
+      return null
+    }
+    return real
+  }
+
+  /** The arguments grant `g` gives capability `c` (`grantArgValues`, or `grantArgTexts` when `texts`), none when it gives `c` whole or not at all. */
+  grantArguments(g: i32, c: i32, texts: boolean): string[] {
+    const out: string[] = []
+    if (g < 0 || g >= this.grantScoped.length || (this.grantScoped[g] & (1 << c)) === 0) {
+      return out
+    }
+    let j = 0
+    while (
+      j < this.grantArgOwners.length &&
+      j < this.grantArgCaps.length &&
+      j < this.grantArgValues.length &&
+      j < this.grantArgTexts.length
+    ) {
+      if (this.grantArgOwners[j] === g && this.grantArgCaps[j] === c) {
+        out.push(texts ? this.grantArgTexts[j] : this.grantArgValues[j])
+      }
+      j = j + 1
+    }
+    return out
   }
 
   /** One `allow` or `deny` list of the root package's policy as a mask, refusing each entry that names no capability. */
@@ -1647,6 +1791,83 @@ export class Compilation {
   }
 
   /**
+   * WP40 §2a: refuse each string literal a dependency hands a gated builtin
+   * that its grant's arguments do not cover (NL2586), for a capability it is
+   * granted only with arguments. Only what the compiler sees is checked: an
+   * absolute path inside or beneath a granted directory, a program a granted
+   * one is (by name, or as found on `PATH`), a host a granted one is. A
+   * relative path, or a value computed when the program runs, is the
+   * sandbox's (docs/wp37-os-sandbox.md §2a), not this check's.
+   */
+  refuseNarrowGrants(): void {
+    const reach = dependencyPackages(this)
+    if (reach.names.length === 0) {
+      return
+    }
+    const spawn = capabilityIndex("process.spawn")
+    const net = capabilityIndex("net")
+    for (const literal of literalReaches(this, reach)) {
+      const p = literal.module < reach.packageOf.length ? reach.packageOf[literal.module] : -1
+      const name = p >= 0 && p < reach.names.length ? reach.names[p] : ""
+      const g = this.grantNames.indexOf(name)
+      const values = this.grantArguments(g, literal.cap, false)
+      const texts = this.grantArguments(g, literal.cap, true)
+      let covered = values.length === 0
+      if (!covered && literal.cap === net) {
+        covered = values.indexOf(literal.value) >= 0
+      } else if (!covered && literal.cap === spawn) {
+        const relative = literal.value.indexOf("/") > 0
+        let found: string | null = null
+        if (!relative) {
+          found = findProgram(literal.value, this.rootPackageDir)
+        }
+        covered =
+          relative ||
+          texts.indexOf(`process.spawn=${literal.value}`) >= 0 ||
+          (found !== null && values.indexOf(found) >= 0)
+      } else if (!covered) {
+        covered = !literal.value.startsWith("/") || beneathAny(normalizePath(literal.value), values)
+        if (!covered) {
+          const real = realpathSync(literal.value)
+          const parent = realpathSync(dirname(normalizePath(literal.value)))
+          covered =
+            (real !== null && beneathAny(real, values)) || (parent !== null && beneathAny(parent, values))
+        }
+      }
+      if (!covered && literal.module < this.modules.length) {
+        this.reportNarrowGrant(
+          this.modules[literal.module].source,
+          literal.site,
+          name,
+          literal.builtin,
+          literal.value,
+          literal.cap,
+          texts
+        )
+      }
+    }
+  }
+
+  /** The refusal of a literal a grant's arguments do not cover, a method of its own for the reason `reportRefusal` is. */
+  reportNarrowGrant(
+    source: SourceFile,
+    site: Node,
+    name: string,
+    builtin: string,
+    value: string,
+    c: i32,
+    texts: string[]
+  ): void {
+    const cap = capabilityName(c)
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `the dependency \`${name}\` hands \`${builtin}\` ${jsonQuote(value)}, which its \`${cap}\` grant does not cover: it is granted ${texts.join(", ")}; name it in the grant, or grant \`${cap}\` whole`
+    )
+  }
+
+  /**
    * WP40: hold each dependency to the capability lockfile beside the root
    * package's `package.json` (the entry's own directory when there is none),
    * or, under `--update-capability-lock`, compute the file instead of reading
@@ -1678,7 +1899,24 @@ export class Compilation {
     const index = functionIndex(this, facts)
     dependencyMasks(reach, index)
     if (text === null) {
-      this.capabilityLockText = capabilityLockText(reach.names, reach.masks)
+      const scoped: i32[] = []
+      const argRows: i32[] = []
+      const argTexts: string[] = []
+      let q = 0
+      while (q < reach.names.length) {
+        const g = this.grantNames.indexOf(reach.names[q])
+        scoped.push(g >= 0 && g < this.grantScoped.length ? this.grantScoped[g] : 0)
+        let j = 0
+        while (j < this.grantArgOwners.length && j < this.grantArgTexts.length) {
+          if (this.grantArgOwners[j] === g) {
+            argRows.push(q)
+            argTexts.push(this.grantArgTexts[j])
+          }
+          j = j + 1
+        }
+        q = q + 1
+      }
+      this.capabilityLockText = capabilityLockText(reach.names, reach.masks, scoped, argRows, argTexts)
       return
     }
     const source = new SourceFile(this.capabilityLockPath, text)
@@ -1698,9 +1936,17 @@ export class Compilation {
       const row = lock.names.indexOf(name)
       const recorded = row >= 0 && row < lock.masks.length ? lock.masks[row] : 0
       const grown = reach.masks[p] & ~recorded
+      const g = this.grantNames.indexOf(name)
       let c = 0
       while (c < CAPABILITY_COUNT) {
-        if ((grown & (1 << c)) !== 0) {
+        const widened =
+          (grown & (1 << c)) === 0 &&
+          row >= 0 &&
+          row < lock.scoped.length &&
+          (reach.masks[p] & lock.scoped[row] & (1 << c)) !== 0
+            ? this.widenedArguments(lock.recorded(row, c), g, c)
+            : ""
+        if ((grown & (1 << c)) !== 0 || widened.length > 0) {
           const chain = dependencyWitness(index, facts, reach, p, c)
           const at: SourceFile | null = chain.length > 0 ? chain[0].source : null
           const site: Node | null = chain.length > 0 ? chain[0].site : null
@@ -1709,13 +1955,55 @@ export class Compilation {
             for (const hop of chain) {
               hops.push(`${hop.at} calls ${hop.calls}`)
             }
-            this.reportLockGrowth(at, site, name, chain[0].caller, c, hops)
+            if (widened.length > 0) {
+              this.reportArgumentGrowth(at, site, name, c, widened, lock.recorded(row, c))
+            } else {
+              this.reportLockGrowth(at, site, name, chain[0].caller, c, hops)
+            }
           }
         }
         c = c + 1
       }
       p = p + 1
     }
+  }
+
+  /**
+   * What grant `g` gives capability `c` past the arguments `recorded`, which
+   * the lockfile records for it, as the message names it, or "" when it gives
+   * nothing more: `whole` when it now grants `c` whole, else the `cap=arg`
+   * entries the lockfile lacks.
+   */
+  widenedArguments(recorded: string[], g: i32, c: i32): string {
+    if (g < 0 || g >= this.grantScoped.length || (this.grantScoped[g] & (1 << c)) === 0) {
+      return "whole"
+    }
+    const extra: string[] = []
+    for (const text of this.grantArguments(g, c, true)) {
+      if (recorded.indexOf(text) < 0) {
+        extra.push(`\`${text}\``)
+      }
+    }
+    return extra.join(", ")
+  }
+
+  /** Dependency `name`'s grant of `c`, wider than the lockfile's arguments for it (NL2587). */
+  reportArgumentGrowth(
+    source: SourceFile,
+    site: Node,
+    name: string,
+    c: i32,
+    widened: string,
+    recorded: string[]
+  ): void {
+    const cap = capabilityName(c)
+    const now = widened === "whole" ? `\`${cap}\` whole` : widened
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `the dependency \`${name}\` is granted ${now}, past the arguments \`${capabilityLockName()}\` records for its \`${cap}\` (${recorded.join(", ")}); review the grant, then record it with \`--update-capability-lock\``
+    )
   }
 
   /** Dependency `name`'s capability `c`, which the lockfile does not record, refused as `reportDependencyRefusal` refuses a grant. */
@@ -2663,6 +2951,79 @@ export class Compilation {
     return caps | (allow & ~deny & reachable)
   }
 
+  /**
+   * WP40 §2a, docs/wp37-os-sandbox.md §2a: when only dependencies reach
+   * `fs.read`, `fs.write` or `process.spawn`, and each of them is granted it
+   * with arguments, `--sandbox` confines the program to those arguments — the
+   * granted directories become its Landlock roots, the granted programs (and
+   * their interpreters) its exec allowlist. A reach the root package makes
+   * itself, an `ffi` call, or a scope given on the command line leaves the
+   * capability as it was.
+   */
+  narrowSandbox(facts: FactsTable): void {
+    const caps = this.opts.sandboxCapabilities
+    if ((caps & (1 << capabilityIndex("ffi"))) !== 0) {
+      return
+    }
+    const reach = dependencyPackages(this)
+    if (reach.names.length === 0) {
+      return
+    }
+    const index = functionIndex(this, facts)
+    dependencyMasks(reach, index)
+    const root = rootReach(this, facts, index, reach)
+    for (const c of [
+      capabilityIndex("fs.read"),
+      capabilityIndex("fs.write"),
+      capabilityIndex("process.spawn"),
+    ]) {
+      const bit = 1 << c
+      let cli = this.opts.sandboxExec
+      if (c === capabilityIndex("fs.read")) {
+        cli = this.opts.sandboxRead
+      } else if (c === capabilityIndex("fs.write")) {
+        cli = this.opts.sandboxWrite
+      }
+      if ((caps & bit) === 0 || (root & bit) !== 0 || cli.length > 0) {
+        continue
+      }
+      const values: string[] = []
+      let reached = false
+      let scoped = true
+      let p = 0
+      while (p < reach.names.length && p < reach.masks.length) {
+        if ((reach.masks[p] & bit) !== 0) {
+          reached = true
+          const g = this.grantNames.indexOf(reach.names[p])
+          const args = this.grantArguments(g, c, false)
+          if (args.length === 0) {
+            scoped = false
+          }
+          for (const value of args) {
+            addOnce(values, value)
+          }
+        }
+        p = p + 1
+      }
+      if (!reached || !scoped) {
+        continue
+      }
+      if (c === capabilityIndex("process.spawn")) {
+        let k = 0
+        while (k < values.length) {
+          const interpreter = programInterpreter(values[k])
+          if (interpreter !== null) {
+            addOnce(values, interpreter)
+          }
+          k = k + 1
+        }
+      }
+      for (const value of values) {
+        cli.push(value)
+      }
+    }
+  }
+
   /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
     const facts = this.analyze()
@@ -2673,6 +3034,7 @@ export class Compilation {
     if (this.opts.sandbox !== 0 && main !== null) {
       const fact = facts.get(main.name)
       this.opts.sandboxCapabilities = this.sandboxWidened(fact === null ? 0 : fact.caps)
+      this.narrowSandbox(facts)
     }
     const units = this.analysisUnits
     const stems = this.outputStems()
@@ -2775,6 +3137,23 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
   }
   const declared = program.ownEnum(name)
   return declared === null ? null : declared.decl.children[0]
+}
+
+/** Push `value` onto `list` unless it is there already. */
+const addOnce = (list: string[], value: string): void => {
+  if (list.indexOf(value) < 0) {
+    list.push(value)
+  }
+}
+
+/** Whether `path`, a normalized absolute path, is one of `dirs` or beneath one. */
+const beneathAny = (path: string, dirs: string[]): boolean => {
+  for (const dir of dirs) {
+    if (path === dir || dir === "/" || path.startsWith(`${dir}/`)) {
+      return true
+    }
+  }
+  return false
 }
 
 /**

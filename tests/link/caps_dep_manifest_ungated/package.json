@@ -3,7 +3,7 @@
   "private": true,
   "nish": {
     "capabilities": {
-      "dependencies": { "pkg_http": ["net", "fs.read"] }
+      "dependencies": { "pkg_http": ["net", "env"] }
     }
   }
 }
