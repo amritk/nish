@@ -651,6 +651,9 @@ bool nish_is_executable(const nish_str *path);
  * whitelist, by the runtime's own id (1 `TCP_NODELAY`, 2 `TCP_QUICKACK`, 3
  * `SO_KEEPALIVE`, 4 `SO_SNDBUF`, 5 `SO_RCVBUF`); any other id is -22, and
  * `TCP_QUICKACK` off Linux is -95.
+ * `nish_net_mss(fd)`: a connected TCP socket's send MSS, from `TCP_INFO`'s
+ * `tcpi_snd_mss` or else `TCP_MAXSEG`; a plain -1, never an errno, for
+ * anything else (a closed descriptor, an unconnected or non-TCP socket).
  * `nish_tcp_connect(addr)`: a new socket connecting to `addr`, answered at
  * once; its `EINPROGRESS` is not a failure, and any other closes it.
  * `nish_connect_result(fd)`: `SO_ERROR` once the socket is writable, 0 when
@@ -686,6 +689,7 @@ int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t l
 int32_t nish_net_shutdown(int32_t fd, int32_t how);
 int32_t nish_net_close(int32_t fd);
 int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value);
+int32_t nish_net_mss(int32_t fd);
 int32_t nish_tcp_connect(const nish_array *addr);
 int32_t nish_connect_result(int32_t fd);
 int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags);
