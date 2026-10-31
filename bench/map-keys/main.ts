@@ -46,7 +46,7 @@ const step = (x: i32): i32 => wrappingAdd(wrappingMul(x, 1664525), 1013904223)
 const keyI32 = (i: i32): i32 => wrappingMul(i, 7919)
 
 /** Two `i32`s as one `i64` key (docs/guide/language/maps-and-sets.md). */
-const pack = (hi: i32, lo: i32): i64 => (toI64(hi) << toI64(32)) | (toI64(lo) & toI64(0xffffffff))
+const pack = (hi: i32, lo: i32): i64 => (toI64(hi) << toI64(32)) | toI64(toU32(lo))
 
 /** The `i`th `i64` key, a cell of a grid 1024 wide; a `miss` takes a row below it. */
 const keyI64 = (i: i32, miss: boolean): i64 => pack(miss ? -1 - (i >> 10) : i >> 10, (i & 1023) - 512)

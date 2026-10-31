@@ -2262,7 +2262,7 @@ console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
   (by identity). An interface, an array, a nullable type or a `Result` is not a
   key; a value is anything but `void` or an interface.
 - A pair of `i32`s is one `i64` key, not a string: `(toI64(a) << toI64(32)) |
-  (toI64(b) & toI64(0xffffffff))`. Every operand is an `i64` so it also runs
+  toI64(toU32(b))`. Every operand is an `i64` so it also runs
   under Node, where `i64` is a `BigInt`; it is exact for every pair. A `+` in
   place of `|` overflows at `a = -2^31` with a negative `b`.
 - A module that declares its own `Map` or `Set` keeps it, but then no other

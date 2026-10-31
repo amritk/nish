@@ -8611,8 +8611,8 @@ export const main = (): i32 => {
   instance its address, so a program keying a table by floats a peer chose
   converts them to a string or a scaled integer first (JSON-16).
 - **A pair of `i32`s is one `i64` key**, packed exactly for every pair:
-  `(toI64(hi) << toI64(32)) | (toI64(lo) & toI64(0xffffffff))`. The mask keeps
-  `lo` in the low half, so nothing is added and nothing overflows; with `+` in
+  `(toI64(hi) << toI64(32)) | toI64(toU32(lo))`. `toU32` takes `lo`
+  unsigned, so it stays in the low half, so nothing is added and nothing overflows; with `+` in
   place of `|` the key leaves the `i64` range at `hi = -2^31` with a negative
   `lo`. Every operand is an `i64` so the same line runs under Node, where an
   `i64` is a `BigInt` (`tests/cases/map_key_composite`, both extremes
