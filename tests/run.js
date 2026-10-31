@@ -29317,16 +29317,77 @@ if (
       `compiled ${tornCompiled.join(",")}: ${torn.stdout}${torn.stderr}`,
     )
 
+    // A key whose object is gone, as a cache cleaner leaves it, does not turn
+    // the cache off: that module is compiled, its key dropped, and the next
+    // link keeps it again, while the other modules come from the cache.
+    fs.rmSync(path.join(mathEntry, "math.o"))
+    writeMain(8)
+    const cleaned = run()
+    const cleanedCompiled = compiled()
+    const keyDropped = !fs.existsSync(path.join(mathEntry, "key"))
+    writeMain(9)
+    const repaired = run()
+    const repairedCompiled = compiled()
+    const settled = run()
+    const settledCompiled = compiled()
+    check(
+      "module cache: an entry whose object is missing is compiled and repaired by the next link, and the other modules still come from the cache",
+      cleaned.status === 0 &&
+        cleaned.stdout === "square 8: 64\n" &&
+        cleanedCompiled.join(",") === "main.ll,math.ll" &&
+        keyDropped &&
+        repaired.stdout === "square 9: 81\n" &&
+        repairedCompiled.join(",") === "main.ll,math.ll" &&
+        fs.existsSync(path.join(mathEntry, "math.o")) &&
+        fs.readFileSync(path.join(mathEntry, "key"), "utf8") === mathKey &&
+        settled.status === 0 &&
+        settledCompiled.length === 0,
+      `compiled ${cleanedCompiled.join(",")} (key dropped: ${keyDropped}), then ${repairedCompiled.join(",")}, then ${settledCompiled.join(",")}: ${cleaned.stderr}${repaired.stderr}`,
+    )
+
+    // The key names the IR by its SHA-256, so an entry does not hold the module twice.
+    check(
+      "module cache: a key holds the IR's SHA-256, not the IR",
+      /\nir \d+ [0-9a-f]{64}\n$/.test(mathKey) && !mathKey.includes("define ") && mathKey.length < 65536,
+      `${mathKey.length} bytes, ends ${JSON.stringify(mathKey.slice(-90))}`,
+    )
+
     // The speed recipe compiles to LTO bitcode and keeps no module objects, so
     // its binary is exactly what scripts/build.sh links without a cache.
     const beforeSpeed = moduleEntries().join(",")
     writeMain(7)
     const speed = run(["--profile", "speed"])
-    compiled()
+    const speedCompiled = compiled()
     check(
       "module cache: `--profile speed` neither reads nor writes the module cache",
-      speed.status === 0 && speed.stdout === "square 7: 49\n" && moduleEntries().join(",") === beforeSpeed,
-      `${speed.stdout}${speed.stderr}`,
+      speed.status === 0 &&
+        speed.stdout === "square 7: 49\n" &&
+        moduleEntries().join(",") === beforeSpeed &&
+        speedCompiled.includes("main.ll") &&
+        speedCompiled.includes("math.ll"),
+      `compiled ${speedCompiled.join(",")}: ${speed.stdout}${speed.stderr}`,
+    )
+
+    const speedObjects = spawnSync(
+      "bash",
+      [
+        path.join(root, "scripts", "build.sh"),
+        "--profile",
+        "speed",
+        "--runtime-from",
+        mcDir,
+        "--module-objects",
+        mcDir,
+        "-o",
+        path.join(mcDir, "x"),
+        path.join(mcDir, "x.ll"),
+      ],
+      { cwd: root, encoding: "utf8" },
+    )
+    check(
+      "module cache: scripts/build.sh refuses --module-objects outside the debug profile (exit 2)",
+      speedObjects.status === 2 && speedObjects.stderr.includes("--module-objects takes the debug profile"),
+      `${speedObjects.status}: ${speedObjects.stderr}`,
     )
 
     const lonely = spawnSync(

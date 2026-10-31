@@ -1991,7 +1991,7 @@ const linkProgram = (
   // against the cached runtime has, and only the debug recipe uses it.
   let staged: StagedModules | null = null
   if (profile === "debug" && runtime.length > 0 && irs.length > 0 && irs.length === outputs.length) {
-    staged = stageModules(outputs, irs, cached.key)
+    staged = stageModules(outputs, irs, cached.key, link)
   }
   if (staged !== null) {
     argv.push("--module-objects")
@@ -2265,11 +2265,23 @@ const stageModule = (
  * runtime cache's is on every link (docs/security/cli.md, CLI-12), because a
  * hit links whatever object stands beside a matching key. Null, and the link
  * compiles every module as it did without the cache, when the root is not
- * there and cannot be made private to this user, or when the copy failed.
+ * there and cannot be made private to this user, when the copies could not be
+ * run, or when `link`, the binary's path, could stand where an object does.
  */
-const stageModules = (outputs: string[], irs: string[], recipe: string): StagedModules | null => {
+const stageModules = (
+  outputs: string[],
+  irs: string[],
+  recipe: string,
+  link: string
+): StagedModules | null => {
   const cacheRoot = moduleCacheRoot()
   if (recipe.length === 0 || cacheRoot.length === 0 || !makeDirectory(cacheRoot)) {
+    return null
+  }
+  // A binary named `<stem>.o` in the scratch directory would be linked over a
+  // module's object and then kept as it.
+  const dir = dirname(outputs[0])
+  if (link.endsWith(".o") && dirname(link) === dir) {
     return null
   }
   const privateRoot: string[] = ["chmod", "700", cacheRoot]
@@ -2279,18 +2291,25 @@ const stageModules = (outputs: string[], irs: string[], recipe: string): StagedM
   if (distrustOf(cacheRoot, false, true).length > 0) {
     return null
   }
-  const staged = new StagedModules(dirname(outputs[0]))
-  const copy: string[] = ["cp", "-f", "--"]
+  const staged = new StagedModules(dir)
+  // One `sh` copies every hit. An object that will not copy, as when a cache
+  // cleaner took it and left its key, has its key removed: this link compiles
+  // the module, which finds no object beside its `.ll`, and the next one keeps
+  // it again, rather than a failed copy turning the cache off for good.
+  const copy: string[] = [
+    "sh",
+    "-c",
+    'd=$1; shift; for f; do cp -f -- "$f" "$d/" 2>/dev/null || rm -f -- "${f%/*}/key"; done',
+    "sh",
+    dir,
+  ]
   let i = 0
   while (i < outputs.length && i < irs.length) {
     stageModule(staged, copy, cacheRoot, recipe, outputs[i], irs[i])
     i = i + 1
   }
-  if (copy.length > 3) {
-    copy.push(`${staged.dir}/`)
-    if (spawnSyncTo(copy, "/dev/null", "/dev/null") !== 0) {
-      return null
-    }
+  if (copy.length > 5 && spawnSyncTo(copy, "/dev/null", "/dev/null") !== 0) {
+    return null
   }
   return staged
 }
@@ -2303,8 +2322,8 @@ const stageModules = (outputs: string[], irs: string[], recipe: string): StagedM
  * key on disk always stands beside a whole object of its own (CLI-5's rule).
  * The moves are one `sh` running one `mv` each, not one spawn per module, and
  * when any fails no key is written: those entries are then misses, compiled
- * again by the next link. Nothing here can fail the link, which already did
- * its work.
+ * again by the next link. A key that cannot be written ends the process, as
+ * the run cache's does, and so never leaves an old key beside a new object.
  */
 const keepModules = (staged: StagedModules): void => {
   if (staged.objects.length === 0) {

@@ -112,7 +112,7 @@
 #   --sqlite-from <dir>      link <dir>/<unit>.o in place of compiling
 #                            runtime/sqlite/, when the IR calls SQLite.
 # All four refuse the wasm, wasi and napi profiles and --pgo-*, with exit 2.
-#   --module-objects <dir>   with --runtime-from only: the object of each
+#   --module-objects <dir>   debug with --runtime-from only: the object of each
 #                            input X.ll is <dir>/X.o, linked as it stands when
 #                            the file is there and compiled into it when it is
 #                            not, so the caller keeps every object it compiled
@@ -206,6 +206,8 @@ fi
 if [ -n "$modules_at" ]; then
   [ -n "$objects_from" ] || { echo "error: --module-objects takes --runtime-from" >&2; exit 2; }
   [ -d "$modules_at" ] || { echo "error: --module-objects: $modules_at is not a directory" >&2; exit 2; }
+  # Speed and size compile a module to LTO bitcode, not the native object kept there.
+  [ "$profile" = debug ] || { echo "error: --module-objects takes the debug profile, not '$profile'" >&2; exit 2; }
 fi
 if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
   # The cached SQLite objects sit beside the cached runtime and take what it takes.

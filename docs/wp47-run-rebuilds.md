@@ -52,7 +52,7 @@ in `$XDG_CACHE_HOME/nish/module/<sha256 of the key>/` beside its key
 (`src/build-cache.ts`, `stageModules` and `keepModules` in `src/compile.ts`).
 The key is the runtime entry's key — the compiler's version, the profile and
 its flags, `CC` and what `$CC --version` printed, `scripts/build.sh` and the
-runtime's files — then the module's stem and its full IR. Before a link, every
+runtime's files — then the module's stem and the SHA-256 of its IR. Before a link, every
 module whose entry holds an equal key has its object copied beside its `.ll`;
 `scripts/build.sh --module-objects <dir>` links an object it finds there and
 compiles the rest. After a successful link, the new objects move into their
@@ -93,7 +93,6 @@ the `sqlite3.c` fingerprint (about 70 ms, read only by programs that link
 SQLite). Neither is near the gap a front-end cache would close.
 
 The module cache grows by one entry each time a module's IR changes: the
-object and, as its key, the module's IR, so tens of kilobytes for the
-program's own module and 14 MB for all 42 of this one. Nothing prunes it,
-the same as the run cache.
+object and a key of a few hundred bytes, so tens of kilobytes for the
+program's own module. Nothing prunes it, the same as the run cache.
 Deleting `nish/module` costs one full compile of every module.

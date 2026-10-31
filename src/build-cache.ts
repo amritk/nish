@@ -18,7 +18,7 @@
 
 import { CLI, VERSION } from "./branding"
 import { dirname } from "./paths"
-import { runCacheRoot } from "./run-cache"
+import { runCacheRoot, sha256Hex } from "./run-cache"
 import { StringBuilder } from "./strings"
 
 /**
@@ -36,10 +36,13 @@ export const moduleCacheRoot = (): string => {
  * Everything one module's object depends on: the recipe, as the runtime
  * entry's key (`runtimeCacheKey`: the compiler's version, the profile and its
  * flags, `CC` and what `$CC --version` printed, `scripts/build.sh` and the
- * runtime's files), then the module's stem, which names its object, and its IR,
- * framed by its length. The runtime's files do not change a module's object,
- * but a key that holds them is one already computed for this link, and an edit
- * there costs one recompile of each module, not a wrong object.
+ * runtime's files), then the module's stem, which names its object, and the
+ * SHA-256 of its IR. A digest, not the IR, so an entry holds one copy of the
+ * module rather than two and a lookup reads back a few hundred bytes, on the
+ * collision resistance the entry's name already rests on. The runtime's files
+ * do not change a module's object, but a key that holds them is one already
+ * computed for this link, and an edit there costs one recompile of each
+ * module, not a wrong object.
  */
 export const moduleCacheKey = (recipe: string, stem: string, ir: string): string => {
   const key = new StringBuilder()
@@ -47,7 +50,7 @@ export const moduleCacheKey = (recipe: string, stem: string, ir: string): string
   key.add("module-object\n")
   key.add(`recipe ${recipe.length}\n`)
   key.add(recipe)
-  key.add(`module ${stem} ${ir.length}\n`)
-  key.add(ir)
+  key.add(`module ${stem}\n`)
+  key.add(`ir ${ir.length} ${sha256Hex(ir)}\n`)
   return key.toText()
 }
