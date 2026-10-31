@@ -10864,7 +10864,9 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
 // default thread stack and main's at 8 MiB on any host, the program written
 // with `scope()` (tests/link/thread_stack_fixtures/default.ts) faults on one
 // thread and on eight; with a 256 MiB stack it prints its two sums; with
-// 128 KiB (guard.ts) it faults on the guard page below the stack. The link
+// 128 KiB (guard.ts) it faults on the guard page below the stack; under a
+// 128 MiB `ulimit -v` the 256 MiB stack cannot be mapped, and the program ends
+// with nish_stack_fail's out-of-memory message before any task runs. The link
 // harness counts a death by signal as a failure, so the faults are read here,
 // as `spawnSync`'s signal.
 if (!only || "thread_stack".includes(only)) {
@@ -10886,11 +10888,11 @@ if (!only || "thread_stack".includes(only)) {
       if (c.status !== 0) check(`thread_stack: ${path.relative(root, src)} compiles and links`, false, shown(c))
       exes.set(name, c.status === 0 ? exe : null)
     }
-    const run = (name, threads) => {
+    const run = (name, threads, limit = "") => {
       const exe = exes.get(name)
       return exe === null
         ? null
-        : spawnSync("bash", ["-c", 'ulimit -S -s 8192 && exec "$0"', exe], {
+        : spawnSync("bash", ["-c", `ulimit -S -s 8192 ${limit}&& exec "$0"`, exe], {
             encoding: "utf8",
             timeout: 60000,
             env: { ...process.env, NISH_NUM_THREADS: threads },
@@ -10915,6 +10917,16 @@ if (!only || "thread_stack".includes(only)) {
         `thread_stack: a 128 KiB scopeWithStack faults on its guard page on ${threads} thread(s)`,
         guard !== null && guard.signal === "SIGSEGV",
         said(guard)
+      )
+      const room = run("deep", threads, "&& ulimit -S -v 131072 ")
+      check(
+        `thread_stack: a 256 MiB stack under a 128 MiB address space ends with the out-of-memory message on ${threads} thread(s)`,
+        room !== null &&
+          room.status === 1 &&
+          room.stdout === "" &&
+          room.stderr ===
+            "nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack\n",
+        said(room)
       )
     }
   }
