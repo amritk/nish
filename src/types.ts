@@ -554,15 +554,26 @@ export class TypeTable {
     return this.names[type]
   }
 
-  /** Whether the union `type` has `variant` among its variants. */
+  /**
+   * Whether the union `type` has `variant` among its variants: a binary search,
+   * since `variantsOf` is ascending and a switch over a 200-variant union asks
+   * once for every variant of every case (`tests/cases/union_scale.ts`).
+   */
   hasVariant(type: i32, variant: i32): boolean {
     const variants = this.variantsOf(type)
-    let i = 0
-    while (i < variants.length) {
-      if (variants[i] === variant) {
+    let lo = 0
+    let hi = variants.length
+    while (lo < hi) {
+      const mid = lo + ((hi - lo) >> 1)
+      const at = variants[mid]
+      if (at === variant) {
         return true
       }
-      i = i + 1
+      if (at < variant) {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
     }
     return false
   }
@@ -813,18 +824,17 @@ export class TypeTable {
     return this.isUnion(this.stripNull(element)) ? `(${name})` : name
   }
 
-  /** The variant names joined as the source joins them, ascending by id. */
+  /**
+   * The variant names joined as the source joins them, ascending by id, in one
+   * `join`: a concatenation per variant copies the tail each time, quadratic in
+   * a union of hundreds that `checkOperator` names for every `!== null`.
+   */
   unionName(type: i32): string {
-    return this.joinedNames(this.variantsOf(type), 0)
-  }
-
-  /** The names from `at` on, joined by ` | `, recursively so that nothing is written. */
-  joinedNames(variants: i32[], at: i32): string {
-    if (at < 0 || at >= variants.length) {
-      return ""
+    const names: string[] = []
+    for (const variant of this.variantsOf(type)) {
+      names.push(this.typeName(variant))
     }
-    const head = this.typeName(variants[at])
-    return at + 1 < variants.length ? `${head} | ${this.joinedNames(variants, at + 1)}` : head
+    return names.join(" | ")
   }
 
   /** The LLVM struct name (without the `%struct.` prefix) backing a `Result`. */
