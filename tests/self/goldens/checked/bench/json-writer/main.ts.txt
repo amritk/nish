@@ -1035,25 +1035,26 @@ function main(): i32 -> @nish_main [exported entry]
   local +8:11 shape: i32 (const)
   local +9:11 sign: f64 (const)
   local +28:9 mode: string (const)
-  local +29:9 out: u8[] (const)
-  local +30:9 w: JsonWriter (const)
-  callee +30:13 new JsonWriter -> @nish.JsonWriter.constructor
-  callee +32:5 JsonWriter.setIndent -> @nish.JsonWriter.setIndent
-  local +34:7 sum: u32 (let)
-  local +35:9 factor: u32 (const)
-  local +36:9 t0: i64 (const)
-  local +37:12 i: i32 (let)
-  local +38:11 pick: i32 (const)
-  callee +39:5 JsonWriter.reset -> @nish.JsonWriter.reset
-  callee +41:7 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
-  local +42:16 j: i32 (let)
-  local +43:15 at: i32 (const)
-  callee +44:9 JsonWriter.f64 -> @nish.JsonWriter.f64
-  callee +46:7 JsonWriter.endArray -> @nish.JsonWriter.endArray
-  callee +48:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
-  callee +49:7 JsonWriter.key -> @nish.JsonWriter.key
-  callee +50:7 JsonWriter.string -> @nish.JsonWriter.string
-  callee +51:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
-  local +53:11 end: i32 (const)
-  local +54:14 k: i32 (let)
-  local +58:9 elapsed: i64 (const)
+  local +33:9 doubles: boolean (const)
+  local +34:9 out: u8[] (const)
+  local +35:9 w: JsonWriter (const)
+  callee +35:13 new JsonWriter -> @nish.JsonWriter.constructor
+  callee +37:5 JsonWriter.setIndent -> @nish.JsonWriter.setIndent
+  local +39:7 sum: u32 (let)
+  local +40:9 factor: u32 (const)
+  local +41:9 t0: i64 (const)
+  local +42:12 i: i32 (let)
+  local +43:11 pick: i32 (const)
+  callee +44:5 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee +46:7 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local +47:16 j: i32 (let)
+  local +48:15 at: i32 (const)
+  callee +49:9 JsonWriter.f64 -> @nish.JsonWriter.f64
+  callee +51:7 JsonWriter.endArray -> @nish.JsonWriter.endArray
+  callee +53:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee +54:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee +55:7 JsonWriter.string -> @nish.JsonWriter.string
+  callee +56:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  local +58:11 end: i32 (const)
+  local +59:14 k: i32 (let)
+  local +63:9 elapsed: i64 (const)
