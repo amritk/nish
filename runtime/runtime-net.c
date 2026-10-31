@@ -922,6 +922,14 @@ static int32_t nish_unix_only(int32_t fd) {
    be closed rather than drops itself (docs/security/runtime.md, RT-37). */
 #define NISH_RECV_FDS 8
 
+/* Linux marks a received descriptor close-on-exec as it arrives; Darwin has
+   no such flag, and `nish_recv_fd` marks it after (RT-38). */
+#if defined(__linux__)
+#define NISH_RECV_CLOEXEC MSG_CMSG_CLOEXEC
+#else
+#define NISH_RECV_CLOEXEC 0
+#endif
+
 /* `sendFd(sock, fd, buf, off, len)`: `len` bytes of `buf` from `off`, with
    one `SCM_RIGHTS` copy of `fd` riding on them, and the bytes sent or the
    failure. A descriptor travels with data, so `len` 0 is -22, and so is a
@@ -984,11 +992,7 @@ int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, ni
   m.msg_iovlen = 1;
   m.msg_control = c.room;
   m.msg_controllen = sizeof c.room;
-#if defined(__linux__)
-  ssize_t n = recvmsg(sock, &m, MSG_CMSG_CLOEXEC);
-#else
-  ssize_t n = recvmsg(sock, &m, 0);
-#endif
+  ssize_t n = recvmsg(sock, &m, NISH_RECV_CLOEXEC);
   if (n < 0) return nish_net_fail();
   for (struct cmsghdr *h = CMSG_FIRSTHDR(&m); h; h = CMSG_NXTHDR(&m, h)) {
     if (h->cmsg_level != SOL_SOCKET || h->cmsg_type != SCM_RIGHTS) continue;
