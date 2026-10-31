@@ -54,6 +54,31 @@ export const main = (): i32 => {
 **Values** may be anything except `void` and an interface. To store a record,
 make it a class.
 
+### Two numbers as one key
+
+A map keyed by a pair — a grid cell, an edge between two nodes — needs no
+string and no class: pack the two `i32`s into one `i64`. Write every operand
+as an `i64`, `2^32` included, because under Node an `i64` is a `BigInt`, which
+will not multiply a plain number:
+
+```ts nish:ok
+const cell = (row: i32, col: i32): i64 => toI64(row) * toI64(4294967296) + toI64(col);
+
+export const main = (): i32 => {
+  const grid = new Map<i64, string>();
+  grid.set(cell(1, -2), "wall");
+  grid.set(cell(-2, 1), "door");
+  console.log(`${grid.get(cell(1, -2)) ?? "?"} ${grid.get(cell(-2, 1)) ?? "?"} ${grid.has(cell(0, 0))}`);
+  return 0;
+};
+```
+
+This prints `wall door false`. The key is exact for every pair of `i32`s,
+negative ones and the extremes included, since `row * 2^32 + col` never leaves
+the `i64` range, and two different pairs never give the same key. It is also
+cheaper than a string key like `` `${row},${col}` ``, which builds and hashes a
+string on every lookup.
+
 ## Reading a value: `get`
 
 `m.get(key)` returns `V | undefined`, just as it does in TypeScript: the key
@@ -107,9 +132,10 @@ the key up once, not twice: the compiler recognises a `set` whose new value
 reads the same key with `get` or `has`, and reuses that first lookup. So does
 `if (!s.has(x)) { s.add(x); … }`.
 
-A string key is hashed under a key the program draws at random when it starts,
-so input from outside — the keys of a JSON body, the words of a file — cannot
-be chosen to land in one bucket and slow every lookup down. Nothing you can
+A string or integer key is hashed under a key the program draws at random when
+it starts, so input from outside — the keys of a JSON body, the words of a
+file, the numbers in a request — cannot be chosen to land in one bucket and
+slow every lookup down. Nothing you can
 observe depends on that key: a map still walks in insertion order, run after
 run.
 

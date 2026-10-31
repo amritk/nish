@@ -2809,7 +2809,8 @@ module names one, and that module writes no `.ll` of its own: every function
 of it this module reaches is defined here, `internal`, after the module's own
 code (docs/wp32-map.md §4.1). `s.has(x)` is a call to `Set$i32.has`, which asks
 `probeTable$i32` for the packed probe result. The key's hash is lowered in
-place — here `fmix32`, then 0 moved to 1 — and the loop reads `entryHashes`
+place — here multiply-add-shift under `@nish_hash_key`, the process's random
+key, then 0 moved to 1 — and the loop reads `entryHashes`
 and `entryKeys` only after the bucket word's top eight bits match the hash's,
 comparing the stored hash before the key (§2). `hashKey` and `sameKey` are
 never called: they are intrinsics `src/emit-map.ts` lowers per key type. So is
