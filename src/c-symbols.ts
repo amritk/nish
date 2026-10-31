@@ -421,6 +421,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "ftell" ||
   name === "ftello" ||
   name === "ftello64" ||
+  name === "ftruncate" ||
   name === "ftrylockfile" ||
   name === "funlockfile" ||
   name === "fwrite" ||
@@ -536,9 +537,11 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "mkdir" ||
   name === "mkdirat" ||
   name === "mktime" ||
+  name === "mmap" ||
   name === "modf" ||
   name === "modff" ||
   name === "modfl" ||
+  name === "munmap" ||
   name === "nan" ||
   name === "nanf" ||
   name === "nanl" ||
