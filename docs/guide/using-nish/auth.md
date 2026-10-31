@@ -154,7 +154,9 @@ before any signature is checked, so it proves nothing until `verify` answers
 `jwtSignString(key, claims)` signs a JSON object with an HS, ES256 or EdDSA
 key and answers the token, or `null` when the key cannot sign (an RS or
 ES384 key, or one made from a public key) or the claims are not one JSON
-object. The header is `{"alg":"…","typ":"JWT"}`.
+object. Claims outside ASCII are refused too: escape such text in the JSON
+(`\u00e9`) or pass its UTF-8 bytes to `jwtSign(key, bytes)`. The header is
+`{"alg":"…","typ":"JWT"}`.
 `jwtSignKid(key, kid, bytes)` adds a `kid`. The claims are signed as given,
 so put the `exp` in yourself.
 
@@ -200,7 +202,8 @@ allocates nothing past the arena block it runs in: the secret's HMAC state is
 computed once, when the key is made, and copied per token, and the tag is
 compared in constant time. An RS, ES or EdDSA verify allocates the arithmetic
 its signature check needs, which `using a = arena()` around the request
-releases. A verifier is one thread's: give each worker its own.
+releases. A verifier and an HS key are one thread's, since both hold working
+state: give each worker its own.
 
 What was checked and what is left open is in the module's
 [security record](../../security/crypto-jwt.md).

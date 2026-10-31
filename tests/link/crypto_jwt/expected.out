@@ -76,6 +76,7 @@ PASS  a huge leeway is held, and now - leeway cannot overflow
 PASS  typ: the required typ
 PASS  typ: no typ when one is required
 PASS  jwtSignString: HS256
+PASS  jwtSignString: claims outside ASCII are refused
 PASS  jwtSignKid: HS256 with a kid
 PASS  peekKid reads the kid
 PASS  peekKid: no kid answers -1
@@ -101,4 +102,7 @@ PASS  a wiped key verifies nothing
 PASS  a wiped key refuses a token forged from its zeroed pads
 PASS  a wiped key signs nothing
 PASS  a hand-built RS256 key holding an HMAC key refuses an HMAC-signed RS256 token
-nish/crypto/jwt: 103 passed, 0 failed, 0 skipped
+PASS  a wiped EdDSA key signs nothing
+PASS  a wiped EdDSA key verifies nothing
+PASS  a wiped ES256 key signs nothing
+nish/crypto/jwt: 107 passed, 0 failed, 0 skipped

@@ -176,10 +176,12 @@ const BAD_ALG_TWICE: string =
   "eyJhbGciOiJIUzI1NiIsImFsZyI6IkhTMjU2In0.eyJleHAiOjIwMDAwMDAwMDB9.ZWGNq4EwepMi42Bo56w7KdrNybN7n6nCEjJW-wWyaog";
 const BAD_ALG_TWICE_NONE: string =
   "eyJhbGciOiJIUzI1NiIsImFsZyI6Im5vbmUifQ.eyJleHAiOjIwMDAwMDAwMDB9.gCpM1IhRz6vU2GaDOafPAqtTVxIYLJiHAgSdH8aaoWo";
+// {"alg":"HS256","\u0061lg":"none"}: the second alg spelled with an escape.
 const BAD_ALG_ESCAPED: string =
-  "eyJhbGciOiJIUzI1NiIsImFsZyI6Im5vbmUifQ.eyJleHAiOjIwMDAwMDAwMDB9.gCpM1IhRz6vU2GaDOafPAqtTVxIYLJiHAgSdH8aaoWo";
+  "eyJhbGciOiJIUzI1NiIsIlx1MDA2MWxnIjoibm9uZSJ9.eyJleHAiOjIwMDAwMDAwMDB9.AaSZqHehhmaSQAkQDPYqjHFcYI0VufDJtyZwDf1Wc9o";
+// {"exp":2000000000,"\u0065xp":1}: the second exp spelled with an escape.
 const BAD_EXP_ESCAPED: string =
-  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsImV4cCI6MX0.PMJz0F7p2wKnsb2dZpeGxZH43PhIu0IYfrm2hjBmDIw";
+  "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjIwMDAwMDAwMDAsIlx1MDA2NXhwIjoxfQ.irY_yCNb_-ICZCCOpoJQ7EeTsZmhxJDGy_8BvjDbRmE";
 const BAD_CRIT: string =
   "eyJhbGciOiJIUzI1NiIsImNyaXQiOlsiZXhwIl19.eyJleHAiOjIwMDAwMDAwMDB9.Dia-bxt3JTdKaDXA4Xm6ILgoJJjxeBPLrYn7UsqJSic";
 const BAD_B64: string =
@@ -420,6 +422,7 @@ export const jwtChecks = (): i32 => {
 
   // Signing.
   t.eqStr("jwtSignString: HS256", jwtSignString(hs, "{\"sub\":\"ana\",\"exp\":2000000000}") ?? "null", SIGN_HS256);
+  t.ok("jwtSignString: claims outside ASCII are refused", jwtSignString(hs, "{\"sub\":\"jos\u00e9\"}") === null);
   t.eqStr("jwtSignKid: HS256 with a kid", jwtSignKid(hs, "k1", bytesOf("{\"sub\":\"ana\",\"exp\":2000000000}")) ?? "null", SIGN_HS256_KID);
   const kidOut: u8[] = new Array<u8>(8);
   const kidLen: i32 = v.peekKid(bytesOf(SIGN_HS256_KID), toI32(0), toI32(SIGN_HS256_KID.length), kidOut);
@@ -499,9 +502,12 @@ export const jwtChecks = (): i32 => {
   confused.wipe();
   if (edSigner !== null) {
     edSigner.wipe();
+    t.ok("a wiped EdDSA key signs nothing", jwtSignString(edSigner, "{\"sub\":\"ana\"}") === null);
+    t.eqStr("a wiped EdDSA key verifies nothing", codeOf(v.verifyString(edSigner, SIGN_EDDSA, NOW)), codeOf(JWT_ERR_SIGNATURE));
   }
   if (ecSigner !== null) {
     ecSigner.wipe();
+    t.ok("a wiped ES256 key signs nothing", jwtSignString(ecSigner, "{\"sub\":\"ana\"}") === null);
   }
   if (hs384 !== null) {
     hs384.wipe();

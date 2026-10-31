@@ -243,7 +243,9 @@ const jwtLength = (a: u8[]): i32 => toI32(a.length)
  * A key for one algorithm: what verifies its tokens and, for a key that can,
  * signs them. Make one with `jwtHmacKey`, `jwtRsaKey`, `jwtRsaKeyParts`,
  * `jwtEcKey`, `jwtEd25519Key`, `jwtEs256SigningKey` or
- * `jwtEd25519SigningKey`; `wipe()` it when it is done with.
+ * `jwtEd25519SigningKey`; `wipe()` it when it is done with. An HS key holds
+ * its HMAC work hashers, so a key is one thread's, like a `JwtVerifier`: give
+ * each worker its own.
  */
 export class JwtKey {
   /** An HS key's pads, keyed once; `null` for any other. */
@@ -979,6 +981,17 @@ const jwtKidFits = (kid: string): boolean => {
   return true
 }
 
+/** Whether every code unit of `text` is ASCII, so `jwtBytesOf` keeps it whole. */
+const jwtIsAscii = (text: string): boolean => {
+  for (let i: i32 = 0; i < toI32(text.length); i += 1) {
+    if (toI32(text.charCodeAt(i)) > 0x7f) {
+      return false
+    }
+  }
+  return true
+}
+
+/** The code units of `text` as bytes; the caller has checked they are ASCII. */
 const jwtBytesOf = (text: string): u8[] => {
   const n: i32 = toI32(text.length)
   const out: u8[] = new Array<u8>(n)
@@ -1030,6 +1043,10 @@ export const jwtSignKid = (key: JwtKey, kid: string | null, claims: u8[]): strin
 /** `jwtSignKid` with no `kid`. */
 export const jwtSign = (key: JwtKey, claims: u8[]): string | null => jwtSignKid(key, null, claims)
 
-/** `jwtSign` over the bytes of the string `claims`. */
+/**
+ * `jwtSign` over the bytes of the string `claims`. Answers `null` for claims
+ * outside ASCII, as `verifyString` refuses them: escape such text (`\u00e9`)
+ * or pass its UTF-8 bytes to `jwtSign`.
+ */
 export const jwtSignString = (key: JwtKey, claims: string): string | null =>
-  jwtSignKid(key, null, jwtBytesOf(claims))
+  jwtIsAscii(claims) ? jwtSignKid(key, null, jwtBytesOf(claims)) : null
