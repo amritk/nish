@@ -2411,11 +2411,13 @@ if (dealtHere("termIo")) {
     // size: the play run looks for the image's deletion at close, and the reopen runs
     // draw in ascii, whose frames are small enough to keep both openings. The stage
     // run pauses before F4 so the reopened stage can be held to the one it left;
-    // 120 frames is past the title's outro at any rate the relay draws.
+    // 120 frames is past the title's outro at any rate the relay draws. The play and
+    // stage runs skip the opening (the help falling apart) with a space at frame 2,
+    // so the title is up by frame 5.
     const [played, reopened, staged] = await Promise.all([
       relay(NISH, "break", {
         dir: at("wall-play"),
-        keys: wallKeys([3, "\r"], [120, " "], [125, "\x1bOR"], [130, "p"], [135, "q"], [150, "q"]),
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
@@ -2427,7 +2429,7 @@ if (dealtHere("termIo")) {
       relay(NISH, "break", {
         dir: at("wall-stage"),
         env: { NISH_TERM_GRAPHICS: "ascii" },
-        keys: wallKeys([3, "\r"], [120, " "], [130, "p"], [140, "\x1bOS"], [170, "q"], [180, "q"], [190, "q"]),
+        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
         timeoutMs: 30000,
       }),
     ])
@@ -2444,7 +2446,7 @@ if (dealtHere("termIo")) {
     )
     const opened = staged.out.lastIndexOf("\x1b[?1049h")
     const leftAt = staged.out.slice(0, opened).split("\x1b[5n").length - 1
-    const [title, paused, back] = [2, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
+    const [title, paused, back] = [5, leftAt, leftAt + 3].map((n) => wallCells(staged.out, n))
     const [asTitle, asPaused] = [wallSame(paused, title, 40), wallSame(paused, back, 40)]
     const seen = `${said(staged)}\nthe paused screen matches the title in ${asTitle.toFixed(3)}, the reopened in ${asPaused.toFixed(3)}`
     check(

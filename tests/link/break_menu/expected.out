@@ -2,13 +2,14 @@ PASS  MENU_STAY
 PASS  MENU_QUIT
 PASS  MENU_APPLY
 PASS  five frame rates
-PASS  five resolutions
+PASS  six resolutions, auto included
 PASS  the first frame rate is adaptive
 PASS  then 30
 PASS  then 60
 PASS  then 120
 PASS  then 240
-PASS  the resolutions start at 270
+PASS  the first resolution is adaptive
+PASS  then 270
 PASS  then 360
 PASS  then 540
 PASS  then 720
@@ -18,11 +19,12 @@ PASS  a frame rate index above range reads the last
 PASS  a resolution index below range reads the first
 PASS  a resolution index above range reads the last
 PASS  default fps is adaptive
-PASS  default resolution is 540
+PASS  default resolution is adaptive
 PASS  default graphics is automatic
 PASS  default smoothing is on
 PASS  default effects are high
 PASS  default stats are off
+PASS  default sound is off
 PASS  a new menu is on the title
 PASS  a new menu selects Play
 PASS  a new menu keeps its level
@@ -86,12 +88,15 @@ PASS  left from auto wraps to 240
 PASS  a fixed rate's hint
 PASS  enter on a value cycles it forward
 PASS  the adaptive hint
-PASS  resolution left: 360p
-PASS  resolution wraps to 1080p
-PASS  resolution wraps up to 360p
-PASS  resolution 720p
-PASS  resolution back to 540p
-PASS  resolution's hint
+PASS  resolution starts adaptive
+PASS  adaptive resolution's hint
+PASS  resolution left from auto wraps to 1080p
+PASS  then 720p
+PASS  resolution wraps up to auto
+PASS  resolution 270p
+PASS  resolution 540p
+PASS  a fixed resolution's hint
+PASS  resolution back to auto
 PASS  graphics starts automatic
 PASS  the automatic hint
 PASS  then kitty
@@ -116,6 +121,11 @@ PASS  effects high again
 PASS  stats start off
 PASS  stats on
 PASS  stats' hint
+PASS  sound starts off
+PASS  sound on
+PASS  the sound setting is on
+PASS  sound's hint
+PASS  sound off again
 PASS  back has no value
 PASS  back's hint
 PASS  left and right on back change nothing
@@ -177,4 +187,4 @@ PASS  high effects puffs 3 sparks a loosened brick
 PASS  low effects puffs 1 spark a loosened brick
 PASS  a key skips the outro to the level
 PASS  and a second key does not answer it again
-break-menu: 179 passed, 0 failed, 0 skipped
+break-menu: 189 passed, 0 failed, 0 skipped
