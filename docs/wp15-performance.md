@@ -474,6 +474,23 @@ Re-measured after WP6's stack allocation, nbody was 1467 ms against 1479 ms,
 which is noise, and vec3 already beat C. A call per allocation for zero is not
 being made.
 
+## 7e. `JsonWriter` writes an f64 in place — **done**
+
+`JsonWriter.f64` used to build `${v}` as a string, check it fit, and copy it
+into the writer's `u8[]`: an allocation and a second pass per number. A native
+build now replaces `std/json.ts`'s private `jsonPutF64Walk` with the runtime's
+`nish_json_put_f64`, which formats with the same Zmij shortest round-trip as
+`nish_str_from_f64` into a stack buffer and copies it in, or refuses with `-1`
+and touches nothing. The bytes are the walk's, which are `JSON.stringify`'s.
+Node and `--emit-ts` keep the Nish body, and only the stdlib package's own
+`std/json.ts` gets the seam (`json_f64_seam` in `tests/run.js`).
+
+`bench/json-writer/run.mjs --base <nish>`, 2,000,000 writes of an eight-number
+array, 18 interleaved rounds, against the merge-base compiler: f64 went from a
+787.7 ns/op median to 362.3 (×2.17, 54% faster). The noise band from a
+byte-identical copy was 2.4% median. The minified and pretty modes write no
+f64, and both stayed inside their noise.
+
 ---
 
 ## 8. The `performance` diagnostic class
