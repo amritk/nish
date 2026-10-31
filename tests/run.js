@@ -29708,12 +29708,41 @@ if (selects("watch", "nish-run")) {
     word(`"three"`)
     const third = await app.until((s) => s.out.includes("three 1 3\n"))
     check("nish run --watch: the change that fixes the build runs the program again", third, app.out + app.err)
+    // A burst of writes, as an editor's save can be, waits out the debounce and builds once.
+    const rebuildsBefore = count(app.err, "watch: rebuilt in")
+    for (const w of ["four", "five", "six"]) word(`"${w}"`)
+    const burst = await app.until((s) => s.out.includes("six 1 3\n"))
+    await pause(600)
+    check(
+      "nish run --watch: a burst of edits is gathered into one rebuild of the newest files",
+      burst && count(app.err, "watch: rebuilt in") === rebuildsBefore + 1 && !app.out.includes("four 1 3"),
+      app.out + app.err,
+    )
     await app.interrupt()
     const appGone = await groupGone(app.pgid)
     check(
       "nish run --watch: Ctrl-C ends the watch as SIGINT ends a program, and leaves no process or state file behind",
       app.signal === "SIGINT" && appGone && leftovers().length === 0,
       `${app.status} ${app.signal} ${appGone} ${leftovers()}: ${app.err}`,
+    )
+
+    // A first build that fails in an imported module still watches that module.
+    const helper = path.join(watchDir, "helper.ts")
+    fs.writeFileSync(helper, 'export const greeting = (): string => 7\n')
+    fs.writeFileSync(
+      path.join(watchDir, "greet.ts"),
+      'import { greeting } from "./helper"\nexport const main = (): i32 => {\n  console.log(greeting())\n  return 0\n}\n',
+    )
+    const greet = startWatch(["greet.ts"])
+    const greetFailed = await greet.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    fs.writeFileSync(helper, 'export const greeting = (): string => "fixed"\n')
+    const greetFixed = await greet.until((s) => s.out.includes("fixed\n"))
+    await greet.interrupt()
+    await groupGone(greet.pgid)
+    check(
+      "nish run --watch: fixing the imported module a first build failed in rebuilds and runs the program",
+      greetFailed && greetFixed && greet.err.includes("helper.ts:1:"),
+      greet.out + greet.err,
     )
 
     // `--json` reaches each build, so a failed one prints its diagnostics as JSON lines.

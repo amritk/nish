@@ -1151,7 +1151,13 @@ export const main = (): number => {
   // The tree is printed from what parsed and validated, so pass 1's refusals
   // do not stop the load — stage0 records them and reaches its dump first.
   compilation.dumpOnly = emitAst
-  if (!loadRoots(compilation, roots, false)) {
+  const loaded = loadRoots(compilation, roots, false)
+  // A watch needs the modules even of a build that fails, so that fixing an
+  // imported one rebuilds; the build that succeeds writes its binary over this.
+  if (runMode && watchStateFile.length > 0) {
+    writeFileSync(watchStateFile, watchState(compilation, "", isCheckout(pkg)))
+  }
+  if (!loaded) {
     reportLoadFailure(compilation, json)
     return 1
   }

@@ -90,13 +90,15 @@ watch: rebuilt in 412 ms
 listening on 8080
 ```
 
-- **What is watched** is the entry file and every module it imports. The
-  standard library is left out, since an installed `nish` does not change
+- **What is watched** is the entry file and every module it imports, as far
+  as the last build got to load them, so a build that fails in an imported
+  module rebuilds when you fix that module. The standard library is left out, since an installed `nish` does not change
   under you; run from a checkout of the compiler, `std/` is watched too.
 - **A failed build changes nothing.** Its diagnostics are printed, as plain
   `nish run` prints them (one JSON object per line under `--json`), followed
   by `watch: the build failed; the running program keeps running`, and the
-  program you had keeps running until the next edit builds.
+  program you had keeps running until the next edit builds. When no program
+  is running yet, the line ends `waiting for a change` instead.
 - **Edits are gathered, and the newest wins.** A change waits a tenth of a
   second for the editor's next write before it builds, and an edit during a
   build stops that build and starts a new one, so the program that runs is
@@ -107,8 +109,11 @@ listening on 8080
   then SIGKILL if it has not exited after five seconds. Listen with
   `SO_REUSEPORT` (`tcpListenFlags(host, port, backlog, 1)`) so both can hold
   the port at once, and answer SIGTERM by finishing the connections you have
-  accepted — a server that does both loses no request across a rebuild. A new
-  build that exits as it starts is reported, and the old one keeps serving.
+  accepted — a server that does both loses no request across a rebuild. A
+  server that does not set `SO_REUSEPORT` cannot bind beside the old one: the
+  new build exits as it starts, that is reported, and the old one keeps
+  serving the old code. A network client is taken for a server too, so for a
+  moment after each rebuild the old and the new copy both run.
 - **Any other program is stopped, then started again**, with the same
   SIGTERM and SIGKILL, because two copies would write the same terminal and
   files. A program that exits on its own leaves the watch waiting for an edit.
@@ -116,6 +121,8 @@ listening on 8080
   it is being watched, and each build prints how long it took.
 - **Ctrl-C stops the watch and the program** and leaves nothing running.
   The exit status is the one an interrupted program has (130 in a shell).
+  If the `nish run --watch` process itself is killed, the watch stops the
+  program and exits as a hangup does (129).
 
 `--watch` is a flag of `nish run`; `nish --watch app.ts` is a usage error
 (exit 2).

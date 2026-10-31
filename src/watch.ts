@@ -24,6 +24,8 @@ import { StringBuilder } from "./strings"
  * What a `--watch-build` leaves for the supervisor, one item per line: the
  * binary, `1` when the program can use the network (and so is a server that
  * the swap starts beside the old one), and every module it was built from.
+ * A build that fails leaves the binary empty and still lists the modules it
+ * loaded, so fixing one of them rebuilds.
  * The standard library is left out of an installed compiler's list, since an
  * install does not change under a running watch, and kept in a checkout's,
  * where editing `std/` is the work being watched.
@@ -31,7 +33,7 @@ import { StringBuilder } from "./strings"
 export const watchState = (compilation: Compilation, binary: string, checkout: boolean): string => {
   const out = new StringBuilder()
   out.add(`${binary}\n`)
-  out.add(programUsesNet(compilation) ? "1\n" : "0\n")
+  out.add(binary.length > 0 && programUsesNet(compilation) ? "1\n" : "0\n")
   for (const unit of compilation.modules) {
     if (checkout || !isStdModule(compilation.libraryRoot(), unit.name, unit.path)) {
       out.add(`${unit.path}\n`)
@@ -222,7 +224,9 @@ const swap = (w: Watch, binary: string, server: boolean): void => {
     pause(w, SETTLE_MS)
     const early: i32 = reap(next)
     if (early >= 0) {
-      console.error(\`watch: the new build exited with status \${early} as it started; the old one keeps running\`)
+      console.error(
+        \`watch: the new build exited with status \${early} as it started (a server must listen with SO_REUSEPORT to start beside the old one); the old one keeps running\`
+      )
       return
     }
     stopProcess(w, w.program)
@@ -238,17 +242,19 @@ const swap = (w: Watch, binary: string, server: boolean): void => {
 const finishBuild = (w: Watch, status: i32): void => {
   const took: i64 = millisSince(w.builtFrom)
   const keeps: string = w.program > 0 ? "the running program keeps running" : "waiting for a change"
+  const text: string | null = readFileSyncOrNull(w.state)
+  const lines: string[] = text === null ? [] : splitLines(text)
+  // A failed build still names the modules it loaded, so a fix to any of them
+  // rebuilds, not only a fix to the files the last good build read.
+  watchFiles(w, lines)
   if (status !== 0) {
     console.error("watch: the build failed; " + keeps)
     return
   }
-  const text: string | null = readFileSyncOrNull(w.state)
-  const lines: string[] = text === null ? [] : splitLines(text)
   if (lines.length < 2 || lines[0].length === 0) {
     console.error("watch: the build left no binary; " + keeps)
     return
   }
-  watchFiles(w, lines)
   console.error(\`watch: \${w.builds === 0 ? "built" : "rebuilt"} in \${took} ms\`)
   w.builds = w.builds + 1
   swap(w, lines[0], lines[1] === "1")
