@@ -337,7 +337,8 @@ declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], 
  * `spawn` with the child holding `fds[i]` as descriptor `3 + i`, inherited
  * across the exec; every other descriptor stays close-on-exec. The child's pid,
  * or a negative errno: -22 more than 64 descriptors or a negative one, -9 one
- * that is not open. No reading under Node, which throws.
+ * that is not open, -24 (or -22 above the descriptor limit) a scratch
+ * descriptor the system cannot give. No reading under Node, which throws.
  */
 declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
 /**
@@ -507,7 +508,10 @@ declare function unixSocketPair(kind: i32, fds: i32[]): i32;
 /**
  * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
  * descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a
- * zero `len`, -88 a `sock` that is not a socket, -95 one that is not Unix.
+ * zero `len` or a negative `fd`, -9 a closed `sock` or `fd`, -88 a `sock`
+ * that is not a socket, -95 one that is not Unix. A stream socket can send
+ * short: the descriptor travels with the first bytes, so send the rest with
+ * `netWrite`.
  */
 declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 /**
@@ -515,13 +519,17 @@ declare function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i
  * the first descriptor that came with them into `fd[0]`, or -1: the bytes read,
  * or a negative errno. Every other descriptor in the message is closed; the
  * one kept is close-on-exec and keeps the sender's blocking mode. -22 a zero
- * `len` or an empty `fd`, -88 not a socket, -95 not Unix.
+ * `len` or an empty `fd`, -9 a closed `sock`, -88 not a socket, -95 not
+ * Unix.
  */
 declare function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
 /**
  * The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid
  * and gid, and the answer is 0; the pid is -1 where Darwin has no
- * `LOCAL_PEERPID`. -22 an `out` shorter than 3, -88 not a socket, -95 not Unix.
+ * `LOCAL_PEERPID`. A uid or gid of 2^31 or above wraps (-2 is uid
+ * 4294967294). -22 an `out` shorter than 3, -9 a closed `fd`, -88 not a
+ * socket, -95 not Unix, -107 a socket with no peer (a listener, or one never
+ * connected).
  */
 declare function peerCredentials(fd: i32, out: i32[]): i32;
 /** `unixListen` flag: unlink a socket file nothing listens on, then bind. */
@@ -638,7 +646,9 @@ declare module "nish:process" {
   export function spawn(argv: string[]): i32;
   /**
    * `spawn` with the child holding `fds[i]` as descriptor `3 + i`: its pid, or
-   * a negative errno; -22 more than 64 descriptors or a negative one.
+   * a negative errno; -22 more than 64 descriptors or a negative one, -9 one
+   * that is not open, -24 (or -22 above the descriptor limit) a scratch
+   * descriptor the system cannot give.
    */
   export function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
   /** Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22. */
@@ -768,7 +778,10 @@ declare module "nish:net" {
   /**
    * Send `buf[off..off+len)` over the Unix socket `sock` with a copy of the
    * descriptor `fd` (`SCM_RIGHTS`): the bytes sent, or a negative errno; -22 a
-   * zero `len`, -88 a `sock` that is not a socket, -95 one that is not Unix.
+   * zero `len` or a negative `fd`, -9 a closed `sock` or `fd`, -88 a `sock`
+   * that is not a socket, -95 one that is not Unix. A stream socket can send
+   * short: the descriptor travels with the first bytes, so send the rest with
+   * `netWrite`.
    */
   export function sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
   /**
@@ -776,13 +789,17 @@ declare module "nish:net" {
    * the first descriptor that came with them into `fd[0]`, or -1: the bytes read,
    * or a negative errno. Every other descriptor in the message is closed; the
    * one kept is close-on-exec and keeps the sender's blocking mode. -22 a zero
-   * `len` or an empty `fd`, -88 not a socket, -95 not Unix.
+   * `len` or an empty `fd`, -9 a closed `sock`, -88 not a socket, -95 not
+   * Unix.
    */
   export function recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32;
   /**
    * The peer of the Unix socket `fd` as of its connect: `out` gets its pid, uid
    * and gid, and the answer is 0; the pid is -1 where Darwin has no
-   * `LOCAL_PEERPID`. -22 an `out` shorter than 3, -88 not a socket, -95 not Unix.
+   * `LOCAL_PEERPID`. A uid or gid of 2^31 or above wraps (-2 is uid
+   * 4294967294). -22 an `out` shorter than 3, -9 a closed `fd`, -88 not a
+   * socket, -95 not Unix, -107 a socket with no peer (a listener, or one never
+   * connected).
    */
   export function peerCredentials(fd: i32, out: i32[]): i32;
   /** `unixListen` flag: unlink a socket file nothing listens on, then bind. */

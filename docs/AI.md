@@ -2268,12 +2268,15 @@ is `-36`. A full backlog makes `unixConnect`
 also needs `fs.write` (`-13` without it); an abstract name does not, and a
 connect to a path is not confined. `sendFd(sock, fd, buf, off, len)` sends
 `buf[off, off + len)` with descriptor `fd` attached (`len` 0 is `-22`) and
-answers the bytes sent; `recvFd(sock, buf, off, len, fd)` reads into the
+answers the bytes sent, which on a stream socket can be short: the descriptor
+went with the first bytes, so send the rest with `netWrite`; `recvFd(sock, buf, off, len, fd)` reads into the
 range and sets `fd[0]` to the descriptor that came with it, or `-1`; the
-descriptor arrives close-on-exec and blocking, any beyond the first are closed,
+descriptor arrives close-on-exec, its status flags (`O_NONBLOCK` among them)
+the open file's, which the sender shares, any beyond the first are closed,
 and `fd` shorter than 1 is `-22`. `peerCredentials(sock, out)` writes
 `[pid, uid, gid]` of the process that made the connection, as it was at
-connect time, into an `out` of length 3 or more (`-22` shorter); on Darwin the
+connect time, into an `out` of length 3 or more (`-22` shorter, `-107` for a
+listener or a socket never connected); on Darwin the
 pid can be `-1`. All three answer `-88` or `-95` for a socket that is not
 Unix-domain. The Unix calls are refused on a wasm target, and under Node each
 throws.
