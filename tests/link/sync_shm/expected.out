@@ -1,0 +1,70 @@
+PASS  a fresh region has the size asked for
+PASS  and is zeroed
+PASS  a name that exists is SHM_EXISTS
+PASS  a name with a slash is SHM_INVALID
+PASS  a name nobody made is SHM_NOT_FOUND
+PASS  a second mapping sees a store
+PASS  add answers the old value
+PASS  exchange answers the old value
+PASS  a compare-exchange that fails answers the value
+PASS  ... and stores nothing
+PASS  one that succeeds answers the expected value
+PASS  ... and stores
+PASS  a negative i32 round-trips
+PASS  the slot beside it is untouched
+PASS  an i64 past 32 bits round-trips
+PASS  addI64 answers the old value
+PASS  exchangeI64 answers the old value
+PASS  compareExchangeI64 fails on a stale value
+PASS  and succeeds on the current one
+PASS  which it stored
+PASS  a byte window round-trips
+PASS  an empty window copies nothing
+PASS  waitI32 on a slot that moved answers at once
+PASS  waitI32 times out
+PASS  after its timeout
+PASS  a wake with nobody asleep wakes nobody
+PASS  closing the second mapping
+PASS  leaves the first
+PASS  the child starts
+PASS  the child exits 0
+PASS  no increment is lost
+PASS  the child's i64 store is seen
+PASS  the sleeper starts
+PASS  wake wakes the sleeper
+PASS  which exits 0, long before its timeout
+PASS  in under five seconds
+PASS  chmod the region 0644
+PASS  a region others may read is SHM_ACCESS
+PASS  plant a symbolic link
+PASS  a symbolic link is not followed (ELOOP)
+PASS  plant an empty object
+PASS  chmod it 0600
+PASS  an empty object is SHM_INVALID
+PASS  link it under a second name
+PASS  a region with a second link is SHM_ACCESS
+PASS  plant a FIFO
+PASS  a FIFO is SHM_ACCESS
+PASS  unlink what was planted
+PASS  past-end: the child exits 1
+PASS  past-end: and says why
+PASS  negative: the child exits 1
+PASS  negative: and says why
+PASS  misaligned: the child exits 1
+PASS  misaligned: and says why
+PASS  load-release: the child exits 1
+PASS  load-release: and says why
+PASS  store-acquire: the child exits 1
+PASS  store-acquire: and says why
+PASS  no-order: the child exits 1
+PASS  no-order: and says why
+PASS  closed: the child exits 1
+PASS  closed: and says why
+PASS  window: the child exits 1
+PASS  window: and says why
+PASS  buffer: the child exits 1
+PASS  buffer: and says why
+PASS  unlink the region
+PASS  a second unlink is SHM_NOT_FOUND
+PASS  the mapping outlives the name
+nish/sync/shm: 69 passed, 0 failed, 0 skipped

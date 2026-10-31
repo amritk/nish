@@ -1437,6 +1437,30 @@ other non-2xx row, when its row count differs from the requests h2load says
 it completed, or when more than 5 % of rows have no status. Results gathered
 before the error are still written and reported.
 
+## Ring latency
+
+`ring-latency/run.mjs` measures [`nish/sync/ring`](../std/sync/ring.ts)
+against an `AF_UNIX` socketpair: 16-byte messages between two processes
+pinned to two cores, `ring.ts` built by `build/nish` and `socketpair.c` by
+`clang -O2`. It is [wp47](../docs/wp47-shared-memory.md)'s measure, and §7
+there records its figures. It is not in this suite's tables. Linux only (it
+uses `taskset` and the futex).
+
+```bash
+npm run build
+node bench/ring-latency/run.mjs                         # 5 rounds, CPUs 0 and 1
+node bench/ring-latency/run.mjs --rounds 9 --cpus 2,3
+```
+
+There are three modes: `pingpong` sends a message and times its echo (p50,
+p99 and mean of the round trip), `stream` sends as fast as the transport
+takes it (messages a second), and `idle` sends one message a millisecond, so
+the reader is asleep for every one. Each round runs
+every transport and mode once in a seeded shuffled order; a figure is the
+median over the rounds, with the lowest and highest beside it. When `strace`
+is installed, one more run of `stream` and `idle` under `strace -f -c` counts
+the system calls a message costs: a busy ring's target is 0.
+
 ## SQLite
 
 `sqlite/run.mjs` measures what [`nish/sqlite`](../docs/guide/using-nish/sqlite.md)
