@@ -98,7 +98,7 @@ const passI64 = (seed: i32): i32 => {
   return sum
 }
 
-/** A histogram of `4 * SIZE` enum keys: one `get` and one `set` each, then a `has` each. */
+/** A histogram of `4 * SIZE` enum keys, one `get` and one `set` each, then `4 * SIZE` probes of a `get` and a `has`. */
 const passEnum = (seed: i32): i32 => {
   const m = new Map<Op, i32>()
   const ops: Op[] = [
@@ -122,23 +122,15 @@ const passEnum = (seed: i32): i32 => {
   let x = seed
   for (let i: i32 = 0; i < 4 * SIZE; i++) {
     x = step(x)
-    const at = (x >>> 12) & 15
-    if (at < ops.length) {
-      const op = ops[at]
-      m.set(op, (m.get(op) ?? seed) + 1)
-    }
+    const op = ops[(x >>> 12) & 15]
+    m.set(op, (m.get(op) ?? seed) + 1)
   }
   let sum: i32 = 0
   for (let i: i32 = 0; i < 4 * SIZE; i++) {
     x = step(x)
-    const probe = (x >>> 12) & 15
-    const read = (x >>> 20) & 15
-    if (probe < ops.length && read < ops.length) {
-      const wanted = ops[probe]
-      const value = m.get(ops[read]) ?? 0
-      if (m.has(wanted)) {
-        sum = wrappingAdd(sum, value ^ x)
-      }
+    const value = m.get(ops[(x >>> 20) & 15]) ?? 0
+    if (m.has(ops[(x >>> 12) & 15])) {
+      sum = wrappingAdd(sum, value ^ x)
     }
   }
   return sum
@@ -159,6 +151,6 @@ export const main = (): i32 => {
   const rounds: i32 = process.argv.length > 1 ? parseInt(process.argv[1]) : 20
   time("i32", rounds, 5 * SIZE, passI32)
   time("i64", rounds, 5 * SIZE, passI64)
-  time("enum", rounds, 12 * SIZE, passEnum)
+  time("enum", rounds, 16 * SIZE, passEnum)
   return 0
 }
