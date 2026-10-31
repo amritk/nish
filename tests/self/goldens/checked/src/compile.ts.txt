@@ -3832,9 +3832,9 @@ function stageModules(outputs: string[], irs: string[], recipe: string, link: st
   callee +14:7 distrustOf -> @distrustOf
   local +17:9 staged: StagedModules (const)
   callee +17:18 new StagedModules -> @StagedModules.constructor
-  local +22:9 copy: string[] (const)
-  local +29:7 i: i32 (let)
-  callee +31:5 stageModule -> @stageModule
+  local +23:9 copy: string[] (const)
+  local +30:7 i: i32 (let)
+  callee +32:5 stageModule -> @stageModule
 function keepModules(staged: StagedModules): void -> @keepModules
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectory

@@ -29411,6 +29411,74 @@ if (
       `compiled ${speedCompiled.join(",")}: ${speed.stdout}${speed.stderr}`,
     )
 
+    // The recipe is part of the key: the same source under another `CC` is
+    // compiled afresh, module for module, and the first `CC`'s entries still hit.
+    fs.writeFileSync(
+      path.join(tools, "cc-log2"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.ll) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 },
+    )
+    writeMain(9)
+    const otherCc = spawnSync(NISH, ["run", main], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: cache, CC: "cc-log2", PATH: `${tools}:${process.env.PATH}` },
+    })
+    const otherCcCompiled = compiled()
+    const backCc = run(["-g"])
+    const backCcCompiled = compiled()
+    writeMain(10)
+    const backPlain = run()
+    const backPlainCompiled = compiled()
+    check(
+      "module cache: a change to the recipe (another CC, or -g) compiles every module again; the old recipe's entries still hit",
+      otherCc.status === 0 &&
+        otherCc.stdout === "square 9: 81\n" &&
+        otherCcCompiled.join(",") === "main.ll,math.ll" &&
+        backCc.status === 0 &&
+        backCcCompiled.join(",") === "main.ll,math.ll" &&
+        backPlain.stdout === "square 10: 100\n" &&
+        backPlainCompiled.join(",") === "main.ll",
+      `CC: ${otherCcCompiled.join(",")}; -g: ${backCcCompiled.join(",")}; back: ${backPlainCompiled.join(",")}: ${otherCc.stderr}${backCc.stderr}`,
+    )
+
+    // An edit that keeps the IR's length still misses: the digest, not the
+    // length, decides. `square 2` and the earlier `square 9` differ in one digit.
+    const mainKeys = () =>
+      moduleEntries()
+        .filter((e) => fs.existsSync(path.join(moduleRoot, e, "main.o")))
+        .map((e) => fs.readFileSync(path.join(moduleRoot, e, "key"), "utf8"))
+    const keysBefore = new Set(mainKeys())
+    writeMain(2)
+    const sameLength = run()
+    const sameLengthCompiled = compiled()
+    const twoKey = mainKeys().find((k) => !keysBefore.has(k)) ?? ""
+    const irLine = (k) => k.slice(k.lastIndexOf("\nir ") + 1)
+    check(
+      "module cache: an edit that keeps the IR's length is a miss, because the key holds the IR's digest",
+      sameLength.status === 0 &&
+        sameLength.stdout === "square 2: 4\n" &&
+        sameLengthCompiled.join(",") === "main.ll" &&
+        twoKey.length > 0 &&
+        [...keysBefore].some((k) => irLine(k).split(" ")[1] === irLine(twoKey).split(" ")[1]),
+      `compiled ${sameLengthCompiled.join(",")}: ${JSON.stringify(irLine(twoKey))} ${sameLength.stderr}`,
+    )
+
+    // A root someone left open to others is made private again before a link
+    // reads an entry from it.
+    fs.chmodSync(moduleRoot, 0o777)
+    writeMain(1)
+    const reopened = run()
+    const reopenedCompiled = compiled()
+    check(
+      "module cache: a root left group- and world-writable is made 0700 again before it is read",
+      reopened.status === 0 &&
+        reopened.stdout === "square 1: 1\n" &&
+        reopenedCompiled.join(",") === "main.ll" &&
+        (fs.statSync(moduleRoot).mode & 0o777) === 0o700,
+      `${(fs.statSync(moduleRoot).mode & 0o777).toString(8)}, compiled ${reopenedCompiled.join(",")}: ${reopened.stderr}`,
+    )
+
     const speedObjects = spawnSync(
       "bash",
       [

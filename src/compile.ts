@@ -2293,13 +2293,14 @@ const stageModules = (
   }
   const staged = new StagedModules(dir)
   // One `sh` copies every hit. An object that will not copy, as when a cache
-  // cleaner took it and left its key, has its key removed: this link compiles
-  // the module, which finds no object beside its `.ll`, and the next one keeps
-  // it again, rather than a failed copy turning the cache off for good.
+  // cleaner took it and left its key, has its key removed and whatever part of
+  // it did copy deleted: this link compiles the module, which finds no object
+  // beside its `.ll`, and the next one keeps it again, rather than a failed
+  // copy turning the cache off for good or a truncated copy being linked.
   const copy: string[] = [
     "sh",
     "-c",
-    'd=$1; shift; for f; do cp -f -- "$f" "$d/" 2>/dev/null || rm -f -- "${f%/*}/key"; done',
+    'd=$1; shift; for f; do cp -f -- "$f" "$d/" 2>/dev/null || rm -f -- "$d/${f##*/}" "${f%/*}/key"; done',
     "sh",
     dir,
   ]

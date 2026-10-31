@@ -49,7 +49,8 @@ argument 3: --help
   profile, unless you pass `--profile`), and every run after that starts the
   binary it already linked. Under `debug`, the link compiles only the modules
   your edit changed: a one-line edit to a 5,000-line server rebuilds in about
-  a second and a half.
+  a second and a half on a 4-core machine, against about five seconds for the
+  first link.
 - **What `nish run` caches**, under `$XDG_CACHE_HOME/nish`, or `~/.cache/nish`
   when that is unset:
 
@@ -62,7 +63,10 @@ argument 3: --help
   An entry is used only when everything it was built from is unchanged: the
   compiler, the profile and its flags, the C compiler, and the code itself.
   The `speed` and `size` profiles do not use `module`, so their binaries are
-  exactly what a build without a cache makes.
+  exactly what a build without a cache makes. Without an absolute
+  `XDG_CACHE_HOME` or `HOME`, or when `nish/module` cannot be made private to
+  you (mode 700, owned by you), the link skips `module` and compiles every
+  module, as the first link does.
 - **The cache is safe to delete.** Removing any of these directories costs
   one rebuild and nothing else. Nothing prunes them, so delete `nish/module`
   now and then if a program you edit often has grown it.
