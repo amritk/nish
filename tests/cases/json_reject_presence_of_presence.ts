@@ -1,4 +1,4 @@
-// Typed JSON's `presence` option: a presence field is off the wire, so its own presence is not recorded (NL2585).
+// Typed JSON's `presence` option: a presence field is off the wire, so its own presence is not recorded (NL2592).
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";
 

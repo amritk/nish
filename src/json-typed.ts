@@ -335,7 +335,7 @@ const jsonReadOptional = (ctx: CheckContext, info: StructInfo, value: Node): voi
   }
 }
 
-/** A presence field misused: NL2585's words after the detail. */
+/** A presence field misused: NL2592's words after the detail. */
 const jsonPresenceMisuse = (ctx: CheckContext, info: StructInfo, node: Node, detail: string): void => {
   ctx.error(
     node,

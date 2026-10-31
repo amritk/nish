@@ -2202,6 +2202,16 @@ Running work on several threads: `parallelMapInto`, `parallelMap`,
 all it takes to build a threaded program. It has a page of its own,
 [Threads](threads.md).
 
+## `nish/sync/shm` and `nish/sync/ring`
+
+Memory several processes share: `createRegion` and `openRegion` map a named
+region, read and written through checked atomic slots (`loadI32`, `addI64`,
+`compareExchangeI32`, ...) and byte windows, and `waitI32` and `wake` sleep
+and wake across processes on Linux. `nish/sync/ring` builds bounded queues of
+byte records in a region: `SpscRing` for one producer and one consumer,
+`MpscRing` for many producers. Native only. It has a page of its own,
+[Shared memory between processes](shared-memory.md).
+
 ## `nish:secret`
 
 `nish:secret` is written with a colon because it is a builtin module, but it

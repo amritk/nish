@@ -1,4 +1,4 @@
-// Typed JSON's `presence` option: a presence field has no key, so no option makes it optional (NL2585).
+// Typed JSON's `presence` option: a presence field has no key, so no option makes it optional (NL2592).
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";
 

@@ -1062,8 +1062,8 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 An arrow written as the argument becomes a function of its own, named after
 the one it is written in with a `$` no declaration can spell
-(`@halves$arrow0`), and it can see only its parameters and the module's
-top-level names. Its parameter takes `T` from the array, and its concise body
+(`@halves$arrow0`). This one reads only its parameters and the module's
+top-level names; the next one reads a name of the function around it. Its parameter takes `T` from the array, and its concise body
 binds `U`, so the instantiation is `map<i32, f64, (n) => ...>`,
 `@map$i32$f64$fn.13.halves$arrow0`.
 
@@ -1226,6 +1226,138 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !21 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fnarg-arrow -->
+
+### An arrow argument that captures
+
+An arrow argument may read the `const` locals and the parameters of the
+function it is written in. Each one it reads is appended to the lifted arrow's
+parameters (`@above$arrow0(i32 %x, i32 %limit)`), and the instance it is given
+to takes it as one more parameter after its own, `%cap.0`, which it passes on
+at the direct call. There is no environment struct and no indirect call, and
+the captured value is not part of the instantiation's key: two arrows that read
+different values share a shape but still get one `define` each, because each
+arrow is its own callee. The instance's capture parameter carries no facts, so
+it has no `readonly` or `nocapture`, and the caller counts a captured reference
+as an escape (docs/LANGUAGE.md, "Function parameters").
+
+<!-- cookbook:begin fnarg-capture -->
+```ts
+// An arrow argument that reads a `const` of the function it is written in:
+// `limit` is appended to the lifted arrow's parameters, and the instance of
+// `countWhere` takes it as one more argument and passes it on.
+const countWhere = (xs: i32[], keep: (x: i32) => boolean): i32 => {
+  let n = 0
+  for (const x of xs) {
+    if (keep(x)) {
+      n++
+    }
+  }
+  return n
+}
+
+export const above = (xs: i32[], limit: i32): i32 => countWhere(xs, (x) => x > limit)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
+
+define noundef i32 @above(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %limit) #0 {
+entry:
+  %0 = call i32 @countWhere$fn.12.above$arrow0(%struct.nish_array* %xs, i32 %limit)
+  ret i32 %0
+}
+
+define internal noundef zeroext i1 @above$arrow0(i32 noundef %x, i32 noundef %limit) #1 {
+entry:
+  %0 = icmp sgt i32 %x, %limit
+  ret i1 %0
+}
+
+define internal noundef i32 @countWhere$fn.12.above$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %cap.0) #0 {
+entry:
+  %n.addr = alloca i32, align 4
+  %x.addr = alloca i32, align 4
+  %forof.idx = alloca i64, align 8
+  store i32 0, i32* %n.addr, align 4
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %8, i32* %x.addr, align 4
+  %9 = load i32, i32* %x.addr, align 4
+  %10 = call i1 @above$arrow0(i32 %9, i32 %cap.0)
+  br i1 %10, label %if.then, label %if.end
+
+if.then:
+  %11 = load i32, i32* %n.addr, align 4
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 1)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %13, i32* %n.addr, align 4
+  br label %if.end
+
+if.end:
+  br label %forof.inc
+
+forof.inc:
+  %15 = load i64, i64* %forof.idx, align 8
+  %16 = add i64 %15, 1
+  store i64 %16, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %17 = load i32, i32* %n.addr, align 4
+  ret i32 %17
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end fnarg-capture -->
 
 ### `nish/threads`: a map and a reduce over the partitioner
 
@@ -12961,8 +13093,8 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 One `switch` instruction: a constant-to-label table and a default edge, which
 the backend turns into a jump table once the labels are dense enough. Empty
-clauses have no block of their own — `case 1:` points at the body of `case 2:`,
-which is the whole of Nish's fallthrough. A label that names a module
+clauses have no block of their own — `case 1:` points at the body of `case 2:`.
+A clause with statements that falls through is in the next section. A label that names a module
 constant is folded before the table is written, so `KIND_CALL` is a `4` here.
 
 <!-- cookbook:begin stmt-switch -->
@@ -13017,6 +13149,81 @@ attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-switch -->
+
+### `switch` fallthrough
+
+A clause that does not end in `break`, `return` or `continue` ends in a `br`
+to the next clause's block, the edge a hand-written `goto` would be: no flag,
+no copy of the body. `sw.case` runs on into `sw.case.1` and that into
+`sw.case.2`, whose `break` is the only edge to `sw.end`.
+
+<!-- cookbook:begin stmt-switch-fallthrough -->
+```ts
+const points = (stars: number): number => {
+  let total = 0
+  switch (stars) {
+    // biome-ignore lint/suspicious/noFallthroughSwitchClause: the fallthrough is the point
+    case 3:
+      total = 100
+    // biome-ignore lint/suspicious/noFallthroughSwitchClause: the fallthrough is the point
+    case 2:
+      total |= 10
+    case 1:
+      total |= 1
+      break
+    default:
+      total = -1
+  }
+  return total
+}
+```
+
+```llvm
+define internal noundef i32 @points(i32 noundef %stars) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  store i32 0, i32* %total.addr, align 4
+  switch i32 %stars, label %sw.default [
+    i32 3, label %sw.case
+    i32 2, label %sw.case.1
+    i32 1, label %sw.case.2
+  ]
+
+sw.case:
+  store i32 100, i32* %total.addr, align 4
+  br label %sw.case.1
+
+sw.case.1:
+  %0 = load i32, i32* %total.addr, align 4
+  %1 = or i32 %0, 10
+  store i32 %1, i32* %total.addr, align 4
+  br label %sw.case.2
+
+sw.case.2:
+  %2 = load i32, i32* %total.addr, align 4
+  %3 = or i32 %2, 1
+  store i32 %3, i32* %total.addr, align 4
+  br label %sw.end
+
+sw.default:
+  store i32 -1, i32* %total.addr, align 4
+  br label %sw.end
+
+sw.end:
+  %4 = load i32, i32* %total.addr, align 4
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end stmt-switch-fallthrough -->
 
 ### `break` / `continue`
 
@@ -13114,6 +13321,120 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-break-continue -->
+
+### Labelled `break` / `continue`
+
+A label names a loop, a block or a `switch`, and a jump that names it is a
+`br` to that statement's block from any depth: `continue outer` inside the
+inner loop is `br label %for.inc`, the outer loop's step, and `break outer`
+is `br label %for.end`, the outer loop's exit. The inner loop's own blocks
+carry the `.1` suffix and are skipped, as a `done` flag tested after the
+inner loop would skip them, without the flag.
+
+<!-- cookbook:begin stmt-labelled -->
+```ts
+const firstPair = (limit: number, target: number): number => {
+  outer: for (let i = 0; i < limit; i++) {
+    for (let j = 0; j < limit; j++) {
+      if (j > i) {
+        continue outer
+      }
+      if (i * j === target) {
+        break outer
+      }
+    }
+  }
+  return 0
+}
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
+
+define internal noundef i32 @firstPair(i32 noundef %limit, i32 noundef %target) #0 {
+entry:
+  %i.addr = alloca i32, align 4
+  %j.addr = alloca i32, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %limit
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  store i32 0, i32* %j.addr, align 4
+  br label %for.cond.1
+
+for.cond.1:
+  %2 = load i32, i32* %j.addr, align 4
+  %3 = icmp slt i32 %2, %limit
+  br i1 %3, label %for.body.1, label %for.end.1
+
+for.body.1:
+  %4 = load i32, i32* %j.addr, align 4
+  %5 = load i32, i32* %i.addr, align 4
+  %6 = icmp sgt i32 %4, %5
+  br i1 %6, label %if.then, label %if.end
+
+if.then:
+  br label %for.inc
+
+if.end:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = load i32, i32* %j.addr, align 4
+  %9 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %7, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %12 = icmp eq i32 %10, %target
+  br i1 %12, label %if.then.1, label %if.end.1
+
+if.then.1:
+  br label %for.end
+
+if.end.1:
+  br label %for.inc.1
+
+for.inc.1:
+  %13 = load i32, i32* %j.addr, align 4
+  %14 = add nsw i32 %13, 1
+  store i32 %14, i32* %j.addr, align 4
+  br label %for.cond.1
+
+for.end.1:
+  br label %for.inc
+
+for.inc:
+  %15 = load i32, i32* %i.addr, align 4
+  %16 = add nsw i32 %15, 1
+  store i32 %16, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end stmt-labelled -->
 
 ### `Result<T, E>`
 

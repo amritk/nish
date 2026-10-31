@@ -413,11 +413,17 @@ export class Parser {
 
   /**
    * The labels of the labelled statements around the current one, innermost
-   * last. A `break` or `continue` naming one of them is read, so that the
-   * refusal is the labelled statement's (NL1046) and there is only one; a
-   * label nothing declares stays a syntax error, as it is in TypeScript.
+   * last. A `break` or `continue` may name one of them; a label nothing
+   * declares stays a syntax error, as it is in TypeScript.
    */
   labels: string[]
+  /** For each of `labels`, whether it names a loop, the only target a `continue` may name. */
+  labelLoops: boolean[]
+  /**
+   * The labels of the functions around the current one: a jump to one would
+   * cross a function boundary, which is its own refusal, as in TypeScript.
+   */
+  outerLabels: string[]
 
   /**
    * The end of the `}` that closes each `{` a `tryStatementAhead` scan has
@@ -433,6 +439,8 @@ export class Parser {
     this.diagnostics = []
     this.nodeCount = 0
     this.labels = []
+    this.labelLoops = []
+    this.outerLabels = []
     this.closingBraces = new StringMap()
     this.formStart = -1
     this.noIn = false
@@ -1881,7 +1889,7 @@ export class Parser {
     // which is TypeScript's rule too, so `{` on the next line is still the
     // body.
     if (this.at(TOK_LBRACE)) {
-      node.children.push(this.parseBlock())
+      node.children.push(this.parseFunctionBlock())
     } else {
       node.children.push(this.empty())
       this.expectSemicolon()
@@ -1913,7 +1921,7 @@ export class Parser {
     // for the next `parseDeclaration` to trip over, which is what lets stage1
     // say what stage0 says instead of complaining about a brace.
     if (this.at(TOK_LBRACE)) {
-      node.children.push(this.parseBlock())
+      node.children.push(this.parseFunctionBlock())
     } else {
       node.children.push(this.empty())
       this.eat(TOK_SEMICOLON)
@@ -2075,7 +2083,7 @@ export class Parser {
     node.children.push(this.parseParameters(true))
     node.children.push(this.parseReturnType())
     this.expect(TOK_ARROW)
-    node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression())
+    node.children.push(this.at(TOK_LBRACE) ? this.parseFunctionBlock() : this.parseExpression())
     node.children.push(typeParams)
     // `const f = (): i32 => 1, g = 2`: the names after the first, a sixth
     // child only when written, for the checker to refuse (NL2274).
@@ -2484,7 +2492,7 @@ export class Parser {
     method.flags = modifiers
     method.children.push(this.parseParameters(true))
     method.children.push(this.parseReturnType())
-    method.children.push(this.parseBlock())
+    method.children.push(this.parseFunctionBlock())
     method.end = this.previousEnd
     return method
   }
@@ -2514,7 +2522,7 @@ export class Parser {
     // BLOCK among the members, spanning the word.
     if (this.at(TOK_IDENT) && this.value === "static" && this.peek() === TOK_LBRACE) {
       this.advance() // `static`
-      const block = this.parseBlock()
+      const block = this.parseFunctionBlock()
       block.start = start
       return block
     }
@@ -2775,7 +2783,7 @@ export class Parser {
       this.eat(TOK_SEMICOLON)
       return this.empty()
     }
-    return this.parseBlock()
+    return this.parseFunctionBlock()
   }
 
   /**
@@ -3525,17 +3533,55 @@ export class Parser {
     return node
   }
 
-  /** `outer: body`, for Phase 0 to refuse (NL1046). */
+  /**
+   * `outer: body`. Phase 0 refuses a label on anything but a loop, a block or
+   * a `switch` (NL1046); a label already declared around this one is refused
+   * here, as TypeScript refuses it.
+   */
   parseLabeled(start: i32): Node {
     const node = this.node(N_LABELED, start, this.end)
     node.text = this.value
+    if (this.labels.indexOf(node.text) >= 0) {
+      this.report("Duplicate label '" + node.text + "'", this.start, this.end)
+    }
     this.advance() // the label
     this.advance() // `:`
     this.labels.push(node.text)
+    this.labelLoops.push(this.at(TOK_WHILE) || this.at(TOK_DO) || this.at(TOK_FOR))
     node.children.push(this.parseStatement())
     this.labels.pop()
+    this.labelLoops.pop()
     node.end = this.previousEnd
     return node
+  }
+
+  /**
+   * A function's body, where no label from outside it can be named: a jump
+   * leaves the function it is in by `return` alone.
+   */
+  parseFunctionBlock(): Node {
+    const labels = this.labels
+    const labelLoops = this.labelLoops
+    const outerLabels = this.outerLabels
+    if (labels.length > 0) {
+      // The labels around this function are hidden in it, not gone: naming one
+      // reads as a jump out of the function, not as a label nothing declares.
+      const hidden: string[] = []
+      for (const name of outerLabels) {
+        hidden.push(name)
+      }
+      for (const name of labels) {
+        hidden.push(name)
+      }
+      this.outerLabels = hidden
+      this.labels = []
+      this.labelLoops = []
+    }
+    const block = this.parseBlock()
+    this.labels = labels
+    this.labelLoops = labelLoops
+    this.outerLabels = outerLabels
+    return block
   }
 
   parseIf(start: i32): Node {
@@ -3732,14 +3778,23 @@ export class Parser {
     return node
   }
 
+  /**
+   * `break` or `continue`, with the label it names in `text` (`""` for none).
+   * The label has to be declared around the jump in the same function, and a
+   * `continue` has to name a loop: TypeScript's rules, refused as it refuses them.
+   */
   parseJump(start: i32, kind: i32): Node {
     this.advance()
     let label = ""
     if (this.at(TOK_IDENT) && !this.newlineBefore()) {
-      if (this.labels.indexOf(this.value) >= 0) {
-        label = this.value
-      } else {
-        this.report("a label is not supported", this.start, this.end)
+      label = this.value
+      const at = this.labels.indexOf(label)
+      if (at < 0 && this.outerLabels.indexOf(label) >= 0) {
+        this.report("Jump target cannot cross function boundary", this.start, this.end)
+      } else if (kind === N_CONTINUE && (at < 0 || !this.labelLoops[at])) {
+        this.report("A `continue` can only jump to a label of an enclosing loop", this.start, this.end)
+      } else if (at < 0) {
+        this.report("A `break` can only jump to a label of an enclosing statement", this.start, this.end)
       }
       this.advance()
     }
@@ -4349,7 +4404,7 @@ export class Parser {
     }
     node.children.push(this.eat(TOK_COLON) ? this.parseType() : this.empty())
     this.expect(TOK_ARROW)
-    node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression())
+    node.children.push(this.at(TOK_LBRACE) ? this.parseFunctionBlock() : this.parseExpression())
     node.children.push(this.list())
     node.end = this.previousEnd
     return node
@@ -4604,7 +4659,7 @@ export class Parser {
     const typeParams = this.parseTypeParameters()
     method.children.push(this.parseParameters(false))
     method.children.push(this.parseReturnType())
-    method.children.push(this.parseBlock())
+    method.children.push(this.parseFunctionBlock())
     if (typeParams.children.length > 0) {
       method.children.push(typeParams)
     }

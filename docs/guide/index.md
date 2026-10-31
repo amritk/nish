@@ -56,7 +56,8 @@ Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385
 - **Using Nish** — [the command-line interface](using-nish/cli.md),
   [the standard library](using-nish/standard-library.md),
   [calling Nish from other languages](using-nish/interop.md),
-  [threads](using-nish/threads.md) and
+  [threads](using-nish/threads.md),
+  [shared memory between processes](using-nish/shared-memory.md) and
   [Terminal programs](using-nish/terminal.md).
 
 This guide teaches; it is not the definition of the language. That is the

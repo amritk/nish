@@ -1,8 +1,14 @@
 %struct.nish_array = type { i64, i64, i8* }
 
-@.str.0 = private unnamed_addr constant { i64, [25 x i8] } { i64 24, [25 x i8] c"build/test/nus-peer.sock\00" }, align 8
+@.str.0 = private unnamed_addr constant { i64, [21 x i8] } { i64 20, [21 x i8] c"build/test/nus-peer-\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c".sock\00" }, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #0
 declare noundef i32 @nish_net_close(i32 noundef) #0
@@ -18,6 +24,14 @@ declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
+
+define internal noundef nonnull align 8 i8* @pathOf(i32 noundef %pid) #0 {
+entry:
+  %0 = call i8* @nish_str_from_i32(i32 %pid)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [21 x i8] }* @.str.0 to i8*), i8* %0)
+  %2 = call i8* @nish_str_concat(i8* %1, i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
+  ret i8* %2
+}
 
 define internal noundef i32 @widowed() #0 {
 entry:
@@ -1394,37 +1408,54 @@ cond.end:
   ret i32 %23
 }
 
-define noundef i32 @connected(i32 noundef %k, i32 noundef %listener) #0 {
+define noundef i32 @connected(i32 noundef %k, i32 noundef %listener, i32 noundef %pid) #0 {
 entry:
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = icmp eq i32 %k, 0
   br i1 %0, label %if.then, label %if.end
 
 if.then:
-  %1 = call i32 @nish_unlink(i8* bitcast ({ i64, [25 x i8] }* @.str.0 to i8*))
-  %2 = call i32 @nish_unix_listen(i8* bitcast ({ i64, [25 x i8] }* @.str.0 to i8*), i32 4, i32 0)
-  ret i32 %2
+  %1 = call i64 @nish_arena_mark()
+  %2 = call i8* @pathOf(i32 %pid)
+  %3 = call i8* @nish_arena_keep(i64 %1, i8* %2)
+  %4 = call i32 @nish_unlink(i8* %3)
+  %5 = call i64 @nish_arena_mark()
+  %6 = call i8* @pathOf(i32 %pid)
+  %7 = call i8* @nish_arena_keep(i64 %5, i8* %6)
+  %8 = call i32 @nish_unix_listen(i8* %7, i32 4, i32 0)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %8
 
 if.end:
-  %3 = icmp eq i32 %k, 1
-  br i1 %3, label %cond.true, label %cond.false
+  %9 = icmp eq i32 %k, 1
+  br i1 %9, label %cond.true, label %cond.false
 
 cond.true:
-  %4 = call i32 @nish_unix_connect(i8* bitcast ({ i64, [25 x i8] }* @.str.0 to i8*))
+  %10 = call i64 @nish_arena_mark()
+  %11 = call i8* @pathOf(i32 %pid)
+  %12 = call i8* @nish_arena_keep(i64 %10, i8* %11)
+  %13 = call i32 @nish_unix_connect(i8* %12)
   br label %cond.end
 
 cond.false:
-  %5 = call i32 @nish_unix_accept(i32 %listener)
+  %14 = call i32 @nish_unix_accept(i32 %listener)
   br label %cond.end
 
 cond.end:
-  %6 = phi i32 [ %4, %cond.true ], [ %5, %cond.false ]
-  ret i32 %6
+  %15 = phi i32 [ %13, %cond.true ], [ %14, %cond.false ]
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %15
 }
 
-define noundef i32 @release() #0 {
+define noundef i32 @release(i32 noundef %pid) #0 {
 entry:
-  %0 = call i32 @nish_unlink(i8* bitcast ({ i64, [25 x i8] }* @.str.0 to i8*))
-  ret i32 %0
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i64 @nish_arena_mark()
+  %1 = call i8* @pathOf(i32 %pid)
+  %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
+  %3 = call i32 @nish_unlink(i8* %2)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %3
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }

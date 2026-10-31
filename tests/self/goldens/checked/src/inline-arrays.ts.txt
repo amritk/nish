@@ -163,7 +163,7 @@ function programOf(walk: InlineWalk, sig: FunctionSig): CheckedProgram | null ->
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn
   pointer walk: size=80 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   local +0:14 ctx: CheckContext (const)
   callee +1:9 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -171,7 +171,7 @@ function paramIndex(program: CheckedProgram, sig: FunctionSig, expr: Node): i32 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq unwrap
   pointer program: size=656 writesThrough=false captured=false
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer sig: size=144 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrap#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -182,7 +182,7 @@ function allocationOf(program: CheckedProgram, table: TypeTable, sig: FunctionSi
   calls: FreshReturn.constructor TypeTable.isArray constantLength nish_alloc_struct nish_panic_index paramIndex unwrap
   pointer program: size=656 writesThrough=false captured=false passedTo=paramIndex#0 constantLength#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isArray#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=paramIndex#1
+  pointer sig: size=144 writesThrough=false captured=false passedTo=paramIndex#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrap#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -250,7 +250,7 @@ function returnedOf(program: CheckedProgram, table: TypeTable, sig: FunctionSig,
   calls: allocationOf declarationOf nish_panic_index onlyIndexed unwrap
   pointer program: size=656 writesThrough=false captured=false passedTo=allocationOf#0 declarationOf#0 allocationOf#0 onlyIndexed#0
   pointer table: size=96 writesThrough=false captured=false passedTo=allocationOf#1 allocationOf#1
-  pointer sig: size=136 writesThrough=false captured=false passedTo=allocationOf#2 allocationOf#2
+  pointer sig: size=144 writesThrough=false captured=false passedTo=allocationOf#2 allocationOf#2
   pointer body: size=40 writesThrough=true captured=true passedTo=declarationOf#1 onlyIndexed#1
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrap#0
   stackSites=0 stackLocals=0
@@ -268,7 +268,7 @@ function freshReturnOf(walk: InlineWalk, sig: FunctionSig): FreshReturn | null -
   sharedWrite: +0:5
   calls: FunctionSig.body FunctionSig.foreign StringMap.get StringMap.set TypeTable.isArray collectReturns holdsArrow nish_array_grow nish_panic_index programOf returnedOf
   pointer walk: size=80 writesThrough=false captured=false passedTo=programOf#0
-  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.body#0 programOf#1 FunctionSig.foreign#0 returnedOf#2
+  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.body#0 programOf#1 FunctionSig.foreign#0 returnedOf#2
   stackSites=2 stackLocals=2
   local -47:9 known: i32 (const)
   callee -47:17 StringMap.get -> @StringMap.get

@@ -23,6 +23,9 @@ from racing on memory or deadlocking on a lock or a channel.
 The same program also runs under Node, one task at a time, and prints the same
 answer ([RUN_UNDER_NODE.md](../../RUN_UNDER_NODE.md) says how).
 
+Threads share one process. To share memory between processes, such as
+prefork workers, see [Shared memory between processes](shared-memory.md).
+
 ## One function over an array: `parallelMapInto` and `parallelReduce`
 
 `parallelMapInto(src, dst, f)` writes `f(src[i])` into `dst[i]` for every
@@ -249,9 +252,10 @@ export const main = (): i32 => {
   either; bind it, or the field you need, to a `const` (`const self = this`,
   `const k = this.k`).
 - **Only the arrow written at the call.** An arrow inside that arrow reads
-  nothing from outside itself, and an arrow given to any other function still
-  reads only its own parameters. An arrow given to `spawn` reads them too, as
-  the next section shows.
+  nothing from outside itself. An arrow given to `spawn` reads them too, as
+  the next section shows, and so does an arrow given to an ordinary function
+  parameter ([Functions](../language/functions.md)), which runs on this thread
+  and so may also write through what it reads.
 - **Not `dst`.** In `parallelMapInto`, a body may not read an array that could
   be the one being written. A `const` table bound to its own array is fine
   beside a `dst` that is a `const` bound to its own array, as in

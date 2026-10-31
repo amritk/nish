@@ -47,7 +47,7 @@ the record that found it. The notes below the table name each such finding.
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
-| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
+| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 15 / 14 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
@@ -69,6 +69,7 @@ the record that found it. The notes below the table name each such finding.
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
 | `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
 | PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
@@ -78,7 +79,7 @@ the record that found it. The notes below the table name each such finding.
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 41 / 137** | **0 / 0 / 1 / 27** |
+| **Total** ⁸ | | | **3 / 10 / 46 / 144** | **0 / 0 / 2 / 30** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -378,6 +379,7 @@ only.
 | PKI-30 | Low | `std/crypto/pki.ts` | A leaf without extKeyUsage is accepted, as RFC 5280 reads it, where the BRs require one | — |
 | PKI-31 | Low | `std/crypto/pki.ts` | A dNSName subtree with a leading period is read as the names below it, not refused; an excluded one leaves the apex allowed | — |
 | PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
+| SHM-3 | Low | `runtime/runtime-shm.c` (`adopt`) | A same-user peer that shrinks a region with `ftruncate` makes a later access past the new end a `SIGBUS`, not a checked panic | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in

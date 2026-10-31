@@ -1,0 +1,1 @@
+The arrow reads `this`: an arrow argument may read the `const` locals and the parameters of the function it is written in, and `this` is neither

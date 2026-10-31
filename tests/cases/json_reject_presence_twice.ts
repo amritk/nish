@@ -1,4 +1,4 @@
-// Typed JSON's `presence` option: a field is recorded once (NL2585).
+// Typed JSON's `presence` option: a field is recorded once (NL2592).
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";
 

@@ -1,4 +1,4 @@
-// Typed JSON's `presence` option: one presence field records one field: two sharing one is refused (NL2585).
+// Typed JSON's `presence` option: one presence field records one field: two sharing one is refused (NL2592).
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";
 

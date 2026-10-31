@@ -106,6 +106,10 @@ reject_ffi_handle_walk_non_null	expected `;`, found `!`
 reject_generic_method_constructor	a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`)
 reject_import_equals_malformed	expected a name, found `NUMBER`
 reject_import_malformed	expected `{`, found `;`
+reject_label_continue_block	A `continue` can only jump to a label of an enclosing loop
+reject_label_crosses_arrow	Jump target cannot cross function boundary
+reject_label_duplicate	Duplicate label 'outer'
+reject_label_unknown	A `break` can only jump to a label of an enclosing statement
 reject_leading_zero_decimal	Decimals with leading zeros are not allowed
 reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
 reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
