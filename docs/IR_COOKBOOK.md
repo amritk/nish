@@ -2906,6 +2906,43 @@ The walkers stay defined, `internal` and uncalled, and `opt` deletes them.
 The whole of `bytes.ll` is `tests/link/std_bytes`'s golden;
 `tests/link/std_bytes_runs` runs every class and clamp against the kernels.
 
+### `nish/json`: a writer's number goes straight into its buffer
+
+`JsonWriter.f64` calls the private walker `jsonPutF64Walk`, which spells the
+number as `${v}` does and copies it into the writer's `u8[]` at `end`, or
+answers `-1` when it does not fit. In the module that is `nish/json` that call
+becomes `nish_json_put_f64` (`src/kernels.ts`, `isJsonPutF64Walk`), which
+formats into a stack buffer and builds no string. The kernel is handed the
+data pointer and the length, narrowed to the `i32` the walker compares
+against, and a refusal is the walker's `JSON_WRITE_FULL`:
+
+```llvm
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %8 = trunc i64 %7 to i32
+  %9 = call i32 @nish_json_put_f64(i8* %5, i32 %8, i32 %3, double %v)
+  store i32 %9, i32* %stop.addr, align 4
+  %10 = load i32, i32* %stop.addr, align 4
+  %11 = icmp slt i32 %10, 0
+  br i1 %11, label %if.then, label %if.end
+
+if.then:
+  %12 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %w, i32 0, i32 3
+  store i32 -5, i32* %12, align 4, !tbaa !27
+  ret i1 false
+```
+
+```llvm
+declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef) #4
+```
+
+The kernel writes all of the number or none of it, so a refused write leaves
+the buffer and `end` as the walker's refusal does. `std/json.ts` compiled as a
+root keeps `call i32 @jsonPutF64Walk(` and declares no kernel, and Node and
+`--emit-ts` run the walker (`tests/run.js`, "json_f64_seam").
+
 ### `nish/regex`: a match's first byte on the runtime kernel
 
 A pattern whose first few positions each take a small set of bytes, such as
@@ -25587,6 +25624,7 @@ declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef,
 declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_bytes_skip_json_plain(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
+declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef) #2
 declare double @nish_floor(double) #0
 declare double @nish_ceil(double) #0
 declare double @nish_trunc(double) #0

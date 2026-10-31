@@ -206,6 +206,10 @@ nish_str *nish_str_from_f64(double v);
    pins it). For a caller that writes numbers into its own buffer. */
 #define NISH_F64_MAX 32
 int nish_f64_format(double v, char out[NISH_F64_MAX]);
+/* `nish_f64_format`'s bytes into `buf[at]` (std/json.ts's JsonWriter): the new
+   end, or -1, with nothing written, when `at < 0` or they do not fit before
+   `len`. `buf` may be null only when nothing fits. */
+int32_t nish_json_put_f64(uint8_t *buf, int32_t len, int32_t at, double v);
 nish_str *nish_str_from_i64(int64_t v);
 /* Unsigned decimal (WP15). u8/u16/u32 are zero-extended by the caller, so one
    symbol serves every unsigned width. */
