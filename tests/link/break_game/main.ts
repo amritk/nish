@@ -2,9 +2,10 @@
 // driven step by step: the difficulty formulas, every phase from the intro to
 // the last screen, the swept ball against the rails, the bricks and the paddle,
 // each power-up, combos, the clear and its tally, the advancing wall, pause and
-// quit, and the draw at every scene and size. The negatives are the inputs a
-// screen must ignore (a confirm before the dismiss delay, a step after the
-// result) and the framebuffers too small to draw in, which must never panic.
+// quit, the sounds each step asks for, and the draw at every scene and size.
+// The negatives are the inputs a screen must ignore (a confirm before the
+// dismiss delay, a step after the result) and the framebuffers too small to
+// draw in, which must never panic.
 import { Suite } from "../../../std/testing"
 import { Framebuffer } from "../../../std/term-pixels"
 import {
@@ -71,6 +72,18 @@ import {
   PHASE_PLAY,
   PHASE_WON,
   SLOW_STEPS,
+  SOUND_ADVANCE,
+  SOUND_BREAK,
+  SOUND_CAPSULE,
+  SOUND_CLEAR,
+  SOUND_CRACK,
+  SOUND_EXPLODE,
+  SOUND_LAUNCH,
+  SOUND_LOSE,
+  SOUND_OVER,
+  SOUND_PADDLE,
+  SOUND_STEEL,
+  SOUND_WALL,
   TALLY_STEPS,
   WIDE_STEPS,
   applyPower,
@@ -183,6 +196,30 @@ const emptyWall = (game: BreakGame): void => {
   game.kinds.fill(BRICK_NONE)
   game.hits.fill(0)
   game.bricksLeft = 0
+}
+
+/** Whether the last step asked for sound `id`. */
+const asked = (game: BreakGame, id: i32): boolean => game.sounds.indexOf(id) >= 0
+
+/** Steps `game` up to `steps` times, stopping at the first step that asks for `id`; answers whether one did. */
+const heard = (game: BreakGame, input: TermInput, id: i32, steps: i32): boolean => {
+  for (let i: i32 = 0; i < steps; i++) {
+    idle(game, input)
+    if (asked(game, id)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether the last step asked for any sound twice. */
+const repeated = (game: BreakGame): boolean => {
+  for (let i: i32 = 0; i < toI32(game.sounds.length); i++) {
+    if (game.sounds.indexOf(game.sounds[i]) !== i) {
+      return true
+    }
+  }
+  return false
 }
 
 // ---- The difficulty curve -------------------------------------------------------
@@ -936,6 +973,78 @@ const testSoak = (t: Suite): void => {
   t.ok("the pools never grow", pools)
 }
 
+const testSounds = (t: Suite): void => {
+  const input = newInput()
+  const serve = playing(1, input)
+  t.eqI32("a waiting ball asks for no sound", toI32(serve.sounds.length), 0)
+  tap(serve, input, KEY_SPACE, 0)
+  t.ok("a serve asks for the launch", asked(serve, SOUND_LAUNCH))
+  t.eqI32("and nothing else", toI32(serve.sounds.length), 1)
+  idle(serve, input)
+  t.eqI32("the next step starts with none", toI32(serve.sounds.length), 0)
+
+  const brick = playing(1, input)
+  fly(brick, colCentre(5), 70.0, 0.0, -1.0)
+  t.ok("a first break asks for the lowest pitch", heard(brick, input, SOUND_BREAK, 12))
+  const pitched = playing(1, input)
+  pitched.combo = 9
+  fly(pitched, colCentre(5), 70.0, 0.0, -1.0)
+  t.ok("a long combo's break stops at the top pitch", heard(pitched, input, SOUND_BREAK + 5, 12))
+  const paddle = playing(1, input)
+  fly(paddle, paddle.paddleX, 150.0, 0.0, 1.0)
+  t.ok("the paddle asks for its knock", heard(paddle, input, SOUND_PADDLE, 60))
+
+  // Twelve breaks in one step: each sound asked for once, and six at most.
+  const keg = playing(1, input)
+  for (let col: i32 = 3; col <= 6; col++) {
+    keg.kinds[3 * LEVEL_COLS + col] = BRICK_EXPLOSIVE
+  }
+  fly(keg, colCentre(6), 70.0, 0.0, -1.0)
+  let exploded: boolean = false
+  let most: i32 = 0
+  let twice: boolean = false
+  for (let i: i32 = 0; i < 12; i++) {
+    idle(keg, input)
+    exploded = exploded || asked(keg, SOUND_EXPLODE)
+    most = Math.max(most, toI32(keg.sounds.length))
+    twice = twice || repeated(keg)
+  }
+  t.ok("an explosive brick asks for the bang", exploded)
+  t.eqI32("a busy step asks for six sounds at most", most, 6)
+  t.ok("a step asks for each sound once", !twice)
+
+  const two = playing(2, input)
+  fly(two, colCentre(0), 120.0, 0.0, -1.0)
+  t.ok("a dent asks for the crack", heard(two, input, SOUND_CRACK, 60))
+  const steel = playing(3, input)
+  fly(steel, colCentre(0), 120.0, 0.0, -1.0)
+  t.ok("steel rings", heard(steel, input, SOUND_STEEL, 40))
+  const rail = playing(1, input)
+  fly(rail, 12.0, 100.0, -0.8, -0.6)
+  t.ok("a rail asks for the wall sound", heard(rail, input, SOUND_WALL, 8))
+
+  const caught = playing(1, input)
+  spawnCapsule(caught, caught.paddleX, PADDLE_Y - 20.0, CAPSULE_LIFE)
+  t.ok("a caught capsule asks for its chime", heard(caught, input, SOUND_CAPSULE, 120))
+
+  const lost = playing(1, input)
+  fly(lost, 20.0, 150.0, 0.0, 1.0)
+  t.ok("a lost ball asks for the loss", heard(lost, input, SOUND_LOSE, 60))
+  lost.lives = 1
+  fly(lost, 20.0, 150.0, 0.0, 1.0)
+  t.ok("the last life asks for game over instead", heard(lost, input, SOUND_OVER, 60))
+  t.ok("and not the loss", !asked(lost, SOUND_LOSE))
+
+  const clear = playing(1, input)
+  emptyWall(clear)
+  idle(clear, input)
+  t.ok("a clear asks for its fanfare", asked(clear, SOUND_CLEAR))
+
+  const wall = playing(6, input)
+  wall.launched = true
+  t.ok("the wall coming down a row asks for the rumble", heard(wall, input, SOUND_ADVANCE, 12 * 120 + 1))
+}
+
 export const main = (): i32 => {
   const t = new Suite("break-game")
   testLevels(t)
@@ -948,6 +1057,7 @@ export const main = (): i32 => {
   testClear(t)
   testWall(t)
   testPause(t)
+  testSounds(t)
   testDraw(t)
   testCompact(t)
   testSoak(t)

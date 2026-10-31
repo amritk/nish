@@ -348,27 +348,31 @@ const trace = (opts: RateOptions, link: Link, scene: Scene, ms: i32): Record => 
 
 export const main = (): i32 => {
   const t = new Suite("term-rate")
+  const none: string[] = []
 
   // Trace 1: a fast local terminal, a millisecond away with 50 MB/s, frames of
-  // 20 kB costing 2 ms. It starts at 30, rises to 60 three seconds after the
-  // first answer shows 60 within budget, and holds for the rest of 30 seconds.
+  // 20 kB costing 2 ms. It starts at 60, the best tier it may use, and holds
+  // there for all 30 seconds: a terminal that keeps up is never made to climb.
   const local = trace(new RateOptions(), new Link(1.0, 50000000.0), new Scene(20000, 2000000.0), 30000)
   show("local", local)
-  t.eqLines("local: the decisions", local.lines, ["3002ms 60fps /1 full"])
+  t.eqStr("local: starts at 60", local.firstKey, "60fps /1 full")
+  t.eqLines("local: the decisions", local.lines, none)
   t.eqI32("local: one frame in flight at most", local.maxUnacked, 1)
 
-  // The same terminal with 120 allowed climbs one tier further, three seconds
-  // and a settle later; allowed without a `maxFps` of 120 it stays at 60.
+  // The same terminal with 120 allowed starts at 120 and holds it; allowed
+  // without a `maxFps` of 120 it starts and stays at 60.
   const fastOpts = new RateOptions()
   fastOpts.allow120 = true
   fastOpts.maxFps = 120
   const fast = trace(fastOpts, new Link(1.0, 50000000.0), new Scene(20000, 2000000.0), 10000)
-  t.eqLines("allow120: the decisions", fast.lines, ["3002ms 60fps /1 full", "6003ms 120fps /1 full"])
+  t.eqStr("allow120: starts at 120", fast.firstKey, "120fps /1 full")
+  t.eqLines("allow120: the decisions", fast.lines, none)
   const capped = new RateOptions()
   capped.allow120 = true
   show("allow120", fast)
   const held = trace(capped, new Link(1.0, 50000000.0), new Scene(20000, 2000000.0), 10000)
-  t.eqLines("allow120 under maxFps 60: the decisions", held.lines, ["3002ms 60fps /1 full"])
+  t.eqStr("allow120 under maxFps 60: starts at 60", held.firstKey, "60fps /1 full")
+  t.eqLines("allow120 under maxFps 60: the decisions", held.lines, none)
 
   // Trace 2: a 100 ms link at 1 Mbit/s (125 kB/s) with 2 kB frames. Ten frames a
   // second one at a time would need the whole round trip, so even the floor of
@@ -400,7 +404,6 @@ export const main = (): i32 => {
   run(swing, swingLink, swingScene, 15000, 40000, sw)
   show("swing", sw)
   t.eqLines("swing: the decisions", sw.lines, [
-    "3002ms 60fps /1 full",
     "5579ms 15fps /1 full",
     "6579ms 10fps /1 full",
     "18369ms 15fps /1 full",
@@ -444,10 +447,9 @@ export const main = (): i32 => {
     "2760ms 5fps /2 full",
     "3760ms 5fps /4 full",
     "4760ms 5fps /4 half",
-    "10764ms 5fps /4 full",
+    "10781ms 5fps /4 full",
   ])
 
-  const none: string[] = []
   // Trace 5: the unacknowledged limit, at a fixed 60 frames a second over a 50
   // ms link. One in flight draws a frame per answer; two draw twice as many.
   const one = new RateOptions()
@@ -482,13 +484,13 @@ export const main = (): i32 => {
     "2760ms 10fps /2 full",
     "3760ms 10fps /4 full",
     "4760ms 10fps /4 half",
-    "13036ms 10fps /4 full",
-    "16037ms 10fps /2 full",
-    "19038ms 10fps /1 full",
-    "22039ms 15fps /1 full",
-    "25040ms 20fps /1 full",
-    "28041ms 30fps /1 full",
-    "31042ms 60fps /1 full",
+    "13053ms 10fps /4 full",
+    "16054ms 10fps /2 full",
+    "19055ms 10fps /1 full",
+    "22056ms 15fps /1 full",
+    "25057ms 20fps /1 full",
+    "28058ms 30fps /1 full",
+    "31059ms 60fps /1 full",
   ])
   // An answer lands on the millisecond after the 1.8 ms its frame takes, so the round trip reads 2. With one frame of
   // one size in flight the latency and the bytes cannot be told apart, so the split is anyone's; their sum is right.
@@ -502,11 +504,15 @@ export const main = (): i32 => {
   t.eqI32("widen: stats lost", st.lost, 1)
   t.ok("widen: stats dropped some while starved", st.dropped > 0)
 
-  // A probe under 5 ms contradicts the remote hint: it starts at 30, not 15.
+  // A probe under 5 ms contradicts the remote hint: it starts local, at 60, not 15.
   const nearOpts = new RateOptions()
   nearOpts.remoteHint = true
   nearOpts.probeRttMs = 2.0
-  t.eqStr("probe: a local probe overrides the hint", keyOf(new RateController(nearOpts).decision()), "30fps /1 full")
+  t.eqStr("probe: a local probe overrides the hint", keyOf(new RateController(nearOpts).decision()), "60fps /1 full")
+  // A probe of 5 ms or more, with no remote hint, starts halfway: at 30.
+  const slowProbe = new RateOptions()
+  slowProbe.probeRttMs = 8.0
+  t.eqStr("probe: a slow local probe starts at 30", keyOf(new RateController(slowProbe).decision()), "30fps /1 full")
 
   // NISH_FPS, read by the caller into `envFps`, beats the program's fixed rate.
   const envOpts = new RateOptions()
@@ -525,7 +531,7 @@ export const main = (): i32 => {
   stray.tick(laterMs)
   t.eqF64("stray: no round trip", stray.stats().rttMs, noRtt)
   t.eqI32("stray: nothing in flight", stray.unacked(), 0)
-  t.eqStr("stray: no decision moved", keyOf(stray.decision()), "30fps /1 full")
+  t.eqStr("stray: no decision moved", keyOf(stray.decision()), "60fps /1 full")
 
   // A terminal that never answers: each frame is given up after the timeout and counted lost, so drawing goes on.
   const muteLink = new Link(1.0, 50000000.0)

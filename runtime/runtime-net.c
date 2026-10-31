@@ -30,20 +30,21 @@
  * (`EAFNOSUPPORT`, as in many containers) `::` falls back to IPv4's
  * `0.0.0.0`.
  *
- * Linux and Darwin differ in six places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
+ * Linux and Darwin differ in seven places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
  * `accept4` against a `socket` or `accept` followed by `fcntl`, `MSG_NOSIGNAL`
  * against the `SO_NOSIGPIPE` socket option (a write to a gone peer is -32 on
  * both, never SIGPIPE), the errno numbers, UDP's segmentation offload
  * (`UDP_SEGMENT`, `UDP_GRO`) and ECN marks, which Linux has and for which
  * Darwin answers -95, and the readiness loop, which is epoll on Linux and
- * kqueue on Darwin, and `TCP_QUICKACK`, which only Linux has (-95 on
- * Darwin). Only the sending side and the GRO bind say -95 there: a
+ * kqueue on Darwin, `TCP_QUICKACK`, which only Linux has (-95 on
+ * Darwin), and the MSS, which `netMss` reads from Linux's `TCP_INFO` and from
+ * `TCP_MAXSEG` on Darwin. Only the sending side and the GRO bind say -95 there: a
  * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
  * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
  * rows and run by its `runtime-net (macos-latest)` job: tests/runtime-test.c and
  * the `net_` sections of tests/run.js, on a mac. A WASI build has none of this (the checker refuses
- * every `nish:net` call under a wasm target), so there the file is empty.
+ * every `nish:net` call on wasm but `netMss`, folded to -1), so the file is empty.
  */
 #if defined(__wasi__) || defined(__wasm__)
 /* ISO C wants at least one declaration in a translation unit. */
@@ -58,6 +59,7 @@ typedef int nish_net_unused;
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -422,6 +424,35 @@ int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value) {
     return -22;
   }
   return setsockopt(fd, level, name, &value, sizeof value) != 0 ? nish_net_fail() : 0;
+}
+
+/* `netMss(fd)`: the segment size a connected TCP socket sends, the bytes of
+   payload one packet carries, or a plain -1 when there is none to read: not
+   an errno, because "no MSS" is one answer whatever the reason. A socket
+   with no peer is -1 first, as a fresh one answers the default 536 to both
+   options below. Linux's `TCP_INFO` answers the current `tcpi_snd_mss`; the
+   kernel copies at most the struct it has and says how much, so an answer
+   too short to reach the field is not read. `TCP_MAXSEG` is the fallback,
+   and Darwin's only reading. */
+int32_t nish_net_mss(int32_t fd) {
+  struct sockaddr_storage peer;
+  socklen_t len = sizeof peer;
+  if (getpeername(fd, (struct sockaddr *)&peer, &len) != 0) return -1;
+#if defined(TCP_INFO) && defined(__linux__)
+  struct tcp_info info;
+  memset(&info, 0, sizeof info);
+  len = sizeof info;
+  if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &info, &len) == 0 &&
+      len >= offsetof(struct tcp_info, tcpi_snd_mss) + sizeof info.tcpi_snd_mss &&
+      info.tcpi_snd_mss > 0 && info.tcpi_snd_mss <= INT32_MAX)
+    return (int32_t)info.tcpi_snd_mss;
+#endif
+#if defined(TCP_MAXSEG)
+  int mss = 0;
+  len = sizeof mss;
+  if (getsockopt(fd, IPPROTO_TCP, TCP_MAXSEG, &mss, &len) == 0 && len == sizeof mss && mss > 0) return mss;
+#endif
+  return -1;
 }
 
 /* `udpBind(host, port, flags)`: a datagram socket, non-blocking and

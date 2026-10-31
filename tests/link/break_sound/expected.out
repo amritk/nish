@@ -1,0 +1,39 @@
+PASS  every sound is under a second
+PASS  every sound is heard
+PASS  no sound clips
+PASS  a paddle knock is 70 ms
+PASS  an id past the last is the top break pitch
+PASS  a negative id still answers samples
+PASS  a header of 44 bytes and two a sample
+PASS  RIFF
+PASS  the RIFF size is the file less 8
+PASS  WAVE
+PASS  fmt
+PASS  PCM
+PASS  one channel
+PASS  22050 Hz
+PASS  bytes a second
+PASS  16 bits
+PASS  data
+PASS  the data size
+PASS  silence is 0
+PASS  1.0 is the top
+PASS  -1.0 is the bottom but one
+PASS  past 1.0 clips to the top
+PASS  -0.5 rounds half up, as Math.round does
+PASS  no samples is a header alone
+PASS  no player, no sound
+PASS  and no player's name
+PASS  playing without a player starts nothing
+PASS  closing with nothing written is a no-op
+PASS  a player and a directory are ready
+PASS  the player's name
+PASS  a sound starts
+PASS  the same sound 40 ms later waits
+PASS  70 ms later it starts again
+PASS  a minor sound 5 ms after another waits
+PASS  a major sound does not
+PASS  a minor sound 24 ms after the last starts
+PASS  ids out of range start nothing
+PASS  the clear starts
+break-sound: 38 passed, 0 failed, 0 skipped
