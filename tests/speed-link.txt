@@ -38,6 +38,7 @@ crypto_bcrypt_batch  tests/wipes counts its wipes after -O2
 crypto_ed25519  the ed25519Reduce wipes survive opt -O2
 crypto_held_derive  tests/wipes counts its wipes after -O2
 crypto_hkdf_wycheproof  tests/wipes counts its wipes after -O2
+crypto_jwt  tests/wipes counts its wipes after -O2
 crypto_p256  tests/wipes and the p256ScalarInverse wipes survive opt -O2
 crypto_p256_ecdh  tests/wipes counts its wipes after -O2
 net_quic_server_wipes  tests/wipes counts its wipes after -O2
