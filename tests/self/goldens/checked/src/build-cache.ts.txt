@@ -5,6 +5,7 @@ import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
 import dirname from "./paths" -> function @dirname
 import runCacheRoot from "./run-cache" -> function @runCacheRoot
+import sha256Hex from "./run-cache" -> function @sha256Hex
 import StringBuilder from "./strings" -> struct StringBuilder
 function moduleCacheRoot(): string -> @moduleCacheRoot [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -15,9 +16,9 @@ function moduleCacheRoot(): string -> @moduleCacheRoot [exported]
   callee +0:16 runCacheRoot -> @runCacheRoot
   callee +1:38 dirname -> @dirname
 function moduleCacheKey(recipe: string, stem: string, ir: string): string -> @moduleCacheKey [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: ir recipe
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_str_concat nish_str_from_i32
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_str_concat nish_str_from_i32 sha256Hex
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
@@ -27,4 +28,5 @@ function moduleCacheKey(recipe: string, stem: string, ir: string): string -> @mo
   callee +4:3 StringBuilder.add -> @StringBuilder.add
   callee +5:3 StringBuilder.add -> @StringBuilder.add
   callee +6:3 StringBuilder.add -> @StringBuilder.add
+  callee +6:30 sha256Hex -> @sha256Hex
   callee +7:10 StringBuilder.toText -> @StringBuilder.toText
