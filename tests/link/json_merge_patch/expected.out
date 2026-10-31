@@ -1,0 +1,13 @@
+PASS  an empty patch: decodes
+PASS  an empty patch: changes nothing
+PASS  values: replace their members
+PASS  a key left out: keeps its member, though the last patch gave it
+PASS  an object: merges into a member the target lacked
+PASS  an object: merges one level down, keeping what it leaves out
+PASS  an array: is replaced whole
+PASS  null: removes a string, a class, an array and a map
+PASS  null on a member that is not `| null`: refuses the patch
+PASS  null on a member that is not `| null`: and nothing of it is applied
+PASS  after a refusal: the next patch decodes
+PASS  after a refusal: only its own key is recorded
+json_merge_patch: 12 passed, 0 failed, 0 skipped

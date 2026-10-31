@@ -14,9 +14,10 @@
 //     the route reaches: `T` itself, a nested class, an array's element and a
 //     `| null` field's class alike, so the rule covers each way in;
 //   - `noteJsonOptions` and `checkJsonOptions` read a class's
-//     `static readonly json = { rename: { ... }, optional: [ ... ] }` once its
-//     fields are collected, and write what it says into each field
-//     (`FieldInfo.wireName`, `jsonOptional`), which is all the emitter reads;
+//     `static readonly json = { rename: { ... }, optional: [ ... ],
+//     presence: { ... } }` once its fields are collected, and write what it
+//     says into each field (`FieldInfo.wireName`, `jsonOptional`,
+//     `jsonPresence`, `jsonOffWire`), which is all the emitter reads;
 //   - `jsonRouteCallees` is everything the written code calls, which the
 //     attribute pass counts as the instance's callees (`markJsonRoute`) and
 //     the checker declares in the calling module (`noteJsonRoute` in
@@ -219,7 +220,8 @@ const jsonNotLiteral = (ctx: CheckContext, info: StructInfo, node: Node, where: 
   ctx.error(
     node,
     `\`${info.name}.${JSON_OPTIONS}\`${where} is not written as a literal: typed JSON reads a class's options from its text when it writes the class's code, ` +
-      "so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals"
+      "so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals, " +
+      "and `presence` an object literal of string literals"
   )
 }
 
@@ -333,10 +335,88 @@ const jsonReadOptional = (ctx: CheckContext, info: StructInfo, value: Node): voi
   }
 }
 
+/** A presence field misused: NL2585's words after the detail. */
+const jsonPresenceMisuse = (ctx: CheckContext, info: StructInfo, node: Node, detail: string): void => {
+  ctx.error(
+    node,
+    `\`${info.name}.${JSON_OPTIONS}\`'s \`presence\` ${detail}: a presence field is a \`boolean\` that is not \`readonly\` ` +
+      "and records whether one other field's key was given; it is off the wire, so no option renames it, makes it optional or records it"
+  )
+}
+
+/**
+ * `presence: { field: "hasField", ... }`: for each field, the `boolean` field
+ * a decoding sets to whether its key was given. The presence field leaves the
+ * wire: neither route reads or writes it.
+ */
+const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): void => {
+  if (value.kind !== N_OBJECT) {
+    jsonNotLiteral(ctx, info, value, "'s `presence`")
+    return
+  }
+  for (const prop of value.children) {
+    if (ctx.errored) {
+      return
+    }
+    // A spread and a computed key were refused by Phase 0 (NL1061, NL1041).
+    if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
+      continue
+    }
+    const to = prop.children[0]
+    if (!jsonIsStringLiteral(to)) {
+      jsonNotLiteral(ctx, info, to, `'s \`presence.${prop.text}\``)
+      return
+    }
+    const field = jsonOptionField(ctx, info, prop, "presence", prop.text)
+    if (field === null) {
+      return
+    }
+    const flag = jsonOptionField(ctx, info, to, "presence", jsonStringLiteral(to))
+    if (flag === null) {
+      return
+    }
+    if (field.jsonPresence !== null) {
+      jsonPresenceMisuse(ctx, info, prop, `records \`${field.name}\` twice`)
+      return
+    }
+    if (flag.jsonOffWire) {
+      jsonPresenceMisuse(ctx, info, to, `gives \`${flag.name}\` to two fields`)
+      return
+    }
+    if (flag === field) {
+      jsonPresenceMisuse(ctx, info, to, `gives \`${field.name}\` itself as its presence field`)
+      return
+    }
+    if (field.jsonOffWire) {
+      jsonPresenceMisuse(ctx, info, prop, `records \`${field.name}\`, which is a presence field`)
+      return
+    }
+    if (flag.jsonPresence !== null) {
+      jsonPresenceMisuse(ctx, info, to, `gives \`${field.name}\` the field \`${flag.name}\`, which is recorded itself`)
+      return
+    }
+    if (flag.type !== T_BOOL) {
+      jsonPresenceMisuse(
+        ctx,
+        info,
+        to,
+        `gives \`${field.name}\` the field \`${flag.name}\`, which is \`${ctx.table.typeName(flag.type)}\``
+      )
+      return
+    }
+    if (flag.readonly) {
+      jsonPresenceMisuse(ctx, info, to, `gives \`${field.name}\` the field \`${flag.name}\`, which is \`readonly\``)
+      return
+    }
+    field.jsonPresence = flag
+    flag.jsonOffWire = true
+  }
+}
+
 /**
  * Read the class's `static readonly json`, now that its fields are known, and
- * write what it says into them: a renamed field's `wireName`, and an optional
- * field's `jsonOptional`. Every misuse is refused here, with the class, so a
+ * write what it says into them: a renamed field's `wireName`, an optional
+ * field's `jsonOptional`, and a recorded field's `jsonPresence`. Every misuse is refused here, with the class, so a
  * class that no call decodes is held to the same rule as one that is.
  * `nish/json-typed`'s own `JsonNumber` is marked here too.
  */
@@ -371,11 +451,11 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
       continue
     }
     const option = prop.text
-    if (option !== "rename" && option !== "optional") {
+    if (option !== "rename" && option !== "optional" && option !== "presence") {
       // The words after the option's name are NL2494's.
       ctx.error(
         prop,
-        `\`${info.name}.${JSON_OPTIONS}\` has no option \`${option}\`: typed JSON's options are \`rename\` and \`optional\``
+        `\`${info.name}.${JSON_OPTIONS}\` has no option \`${option}\`: typed JSON's options are \`rename\` and \`optional\`, and \`presence\``
       )
       return
     }
@@ -385,21 +465,32 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
     }
     if (option === "rename") {
       jsonReadRename(ctx, info, prop.children[0])
-    } else {
+    } else if (option === "optional") {
       jsonReadOptional(ctx, info, prop.children[0])
+    } else {
+      jsonReadPresence(ctx, info, prop.children[0])
     }
   }
   if (ctx.errored) {
     return
   }
+  // A presence field has no key, so the other options cannot name it; read
+  // once every option is, whichever order the literal gives them in.
+  for (const field of info.fields) {
+    if (field.jsonOffWire && (field.jsonOptional || field.wireName !== field.name)) {
+      const what = field.jsonOptional ? "make it optional" : "rename it"
+      jsonPresenceMisuse(ctx, info, decl, `names \`${field.name}\` as a presence field, and the class's options also ${what}`)
+      return
+    }
+  }
   // A key names one field: no two fields' keys may be equal, a renamed one's
   // and another's own name included.
   const keys = new StringSet()
   for (const field of info.fields) {
-    if (!keys.add(field.wireName)) {
+    if (!field.jsonOffWire && !keys.add(field.wireName)) {
       let other = ""
       for (const f of info.fields) {
-        if (other.length === 0 && f !== field && f.wireName === field.wireName) {
+        if (other.length === 0 && f !== field && !f.jsonOffWire && f.wireName === field.wireName) {
           other = f.name
         }
       }
@@ -590,6 +681,10 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
       continue
     }
     for (const field of info.fields) {
+      // A presence field is off the wire: set by a decoding, read by neither route.
+      if (field.jsonOffWire) {
+        continue
+      }
       const f = jsonFieldOf(program, table, field)
       if (f === null) {
         continue
@@ -615,6 +710,10 @@ const jsonValues = (program: CheckedProgram, table: TypeTable, root: StructInfo)
       continue
     }
     for (const field of info.fields) {
+      // A presence field is off the wire: set by a decoding, read by neither route.
+      if (field.jsonOffWire) {
+        continue
+      }
       const f = jsonFieldOf(program, table, field)
       if (f !== null) {
         jsonValuesOf(f, out)
@@ -695,6 +794,10 @@ export const jsonRefusal = (
       continue
     }
     for (const field of info.fields) {
+      // A presence field is off the wire: set by a decoding, read by neither route.
+      if (field.jsonOffWire) {
+        continue
+      }
       if (jsonFieldOf(program, table, field) === null) {
         // The words up to `| null` are NL2485's in `src/codes.ts`, and the
         // kinds added since follow them.

@@ -126,7 +126,7 @@ numbers are the platform's errno values (Linux's shown).
 | [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
-| [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
+| [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys, which keys were given, and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
 | [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML; `YamlJsonLoader` in `nish/yaml-json` to load a document into a `JsonDocument` with its ranges |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
@@ -714,6 +714,73 @@ export const main = (): i32 => {
   console.log(w.text()); // {"amount":12345678901234567890.123456789,"note":"","user_id":7}
   console.log(`${p.userId} ${p.amount.isU64()}`); // 7 false
   return code;
+};
+```
+
+An optional field whose key was left out holds the same value as one whose key
+was given its initializer. When you need to tell them apart — to apply a
+partial update, say — `presence` names, for each field you want to know
+about, a `boolean` field of the same class. Every decoding sets it to whether
+the input gave that field's key, and a key given `null` counts as given. A
+presence field has no key of its own: decoding never reads it from the input,
+encoding leaves it out, and no other option may name it. Recording a field
+allocates nothing, and a class that records none decodes exactly as fast as
+before. Read the presence fields only when `jsonDecode` answered
+`JSON_DECODE_OK`.
+
+That is what a JSON Merge Patch (RFC 7396) needs. Make the patch a class of
+its own, with every field optional and recorded, then copy across the fields
+that were given. `null` on a `| null` field removes the member. `null` on a
+field that is not `| null` fails the decode with `JSON_DECODE_TYPE`, so you
+apply nothing. An object field merges one level down by the same steps, and
+an array is replaced whole. `examples/merge-patch.ts` is the whole recipe.
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JSON_DECODE_OK, JsonDecoder, jsonDecode } from "nish/json-typed";
+
+class User {
+  name: string = "";
+  email: string | null = null;
+}
+
+class UserPatch {
+  static readonly json = {
+    optional: ["name", "email"],
+    presence: { name: "hasName", email: "hasEmail" },
+  };
+  name: string = "";
+  email: string | null = null;
+  hasName: boolean = false;
+  hasEmail: boolean = false;
+}
+
+const bytesOf = (text: string): u8[] => {
+  const out = new Array<u8>(toI32(text.length));
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(text.length); i += 1) {
+    out[i] = toU8(text.charCodeAt(i));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const user = new User();
+  user.name = "Ada";
+  user.email = "ada@example.com";
+  const body = bytesOf(`{"email":null}`);
+  const patch = new UserPatch();
+  const code = jsonDecode(new JsonDecoder(body, 0, toI32(body.length), new JsonLimits()), patch);
+  if (code !== JSON_DECODE_OK) {
+    return 1;
+  }
+  if (patch.hasName) {
+    user.name = patch.name;
+  }
+  if (patch.hasEmail) {
+    user.email = patch.email;
+  }
+  console.log(`${user.name} ${user.email === null}`); // Ada true
+  return 0;
 };
 ```
 

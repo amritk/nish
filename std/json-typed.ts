@@ -54,6 +54,40 @@
  * A map is emptied and filled in the input's order, and every map of one
  * decoding takes at most `maxMapKeys` keys between them.
  *
+ * **Which keys were given.** An optional field's missing key and a key given
+ * the field's initializer leave the same value; the `presence` option tells
+ * them apart. It names, for a field, a `boolean` field of the same class that
+ * each decoding sets to whether the input gave that field's key — true for a
+ * key given `null` too:
+ *
+ *     class UserPatch {
+ *       static readonly json = { optional: ["name", "email"], presence: { name: "hasName", email: "hasEmail" } };
+ *       name: string = "";
+ *       email: string | null = null;
+ *       hasName: boolean = false;
+ *       hasEmail: boolean = false;
+ *     }
+ *
+ * Any field can be recorded, of any kind and optional or not. A presence
+ * field is off the wire: no key reads it, encoding leaves it out, and no option
+ * renames it, makes it optional or records it. It is set when the object
+ * closes, from the flag the decoder already keeps per field to find a
+ * duplicate or a missing key, so recording costs one store per recorded field
+ * and allocates nothing, and a class that records nothing compiles to the code
+ * it did before. Each object sets its own, so a nested class or an array
+ * element answers for its own keys. When the input is not an object at all the
+ * decoding stops before the object closes and sets none of them; read them
+ * only when `jsonDecode` answered `JSON_DECODE_OK`.
+ *
+ * **A merge patch (RFC 7396)** is that option's use: a patch class whose
+ * every field is optional and recorded, decoded and then applied a field at a
+ * time — a recorded key replaces its member, `null` on a `| null` field
+ * removes it, an object field is applied the same way one level down, and an
+ * array is replaced whole. `null` on a field that is not `| null` is
+ * `JSON_DECODE_TYPE`, so a patch that removes what the type cannot lose is
+ * refused before any of it is applied. `examples/merge-patch.ts` is the
+ * recipe in full.
+ *
  * **Errors are sticky codes**, as the tokenizer's and the writer's are. The
  * first error sets `failed` to a negative code — a `JSON_DECODE_*` code here,
  * or the tokenizer's own `JSON_TOK_ERR_*` code when the text is not JSON or

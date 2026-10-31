@@ -785,9 +785,20 @@ export class FieldInfo {
   readonly: boolean
   /** Named in the class's `json.optional`: a missing key sets the field to its initializer. */
   jsonOptional: boolean
+  /**
+   * Named as a presence field in the class's `json.presence`: set by a
+   * decoding and read and written by neither route, so it has no key.
+   */
+  jsonOffWire: boolean
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null
   decl: Node
+  /**
+   * The `boolean` field the class's `json.presence` names for this one: a
+   * decoding sets it to whether the input gave this field's key. `null` when
+   * no presence field records this one.
+   */
+  jsonPresence: FieldInfo | null
   /**
    * The number of element slots an array field holds inside its object, or -1
    * for a field laid out as it always was. Decided once the whole program is
@@ -828,6 +839,8 @@ export class FieldInfo {
     this.spelling = ""
     this.wireName = name
     this.jsonOptional = false
+    this.jsonPresence = null
+    this.jsonOffWire = false
   }
 
   /** Whether the array this field holds lives inside the object (`inlineCapacity`). */
