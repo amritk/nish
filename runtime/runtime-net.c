@@ -30,7 +30,7 @@
  * (`EAFNOSUPPORT`, as in many containers) `::` falls back to IPv4's
  * `0.0.0.0`.
  *
- * Linux and Darwin differ in seven places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
+ * Linux and Darwin differ in nine places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
  * `accept4` against a `socket` or `accept` followed by `fcntl`, `MSG_NOSIGNAL`
  * against the `SO_NOSIGPIPE` socket option (a write to a gone peer is -32 on
  * both, never SIGPIPE), the errno numbers, UDP's segmentation offload
@@ -38,7 +38,12 @@
  * Darwin answers -95, and the readiness loop, which is epoll on Linux and
  * kqueue on Darwin, `TCP_QUICKACK`, which only Linux has (-95 on
  * Darwin), and the MSS, which `netMss` reads from Linux's `TCP_INFO` and from
- * `TCP_MAXSEG` on Darwin. Only the sending side and the GRO bind say -95 there: a
+ * `TCP_MAXSEG` on Darwin, a descriptor `recvFd` keeps, which Linux's
+ * `MSG_CMSG_CLOEXEC` makes close-on-exec as it arrives and Darwin marks with
+ * `fcntl` after `recvmsg` returns (the window RT-38 records), and
+ * `peerCredentials`, which reads Linux's `SO_PEERCRED` and Darwin's
+ * `getpeereid` with `LOCAL_PEERPID` (pid -1 where that refuses). Of the UDP calls, only the sending side and
+ * the GRO bind say -95 on Darwin: a
  * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
  * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
@@ -895,6 +900,157 @@ int32_t nish_unix_socket_pair(int32_t kind, nish_array *fds) {
   int32_t *out = (int32_t *)fds->data;
   out[0] = sv[0];
   out[1] = sv[1];
+  return 0;
+}
+
+/* 0 when `fd` is a Unix-domain socket, the one kind a descriptor or a
+   credential passes over; else the refusal: -88 for a descriptor that is not
+   a socket, -95 for a socket of another family, and the host's failure for a
+   descriptor that is not open (-9). Asked before the call rather than read
+   from it, because a TCP socket does not refuse `SCM_RIGHTS` as such: Linux
+   answers -22 for the control message, and `SO_PEERCRED` on one succeeds with
+   no peer behind it. */
+static int32_t nish_unix_only(int32_t fd) {
+  struct sockaddr_un s;
+  socklen_t n = sizeof s;
+  if (getsockname(fd, (struct sockaddr *)&s, &n) != 0) return nish_net_fail();
+  return s.sun_family == AF_UNIX ? 0 : -95;
+}
+
+/* The most descriptors one `recvFd` makes room for: one is kept and every
+   other is closed, so the room only decides how many the kernel installs to
+   be closed rather than drops itself (docs/security/runtime.md, RT-37). */
+#define NISH_RECV_FDS 8
+
+/* Linux marks a received descriptor close-on-exec as it arrives; Darwin has
+   no such flag, and `nish_recv_fd` marks it after (RT-38). */
+#if defined(__linux__)
+#define NISH_RECV_CLOEXEC MSG_CMSG_CLOEXEC
+#else
+#define NISH_RECV_CLOEXEC 0
+#endif
+
+/* `sendFd(sock, fd, buf, off, len)`: `len` bytes of `buf` from `off`, with
+   one `SCM_RIGHTS` copy of `fd` riding on them, and the bytes sent or the
+   failure. A descriptor travels with data, so `len` 0 is -22, and so is a
+   negative `fd`; one that is not open is the kernel's -9. Only a Unix socket
+   carries one (`nish_unix_only`). A gone peer is -32, as `netWrite`'s is.
+   The descriptor stays open here: the receiver gets its own. */
+int32_t nish_send_fd(int32_t sock, int32_t fd, const nish_array *buf, int64_t off, int64_t len) {
+  if (len == 0 || fd < 0) return -22;
+  int32_t kind = nish_unix_only(sock);
+  if (kind != 0) return kind;
+  union {
+    struct cmsghdr h;
+    char room[CMSG_SPACE(sizeof(int))];
+  } c;
+  memset(&c, 0, sizeof c);
+  struct iovec v = {buf->data + off, (size_t)len};
+  struct msghdr m;
+  memset(&m, 0, sizeof m);
+  m.msg_iov = &v;
+  m.msg_iovlen = 1;
+  m.msg_control = c.room;
+  m.msg_controllen = sizeof c.room;
+  struct cmsghdr *h = CMSG_FIRSTHDR(&m);
+  h->cmsg_level = SOL_SOCKET;
+  h->cmsg_type = SCM_RIGHTS;
+  h->cmsg_len = CMSG_LEN(sizeof(int));
+  int one = fd;
+  memcpy(CMSG_DATA(h), &one, sizeof one);
+  ssize_t n = sendmsg(sock, &m, NISH_NOSIGNAL);
+  return n < 0 ? nish_net_fail() : (int32_t)n;
+}
+
+/* `recvFd(sock, buf, off, len, fd)`: at most `len` bytes into `buf` from
+   `off`, and the bytes read (0 at end of stream) or the failure. `fd[0]` is
+   the first descriptor the message carried, or -1 when it carried none; every
+   further one is closed before the answer, so a peer cannot make this process
+   hold descriptors it never asked for (RT-37). A message carrying more than
+   NISH_RECV_FDS has the rest dropped by the kernel (`MSG_CTRUNC`), and the
+   bytes and the first descriptor are answered under the same rule. `len` 0 is
+   -22, as `sendFd`'s is, and so is an empty `fd`, both before anything is
+   read. The descriptor kept is close-on-exec: from the receive on Linux
+   (`MSG_CMSG_CLOEXEC`), and from the `fcntl` after it on Darwin, where a child
+   another thread spawns in between inherits it (RT-38). It is not made
+   non-blocking: its status flags are the open file's, which the sender
+   shares. */
+int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, nish_array *fd) {
+  if (len == 0 || fd->len < 1) return -22;
+  int32_t *out = (int32_t *)fd->data;
+  out[0] = -1;
+  int32_t kind = nish_unix_only(sock);
+  if (kind != 0) return kind;
+  union {
+    struct cmsghdr h;
+    char room[CMSG_SPACE(NISH_RECV_FDS * sizeof(int))];
+  } c;
+  struct iovec v = {buf->data + off, (size_t)len};
+  struct msghdr m;
+  memset(&m, 0, sizeof m);
+  m.msg_iov = &v;
+  m.msg_iovlen = 1;
+  m.msg_control = c.room;
+  m.msg_controllen = sizeof c.room;
+  ssize_t n = recvmsg(sock, &m, NISH_RECV_CLOEXEC);
+  if (n < 0) return nish_net_fail();
+  for (struct cmsghdr *h = CMSG_FIRSTHDR(&m); h; h = CMSG_NXTHDR(&m, h)) {
+    if (h->cmsg_level != SOL_SOCKET || h->cmsg_type != SCM_RIGHTS) continue;
+    /* Counted from the header, but never past the room the kernel filled:
+       a truncated message's last header may claim more than arrived. */
+    size_t room = (size_t)((char *)m.msg_control + m.msg_controllen - (char *)CMSG_DATA(h));
+    size_t claim = h->cmsg_len > CMSG_LEN(0) ? h->cmsg_len - CMSG_LEN(0) : 0;
+    size_t count = (claim < room ? claim : room) / sizeof(int);
+    for (size_t k = 0; k < count; k++) {
+      int got;
+      memcpy(&got, CMSG_DATA(h) + k * sizeof(int), sizeof got);
+      if (out[0] < 0) {
+#if !defined(__linux__)
+        fcntl(got, F_SETFD, FD_CLOEXEC);
+#endif
+        out[0] = got;
+      } else {
+        close(got);
+      }
+    }
+  }
+  return (int32_t)n;
+}
+
+/* `peerCredentials(fd, out)`: the process at the other end of a connected
+   Unix socket, as `out[0..2]` = pid, uid, gid, and 0; an `out` shorter than
+   three is -22 before anything is asked. The kernel recorded them when the
+   connection was made (`connect`, or `socketpair` for a pair), so a peer that
+   has since changed its uid, or passed the socket to another process, still
+   reads as it was then (RT-39). Linux reads `SO_PEERCRED`. Darwin reads uid
+   and gid from `getpeereid` and the pid from `LOCAL_PEERPID` where the SDK
+   names it, else -1. */
+int32_t nish_peer_credentials(int32_t fd, nish_array *out) {
+  if (out->len < 3) return -22;
+  int32_t kind = nish_unix_only(fd);
+  if (kind != 0) return kind;
+  int32_t *o = (int32_t *)out->data;
+#if defined(__linux__)
+  struct ucred c;
+  socklen_t n = sizeof c;
+  if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &c, &n) != 0) return nish_net_fail();
+  o[0] = (int32_t)c.pid;
+  o[1] = (int32_t)c.uid;
+  o[2] = (int32_t)c.gid;
+#else
+  uid_t uid;
+  gid_t gid;
+  if (getpeereid(fd, &uid, &gid) != 0) return nish_net_fail();
+  int32_t pid = -1;
+#if defined(LOCAL_PEERPID)
+  pid_t p;
+  socklen_t n = sizeof p;
+  if (getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &p, &n) == 0) pid = (int32_t)p;
+#endif
+  o[0] = pid;
+  o[1] = (int32_t)uid;
+  o[2] = (int32_t)gid;
+#endif
   return 0;
 }
 #endif

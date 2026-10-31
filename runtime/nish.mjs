@@ -104,9 +104,11 @@ provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
 provide("spawnPiped", shim.spawnPiped);
-// WP34 N12. `spawn` and `waitPid` throw, naming themselves: a child is reaped
-// by Node's event loop. `kill`, `availableParallelism` and `totalMemory` answer.
+// WP34 N12. `spawn`, `spawnWithFds` and `waitPid` throw, naming themselves: a
+// child is reaped by Node's event loop. `kill`, `availableParallelism` and
+// `totalMemory` answer.
 provide("spawn", shim.spawn);
+provide("spawnWithFds", shim.spawnWithFds);
 provide("kill", shim.kill);
 provide("waitPid", shim.waitPid);
 provide("availableParallelism", shim.availableParallelism);
@@ -153,6 +155,9 @@ for (const name of [
   "unixConnect",
   "unixAccept",
   "unixSocketPair",
+  "sendFd",
+  "recvFd",
+  "peerCredentials",
 ]) {
   provide(name, () => shim.noNetReading(name));
 }

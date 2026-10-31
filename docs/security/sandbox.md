@@ -217,6 +217,15 @@ recorded rather than counted.
   bounds it is the socket file's mode and its directory's, which the listener
   sets, and a program that must not reach a host's daemons should not be
   granted `net`. Not pinned by a test.
+- **A passed descriptor is not checked.** Landlock rules apply when a path
+  is opened, and `sendmsg` and `recvmsg` are not in the seccomp filter, so a
+  file another process opens and sends with `sendFd` reaches a sandboxed
+  `recvFd` usable as it was opened, whatever `fs.read` and `fs.write` grant;
+  only making the socket it arrives on needs `net`. A child started with
+  `spawnWithFds` likewise holds what its parent handed it. This is the first
+  bullet of "What the adversary keeps", now reachable from the language
+  (`docs/security/runtime.md`, RT-37 and RT-40): what bounds it is who is at
+  the other end, which `peerCredentials` names (RT-39). Not pinned by a test.
 - **Scopes are resolved at build time.** The directory is the realpath the
   compiler saw; the binary opens that path when it starts, so a directory
   renamed, removed or replaced by a symlink in between is opened as it then

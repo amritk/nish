@@ -438,6 +438,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "getpayload" ||
   name === "getpayloadf" ||
   name === "getpayloadl" ||
+  // `peerCredentials` on Darwin, which has no `SO_PEERCRED` (runtime-net.c).
+  name === "getpeereid" ||
   name === "getpeername" ||
   name === "getpid" ||
   // `setNice` reads the current nice value before it may lower it (runtime-os.c).

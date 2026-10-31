@@ -69,6 +69,16 @@ abstract name created outside it, and only from Landlock ABI 6 (below). If
 the program must not talk to the machine's daemons, do not let `main` reach
 `net`.
 
+A descriptor that arrives already open is not checked either. Landlock rules
+apply when a path is opened, so a file another process opens and passes over a
+Unix socket with `sendFd` reaches `recvFd` usable as it was opened, whatever
+`fs.read` or `fs.write` say; sending and receiving such a descriptor are not
+filtered, only making the socket is. The same holds for what a sandboxed
+parent hands a child with `spawnWithFds`: the child holds whatever the parent
+held. Treat a socket that can pass descriptors as a door into the sandbox, and
+check who is on the other end with `peerCredentials`
+([Unix sockets](unix-sockets.md#passing-a-descriptor)).
+
 A few things are refused whatever `main` reaches: attaching to, reading or
 writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
 and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
