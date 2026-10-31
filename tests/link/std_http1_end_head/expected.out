@@ -19,7 +19,7 @@ PASS  pipelined: reads as the second
 PASS  pipelined: without gzip
 PASS  pipelined: its end
 PASS  pipelined: still the second's at its end
-PASS  pipelined: the first response is whole
+PASS  pipelined: the first response is whole, its gzip body ending where its content-length says
 PASS  fed after: the first request
 PASS  fed after: its end
 PASS  fed after: the held head is still the first's

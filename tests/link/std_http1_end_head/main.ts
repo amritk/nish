@@ -34,6 +34,23 @@ const output = (conn: Http1Connection, from: i32): string => {
   return parts.join("")
 }
 
+/** The value of the first `content-length` field in a lowered head, or -1. */
+const contentLength = (text: string): i32 => {
+  const at: i32 = text.indexOf("content-length: ")
+  if (at < 0) {
+    return -1
+  }
+  let n: i32 = 0
+  for (let i: i32 = at + 16; i < text.length; i++) {
+    const c: i32 = text.charCodeAt(i)
+    if (c < 48 || c > 57) {
+      break
+    }
+    n = n * 10 + (c - 48)
+  }
+  return n
+}
+
 /** `count` bytes of JSON-shaped text, which gzip shrinks well. */
 const json = (count: i32): u8[] => {
   const parts: string[] = []
@@ -105,7 +122,13 @@ export const main = (): number => {
     t.eqI32("pipelined: without gzip", conn.acceptEncoding(), HTTP_CODING_IDENTITY)
     t.eqI32("pipelined: its end", conn.next(), H1_END)
     t.eqI32("pipelined: still the second's at its end", conn.acceptEncoding(), HTTP_CODING_IDENTITY)
-    t.ok("pipelined: the first response is whole", output(conn, conn.outputStart).startsWith("http/1.1 200 ok\r\n") && first > conn.outputStart)
+    // Its head and the content-length of gzip it names end where the first
+    // answer's output ended, before anything the second request queues.
+    const length: i32 = contentLength(sent)
+    t.ok(
+      "pipelined: the first response is whole, its gzip body ending where its content-length says",
+      sent.startsWith("http/1.1 200 ok\r\n") && length > 0 && length < 4000 && conn.outputStart + sent.indexOf("\r\n\r\n") + 4 + length === first
+    )
   }
 
   // --- Bytes fed after H1_END, before the answer --------------------------------
@@ -115,7 +138,8 @@ export const main = (): number => {
     for (let i: i32 = 0; i < 30; i++) {
       filler.push("x-pad: 01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\r\n")
     }
-    // About 6 KB more: the input buffer, 1024 bytes at first, grows and moves.
+    // About 6 KB more of the next request, fed after H1_END: the held head, in
+    // `p.head` apart from the input buffer, is left as it was.
     const more: u8[] = ascii(`ond HTTP/1.1\r\nhost: b\r\n${filler.join("")}\r\n`)
     conn.feed(more, 0, toI32(more.length))
     t.ok("fed after: the held head is still the first's", conn.parser.targetIs("/first") && conn.parser.methodIs("GET") && conn.parser.headerIs("host", "a"))
