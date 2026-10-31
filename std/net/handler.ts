@@ -79,6 +79,7 @@
  */
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
+import { httpFieldBytes } from "nish/net/http-fields"
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1"
 import {
   H1_AGAIN,
@@ -375,8 +376,6 @@ export class HttpHandler {
   queueStart: i32 = 0
   queueCount: i32 = 0
   outputSize: i32 = 0
-  /** The request `json` was last asked for, so `sendJson` can tell a writer reset under it. */
-  served: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   draining: boolean = false
 
@@ -410,14 +409,16 @@ export class HttpHandler {
     this.scratch = new Array<u8>(limits.jsonBytes)
     this.writer = new JsonWriter(this.scratch, HANDLER_ZERO)
     this.probe = new Array<i32>(2 * router.maxParams + 2)
-    this.typeName = [handlerBytes("content-type")]
-    this.typeValue = [handlerBytes("text/plain")]
-    this.allowNames = [handlerBytes("content-type"), handlerBytes("allow")]
-    this.allowValues = [handlerBytes("application/problem+json"), handlerBytes("")]
+    this.jsonType = httpFieldBytes("application/json")
+    this.problemType = httpFieldBytes("application/problem+json")
+    const contentType: u8[] = httpFieldBytes("content-type")
+    this.typeName = [contentType]
+    this.typeValue = [this.jsonType]
+    this.allowNames = [contentType, httpFieldBytes("allow")]
+    // The `Allow` value, `allowValues[1]`, is set for each 405.
+    this.allowValues = [this.problemType, this.problemType]
     this.allowMasks = []
     this.allowBytes = []
-    this.jsonType = handlerBytes("application/json")
-    this.problemType = handlerBytes("application/problem+json")
     this.noFields = []
     this.loop = pollCreate()
     if (this.loop < 0) {
@@ -1018,16 +1019,7 @@ export class HttpHandler {
     if (!this.writer.complete()) {
       return this.problem(r, toI32(500), "Internal Server Error", "the response did not fit its buffer")
     }
-    this.typeValue[0] = this.jsonType
-    return this.sendFields(
-      r,
-      status,
-      this.typeName,
-      this.typeValue,
-      this.scratch,
-      HANDLER_ZERO,
-      this.writer.end
-    )
+    return this.send(r, status, this.jsonType, this.scratch, HANDLER_ZERO, this.writer.end)
   }
 
   /**
@@ -1039,8 +1031,7 @@ export class HttpHandler {
    */
   problem(r: HttpRequest, status: i32, title: string, detail: string): i32 {
     const length: i32 = this.writeProblem(status, title, detail)
-    this.typeValue[0] = this.problemType
-    return this.sendFields(r, status, this.typeName, this.typeValue, this.scratch, HANDLER_ZERO, length)
+    return this.send(r, status, this.problemType, this.scratch, HANDLER_ZERO, length)
   }
 
   /** Writes a problem object into the scratch buffer and answers its length. */
@@ -1108,39 +1099,22 @@ export class HttpHandler {
         return this.allowBytes[k]
       }
     }
-    let length: i32 = 0
+    const value: u8[] = []
     for (let m: i32 = 0; m < methods && m < 31; m++) {
       if ((mask & (1 << m)) !== 0) {
-        length += (length > 0 ? toI32(2) : HANDLER_ZERO) + router.methodEnd[m] - router.methodStart[m]
-      }
-    }
-    const value: u8[] = new Array<u8>(length)
-    let at: i32 = 0
-    for (let m: i32 = 0; m < methods && m < 31; m++) {
-      if ((mask & (1 << m)) !== 0) {
-        if (at > 0 && at + 1 < toI32(value.length)) {
-          value[at] = toU8(44)
-          value[at + 1] = toU8(32)
-          at += 2
+        if (value.length > 0) {
+          value.push(toU8(44))
+          value.push(toU8(32))
         }
-        const n: i32 = router.methodEnd[m] - router.methodStart[m]
-        copyBytes(value, at, router.methodBytes, router.methodStart[m], n)
-        at += n
+        for (let k: i32 = router.methodStart[m]; k < router.methodEnd[m]; k++) {
+          value.push(router.methodBytes[k])
+        }
       }
     }
     this.allowMasks.push(mask)
     this.allowBytes.push(value)
     return value
   }
-}
-
-/** The bytes of `s`, which is ASCII. */
-const handlerBytes = (s: string): u8[] => {
-  const out: u8[] = new Array<u8>(s.length)
-  for (let k: i32 = 0; k < toI32(s.length) && k < toI32(out.length); k++) {
-    out[k] = toU8(s.charCodeAt(k))
-  }
-  return out
 }
 
 /** A buffer size of at least `need`: `have` doubled until it is, starting from 64. */
