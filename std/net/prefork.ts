@@ -430,18 +430,18 @@ class PreforkSupervisor {
       this.running = this.running - 1
       slot.pid = 0
       this.closeChannel(slot)
-      const now: i64 = preforkNowMs()
       if (!this.config.restart) {
         slot.gone = true
-      } else if (stopping) {
-        // Nothing starts again.
-      } else if (this.cascading) {
-        // Stopped with its group, so it waits only on the group.
-        slot.at = now
-      } else {
-        this.backoff(slot, now, false)
-        if (this.service >= 0) {
-          this.cascade(now)
+      } else if (!stopping) {
+        const now: i64 = preforkNowMs()
+        if (this.cascading) {
+          // Stopped with its group, so it waits only on the group.
+          slot.at = now
+        } else {
+          this.backoff(slot, now, false)
+          if (this.service >= 0) {
+            this.cascade(now)
+          }
         }
       }
     }
@@ -465,8 +465,11 @@ class PreforkSupervisor {
 
   /** SIGKILL a stopping group that outlived `graceMs`, again each `graceMs`. */
   escalate(): void {
+    if (!this.cascading || this.running <= 0) {
+      return
+    }
     const now: i64 = preforkNowMs()
-    if (this.cascading && this.running > 0 && now >= this.cascadeAt) {
+    if (now >= this.cascadeAt) {
       this.cascadeAt = now + toI64(this.config.graceMs)
       this.signal(PREFORK_SIGKILL)
     }
@@ -508,10 +511,10 @@ class PreforkSupervisor {
    * the workers it started, to be tried again whole.
    */
   restartGroup(first: boolean): boolean {
-    const now: i64 = preforkNowMs()
     if (this.running > 0) {
       return true
     }
+    const now: i64 = preforkNowMs()
     let due: i64 = 0
     let waiting = false
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
@@ -634,8 +637,7 @@ const preforkInvalid = (config: PreforkConfig): string => {
 }
 
 /** Read and drop what a channel holds: `preforkWith`'s callback. */
-const preforkDiscard = (_state: i32, _index: i32, fd: i32, _events: i32): void => {
-  const buf: u8[] = new Array<u8>(512)
+const preforkDiscard = (buf: u8[], _index: i32, fd: i32, _events: i32): void => {
   while (netRead(fd, buf, 0, buf.length) > 0) {
     // Dropped.
   }
@@ -652,8 +654,8 @@ const preforkDiscard = (_state: i32, _index: i32, fd: i32, _events: i32): void =
  * dropped; `preforkSupervise` hands them to the program.
  */
 export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
-  const none: i32 = 0
-  return preforkSupervise(args, config, none, preforkDiscard)
+  const buf: u8[] = new Array<u8>(512)
+  return preforkSupervise(args, config, buf, preforkDiscard)
 }
 
 /**

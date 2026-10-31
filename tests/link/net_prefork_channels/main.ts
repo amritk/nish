@@ -276,20 +276,15 @@ const hold = (port: i32): number => {
   return 0;
 };
 
-/** What a supervisor's callback needs: where the driver listens. */
-class Hub {
-  port: i32 = 0;
-}
-
 /**
  * Tell the driver how many descriptors this process holds, then answer the
  * greeting with "a": in that order, so the count reaches the driver before the
  * worker's report does.
  */
-const greet = (hub: Hub, index: i32, fd: i32, events: i32): void => {
+const greet = (port: i32, _index: i32, fd: i32, _events: i32): void => {
   const buf: u8[] = new Array<u8>(64);
   while (netRead(fd, buf, 0, 64) > 0) {
-    tell(hub.port, `s ${fdCount()}`);
+    tell(port, `s ${fdCount()}`);
     say(fd, "a");
   }
 };
@@ -311,9 +306,7 @@ const supervise = (mode: string, port: i32): number => {
   if (preforkIndex(argv) < 0) {
     argv.push(`${selfPid()}`);
   }
-  const hub = new Hub();
-  hub.port = port;
-  const index = toSupervisor(mode) ? preforkSupervise(argv, config, hub, greet) : preforkWith(argv, config);
+  const index = toSupervisor(mode) ? preforkSupervise(argv, config, port, greet) : preforkWith(argv, config);
   if (index < 0) {
     return index === -1 ? 0 : 1;
   }
