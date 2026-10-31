@@ -3799,11 +3799,26 @@ function StagedModules.constructor(this: StagedModules, dir: string): void -> @S
   escaping: dir
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function stageModule(staged: StagedModules, copy: string[], cacheRoot: string, recipe: string, output: string, ir: string): void -> @stageModule
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: ir output recipe
+  calls: basenameWithout moduleCacheKey nish_array_grow nish_read_file_or_null nish_str_concat nish_str_eq sha256Hex
+  pointer staged: size=32 writesThrough=false captured=false
+  pointer copy: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:9 stem: string (const)
+  callee -5:16 basenameWithout -> @basenameWithout
+  local -4:9 key: string (const)
+  callee -4:15 moduleCacheKey -> @moduleCacheKey
+  local -3:9 entry: string (const)
+  callee -3:33 sha256Hex -> @sha256Hex
+  local -2:9 stored: string | null (const)
 function stageModules(outputs: string[], irs: string[], recipe: string): StagedModules | null -> @stageModules
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via moduleCacheRoot
   escaping: recipe
-  calls: StagedModules.constructor basenameWithout dirname distrustOf makeDirectory moduleCacheKey moduleCacheRoot nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn_to nish_str_concat nish_str_eq sha256Hex
+  calls: StagedModules.constructor dirname distrustOf makeDirectory moduleCacheRoot nish_alloc_struct nish_array_grow nish_panic_index nish_spawn_to nish_str_concat stageModule
   pointer outputs: size=0 writesThrough=true captured=false
   pointer irs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -3817,13 +3832,7 @@ function stageModules(outputs: string[], irs: string[], recipe: string): StagedM
   callee +11:36 dirname -> @dirname
   local +12:9 copy: string[] (const)
   local +13:7 i: i32 (let)
-  local +15:11 stem: string (const)
-  callee +15:18 basenameWithout -> @basenameWithout
-  local +16:11 key: string (const)
-  callee +16:17 moduleCacheKey -> @moduleCacheKey
-  local +17:11 entry: string (const)
-  callee +17:35 sha256Hex -> @sha256Hex
-  local +18:11 stored: string | null (const)
+  callee +15:5 stageModule -> @stageModule
 function keepModules(staged: StagedModules): void -> @keepModules
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectory
