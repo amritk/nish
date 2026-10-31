@@ -100,7 +100,9 @@ export const sortWith = <T>(xs: T[], cmp: (a: T, b: T) => number): T[] => {
     inTmp = !inTmp
   }
   if (inTmp) {
-    xs.set(tmp)
+    for (let k: i32 = 0; k < n && k < toI32(xs.length) && k < toI32(tmp.length); k++) {
+      xs[k] = tmp[k]
+    }
   }
   return xs
 }

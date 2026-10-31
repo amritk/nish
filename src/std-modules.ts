@@ -217,6 +217,10 @@ export const SORT_SPECIFIER: string = "nish/sort"
 /** The local name `sortWith` is imported under: dotted, so no declaration can take it. */
 export const SORT_LOCAL: string = "Array.prototype.sort"
 
+/** Whether `name` in `packageName` is `std/sort.ts`, which is copied into its user like `std/math.ts`. */
+export const isSortModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(SORT_SPECIFIER)
+
 /** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isSecretModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(SECRET_STD_SPECIFIER)
