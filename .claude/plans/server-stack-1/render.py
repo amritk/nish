@@ -38,6 +38,7 @@ def render(sid, base):
     src_dod = "and because you change src/: `WASI_SYSROOT=/usr node tests/run.js wasi` (read its skip line) and `node tests/run.js performance`" if s["src"] else "and if you change src/ or add a builtin: `WASI_SYSROOT=/usr node tests/run.js wasi` (read its skip line) and `node tests/run.js performance`"
     todos="\n".join("- "+t for t in s["todos"])
     extra=("\n"+s["extra"]) if s["extra"] else ""
+    extra+="\nIf you add a new std/ module, register it in src/std-modules.ts (the std module list) and in the std-module presence gates of .github/workflows/release.yml — one entry each, nothing else; those two are shared append-only for every stage that adds a module (see the plan's Shared files table)."
     return f"""{pre}
 
 {stage}

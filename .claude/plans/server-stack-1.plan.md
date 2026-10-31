@@ -161,6 +161,7 @@ Where several stages must touch one file, it is listed here. Each is **append-on
 | `docs/LANGUAGE.md` | s7 ("Typed JSON"), s12 ("A dependency's capabilities") | each edits only its own section |
 | `docs/guide/using-nish/cli.md` | s3, then s4 (serial) | |
 | `THIRD_PARTY_NOTICES.md` | any stage that copies code | |
+| `src/std-modules.ts` (the std module list), `.github/workflows/release.yml` (the std-module presence gates only) | every stage that adds a new `std/` module (s1, s5, s7, s8, s10, s11) | one entry per new module, nothing else; required by the self-hosting section, found by s1 |
 | `tests/wipes/crypto.js` | s8, s10 | one entry per wiped `Secret` |
 | `tests/fuzz/targets/*`, `tests/fuzz/harness.c` | s8 (new target), s11 if it adds one | a new target file each |
 | `src/runtime.ts`, `runtime/nish.h`, `runtime/nish.d.ts` | any stage that needs a new builtin | declarations only; a stage that adds a builtin also runs the wasi and performance runs |
