@@ -4050,7 +4050,8 @@ export const pgTarget = (host: string, port: i32): PgTarget => {
 }
 
 /** `text[start, end)` percent-decoded, or null for a `%` without two hex digits after it, `%00`, or bytes that are not UTF-8. */
-const pgDecoded = (text: string, start: i32, end: i32): string | null => urlDecode(text.substring(start, end), 0)
+const pgDecoded = (text: string, start: i32, end: i32): string | null =>
+  urlDecode(text.substring(start, end), 0)
 
 /** The port `text` spells, 1 to 5 decimal digits naming 1 to 65535, or -1. */
 const pgPortValue = (text: string): i32 => {

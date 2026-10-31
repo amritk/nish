@@ -2344,7 +2344,7 @@ function pgDecoded(text: string, start: i32, end: i32): string | null -> @nish.p
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.urlDecode nish_str_new
   stackSites=0 stackLocals=0
-  callee +0:74 urlDecode -> @nish.urlDecode
+  callee +0:3 urlDecode -> @nish.urlDecode
 function pgPortValue(text: string): i32 -> @nish.pgPortValue
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
