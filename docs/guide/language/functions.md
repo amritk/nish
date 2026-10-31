@@ -120,15 +120,45 @@ pointer and nothing to allocate at run time. That decides the rules:
 
 - **The parameter can only be called, or passed on** to another function
   parameter.
-- **An arrow captures nothing.** It sees its own parameters and top-level
-  names, never a local of the function it is written in. Pass the value in
-  as another argument instead:
+- **An arrow may read the `const` locals and the parameters of the function
+  it is written in.** The compiler hands each one to the copy as one more
+  argument, so it is still a direct call with nothing allocated. A captured
+  array or object may be written through (`hits.push(x)`), because the arrow
+  runs during the call, on the same thread:
 
-```ts nish:err NL2335
+```ts nish:ok
+const each = (xs: i32[], f: (x: i32) => void): void => {
+  for (const x of xs) {
+    f(x);
+  }
+};
+
+export const main = (): i32 => {
+  const limit = 3;
+  const hits: i32[] = [];
+  each([1, 5, 2, 7], (x) => {
+    if (x > limit) {
+      hits.push(x);
+    }
+  });
+  console.log(`${hits.length}`);   // 2
+  return 0;
+};
+```
+
+- **What it captures is read, never reassigned**, and it may not read a
+  `let`, which could change before the arrow runs; bind it to a `const`
+  first (`nish --fix` does). It may not read `this` (bind `const self = this`),
+  or the function's own function parameters. An arrow inside another arrow
+  reads only its own parameters, and an arrow given to a method or a
+  constructor, or to `expose`, captures nothing:
+
+```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
 export const main = (): i32 => {
-  const k = 3;
+  let k = 3;
+  k = k + 1;
   return apply((x) => x + k, 1);
 };
 ```

@@ -48,7 +48,7 @@ export const secret = <T>(value: T): Secret<T> => new Secret<T>(value)
 /** `f(value)`: the one way to compute with what a `Secret` holds. */
 export const expose = <T, R>(s: Secret<T>, f: (value: T) => R): R => f(s.value)
 
-/** `f(value, arg)`: `expose` with one more argument, because an arrow captures nothing. */
+/** `f(value, arg)`: `expose` with one more argument, because the arrow `expose` runs captures nothing. */
 export const exposeWith = <T, A, R>(s: Secret<T>, arg: A, f: (value: T, arg: A) => R): R => f(s.value, arg)
 
 /**

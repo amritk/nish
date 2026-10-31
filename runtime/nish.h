@@ -514,6 +514,12 @@ int32_t nish_spawn_child(const nish_array *argv);
  * copied; SIGPIPE is blocked on the calling thread for the call, a SIGPIPE the
  * call raised is consumed, and the thread's mask is restored after it. */
 int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err);
+/* `spawnWithFds(argv, fds)`: `nish_spawn_child` with the child holding
+ * `fds[i]` (element type `int32_t`) as descriptor `3 + i`, close-on-exec
+ * cleared there. More than 64 descriptors or a negative one is -EINVAL before
+ * anything starts, and a source that is not open is -EBADF; -ENOSYS under
+ * WASI. This process's descriptors are left as they were. */
+int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds);
 /* `kill(pid, sig)`: send `sig` to `pid` and answer 0, or a negative errno. Only
  * 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are sent; any other signal, and
  * a pid of 0 or below, is -EINVAL. -ESRCH when no process has the pid, -EPERM
@@ -651,6 +657,9 @@ bool nish_is_executable(const nish_str *path);
  * whitelist, by the runtime's own id (1 `TCP_NODELAY`, 2 `TCP_QUICKACK`, 3
  * `SO_KEEPALIVE`, 4 `SO_SNDBUF`, 5 `SO_RCVBUF`); any other id is -22, and
  * `TCP_QUICKACK` off Linux is -95.
+ * `nish_net_mss(fd)`: a connected TCP socket's send MSS, from `TCP_INFO`'s
+ * `tcpi_snd_mss` or else `TCP_MAXSEG`; a plain -1, never an errno, for
+ * anything else (a closed descriptor, an unconnected or non-TCP socket).
  * `nish_tcp_connect(addr)`: a new socket connecting to `addr`, answered at
  * once; its `EINPROGRESS` is not a failure, and any other closes it.
  * `nish_connect_result(fd)`: `SO_ERROR` once the socket is writable, 0 when
@@ -675,7 +684,32 @@ bool nish_is_executable(const nish_str *path);
  * into `ready` (element type `int32_t`) a token and its events, 4 added for a
  * hang-up or an error, per ready descriptor: at most `ready->len / 2` pairs
  * and at most 64 in one call. It answers the count, 0 on a timeout or an
- * interrupting signal, and -22 for a `ready` shorter than 2. */
+ * interrupting signal, and -22 for a `ready` shorter than 2.
+ *
+ * Unix-domain sockets. A `path` names a socket file, or with a leading `@`
+ * Linux's abstract namespace (-95 on Darwin); empty, holding a NUL, or a bare
+ * `@` is -22, and one too long for `sun_path` with its NUL is -36, before any
+ * socket exists. `nish_unix_listen(path, backlog, flags)` is a listening
+ * stream socket whose file has mode 0600; a path that exists is -98, unless
+ * flag 1 (`NET_UNIX_UNLINK_STALE`) unlinks a socket file nothing listens on
+ * (anything but a socket is -17, a live listener -98). `nish_unix_listen_mode`
+ * takes the mode (0..0o777, -22 for an abstract name). `nish_unix_connect(path)`
+ * connects, -11 for a full backlog on Linux (-111 on Darwin). `nish_unix_accept(fd)` takes the next
+ * connection, -11 when none waits. `nish_unix_socket_pair(kind, fds)` writes
+ * two connected sockets into `fds` (element type `int32_t`, at least 2): kind
+ * 1 a stream, kind 2 `SOCK_SEQPACKET` (-95 on Darwin). Every descriptor is
+ * non-blocking and close-on-exec.
+ *
+ * Descriptors over a Unix socket: each of the three refuses a descriptor that
+ * is not a socket with -88 and a socket of another family with -95.
+ * `nish_send_fd(sock, fd, buf, off, len)` sends `len` bytes (at least 1, else
+ * -22) carrying one `SCM_RIGHTS` copy of `fd`. `nish_recv_fd(sock, buf, off,
+ * len, fd)` reads at most `len` bytes (at least 1, and `fd` at least one
+ * `int32_t` long, else -22) and writes the first descriptor received, or -1,
+ * into `fd[0]`, closing every other; the one kept is close-on-exec and its
+ * status flags are left as the sender's. `nish_peer_credentials(fd, out)`
+ * writes the peer's pid, uid and gid as of the connect into `out` (at least
+ * 3, else -22); Darwin's pid is -1 where `LOCAL_PEERPID` is missing. */
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
@@ -686,6 +720,7 @@ int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t l
 int32_t nish_net_shutdown(int32_t fd, int32_t how);
 int32_t nish_net_close(int32_t fd);
 int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value);
+int32_t nish_net_mss(int32_t fd);
 int32_t nish_tcp_connect(const nish_array *addr);
 int32_t nish_connect_result(int32_t fd);
 int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags);
@@ -698,6 +733,14 @@ int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_modify(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_remove(int32_t loop, int32_t fd);
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
+int32_t nish_unix_listen(const nish_str *path, int32_t backlog, int32_t flags);
+int32_t nish_unix_listen_mode(const nish_str *path, int32_t backlog, int32_t flags, int32_t mode);
+int32_t nish_unix_connect(const nish_str *path);
+int32_t nish_unix_accept(int32_t fd);
+int32_t nish_unix_socket_pair(int32_t kind, nish_array *fds);
+int32_t nish_send_fd(int32_t sock, int32_t fd, const nish_array *buf, int64_t off, int64_t len);
+int32_t nish_recv_fd(int32_t sock, nish_array *buf, int64_t off, int64_t len, nish_array *fd);
+int32_t nish_peer_credentials(int32_t fd, nish_array *out);
 
 /* ---- The terminal, runtime/runtime-term.c, `nish:term` -------------------
  *
@@ -810,6 +853,13 @@ __attribute__((constructor)) static void nish_napi_unpooled(void) { nish_pool_di
  * the order they were filed. Without `-DNISH_THREADS` every task runs on the
  * calling thread, so running short of threads costs speed and never an
  * answer.
+ *
+ * `scope` points at a `ThreadScope` (std/threads.ts), whose first `int32_t` is
+ * the stack `scopeWithStack` asked for, or 0. A nonzero one runs every task on
+ * a new thread of its own started with that stack, rounded up to the page,
+ * plus a guard page, none on the calling thread; if one cannot be started the
+ * program ends, saying whether the system was out of threads or memory or
+ * refused the size (`nish_stack_fail`). Without threads the word is ignored.
  *
  * The preconditions are the language's (docs/LANGUAGE.md, "Scoped tasks"):
  * `run` writes nothing another task or the caller can see, its result is a

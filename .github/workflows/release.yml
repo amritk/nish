@@ -875,6 +875,8 @@ jobs:
     name: regenerate package-lock.json
     needs: [targets, npm]
     runs-on: ubuntu-latest
+    # The registry wait is bounded by its own step; this bounds the rest.
+    timeout-minutes: 45
     permissions:
       contents: write # push the release/lockfile-v<version> branch
       pull-requests: write # open the pull request from it and merge it
@@ -908,12 +910,20 @@ jobs:
       # published last, so seeing it means the whole publish finished.
       #
       # The `npm` job finishing is not the registry serving: a version can
-      # take a while to appear in the metadata an install reads. So each name is
-      # asked for with a bounded wait (30 tries, 10 seconds apart), and a
-      # version still missing after that fails the job rather than writing a
-      # lockfile that leaves it out. "Re-run failed jobs" retries this alone.
+      # take a while to appear in the metadata an install reads. So the names
+      # are asked for every 10 seconds against one deadline, half an hour from
+      # the start of the step and shared by every name, and a version still
+      # missing at the deadline fails the job rather than writing a lockfile
+      # that leaves it out. Each `npm view` is cut at a minute, so a hung
+      # request cannot carry the wait past the deadline; the step's own
+      # timeout is only the backstop. "Re-run failed jobs" retries this alone.
+      # The wait was five minutes until 0.28.0, whose Linux x64 package
+      # took longer than that to appear: the job failed, no lockfile pull
+      # request opened, and main stayed red until a human re-ran it. Waiting
+      # here is that re-run without the human.
       - name: The registry serves every package of this release
         if: steps.main.outputs.current == 'true'
+        timeout-minutes: 35
         env:
           ROWS: ${{ needs.targets.outputs.rows }}
         run: |
@@ -925,17 +935,15 @@ jobs:
             node --input-type=module -e "import { platformPackageName } from './bin/packaging.js'; console.log(platformPackageName(process.argv[1]))" "$asset" >> "$RUNNER_TEMP/packages.txt"
           done < <(printf '%s' "$ROWS" | jq -r '.[].asset')
           echo "$name" >> "$RUNNER_TEMP/packages.txt"
+          deadline=$(( $(date +%s) + 30 * 60 ))
           while IFS= read -r pkg; do
-            seen=""
-            for _ in $(seq 1 30); do
-              seen="$(npm view "$pkg@$version" version --prefer-online 2>/dev/null || true)"
-              [ "$seen" = "$version" ] && break
+            until [ "$(timeout 60 npm view "$pkg@$version" version --prefer-online 2>/dev/null || true)" = "$version" ]; do
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "::error::the registry does not serve $pkg@$version after 30 minutes; re-run this job once it does"
+                exit 1
+              fi
               sleep 10
             done
-            if [ "$seen" != "$version" ]; then
-              echo "::error::the registry does not serve $pkg@$version after 5 minutes; re-run this job once it does"
-              exit 1
-            fi
             echo "$pkg@$version is on the registry"
           done < "$RUNNER_TEMP/packages.txt"
 
@@ -944,15 +952,32 @@ jobs:
       # code away from a job holding a write token. `npm ls` then reads the
       # result back with no registry involved, the check ci.yml's `lint` job
       # makes, so a lockfile that still disagrees fails here and not on main.
+      #
+      # Main is fetched again first: the checkout above is from before the
+      # registry wait, which can be half an hour, and a lockfile regenerated
+      # from that checkout would undo whatever landed on main meanwhile. A main
+      # that has moved on to another version is that release's to fix, as in
+      # the first check.
       - name: Regenerate the lockfile
+        id: relock
         if: steps.main.outputs.current == 'true'
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          git fetch --no-tags --depth=1 origin main
+          git checkout --force -B main FETCH_HEAD
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$version" ]; then
+            echo "::notice::main moved on to $pkg while this job waited, so its lockfile is not this release's to regenerate"
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "current=true" >> "$GITHUB_OUTPUT"
           npm install --package-lock-only --ignore-scripts --prefer-online --no-audit --no-fund
           npm ls --package-lock-only --all > /dev/null
           git diff --stat -- package-lock.json
 
       - name: Open the lockfile pull request
-        if: steps.main.outputs.current == 'true'
+        if: steps.relock.outputs.current == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
         run: |

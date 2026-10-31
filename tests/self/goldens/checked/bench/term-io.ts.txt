@@ -2211,15 +2211,15 @@ function RateController.constructor(this: RateController, options: RateOptions):
   local +11:9 minTier: i32 (let)
   local +12:16 t: i32 (const)
   local +19:11 remote: boolean (const)
-  local +21:11 want: i32 (const)
-  local +22:9 start: i32 (let)
-  local +23:16 t: i32 (const)
-  local +28:11 floored: i32 (const)
-  callee +31:18 new FixedStep -> @nish.FixedStep.constructor
-  callee +41:48 rateFinite -> @nish.rateFinite
-  callee +70:20 new RateDecision -> @nish.RateDecision.constructor
-  callee +71:21 new TermStats -> @nish.TermStats.constructor
-  callee +72:5 RateController.publish -> @nish.RateController.publish
+  local +21:9 want: i32 (let)
+  local +27:9 start: i32 (let)
+  local +28:16 t: i32 (const)
+  local +33:11 floored: i32 (const)
+  callee +36:18 new FixedStep -> @nish.FixedStep.constructor
+  callee +46:48 rateFinite -> @nish.rateFinite
+  callee +75:20 new RateDecision -> @nish.RateDecision.constructor
+  callee +76:21 new TermStats -> @nish.TermStats.constructor
+  callee +77:5 RateController.publish -> @nish.RateController.publish
 function RateController.unacked(this: RateController): i32 -> @nish.RateController.unacked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow

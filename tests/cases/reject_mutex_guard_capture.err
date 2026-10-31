@@ -1,1 +1,1 @@
-The arrow reads `g`, which belongs to the function it is written in
+The arrow reads `g`, which is `MutexGuard<Counter>`, and an arrow argument cannot capture it: a scope, a lock, a guard or a channel is shared only by the rules of its own block

@@ -5,7 +5,9 @@ whichever of them is ready. It is a thin layer: every socket is non-blocking,
 there is no `async` and no callback, and your `main` is the loop. The protocol
 stack on top of it (TLS, HTTP/1.1, HTTP/2, HTTP/3) is in the
 [standard library](standard-library.md); this page is about the sockets
-themselves. The rules are in the reference,
+themselves, and [Unix sockets](unix-sockets.md) covers the Unix-domain
+listeners, connections and pairs, passing a descriptor over one, and naming
+the process at the other end. The rules are in the reference,
 [`nish:net`](../../LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop).
 
 Every function is also a global, as every `nish:` export is, but importing them
@@ -194,6 +196,34 @@ export const acceptOne = (listener: i32, peer: u8[]): i32 => {
 The ids are plain `i32`s you pass straight to the call. They are not module
 constants, so `const MODE = NET_TCP_QUICKACK;` at the top of a module is an
 error; write the id where you call `netSetOption`.
+
+## A connection's segment size: `netMss`
+
+`netMss(fd)` answers how many bytes of payload one TCP segment on a connected
+socket carries, the maximum segment size the kernel is sending with now. A
+program that batches writes can size each batch to whole segments. It
+answers `-1` when there is no MSS to read: a socket that is not connected yet,
+a listener, a UDP socket, a closed descriptor or one that is not a socket.
+`-1` is not an error code, so check for a positive answer and fall back to a
+size of your own:
+
+```ts nish:ok
+import { netMss } from "nish:net";
+
+// Bytes to gather before one write: four full segments, or 4096 when the
+// socket has no MSS to tell.
+export const batchSize = (conn: i32): i32 => {
+  const mss = netMss(conn);
+  return mss > 0 ? mss * 4 : 4096;
+};
+```
+
+The kernel can change the MSS during a connection, as it learns the path, so
+read it again rather than keeping the first answer. On Linux it comes from
+`TCP_INFO`, on macOS from `TCP_MAXSEG`; over loopback it is large (tens of
+kilobytes), and over Ethernet about 1,448. A wasm build, which has no sockets,
+compiles `netMss` to `-1`, so the same code builds there and takes the
+fallback.
 
 ## A server on every core: `nish/net/prefork`
 
@@ -394,5 +424,5 @@ a client against its per-address cap only from that point.
 
 A program that uses `nish:net` type-checks with `npm run check`, but it has no
 reading under Node: Node's sockets become ready only to Node's own event loop,
-which a program that owns its loop never returns to, so each call throws there.
-Run it natively.
+which a program that owns its loop never returns to, so each call throws there,
+`netMss` included. Run it natively.

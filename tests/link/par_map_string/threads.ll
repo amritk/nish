@@ -10,7 +10,9 @@
 @.str.2 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"spawn: destination index \00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c" is out of range for an array of \00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c" elements\00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"scopeWithStack: a stack of \00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [32 x i8] } { i64 31, [32 x i8] c" bytes is below the minimum of \00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare double @floor(double)
@@ -158,6 +160,31 @@ entry:
   ret %struct.ThreadScope* %1
 }
 
+define noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scopeWithStack(i32 noundef %bytes) #1 {
+entry:
+  %s.addr = alloca %struct.ThreadScope*, align 8
+  %0 = icmp slt i32 %bytes, 131072
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = call i8* @nish_str_from_i32(i32 %bytes)
+  %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [28 x i8] }* @.str.5 to i8*), i8* %1)
+  %3 = call i8* @nish_str_concat(i8* %2, i8* bitcast ({ i64, [32 x i8] }* @.str.6 to i8*))
+  %4 = call i8* @nish_str_from_i32(i32 131072)
+  %5 = call i8* @nish_str_concat(i8* %3, i8* %4)
+  call void @nish_panic(i8* %5)
+  unreachable
+
+if.end:
+  %6 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %6, %struct.ThreadScope** %s.addr, align 8
+  %7 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %8 = getelementptr inbounds %struct.ThreadScope, %struct.ThreadScope* %7, i32 0, i32 0
+  store i32 %bytes, i32* %8, align 4, !tbaa !4
+  %9 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  ret %struct.ThreadScope* %9
+}
+
 define void @nish.AtomicI32.constructor(%struct.AtomicI32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #2 {
 entry:
   %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
@@ -297,7 +324,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:
@@ -330,7 +357,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:
@@ -363,7 +390,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:
@@ -413,7 +440,7 @@ entry:
   br i1 %1, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:
@@ -473,7 +500,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:
@@ -523,7 +550,7 @@ entry:
   br i1 %1, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:
@@ -658,7 +685,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:
@@ -723,7 +750,7 @@ if.end:
   br i1 %8, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.7 to i8*))
   unreachable
 
 len.ok:

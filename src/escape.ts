@@ -98,7 +98,7 @@ import { StringSet } from "./map"
 import { Options } from "./options"
 import { chunkDstIndex, isMapEntry, isSpawnEntry } from "./parallel"
 import { CheckedProgram, elementStride, FunctionSig, ROLE_FUNCTION } from "./program"
-import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
+import { Local, STORAGE_LOCAL, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
@@ -369,6 +369,8 @@ class EscapeAnalysis {
   outcomeValues: Outcome[]
   /** The signature being analysed; WP17 reads its parameter list. */
   sig: FunctionSig
+  /** The locals an arrow argument captures (WP29), which escape. */
+  captured: Local[]
 
   constructor(
     unit: AnalysisUnit,
@@ -397,6 +399,7 @@ class EscapeAnalysis {
     this.outcomeLocals = []
     this.outcomeValues = []
     this.listing = false
+    this.captured = []
   }
 
   // ---- Collection -------------------------------------------------------------------
@@ -454,8 +457,15 @@ class EscapeAnalysis {
   visit(node: Node): void {
     const program = this.unit.program
     // WP29: an arrow argument's body belongs to the function it was lifted
-    // into, whose own walk finds its sites; nothing in it is this function's.
+    // into, whose own walk finds its sites; nothing in it is this function's
+    // but the locals it captures. An arrow given to an ordinary function
+    // parameter may store those anywhere; a data-parallel form's or a task's
+    // keeps them read-only and inside the call, by that form's rules.
     if (node.kind === N_ARROW) {
+      const lifted = program.nodeCallees[node.id]
+      if (lifted !== null && lifted.capturesForCall) {
+        this.noteCaptures(node)
+      }
       return
     }
     if (node.kind === N_IDENT) {
@@ -496,6 +506,27 @@ class EscapeAnalysis {
     for (const child of node.children) {
       this.visit(child)
     }
+  }
+
+  /** Each local of this function an arrow under `node` captures (`captured`). */
+  noteCaptures(node: Node): void {
+    const local: Local | null = node.kind === N_IDENT ? this.unit.program.nodeLocals[node.id] : null
+    const source: Local | null = local === null || local.captureOf === null ? null : sourceLocal(local)
+    if (source !== null && !this.isCaptured(source)) {
+      this.captured.push(source)
+    }
+    for (const child of node.children) {
+      this.noteCaptures(child)
+    }
+  }
+
+  isCaptured(v: Local): boolean {
+    for (const seen of this.captured) {
+      if (seen === v) {
+        return true
+      }
+    }
+    return false
   }
 
   visitNew(node: Node): void {
@@ -1231,6 +1262,11 @@ class EscapeAnalysis {
     const known = this.memoised(v)
     if (known !== null) {
       return known
+    }
+    if (this.isCaptured(v)) {
+      // Handed to an instantiation's capture parameter, which no fact
+      // describes: the arrow may keep it, so it is an escape.
+      return new Outcome(FLOW_LEAKS, false, true)
     }
     for (const seen of visiting) {
       if (seen === v) {

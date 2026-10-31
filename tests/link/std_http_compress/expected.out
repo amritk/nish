@@ -179,4 +179,47 @@ PASS  h1 none acceptable: the request is read
 PASS  h1 none acceptable: HTTP_CODING_NONE
 PASS  h1 none acceptable: respondEncoded
 PASS  h1 none acceptable: identity, with vary
-http-compress: 181 passed, 0 failed, 0 skipped
+PASS  skip: 1448 bytes fit the default segment
+PASS  skip: 1449 do not
+PASS  skip: the connection's mss wins over the compressor's
+PASS  skip: not under minLength
+PASS  skip: not for a client without gzip
+PASS  skip one: the request is read
+PASS  skip one: respondEncoded
+PASS  skip one: NO_FEWER_SEGMENTS
+PASS  skip one: sent as it is
+PASS  skip one: no vary
+PASS  skip one: and no encoder ran
+PASS  skip exact: the request is read
+PASS  skip exact: respondEncoded
+PASS  skip exact: a 709-byte response in a 709-byte segment is sent as it is
+PASS  skip exact: no encoder ran
+PASS  skip over: the request is read
+PASS  skip over: respondEncoded
+PASS  skip over: a 709-byte response in a 708-byte segment is gzipped
+PASS  skip over: in one segment
+PASS  skip over: and gunzips
+PASS  skip over: one encoder run
+PASS  skip full: the request is read
+PASS  skip full: respondEncoded
+PASS  skip full: 1448 bytes and a head are gzipped
+PASS  skip full: one encoder run more
+PASS  skip past: the request is read
+PASS  skip past: respondEncoded
+PASS  skip past: 1449 bytes are gzipped
+PASS  skip past: one encoder run more
+PASS  skip not accepted: the request is read
+PASS  skip not accepted: respondEncoded
+PASS  skip not accepted: NOT_ACCEPTED
+PASS  skip not accepted: as it is, with vary
+PASS  skip short: the request is read
+PASS  skip short: respondEncoded
+PASS  skip short: TOO_SMALL
+PASS  skip refused: the request is read
+PASS  skip refused: respondEncoded
+PASS  skip refused: gzipped
+PASS  skip refused: one encoder run more
+PASS  runs: compress at 2^31 - 1 runs
+PASS  runs: wraps to -2^31
+PASS  runs: so does compressAnyway
+http-compress: 224 passed, 0 failed, 0 skipped

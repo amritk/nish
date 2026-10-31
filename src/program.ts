@@ -110,9 +110,9 @@ export class FunctionSig {
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
   /**
-   * WP29: on an arrow passed to a data-parallel form, the locals of the
-   * function it is written in that its body reads, in the order it first
-   * reads them (docs/LANGUAGE.md, "Data parallelism"). Each is a parameter of
+   * WP29: on an arrow argument, the locals of the function it is written in
+   * that its body reads, in the order it first reads them (docs/LANGUAGE.md,
+   * "Function parameters" and "Data parallelism"). Each is a parameter of
    * the arrow too, appended to `paramNames` after the ones it wrote, so the
    * analyses read it as the parameter it is in the IR. Every instance the arrow
    * is handed to carries the same values as parameters the emitter adds
@@ -121,6 +121,14 @@ export class FunctionSig {
    */
   captures: Local[]
   captureHost: FunctionSig | null
+  /**
+   * Whether the arrow was given to an ordinary function parameter, which runs
+   * it on this thread and may write through or keep what it captures, rather
+   * than to a data-parallel form or a scope's `spawn`, whose rules keep every
+   * capture read-only and inside the call. Escape analysis and the attributes
+   * pass count only the first kind's captures as an escape.
+   */
+  capturesForCall: boolean
   /**
    * WP33 R2: the typed-array name the return type is spelled with, or `""`
    * (`annotationSpelling` in `src/arrays.ts`). It is read where the signature
@@ -220,6 +228,7 @@ export class FunctionSig {
     this.arrowCount = 0
     this.captures = []
     this.captureHost = null
+    this.capturesForCall = false
     this.returnSpelling = ""
     this.keepsLength = []
   }

@@ -971,6 +971,16 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
       `call i32 ${emitter.useRuntime("nish_spawn_piped")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${input}, ${ARRAY_STRUCT}* ${out}, ${ARRAY_STRUCT}* ${err})`
     )
   }
+  // The vector and the descriptors, left to right; the runtime only reads both.
+  if (name === "spawnWithFds") {
+    emitter.declareType(ARRAY_TYPE)
+    const args = expr.children[1].children
+    const argv = emitter.emitExpression(args[0])
+    const fds = emitter.emitExpression(args[1])
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_spawn_with_fds")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${fds})`
+    )
+  }
   if (name === "kill" || name === "waitPid") {
     const args = expr.children[1].children
     const pid = emitter.emitExpression(args[0])
@@ -1132,12 +1142,12 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
 
 /** The other half of the pair above, in the same order. */
 /**
- * A call of the `spawnSync`, `spawnSyncTo`, `spawn` or `spawnPiped` builtin (not of a user
+ * A call of the `spawnSync`, `spawnSyncTo`, `spawn`, `spawnPiped` or `spawnWithFds` builtin (not of a user
  * function that happens to be called any of them, which wins the name as every
  * identifier builtin loses it). `attributes.ts` asks, because the argument escapes into
  * the runtime: the spawn path copies each element's bytes pointer into an arena
- * vector that outlives the call. It answers for all four names, because all
- * four reach that same C.
+ * vector that outlives the call. It answers for all five names, because all
+ * five reach that same C.
  */
 export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
@@ -1145,7 +1155,13 @@ export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
     return false
   }
   const name = builtinNameOf(program, call)
-  return name === "spawnSync" || name === "spawnSyncTo" || name === "spawn" || name === "spawnPiped"
+  return (
+    name === "spawnSync" ||
+    name === "spawnSyncTo" ||
+    name === "spawn" ||
+    name === "spawnPiped" ||
+    name === "spawnWithFds"
+  )
 }
 
 export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] =>
@@ -1272,6 +1288,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "spawnPiped") {
     out.push("nish_spawn_piped")
+    return out
+  }
+  if (name === "spawnWithFds") {
+    out.push("nish_spawn_with_fds")
     return out
   }
   if (name === "kill") {
@@ -1488,6 +1508,11 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
     )
     const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
     emitSliceCheck(emitter, values[at + 1], end, size, true, "net")
+  }
+  // A wasm build has no socket to ask, so its answer is the "no MSS" `-1`,
+  // once the descriptor has been evaluated for its effects.
+  if (name === "netMss" && isWasmBuild(emitter.opts)) {
+    return "-1"
   }
   return fn.emitValue(`call i32 ${emitter.useRuntime(netSymbol(name))}(${parts.join(", ")})`)
 }

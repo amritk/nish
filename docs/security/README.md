@@ -47,13 +47,13 @@ the record that found it. The notes below the table name each such finding.
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
-| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 13 / 11 ⁴ | 0 / 0 / 0 / 0 |
+| Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 15 / 14 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
-| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 2 ⁷ |
+| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 2 ⁷ |
 | HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [http-client.md](http-client.md) | `std/net/http-client.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 2 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
@@ -115,7 +115,20 @@ the record that found it. The notes below the table name each such finding.
    (Low), `spawnPiped`'s deadlock, output cap, pipe descriptors and SIGPIPE,
    were found and fixed by the stage that added it, and are counted as
    fixed; RT-30's Darwin window is recorded in the row and is not counted.
-   RT-31, the stdin channel itself, is a decision and is not counted.
+   RT-31, the stdin channel itself, is a decision and is not counted, and so
+   is RT-32, how `netMss` reads the kernel's reply (#1094).
+   RT-33 and RT-35 (Medium) and RT-36 (Low), the Unix path copy, the socket
+   file's mode window and the error paths of the Unix-domain calls, were
+   found and fixed by the stage that added them, and are counted as fixed.
+   RT-34 (Low), the stale-socket unlink racing another binder, is counted as
+   an open Low: its boundary is the socket's directory. RT-37 (Low), the
+   descriptors `recvFd` closes and the family check, and RT-40 (Low),
+   `spawnWithFds`' self-dups and collisions, were found and fixed by the stage
+   that added descriptor passing, and are counted as fixed. RT-38 (Low), the
+   window on Darwin before a received descriptor is close-on-exec, is counted
+   as an open Low. RT-39, what `peerCredentials` reads and when, is a
+   decision and is not counted. RT-17 and RT-19 were amended there, not
+   reopened.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
@@ -326,7 +339,7 @@ takes a file in deletes its row.
 | `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1.md` names it but no Scope table does. |
 | `std/crypto/x509-random.ts` | The private key and serial `x509MintSelfSigned` needs, drawn from the OS CSPRNG; `crypto-x509.md` (X509-6) and `secret.md` cover it in their bodies, not in a Scope table. |
 | `std/net/buffer-pool.ts` | Holds no parser: it lends fixed-size buffers and zeroes what a borrower used on give-back. No record has reviewed that zeroing yet. |
-| `std/net/prefork.ts` | A supervisor over `spawn` and signals that reads no network input; its descriptor hygiene is RT-17 and RT-19 in `runtime.md`. |
+| `std/net/prefork.ts` | A supervisor over `spawn` and signals that reads no network input; its descriptor hygiene is RT-17 and RT-19 in `runtime.md`, and RT-40 covers `spawnWithFds`, which a supervisor may use to hand workers one listener instead (`prefork.ts` does not yet). |
 | `std/net/qpack.ts` | HTTP/3's field decoder, which `http3.md` audits through its callers (the refusals of a field section) but does not list in its Scope table. |
 | `std/net/tls/ticket.ts` | The session-ticket seal, open and strike register; `tls.md`'s Resumption section and its ticket-seal stage record the design and tests, but its Scope table does not list the file. |
 
@@ -347,6 +360,7 @@ only.
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
 | SHA256HW-2 | Low | `runtime/runtime-sha256.c` (`nish_sha256_compress`) | On the SHA-NI and ARMv8 SHA-256 path the state, the message words and every round's intermediates pass through vector registers, and on x86-64 seven spills of them, which no store from C or the language can wipe; the kernel keeps no buffer and writes only the new state to `h`, which HMAC wipes (K1-7). Recorded rather than reached, as AEAD-4 | — |
+| RT-38 | Low | `runtime/runtime-net.c` (`nish_recv_fd`) | On Darwin a descriptor `recvFd` keeps is made close-on-exec by an `fcntl` after `recvmsg`, so a child another thread spawns in between inherits it; Linux marks it in the receive. The window RT-30 records for pipes, recorded rather than reached | — |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | TLS-7 | Low | `std/net/tls/client.ts` | TLS 1.2 and below are refused by design (`protocol_version`, or `illegal_parameter` for the downgrade sentinel); client certificates, 0-RTT and client resumption are not offered | — |
 | TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | A handshake that fails within the `receive` that delivered the ServerHello seals its fatal alert in the clear, before the client's handshake write keys are installed | — |
