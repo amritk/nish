@@ -9620,8 +9620,8 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
 
 A grant entry may carry an **argument**, `capability=argument`, which narrows
 it: a directory for `fs.read` and `fs.write`, a program for `process.spawn`,
-a numeric host for `net`. An entry without one grants the capability whole,
-as before:
+a numeric host, or a Unix socket's absolute path, for `net`. An entry
+without one grants the capability whole, as before:
 
 ```json
 { "nish": { "capabilities": { "dependencies": {

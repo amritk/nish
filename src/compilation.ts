@@ -1533,7 +1533,8 @@ export class Compilation {
    * resolved to, or null once it is refused (NL3045 to NL3047): a directory, against
    * the root package's directory `base`, to its real path; a program, found
    * on `PATH` or as a path from `base`, to its real path; a host, checked to
-   * be the numeric address `nish:net` takes, as written.
+   * be the numeric address `nish:net` takes, or a Unix socket's absolute path
+   * for `unixConnect` and `unixListen`, as written.
    */
   grantArgument(
     source: SourceFile,
@@ -1545,12 +1546,12 @@ export class Compilation {
     base: string
   ): string | null {
     if (c === capabilityIndex("net")) {
-      if (!numericHost(arg)) {
+      if (!numericHost(arg) && !arg.startsWith("/")) {
         this.sink.report(
           source,
           at,
           end,
-          `\`${entry}\` names no numeric host: \`net\` is granted for the IPv4 or IPv6 addresses \`nish:net\` takes, one entry per address`
+          `\`${entry}\` names no numeric host: \`net\` is granted for the IPv4 or IPv6 addresses \`nish:net\` takes, or a Unix socket's absolute path, one entry per address`
         )
         return null
       }

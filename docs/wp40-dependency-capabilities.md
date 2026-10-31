@@ -64,13 +64,14 @@ may be named once per argument. When the program is built:
 | --- | --- | --- | --- |
 | `fs.read`, `fs.write` | a directory | from the root package's directory, to its real path | NL3047, when it is not a directory |
 | `process.spawn` | a program | on `PATH`, or as a path from the root package's directory, to its real path | NL3046, when nothing is found |
-| `net` | a host | kept as written: an IPv4 or IPv6 address, the form `nish:net` takes | NL3045, for a name to look up |
+| `net` | a host, or a Unix socket | kept as written: an IPv4 or IPv6 address, the form `nish:net` takes, or an absolute socket path for `unixConnect`, `unixListen` and `unixListenMode` | NL3045, for a name to look up |
 | any other | — | — | NL3048 |
 
 **At build time** (`refuseNarrowGrants`), each string literal a dependency's
 module hands a builtin that reaches the capability — `readFileSync` and its
 kin for a path, `spawnSync` and its kin for the program (an array's first
-element), `netAddress` for the host — is held to the arguments, and one
+element), `netAddress` for the host and the `unix*` calls for the socket path
+(`caps_dep_arg_unix_granted`, `caps_dep_arg_unix_too_narrow`) — is held to the arguments, and one
 outside them is NL2592, spanned at the literal. An absolute path is
 normalized and compared by its real path and its parent's; a relative path
 and a computed value are not seen.
