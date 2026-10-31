@@ -224,4 +224,31 @@ import from `bench/http-app-routes.ts` — through `HttpHandler`.
 request and response layer costs on top. A byte-identical copy of the
 carrier gives the noise band.
 
-BENCH_TABLE
+`node bench/http.mjs --rounds 5 --duration 3 carrier=… copy=… handler=…`,
+server on one CPU, `wrk -t3` on three more, in a 4-core cloud session. Each
+cell is the median of five rounds and its change against the carrier; user
+time is CPU microseconds a request.
+
+| Scenario | carrier req/s | copy (noise) | handler | carrier user µs | handler user µs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ping, c=500 | 121,983 | +17.7% | −16.4% | 1.44 | 1.61 |
+| query, c=500 | 132,807 | −26.0% | −9.5% | 1.50 | 1.64 |
+| body, c=500 | 122,351 | −43.4% | +3.6% | 2.15 | 2.23 |
+| plaintext, c=256 | 163,869 | +3.2% | −3.7% | 1.22 | 1.40 |
+| json, c=256 | 165,330 | −6.3% | −4.8% | 1.44 | 1.55 |
+| post-json, c=256 | 57,705 | +11.2% | n/a (no route) | 8.36 | n/a |
+| post-json-doc, c=256 | 50,164 | −6.4% | +12.1% | 10.17 | 8.82 |
+| deep-route, c=256 | 153,670 | −24.2% | +0.9% | 1.60 | 1.72 |
+| plaintext, c=4096 | 89,343 | +2.8% | +16.0% | 1.98 | 2.22 |
+| plaintext close, c=64 | 58,670 | +0.7% | +5.5% | 2.22 | 2.30 |
+| close, c=64 + 8000 idle | 62,118 | −2.9% | −0.3% | 2.02 | 2.37 |
+
+The copy, the same bytes as the carrier, moves −43% to +18% at c=500 and
+−6% to +11% elsewhere, so no throughput difference here is outside the noise
+band. What the handler does cost shows in user time: 0.1 to 0.35 µs a
+request more than the carrier driven by hand (the head copy, the routing
+before the body and the queue) — less on `post-json-doc`, within its own
+spread — against 4.5 to 14 µs of kernel time. Its
+peak RSS matches the carrier's or is below it in every scenario. `post-json`
+names a route the handler bench does not add, so it answers 404 and is not
+compared; `post-json-doc` covers a JSON body.
