@@ -211,6 +211,10 @@ export const jwtAlgName = (alg: i32): string => {
   return ""
 }
 
+/** Whether `alg` is one of the HS algorithms, checked with an HMAC key. */
+const jwtIsHmac = (alg: i32): boolean =>
+  alg === JWT_ALG_HS256 || alg === JWT_ALG_HS384 || alg === JWT_ALG_HS512
+
 /** The signature length `alg` gives under `key`, in bytes. */
 const jwtSignatureSize = (key: JwtKey): i32 => {
   const alg: i32 = key.alg
@@ -231,13 +235,7 @@ const jwtSignatureSize = (key: JwtKey): i32 => {
   return 64
 }
 
-const jwtCopy = (a: u8[]): u8[] => {
-  const out: u8[] = new Array<u8>(toI32(a.length))
-  for (let i: i32 = 0; i < toI32(a.length) && i < toI32(out.length); i += 1) {
-    out[i] = a[i]
-  }
-  return out
-}
+const jwtCopy = (a: u8[]): u8[] => jwtSlice(a, toI32(0), toI32(a.length))
 
 const jwtLength = (a: u8[]): i32 => toI32(a.length)
 
@@ -260,6 +258,8 @@ export class JwtKey {
   readonly alg: i32
   /** Whether `jwtSign` signs with this key. */
   readonly canSign: boolean
+  /** Whether the key is in use: `wipe()` clears it, and a wiped key signs and verifies nothing. */
+  live: boolean
 
   constructor(
     alg: i32,
@@ -275,10 +275,15 @@ export class JwtKey {
     this.pub = pub
     this.priv = secret(expose(priv, jwtCopy))
     this.canSign = canSign
+    this.live = true
   }
 
-  /** Zero the key's private copy and its HMAC pads; it neither signs nor verifies an HS token after. */
+  /**
+   * Zero the key's private copy and its HMAC pads. It neither signs nor
+   * verifies after: its zeroed secret is one anyone could hold.
+   */
   wipe(): void {
+    this.live = false
     wipe(this.priv)
     const hmac: HmacKey | null = this.hmac
     if (hmac !== null) {
@@ -642,7 +647,13 @@ export class JwtVerifier {
     const n: i32 = toI32(token.length)
     const text: u8[] = this.text
     for (let i: i32 = 0; i < n && i < toI32(text.length); i += 1) {
-      text[i] = toU8(token.charCodeAt(i))
+      const c: i32 = toI32(token.charCodeAt(i))
+      // No token character is above 0x7F; where a string holds UTF-16 code
+      // units, cutting one to its low byte could make it a base64url one.
+      if (c > 0x7f) {
+        return JWT_ERR_FORMAT
+      }
+      text[i] = toU8(c)
     }
     return this.verify(key, text, toI32(0), n, now)
   }
@@ -699,6 +710,10 @@ export class JwtVerifier {
       return JWT_ERR_SIGNATURE
     }
     const hmac: HmacKey | null = key.hmac
+    // The check follows the algorithm: an HS name with an HMAC key, any other name without one.
+    if (!key.live || jwtIsHmac(key.alg) !== (hmac !== null)) {
+      return JWT_ERR_SIGNATURE
+    }
     const good: boolean =
       hmac !== null
         ? hmacKeyedVerify(hmac, src, off, d2 - off, sig, 0)
@@ -711,7 +726,7 @@ export class JwtVerifier {
     if (claimsLen < 0) {
       return JWT_ERR_FORMAT
     }
-    return this.checkClaims(claimsLen, jwtClamp(now, toI64(0), JWT_MAX_NOW))
+    return this.checkClaims(claimsLen, jwtClamp(now, toI64(0), toI64(JWT_MAX_NOW)))
   }
 
   /** The header in `part[0 .. len)` checked against `key`'s algorithm and the verifier's `typ`. */
@@ -869,7 +884,7 @@ export class JwtVerifier {
     if (this.requireExp && !this.hasExp) {
       return JWT_ERR_CLAIMS
     }
-    const leeway: i64 = jwtClamp(this.leeway, toI64(0), JWT_MAX_LEEWAY)
+    const leeway: i64 = jwtClamp(this.leeway, toI64(0), toI64(JWT_MAX_LEEWAY))
     if (this.hasExp && !(now - leeway < this.exp)) {
       return JWT_ERR_EXPIRED
     }
@@ -982,7 +997,7 @@ const jwtBytesOf = (text: string): u8[] => {
  * neither adds nor checks any claim.
  */
 export const jwtSignKid = (key: JwtKey, kid: string | null, claims: u8[]): string | null => {
-  if (!key.canSign || !jwtIsObject(claims)) {
+  if (!key.canSign || !key.live || !jwtIsObject(claims)) {
     return null
   }
   let header: string = '{"alg":"' + jwtAlgName(key.alg) + '"'

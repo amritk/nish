@@ -923,8 +923,6 @@ const hmacMidstates512 = (out: u64[], inner: u64[], outer: u64[]): void => {
  * therefore used by one computation at a time, as a `Sha256` is.
  */
 export class HmacKey {
-  /** `HMAC_SHA256`, `HMAC_SHA384` or `HMAC_SHA512`. */
-  readonly hash: i32
   /** Words 0 to 7: the keyed inner chaining value; 8 to 15: the keyed outer one. */
   readonly pads: Secret<u64[]>
   /** SHA-256's work hashers; idle and wiped between tags. */
@@ -937,6 +935,14 @@ export class HmacKey {
    */
   readonly inner512: Sha512
   readonly outer512: Sha512
+  /** `HMAC_SHA256`, `HMAC_SHA384` or `HMAC_SHA512`. */
+  readonly hash: i32
+  /**
+   * Whether the key still MACs: `wipe()` clears it. A wiped key's chaining
+   * values are zeros anyone can resume from, so a tag under them proves
+   * nothing and none is computed.
+   */
+  live: boolean
 
   constructor(hash: i32, key: Secret<u8[]>) {
     if (hmacTagSize(hash) === 0) {
@@ -952,6 +958,7 @@ export class HmacKey {
     hmacWipeSha256(this.outer256)
     hmacWipeSha512(this.inner512)
     hmacWipeSha512(this.outer512)
+    this.live = true
   }
 
   /** The tag length in bytes: 32, 48 or 64. */
@@ -961,6 +968,7 @@ export class HmacKey {
 
   /** Zero both keyed chaining values and the work hashers; the key MACs nothing after. */
   wipe(): void {
+    this.live = false
     wipe(this.pads)
     hmacWipeSha256(this.inner256)
     hmacWipeSha256(this.outer256)
@@ -1047,6 +1055,9 @@ const hmacKeyedTag = (key: HmacKey, data: u8[], off: i32, len: i32): u8[] => {
  */
 export const hmacKeyedInto = (key: HmacKey, data: u8[], off: i32, len: i32, out: u8[], at: i32): void => {
   const size: i32 = key.size()
+  if (!key.live) {
+    panic("hmacKeyedInto: the key is wiped")
+  }
   if (!hmacWindowFits(toI32(data.length), off, len)) {
     panic("hmacKeyedInto: the message window is outside its array")
   }
@@ -1080,7 +1091,7 @@ export const hmacKeyedVerify = (
   if (!hmacWindowFits(toI32(data.length), off, len)) {
     panic("hmacKeyedVerify: the message window is outside its array")
   }
-  if (!hmacWindowFits(toI32(tag.length), tagAt, size)) {
+  if (!key.live || !hmacWindowFits(toI32(tag.length), tagAt, size)) {
     return false
   }
   using _scope = arena()

@@ -22,7 +22,7 @@ A shared secret and a private key are `Secret<u8[]>` values
 ([Secrets](../../LANGUAGE.md#secrets-nishsecret)), so the compiler keeps them
 out of logs and templates. A key copies what you hand it, so you wipe your own
 copy as soon as the key is made, and `key.wipe()` zeroes the key's copy when
-you are done with it.
+you are done with it. A wiped key signs and verifies nothing.
 
 ## Verifying a token
 
@@ -113,7 +113,8 @@ answer:
 Each of these claims may appear once. The times are whole seconds since 1970,
 and a time claim given twice, as a string or with a fraction is
 `JWT_ERR_CLAIMS`. Set `v.typ = "JWT"` (or your issuer's type, such as
-`at+jwt`) to require a header `typ` as well (`JWT_ERR_TYPE`).
+`at+jwt`) to require a header `typ` as well (`JWT_ERR_TYPE`). It is compared
+exactly, so give the spelling your issuer sends.
 
 **Each token has one spelling.** Base64url padding, whitespace, `+` and `/`,
 and a stray bit in a part's last character are refused (`JWT_ERR_FORMAT`).

@@ -98,4 +98,7 @@ PASS  jwtEcKey: a P-256 point under ES384 is refused
 PASS  jwtEd25519Key: 31 bytes are refused
 PASS  one verifier answers the same over 200 tokens
 PASS  a wiped key verifies nothing
-nish/crypto/jwt: 100 passed, 0 failed, 0 skipped
+PASS  a wiped key refuses a token forged from its zeroed pads
+PASS  a wiped key signs nothing
+PASS  a hand-built RS256 key holding an HMAC key refuses an HMAC-signed RS256 token
+nish/crypto/jwt: 103 passed, 0 failed, 0 skipped

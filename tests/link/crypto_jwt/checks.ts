@@ -9,7 +9,8 @@
 // `node:crypto` (`createHmac`, and `sign` for Ed25519) over the header and
 // claims their name describes.
 import { Suite } from "nish/testing";
-import { base64urlDecode } from "nish/crypto/base64url";
+import { base64urlDecode, base64urlEncode } from "nish/crypto/base64url";
+import { Sha256 } from "nish/crypto/sha256";
 import { HMAC_SHA256, HMAC_SHA384, HMAC_SHA512, HmacKey, hmacKeyedInto, hmacKeyedVerify, hmacSha256, hmacSha384, hmacSha512 } from "nish/crypto/hmac";
 import {
   JWT_ALG_ES256,
@@ -94,6 +95,27 @@ const same = (a: u8[], b: u8[]): boolean => {
 };
 
 const codeOf = (code: i32): string => `${code}`;
+
+/** A SHA-256 hasher resumed from an all-zero chaining value after one block: what a wiped HMAC key's pads would give. */
+const zeroResumed = (): Sha256 => {
+  const h: Sha256 = new Sha256();
+  for (let i: i32 = 0; i < toI32(h.state.length); i++) {
+    h.state[i] = toU32(0);
+  }
+  h.total = toI64(64);
+  return h;
+};
+
+/** The HS256 token over `input` a forger computes from the all-zero chaining values a wiped key holds. */
+const zeroPadToken = (input: string): string => {
+  const inner: Sha256 = zeroResumed();
+  const msg: u8[] = bytesOf(input);
+  inner.update(msg, toI32(0), toI32(msg.length));
+  const digest: u8[] = inner.digest();
+  const outer: Sha256 = zeroResumed();
+  outer.update(digest, toI32(0), toI32(digest.length));
+  return input + "." + base64urlEncode(outer.digest());
+};
 
 /** `token` with the character at `at` replaced by `c`. */
 const swapAt = (token: string, at: i32, c: string): string => token.substring(0, at) + c + token.substring(at + 1, toI32(token.length));
@@ -451,6 +473,30 @@ export const jwtChecks = (): i32 => {
 
   hs.wipe();
   t.eqStr("a wiped key verifies nothing", codeOf(v.verifyString(hs, RFC_HS256_TOKEN, RFC_NOW)), codeOf(JWT_ERR_SIGNATURE));
+  const forgedInput: string = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbmEiLCJleHAiOjQxMDI0NDQ4MDB9";
+  t.eqStr(
+    "a wiped key refuses a token forged from its zeroed pads",
+    codeOf(new JwtVerifier(JWT_MAX_TOKEN).verifyString(hs, zeroPadToken(forgedInput), NOW)),
+    codeOf(JWT_ERR_SIGNATURE),
+  );
+  t.ok("a wiped key signs nothing", jwtSignString(hs, "{\"sub\":\"ana\"}") === null);
+
+  // A key built by hand that names RS256 but holds an HMAC key verifies nothing:
+  // the check follows the name, so the public key is never an HMAC secret.
+  const confusedRaw: u8[] = seq(32);
+  const confusedSecret: Secret<u8[]> = secret(seq(32));
+  const confusedEmpty: Secret<u8[]> = secret(new Array<u8>(0));
+  const confused: JwtKey = new JwtKey(JWT_ALG_RS256, new HmacKey(HMAC_SHA256, confusedSecret), null, [], confusedEmpty, false);
+  wipe(confusedSecret);
+  wipe(confusedEmpty);
+  const confusedInput: string = base64urlEncode(bytesOf("{\"alg\":\"RS256\"}")) + "." + base64urlEncode(bytesOf("{\"exp\":4102444800}"));
+  const confusedToken: string = confusedInput + "." + base64urlEncode(hmacSha256(confusedRaw, bytesOf(confusedInput)));
+  t.eqStr(
+    "a hand-built RS256 key holding an HMAC key refuses an HMAC-signed RS256 token",
+    codeOf(new JwtVerifier(JWT_MAX_TOKEN).verifyString(confused, confusedToken, NOW)),
+    codeOf(JWT_ERR_SIGNATURE),
+  );
+  confused.wipe();
   if (edSigner !== null) {
     edSigner.wipe();
   }
