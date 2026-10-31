@@ -4109,9 +4109,11 @@ export const pgTargetUrl = (url: string): PgTarget => {
   while (queryStart < n && toI32(url.charCodeAt(queryStart)) !== 63) {
     queryStart += 1
   }
-  // The user information ends at the authority's last `@`.
+  // The user information ends at the authority's last `@`. The loops below
+  // also test `>= 0` and `< n`, always true as `authorityEnd <= n`, so the
+  // prover drops each access's bounds check.
   let hostStart: i32 = at
-  for (let i: i32 = at; i < authorityEnd; i++) {
+  for (let i: i32 = at; i < authorityEnd && i < n; i++) {
     if (toI32(url.charCodeAt(i)) === 64) {
       hostStart = i + 1
     }
@@ -4128,7 +4130,7 @@ export const pgTargetUrl = (url: string): PgTarget => {
   let bracketed: boolean = false
   if (hostStart < authorityEnd && toI32(url.charCodeAt(hostStart)) === 91) {
     let close: i32 = hostStart + 1
-    while (close < authorityEnd && toI32(url.charCodeAt(close)) !== 93) {
+    while (close >= 0 && close < authorityEnd && close < n && toI32(url.charCodeAt(close)) !== 93) {
       close += 1
     }
     if (close === authorityEnd) {
@@ -4143,7 +4145,7 @@ export const pgTargetUrl = (url: string): PgTarget => {
       portStart = hostEnd + 1
     }
   } else {
-    for (let i: i32 = hostStart; i < authorityEnd; i++) {
+    for (let i: i32 = hostStart; i >= 0 && i < authorityEnd && i < n; i++) {
       if (toI32(url.charCodeAt(i)) === 58) {
         hostEnd = i
         portStart = i + 1
@@ -4171,7 +4173,7 @@ export const pgTargetUrl = (url: string): PgTarget => {
   }
   // The query: `key=value` pairs split at `&`.
   let i: i32 = queryStart + 1
-  while (i < n) {
+  while (i >= 0 && i < n) {
     let end: i32 = i
     let eq: i32 = -1
     while (end < n && toI32(url.charCodeAt(end)) !== 38) {
