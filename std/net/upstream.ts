@@ -166,8 +166,6 @@ export class UpstreamResponse {
   head: u8[]
   /** When the call fails `UPSTREAM_E_TIMEOUT`, on `monotonicNanos`'s clock. */
   deadline: i64 = 0
-  /** Whether the response was read to its end; `error` says why not. */
-  ok: boolean = false
   /** The final status code, once the response's head has arrived. */
   status: i32 = 0
   /** `UPSTREAM_E_NONE`, an `HTTP1_E_` refusal of the codec, or an `UPSTREAM_E_` code. */
@@ -175,6 +173,8 @@ export class UpstreamResponse {
   length: i32 = 0
   headLength: i32 = 0
   index: i32 = 0
+  /** Whether the response was read to its end; `error` says why not. */
+  ok: boolean = false
   /** Taken by the program and not yet released. */
   taken: boolean = false
 
@@ -547,7 +547,8 @@ export class Upstream {
   /** Reads what arrived and runs the codec over it. */
   receive(c: UpstreamConnection): void {
     while (c.fd >= 0) {
-      const n: i32 = netRead(c.fd, c.input, 0, toI32(c.input.length))
+      const start: i32 = 0
+      const n: i32 = netRead(c.fd, c.input, start, toI32(c.input.length))
       if (n === UPSTREAM_WOULD_BLOCK) {
         return
       }
@@ -557,7 +558,7 @@ export class Upstream {
         return
       }
       if (n > 0) {
-        c.parser.feed(c.input, 0, n)
+        c.parser.feed(c.input, start, n)
       } else {
         c.parser.finish()
       }
