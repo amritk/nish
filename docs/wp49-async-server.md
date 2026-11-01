@@ -1,10 +1,12 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
-**Status: proposed.** Nothing here is built. The anchors below are at
-`a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this note
-is a proposal and is not compiled by `npm test`. This note reopens
+**Status: proposed; D1 accepted.** Nothing here is built. The anchors below
+are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
+note is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
-the owner's (§9).
+the owner's (§9). The owner accepted D1 on 2026-11-01, on one condition: an
+`await` never blocks the process, and `async` costs the server nothing it
+would not pay written by hand. §6's gate is how that condition is checked.
 
 Two goals, one design:
 
@@ -338,7 +340,7 @@ so this moves the minor version. 35 files under `std/`, `src/`, `examples/`,
 
 | | Question | Recommendation |
 | --- | --- | --- |
-| **D1** | Reverse WP24's refusal for the restricted `async` of §2 | **Yes.** No promise value, no recursion, a region per task. The TFB gate of §6 decides whether it ships |
+| **D1** | Reverse WP24's refusal for the restricted `async` of §2 | **Accepted** (2026-11-01), on the condition that an `await` never blocks and `async` costs nothing the explicit style does not. No promise value, no recursion, a region per task; the TFB gate of §6 decides whether it ships |
 | **D2** | Tasks in a process take turns on one thread, and never move between processes or threads | **Yes.** The fastest servers are thread-per-core, it needs no lock between `await`s, and a task's frame and region never cross an arena (WP47 §6) |
 | **D3** | Cancellation answers every later `await` with the call's own failure, and never drops a frame halfway | **Yes.** Without `throw`, it is the only kind that keeps `using` and the region correct |
 | **D4** | The renames of §8 | **Yes**, in one PR of their own, before `fetch` becomes async |

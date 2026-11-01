@@ -272,7 +272,7 @@ is its plan. [README.md](README.md) indexes them.
 | 46 | Memory for programs that do not exit: regions | proposed | [wp46](wp46-long-running-memory.md) |
 | 47 | Shared work across cores: regions, atomics and rings | built: `nish/sync/shm`, `nish/sync/ring` and `examples/prefork-jobs.ts` | [wp47](wp47-shared-memory.md) |
 | 48 | Compressed 32-bit references: a whole-program mode against `i32` handles, measured | proposed; neither built, the lean node layout recommended | [wp48](wp48-compressed-references.md) |
-| 49 | `async`/`await` on the server, and the TechEmpower top | proposed; reopens WP24, waits for WP46 stages 1–2 | [wp49](wp49-async-server.md) |
+| 49 | `async`/`await` on the server, and the TechEmpower top | proposed, D1 accepted: reverses WP24 for a restricted `async`; waits for WP46 stages 1–2 | [wp49](wp49-async-server.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
