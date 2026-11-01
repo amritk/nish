@@ -11,6 +11,11 @@ since fired: WP34 needed a real server. The answer held. `nish:net` (0.15.0,
 sockets and a readiness loop it owns, and the language gained no colour.
 The full note, with the spikes' source, is this file at commit `2b2eb95c`.
 
+**2026-11-01:** [wp49-async-server.md](wp49-async-server.md) proposes
+reopening this refusal for a restricted `async` on the server: no promise
+value, no recursion through `async`, a region per task. Until it is accepted,
+this note's decision stands.
+
 ## 1. The decision
 
 **Keep the Phase 0 rejections. Build the one thing that was actually being
