@@ -292,10 +292,11 @@ const refused = async (exe) => {
     encoding: "utf8",
     timeout: 30_000,
   });
-  // -111 is ECONNREFUSED; the connect may also fail later, at its result.
-  const want = /^listening\nnap failed: failure 9, socket -\d+\n$/;
+  // -111 is ECONNREFUSED, whether the connect fails at once or at its result;
+  // -110 would be the connect timeout, the wait this check rules out.
+  const want = "listening\nnap failed: failure 9, socket -111\n";
   return {
-    ok: r.status === 1 && want.test(r.stdout),
+    ok: r.status === 1 && r.stdout === want,
     detail: `status ${r.status}, stdout ${JSON.stringify(r.stdout)}`,
   };
 };

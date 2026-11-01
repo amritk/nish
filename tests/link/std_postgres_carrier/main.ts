@@ -7,26 +7,39 @@
 // authentication: it answers Parse, Describe, Bind, Execute and Sync as a
 // server does, holds an Execute of `slow` until told to go on, closes the
 // connection on an Execute of `die` (and on a batch holding a key past 4999),
-// and answers the batcher's statement with a row `v<key>` for each key below
-// 1000.
+// answers an Execute of `bad` (and a batch holding a key past 2999) with an
+// ErrorResponse, and answers the batcher's statement with a row `v<key>` for
+// each key below 1000. It counts the batcher's executions and the keys the
+// last one carried.
 //
 //   1. Routing: a plain query's row answers its request, a batch of keys
-//      answers each request with its own row, and a key with no row is 404.
+//      answers each request with its own row, and a key with no row is 404;
+//      three clients' keys go out in one execution.
 //   2. The slow query: while one query is held by the server, another client
 //      is answered.
 //   3. Loss: a connection that ends under a plain query or a batch fails
-//      them, and the next query is answered on a new connection.
-//   4. The flat arena: four thousand queries, half of them batched, leave
+//      them, a batch of three keys fails all three requests, and the next
+//      query is answered on a new connection.
+//   4. Refusals: a statement the server refuses reaches its request as
+//      PG_CARRIER_ERROR then PG_CARRIER_FAILED with failure 0, a refused
+//      batch fails each of its requests, and the connection answers the
+//      queries after them.
+//   5. The flat arena: four thousand queries, half of them batched, leave
 //      `Arena.used()` unchanged.
-//   5. Connects: a server that accepts and never answers fails the query at
+//   6. Closing: `close()` with a query held by the server ends that
+//      connection, and the handler goes on answering. A query in flight at
+//      `close()` gets no further event: the carrier promises only that its
+//      sockets are closed and its watch is gone.
+//   7. Connects: a server that accepts and never answers fails the query at
 //      the connect timeout, a port with no listener fails it at once, and a
 //      full carrier answers PG_CARRIER_FULL.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
-import { PG_ERR_CLOSED, PgBatchConfig, PgBatcher, PgConfig, PgConnection, PgPool, pgTarget } from "nish/net/postgres"
+import { PG_ERR_CLOSED, PG_ERR_NONE, PgBatchConfig, PgBatcher, PgConfig, PgConnection, PgError, PgPool, pgTarget } from "nish/net/postgres"
 import {
   PG_CARRIER_BUILD,
   PG_CARRIER_DONE,
+  PG_CARRIER_ERROR,
   PG_CARRIER_FAILED,
   PG_CARRIER_FULL,
   PG_CARRIER_MISSING,
@@ -63,6 +76,7 @@ const ECHO: i32 = 0
 const SLOW: i32 = 1
 const DIE: i32 = 2
 const USERS: i32 = 3
+const BAD: i32 = 4
 
 // What a stand-in connection's bound statement is.
 const KIND_OTHER: i32 = 0
@@ -70,6 +84,7 @@ const KIND_ECHO: i32 = 1
 const KIND_SLOW: i32 = 2
 const KIND_DIE: i32 = 3
 const KIND_USERS: i32 = 4
+const KIND_BAD: i32 = 5
 
 const ascii = (text: string): u8[] => {
   const out: u8[] = new Array<u8>(text.length)
@@ -120,6 +135,11 @@ class BackendConn {
   paramLen: i32 = 0
   kind: i32 = 0
   started: boolean = false
+  /** After an ErrorResponse: messages up to the next Sync are skipped, as a server does. */
+  skipping: boolean = false
+  /** How many Executes it answered, and how many with an ErrorResponse. */
+  executed: i32 = 0
+  refused: i32 = 0
 
   constructor() {
     this.input = new Array<u8>(65536)
@@ -185,6 +205,26 @@ class BackendConn {
     this.end()
   }
 
+  /** An ErrorResponse: undefined_table, as a missing relation is. */
+  error(): void {
+    this.begin(69)
+    this.byte(83)
+    this.text(ascii("ERROR"))
+    this.byte(0)
+    this.byte(86)
+    this.text(ascii("ERROR"))
+    this.byte(0)
+    this.byte(67)
+    this.text(ascii("42P01"))
+    this.byte(0)
+    this.byte(77)
+    this.text(ascii("relation does not exist"))
+    this.byte(0)
+    this.byte(0)
+    this.end()
+    this.skipping = true
+  }
+
   /** A CommandComplete `SELECT n`. */
   complete(n: i32): void {
     this.begin(67)
@@ -214,6 +254,11 @@ class Backend {
   /** How many connections it accepted, and how many it closed under a query. */
   accepted: i32 = 0
   killed: i32 = 0
+  /** How many connections it closed, for any reason. */
+  ended: i32 = 0
+  /** How many executions of the batcher's statement it answered, and the keys the last one carried. */
+  batches: i32 = 0
+  lastKeys: i32 = 0
 
   constructor() {
     this.listener = tcpListen("127.0.0.1", 0, 16)
@@ -222,7 +267,7 @@ class Backend {
     for (let k: i32 = 0; k < 8; k++) {
       this.conns.push(new BackendConn())
     }
-    this.names = [ascii("echo"), ascii("slow"), ascii("die"), ascii("users")]
+    this.names = [ascii("echo"), ascii("slow"), ascii("die"), ascii("users"), ascii("bad")]
     this.peer = new Array<u8>(32)
   }
 
@@ -238,6 +283,9 @@ class Backend {
           c.outStart = 0
           c.outLen = 0
           c.started = false
+          c.skipping = false
+          c.executed = 0
+          c.refused = 0
           placed = true
         }
       }
@@ -277,6 +325,7 @@ class Backend {
   close(c: BackendConn): void {
     netClose(c.fd)
     c.fd = -1
+    this.ended += 1
   }
 
   kindOf(buf: u8[], at: i32, end: i32): i32 {
@@ -322,6 +371,10 @@ class Backend {
         break
       }
       const body: i32 = at + 5
+      if (c.skipping && type !== 83) {
+        at = end
+        continue
+      }
       if (type === 80) {
         // Parse
         c.begin(49)
@@ -358,14 +411,21 @@ class Backend {
           this.holding = true
           break
         }
-        if (c.kind === KIND_DIE || (c.kind === KIND_USERS && this.fatal(c))) {
+        if (c.kind === KIND_DIE || (c.kind === KIND_USERS && this.highest(c) > 4999)) {
           this.killed += 1
           this.close(c)
           return
         }
-        this.execute(c)
+        c.executed += 1
+        if (c.kind === KIND_BAD || (c.kind === KIND_USERS && this.highest(c) > 2999)) {
+          c.refused += 1
+          c.error()
+        } else {
+          this.execute(c)
+        }
       } else if (type === 83) {
         // Sync
+        c.skipping = false
         c.begin(90)
         c.byte(73)
         c.end()
@@ -381,21 +441,22 @@ class Backend {
     }
   }
 
-  /** Whether the batch `c` bound holds a key past 4999. */
-  fatal(c: BackendConn): boolean {
+  /** The highest key in the batch `c` bound. */
+  highest(c: BackendConn): i32 {
+    let most: i32 = 0
     let key: i32 = 0
     for (let k: i32 = 0; k < c.paramLen; k++) {
       const d: i32 = toI32(c.param[k])
       if (d >= 48 && d <= 57) {
         key = key * 10 + d - 48
-        if (key > 4999) {
-          return true
+        if (key > most) {
+          most = key
         }
       } else {
         key = 0
       }
     }
-    return false
+    return most
   }
 
   execute(c: BackendConn): void {
@@ -435,6 +496,8 @@ class Backend {
           key = 0
         }
       }
+      this.batches += 1
+      this.lastKeys = ord
       c.complete(rows)
     } else {
       c.complete(ZERO)
@@ -460,6 +523,11 @@ class App {
   lastFailedTag: i32 = -1
   lastFailure: i32 = 0
   lastSocketError: i32 = 0
+  /** How many `PG_CARRIER_ERROR` events, the tag and SQLSTATE of the last, and the tag of the event after it. */
+  errors: i32 = 0
+  errorTag: i32 = -1
+  errorCode: string = ""
+  afterError: i32 = 0
   full: i32 = 0
 
   constructor() {
@@ -468,6 +536,7 @@ class App {
     router.add("GET", "/slow")
     router.add("GET", "/die")
     router.add("GET", "/users/:id")
+    router.add("GET", "/bad")
     const limits = new HandlerLimits()
     limits.slots = 8
     const listener: i32 = tcpListen("127.0.0.1", 0, 64)
@@ -486,6 +555,7 @@ class App {
     this.pool.register("echo", "select $1::text", types)
     this.pool.register("slow", "select 'slow'", types)
     this.pool.register("die", "select 'die'", types)
+    this.pool.register("bad", "select * from missing", types)
     const carrierLimits = new PgCarrierLimits()
     this.carrier = new PgCarrier(carrierLimits, this.pool, pgTarget("127.0.0.1", this.backend.port), this.h)
     const batch = new PgBatchConfig()
@@ -513,7 +583,7 @@ class App {
     let q: i32 = PG_CARRIER_FULL
     if (req.route === USERS) {
       q = this.carrier.runInt(req, this.users, toI64(req.paramDecimal(ZERO)), USERS)
-    } else if (req.route === ECHO || req.route === SLOW || req.route === DIE) {
+    } else if (req.route === ECHO || req.route === SLOW || req.route === DIE || req.route === BAD) {
       q = this.carrier.run(req, req.route)
     } else {
       this.h.refuse(req)
@@ -528,14 +598,27 @@ class App {
   events(): void {
     const c: PgCarrier = this.carrier
     let event: i32 = c.next()
+    let erred: boolean = false
     while (event !== PG_CARRIER_NONE) {
-      if (event === PG_CARRIER_BUILD) {
+      if (erred) {
+        this.afterError = event
+        erred = false
+      }
+      if (event === PG_CARRIER_ERROR) {
+        const error: PgError | null = c.connection().lastError
+        this.errors += 1
+        this.errorTag = c.tag
+        this.errorCode = error === null ? "" : error.code
+        erred = true
+      } else if (event === PG_CARRIER_BUILD) {
         const conn: PgConnection = c.connection()
         if (c.tag === ECHO) {
           conn.bindStart("echo")
           conn.paramInt(toI64(c.request().paramDecimal(ZERO)))
         } else if (c.tag === SLOW) {
           conn.bindStart("slow")
+        } else if (c.tag === BAD) {
+          conn.bindStart("bad")
         } else {
           conn.bindStart("die")
         }
@@ -708,6 +791,50 @@ const check = (app: App, name: string, ok: boolean): void => {
   }
 }
 
+/** A client of its own for each of `paths`, each sent its GET before the app turns, so one turn takes them all. */
+const clients = (app: App, paths: string[]): Client[] => {
+  const out: Client[] = []
+  const requests: u8[][] = []
+  for (const p of paths) {
+    out.push(connect(app))
+    requests.push(ascii(`GET ${p} HTTP/1.1\r\nHost: t\r\n\r\n`))
+  }
+  for (let k: i32 = 0; k < toI32(out.length) && k < toI32(requests.length); k++) {
+    sendAll(app, out[k], requests[k])
+  }
+  return out
+}
+
+const closeAll = (cs: Client[]): void => {
+  for (const c of cs) {
+    netClose(c.fd)
+  }
+}
+
+/** How many of `cs` were answered 503 with no body. */
+const unavailable = (app: App, cs: Client[]): i32 => {
+  const empty = ascii("")
+  let n: i32 = 0
+  for (const c of cs) {
+    if (response(app, c) && answer(c, 503, empty)) {
+      n += 1
+    }
+  }
+  return n
+}
+
+/** The stand-in connection that answered the most Executes with an error, or null. */
+const refusing = (app: App): BackendConn | null => {
+  let found: BackendConn | null = null
+  for (let k: i32 = 0; k < toI32(app.backend.conns.length); k++) {
+    const c: BackendConn = app.backend.conns[k]
+    if (c.fd >= 0 && c.refused > 0) {
+      found = c
+    }
+  }
+  return found
+}
+
 const routing = (app: App): void => {
   const c = connect(app)
   sendAll(app, c, ascii("GET /echo/41 HTTP/1.1\r\nHost: t\r\n\r\n"))
@@ -717,6 +844,14 @@ const routing = (app: App): void => {
   check(app, "a key with no row is the program's 404", response(app, c) && answer(c, 404, ascii("")))
   check(app, "and the key after it still gets its row", response(app, c) && answer(c, 200, ascii("v7")))
   netClose(c.fd)
+
+  const batches: i32 = app.backend.batches
+  const cs: Client[] = clients(app, ["/users/7", "/users/2000", "/users/5"])
+  check(app, "keys from three clients: the first gets its own row", response(app, cs[0]) && answer(cs[0], 200, ascii("v7")))
+  check(app, "the second, with no row, its 404", response(app, cs[1]) && answer(cs[1], 404, ascii("")))
+  check(app, "the third its own row", response(app, cs[2]) && answer(cs[2], 200, ascii("v5")))
+  check(app, "from one execution carrying all three keys", app.backend.batches === batches + 1 && app.backend.lastKeys === 3)
+  closeAll(cs)
 }
 
 const slowQuery = (app: App): void => {
@@ -752,6 +887,86 @@ const loss = (app: App): void => {
   check(app, "the next plain query is answered", response(app, c) && answer(c, 200, ascii("3")))
   check(app, "and the next batch", response(app, c) && answer(c, 200, ascii("v8")))
   check(app, "on new connections", app.backend.killed === 2 && app.backend.accepted > accepted)
+  netClose(c.fd)
+
+  const batches: i32 = app.backend.batches
+  const cs: Client[] = clients(app, ["/users/6", "/users/5001", "/users/7"])
+  const failed: i32 = unavailable(app, cs)
+  check(app, "a lost execution of three keys fails all three requests", failed === 3 && app.backend.killed === 3)
+  check(app, "the three were one execution, answered by none", app.backend.batches === batches && app.lastFailure === PG_ERR_CLOSED)
+  closeAll(cs)
+}
+
+const refused = (app: App): void => {
+  const c = connect(app)
+  const ended: i32 = app.backend.ended
+  sendAll(app, c, ascii("GET /bad HTTP/1.1\r\nHost: t\r\n\r\n"))
+  check(app, "a statement the server refuses is the program's 503", response(app, c) && answer(c, 503, ascii("")))
+  check(app, "after PG_CARRIER_ERROR for its query, with the server's SQLSTATE", app.errors === 1 && app.errorTag === BAD && app.errorCode === "42P01")
+  check(app, "then PG_CARRIER_FAILED, with failure 0", app.afterError === PG_CARRIER_FAILED && app.lastFailedTag === BAD && app.lastFailure === PG_ERR_NONE && app.lastSocketError === 0)
+  const bad: BackendConn | null = refusing(app)
+  const executed: i32 = bad === null ? 0 : bad.executed
+  const echo = ascii("GET /echo/4 HTTP/1.1\r\nHost: t\r\n\r\n")
+  const four = ascii("4")
+  let answered: i32 = 0
+  for (let k: i32 = 0; k < 4; k++) {
+    sendAll(app, c, echo)
+    if (response(app, c) && answer(c, 200, four)) {
+      answered += 1
+    }
+  }
+  check(app, "the queries after it are answered", answered === 4)
+  check(app, "on the connection that refused it, still open", bad !== null && bad.fd >= 0 && bad.executed > executed && app.backend.ended === ended)
+
+  const cs: Client[] = clients(app, ["/users/5", "/users/3001", "/users/6"])
+  const failed: i32 = unavailable(app, cs)
+  check(app, "a batch the server refuses fails each of its requests", failed === 3)
+  check(app, "with failure 0, and no PG_CARRIER_ERROR for a batch", app.lastFailedTag === USERS && app.lastFailure === PG_ERR_NONE && app.errors === 1)
+  closeAll(cs)
+  sendAll(app, c, ascii("GET /users/8 HTTP/1.1\r\nHost: t\r\n\r\n"))
+  check(app, "and the next batch is answered", response(app, c) && answer(c, 200, ascii("v8")) && app.backend.ended === ended)
+  netClose(c.fd)
+}
+
+/** `close()` with a query held by the server: its connection is ended, and the handler goes on. */
+const closing = (app: App): void => {
+  const config = new PgConfig()
+  config.user = "app"
+  config.database = "db"
+  const password = secret(ascii("pw"))
+  const pool = new PgPool(config, password, toI32(1), toI32(4))
+  wipe(password)
+  const types: i32[] = []
+  pool.register("slow", "select 'slow'", types)
+  const limits = new PgCarrierLimits()
+  limits.watch = 3
+  const extra = new PgCarrier(limits, pool, pgTarget("127.0.0.1", app.backend.port), app.h)
+  extra.run(null, SLOW)
+  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
+  while (!app.backend.holding && monotonicNanos() < deadline) {
+    app.turn()
+    let event: i32 = extra.next()
+    while (event !== PG_CARRIER_NONE) {
+      if (event === PG_CARRIER_BUILD) {
+        extra.connection().bindStart("slow")
+        extra.connection().bindEnd()
+        extra.send()
+      }
+      event = extra.next()
+    }
+  }
+  check(app, "a second carrier's query is held by the server", app.backend.holding)
+  const ended: i32 = app.backend.ended
+  extra.close()
+  pool.dispose()
+  while (app.backend.ended === ended && monotonicNanos() < deadline) {
+    app.turn()
+  }
+  check(app, "close() with it in flight ends its connection", app.backend.ended === ended + 1)
+  app.backend.holding = false
+  const c = connect(app)
+  sendAll(app, c, ascii("GET /echo/9 HTTP/1.1\r\nHost: t\r\n\r\n"))
+  check(app, "and the handler, its watch gone, goes on answering", response(app, c) && answer(c, 200, ascii("9")))
   netClose(c.fd)
 }
 
@@ -873,7 +1088,9 @@ export const main = (): i32 => {
   routing(app)
   slowQuery(app)
   loss(app)
+  refused(app)
   flat(app)
+  closing(app)
   connects(app)
   app.carrier.close()
   app.pool.dispose()

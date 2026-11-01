@@ -3,7 +3,7 @@
 // "Panic sites".
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
 import { PgBatchConfig, PgBatcher, PgConfig, PgPool, pgTarget } from "nish/net/postgres"
-import { PG_CARRIER_BUILD, PG_CARRIER_NONE, PgCarrier, PgCarrierLimits } from "nish/net/postgres-carrier"
+import { PgCarrier, PgCarrierLimits } from "nish/net/postgres-carrier"
 import { Router, RouterLimits } from "nish/net/router"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
