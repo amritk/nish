@@ -38,6 +38,8 @@ PASS  and the server's calls and its program's answers moved the arena not at al
 PASS  and its interest never changed, so rearm never asked for a pollModify
 PASS  the date crossed a second among them and was formatted once for the two hundred
 PASS  the server's slots share one date: a second set through one is formatted once and read through another
+PASS  eight pipelined responses, each with a Date, read the clock once per serve call, fewer times than they were answered
+PASS  an answer given later, outside a serve call, reads the clock and carries the current second
 PASS  refused with 431: a header section past maxHeaderBytes
 PASS  refused with 400: a chunk size that is not hex
 PASS  a bad chunk size once the response has started: no second response, and the connection ends
@@ -227,4 +229,4 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 229 passed, 0 failed, 0 skipped
+http1 server: 231 passed, 0 failed, 0 skipped
