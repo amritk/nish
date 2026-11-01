@@ -1,0 +1,27 @@
+PASS  a plain query's row answers its request
+PASS  a batched key's row answers its own request
+PASS  a key with no row is the program's 404
+PASS  and the key after it still gets its row
+PASS  the server holds the slow query
+PASS  another client is answered while it is held
+PASS  and the held one has no answer yet
+PASS  once the server goes on, the held client is answered
+PASS  a query whose connection ends is the program's 503
+PASS  with the connection closed behind it
+PASS  a batch whose connection ends fails its request
+PASS  as lost with the connection
+PASS  the next plain query is answered
+PASS  and the next batch
+PASS  on new connections
+PASS  every round of four pipelined queries is answered
+PASS  and the arena stays flat
+PASS  and none was refused for room
+PASS  a query is taken
+PASS  past the queries cap the carrier is full
+PASS  a server that never answers fails the query
+PASS  at the connect timeout, as ETIMEDOUT
+PASS  not before it
+PASS  its query is held until the next read
+PASS  and once read past, it takes another
+PASS  a refused connect fails the query
+PASS  without waiting for the timeout
