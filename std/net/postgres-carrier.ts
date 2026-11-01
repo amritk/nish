@@ -113,6 +113,14 @@ export class PgCarrierLimits {
   watch: i32 = 0
 }
 
+// Fills free stack `a` highest first, so that the lowest is handed out first.
+const fillFree = (a: i32[]): void => {
+  const n: i32 = toI32(a.length)
+  for (let k: i32 = 0; k < n; k++) {
+    a[k] = n - 1 - k
+  }
+}
+
 /**
  * A `PgPool` on an `HttpHandler`'s loop: the pool's sockets sit in one
  * epoll set of the carrier's own, which the handler watches beside its
@@ -134,14 +142,6 @@ export class PgCarrierLimits {
  * nothing is allocated per query. A final event's query is freed on the
  * following `next()` call, so `query`, `tag` and `request()` hold until then.
  */
-// Fills free stack `a` highest first, so that the lowest is handed out first.
-const fillFree = (a: i32[]): void => {
-  const n: i32 = toI32(a.length)
-  for (let k: i32 = 0; k < n; k++) {
-    a[k] = n - 1 - k
-  }
-}
-
 export class PgCarrier {
   private readonly pool: PgPool
   private readonly handler: HttpHandler
@@ -291,14 +291,17 @@ export class PgCarrier {
 
   /**
    * Registers `batcher`'s statement on the pool and answers its id for
-   * `runInt` and `runText`. Panics once the pool has connected, as
-   * `PgPool.register` refuses then, and past 8 batchers.
+   * `runInt` and `runText`. Panics past 8 batchers, and wherever
+   * `PgPool.register` refuses: once the pool has connected, on a NUL in the
+   * batcher's name or SQL, or past 256 statements.
    */
   attach(batcher: PgBatcher): i32 {
     const id: i32 = toI32(this.batchers.length)
     const types: i32[] = []
     if (id >= PG_CARRIER_MAX_BATCHERS || !this.pool.register(batcher.name, batcher.sql, types)) {
-      panic("nish/net/postgres-carrier: PgCarrier.attach after the pool connected, or past 8 batchers")
+      panic(
+        "nish/net/postgres-carrier: PgCarrier.attach past 8 batchers, after the pool connected, on a NUL in the name or SQL, or past 256 statements"
+      )
     }
     this.batchers.push(batcher)
     return id

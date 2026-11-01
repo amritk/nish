@@ -802,7 +802,8 @@ statement with the server's `statement_timeout`. `close()` closes the
 carrier's sockets; the pool's `dispose()` still wipes the password.
 
 The constructor panics on a cap out of range, a target that failed or a host
-name; `attach` past 8 batchers or after the pool connected; `runInt` and
+name; `attach` past 8 batchers, after the pool connected, on a NUL in the
+batcher's name or SQL, or past 256 statements; `runInt` and
 `runText` on an id `attach` never gave; `request()` for a query run with no
 request; `connection()` before an event named one; `send()` with no build
 open; and `next()` with one still open.
