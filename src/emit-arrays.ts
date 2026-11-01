@@ -61,6 +61,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
+import { simdSuffix, simdTypeLane } from "./nish-modules"
 import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructInfo } from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
@@ -675,6 +676,20 @@ const noteArrayUse = (emitter: Emitter, expr: Node, len: boolean, data: boolean,
 }
 
 /**
+ * `nish:simd`'s `loadU8x16(xs, i)` or `store(v, xs, i)`, the two calls that
+ * lower through `emitVectorAccess`: the array is the second argument from the
+ * end. They are only reachable by import, so the checker's record of the
+ * imported name is the whole test: a local `store` closure has none.
+ */
+const isVectorAccess = (emitter: Emitter, call: Node): boolean => {
+  if (call.kind !== N_CALL || call.children[1].children.length < 2) {
+    return false
+  }
+  const name = emitter.program.nodeBuiltins[call.id]
+  return name === "store" || simdTypeLane(simdSuffix(name, "load")).length > 0
+}
+
+/**
  * Collect the array receivers `loop` reads through, one entry per distinct
  * location, with whether the loop needs that array's `len` (a `.length` read or
  * a bounds check) and its `data` (any element access).
@@ -697,6 +712,12 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
     noteArrayUse(emitter, node.children[0], needsLen, true, out)
   } else if (isUncheckedAccess(emitter.program, node)) {
     noteArrayUse(emitter, node.children[1].children[0], false, true, out)
+  } else if (isVectorAccess(emitter, node)) {
+    // `emitVectorAccess` checks against `len` and reads `data`, so it asks for
+    // both. Unasked, an inner loop that also reads `.length` lifted a header
+    // with no `data`, and the load took that empty value as its pointer.
+    const args = node.children[1].children
+    noteArrayUse(emitter, args[args.length - 2], true, true, out)
   } else if (node.kind === N_MEMBER && node.text === "length") {
     noteArrayUse(emitter, node.children[0], true, false, out)
   }
