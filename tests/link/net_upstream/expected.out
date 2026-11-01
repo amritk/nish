@@ -1,0 +1,22 @@
+PASS  slow: the call reached the slow server, and get returned at once
+PASS  slow: another client is answered by the program meanwhile
+PASS  slow: and through a second upstream
+PASS  slow: both inside the slow call's deadline
+PASS  slow: the slow call ends UPSTREAM_E_TIMEOUT and its client gets a 504
+PASS  slow: its slot and connection are given back
+PASS  keep-alive: five calls in a row are answered, each tagged with its request
+PASS  keep-alive: on one connection
+PASS  keep-alive: the request head is the path and the origin's Host
+PASS  refusal: a malformed status line fails the call with code 1
+PASS  refusal: a bare LF fails the call with code 3
+PASS  refusal: conflicting framing fails the call with code 6
+PASS  refusal: a body past maxBody fails the call with code 14
+PASS  refusal: a body cut short fails the call with code 10
+PASS  refusal: the next call is answered on a new connection
+PASS  policy: a loopback origin is refused at start-up
+PASS  policy: and each call fails UPSTREAM_E_BLOCKED with nothing connected
+PASS  policy: permitted, the same origin is called
+PASS  origin: https, userinfo and a path are each UPSTREAM_E_ORIGIN
+PASS  request: a path that is not a request target is UPSTREAM_E_REQUEST
+PASS  warm pool: three thousand calls are answered
+PASS  warm pool: on the one connection, with every slot back and no body buffer grown

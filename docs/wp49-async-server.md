@@ -285,21 +285,21 @@ handler's own poll loop:
 
 ```typescript
 const h = new HttpHandler(new HandlerLimits(), listener, router)
-const users = new Upstream(h.loop(), "http://users.internal", new UpstreamLimits())
+const users = new Upstream(h, "http://users.internal", new UpstreamLimits())
 
 while (true) {
   h.wait(1000) // one turn: the handler's sockets and the upstream's
   while (h.ready()) {
     const req = h.take()
     switch (req.route) {
-      case USER: users.get(req, "/v1/" + req.param("id")); break // returns at once
+      case USER: if (users.get(req, "/v1/users/7") !== UPSTREAM_E_NONE) { h.problem(req, 503, "Busy", "") } break // returns at once
       default: h.refuse(req)
     }
   }
   while (users.ready()) { // answers that arrived this turn
     const r = users.take() // r.req is the request that asked
-    if (r.ok) { h.send(r.req, 200, JSON, r.body, 0, r.body.length) }
-    else { h.problem(r.req, 502) }
+    if (r.ok) { h.send(r.req, 200, JSON, r.body, 0, r.length) }
+    else { h.problem(r.req, 502, "Bad Gateway", "") }
     users.release(r)
   }
 }
@@ -316,6 +316,17 @@ same shape, and it is what the TFB database tests can use before §2 exists.
 `Upstream` applies `nish/net/outbound`'s policy when its origin comes from
 input, and it lands with its record under `docs/security/` (CLAUDE.md,
 "Attacker-facing code ships with its security record").
+
+As built (`std/net/upstream.ts`, record `docs/security/upstream.md`, guide
+`docs/guide/using-nish/calling-services.md`): the handler has no `loop()`
+method, so `Upstream` takes the handler itself and uses its public `loop`,
+`turnAt` and `fired`. Each connection takes one of the handler's 16 watch
+ids (`UpstreamLimits.firstId` and up), and `ready` reads the sockets that
+fired, once per turn. `get` answers `UPSTREAM_E_FULL` when every call slot is
+taken. Deadlines are checked when `ready` runs. One allocation per call
+remains: the `http1-client` codec makes each response's field names and
+values as strings (UPSTREAM-8), so the arena is not flat over many calls
+until the codec records spans.
 
 ## 8. Names
 
