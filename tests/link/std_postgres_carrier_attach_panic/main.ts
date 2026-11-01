@@ -2,7 +2,8 @@
 // than register a statement the id table cannot name. docs/security/postgres.md,
 // "Panic sites".
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
-import { PG_CARRIER_BUILD, PG_CARRIER_NONE, PgBatchConfig, PgBatcher, PgCarrier, PgCarrierLimits, PgConfig, PgPool, pgTarget } from "nish/net/postgres"
+import { PgBatchConfig, PgBatcher, PgConfig, PgPool, pgTarget } from "nish/net/postgres"
+import { PG_CARRIER_BUILD, PG_CARRIER_NONE, PgCarrier, PgCarrierLimits } from "nish/net/postgres-carrier"
 import { Router, RouterLimits } from "nish/net/router"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"

@@ -23,6 +23,7 @@
 //      full carrier answers PG_CARRIER_FULL.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
+import { PG_ERR_CLOSED, PgBatchConfig, PgBatcher, PgConfig, PgConnection, PgPool, pgTarget } from "nish/net/postgres"
 import {
   PG_CARRIER_BUILD,
   PG_CARRIER_DONE,
@@ -31,16 +32,9 @@ import {
   PG_CARRIER_MISSING,
   PG_CARRIER_NONE,
   PG_CARRIER_ROW,
-  PG_ERR_CLOSED,
-  PgBatchConfig,
-  PgBatcher,
   PgCarrier,
   PgCarrierLimits,
-  PgConfig,
-  PgConnection,
-  PgPool,
-  pgTarget,
-} from "nish/net/postgres"
+} from "nish/net/postgres-carrier"
 import { Router, RouterLimits } from "nish/net/router"
 import {
   connectResult,

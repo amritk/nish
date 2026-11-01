@@ -1,4 +1,4 @@
-// nish/net/postgres's PgCarrier on an HttpHandler's loop, against a live
+// nish/net/postgres-carrier's PgCarrier on an HttpHandler's loop, against a live
 // server: it runs `select pg_sleep(...)` through the carrier and serves HTTP
 // while the query is in flight, then prints the query's row.
 //
@@ -11,6 +11,7 @@
 // or reset (run.mjs's `refused` and `reset` checks), prints the carrier's
 // failure and socket error and exits 1.
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
+import { PgConfig, PgConnection, PgPool, pgTarget } from "nish/net/postgres"
 import {
   PG_CARRIER_BUILD,
   PG_CARRIER_DONE,
@@ -20,11 +21,7 @@ import {
   PG_CARRIER_ROW,
   PgCarrier,
   PgCarrierLimits,
-  PgConfig,
-  PgConnection,
-  PgPool,
-  pgTarget,
-} from "nish/net/postgres"
+} from "nish/net/postgres-carrier"
 import { Router, RouterLimits } from "nish/net/router"
 import { tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"

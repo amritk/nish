@@ -2,7 +2,8 @@
 // it panics rather than hand out a second build on the same connection.
 // docs/security/postgres.md, "Panic sites".
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
-import { PG_CARRIER_BUILD, PG_CARRIER_NONE, PgCarrier, PgCarrierLimits, PgConfig, PgPool, pgTarget } from "nish/net/postgres"
+import { PgConfig, PgPool, pgTarget } from "nish/net/postgres"
+import { PG_CARRIER_BUILD, PG_CARRIER_NONE, PgCarrier, PgCarrierLimits } from "nish/net/postgres-carrier"
 import { Router, RouterLimits } from "nish/net/router"
 import { netLocalPort, netWrite, tcpAccept, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
