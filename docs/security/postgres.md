@@ -9,7 +9,7 @@ rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
 Anchors are function names in `std/net/postgres.ts` at the commit that adds
-binary result columns (`bindStartBinary`, `PgBinary`), the last to change it.
+connection targets (`pgTarget`, `pgTargetUrl`), the last to change it.
 
 **Result.** Every message is framed once, by its length, and a length under 4
 or over `maxMessage` fails the connection before its body is read; every
@@ -31,7 +31,10 @@ were fixed in review, and PG-15 to PG-17 (a spent batch run that panicked,
 a text key that failed its whole batch, and collidable keys) in the
 batcher's. Three properties a reader might assume are not provided, by
 design, and are recorded as accepted: no TLS (PG-9), no way to require SCRAM
-of a server (PG-10), and MD5 and cleartext refused (PG-11).
+of a server (PG-10), and MD5 and cleartext refused (PG-11). Two more are
+accepted for a Unix socket target: nothing checks who owns the socket
+(PG-21), and a host naming the socket file itself is taken as a directory,
+as `libpq` takes it (PG-22).
 
 `PgPool` reaches a server only through its connections: each pooled
 connection is a `PgConnection` under the same caps, so a server can make the
@@ -64,11 +67,21 @@ server answer makes it grow. A key refused for room, by `maxBytes` or by the
 connection's `maxOutput`, is not a panic: the take stops there, cancels the
 bind when nothing was bound, and the request waits.
 
+`pgTarget` and `pgTargetUrl` turn a host and port, or a `postgres://` URL,
+into the socket path or TCP host a program connects to; they open nothing.
+The URL may come from a configuration file or an environment variable, so
+its bytes are untrusted: every escape is checked, `%00` and a bare NUL are
+refused, so a decoded path cannot end early at a NUL (PG-19), the user
+information ends where `libpq` ends it or the URL is refused (PG-20), and a socket
+path too long for `sun_path` is refused rather than cut to a shorter path
+that names another socket (PG-18). Neither panics on any input (the seeded
+URLs under "Properties verified").
+
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys` |
+| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue` |
 
 Out of scope: the socket and loop the program owns (`nish:net`); the HMAC,
 SHA-256, base64 and constant-time primitives the SCRAM exchange calls, which
@@ -88,6 +101,10 @@ attackers too, through the keys a program hands `PgBatcher`: a key reaches
 the server only as an element of the bound array parameter, never in SQL
 text, and a win for them is a panic, one client's key failing or reading
 another's requests, or time a chosen key makes a take spend beyond its caps.
+So is whoever wrote the URL `pgTargetUrl` reads: a win for them is a panic,
+or a target other than the one the URL spells — a socket path cut short, or
+one a decoded byte ended early. A local user who can create the socket a
+target names is out of reach of a parser, and is PG-21.
 The program is trusted: its
 `PgConfig`, its SQL and its names. A NUL in a name or in SQL is refused rather
 than sent; the program's mistakes that would leave the connection with no
@@ -104,7 +121,9 @@ Rows PG-1 to PG-8 are the shapes a hostile server's bytes can take, each
 checked and found to hold; they are recorded so that the audit can see what
 was tried. PG-9 to PG-11 are accepted. PG-12 and PG-13 were found by the
 first review of this module and fixed before it merged; PG-15 to PG-17 by the
-batcher's first review, and fixed before it merged.
+batcher's first review, and fixed before it merged. PG-18 to PG-20 are the
+shapes a URL can take, checked as the parser was written; PG-21 and PG-22
+are accepted.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -125,6 +144,11 @@ batcher's first review, and fixed before it merged.
 | PG-15 | Medium | `PgBatcher.row`, `end`, `fail`, `next` | A run was named by its index, reused once answered, and an event on a run that was over panicked. So a server that sent `CommandComplete` twice, a `DataRow` or `CommandComplete` after an `ErrorResponse`, or a connection lost after its answer, ended the program; and had the panic been lifted, a late event would have reached the run's next batch, another set of requests. | **Fixed.** `take` answers a handle, the run's index plus its uses times `runs` (the uses wrap after 2^20, so a handle stays under 2^30), and a run's next take answers a new one. A spent handle — its run answered or taken again — makes `row`, `end` and `fail` do nothing and `next` answer `PG_BATCH_NONE`, and counts the call in `stray`. Only the program's own mistakes still panic (see Panic sites). "a second CommandComplete is stray", "a row after CommandComplete is stray", "an error after CommandComplete, as a commit at Sync can fail, is stray", "a connection lost after CommandComplete, before the group is done", "a row after an error is stray", "a CommandComplete after an error is stray", each through a `PgPool` from the server's bytes; "the one run is taken again under a new handle", "a row on the spent handle answers false", "and next on it answers nothing", "each counted stray", "the new execution is untouched", "the run is free again, under its next handle: a use of 16 runs on". |
 | PG-16 | Medium | `PgBatcher.addText` | A text key that is not UTF-8, or holds a NUL, is refused by the server for the whole array, so one client's bad key failed every request batched with it. | **Fixed.** `addText` answers false for a key with a NUL or that is not RFC 3629 UTF-8 (an overlong form, a surrogate, past U+10FFFF, a stray or missing continuation byte), before it is queued. "a key with a NUL is refused", "a lone continuation byte is refused", "an overlong NUL is refused", "an overlong three-byte form is refused", "a surrogate is refused", "past U+10FFFF is refused", "a character cut by the window is refused", "a bad second continuation byte is refused", "only the good ones wait". |
 | PG-17 | Low | `PgBatcher.take` | Each key is bound once, found by an open-addressed table hashed with a 31-bit polynomial a client could collide, and `maxRequests` reached 65,536: keys chosen to collide made one take probe on the order of 2^31 slots. | **Fixed.** `maxRequests` is at most 1024, so a take probes at most maxRequests² / 2 slots whatever the hash; it compares a key's bytes only on an equal 31-bit hash, so the bytes compared are at most that bound times the key length, which `maxBytes` caps. FNV-1a, which replaced the polynomial, makes chance collisions rarer but does not set that bound: it is unseeded, and `bwfgaa` and `zidhaa` share a 31-bit hash. "text keys quoted and escaped, each once", where only their bytes tell those two apart; `link/std_postgres_batch_config_requests_panic` (1025, after 1024 is taken). |
+| PG-18 | High if it failed | `pgTarget` | `sun_path` holds 108 bytes on Linux, its NUL included; a longer path cut to fit would connect to a different socket, perhaps one another user made. | **Holds.** A `/` path over 107 bytes, or an `@` name over 107 after its `@`, is `PG_TARGET_TOO_LONG`, with `path` empty and `unix` false. macOS's 104-byte `sun_path` is left to `unixConnect`, which answers `-36` there rather than cut. "a 107-byte socket path is taken", "a 108-byte socket path is refused", "not cut short", "nor unix", "an @ name of 107 bytes after the @ is taken", "one of 108 is refused", "a longer port counts", "multi-byte UTF-8 counts in bytes: 107 is taken", "and 108 refused"; through a URL, "a URL's @ name of 107 bytes after the @ is taken", its "one of 108 is refused", and "a long encoded directory is refused" (`link/std_postgres_unix_target`). |
+| PG-19 | High if it failed | `pgDecoded`, `pgTargetUrl`, `pgTarget` | A percent escape must decode to the byte it spells and nothing else: a `%` at the end, with one digit or a non-hex one would read past the text or decode garbage, and `%00`, or a NUL byte as given, would end the path early in the C call. | **Holds.** Each is refused, `PG_TARGET_BAD_ESCAPE` for an escape and `PG_TARGET_BAD_HOST` for a raw NUL byte, in every part of the URL, including those `pgTargetUrl` does not otherwise read: `pgTargetUrl` scans the whole URL for a raw NUL before it splits it, and `pgTarget` refuses one in a host. Decoding is `urlDecode`'s, which also refuses escapes that decode to bytes that are not UTF-8. "an escape that is not UTF-8 is refused", "escaped UTF-8 decodes"; "a bare % ends the host", "a % with one digit", "%G1 is no hex", "%1G is no hex", "%00 is refused", "in the user too", "in the database too", "in the port", "in a query key", "in a query value", "in an ignored value"; for a raw NUL, "a raw NUL in the user is refused" and its password, host, port, database, query key, query value and ignored value lines, and "a NUL in the host is refused" (`pgTarget`); "lower-case escapes" and "an encoded port" decode, and "%252F stays the TCP host %2F", decoded once. |
+| PG-20 | Medium if it failed | `pgTargetUrl`, `pgPortValue` | The host is the authority after the user information and before its port, or a query `host`; a password with an `@`, an encoded `,` (libpq's list of hosts) or a port past 65535 must not become a different host or wrap to another port. | **Fixed** in review: the user information first ended at the authority's last `@`, where `libpq` ends it at the first, so `postgres://u:p@ss@db/app` named `db` here and `ss@db` to libpq. Now a raw `@` after the first in the authority, or a first `@` after a `?` (libpq reads that `?` as the user's), is `PG_TARGET_BAD_HOST` rather than read either way; an `@` in a password is written `%40`. A `,` is `PG_TARGET_BAD_HOST`, since one target names one host; a port is 1 to 5 digits naming 1 to 65535, else `PG_TARGET_BAD_PORT`, so it cannot overflow. "a second @ is refused, not read as the host", "an encoded @ in the password is the user's", "an @ after a ? is refused", "an @ in the path is the database's", "an encoded , is two hosts", "two hosts are refused", "an empty port is refused", "a port of letters is refused", "a six-digit port is refused", "port 65536 is refused", "URL port 65536 is refused", "?port=0 is refused", "?host= overrides the authority, ?port= the port". An empty port, `?port=` or `?host=` is refused, where libpq takes it as unset: "an empty port is refused", "an empty ?port= is refused", "an empty ?host= is refused". |
+| PG-21 | Low | `PgConnection`, over a socket | A local user who can create the socket a target names, in a directory others may write such as `/tmp`, can answer as the server; under `peer` or `trust` the server asks for no password, so nothing proves it is the server. | **Accepted.** As PG-10: there is no `requirepeer` to check the socket's owner, which `nish:net` cannot report. Put the socket in a directory only the server's user may write, as `/var/run/postgresql` is; the guide says peer and trust send no password. |
+| PG-22 | Low | `pgTarget` | A host that is a path to the socket file itself, not its directory, is taken as a directory, as `libpq` takes it, and names `<file>/.s.PGSQL.<port>`, which does not exist. | **Accepted.** The connect fails (`ENOTDIR`); it reaches no other socket. Kept for `libpq`'s meaning of the same string; the guide says so. "a full socket path is taken as a directory, as libpq does", "a URL's socket file is a directory too". |
 
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
@@ -441,6 +465,21 @@ panic test under Panic sites, and its refusals answered rather than grown:
 exits with 0 and stdout matches expected.out`, and the live `batch`
 scenario below drives three batchers through a pool against PostgreSQL 18.
 
+**Connection targets** (PG-18 to PG-20): the checks quoted in those rows are
+lines of `tests/link/std_postgres_unix_target/expected.out`, compared byte
+for byte by `link/std_postgres_unix_target: exits with 0 and stdout matches
+expected.out`. That `pgTargetUrl` and `pgTarget` never panic is pinned by
+3000 URLs drawn from a fixed seed (xorshift32) out of the bytes and escapes
+the parser splits on — `/`, `@`, `:`, `%`, `?`, `&`, `=`, brackets, `,`,
+`%2F`, `%40`, `%00`, a raw NUL, `é` and `%C3%A9`, `?host=` and `&port=`
+among them, cut anywhere: each must answer a failure code from
+`PG_TARGET_OK` to `PG_TARGET_TOO_LONG` ("3000 seeded URLs: each answers a
+defined failure"), no target it accepts may hold a NUL in its host or path
+("no accepted target holds a NUL", PG-19), each socket target it
+gives must end `/.s.PGSQL.<port>` within 107 bytes, or 108 for an `@` name
+("and each socket target fits sun_path"), and some must be sockets ("some of them sockets"). A panic
+ends the run, so the line after it is missing and the comparison fails.
+
 **Against a live server**: `tests/postgres/live/run.mjs` runs the pool and
 `tests/postgres/carrier.ts` against PostgreSQL 18, in CI's `postgres-live`
 job against a `postgres:18` service. It checks that a wrong password is
@@ -465,4 +504,9 @@ serves HTTP while a query sleeps, and with nothing listening on its database
 port reports the request lost and the slot failed rather than waiting. Its
 `reset` check points it at a server that resets the connection on the
 startup message: the read answers ECONNRESET (-104), and the carrier ends
-the connection there rather than leave the readable socket to spin.
+the connection there rather than leave the readable socket to spin. Its
+`unix` scenario connects through a `postgres://` URL whose host is the
+percent-encoded socket directory: the server asks for no password (`peer`
+for a cluster `run.mjs` starts, `trust` in CI's service), so a password the
+server would refuse still logs in, and its copy is wiped; and a multi-row read comes back over the socket,
+where `inet_server_addr()` is NULL.

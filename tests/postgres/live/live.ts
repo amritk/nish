@@ -1,6 +1,9 @@
 // The live checks of nish/net/postgres's PgPool, against a real server:
 //
-//   live <scenario> <port> <user> <password> <database> [sql ...]
+//   live <scenario> <port | url> <user> <password> <database> [sql ...]
+//
+// A port is TCP to 127.0.0.1; a `postgres://` URL names its own host, which
+// may be a socket directory, as `%2Ftmp`.
 //
 // Every connection sets `search_path=nish_live`, the schema `exec` builds.
 // `run.mjs` runs each scenario and compares its output with `expected/`.
@@ -16,6 +19,8 @@
 //   binary      one statement's rows in binary and in text, read alike; two
 //               batches of creation times, binary and text, read alike
 //   conduit     the Conduit article list, prepared once and run pipelined
+//   unix        over a socket, with a wrong password the server never asks
+//               for (peer or trust): the user, `select 1`, and 100 rows
 //   batch       keyed reads through PgBatcher: users by id, articles by slug,
 //               tags by article; duplicate and missing keys, two takes
 //
@@ -24,7 +29,7 @@
 // https://github.com/arjaythedev/multicore-server-challenge/blob/c301225/SPEC.md.
 // Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
 // see tests/postgres/live/LICENSE.md.
-import { connectResult, netAddress, netClose, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpConnect } from "nish:net"
+import { connectResult, netAddress, netClose, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpConnect, unixConnect } from "nish:net"
 import { secret, wipe } from "nish:secret"
 import {
   PG_ARRAY_ELEMENT,
@@ -53,6 +58,10 @@ import {
   PgConfig,
   PgConnection,
   PgPool,
+  PG_TARGET_OK,
+  PgTarget,
+  pgTarget,
+  pgTargetUrl,
 } from "nish/net/postgres"
 
 const WANT_READ: i32 = 1
@@ -109,15 +118,20 @@ class Driver {
   private readonly loop: i32
   private cursor: i32 = 0
 
-  constructor(pool: PgPool, port: i32) {
+  private readonly target: PgTarget
+
+  constructor(pool: PgPool, target: PgTarget) {
     this.pool = pool
     this.sockets = []
     for (let s: i32 = 0; s < pool.size; s++) {
       this.sockets.push(new Socket())
     }
     this.loop = pollCreate()
+    this.target = target
     this.addr = new Array<u8>(18)
-    netAddress(this.addr, "127.0.0.1", port)
+    if (!target.unix) {
+      netAddress(this.addr, target.host, target.port)
+    }
     this.ready = new Array<i32>(64)
   }
 
@@ -130,7 +144,7 @@ class Driver {
       crypto.getRandomValues(nonce)
       this.pool.connect(want, nonce)
       this.made += 1
-      socket.fd = tcpConnect(this.addr)
+      socket.fd = this.target.unix ? unixConnect(this.target.path) : tcpConnect(this.addr)
       socket.live = true
       socket.connected = false
       if (socket.fd < 0 || pollAdd(this.loop, socket.fd, WANT_WRITE, want) < 0) {
@@ -254,9 +268,9 @@ const codeOf = (conn: PgConnection): string => {
 const failed = (ticket: i32, conn: PgConnection): string => `request ${ticket} failed: ${errorOf(conn)}`
 
 /** `exec`: each SQL argument in its own group, in order on one connection. */
-const exec = (port: i32): i32 => {
+const exec = (target: PgTarget): i32 => {
   const pool = makePool(toI32(1), toI32(256), "")
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   const count: i32 = toI32(process.argv.length) - 6
   for (let k: i32 = 0; k < count; k++) {
     pool.request()
@@ -297,9 +311,9 @@ const exec = (port: i32): i32 => {
 }
 
 /** Runs `select current_user` through a pool with the password plus `extra`, printing what came back. */
-const login = (port: i32, extra: string, label: string): i32 => {
+const login = (target: PgTarget, extra: string, label: string): i32 => {
   const pool = makePool(toI32(1), toI32(4), extra)
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   pool.request()
   let over: boolean = false
   while (!over) {
@@ -337,12 +351,12 @@ const login = (port: i32, extra: string, label: string): i32 => {
   return 0
 }
 
-const auth = (port: i32): i32 => login(port, "", "right password") + login(port, "!", "wrong password")
+const auth = (target: PgTarget): i32 => login(target, "", "right password") + login(target, "!", "wrong password")
 
 /** The first column of the first row `sql` answers, on a connection of its own; "" for none. */
-const one = (port: i32, sql: string): string => {
+const one = (target: PgTarget, sql: string): string => {
   const pool = makePool(toI32(1), toI32(1), "")
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   pool.request()
   let text: string = ""
   let over: boolean = false
@@ -381,14 +395,14 @@ const one = (port: i32, sql: string): string => {
  * inserts a duplicate key into `live_uniq` first, so its own insert and probe
  * are skipped and the groups beside it on the connection commit.
  */
-const groups = (port: i32): i32 => {
+const groups = (target: PgTarget): i32 => {
   const total: i32 = 100
   const size: i32 = 4
   const pool = makePool(size, toI32(128), "")
   pool.register("probe", "select $1::int4 * 2", [toI32(23)])
   pool.register("dup", "insert into live_uniq values (1)", noTypes())
   pool.register("put", "insert into live_rows values ($1::int4)", [toI32(23)])
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   const rows: i32[] = new Array<i32>(total)
   const dones: i32[] = new Array<i32>(total)
   const carried: i32[] = new Array<i32>(size)
@@ -474,17 +488,17 @@ const groups = (port: i32): i32 => {
   console.log(`${answered} groups answered their probe`)
   console.log(`${d.made} connections, ${used} of them carried groups, at most ${peak} in flight on one`)
   console.log(
-    `committed: ${one(port, "select count(*) || ' rows, ' || count(*) filter (where k % 25 = 7) || ' from the failed groups, ' || coalesce(sum(k), 0) || ' summed' from live_rows")}`,
+    `committed: ${one(target, "select count(*) || ' rows, ' || count(*) filter (where k % 25 = 7) || ' from the failed groups, ' || coalesce(sum(k), 0) || ' summed' from live_rows")}`,
   )
   return bad
 }
 
 /** `terminate`: one pool's backend is ended from another; the next request builds the slot again. */
-const terminate = (port: i32): i32 => {
+const terminate = (target: PgTarget): i32 => {
   const victim = makePool(toI32(1), toI32(4), "")
   const killer = makePool(toI32(1), toI32(4), "")
-  const v = new Driver(victim, port)
-  const k = new Driver(killer, port)
+  const v = new Driver(victim, target)
+  const k = new Driver(killer, target)
   // 0: ask the victim its pid; 1: end it from the killer; 2: wait for the victim to fail; 3: ask again; 4: done.
   let phase: i32 = 0
   let pid: string = ""
@@ -562,10 +576,10 @@ const terminate = (port: i32): i32 => {
 }
 
 /** `pipeline`: five groups in flight on one connection, the third dividing by zero before a second statement. */
-const pipeline = (port: i32): i32 => {
+const pipeline = (target: PgTarget): i32 => {
   const pool = makePool(toI32(1), toI32(8), "")
   pool.register("div", "select 60 / $1::int4", [toI32(23)])
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   const divisors: i64[] = [toI64(1), toI64(2), toI64(0), toI64(5), toI64(6)]
   for (let t: i32 = 0; t < toI32(divisors.length); t++) {
     pool.request()
@@ -656,12 +670,12 @@ const bindArray = (conn: PgConnection, t: i32): void => {
  * unnested by the server; awkward text, NULLs, the empty array, the extreme
  * int8s, and a text literal the server reads as `int4[]`.
  */
-const arrays = (port: i32): i32 => {
+const arrays = (target: PgTarget): i32 => {
   const pool = makePool(toI32(1), toI32(8), "")
   pool.register("texts", "select x, ord from unnest($1::text[]) with ordinality as u(x, ord)", noTypes())
   pool.register("ints", "select x, ord from unnest($1::int8[]) with ordinality as u(x, ord)", noTypes())
   pool.register("int4s", "select x + 1, pg_typeof(x)::text from unnest($1::int4[]) as u(x)", noTypes())
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   const requests: i32 = 5
   for (let t: i32 = 0; t < requests; t++) {
     pool.request()
@@ -835,7 +849,7 @@ const stampEvents = (b: PgBatcher, r: i32, binary: boolean, conn: PgConnection, 
  * text: each routes by its ordinal, binary's read with `binaryInt`, and the
  * two print the same creation times.
  */
-const binary = (port: i32): i32 => {
+const binary = (target: PgTarget): i32 => {
   const pool = makePool(toI32(1), toI32(8), "")
   pool.register("kinds", KINDS, noTypes())
   const stampers: PgBatcher[] = [stamps("stamps_binary", true), stamps("stamps_text", false)]
@@ -849,7 +863,7 @@ const binary = (port: i32): i32 => {
     }
   }
   const runs: i32[] = [-1, -1]
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   const out: u8[] = new Array<u8>(24)
   pool.request()
   let done: boolean = false
@@ -957,7 +971,7 @@ const jsonTags = (conn: PgConnection, c: i32, walker: PgArrayWalker, out: u8[]):
 }
 
 /** `conduit`: the article list for three viewers and pages, the statement prepared once on one connection. */
-const conduit = (port: i32): i32 => {
+const conduit = (target: PgTarget): i32 => {
   const pool = makePool(toI32(1), toI32(8), "")
   pool.register(
     "article_list",
@@ -972,7 +986,7 @@ const conduit = (port: i32): i32 => {
       "ORDER BY a.id DESC LIMIT $2 OFFSET $3",
     [toI32(20), toI32(20), toI32(20)]
   )
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   // viewer, limit, offset: anonymous (0), then two signed-in viewers paging.
   const viewers: i64[] = [toI64(0), toI64(1), toI64(2)]
   const limits: i64[] = [toI64(20), toI64(2), toI64(2)]
@@ -1085,7 +1099,7 @@ const routeBatch = (b: PgBatcher, r: i32, conn: PgConnection, log: string): stri
  * the take line leaves out its run handle, which does (a second take may come
  * before or after the first run is answered).
  */
-const batch = (port: i32): i32 => {
+const batch = (target: PgTarget): i32 => {
   const batchers: PgBatcher[] = [
     batcher("users_by_id", PG_BATCH_INT, "select u.username from users u where u.id = q.key", "", toI32(4)),
     batcher("article_by_slug", PG_BATCH_TEXT, "select a.title from articles a where a.slug = q.key", "", toI32(32)),
@@ -1114,7 +1128,7 @@ const batch = (port: i32): i32 => {
   for (let t: i32 = 0; t < toI32(articleIds.length); t++) {
     batchers[2].addInt(articleIds[t], t)
   }
-  const d = new Driver(pool, port)
+  const d = new Driver(pool, target)
   // Each pool request is one take of one batcher: which, the run it got, and
   // its log. The scenario makes far fewer than `ring` requests, so a slot's
   // index is its ticket and the slots are in take order.
@@ -1207,31 +1221,93 @@ const batch = (port: i32): i32 => {
   return code
 }
 
+/** The ticket's rows of `sql`, on a connection of its own: how many, and the sum of their first column; "" if it failed. */
+const rows = (target: PgTarget, sql: string): string => {
+  const pool = makePool(toI32(1), toI32(1), "")
+  const d = new Driver(pool, target)
+  pool.request()
+  let count: i32 = 0
+  let sum: i32 = 0
+  let ok: boolean = false
+  let over: boolean = false
+  while (!over) {
+    const slot: i32 = pool.dispatch()
+    if (slot >= 0) {
+      const conn = pool.connection(slot)
+      adhoc(conn, sql, noTypes())
+      conn.bindEnd()
+      pool.send()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      over = true
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      if (event === PG_ROW) {
+        count += 1
+        sum += parseInt(conn.columnText(toI32(0)))
+      } else if (event === PG_ERROR) {
+        console.log(failed(pool.ticket, conn))
+      } else if (event === PG_GROUP_DONE) {
+        ok = true
+        over = true
+      } else if (event === PG_FAILED) {
+        over = true
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  return ok ? `${count} rows, summing ${sum}` : ""
+}
+
+/** `unix`: a socket the server trusts, or maps by peer credentials, so a wrong password still logs in; then reads over it. */
+const unix = (target: PgTarget): i32 => {
+  if (!target.unix) {
+    console.log("not a socket target")
+    return 1
+  }
+  const code: i32 = login(target, "!", "a password never asked for")
+  console.log(`select 1: ${one(target, "select 1")}`)
+  console.log(`over a socket: ${one(target, "select inet_server_addr() is null")}`)
+  console.log(`a multi-row read: ${rows(target, "select g from generate_series(1, 100) g")}`)
+  return code
+}
+
 export const main = (): i32 => {
   if (process.argv.length < 6) {
-    console.log("usage: live <scenario> <port> <user> <password> <database> [sql ...]")
+    console.log("usage: live <scenario> <port | url> <user> <password> <database> [sql ...]")
     return 2
   }
   const scenario: string = process.argv[1]
-  const port: i32 = parseInt(process.argv[2])
+  const where: string = process.argv[2]
+  const target: PgTarget = where.startsWith("postgres") ? pgTargetUrl(where) : pgTarget("127.0.0.1", parseInt(where))
+  if (target.failure !== PG_TARGET_OK) {
+    console.log(`bad target ${where}: ${target.failure}`)
+    return 2
+  }
   if (scenario === "exec") {
-    return exec(port)
+    return exec(target)
   } else if (scenario === "auth") {
-    return auth(port)
+    return auth(target)
   } else if (scenario === "groups") {
-    return groups(port)
+    return groups(target)
   } else if (scenario === "terminate") {
-    return terminate(port)
+    return terminate(target)
   } else if (scenario === "pipeline") {
-    return pipeline(port)
+    return pipeline(target)
   } else if (scenario === "arrays") {
-    return arrays(port)
+    return arrays(target)
   } else if (scenario === "binary") {
-    return binary(port)
+    return binary(target)
   } else if (scenario === "conduit") {
-    return conduit(port)
+    return conduit(target)
   } else if (scenario === "batch") {
-    return batch(port)
+    return batch(target)
+  } else if (scenario === "unix") {
+    return unix(target)
   }
   console.log(`unknown scenario ${scenario}`)
   return 2
