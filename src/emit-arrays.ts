@@ -676,10 +676,11 @@ const noteArrayUse = (emitter: Emitter, expr: Node, len: boolean, data: boolean,
 }
 
 /**
- * `nish:simd`'s `loadU8x16(xs, i)` or `store(v, xs, i)`, the two calls that
- * lower through `emitVectorAccess`: the array is the second argument from the
- * end. They are only reachable by import, so the checker's record of the
- * imported name is the whole test: a local `store` closure has none.
+ * `nish:simd`'s `load…(xs, i)` or `store(v, xs, i)`, the calls that lower
+ * through `emitVectorAccess`: the array is the second argument from the end.
+ * The test is `isSimdAccess`'s in `src/simd.ts`, which imports this file. They
+ * are only reachable by import, so the checker's record of the imported name
+ * is the whole test: a local `store` closure has none.
  */
 const isVectorAccess = (emitter: Emitter, call: Node): boolean => {
   if (call.kind !== N_CALL || call.children[1].children.length < 2) {
