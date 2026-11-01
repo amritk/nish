@@ -25,7 +25,7 @@ PASS  idle: a connection the origin closed while idle is not reused, and the nex
 PASS  idle: bytes the origin sent while the connection was idle are not the next call's response
 PASS  retry: a call the origin drops unanswered on a reused connection is made once more on a new one
 PASS  reset: a close-delimited body ends at the origin's close
-PASS  reset: a reset in a close-delimited body fails the call UPSTREAM_E_RESET, not ok with what came
+PASS  reset: a reset where the origin's close would end a close-delimited body fails the call UPSTREAM_E_RESET, not ok
 PASS  connections: three calls with one connection allowed share it, one after another
 PASS  request: an absolute-form or asterisk path is UPSTREAM_E_REQUEST, with nothing sent
 PASS  calls: with every slot taken, get answers UPSTREAM_E_FULL and holds nothing
@@ -33,5 +33,14 @@ PASS  calls: once the slot is released, get takes a call again
 PASS  request: a request head past maxHead is UPSTREAM_E_REQUEST, with nothing sent
 PASS  request: and one that fits is called
 PASS  policy: a host name the policy does not allow is refused before any lookup
-PASS  late reply: a call past its deadline fails UPSTREAM_E_TIMEOUT and its connection is closed
+PASS  late reply: a call past its deadline fails UPSTREAM_E_TIMEOUT and its connection is closed before the reply is due
 PASS  late reply: the next call gets its own response, on a new connection
+PASS  framing: a Connection: close response closes its connection, and the next call opens a new one
+PASS  framing: bytes past a response in the same read close its connection, and are not the next call's
+PASS  body: a body of maxBody is taken whole, in a buffer under twice maxBody
+PASS  request: a CR, LF or space in a path is UPSTREAM_E_REQUEST, with nothing sent
+PASS  closed: a call the origin drops on its retry's new connection too fails UPSTREAM_E_CLOSED, made twice in all
+PASS  deadline: a call queued behind the connections cap fails UPSTREAM_E_TIMEOUT at the deadline get gave it
+PASS  connect: a refused connection fails the call UPSTREAM_E_CONNECT
+PASS  policy: an allowed name that resolves only to refused addresses is UPSTREAM_E_BLOCKED
+PASS  lookup: a name with no address is UPSTREAM_E_LOOKUP

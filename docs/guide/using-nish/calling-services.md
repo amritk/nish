@@ -162,7 +162,7 @@ export const servicesLimits = (): UpstreamLimits => {
 | `firstId` | 8 | the first of the handler watch ids the connections use, one each; keep them clear of your own `h.watch` ids |
 | `timeoutMs` | 10 000 | one call, from `get` to its response's end |
 | `lookupMs` | 5 000 | the start-up lookup |
-| `maxBody` | 1 MiB | a response body |
+| `maxBody` | 1 MiB | a response body; a value past 1 GiB is taken as 1 GiB |
 | `maxHead` | 8 KiB | the request head `get` writes |
 | `maxStatusLine`, `maxHeaderBytes`, `maxHeaders`, `maxTrailerBytes` | 8 KiB, 64 KiB, 100, 8 KiB | a response's head and trailers |
 | `outbound` | null | the outbound policy |
@@ -183,3 +183,7 @@ buffers are made at start-up. Each call keeps a body buffer as large as the
 largest body it has held. Each connection keeps one response parser, which
 reads a response's fields into a buffer it reuses, so a warm pool allocates
 nothing per call.
+
+An `Upstream` has no `close`: make one per origin at start-up and keep it for
+the life of the program. Its connections and their watch ids are released
+when the program exits.

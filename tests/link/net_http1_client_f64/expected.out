@@ -395,4 +395,7 @@ PASS  spans mode: 1,000 kept-alive responses leave Arena.mark() and Arena.used()
 PASS  spans mode: names, values and reason stay empty, and the accessors answer
 PASS  spans mode: header() matches a name in any case
 PASS  spans mode: past the last field, a name and a value are empty
-http1-client: 397 passed, 0 failed, 0 skipped
+PASS  strings mode: after reset() the next response's head reads
+PASS  strings mode: reason is what reasonText() answers
+PASS  strings mode: reset() leaves no field of the response it cut behind
+http1-client: 400 passed, 0 failed, 0 skipped

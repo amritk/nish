@@ -134,6 +134,8 @@ const UPSTREAM_WRITE: i32 = 2
 const UPSTREAM_WOULD_BLOCK: i32 = -11
 const UPSTREAM_NS_PER_MS: i64 = 1000000
 const UPSTREAM_READ_CHUNK: i32 = 16384
+/** The largest body a call takes, whatever `maxBody` says: doubling the buffer up to it stays in i32's range. */
+const UPSTREAM_MAX_BODY: i64 = 1073741824
 
 /** A connection with no socket. */
 const UPSTREAM_C_CLOSED: i32 = 0
@@ -148,7 +150,7 @@ const UPSTREAM_C_IDLE: i32 = 3
 export class UpstreamLimits {
   /** Checks the origin's host and address when set; set it whenever the origin comes from input. */
   outbound: OutboundPolicy | null = null
-  /** The largest response body the codec accepts; past it the call fails `HTTP1_E_BODY_LIMIT`. */
+  /** The largest response body the codec accepts, at most 1 GiB; past it the call fails `HTTP1_E_BODY_LIMIT`. */
   maxBody: i64 = 1048576
   /** Connections to the origin, at most; each takes one handler watch id. */
   connections: i32 = 4
@@ -728,18 +730,23 @@ const upstreamParser = (limits: UpstreamLimits): Http1ResponseParser => {
     limits.maxStatusLine,
     limits.maxHeaderBytes,
     limits.maxHeaders,
-    limits.maxBody,
+    // A body buffer is an i32-indexed array, so past this the codec refuses the body rather than the buffer overflowing.
+    limits.maxBody < UPSTREAM_MAX_BODY ? limits.maxBody : UPSTREAM_MAX_BODY,
     limits.maxTrailerBytes
   )
   p.fieldsAsSpans()
   return p
 }
 
-/** Appends `data[off .. off + len)` to `r`'s body, growing its buffer by doubling when it is full. */
+/**
+ * Appends `data[off .. off + len)` to `r`'s body, growing its buffer by
+ * doubling when it is full: to under twice the body, and at least 1 KiB.
+ */
 const upstreamAppend = (r: UpstreamResponse, data: u8[], off: i32, len: i32): void => {
   const need: i32 = r.length + len
   if (need > toI32(r.body.length)) {
     let size: i32 = toI32(r.body.length) < 1024 ? 1024 : toI32(r.body.length)
+    // `need` is at most UPSTREAM_MAX_BODY, 2^30, so `size` doubles to 2^30 at most.
     while (size < need) {
       size = size * 2
     }

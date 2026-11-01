@@ -1481,5 +1481,19 @@ export const http1ClientChecks = (): i32 => {
   );
   t.eqStr("spans mode: header() matches a name in any case", headerText(spans, "X-REQUEST"), "7");
   t.ok("spans mode: past the last field, a name and a value are empty", spans.fieldName(spanPast) === "" && spans.fieldValue(spanBefore) === "");
+  // Strings mode, reset half way through a body: the next head reads as a new parser's, reason and reasonText() agreeing.
+  const reread: Http1ResponseParser = corpusParser();
+  const fieldCount: i32 = 3;
+  const keptStart: i32 = 0;
+  leaveBehind(reread, 3);
+  reread.reset();
+  reread.expect(false, false);
+  reread.feed(keptAlive, keptStart, toI32(keptAlive.length));
+  t.eqI32("strings mode: after reset() the next response's head reads", reread.next(), HTTP1_HEAD);
+  t.eqStr("strings mode: reason is what reasonText() answers", reread.reason, reread.reasonText());
+  t.ok(
+    "strings mode: reset() leaves no field of the response it cut behind",
+    reread.error === 0 && toI32(reread.names.length) === fieldCount && reread.reason === "OK" && headerText(reread, "x-old") === "null" && headerText(reread, "X-Request") === "7"
+  );
   return t.done();
 };
