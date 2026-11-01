@@ -137,10 +137,11 @@ process.env.XDG_CACHE_HOME = suiteCache
  * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
  * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes`,
  * `runtime-sandbox.c` the `--sandbox` confinement and `runtime-shm.c` the
- * shared-memory regions of `nish/sync/shm`, split apart so that each carries its own `.text*`
+ * shared-memory regions of `nish/sync/shm` and `runtime-region.c` the arenas a program
+ * makes and frees one at a time, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fourteen:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fifteen:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -165,6 +166,7 @@ const RUNTIME_C = [
   "runtime/runtime-bytes.c",
   "runtime/runtime-sandbox.c",
   "runtime/runtime-shm.c",
+  "runtime/runtime-region.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -9144,7 +9146,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's fourteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's fifteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9205,6 +9207,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-bytes.c",
       "runtime-sandbox.c",
       "runtime-shm.c",
+      "runtime-region.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -9212,7 +9215,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fourteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fifteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9221,7 +9224,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the fourteen runtime units once",
+      "runtime cache: the miss compiled each of the fifteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -18283,6 +18286,77 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
   }
 }
 
+// ---- Regions (WP46 stage 1): runtime-region.c from C ---------------------------------
+// tests/runtime/region-test.c, linked with the whole runtime in the default
+// build and with -DNISH_THREADS: with no argument it runs the positive checks
+// (chunk sizes, nesting, the root, a hundred thousand regions freed ten times
+// with the resident set flat); with a mode it misuses a handle, and each mode
+// must exit 1 with its panic. Then `scripts/build.sh --profile wasm` must refuse
+// IR that names a region function, pointing at `--profile wasi`.
+if (!only || "region".includes(only)) {
+  const regionBuild = (name, flags) => {
+    const exe = path.join(buildDir, name)
+    const cc = spawnSync(
+      "clang",
+      ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", ...flags, ...RUNTIME_C, "tests/runtime/region-test.c", "-lm", "-o", exe],
+      { cwd: root, encoding: "utf8" }
+    )
+    return { exe, ok: cc.status === 0, stderr: cc.stderr }
+  }
+  const zero = "nish: a zero region handle: no region was made for it"
+  const stale = "nish: a stale region handle: the region was freed"
+  const entered = "nish: enter of a region that is already entered"
+  const notLast = "nish: leave of a region that is not the one entered last"
+  const panics = [
+    ["zero-enter", zero],
+    ["zero-free", zero],
+    ["zero-leave", zero],
+    ["stale-enter", stale],
+    ["double-free", stale],
+    ["forged", stale],
+    ["free-entered", "nish: free of a region that is entered"],
+    ["reenter", entered],
+    ["reenter-nested", entered],
+    ["leave-outer", notLast],
+    ["leave-unentered", notLast],
+  ]
+  for (const [name, flags, extra] of [
+    ["region_test", [], []],
+    ["region_test_threads", ["-DNISH_THREADS=1", "-pthread"], [["thread", "nish: a region handle made on another thread"]]],
+  ]) {
+    const built = regionBuild(name, flags)
+    const label = flags.length > 0 ? "runtime-region.c -DNISH_THREADS" : "runtime-region.c"
+    const run = built.ok ? spawnSync(built.exe, [], { encoding: "utf8" }) : null
+    check(
+      `${label}: chunks start at the first allocation and double, regions nest, and 100,000 freed ten times leave the resident set flat`,
+      run !== null && run.status === 0,
+      built.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "")
+    )
+    for (const [mode, message] of [...panics, ...extra]) {
+      const bad = built.ok ? spawnSync(built.exe, [mode], { encoding: "utf8" }) : null
+      check(
+        `${label}: ${mode} panics with "${message}"`,
+        bad !== null && bad.status === 1 && bad.stderr === `${message}\n`,
+        built.stderr + (bad ? `exit ${bad.status} ${bad.signal ?? ""}\n${bad.stdout}${bad.stderr}` : "")
+      )
+    }
+  }
+  const ll = path.join(buildDir, "region_wasm.ll")
+  fs.writeFileSync(
+    ll,
+    "declare i64 @nish_region_new()\ndefine i32 @main() {\n  %r = call i64 @nish_region_new()\n  ret i32 0\n}\n"
+  )
+  const wasm = spawnSync("bash", ["scripts/build.sh", ll, "-o", path.join(buildDir, "region.wasm"), "--profile", "wasm"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "scripts/build.sh --profile wasm refuses IR that names @nish_region_ with exit 2, naming --profile wasi",
+    wasm.status === 2 && wasm.stderr.includes("uses regions") && wasm.stderr.includes("--profile wasi"),
+    `exit ${wasm.status}\n${wasm.stderr}`
+  )
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 // The two runtime unit tests below name the runtime's sources rather than the
 // prebuilt objects, deliberately: what they assert *is* that the two
@@ -18308,7 +18382,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c and runtime-shm.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -24896,9 +24970,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fourteen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fifteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 14 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 15 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")

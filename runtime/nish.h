@@ -104,8 +104,9 @@ extern NISH_TLS struct nish_arena nish_arena;
 
 /* Bump allocation: 8-byte rounded and aligned, uninitialised. */
 void *nish_alloc_struct(uint64_t size);
-/* Slow path: push a new chunk (at least 64 KB) and bump from it. Called by
- * the inlined fast path when the current chunk is full; rarely by hosts. */
+/* Slow path: push a new chunk (at least 64 KB, or a region's next size) and
+ * bump from it. Called by the inlined fast path when the current chunk is
+ * full; rarely by hosts. */
 void *nish_arena_grow(uint64_t size);
 /* Recycle everything in O(1): keeps the newest chunk, frees the rest. Every
  * arena string and object becomes invalid. Call it between batches. */
@@ -131,6 +132,25 @@ void nish_arena_release(uint64_t mark);
 void *nish_arena_keep(uint64_t mark, void *p);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
 uint64_t nish_arena_used(void);
+
+/* ---- Regions (runtime-region.c) -----------------------------------------
+ * Arenas made, entered, left and freed one at a time
+ * (docs/wp46-long-running-memory.md). A handle is a nonzero `uint64_t`: a
+ * 24-bit slot and its 40-bit generation. Every call below panics on a zero
+ * handle, a freed (stale) one and one made on another thread.
+ * `nish_region_new` makes an empty region, owned by the calling thread.
+ * `nish_region_enter` makes the region the thread's arena until the matching
+ * `nish_region_leave`, so every allocation in between lands in it, and
+ * answers the root `leave` last recorded (null at first); entering a region
+ * already entered panics. `nish_region_leave` must name the region entered
+ * last on this thread, puts back the arena its enter displaced and records
+ * `root`. `nish_region_free` frees every chunk of a region that is not
+ * entered and makes its handle stale. The wasm profile has none of these
+ * (scripts/build.sh refuses IR that names them); wasi has. */
+uint64_t nish_region_new(void);
+void *nish_region_enter(uint64_t r);
+void nish_region_leave(uint64_t r, void *root);
+void nish_region_free(uint64_t r);
 
 /* ---- String operations ------------------------------------------------- */
 /* Copy `len` bytes into a new arena string (`bytes` need not be terminated). */

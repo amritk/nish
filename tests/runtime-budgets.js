@@ -60,8 +60,15 @@
  * links alone (a C host's one file, and the direct `clang` lines in `tests/run.js`) and
  * its own panics call it: defined in `runtime-term.c` the core measured 3,675, and a
  * lone `runtime.c` no longer linked.
+ *
+ * Raised by 26, to 3,724, for regions (docs/wp46-long-running-memory.md, stage 1):
+ * `nish_arena_grow`'s slow path reads the thread-local `nish_region_chunk`, so a region's
+ * chunks start at its first allocation's size and double while a thread's own arena
+ * keeps its 64 KiB floor. The read lives here because the grow does; the rest of regions
+ * is `runtime-region.c`'s own row. Measured 3,479 against 3,453 on 2026-11-01 with clang
+ * 18.1.3 on linux-x64; the ceiling moves by that difference and no more.
  */
-const RUNTIME_TEXT_BUDGET = 3698
+const RUNTIME_TEXT_BUDGET = 3724
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -174,8 +181,12 @@ const RUNTIME_OS_TEXT_BUDGET = 4864
  *
  * Raised by 14, to 3,899, for `nish_fatal_exit` (as above), measured 3,899 against 3,885
  * on 2026-10-23 with clang 18 on linux-x64.
+ *
+ * Raised by 40, to 3,939, for the chunk-size read of regions (as above), which costs
+ * more here because `nish_region_chunk` is `_Thread_local`. Measured 3,694 against 3,654
+ * on 2026-11-01 with clang 18.1.3 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3899
+const RUNTIME_THREADS_TEXT_BUDGET = 3939
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -607,6 +618,24 @@ const RUNTIME_SANDBOX_TEXT_BUDGET = 2560
  * every ceiling here was set.
  */
 const RUNTIME_SHM_TEXT_BUDGET = 2816
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
+ * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
+ * table, `nish_region_new`, `_enter`, `_leave` and `_free` with their zero, stale,
+ * thread and entered checks, and the panic table (docs/security/runtime.md).
+ *
+ * Measured **664 bytes** on 2026-11-01 with clang 18.1.3 on linux-x64. A fifteenth
+ * translation unit, so a program that makes no region links none of it. The budget is
+ * the next 256-byte boundary above the measurement.
+ */
+const RUNTIME_REGION_TEXT_BUDGET = 768
+/**
+ * The same file with `-DNISH_THREADS=1`: the table's spin lock, the thread number taken
+ * from a process-wide counter, and the innermost entered handle, which is thread-local.
+ * Measured **852 bytes** on 2026-11-01 with clang 18.1.3 on linux-x64; a row of its own,
+ * as `runtime.c`'s threads build has, so neither number covers the other's room.
+ */
+const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1024
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
@@ -762,6 +791,13 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-sandbox.c", RUNTIME_SANDBOX_TEXT_BUDGET, "RUNTIME_SANDBOX_TEXT_BUDGET", []],
   ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", []],
   ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
+  ["runtime/runtime-region.c", RUNTIME_REGION_TEXT_BUDGET, "RUNTIME_REGION_TEXT_BUDGET", []],
+  [
+    "runtime/runtime-region.c",
+    RUNTIME_REGION_THREADS_TEXT_BUDGET,
+    "RUNTIME_REGION_THREADS_TEXT_BUDGET",
+    ["-DNISH_THREADS=1"],
+  ],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
