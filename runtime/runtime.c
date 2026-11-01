@@ -181,8 +181,11 @@ static NISH_COLD void nish_oom(void) { nish_die("nish: out of memory\n"); }
 NISH_TLS uint64_t nish_region_chunk;
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB, or a region's
-   next size), bump from it. A region's chunks double from its first. */
-void *nish_arena_grow(uint64_t size) {
+   next size), bump from it. A region's chunks double from its first. Never
+   inlined: it runs once per chunk, and inlined into every bump allocation it
+   changes what LTO inlines around those (a region's branch here moved
+   `nish_str_from_i32` out of a map benchmark's loop, +0.2% instructions). */
+__attribute__((noinline)) void *nish_arena_grow(uint64_t size) {
 #ifdef NISH_ASAN
   /* An exact chunk leaves off == cap, so the inline bump never fits again and
      every block comes through here: one malloc, one redzone, per block. */
