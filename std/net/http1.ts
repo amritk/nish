@@ -81,6 +81,7 @@
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
 import { copyBytes } from "nish/bytes"
+import { extract, loadU8x16, u8x16 } from "nish:simd"
 
 /** `next()`: the input so far holds no further event; feed more. */
 export const HTTP1_NEED_MORE: i32 = 0
@@ -218,7 +219,13 @@ export class Http1Parser {
   /** The line `http1TakeLine` found is `buf[lineStart .. lineEnd)`, its CRLF dropped. */
   lineStart: i32 = 0
   lineEnd: i32 = 0
-
+  /**
+   * Whether the line being scanned holds a byte a field value may not: a
+   * control byte other than HTAB, or DEL (RFC 9110 §5.5). `http1TakeLine`
+   * sets it as it looks for the line's end, so a field line's bytes are read
+   * once, not once for the LF and again for the check.
+   */
+  lineControl: boolean = false
   chunked: boolean = false
   keepAlive: boolean = false
   /** Whether the request asked to switch protocols (`upgrade` is its value when `keepText`). */
@@ -498,6 +505,67 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.headHeld = false
 }
 
+/**
+ * Whether any of the eight bytes of `x` is below 32 or is 127: a control
+ * byte or DEL, which `http1TakeLine` stops at. Two of the bit tricks of
+ * "Bit Twiddling Hacks" (S. E. Anderson, public domain): a byte below `n`
+ * leaves its high bit set in `(x - n * ones) & ~x`, for `n` up to 128, and
+ * `127` is the byte that is zero in `x ^ 127 * ones`. A byte from 128 up
+ * has its high bit set in `x`, so `~x` clears it: obs-text never matches.
+ * The answer is exact for the word, though not for which byte. Each
+ * subtraction is masked to 64 bits because a `u64` is a BigInt under Node,
+ * which does not wrap; natively the mask is a no-op.
+ */
+const http1WordHasControl = (x: u64): boolean => {
+  const ones32: u64 = toU64(16843009)
+  const ones: u64 = (ones32 << toU64(32)) | ones32
+  const low32: u64 = 0xffffffff
+  const all: u64 = (low32 << toU64(32)) | low32
+  const high: u64 = ones * toU64(128)
+  const below: u64 = (x - ones * toU64(32)) & all & ~x & high
+  const y: u64 = x ^ (ones * toU64(127))
+  const del: u64 = (y - ones) & all & ~y & high
+  return (below | del) !== toU64(0)
+}
+
+/**
+ * `buf[i .. i + 16)` as one vector. A function of its own, because inside
+ * `http1TakeLine`'s loop, where `buf`'s header is hoisted, the load is
+ * emitted without its array.
+ */
+const http1Load16 = (buf: u8[], i: i32): u8x16 => loadU8x16(buf, i)
+
+/**
+ * Lanes `at` to `at + 7` of `v`, the first the lowest byte: eight bytes of a
+ * sixteen-byte load as one word, which `opt` folds to a bitcast of the
+ * vector's half. One load is one bounds check for sixteen bytes, where eight
+ * reads of `buf[i + k]` would be eight.
+ */
+const http1Lanes = (v: u8x16, at: i32): u64 => {
+  if (at === 0) {
+    return (
+      toU64(extract(v, 0)) |
+      (toU64(extract(v, 1)) << toU64(8)) |
+      (toU64(extract(v, 2)) << toU64(16)) |
+      (toU64(extract(v, 3)) << toU64(24)) |
+      (toU64(extract(v, 4)) << toU64(32)) |
+      (toU64(extract(v, 5)) << toU64(40)) |
+      (toU64(extract(v, 6)) << toU64(48)) |
+      (toU64(extract(v, 7)) << toU64(56))
+    )
+  }
+  return (
+    toU64(extract(v, 8)) |
+    (toU64(extract(v, 9)) << toU64(8)) |
+    (toU64(extract(v, 10)) << toU64(16)) |
+    (toU64(extract(v, 11)) << toU64(24)) |
+    (toU64(extract(v, 12)) << toU64(32)) |
+    (toU64(extract(v, 13)) << toU64(40)) |
+    (toU64(extract(v, 14)) << toU64(48)) |
+    (toU64(extract(v, 15)) << toU64(56))
+  )
+}
+
 /** `http1TakeLine`'s answer when a whole line is ready; never an event. */
 const HTTP1_LINE: i32 = -1
 
@@ -505,14 +573,42 @@ const HTTP1_LINE: i32 = -1
  * Finds the next line: answers `HTTP1_LINE` with it in `lineStart ..
  * lineEnd`, `HTTP1_NEED_MORE` when no LF has arrived yet, or the refusal. A line ends in CRLF and in
  * nothing else; a LF without its CR is a 400. A line that has not ended by
- * `limit` bytes is refused with `overStatus`.
+ * `limit` bytes is refused with `overStatus`. On the way it sets
+ * `lineControl` when the line holds a byte no field value may, which
+ * `http1FieldLine` reads instead of scanning the value again.
  */
 const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
   const buf: u8[] = p.buf
   const end: i32 = p.end
-  let i: i32 = p.scan > p.start ? p.scan : p.start
-  while (i >= 0 && i < end && i < toI32(buf.length)) {
-    if (buf[i] === 10) {
+  let i: i32 = p.start
+  if (p.scan > p.start) {
+    i = p.scan
+  } else {
+    p.lineControl = false
+  }
+  const stop: i32 = end < toI32(buf.length) ? end : toI32(buf.length)
+  if (i < 0) {
+    i = 0
+  }
+  while (i < stop) {
+    // Most bytes are printable: sixteen at a time while a whole vector is,
+    // then one at a time, with no test in either loop but the bytes' and the
+    // bound's.
+    while (i >= 0 && i <= stop - 16 && i <= toI32(buf.length) - 16) {
+      const v: u8x16 = http1Load16(buf, i)
+      if (http1WordHasControl(http1Lanes(v, 0)) || http1WordHasControl(http1Lanes(v, 8))) {
+        break
+      }
+      i += 16
+    }
+    while (i >= 0 && i < stop && i < toI32(buf.length) && buf[i] >= 32 && buf[i] !== 127) {
+      i += 1
+    }
+    if (i < 0 || i >= stop || i >= toI32(buf.length)) {
+      break
+    }
+    const c: i32 = toI32(buf[i])
+    if (c === 10) {
       if (i === p.start || buf[i - 1] !== 13) {
         return http1Fail(p, 400, "a line ended in a bare LF")
       }
@@ -525,31 +621,49 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
       p.scan = i + 1
       return HTTP1_LINE
     }
+    if (c === 13 && i + 1 >= stop) {
+      // A CR at the end of the bytes so far: whether it ends the line is
+      // the next byte's to say, so the next call looks at it again.
+      break
+    }
+    if (c !== 9 && !(c === 13 && i + 1 < toI32(buf.length) && buf[i + 1] === 10)) {
+      p.lineControl = true
+    }
     i += 1
   }
-  p.scan = end
+  p.scan = i
   if (end - p.start > limit + 1) {
     return http1Fail(p, overStatus, "a line over its limit")
   }
   return HTTP1_NEED_MORE
 }
 
+/**
+ * The tchars of RFC 9110 §5.6.2 as three 32-bit masks, bit `c - 32`,
+ * `c - 64` and `c - 96` of each: `!` `#`-`'` `*` `+` `-` `.` and the digits
+ * in the first (0x03ff6cfa); the upper-case letters, `^` and `_` in the
+ * second (0xc7fffffe); `` ` ``, the lower-case letters, `|` and `~` in the
+ * third (0x57ffffff). No byte below 33 or above 126 is a tchar. One shift
+ * and mask replaces a chain of fourteen comparisons on the parser's hottest
+ * path (`bench/techempower`).
+ */
+const HTTP1_TCHAR_32: i32 = 67071226
+const HTTP1_TCHAR_64: i32 = -939524098
+const HTTP1_TCHAR_96: i32 = 1476395007
+
 /** Whether `c` is a tchar of RFC 9110 §5.6.2, the bytes a token is made of. */
-export const http1IsTokenByte = (c: i32): boolean =>
-  (c >= 97 && c <= 122) ||
-  (c >= 65 && c <= 90) ||
-  (c >= 48 && c <= 57) ||
-  c === 33 ||
-  (c >= 35 && c <= 39) ||
-  c === 42 ||
-  c === 43 ||
-  c === 45 ||
-  c === 46 ||
-  c === 94 ||
-  c === 95 ||
-  c === 96 ||
-  c === 124 ||
-  c === 126
+export const http1IsTokenByte = (c: i32): boolean => {
+  if (c < 32 || c > 127) {
+    return false
+  }
+  let mask: i32 = HTTP1_TCHAR_96
+  if (c < 64) {
+    mask = HTTP1_TCHAR_32
+  } else if (c < 96) {
+    mask = HTTP1_TCHAR_64
+  }
+  return ((mask >> (c & 31)) & 1) !== 0
+}
 
 /** Whether `c` may appear in a field value (RFC 9110 §5.5): HTAB, SP, VCHAR or obs-text. */
 export const http1IsValueByte = (c: i32): boolean => c === 9 || (c >= 32 && c !== 127)
@@ -720,6 +834,57 @@ const http1Tally = (p: Http1Parser, name: string, word: string): Http1ListTally 
   return tally
 }
 
+/** `http1ConnectionOptions`: the Connection list names `close`. */
+const HTTP1_CONNECTION_CLOSE: i32 = 1
+/** `http1ConnectionOptions`: the Connection list names `keep-alive`. */
+const HTTP1_CONNECTION_KEEP_ALIVE: i32 = 2
+/** `http1ConnectionOptions`: the Connection list names `upgrade`. */
+const HTTP1_CONNECTION_UPGRADE: i32 = 4
+
+/**
+ * Which of `close`, `keep-alive` and `upgrade` the Connection fields name,
+ * in any case, as `HTTP1_CONNECTION_` bits: one walk of every Connection
+ * field's list, where three `http1Tally` walks would each read it all. An
+ * element is trimmed of OWS and compared whole, as `http1TallyRun` compares.
+ */
+const http1ConnectionOptions = (p: Http1Parser): i32 => {
+  const spans: i32[] = p.spans
+  const head: u8[] = p.head
+  let found: i32 = 0
+  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
+    if (!http1HeadIs(head, spans[4 * i], spans[4 * i + 1], "connection", false)) {
+      continue
+    }
+    const to: i32 = spans[4 * i + 3]
+    let start: i32 = spans[4 * i + 2]
+    for (let k: i32 = start; k <= to; k += 1) {
+      const c: i32 = k < to && k >= 0 && k < toI32(head.length) ? toI32(head[k]) : 44
+      if (c !== 44) {
+        continue
+      }
+      let a: i32 = start
+      let b: i32 = k
+      while (a >= 0 && a < b && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
+        a += 1
+      }
+      while (b > a && b - 1 >= 0 && b - 1 < toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
+        b -= 1
+      }
+      // The length picks the one word an element could be.
+      const n: i32 = b - a
+      if (n === 5 && http1HeadIs(head, a, b, "close", true)) {
+        found = found | HTTP1_CONNECTION_CLOSE
+      } else if (n === 10 && http1HeadIs(head, a, b, "keep-alive", true)) {
+        found = found | HTTP1_CONNECTION_KEEP_ALIVE
+      } else if (n === 7 && http1HeadIs(head, a, b, "upgrade", true)) {
+        found = found | HTTP1_CONNECTION_UPGRADE
+      }
+      start = k + 1
+    }
+  }
+  return found
+}
+
 /**
  * Whether the buffered start of a request line holds more than
  * `HTTP1_MAX_METHOD` bytes before its first space (or line end).
@@ -828,10 +993,10 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
     return http1Fail(p, 400, "a malformed field name")
   }
   const nameEnd: i32 = i
-  for (let k: i32 = nameEnd + 1; k >= 0 && k < b && k < toI32(buf.length); k += 1) {
-    if (!http1IsValueByte(toI32(buf[k]))) {
-      return http1Fail(p, 400, "a control character in a field value")
-    }
+  // The name is tchars and the colon is field text, so a byte no value may
+  // hold anywhere on the line is one in the value.
+  if (p.lineControl) {
+    return http1Fail(p, 400, "a control character in a field value")
   }
   p.fieldCount += 1
   if (p.fieldCount > p.maxHeaders) {
@@ -856,9 +1021,13 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
     }
     const base: i32 = 4 * p.headerCount
     http1SpanSet(p, base + 3, at + (valueEnd - a))
-    http1SpanSet(p, base, at)
-    http1SpanSet(p, base + 1, at + (nameEnd - a))
-    http1SpanSet(p, base + 2, at + (valueStart - a))
+    // The last of the four is set first, so the array has room for them all.
+    const spans: i32[] = p.spans
+    if (base >= 0 && base + 2 < toI32(spans.length)) {
+      spans[base] = at
+      spans[base + 1] = at + (nameEnd - a)
+      spans[base + 2] = at + (valueStart - a)
+    }
     p.headerCount += 1
     if (p.keepText) {
       p.names.push(http1Text(buf, a, nameEnd, true))
@@ -938,12 +1107,12 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
     }
     p.contentLength = size
   }
-  // Each tally is read before the next one reuses it, and none is walked
-  // for a request without a Connection field, which is most of them.
-  const listed: boolean = connectionFields > 0
-  const close: boolean = listed && http1Tally(p, "connection", "close").matches > 0
-  const keep: boolean = listed && http1Tally(p, "connection", "keep-alive").matches > 0
-  const upgradeAsked: boolean = listed && http1Tally(p, "connection", "upgrade").matches > 0
+  // One walk of the Connection list finds all three options, and none is
+  // made for a request without a Connection field.
+  const options: i32 = connectionFields > 0 ? http1ConnectionOptions(p) : 0
+  const close: boolean = (options & HTTP1_CONNECTION_CLOSE) !== 0
+  const keep: boolean = (options & HTTP1_CONNECTION_KEEP_ALIVE) !== 0
+  const upgradeAsked: boolean = (options & HTTP1_CONNECTION_UPGRADE) !== 0
   p.keepAlive = p.minor === 1 ? !close : keep && !close
   // The fields of one name joined with ", " are empty only when there is one
   // field and it is empty: the same test, without the join.
@@ -1405,9 +1574,18 @@ export const http1BytesAre = (bytes: u8[], word: string): boolean =>
 
 /** How many decimal digits `n`, which is not negative, takes. */
 const http1DecimalDigits = (n: i32): i32 => {
-  let digits: i32 = 1
-  let v: i32 = n
-  while (v >= 10) {
+  if (n < 10) {
+    return 1
+  }
+  if (n < 100) {
+    return 2
+  }
+  if (n < 1000) {
+    return 3
+  }
+  let digits: i32 = 4
+  let v: i32 = n / 10000
+  while (v > 0) {
     v = v / 10
     digits += 1
   }
@@ -1425,9 +1603,31 @@ export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
   return at + n
 }
 
-/** Writes `bytes` at `out[at ..)`, likewise. */
+/** Writes CR LF at `out[at ..)`, likewise: two stores, where `http1PutText` walks a string. */
+const http1PutCrlf = (out: u8[], at: i32): i32 => {
+  if (at >= 0 && at < toI32(out.length) - 1) {
+    out[at] = 13
+    out[at + 1] = 10
+  }
+  return at + 2
+}
+
+/** Writes `: ` at `out[at ..)`, likewise. */
+const http1PutColonSpace = (out: u8[], at: i32): i32 => {
+  if (at >= 0 && at < toI32(out.length) - 1) {
+    out[at] = 58
+    out[at + 1] = 32
+  }
+  return at + 2
+}
+
+/** Writes `bytes` at `out[at ..)`, likewise, as one copy when it fits. */
 const http1PutBytes = (out: u8[], at: i32, bytes: u8[]): i32 => {
   const n: i32 = toI32(bytes.length)
+  if (at >= 0 && at <= toI32(out.length) - n) {
+    copyBytes(out, at, bytes, 0, n)
+    return at + n
+  }
   for (let k: i32 = 0; k < n && at + k < toI32(out.length); k += 1) {
     if (at + k >= 0) {
       out[at + k] = bytes[k]
@@ -1525,32 +1725,42 @@ export const http1WriteResponseHead = (
     return HTTP1_NO_ROOM
   }
   let end: i32 = http1PutText(out, at, "HTTP/1.1 ")
-  end = http1PutDecimal(out, end, status)
-  end = http1PutText(out, end, " ")
+  // A status is three digits, checked above: no division loop for them.
+  if (end >= 0 && end < toI32(out.length) - 3) {
+    const hundreds: i32 = status / 100
+    const tens: i32 = status / 10
+    const tensDigit: i32 = tens % 10
+    const ones: i32 = status % 10
+    out[end] = toU8(48 + hundreds)
+    out[end + 1] = toU8(48 + tensDigit)
+    out[end + 2] = toU8(48 + ones)
+    out[end + 3] = 32
+  }
+  end = end + 4
   end = http1PutText(out, end, reason)
-  end = http1PutText(out, end, "\r\n")
+  end = http1PutCrlf(out, end)
   for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
     end = http1PutBytes(out, end, names[i])
-    end = http1PutText(out, end, ": ")
+    end = http1PutColonSpace(out, end)
     end = http1PutBytes(out, end, values[i])
-    end = http1PutText(out, end, "\r\n")
+    end = http1PutCrlf(out, end)
   }
   if (sendDate) {
     end = http1PutText(out, end, "Date: ")
     end = http1PutBytes(out, end, date)
-    end = http1PutText(out, end, "\r\n")
+    end = http1PutCrlf(out, end)
   }
   if (bodyLength >= 0) {
     end = http1PutText(out, end, "Content-Length: ")
     end = http1PutDecimal(out, end, bodyLength)
-    end = http1PutText(out, end, "\r\n")
+    end = http1PutCrlf(out, end)
   } else if (bodyLength === HTTP1_CHUNKED) {
     end = http1PutText(out, end, "Transfer-Encoding: chunked\r\n")
   }
   if (toI32(connection.length) > 0) {
     end = http1PutText(out, end, "Connection: ")
     end = http1PutText(out, end, connection)
-    end = http1PutText(out, end, "\r\n")
+    end = http1PutCrlf(out, end)
   }
-  return http1PutText(out, end, "\r\n")
+  return http1PutCrlf(out, end)
 }

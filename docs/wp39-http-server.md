@@ -234,7 +234,9 @@ closes.
 ## 6. Not in the list, on purpose
 
 - **`async`/`await`.** It stays refused ([wp24](wp24-async.md)). The loop a
-  program owns is the server's answer, as WP34 N5 argued.
+  program owns is the server's answer, as WP34 N5 argued. [wp49](wp49-async-server.md)
+  proposes a restricted `async` for the server, with the explicit loop kept
+  as the fallback and the gate.
 - **A socket handed to a `scope()` task.** It needs an ownership rule for
   descriptors, and pre-fork (E1) gives the cores without one. #478 records
   it as worth a design note if it is ever wanted.

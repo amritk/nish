@@ -123,6 +123,17 @@ request line). A refusal after a good pipelined request answers the good one
 first. A refusal once a response has started (a bad chunk size in a body the
 program is echoing) sends no second response and ends the connection.
 
+**A control byte in a field value is refused wherever it falls**
+(`net_http1`, `_f64`): the scan for a line's end reads sixteen bytes at a time
+while a whole block is field text, then a byte at a time, and it is also the
+check of the value: a control byte other than HTAB, or DEL, on a field line
+is a 400, with no second pass over the value. NUL, 0x01, 0x1f, DEL and a bare
+CR placed at each of the forty bytes of a long value are each refused, and
+HTAB and an obs-text byte at each of them are read. At the block boundaries
+the stream is also cut at every byte, so a CR that ends what has arrived so
+far is read again with the byte after it, never taken as a line end or a
+refusal on its own.
+
 **One exchange at a time, in order** (`net_http1_server`): pipelined requests
 are answered in the order they came, because the next head is not read until
 the current response has ended and the current body has been read to its end;
