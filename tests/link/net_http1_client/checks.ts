@@ -94,11 +94,24 @@ class Transcript {
   }
 }
 
-/** The fields of the response last read, as `name=value; ...`. */
+/**
+ * The fields of the response last read, as `name=value; ...`, through the
+ * accessors, which answer in either mode. While the parser keeps strings,
+ * `names` and `values` must say the same, and a field where they do not is
+ * marked `MISMATCH`.
+ */
 const fieldsOf = (p: Http1ResponseParser): string => {
   const fields: string[] = [];
-  for (let i: i32 = 0; i < toI32(p.names.length) && i < toI32(p.values.length); i += 1) {
-    fields.push(`${p.names[i]}=${p.values[i]}`);
+  for (let i: i32 = 0; i < p.fields(); i += 1) {
+    const name: string = p.fieldName(i);
+    const value: string = p.fieldValue(i);
+    const same: boolean =
+      !p.keepStrings ||
+      (i < toI32(p.names.length) && i < toI32(p.values.length) && p.names[i] === name && p.values[i] === value);
+    fields.push(same ? `${name}=${value}` : `${name}=${value} MISMATCH`);
+  }
+  if (p.keepStrings && toI32(p.names.length) !== p.fields()) {
+    fields.push("MISMATCH in the field count");
   }
   return fields.join("; ");
 };
@@ -210,6 +223,34 @@ const transcriptSplitAt = (data: u8[], cut: i32, a: Ask): string => {
   return ending(p, t);
 };
 
+/**
+ * The transcript of `data` read whole by a parser in spans mode that has
+ * already read another response, been refused and been reset: the same
+ * transcript as a new parser's, or the reset left something behind.
+ */
+const transcriptReset = (data: u8[], a: Ask): string => {
+  const p: Http1ResponseParser = corpusParser();
+  p.fieldsAsSpans();
+  const before: u8[] = bytesOf("HTTP/1.0 299 Old\r\nX-Old: 1\r\nTransfer-Encoding: x\r\nConnection: keep-alive\r\n\r\nleft over");
+  const start: i32 = 0;
+  p.expect(true, true);
+  p.expectUpgrade();
+  p.feed(before, start, toI32(before.length));
+  p.next();
+  p.finish();
+  p.next();
+  p.reset();
+  const t: Transcript = new Transcript();
+  expectAs(p, a);
+  p.feed(data, start, toI32(data.length));
+  drain(p, t, a);
+  if (a.close) {
+    p.finish();
+    drain(p, t, a);
+  }
+  return ending(p, t);
+};
+
 /** The transcript of `data` fed one byte at a time. */
 const transcriptByteByByte = (data: u8[], a: Ask): string => {
   const p: Http1ResponseParser = corpusParser();
@@ -250,6 +291,38 @@ const corpusCase = (t: Suite, name: string, text: string, a: Ask, expected: stri
   const data: u8[] = bytesOf(text);
   t.eqStr(`${name}: transcript`, transcriptSplitAt(data, toI32(data.length), a), expected);
   t.eqI32(`${name}: the same cut at every byte and fed a byte at a time`, firstBadCut(text, a), none);
+  t.eqStr(`${name}: the same in spans mode, on a reset parser`, transcriptReset(data, a), expected);
+};
+
+/**
+ * Reads `count` kept-alive responses of `response` through `p`, which is
+ * left between responses; answers how many ended. Nothing here allocates,
+ * so whatever the arena gains is the parser's.
+ */
+const readMany = (p: Http1ResponseParser, response: u8[], count: i32): i32 => {
+  let ends: i32 = 0;
+  const start: i32 = 0;
+  for (let k: i32 = 0; k < count; k += 1) {
+    p.expect(false, false);
+    p.feed(response, start, toI32(response.length));
+    let e: i32 = p.next();
+    while (e !== HTTP1_NEED_MORE && e !== HTTP1_ERROR) {
+      if (e === HTTP1_END) {
+        ends += 1;
+      }
+      e = p.next();
+    }
+  }
+  return ends;
+};
+
+/** What the arena gains over 1,000 responses past 100 of warm-up, in `p`'s mode. */
+const arenaGain = (p: Http1ResponseParser, response: u8[]): i64 => {
+  readMany(p, response, 100);
+  const used: i64 = Arena.used();
+  const ends: i32 = readMany(p, response, 1000);
+  const gain: i64 = Arena.used() - used;
+  return ends === 1000 ? gain : toI64(-1);
 };
 
 /** What feeding `text` whole to `p` came to: the responses ended and the error code. */
@@ -1318,5 +1391,20 @@ export const http1ClientChecks = (): i32 => {
   t.ok("a field whose value is upgrade is written when it is not Connection", requestWith("GET", "/", "X-A", "upgrade", none) !== "null");
 
   t.eqI32("HTTP1_E_NONE is 0, before anything goes wrong", smallParser().error, HTTP1_E_NONE);
+
+  // HC-1: a parser in spans mode keeps a response's fields in buffers it reuses.
+  const three: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nX-Request: 7\r\n\r\nok");
+  const zero: i64 = 0;
+  const strings: Http1ResponseParser = corpusParser();
+  t.ok("strings mode: 1,000 kept-alive responses grow the arena, as HC-1 records", arenaGain(strings, three) > zero);
+  const spans: Http1ResponseParser = corpusParser();
+  spans.fieldsAsSpans();
+  t.ok("spans mode: 1,000 kept-alive responses leave Arena.used() flat", arenaGain(spans, three) === zero);
+  t.ok(
+    "spans mode: names, values and reason stay empty, and the accessors answer",
+    spans.names.length === 0 && spans.reason === "" && spans.fields() === 3 && spans.fieldName(0) === "content-type" && spans.fieldValue(2) === "7" && spans.reasonText() === "OK"
+  );
+  t.eqStr("spans mode: header() matches a name in any case", headerText(spans, "X-REQUEST"), "7");
+  t.ok("spans mode: past the last field, a name and a value are empty", spans.fieldName(3) === "" && spans.fieldValue(-1) === "");
   return t.done();
 };

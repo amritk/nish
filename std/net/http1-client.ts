@@ -538,9 +538,22 @@ export class Http1ResponseParser {
   // --- the response: valid from its HEAD or INFORMATIONAL until the next ----
   /** The reason phrase, which RFC 9112 §4 says a client ignores; for a log. */
   reason: string = ""
-  /** The field names, in lowercase, in the order they arrived; `values` beside them, OWS trimmed. */
+  /**
+   * The field names, in lowercase, in the order they arrived; `values` beside
+   * them, OWS trimmed. These and `reason` are filled only while the parser
+   * keeps strings, which it does until `fieldsAsSpans()`; `fields()`,
+   * `fieldName`, `fieldValue`, `reasonText` and `header` answer in either mode.
+   */
   names: string[]
   values: string[]
+  /**
+   * The response's reason phrase and kept fields, copied: `head[reasonStart ..
+   * reasonEnd)` is the reason, and field `i` is `head[spans[4i] ..
+   * spans[4i + 1])`, its name in lowercase, then `head[spans[4i + 2] ..
+   * spans[4i + 3])`, its value. Both arrays are reused from response to response.
+   */
+  head: u8[]
+  spans: i32[]
   /** The buffer the last `HTTP1_BODY`'s bytes are in, at `bodyOff`, `bodyLen` long. */
   body: u8[]
   /** What was wrong, once `next()` said `HTTP1_ERROR`; for a log. */
@@ -595,6 +608,13 @@ export class Http1ResponseParser {
   wasUpgrade: boolean = false
   /** Whether `finish()` said the server closed the connection. */
   closed: boolean = false
+  /** Whether `names`, `values` and `reason` are filled; `fieldsAsSpans()` clears it. */
+  keepStrings: boolean = true
+  /** Bytes of `head` in use, and the fields recorded in `spans`. */
+  headUsed: i32 = 0
+  spanCount: i32 = 0
+  reasonStart: i32 = 0
+  reasonEnd: i32 = 0
 
   /**
    * Each `i32` limit is clamped into 0 to 2^30 and `maxBody` into 0 to 2^53,
@@ -614,6 +634,46 @@ export class Http1ResponseParser {
     this.body = this.buf
     this.names = []
     this.values = []
+    this.head = []
+    this.spans = []
+  }
+
+  /**
+   * Stops filling `names`, `values` and `reason`, which then stay empty: a
+   * response's fields are read through `fields()`, `fieldName`, `fieldValue`,
+   * `reasonText` and `header`, which make a string only when asked. A parser
+   * kept for many responses allocates nothing per response this way.
+   */
+  fieldsAsSpans(): void {
+    this.keepStrings = false
+    this.names = []
+    this.values = []
+    this.reason = ""
+  }
+
+  /**
+   * Makes the parser as it was new, for the next connection, keeping its
+   * limits, its mode and its buffers: what was fed and not read is dropped,
+   * and an error or a close is forgotten.
+   */
+  reset(): void {
+    this.state = HTTP1_CLIENT_S_STATUS_LINE
+    this.start = 0
+    this.end = 0
+    this.scan = 0
+    this.lineStart = 0
+    this.lineEnd = 0
+    this.closed = false
+    this.error = 0
+    this.errorText = ""
+    this.informational = 0
+    this.wasHead = false
+    this.wasConnect = false
+    this.wasUpgrade = false
+    http1ClientStartHead(this)
+    this.left = toI64(0)
+    this.bodyOff = 0
+    this.body = this.buf
   }
 
   /**
@@ -704,14 +764,41 @@ export class Http1ResponseParser {
 
   /** The value of the first field named `name` (any case), or `null`. */
   header(name: string): string | null {
-    const names: string[] = this.names
-    const n: i32 = toI32(name.length)
-    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(this.values.length); i += 1) {
-      if (http1SameWord(name, 0, n, names[i])) {
-        return this.values[i]
+    for (let i: i32 = 0; i < this.spanCount; i += 1) {
+      if (http1ClientHeadSameWord(this.head, this.spans[i * 4], this.spans[i * 4 + 1], name)) {
+        return http1Text(this.head, this.spans[i * 4 + 2], this.spans[i * 4 + 3], false)
       }
     }
     return null
+  }
+
+  /** How many fields the response last read has; trailers are not kept. */
+  fields(): i32 {
+    return this.spanCount
+  }
+
+  /** Field `i`'s name, in lowercase, as a fresh string; "" past the last field. */
+  fieldName(i: i32): string {
+    if (i < 0 || i >= this.spanCount) {
+      return ""
+    }
+    return http1Text(this.head, this.spans[i * 4], this.spans[i * 4 + 1], false)
+  }
+
+  /** Field `i`'s value, OWS trimmed, as a fresh string; "" past the last field. */
+  fieldValue(i: i32): string {
+    if (i < 0 || i >= this.spanCount) {
+      return ""
+    }
+    return http1Text(this.head, this.spans[i * 4 + 2], this.spans[i * 4 + 3], false)
+  }
+
+  /** The reason phrase, as a fresh string. */
+  reasonText(): string {
+    if (this.reasonEnd <= this.reasonStart) {
+      return ""
+    }
+    return http1Text(this.head, this.reasonStart, this.reasonEnd, false)
   }
 
   /** How many bytes were fed and not consumed yet. */
@@ -777,10 +864,17 @@ const http1ClientFail = (p: Http1ResponseParser, code: i32, text: string): i32 =
 /** Clears the per-response fields for the status line just taken. */
 const http1ClientStartHead = (p: Http1ResponseParser): void => {
   p.status = 0
-  p.reason = ""
   p.minor = 1
-  p.names = []
-  p.values = []
+  // Fresh arrays, not cleared ones: a caller may hold the last response's.
+  if (p.keepStrings) {
+    p.reason = ""
+    p.names = []
+    p.values = []
+  }
+  p.headUsed = 0
+  p.spanCount = 0
+  p.reasonStart = 0
+  p.reasonEnd = 0
   p.contentLength = toI64(-1)
   p.chunked = false
   p.persistent = false
@@ -872,7 +966,13 @@ const http1ClientStatusLine = (p: Http1ResponseParser): i32 => {
   }
   p.minor = buf[a + 7] === 48 ? 0 : 1
   p.status = status
-  p.reason = b - a > 13 ? http1Text(buf, a + 13, b, false) : ""
+  if (b - a > 13) {
+    p.reasonStart = http1ClientKeep(p, buf, a + 13, b, false)
+    p.reasonEnd = p.headUsed
+    if (p.keepStrings) {
+      p.reason = http1Text(buf, a + 13, b, false)
+    }
+  }
   p.state = HTTP1_CLIENT_S_FIELDS
   return HTTP1_NEED_MORE
 }
@@ -925,8 +1025,13 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
     ) {
       valueEnd -= 1
     }
-    p.names.push(http1Text(buf, a, nameEnd, true))
-    p.values.push(http1Text(buf, valueStart, valueEnd, false))
+    const name: i32 = http1ClientKeep(p, buf, a, nameEnd, true)
+    const value: i32 = http1ClientKeep(p, buf, valueStart, valueEnd, false)
+    http1ClientSpan(p, name, value, value + (valueEnd - valueStart))
+    if (p.keepStrings) {
+      p.names.push(http1Text(buf, a, nameEnd, true))
+      p.values.push(http1Text(buf, valueStart, valueEnd, false))
+    }
   }
   return HTTP1_NEED_MORE
 }
@@ -940,20 +1045,20 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
  * value past 2^53 is saturated to 2^53 + 1: over any `maxBody`. Saturated
  * values cannot be told apart, so one seen with any other value is -2.
  */
-const http1ClientLengthList = (value: string, seen: i64): i64 => {
-  const n: i32 = toI32(value.length)
+const http1ClientLengthList = (head: u8[], from: i32, to: i32, seen: i64): i64 => {
+  const n: i32 = to < toI32(head.length) ? to : toI32(head.length)
   let found: i64 = seen
-  let start: i32 = 0
-  for (let k: i32 = 0; k <= n; k += 1) {
-    if (k === n || http1ClientIsComma(value, k)) {
-      const a: i32 = http1ClientTrimStart(value, start, k)
-      const b: i32 = http1ClientTrimEnd(value, a, k)
+  let start: i32 = from
+  for (let k: i32 = from; k <= n; k += 1) {
+    if (k === n || head[k] === 44) {
+      const a: i32 = http1ClientHeadTrimStart(head, start, k)
+      const b: i32 = http1ClientHeadTrimEnd(head, a, k)
       if (a === b) {
         return toI64(-1)
       }
       let v: i64 = toI64(0)
       for (let j: i32 = a; j >= 0 && j < b && j < n; j += 1) {
-        const c: i32 = toI32(value.charCodeAt(j))
+        const c: i32 = toI32(head[j])
         if (c < 48 || c > 57) {
           return toI64(-1)
         }
@@ -982,20 +1087,19 @@ const http1ClientTally = (p: Http1ResponseParser, name: string, word: string): i
   let elements: i32 = 0
   let matches: i32 = 0
   let last: boolean = false
-  const names: string[] = p.names
-  const values: string[] = p.values
-  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
-    if (names[i] === name) {
-      const value: string = values[i]
-      const n: i32 = toI32(value.length)
-      let start: i32 = 0
-      for (let k: i32 = 0; k <= n; k += 1) {
-        if (k === n || http1ClientIsComma(value, k)) {
-          const a: i32 = http1ClientTrimStart(value, start, k)
-          const b: i32 = http1ClientTrimEnd(value, a, k)
+  const head: u8[] = p.head
+  for (let i: i32 = 0; i < p.spanCount; i += 1) {
+    if (http1ClientHeadIs(head, p.spans[i * 4], p.spans[i * 4 + 1], name)) {
+      const from: i32 = p.spans[i * 4 + 2]
+      const n: i32 = p.spans[i * 4 + 3] < toI32(head.length) ? p.spans[i * 4 + 3] : toI32(head.length)
+      let start: i32 = from
+      for (let k: i32 = from; k <= n; k += 1) {
+        if (k === n || head[k] === 44) {
+          const a: i32 = http1ClientHeadTrimStart(head, start, k)
+          const b: i32 = http1ClientHeadTrimEnd(head, a, k)
           if (b > a) {
             elements += 1
-            last = http1SameWord(value, a, b, word)
+            last = http1ClientHeadSameWord(head, a, b, word)
             if (last) {
               matches += 1
             }
@@ -1010,10 +1114,134 @@ const http1ClientTally = (p: Http1ResponseParser, name: string, word: string): i
 
 /** Whether a `Connection` field of the response lists `word`. */
 const http1ClientConnectionHas = (p: Http1ResponseParser, word: string): boolean => {
-  const names: string[] = p.names
-  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(p.values.length); i += 1) {
-    if (names[i] === "connection" && http1ClientListHas(p.values[i], word)) {
+  for (let i: i32 = 0; i < p.spanCount; i += 1) {
+    if (
+      http1ClientHeadIs(p.head, p.spans[i * 4], p.spans[i * 4 + 1], "connection") &&
+      http1ClientHeadListHas(p.head, p.spans[i * 4 + 2], p.spans[i * 4 + 3], word)
+    ) {
       return true
+    }
+  }
+  return false
+}
+
+/**
+ * Copies `buf[a .. b)` to the end of `p.head`, lowercased when `lower`, and
+ * answers where the copy starts. `head` grows by doubling and is kept, so a
+ * parser reused for many responses stops growing at the largest head.
+ */
+const http1ClientKeep = (p: Http1ResponseParser, buf: u8[], a: i32, b: i32, lower: boolean): i32 => {
+  const n: i32 = b - a
+  const at: i32 = p.headUsed
+  if (n > toI32(p.head.length) - at) {
+    let size: i32 = toI32(p.head.length) < 256 ? 256 : toI32(p.head.length)
+    while (size - at < n) {
+      if (size > 1073741823) {
+        panic("Http1ResponseParser: more than 2^30 bytes of head")
+      }
+      size = size * 2
+    }
+    const grown: u8[] = new Array<u8>(size)
+    copyBytes(grown, 0, p.head, 0, at)
+    p.head = grown
+  }
+  copyBytes(p.head, at, buf, a, n)
+  if (lower) {
+    const head: u8[] = p.head
+    for (let k: i32 = at; k < at + n && k < toI32(head.length); k += 1) {
+      const c: i32 = toI32(head[k])
+      if (c >= 65 && c <= 90) {
+        head[k] = toU8(c + 32)
+      }
+    }
+  }
+  p.headUsed = at + n
+  return at
+}
+
+/** Records the field whose name starts at `name` and whose value is `head[value .. valueEnd)`. */
+const http1ClientSpan = (p: Http1ResponseParser, name: i32, value: i32, valueEnd: i32): void => {
+  const at: i32 = p.spanCount * 4
+  if (at + 4 > toI32(p.spans.length)) {
+    p.spans.push(name)
+    p.spans.push(value)
+    p.spans.push(value)
+    p.spans.push(valueEnd)
+  } else {
+    p.spans[at] = name
+    p.spans[at + 1] = value
+    p.spans[at + 2] = value
+    p.spans[at + 3] = valueEnd
+  }
+  p.spanCount += 1
+}
+
+/** Whether `head[a .. b)` is `word`, byte for byte. */
+const http1ClientHeadIs = (head: u8[], a: i32, b: i32, word: string): boolean => {
+  const n: i32 = toI32(word.length)
+  if (b - a !== n || a < 0 || b > toI32(head.length)) {
+    return false
+  }
+  for (let k: i32 = 0; k < n; k += 1) {
+    if (toI32(head[a + k]) !== toI32(word.charCodeAt(k))) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Whether `head[a .. b)` is `word` in any case, ASCII letters folded. */
+const http1ClientHeadSameWord = (head: u8[], a: i32, b: i32, word: string): boolean => {
+  const n: i32 = toI32(word.length)
+  if (b - a !== n || a < 0 || b > toI32(head.length)) {
+    return false
+  }
+  for (let k: i32 = 0; k < n; k += 1) {
+    let x: i32 = toI32(head[a + k])
+    let y: i32 = toI32(word.charCodeAt(k))
+    if (x >= 65 && x <= 90) {
+      x += 32
+    }
+    if (y >= 65 && y <= 90) {
+      y += 32
+    }
+    if (x !== y) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Where `head[a .. b)` starts once its leading OWS is dropped. */
+const http1ClientHeadTrimStart = (head: u8[], a: i32, b: i32): i32 => {
+  let i: i32 = a
+  while (i >= 0 && i < b && i < toI32(head.length) && http1IsOws(toI32(head[i]))) {
+    i += 1
+  }
+  return i
+}
+
+/** Where `head[a .. b)` ends once its trailing OWS is dropped. */
+const http1ClientHeadTrimEnd = (head: u8[], a: i32, b: i32): i32 => {
+  let i: i32 = b
+  while (i > a && i > 0 && i <= toI32(head.length) && http1IsOws(toI32(head[i - 1]))) {
+    i -= 1
+  }
+  return i
+}
+
+/** Whether the comma-separated list in `head[from .. to)` holds `word` in any case, each element trimmed of OWS. */
+const http1ClientHeadListHas = (head: u8[], from: i32, to: i32, word: string): boolean => {
+  const n: i32 = to < toI32(head.length) ? to : toI32(head.length)
+  let start: i32 = from
+  for (let k: i32 = from; k <= n; k += 1) {
+    if (k === n || head[k] === 44) {
+      const a: i32 = http1ClientHeadTrimStart(head, start, k)
+      const b: i32 = http1ClientHeadTrimEnd(head, a, k)
+      if (http1ClientHeadSameWord(head, a, b, word)) {
+        return true
+      }
+      start = k + 1
     }
   }
   return false
@@ -1052,12 +1280,13 @@ const http1ClientEndOfHead = (p: Http1ResponseParser): i32 => {
   }
   let codings: boolean = false
   let length: i64 = toI64(-1)
-  const names: string[] = p.names
-  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(p.values.length); i += 1) {
-    if (names[i] === "transfer-encoding") {
+  for (let i: i32 = 0; i < p.spanCount; i += 1) {
+    const a: i32 = p.spans[i * 4]
+    const b: i32 = p.spans[i * 4 + 1]
+    if (http1ClientHeadIs(p.head, a, b, "transfer-encoding")) {
       codings = true
-    } else if (names[i] === "content-length") {
-      length = http1ClientLengthList(p.values[i], length)
+    } else if (http1ClientHeadIs(p.head, a, b, "content-length")) {
+      length = http1ClientLengthList(p.head, p.spans[i * 4 + 2], p.spans[i * 4 + 3], length)
       if (length === toI64(-2)) {
         return http1ClientFail(
           p,

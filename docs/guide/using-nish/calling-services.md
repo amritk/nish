@@ -163,5 +163,6 @@ The handler watches at most 16 descriptors besides its clients, so
 A call's deadline is checked when you call `ready` after a turn, so wait with
 a timeout, as above, not `h.wait(-1)`. The slots, the connections and their
 buffers are made at start-up. Each call keeps a body buffer as large as the
-largest body it has held. A response's field names and values are still
-allocated on every call.
+largest body it has held. Each connection keeps one response parser, which
+reads a response's fields into a buffer it reuses, so a warm pool allocates
+nothing per call.

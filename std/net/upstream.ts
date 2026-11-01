@@ -54,9 +54,10 @@
  * head's room, the response limits the codec enforces, and a deadline per
  * call. The slots, their head buffers and the connections' read buffers are
  * made by the constructor; a call's body buffer grows to the largest body it
- * has held and is kept. The codec itself allocates the response's field
- * names and values as strings on each response, which is the one allocation
- * per call that remains; `docs/security/upstream.md` records it.
+ * has held and is kept. Each connection keeps one codec for its life and
+ * the next connection's, reset between them, in its spans mode: a response's
+ * fields are read as spans of a buffer the codec reuses, so a warm pool
+ * allocates nothing per call.
  *
  * `docs/security/upstream.md` is the record. Private helpers share the
  * importing program's flat symbol namespace (`docs/wp26-stdlib.md` §3e),
@@ -504,8 +505,8 @@ export class Upstream {
     c.fd = fd
     c.events = UPSTREAM_WRITE
     c.state = UPSTREAM_C_CONNECTING
-    // A connection's parser ends with it, so a new one gets a new parser.
-    c.parser = upstreamParser(this.limits)
+    // The slot's parser is kept and starts over with the new connection.
+    c.parser.reset()
     c.parser.expect(false, false)
   }
 
@@ -649,14 +650,18 @@ export class Upstream {
   }
 }
 
-const upstreamParser = (limits: UpstreamLimits): Http1ResponseParser =>
-  new Http1ResponseParser(
+/** A connection slot's codec, made once, reading fields as spans so that a response allocates no strings. */
+const upstreamParser = (limits: UpstreamLimits): Http1ResponseParser => {
+  const p: Http1ResponseParser = new Http1ResponseParser(
     limits.maxStatusLine,
     limits.maxHeaderBytes,
     limits.maxHeaders,
     limits.maxBody,
     limits.maxTrailerBytes
   )
+  p.fieldsAsSpans()
+  return p
+}
 
 /** Appends `data[off .. off + len)` to `r`'s body, growing its buffer by doubling when it is full. */
 const upstreamAppend = (r: UpstreamResponse, data: u8[], off: i32, len: i32): void => {

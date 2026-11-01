@@ -323,10 +323,11 @@ method, so `Upstream` takes the handler itself and uses its public `loop`,
 `turnAt` and `fired`. Each connection takes one of the handler's 16 watch
 ids (`UpstreamLimits.firstId` and up), and `ready` reads the sockets that
 fired, once per turn. `get` answers `UPSTREAM_E_FULL` when every call slot is
-taken. Deadlines are checked when `ready` runs. One allocation per call
-remains: the `http1-client` codec makes each response's field names and
-values as strings (UPSTREAM-8), so the arena is not flat over many calls
-until the codec records spans.
+taken. Deadlines are checked when `ready` runs. Each connection keeps one
+`http1-client` parser, reset between connections and switched to spans mode
+(`fieldsAsSpans`), which records a response's fields as spans of a head buffer
+it reuses, so `Arena.used()` stays flat over thousands of warm calls
+(UPSTREAM-8, fixed).
 
 ## 8. Names
 

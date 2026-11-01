@@ -20,3 +20,4 @@ PASS  origin: https, userinfo and a path are each UPSTREAM_E_ORIGIN
 PASS  request: a path that is not a request target is UPSTREAM_E_REQUEST
 PASS  warm pool: three thousand calls are answered
 PASS  warm pool: on the one connection, with every slot back and no body buffer grown
+PASS  warm pool: Arena.used() flat over two thousand calls past a thousand of warm-up

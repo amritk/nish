@@ -22,9 +22,11 @@ over-long response left behind is read as the next call's answer. Under an
 `OutboundPolicy` the origin's host name is checked before the lookup and its
 addresses after it, and the pool connects only to the bytes that were checked,
 with no second lookup. Review before merge found one fault and fixed it with a
-test (UPSTREAM-7). One is open: the codec allocates each response's field
-names and values as strings, so the arena grows with every call (UPSTREAM-8,
-Medium). Three properties are limits by design, recorded as accepted
+test (UPSTREAM-7). Writing it found a second: the codec allocated each
+response's field names and values as strings, so the arena grew with every
+call (UPSTREAM-8, Medium). It is fixed in the codec, which now records a
+response's fields as spans of a head buffer it reuses, and the pool keeps one
+codec per connection. Three properties are limits by design, recorded as accepted
 (UPSTREAM-9 to UPSTREAM-11).
 
 ## Scope
@@ -32,6 +34,7 @@ Medium). Three properties are limits by design, recorded as accepted
 | File | Functions |
 | --- | --- |
 | `std/net/upstream.ts` | `UpstreamLimits`; `UpstreamResponse`; `Upstream` (`settle`, `fail`, `get`, `ready`, `take`, `release`, `pending`, `openConnections`, `pump`, `dispatch`, `idle`, `connect`, `service`, `send`, `receive`, `parse`, `finish`, `end`, `interest`, `close`); `UpstreamConnection`; the helpers `upstreamParser`, `upstreamAppend` |
+| `std/net/http1-client.ts` | `Http1ResponseParser`'s spans mode (`fieldsAsSpans`, `reset`, `fields`, `fieldName`, `fieldValue`, `reasonText`, `header`) and its helpers (`http1ClientKeep`, `http1ClientSpan`, `http1ClientHeadIs`, `http1ClientHeadSameWord`, `http1ClientHeadListHas`), added for UPSTREAM-8; the rest of the codec is [http1-client.md](http1-client.md)'s |
 
 Out of scope: the response codec and `http1WriteRequestHead`
 (`std/net/http1-client.ts`, [http-client.md](http-client.md)); the outbound
@@ -58,8 +61,9 @@ cause it.
 ## Findings
 
 Rows UPSTREAM-1 to UPSTREAM-6 are the shapes an attacker's traffic can take,
-each checked and found to hold. UPSTREAM-7 was fixed before merge and is
-counted as fixed in the index; UPSTREAM-8 is open; UPSTREAM-9 to UPSTREAM-11
+each checked and found to hold. UPSTREAM-7
+and UPSTREAM-8 were fixed before merge and are counted as fixed in the
+index; UPSTREAM-9 to UPSTREAM-11
 are accepted.
 
 | Id | Severity | Where | Description | Disposition |
@@ -71,7 +75,7 @@ are accepted.
 | UPSTREAM-5 | Medium if it failed | `get` | A path from input must not split the request or add fields. | **Holds.** The head is written by `http1WriteRequestHead`, which refuses a path that is not a request target; the call then fails `UPSTREAM_E_REQUEST` and nothing is sent. A head longer than `maxHead` fails the same way. |
 | UPSTREAM-6 | Medium if it failed | `get`, `release`, `dispatch` | Calls must not queue without bound, nor connections multiply. | **Holds.** `get` takes one of `calls` slots, made at start-up, or answers `UPSTREAM_E_FULL` and holds nothing; a slot is held until `release`. At most `connections` sockets are open, each under its own watch id. |
 | UPSTREAM-7 | Low | `take`, `release` | `release` of a call already released, or never taken, put its slot on the free list twice, so two later calls shared a slot and one request could be handed another's answer. | **Fixed.** A slot is marked taken by `take` and `release` panics unless it is. `tests/link/net_upstream_release` releases a call twice: it printed `FAIL` and exited 0 before the fix, and panics now. |
-| UPSTREAM-8 | Medium | `parse` (the codec's `next`) | The codec allocates a response's field names and values, and its reason phrase, as strings, on each response. In a long-running server the arena grows with every call: about 168 bytes a call against the test's mock origin, more for an origin that sends more fields, up to `maxHeaderBytes`. | **Open.** It cannot be closed in this module: a parser made per call cannot be scoped to an arena, and the fields are the codec's. The fix belongs in `nish/net/http1-client`: record a field as a span of the head, as the server carrier does. The stage asked for a test that the arena stays flat over thousands of calls; it would fail until then and is not written. `tests/link/net_upstream` pins the rest: three thousand warm calls run on one connection with every slot back and no body buffer grown. |
+| UPSTREAM-8 | Medium | `parse` (the codec's `next`) | The codec allocates a response's field names and values, and its reason phrase, as strings, on each response. In a long-running server the arena grows with every call: about 168 bytes a call against the test's mock origin, more for an origin that sends more fields, up to `maxHeaderBytes`. | **Fixed.** The codec gained a spans mode (`fieldsAsSpans`): each field and the reason phrase are copied into a `head` buffer the parser reuses and recorded as spans, and a string is made only when `header`, `fieldName`, `fieldValue` or `reasonText` asks. `reset()` readies a parser for a new connection with its buffers kept, so each connection keeps one parser (`connect`, `upstreamParser`). Before: `Arena.used()` grew 504,344 bytes over 3,000 warm calls, about 168 a call. After: "warm pool: Arena.used() flat over two thousand calls past a thousand of warm-up" in `tests/link/net_upstream`, which compares `Arena.mark()` and `Arena.used()` before and after and would fail on one byte. |
 | UPSTREAM-9 | Low | `pump` | A deadline is checked only when the program reads the pool (`ready`, `take`) after a handler turn. A program that calls `h.wait(-1)` with nothing else to wake it holds a call past its deadline. | **Accepted.** As HANDLER-5 records for bodies, a timed wait is the program's. The guide's loop waits with a timeout. |
 | UPSTREAM-10 | Low | `settle` | The lookup blocks for up to `lookupMs`, once, in the constructor; one address is kept, with no fallback to another and no refresh. | **Accepted.** Pinning one checked address is what makes UPSTREAM-4 hold; an origin that moves needs a new `Upstream`. Start-up may block. |
 | UPSTREAM-11 | Low | `settle` | Only `http:` is spoken: a call's request and response are in clear, readable and changeable on the path. | **Accepted.** `https:` is refused (`UPSTREAM_E_ORIGIN`) rather than downgraded. Use it for an origin on a network the program trusts, such as a service beside it. |
@@ -111,7 +115,8 @@ a request target is UPSTREAM_E_REQUEST".
 
 **A warm pool** (UPSTREAM-6, UPSTREAM-8): "warm pool: three thousand calls are
 answered", "warm pool: on the one connection, with every slot back and no body
-buffer grown".
+buffer grown", "warm pool: Arena.used() flat over two thousand calls past a
+thousand of warm-up".
 
 **A second release** (UPSTREAM-7): `link/net_upstream_release: exits with 1
 and stderr matches expected.stderr`.

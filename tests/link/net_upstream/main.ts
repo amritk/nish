@@ -6,7 +6,7 @@
 //   1. The slow upstream: a client whose route waits on an upstream that
 //      never answers does not stall another client, whether that one is
 //      answered by the program or through a second upstream; the slow call
-//      ends `UPSTREAM_E_TIMEOUT` at its deadline and its client gets a 502.
+//      ends `UPSTREAM_E_TIMEOUT` at its deadline and its client gets a 504.
 //   2. Keep-alive: calls in a row reuse one connection, and each answer is
 //      tagged with the request that asked.
 //   3. Every codec refusal is a failed call: a malformed status line, a bare
@@ -18,7 +18,9 @@
 //      policy permits it; an origin that is not `http:` is `UPSTREAM_E_ORIGIN`,
 //      and a path the codec will not write is `UPSTREAM_E_REQUEST`.
 //   5. The warm pool: three thousand calls on one connection make no call
-//      slot, connection or body buffer past the ones the pool started with.
+//      slot, connection or body buffer past the ones the pool started with,
+//      and past a thousand of warm-up, two thousand more leave
+//      `Arena.used()` where it was: a call allocates nothing.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import {
@@ -540,11 +542,27 @@ const warmPool = (app: App): void => {
   }
   const body: u8[] = first.body
   u.release(first)
+  const warm: boolean = warmCalls(app, u, tag, body, 1000)
+  // Nothing between the two readings but the calls.
+  const mark: i64 = Arena.mark()
+  const used: i64 = Arena.used()
+  const measured: boolean = warmCalls(app, u, tag, body, 2000)
+  const markAfter: i64 = Arena.mark()
+  const usedAfter: i64 = Arena.used()
+  check(app, "warm pool: three thousand calls are answered", warm && measured && mock.requests === 3001)
+  check(app, "warm pool: on the one connection, with every slot back and no body buffer grown", mock.accepted === 1 && u.pending() === 0 && u.openConnections() === 1)
+  check(app, "warm pool: Arena.used() flat over two thousand calls past a thousand of warm-up", markAfter === mark && usedAfter === used)
+  if (usedAfter !== used) {
+    console.log(`      used ${used} before, ${usedAfter} after`)
+  }
+}
+
+/** Makes `count` calls on `u` one after another; whether each answered `ok` in `body`. */
+const warmCalls = (app: App, u: Upstream, tag: HttpRequest, body: u8[], count: i32): boolean => {
   let ok: boolean = true
-  for (let k: i32 = 0; k < 3000 && ok; k++) {
+  for (let k: i32 = 0; k < count && ok; k++) {
     if (u.get(tag, "/") !== UPSTREAM_E_NONE) {
-      ok = false
-      break
+      return false
     }
     const r: UpstreamResponse | null = app.awaitCall(u)
     if (r === null || !r.ok || r.body !== body || r.length !== 2) {
@@ -554,8 +572,7 @@ const warmPool = (app: App): void => {
       u.release(r)
     }
   }
-  check(app, "warm pool: three thousand calls are answered", ok && mock.requests === 3001)
-  check(app, "warm pool: on the one connection, with every slot back and no body buffer grown", mock.accepted === 1 && u.pending() === 0 && u.openConnections() === 1)
+  return ok
 }
 
 export function main(): i32 {
