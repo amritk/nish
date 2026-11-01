@@ -1,51 +1,75 @@
 PASS  two kept-alive responses with Content-Length: transcript
 PASS  two kept-alive responses with Content-Length: the same cut at every byte and fed a byte at a time
+PASS  two kept-alive responses with Content-Length: the same in spans mode, on a reset parser
 PASS  a chunked response with an extension and a trailer, then a 204: transcript
 PASS  a chunked response with an extension and a trailer, then a 204: the same cut at every byte and fed a byte at a time
+PASS  a chunked response with an extension and a trailer, then a 204: the same in spans mode, on a reset parser
 PASS  two interim responses, each with its fields, then the final one: transcript
 PASS  two interim responses, each with its fields, then the final one: the same cut at every byte and fed a byte at a time
+PASS  two interim responses, each with its fields, then the final one: the same in spans mode, on a reset parser
 PASS  a body read until the server closes: transcript
 PASS  a body read until the server closes: the same cut at every byte and fed a byte at a time
+PASS  a body read until the server closes: the same in spans mode, on a reset parser
 PASS  an HTTP/1.0 response kept alive, then one that is not: transcript
 PASS  an HTTP/1.0 response kept alive, then one that is not: the same cut at every byte and fed a byte at a time
+PASS  an HTTP/1.0 response kept alive, then one that is not: the same in spans mode, on a reset parser
 PASS  Connection: close ends the connection, and what follows is not read: transcript
 PASS  Connection: close ends the connection, and what follows is not read: the same cut at every byte and fed a byte at a time
+PASS  Connection: close ends the connection, and what follows is not read: the same in spans mode, on a reset parser
 PASS  a response to HEAD and a 304 have no body, whatever their fields say: transcript
 PASS  a response to HEAD and a 304 have no body, whatever their fields say: the same cut at every byte and fed a byte at a time
+PASS  a response to HEAD and a 304 have no body, whatever their fields say: the same in spans mode, on a reset parser
 PASS  a 304 to GET with a Content-Length has no body: transcript
 PASS  a 304 to GET with a Content-Length has no body: the same cut at every byte and fed a byte at a time
+PASS  a 304 to GET with a Content-Length has no body: the same in spans mode, on a reset parser
 PASS  a 304 to GET that says chunked has no body: transcript
 PASS  a 304 to GET that says chunked has no body: the same cut at every byte and fed a byte at a time
+PASS  a 304 to GET that says chunked has no body: the same in spans mode, on a reset parser
 PASS  a 2xx to CONNECT is a tunnel, and its framing fields are ignored: transcript
 PASS  a 2xx to CONNECT is a tunnel, and its framing fields are ignored: the same cut at every byte and fed a byte at a time
+PASS  a 2xx to CONNECT is a tunnel, and its framing fields are ignored: the same in spans mode, on a reset parser
 PASS  a 407 to CONNECT has a body like any other: transcript
 PASS  a 407 to CONNECT has a body like any other: the same cut at every byte and fed a byte at a time
+PASS  a 407 to CONNECT has a body like any other: the same in spans mode, on a reset parser
 PASS  a body cut short by the close: transcript
 PASS  a body cut short by the close: the same cut at every byte and fed a byte at a time
+PASS  a body cut short by the close: the same in spans mode, on a reset parser
 PASS  smuggling: Transfer-Encoding with Content-Length: transcript
 PASS  smuggling: Transfer-Encoding with Content-Length: the same cut at every byte and fed a byte at a time
+PASS  smuggling: Transfer-Encoding with Content-Length: the same in spans mode, on a reset parser
 PASS  smuggling: two Content-Length fields that differ: transcript
 PASS  smuggling: two Content-Length fields that differ: the same cut at every byte and fed a byte at a time
+PASS  smuggling: two Content-Length fields that differ: the same in spans mode, on a reset parser
 PASS  smuggling: a coding after chunked: transcript
 PASS  smuggling: a coding after chunked: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a coding after chunked: the same in spans mode, on a reset parser
 PASS  smuggling: a header line ended in a bare LF: transcript
 PASS  smuggling: a header line ended in a bare LF: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a header line ended in a bare LF: the same in spans mode, on a reset parser
 PASS  smuggling: an obs-fold continuing Transfer-Encoding: transcript
 PASS  smuggling: an obs-fold continuing Transfer-Encoding: the same cut at every byte and fed a byte at a time
+PASS  smuggling: an obs-fold continuing Transfer-Encoding: the same in spans mode, on a reset parser
 PASS  smuggling: whitespace before the colon: transcript
 PASS  smuggling: whitespace before the colon: the same cut at every byte and fed a byte at a time
+PASS  smuggling: whitespace before the colon: the same in spans mode, on a reset parser
 PASS  smuggling: chunk data longer than its size: transcript
 PASS  smuggling: chunk data longer than its size: the same cut at every byte and fed a byte at a time
+PASS  smuggling: chunk data longer than its size: the same in spans mode, on a reset parser
 PASS  a 101 this client never asked for: transcript
 PASS  a 101 this client never asked for: the same cut at every byte and fed a byte at a time
+PASS  a 101 this client never asked for: the same in spans mode, on a reset parser
 PASS  a 101 to a request that asked to switch protocols, frame bytes glued to its head: transcript
 PASS  a 101 to a request that asked to switch protocols, frame bytes glued to its head: the same cut at every byte and fed a byte at a time
+PASS  a 101 to a request that asked to switch protocols, frame bytes glued to its head: the same in spans mode, on a reset parser
 PASS  a 101 that asked to switch protocols ignores its framing fields: transcript
 PASS  a 101 that asked to switch protocols ignores its framing fields: the same cut at every byte and fed a byte at a time
+PASS  a 101 that asked to switch protocols ignores its framing fields: the same in spans mode, on a reset parser
 PASS  a request that asked to switch protocols, answered 200, reads as any other: transcript
 PASS  a request that asked to switch protocols, answered 200, reads as any other: the same cut at every byte and fed a byte at a time
+PASS  a request that asked to switch protocols, answered 200, reads as any other: the same in spans mode, on a reset parser
 PASS  a status line over the limit, ended in a bare LF past it: transcript
 PASS  a status line over the limit, ended in a bare LF past it: the same cut at every byte and fed a byte at a time
+PASS  a status line over the limit, ended in a bare LF past it: the same in spans mode, on a reset parser
 PASS  a second head across the first 1 KiB: in pieces
 PASS  a second head across the first 1 KiB: a byte at a time
 PASS  a 1500-byte body fed in uneven pieces: in pieces
@@ -366,4 +390,9 @@ PASS  CONNECT :80 is refused
 PASS  CONNECT a:123456 is refused
 PASS  a field whose value is upgrade is written when it is not Connection
 PASS  HTTP1_E_NONE is 0, before anything goes wrong
-http1-client: 368 passed, 0 failed, 0 skipped
+PASS  strings mode: 1,000 kept-alive responses move the arena, as HC-1 records
+PASS  spans mode: 1,000 kept-alive responses leave Arena.mark() and Arena.used() flat
+PASS  spans mode: names, values and reason stay empty, and the accessors answer
+PASS  spans mode: header() matches a name in any case
+PASS  spans mode: past the last field, a name and a value are empty
+http1-client: 397 passed, 0 failed, 0 skipped

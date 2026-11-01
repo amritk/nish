@@ -316,13 +316,21 @@ const readMany = (p: Http1ResponseParser, response: u8[], count: i32): i32 => {
   return ends;
 };
 
-/** What the arena gains over 1,000 responses past 100 of warm-up, in `p`'s mode. */
-const arenaGain = (p: Http1ResponseParser, response: u8[]): i64 => {
+/**
+ * Whether 1,000 responses past 100 of warm-up move the arena in `p`'s mode:
+ * 1 if its bump address or the bytes in its chunk change, 0 if both stay, -1
+ * if not every response ended. `Arena.used()` counts the current chunk only,
+ * so a chunk change can make it fall; the mark catches that.
+ */
+const arenaMoves = (p: Http1ResponseParser, response: u8[]): i32 => {
   readMany(p, response, 100);
+  const mark: i64 = Arena.mark();
   const used: i64 = Arena.used();
   const ends: i32 = readMany(p, response, 1000);
-  const gain: i64 = Arena.used() - used;
-  return ends === 1000 ? gain : toI64(-1);
+  if (ends !== 1000) {
+    return -1;
+  }
+  return Arena.mark() === mark && Arena.used() === used ? 0 : 1;
 };
 
 /** What feeding `text` whole to `p` came to: the responses ended and the error code. */
@@ -1393,18 +1401,23 @@ export const http1ClientChecks = (): i32 => {
   t.eqI32("HTTP1_E_NONE is 0, before anything goes wrong", smallParser().error, HTTP1_E_NONE);
 
   // HC-1: a parser in spans mode keeps a response's fields in buffers it reuses.
-  const threeFields: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nX-Request: 7\r\n\r\nok");
-  const noGain: i64 = 0;
+  const keptAlive: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nX-Request: 7\r\n\r\nok");
+  const arenaMoved: i32 = 1;
+  const arenaFlat: i32 = 0;
+  const spanFirst: i32 = 0;
+  const spanLast: i32 = 2;
+  const spanPast: i32 = 3;
+  const spanBefore: i32 = -1;
   const strings: Http1ResponseParser = corpusParser();
-  t.ok("strings mode: 1,000 kept-alive responses grow the arena, as HC-1 records", arenaGain(strings, threeFields) > noGain);
+  t.ok("strings mode: 1,000 kept-alive responses move the arena, as HC-1 records", arenaMoves(strings, keptAlive) === arenaMoved);
   const spans: Http1ResponseParser = corpusParser();
   spans.fieldsAsSpans();
-  t.ok("spans mode: 1,000 kept-alive responses leave Arena.used() flat", arenaGain(spans, threeFields) === noGain);
+  t.ok("spans mode: 1,000 kept-alive responses leave Arena.mark() and Arena.used() flat", arenaMoves(spans, keptAlive) === arenaFlat);
   t.ok(
     "spans mode: names, values and reason stay empty, and the accessors answer",
-    spans.names.length === 0 && spans.reason === "" && spans.fields() === 3 && spans.fieldName(0) === "content-type" && spans.fieldValue(2) === "7" && spans.reasonText() === "OK"
+    spans.names.length === 0 && spans.reason === "" && spans.fields() === spanPast && spans.fieldName(spanFirst) === "content-type" && spans.fieldValue(spanLast) === "7" && spans.reasonText() === "OK"
   );
   t.eqStr("spans mode: header() matches a name in any case", headerText(spans, "X-REQUEST"), "7");
-  t.ok("spans mode: past the last field, a name and a value are empty", spans.fieldName(3) === "" && spans.fieldValue(-1) === "");
+  t.ok("spans mode: past the last field, a name and a value are empty", spans.fieldName(spanPast) === "" && spans.fieldValue(spanBefore) === "");
   return t.done();
 };

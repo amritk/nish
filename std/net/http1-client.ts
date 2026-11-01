@@ -1050,14 +1050,14 @@ const http1ClientLengthList = (head: u8[], from: i32, to: i32, seen: i64): i64 =
   let found: i64 = seen
   let start: i32 = from
   for (let k: i32 = from; k <= n; k += 1) {
-    if (k === n || head[k] === 44) {
+    if (k === n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
       const a: i32 = http1ClientHeadTrimStart(head, start, k)
       const b: i32 = http1ClientHeadTrimEnd(head, a, k)
       if (a === b) {
         return toI64(-1)
       }
       let v: i64 = toI64(0)
-      for (let j: i32 = a; j >= 0 && j < b && j < n; j += 1) {
+      for (let j: i32 = a; j >= 0 && j < b && j < toI32(head.length); j += 1) {
         const c: i32 = toI32(head[j])
         if (c < 48 || c > 57) {
           return toI64(-1)
@@ -1094,7 +1094,7 @@ const http1ClientTally = (p: Http1ResponseParser, name: string, word: string): i
       const n: i32 = p.spans[i * 4 + 3] < toI32(head.length) ? p.spans[i * 4 + 3] : toI32(head.length)
       let start: i32 = from
       for (let k: i32 = from; k <= n; k += 1) {
-        if (k === n || head[k] === 44) {
+        if (k === n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
           const a: i32 = http1ClientHeadTrimStart(head, start, k)
           const b: i32 = http1ClientHeadTrimEnd(head, a, k)
           if (b > a) {
@@ -1148,7 +1148,7 @@ const http1ClientKeep = (p: Http1ResponseParser, buf: u8[], a: i32, b: i32, lowe
   copyBytes(p.head, at, buf, a, n)
   if (lower) {
     const head: u8[] = p.head
-    for (let k: i32 = at; k < at + n && k < toI32(head.length); k += 1) {
+    for (let k: i32 = at; k >= 0 && k < at + n && k < toI32(head.length); k += 1) {
       const c: i32 = toI32(head[k])
       if (c >= 65 && c <= 90) {
         head[k] = toU8(c + 32)
@@ -1235,7 +1235,7 @@ const http1ClientHeadListHas = (head: u8[], from: i32, to: i32, word: string): b
   const n: i32 = to < toI32(head.length) ? to : toI32(head.length)
   let start: i32 = from
   for (let k: i32 = from; k <= n; k += 1) {
-    if (k === n || head[k] === 44) {
+    if (k === n || (k >= 0 && k < toI32(head.length) && head[k] === 44)) {
       const a: i32 = http1ClientHeadTrimStart(head, start, k)
       const b: i32 = http1ClientHeadTrimEnd(head, a, k)
       if (http1ClientHeadSameWord(head, a, b, word)) {
