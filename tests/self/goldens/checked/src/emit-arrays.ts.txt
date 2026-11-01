@@ -44,6 +44,8 @@ import N_THIS from "./nodes" -> const N_THIS
 import N_UNARY from "./nodes" -> const N_UNARY
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
+import simdSuffix from "./nish-modules" -> function @simdSuffix
+import simdTypeLane from "./nish-modules" -> function @simdTypeLane
 import elementLLVMType from "./program" -> function @elementLLVMType
 import elementStride from "./program" -> function @elementStride
 import FieldInfo from "./program" -> struct FieldInfo
@@ -461,21 +463,33 @@ function noteArrayUse(emitter: Emitter, expr: Node, len: boolean, data: boolean,
   callee -5:25 TypeTable.isArray -> @TypeTable.isArray
   local -2:14 found: ArrayUse (const)
   callee +5:12 new ArrayUse -> @ArrayUse.constructor
+function isVectorAccess(emitter: Emitter, call: Node): boolean -> @isVectorAccess
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_str_eq simdSuffix simdTypeLane
+  pointer emitter: size=296 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 name: string (const)
+  callee +1:30 simdTypeLane -> @simdTypeLane
+  callee +1:43 simdSuffix -> @simdSuffix
 function arrayUses(emitter: Emitter, node: Node, out: ArrayUse[]): void -> @arrayUses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteArrayUse
-  calls: arrayUses isUncheckedAccess nish_panic_index nish_str_eq noteArrayUse
-  pointer emitter: size=296 writesThrough=false captured=false passedTo=noteArrayUse#0 noteArrayUse#0 noteArrayUse#0 arrayUses#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=isUncheckedAccess#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=noteArrayUse#4 noteArrayUse#4 noteArrayUse#4 arrayUses#2
+  calls: arrayUses isUncheckedAccess isVectorAccess nish_panic_index nish_str_eq noteArrayUse
+  pointer emitter: size=296 writesThrough=false captured=false passedTo=noteArrayUse#0 noteArrayUse#0 isVectorAccess#0 noteArrayUse#0 noteArrayUse#0 arrayUses#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=isUncheckedAccess#1 isVectorAccess#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=noteArrayUse#4 noteArrayUse#4 noteArrayUse#4 noteArrayUse#4 arrayUses#2
   stackSites=0 stackLocals=0
   local +0:11 needsLen: boolean (const)
   callee +1:5 noteArrayUse -> @noteArrayUse
   callee +2:14 isUncheckedAccess -> @isUncheckedAccess
   callee +3:5 noteArrayUse -> @noteArrayUse
-  callee +5:5 noteArrayUse -> @noteArrayUse
-  local +7:14 child: Node (const)
-  callee +8:5 arrayUses -> @arrayUses
+  callee +4:14 isVectorAccess -> @isVectorAccess
+  local +8:11 args: Node[] (const)
+  callee +9:5 noteArrayUse -> @noteArrayUse
+  callee +11:5 noteArrayUse -> @noteArrayUse
+  local +13:14 child: Node (const)
+  callee +14:5 arrayUses -> @arrayUses
 function pathHoldsRecord(emitter: Emitter, expr: Node, records: i32[]): boolean -> @pathHoldsRecord
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index pathOf recordReaches unwrapParens

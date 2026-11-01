@@ -2479,11 +2479,6 @@ function http1WordHasControl(x: u64): boolean -> @nish.http1WordHasControl
   local +5:9 below: u64 (const)
   local +6:9 y: u64 (const)
   local +7:9 del: u64 (const)
-function http1Load16(buf: u8[], i: i32): u8x16 -> @nish.http1Load16
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  pointer buf: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
 function http1Lanes(v: u8x16, at: i32): u64 -> @nish.http1Lanes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -2491,7 +2486,7 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: overStatus
-  calls: nish.http1Fail nish.http1Lanes nish.http1Load16 nish.http1WordHasControl nish_panic_index nish_panic_overflow
+  calls: nish.http1Fail nish.http1Lanes nish.http1WordHasControl nish_panic_index nish_panic_overflow
   pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0
   stackSites=0 stackLocals=0
   local -6:9 buf: u8[] (const)
@@ -2499,7 +2494,6 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   local -4:7 i: i32 (let)
   local +2:9 stop: i32 (const)
   local +11:13 v: u8x16 (const)
-  callee +11:24 http1Load16 -> @nish.http1Load16
   callee +12:11 http1WordHasControl -> @nish.http1WordHasControl
   callee +12:31 http1Lanes -> @nish.http1Lanes
   callee +12:52 http1WordHasControl -> @nish.http1WordHasControl
