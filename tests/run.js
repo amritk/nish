@@ -2381,7 +2381,18 @@ if (dealtHere("termIo")) {
     // restored and the termios as it was. F6 changes the graphics setting and
     // keeps the terminal open; F4 closes it and opens it again with the new rate,
     // on whichever scene was showing.
-    const wallKeys = (...keys) => keys.map(([afterFrames, bytes]) => ({ afterFrames, bytes }))
+    // A third element is the least gap in milliseconds after the key before.
+    // The game steps 120 times a second whatever the frame rate, and the rate
+    // starts at the best tier and falls under load, so a count of frames is no
+    // measure of game time: the Space that starts play waits out the title's
+    // 1 s outro after Enter (OUTRO_STEPS), and two taps of one key are spaced
+    // past KeyState's 700 ms, inside which the second is a repeat the game
+    // ignores.
+    const wallKeys = (...keys) => keys.map(([afterFrames, bytes, afterMs]) => ({ afterFrames, bytes, afterMs }))
+    const OUTRO_GAP_MS = 1300
+    const TAP_GAP_MS = 1000
+    // Keys after a wait would otherwise go out together, into one step.
+    const STEP_GAP_MS = 250
     // The cells `out` leaves on the screen by its `n`th frame (`CSI 5 n`): plays
     // cursor moves, SGR and text, starts afresh at each `?1049h`, skips the rest.
     const wallCells = (out, n) => {
@@ -2422,7 +2433,15 @@ if (dealtHere("termIo")) {
       relay(NISH, "break", {
         dir: at("wall-play"),
         env: { XDG_CONFIG_HOME: configs[0] },
-        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
+        keys: wallKeys(
+          [2, " "],
+          [6, "\r"],
+          [123, " ", OUTRO_GAP_MS],
+          [128, "\x1bOR", STEP_GAP_MS],
+          [133, "p", STEP_GAP_MS],
+          [138, "q", STEP_GAP_MS],
+          [153, "q", TAP_GAP_MS]
+        ),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
@@ -2434,7 +2453,16 @@ if (dealtHere("termIo")) {
       relay(NISH, "break", {
         dir: at("wall-stage"),
         env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[2] },
-        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
+        keys: wallKeys(
+          [2, " "],
+          [6, "\r"],
+          [123, " ", OUTRO_GAP_MS],
+          [133, "p", STEP_GAP_MS],
+          [143, "\x1bOS", STEP_GAP_MS],
+          [173, "q", TAP_GAP_MS],
+          [183, "q", TAP_GAP_MS],
+          [193, "q", TAP_GAP_MS]
+        ),
         timeoutMs: 30000,
       }),
     ]).finally(() => {
