@@ -181,11 +181,8 @@ static NISH_COLD void nish_oom(void) { nish_die("nish: out of memory\n"); }
 NISH_TLS uint64_t nish_region_chunk;
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB, or a region's
-   next size), bump from it. A region's chunks double from its first. Never
-   inlined: it runs once per chunk, and inlined into every bump allocation it
-   changes what LTO inlines around those (a region's branch here moved
-   `nish_str_from_i32` out of a map benchmark's loop, +0.2% instructions). */
-__attribute__((noinline)) void *nish_arena_grow(uint64_t size) {
+   next size), bump from it. A region's chunks double from its first. */
+void *nish_arena_grow(uint64_t size) {
 #ifdef NISH_ASAN
   /* An exact chunk leaves off == cap, so the inline bump never fits again and
      every block comes through here: one malloc, one redzone, per block. */
@@ -508,8 +505,12 @@ __attribute__((noreturn)) void nish_panic(const nish_str *s) {
 }
 
 /* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the
-   widest a uint64_t can be, plus the sign. */
-static nish_str *str_from_digits(uint64_t u, int neg) {
+   widest a uint64_t can be, plus the sign. Never inlined: LTO otherwise
+   decides by the size of the arena's slow path inlined under it, and the
+   region branch that path gained had it pull this into `nish_str_from_i32`
+   and push that out of a map benchmark's loop (+0.2% instructions).
+   `nish_arena_grow` itself stays inlinable; out of line, sieve ran 60% more. */
+static __attribute__((noinline)) nish_str *str_from_digits(uint64_t u, int neg) {
   char tmp[21], *p = tmp + 21;
   do { *--p = '0' + u % 10; u /= 10; } while (u);
   if (neg) *--p = '-';
