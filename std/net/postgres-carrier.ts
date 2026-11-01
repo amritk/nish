@@ -21,6 +21,7 @@
  * Written for this module; not ported from another implementation.
  */
 import { HttpHandler, HttpRequest } from "nish/net/handler"
+import { H1_WANT_READ, H1_WANT_WRITE } from "nish/net/http1-server"
 import {
   PG_BATCH_DONE,
   PG_BATCH_FAILED,
@@ -81,9 +82,6 @@ export const PG_CARRIER_FULL: i32 = -2
 
 /** `netRead` and `netWrite`: nothing to do now. */
 const PG_CARRIER_AGAIN: i32 = -11
-/** The readiness bits `pollAdd` takes and `pollWait` answers. */
-const PG_CARRIER_READ: i32 = 1
-const PG_CARRIER_WRITE: i32 = 2
 /** A ready socket with input to read: readable, or hung up or in error. */
 const PG_CARRIER_READ_BITS: i32 = 5
 /** The socket error a connection past its connect timeout reports (ETIMEDOUT). */
@@ -136,6 +134,14 @@ export class PgCarrierLimits {
  * nothing is allocated per query. A final event's query is freed on the
  * following `next()` call, so `query`, `tag` and `request()` hold until then.
  */
+// Fills free stack `a` highest first, so that the lowest is handed out first.
+const fillFree = (a: i32[]): void => {
+  const n: i32 = toI32(a.length)
+  for (let k: i32 = 0; k < n; k++) {
+    a[k] = n - 1 - k
+  }
+}
+
 export class PgCarrier {
   private readonly pool: PgPool
   private readonly handler: HttpHandler
@@ -254,18 +260,13 @@ export class PgCarrier {
     this.qTickets = new Array<i32>(queries)
     this.qFailed = new Array<boolean>(queries)
     this.qFree = new Array<i32>(queries)
-    // Pushed highest first, so that the lowest is handed out first.
-    for (let q: i32 = 0; q < queries && q < toI32(this.qFree.length); q++) {
-      this.qFree[q] = queries - 1 - q
-    }
+    fillFree(this.qFree)
     this.qFreeCount = queries
     this.eBatchers = new Array<i32>(executions)
     this.eRuns = new Array<i32>(executions)
     this.eEnded = new Array<boolean>(executions)
     this.eFree = new Array<i32>(executions)
-    for (let e: i32 = 0; e < executions && e < toI32(this.eFree.length); e++) {
-      this.eFree[e] = executions - 1 - e
-    }
+    fillFree(this.eFree)
     this.eFreeCount = executions
     // At least twice the tickets ever held, a power of two for the mask.
     let mapSize: i32 = 2
@@ -490,9 +491,7 @@ export class PgCarrier {
         const conn: PgConnection = this.pool.connection(s)
         conn.terminate()
         this.flush(conn, fd)
-        pollRemove(this.loop, fd)
-        netClose(fd)
-        this.fds[s] = -1
+        this.dropSocket(s, fd)
       }
     }
     netClose(this.loop)
@@ -594,9 +593,7 @@ export class PgCarrier {
     if (event === PG_FAILED) {
       const fd: i32 = this.fds[s]
       if (fd >= 0) {
-        pollRemove(this.loop, fd)
-        netClose(fd)
-        this.fds[s] = -1
+        this.dropSocket(s, fd)
       }
       this.deadlines[s] = 0
       return PG_CARRIER_NONE
@@ -617,14 +614,12 @@ export class PgCarrier {
 
   private routePlain(s: i32, q: i32, ticket: i32, event: i32, conn: PgConnection): i32 {
     if (event === PG_ROW || event === PG_COMPLETE) {
-      this.query = q
-      this.tag = this.qTags[q]
+      this.announce(q)
       return event === PG_ROW ? PG_CARRIER_ROW : PG_CARRIER_COMPLETE
     }
     if (event === PG_ERROR) {
       this.qFailed[q] = true
-      this.query = q
-      this.tag = this.qTags[q]
+      this.announce(q)
       return PG_CARRIER_ERROR
     }
     if (event === PG_GROUP_DONE) {
@@ -708,8 +703,7 @@ export class PgCarrier {
       return PG_CARRIER_NONE
     }
     if (event === PG_BATCH_ROW) {
-      this.query = q
-      this.tag = this.qTags[q]
+      this.announce(q)
       return PG_CARRIER_ROW
     }
     if (event === PG_BATCH_FAILED) {
@@ -758,8 +752,7 @@ export class PgCarrier {
     if (v >= 0 && v < queries) {
       this.conn = conn
       this.building = v
-      this.query = v
-      this.tag = this.qTags[v]
+      this.announce(v)
       return PG_CARRIER_BUILD
     }
     if (v < 0) {
@@ -799,20 +792,21 @@ export class PgCarrier {
     let failed: boolean = false
     if (connect) {
       let slot: i32 = this.pool.wanted()
+      const deadline: i64 = slot >= 0 ? monotonicNanos() + this.timeoutNs : toI64(0)
       while (slot >= 0 && slot < toI32(this.fds.length)) {
         crypto.getRandomValues(this.nonce)
         this.pool.connect(slot, this.nonce)
         this.made[slot] = true
         this.connected[slot] = false
-        this.interest[slot] = PG_CARRIER_WRITE
+        this.interest[slot] = H1_WANT_WRITE
         this.errors[slot] = 0
-        this.deadlines[slot] = monotonicNanos() + this.timeoutNs
+        this.deadlines[slot] = deadline
         const fd: i32 = this.unix ? unixConnect(this.path) : tcpConnect(this.address)
         this.fds[slot] = fd
         if (fd < 0) {
           this.fail(slot, fd)
           failed = true
-        } else if (pollAdd(this.loop, fd, PG_CARRIER_WRITE, slot) < 0) {
+        } else if (pollAdd(this.loop, fd, H1_WANT_WRITE, slot) < 0) {
           this.fail(slot, toI32(-1))
           failed = true
         }
@@ -834,8 +828,7 @@ export class PgCarrier {
         failed = true
         continue
       }
-      const wants: i32 =
-        conn.outputEnd() > conn.outputStart() ? PG_CARRIER_READ | PG_CARRIER_WRITE : PG_CARRIER_READ
+      const wants: i32 = conn.outputEnd() > conn.outputStart() ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
       if (wants !== this.interest[s]) {
         pollModify(this.loop, fd, wants, s)
         this.interest[s] = wants
@@ -865,10 +858,22 @@ export class PgCarrier {
     return 0
   }
 
-  // Answers query `q`'s final `event`; the query is freed on the next call.
-  private final(q: i32, event: i32): i32 {
+  // Names query `q` as the one the event is about.
+  private announce(q: i32): void {
     this.query = q
     this.tag = this.qTags[q]
+  }
+
+  // Takes slot `s`'s socket `fd` off the poll set and closes it.
+  private dropSocket(s: i32, fd: i32): void {
+    pollRemove(this.loop, fd)
+    netClose(fd)
+    this.fds[s] = -1
+  }
+
+  // Answers query `q`'s final `event`; the query is freed on the next call.
+  private final(q: i32, event: i32): i32 {
+    this.announce(q)
     this.finished = q
     return event
   }
