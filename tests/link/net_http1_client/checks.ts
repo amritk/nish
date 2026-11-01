@@ -1393,13 +1393,13 @@ export const http1ClientChecks = (): i32 => {
   t.eqI32("HTTP1_E_NONE is 0, before anything goes wrong", smallParser().error, HTTP1_E_NONE);
 
   // HC-1: a parser in spans mode keeps a response's fields in buffers it reuses.
-  const three: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nX-Request: 7\r\n\r\nok");
-  const zero: i64 = 0;
+  const threeFields: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nX-Request: 7\r\n\r\nok");
+  const noGain: i64 = 0;
   const strings: Http1ResponseParser = corpusParser();
-  t.ok("strings mode: 1,000 kept-alive responses grow the arena, as HC-1 records", arenaGain(strings, three) > zero);
+  t.ok("strings mode: 1,000 kept-alive responses grow the arena, as HC-1 records", arenaGain(strings, threeFields) > noGain);
   const spans: Http1ResponseParser = corpusParser();
   spans.fieldsAsSpans();
-  t.ok("spans mode: 1,000 kept-alive responses leave Arena.used() flat", arenaGain(spans, three) === zero);
+  t.ok("spans mode: 1,000 kept-alive responses leave Arena.used() flat", arenaGain(spans, threeFields) === noGain);
   t.ok(
     "spans mode: names, values and reason stay empty, and the accessors answer",
     spans.names.length === 0 && spans.reason === "" && spans.fields() === 3 && spans.fieldName(0) === "content-type" && spans.fieldValue(2) === "7" && spans.reasonText() === "OK"
