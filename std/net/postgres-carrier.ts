@@ -722,7 +722,12 @@ export class PgCarrier {
   // build, an execution's is bound here.
   private dispatch(): i32 {
     for (let id: i32 = 0; id < toI32(this.batchers.length) && id < PG_CARRIER_MAX_BATCHERS; id++) {
-      if (this.batchQueued[id] || this.batchStalled[id] || this.batchers[id].waiting() === 0 || this.eFreeCount === 0) {
+      if (
+        this.batchQueued[id] ||
+        this.batchStalled[id] ||
+        this.batchers[id].waiting() === 0 ||
+        this.eFreeCount === 0
+      ) {
         continue
       }
       const ticket: i32 = this.pool.request()
@@ -823,7 +828,8 @@ export class PgCarrier {
         failed = true
         continue
       }
-      const wants: i32 = conn.outputEnd() > conn.outputStart() ? PG_CARRIER_READ | PG_CARRIER_WRITE : PG_CARRIER_READ
+      const wants: i32 =
+        conn.outputEnd() > conn.outputStart() ? PG_CARRIER_READ | PG_CARRIER_WRITE : PG_CARRIER_READ
       pollModify(this.loop, fd, wants, s)
     }
     return failed
@@ -833,7 +839,12 @@ export class PgCarrier {
   // error when it fails, else 0.
   private flush(conn: PgConnection, fd: i32): i32 {
     while (conn.outputEnd() > conn.outputStart()) {
-      const n: i32 = netWrite(fd, conn.outputBuffer(), conn.outputStart(), conn.outputEnd() - conn.outputStart())
+      const n: i32 = netWrite(
+        fd,
+        conn.outputBuffer(),
+        conn.outputStart(),
+        conn.outputEnd() - conn.outputStart()
+      )
       if (n === PG_CARRIER_AGAIN) {
         return 0
       }
