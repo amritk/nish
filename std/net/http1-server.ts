@@ -70,7 +70,11 @@
  * most once a second; a 1xx carries none. The pool's slots share one, so a
  * busy server formats a second once, not once a slot. A program that sets its
  * own `date` field sends that one instead, so a response has one `Date`.
- * `date.pin(unixMs)` fixes it, for a test that compares bytes.
+ * `Http1Server` reads the clock once per serve call — from `readable` or
+ * `writable` to the `flush` that ends it — and every response written in
+ * between carries that reading; one written outside a serve call, an answer
+ * given later, reads the clock then. `date.pin(unixMs)` fixes it, for a test
+ * that compares bytes.
  *
  * **Refusals.** Every refusal of `nish/net/http1`'s parser — the smuggling
  * shapes, a `Content-Length` with a `Transfer-Encoding`, two that disagree,
@@ -275,7 +279,8 @@ const http1ServerCopy = (out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 =
  * it calls, `httpDateWrite`, stays in `nish/net/http-fields`, which compiles
  * for wasm32 (the split `nish/crypto/x509` and `x509-random` make). `pin`
  * replaces the clock with one instant, which is how a test asserts a response
- * byte for byte.
+ * byte for byte. `hold` reads the clock once for a run of responses, a serve
+ * call's, until `unhold`; `pin` wins over it.
  */
 export class HttpDate {
   /** The IMF-fixdate of `second`: what `current` answers, made once. */
@@ -284,9 +289,14 @@ export class HttpDate {
   second: i64 = -1
   /** The instant `pin` fixed, in milliseconds since 1970, while `pinned`. */
   pinnedMs: i64 = 0
+  /** The clock reading `hold` took, in milliseconds since 1970, while `held`. */
+  heldMs: i64 = 0
   /** How many times `bytes` has been rewritten. */
   rewrites: i64 = 0
+  /** How many times the wall clock has been read. */
+  reads: i64 = 0
   pinned: boolean = false
+  held: boolean = false
 
   /** A date on the wall clock, with nothing formatted yet. */
   constructor() {
@@ -301,7 +311,10 @@ export class HttpDate {
    * or past 9999 answers the nearer of the two ends.
    */
   current(): u8[] {
-    const ms: i64 = this.pinned ? this.pinnedMs : toI64(Date.now())
+    let ms: i64 = this.pinnedMs
+    if (!this.pinned) {
+      ms = this.held ? this.heldMs : this.now()
+    }
     let second: i64 = ms / 1000
     if (ms < 0) {
       second = 0
@@ -333,6 +346,34 @@ export class HttpDate {
   /** Puts `current` back on the wall clock. */
   unpin(): void {
     this.pinned = false
+  }
+
+  /**
+   * Reads the wall clock once and makes `current` answer that reading until
+   * `unhold`, so the responses of one serve call cost one read. A pinned date
+   * reads nothing. A second `hold` takes a fresh reading.
+   */
+  hold(): void {
+    if (!this.pinned) {
+      this.heldMs = this.now()
+    }
+    this.held = true
+  }
+
+  /** Puts `current` back on a clock read per call, for a response written outside a serve call. */
+  unhold(): void {
+    this.held = false
+  }
+
+  /** The wall clock, in milliseconds since 1970. */
+  now(): i64 {
+    this.reads += 1
+    return toI64(Date.now())
+  }
+
+  /** How many times the wall clock has been read: once per `hold`, and once per `current` outside one. */
+  clockReads(): i64 {
+    return this.reads
   }
 
   /** How many times the bytes have been rewritten: one per second that `current` was asked for, at most. */
@@ -1573,7 +1614,11 @@ export class Http1Server {
    * accepted into, and slot 0's once `connection` has asked for it.
    */
   connections: Http1Connection[]
-  /** The `Date` every slot's responses carry, formatted once a second for all of them. `date.pin` fixes its clock. */
+  /**
+   * The `Date` every slot's responses carry, formatted once a second for all
+   * of them and read from the clock once per serve call: `readable` and
+   * `writable` hold a reading and `flush` lets it go. `date.pin` fixes its clock.
+   */
   date: HttpDate
   /**
    * Each slot's descriptor, or -1 while it is free, for the slots accepted
@@ -1729,12 +1774,15 @@ export class Http1Server {
 
   /**
    * The socket of `slot` is readable: reads it while the connection has room
-   * and the socket has more, then sends. Answers the interest.
+   * and the socket has more, then sends. Answers the interest. It begins a
+   * serve call, which the program's `flush` of the slot ends: the responses
+   * written in between carry one clock reading as their `Date`.
    */
   readable(slot: i32): i32 {
     if (!this.holds(slot)) {
       return H1_DONE
     }
+    this.date.hold()
     const conn: Http1Connection = this.connections[slot]
     const fd: i32 = this.fds[slot]
     let moved: boolean = false
@@ -1768,12 +1816,16 @@ export class Http1Server {
       conn.lastActive = now
       conn.headArrived(now)
     }
-    return this.flush(slot)
+    return this.settle(slot)
   }
 
-  /** The socket of `slot` is writable. Answers the interest. */
+  /** The socket of `slot` is writable: sends, and begins a serve call as `readable` does. Answers the interest. */
   writable(slot: i32): i32 {
-    return this.flush(slot)
+    if (!this.holds(slot)) {
+      return H1_DONE
+    }
+    this.date.hold()
+    return this.settle(slot)
   }
 
   /**
@@ -1797,9 +1849,16 @@ export class Http1Server {
   /**
    * Sends what `slot`'s connection holds until the socket would block, and
    * answers the interest: `H1_DONE` once the connection is over and sent,
-   * otherwise read while it has room and write while it holds bytes.
+   * otherwise read while it has room and write while it holds bytes. It ends
+   * the serve call, so a response written after it reads the clock anew.
    */
   flush(slot: i32): i32 {
+    this.date.unhold()
+    return this.settle(slot)
+  }
+
+  /** `flush` within a serve call: sends, answers the interest, and keeps the clock reading. */
+  settle(slot: i32): i32 {
     if (!this.holds(slot)) {
       return H1_DONE
     }

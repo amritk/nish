@@ -529,13 +529,6 @@ const http1WordHasControl = (x: u64): boolean => {
 }
 
 /**
- * `buf[i .. i + 16)` as one vector. A function of its own, because inside
- * `http1TakeLine`'s loop, where `buf`'s header is hoisted, the load is
- * emitted without its array.
- */
-const http1Load16 = (buf: u8[], i: i32): u8x16 => loadU8x16(buf, i)
-
-/**
  * Lanes `at` to `at + 7` of `v`, the first the lowest byte: eight bytes of a
  * sixteen-byte load as one word, which `opt` folds to a bitcast of the
  * vector's half. One load is one bounds check for sixteen bytes, where eight
@@ -595,7 +588,7 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
     // then one at a time, with no test in either loop but the bytes' and the
     // bound's.
     while (i >= 0 && i <= stop - 16 && i <= toI32(buf.length) - 16) {
-      const v: u8x16 = http1Load16(buf, i)
+      const v: u8x16 = loadU8x16(buf, i)
       if (http1WordHasControl(http1Lanes(v, 0)) || http1WordHasControl(http1Lanes(v, 8))) {
         break
       }
