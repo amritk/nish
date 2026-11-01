@@ -47,7 +47,12 @@ const rssKb = (pid) => {
  *                and an answer leaves once the frame's bytes have crossed it,
  *                plus the round trip, the probe's after the round trip; null
  *                reads at once and answers at once
- *   keys         `[{ afterFrames, bytes }]`, sent once that many frames are seen
+ *   keys         `[{ afterFrames, bytes, afterMs }]`, sent once that many frames
+ *                are seen and, with `afterMs`, once that many milliseconds have
+ *                passed since the key before it was sent: a terminal without
+ *                kitty's key releases makes a second press of a key within
+ *                `KeyState.firstRepeatMs` a repeat, so two taps of one key need
+ *                a gap in time, which a count of frames is not at every rate
  *   rssAt        frame counts to sample the program's memory at, before keys
  *   stdoutPipe   pipe the program's stdout through cat inside the terminal
  *   stdinNull    give the program /dev/null for stdin
@@ -99,6 +104,7 @@ export const relay = (exe, mode, options) => {
   const keySentNs = []
   const rss = []
   const keys = [...o.keys]
+  let lastKeyAt = -Infinity
   const rssAt = [...o.rssAt]
   const start = performance.now()
   const send = (s) => {
@@ -120,8 +126,13 @@ export const relay = (exe, mode, options) => {
     while (rssAt.length > 0 && frames >= rssAt[0]) {
       rss.push({ frames: rssAt.shift(), kb: rssKb(programPid()) })
     }
-    while (keys.length > 0 && frames >= keys[0].afterFrames) {
+    while (
+      keys.length > 0 &&
+      frames >= keys[0].afterFrames &&
+      performance.now() - lastKeyAt >= (keys[0].afterMs ?? 0)
+    ) {
       keySentNs.push(process.hrtime.bigint())
+      lastKeyAt = performance.now()
       send(keys.shift().bytes)
     }
     const ack = () => {
