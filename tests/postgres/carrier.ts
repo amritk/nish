@@ -94,16 +94,19 @@ export const main = (): i32 => {
       } else if (event === PG_CARRIER_FAILED) {
         console.log(`nap failed: failure ${carrier.failure}, socket ${carrier.socketError}`)
         carrier.close()
+        pool.dispose()
         return 1
       }
       event = carrier.next()
     }
     if (napDone && served) {
       carrier.close()
+      pool.dispose()
       return 0
     }
   }
   console.log("timed out")
   carrier.close()
+  pool.dispose()
   return 1
 }

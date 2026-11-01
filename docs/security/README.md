@@ -276,7 +276,8 @@ the record that found it. The notes below the table name each such finding.
     lost before it was taken, were found as the carrier was written and
     fixed before it merged. PG-25, a reset socket ending its connection,
     holds and is not a finding; PG-26 (Low), no deadline on a query once
-    its connection is up, is accepted and not counted.
+    its connection is up, and PG-27 (Low), a connect attempt with no
+    backoff while the server is down, are accepted and not counted.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`

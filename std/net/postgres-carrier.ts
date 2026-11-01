@@ -20,7 +20,7 @@
  *
  * Written for this module; not ported from another implementation.
  */
-import { HttpHandler, HttpRequest } from "nish/net/handler"
+import { HANDLER_MAX_WATCHED, HttpHandler, HttpRequest } from "nish/net/handler"
 import { H1_WANT_READ, H1_WANT_WRITE } from "nish/net/http1-server"
 import {
   PG_BATCH_DONE,
@@ -109,7 +109,7 @@ export class PgCarrierLimits {
   executions: i32 = 64
   /** How long a connection has to connect and authenticate before it fails, in milliseconds (1 to 3600000). */
   connectTimeoutMs: i32 = 5000
-  /** The id the carrier's descriptor is watched under on the handler (`HttpHandler.watch`). */
+  /** The id the carrier's descriptor is watched under on the handler (`HttpHandler.watch`), 0 to `HANDLER_MAX_WATCHED - 1`. */
   watch: i32 = 0
 }
 
@@ -211,11 +211,12 @@ export class PgCarrier {
   private at: i32 = 0
   private readonly unix: boolean
   private connecting: boolean = true
+  private closed: boolean = false
 
   /**
    * A carrier for `pool`'s connections to `target`, its descriptor watched on
-   * `handler` as `limits.watch`. Panics on a cap out of range, a target that
-   * failed or is not a numeric address, or a watch id the handler refuses.
+   * `handler` as `limits.watch`. Panics on a cap or watch id out of range,
+   * or a target that failed or is not a numeric address.
    */
   constructor(limits: PgCarrierLimits, pool: PgPool, target: PgTarget, handler: HttpHandler) {
     const queries: i32 = limits.queries
@@ -226,7 +227,9 @@ export class PgCarrier {
       executions < 1 ||
       executions > PG_CARRIER_MAX_QUERIES ||
       limits.connectTimeoutMs < 1 ||
-      limits.connectTimeoutMs > 3600000
+      limits.connectTimeoutMs > 3600000 ||
+      limits.watch < 0 ||
+      limits.watch >= HANDLER_MAX_WATCHED
     ) {
       panic("nish/net/postgres-carrier: a PgCarrierLimits cap out of range")
     }
@@ -310,8 +313,8 @@ export class PgCarrier {
   /**
    * Queues a plain query for `req` (null for one of the program's own) and
    * answers its number; `PG_CARRIER_BUILD` comes for it once a connection
-   * has room. `PG_CARRIER_FULL` when `queries` are waiting or the pool's
-   * queue is full. Returns at once.
+   * has room. `PG_CARRIER_FULL` when `queries` are waiting, the pool's
+   * queue is full or the carrier is closed. Returns at once.
    */
   run(req: HttpRequest | null, tag: i32): i32 {
     const q: i32 = this.take(req, tag)
@@ -414,8 +417,12 @@ export class PgCarrier {
    * written and nothing more can happen until the handler's next turn. The
    * connect timeout is checked here, so the program's `wait` timeout bounds
    * how late it fires. Panics while a `PG_CARRIER_BUILD` is unsent.
+   * `PG_CARRIER_NONE` once the carrier is closed, which connects nothing.
    */
   next(): i32 {
+    if (this.closed) {
+      return PG_CARRIER_NONE
+    }
     if (this.building >= 0) {
       panic("nish/net/postgres-carrier: PgCarrier.next before send() ended the PG_CARRIER_BUILD")
     }
@@ -486,8 +493,19 @@ export class PgCarrier {
     }
   }
 
-  /** Tells every connection the session is over, writes what it can of that, and closes the sockets and the carrier's poll set, which closing takes off the handler's watch. Queries still held get no further event: answer their requests first. The pool is the program's to `dispose()`. */
+  /**
+   * Tells every connection the session is over, writes what it can of that,
+   * and closes the sockets and the carrier's poll set, which closing takes
+   * off the handler's watch. Queries still in flight get no further event:
+   * their requests are the program's to answer. After it, `run`, `runInt`
+   * and `runText` answer `PG_CARRIER_FULL` and `next()` `PG_CARRIER_NONE`;
+   * a second `close()` does nothing. The pool is the program's to `dispose()`.
+   */
   close(): void {
+    if (this.closed) {
+      return
+    }
+    this.closed = true
     for (let s: i32 = 0; s < toI32(this.fds.length); s++) {
       const fd: i32 = this.fds[s]
       if (fd >= 0) {
@@ -888,9 +906,9 @@ export class PgCarrier {
     return this.batchers[id]
   }
 
-  // A free query for `req` and `tag`, or -1.
+  // A free query for `req` and `tag`, or -1 when none is free or the carrier is closed.
   private take(req: HttpRequest | null, tag: i32): i32 {
-    if (this.qFreeCount === 0) {
+    if (this.closed || this.qFreeCount === 0) {
       return -1
     }
     this.qFreeCount -= 1

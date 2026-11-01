@@ -128,9 +128,9 @@ was tried. PG-9 to PG-11 are accepted. PG-12 and PG-13 were found by the
 first review of this module and fixed before it merged; PG-15 to PG-17 by the
 batcher's first review, and fixed before it merged. PG-18 to PG-20 are the
 shapes a URL can take, checked as the parser was written; PG-21 and PG-22
-are accepted. PG-23 to PG-26 are the carrier's (`std/net/postgres-carrier.ts`):
+are accepted. PG-23 to PG-27 are the carrier's (`std/net/postgres-carrier.ts`):
 PG-23 and PG-24 were found as it was written and fixed before it merged,
-PG-25 holds, and PG-26 is accepted.
+PG-25 holds, and PG-26 and PG-27 are accepted.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -157,9 +157,10 @@ PG-25 holds, and PG-26 is accepted.
 | PG-21 | Low | `PgConnection`, over a socket | A local user who can create the socket a target names, in a directory others may write such as `/tmp`, can answer as the server; under `peer` or `trust` the server asks for no password, so nothing proves it is the server. | **Accepted.** As PG-10: there is no `requirepeer` to check the socket's owner, which `nish:net` cannot report. Put the socket in a directory only the server's user may write, as `/var/run/postgresql` is; the guide says peer and trust send no password. |
 | PG-22 | Low | `pgTarget` | A host that is a path to the socket file itself, not its directory, is taken as a directory, as `libpq` takes it, and names `<file>/.s.PGSQL.<port>`, which does not exist. | **Accepted.** The connect fails (`ENOTDIR`); it reaches no other socket. Kept for `libpq`'s meaning of the same string; the guide says so. "a full socket path is taken as a directory, as libpq does", "a URL's socket file is a directory too". |
 | PG-23 | Medium | `PgCarrier.next`, its connect pass | A server, or anything at its address, that accepts the connection and never sends a byte holds every query queued on that slot for ever; a route's clients wait on requests that are never answered. | **Fixed** as written: each slot's connect has a deadline, `connectTimeoutMs` (default 5000, at most an hour) from the connect, checked on every `next()` until the connection is ready; past it the connection fails with socket error -110 (ETIMEDOUT), its socket is closed and each query on it is `PG_CARRIER_FAILED` with failure 9 (`PG_ERR_CLOSED`). The program's `wait` timeout bounds how late the check runs. A refused connect fails at once rather than at the deadline. A connect that fails while no connection is ready takes the oldest waiting query with it (`PgPool.next`), so the queries waiting behind an unreachable server fail one per slot per turn, a turn being bounded by the program's `wait` timeout; a program that waits with no timeout holds them until the handler next wakes. A deadline found past on a connection the server already failed keeps the server's failure. "a server that never answers fails the query", "at the connect timeout, as ETIMEDOUT", "not before it", "a refused connect fails the query", "without waiting for the timeout" (`link/std_postgres_carrier`); live, the `refused` check. |
-| PG-24 | Medium | `PgCarrier` routing, `PgBatcher.shed` | A batched execution whose connection is lost before it is taken leaves its requests in the batcher, where they wait on a server the carrier cannot reach and their clients are never answered. | **Fixed** as written: the carrier fails one execution's worth (`maxRequests`) of the batcher's oldest waiting requests, each `PG_CARRIER_FAILED` with the connection's failure, through `PgBatcher.shed`, which drops the oldest and answers its tag; the next request queues a new execution on a new connection. "a batch whose connection ends fails its request", "as lost with the connection", "and the next batch", "on new connections", "a lost execution of three keys fails all three requests", "the three were one execution, answered by none". |
+| PG-24 | Medium | `PgCarrier` routing, `PgBatcher.shed` | A batched execution whose connection is lost before it is taken leaves its requests in the batcher, where they wait on a server the carrier cannot reach and their clients are never answered. | **Fixed** as written: the carrier fails one execution's worth (`maxRequests`) of the batcher's oldest waiting requests, each `PG_CARRIER_FAILED` with the connection's failure, through `PgBatcher.shed`, which drops the oldest and answers its tag; the next request queues a new execution on a new connection. "a batch whose connection ends fails its request", "as lost with the connection", "and the next batch", "after two connections ended, with a new one accepted", "a lost execution of three keys fails all three requests", "the three were one execution, answered by none". |
 | PG-25 | Medium if it failed | `PgCarrier.next`, its read of a slot | A socket that reports an error or hang-up stays readable; a carrier that read nothing from it and went on would be woken by it on every turn, spinning a worker. | **Holds.** A read that answers an error, or 0 bytes, ends the connection there: the error is kept as `socketError`, the socket closed and removed from the poll set, and the queries on it fail. "a query whose connection ends is the program's 503", "with the connection closed behind it" (`link/std_postgres_carrier`); live, the `reset` check (ECONNRESET, -104). |
 | PG-26 | Low | `PgCarrier` | Once a connection is up there is no deadline on a query: a server that authenticates and then never answers a statement holds that query, and the ones behind it on its connection, until the connection ends. | **Accepted.** A statement's time is the server's to bound (`statement_timeout`); the carrier holds `request()` so the program can answer with its own deadline, and a backend ended by the server fails its queries as lost. |
+| PG-27 | Low | `PgCarrier.next`, its connect pass | While the server is down, each `next()` pass makes one connect attempt for each slot the pool wants, with no backoff, and each attempt makes a new `PgConnection` and its buffers, which the arena keeps. | **Accepted.** The attempts are bounded by the queries waiting, not by time: a slot is wanted only while more queries wait than the connections starting can take, and a connect that fails while no connection is ready fails the oldest waiting query with it (PG-23), so the attempts end when the queue is empty, and there is at most one for each slot in each pass, which the program's `wait` turns pace. The memory is a connection's for each query that failed for want of a server, which the Limits below record. A backoff would hold the clients of the queries waiting behind a server already down for longer; a program that would rather not pay it can answer 503 itself after failures instead of queueing more. "a refused connect fails the query", "without waiting for the timeout" (`link/std_postgres_carrier`). |
 
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
@@ -213,7 +214,7 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `PgBatchTurns` constructor | a size outside 1..1024 | — |
 | `PgBatchTurns.started`, `release` | a slot out of range or holding a batch ("PgBatchTurns slot out of range or holding a batch") | — |
 | `PgBatchTurns.finished` | a slot holding no batch ("PgBatchTurns.finished on a slot holding no batch") | `link/std_postgres_batch_clock_turns_panic` (slot 0 finished twice, after once) |
-| `PgCarrier` constructor | a cap out of range: `queries` or `executions` outside 1..65536, `connectTimeoutMs` outside 1..3,600,000 ("a PgCarrierLimits cap out of range") | `link/std_postgres_carrier_limits_panic` (`queries` of 0, after 1 is taken); the other bounds share its condition |
+| `PgCarrier` constructor | a cap out of range: `queries` or `executions` outside 1..65536, `connectTimeoutMs` outside 1..3,600,000, or a `watch` id outside 0..15 (`HANDLER_MAX_WATCHED` − 1), checked before the poll set is made so that none leaks ("a PgCarrierLimits cap out of range") | `link/std_postgres_carrier_limits_panic` (`queries` of 0, after 1 is taken); the other bounds share its condition |
 | `PgCarrier` constructor | a target that failed, a TCP host that is not a numeric address (the carrier resolves no names), or a poll set the kernel refuses | — |
 | `PgCarrier.attach` | past 8 batchers, or where `PgPool.register` refuses: after the pool connected, a NUL in the name or SQL, past 256 statements | `link/std_postgres_carrier_attach_panic` (a ninth, after eight) |
 | `PgCarrier.runInt`, `runText` | a batcher id `attach` never gave ("PgCarrier batcher id out of range") | `link/std_postgres_carrier_batcher_panic` (id 1 with only id 0 attached) |
@@ -230,6 +231,14 @@ array. An open array is the program's state, not the server's, so misusing it
 is a panic rather than a refusal a caller could miss and send a Bind whose
 array never closed.
 
+`PgCarrier.close()` is not a panic site either. Queries in flight when it is
+called get no further event: their requests are the program's to answer,
+before or after it. Once closed, `run`, `runInt` and `runText` answer
+`PG_CARRIER_FULL` and `next()` answers `PG_CARRIER_NONE`, so a carrier used
+after `close()` makes no connection on its closed poll set, and a second
+`close()` does nothing ("after close(), a second close() does nothing and
+the carrier refuses queries", "and connects nothing").
+
 ## Limits
 
 Edges of the module a caller owns, recorded so that no one assumes otherwise:
@@ -241,7 +250,8 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   a table, so a flood of a route's clients costs refusals, not memory: "past
   the queries cap the carrier is full". Once its connections are up nothing
   is allocated per query ("and the arena stays flat", over thousands of
-  pipelined queries). Making a connection allocates — the pool's
+  pipelined queries). That window is the connected steady state only: a
+  statement the server refuses and a reconnect are outside it. Making a connection allocates — the pool's
   `PgConnection` and its buffers — so a server that drops connections in a
   loop costs one connection's memory each time it is made again, as it does
   for `PgPool` without the carrier.
@@ -445,7 +455,8 @@ program, which answers each statement from its bytes, and HTTP clients on
 loopback. A plain query's row and a batched key's row each answer their own
 request, and a key with no row is the program's 404 without failing the key
 after it; three clients' keys go out in one execution, which the backend
-counts, and each client gets its own row or 404. With the backend holding a
+counts, after the handler took all three in one turn, and each client
+gets its own row or 404. With the backend holding a
 slow query, another client is answered while it is held, and the held one
 only once the backend goes on. A connection that ends fails its plain query
 and its batch (PG-24) and closes its socket (PG-25), an execution of three
@@ -458,7 +469,9 @@ and the connection that refused them, still open, answers the queries after
 them. `close()` with a query held by the backend sends `Terminate` and
 closes that connection, which the backend sees end, and the handler goes on
 answering; the held query gets no further event, which `close()`'s
-documentation states.
+documentation states. After it, a second `close()` does nothing, the
+carrier answers `PG_CARRIER_FULL` to a query and `PG_CARRIER_NONE` to
+`next()`, and the backend accepts no new connection.
 After 100 warm-up rounds, a thousand rounds of four pipelined queries, half
 of them batched, leave `Arena.used()` unchanged, with none refused for room; the queries cap answers
 `PG_CARRIER_FULL`; a backend that never answers fails at the connect timeout

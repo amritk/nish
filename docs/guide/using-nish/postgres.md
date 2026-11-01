@@ -768,7 +768,7 @@ carrier.close()
   connection takes it, `next()` answers `PG_CARRIER_BUILD`: bind the
   statement on `connection()` and call `send()` before the next `next()`.
 - **`runInt` and `runText`** queue a key for a batcher `attach` gave you
-  (at most 8, attached before the first query). The carrier takes a batch
+  (at most 8, attached before the pool connects). The carrier takes a batch
   whenever a connection is free and answers each key's rows to its own
   request; a key with no row is `PG_CARRIER_MISSING`.
 - **Events.** A query's final event comes whether or not it had rows, so
@@ -792,16 +792,19 @@ carrier.close()
 - **Caps.** `PgCarrierLimits` sets `queries` (256) and `executions` (64), each
   at most 65536, before the carrier starts; nothing grows after, and once the
   connections are up nothing is allocated per query. `watch` is the id the
-  carrier is watched under on the handler, if your program watches other
-  descriptors.
+  carrier is watched under on the handler (0 to 15), if your program watches
+  other descriptors.
 - **The target** is a Unix socket or a numeric address: the carrier resolves
   no names.
 
 There is no deadline on a query once its connection is up: bound a slow
 statement with the server's `statement_timeout`. `close()` closes the
-carrier's sockets; the pool's `dispose()` still wipes the password.
+carrier's sockets; the pool's `dispose()` still wipes the password. Queries
+in flight at `close()` get no further event, so answer their requests
+yourself. After it, `run`, `runInt` and `runText` answer `PG_CARRIER_FULL`
+and `next()` answers `PG_CARRIER_NONE`, and a second `close()` does nothing.
 
-The constructor panics on a cap out of range, a target that failed or a host
+The constructor panics on a cap or `watch` id out of range, a target that failed or a host
 name; `attach` past 8 batchers, after the pool connected, on a NUL in the
 batcher's name or SQL, or past 256 statements; `runInt` and
 `runText` on an id `attach` never gave; `request()` for a query run with no

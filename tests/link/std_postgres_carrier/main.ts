@@ -14,7 +14,8 @@
 //
 //   1. Routing: a plain query's row answers its request, a batch of keys
 //      answers each request with its own row, and a key with no row is 404;
-//      three clients' keys go out in one execution.
+//      three clients' keys, taken in one handler turn, go out in one
+//      execution.
 //   2. The slow query: while one query is held by the server, another client
 //      is answered.
 //   3. Loss: a connection that ends under a plain query or a batch fails
@@ -28,8 +29,9 @@
 //      `Arena.used()` unchanged.
 //   6. Closing: `close()` with a query held by the server ends that
 //      connection, and the handler goes on answering. A query in flight at
-//      `close()` gets no further event: the carrier promises only that its
-//      sockets are closed and its watch is gone.
+//      `close()` gets no further event: its request is the program's to
+//      answer. After it the carrier refuses queries and connects nothing,
+//      and a second `close()` does nothing.
 //   7. Connects: a server that accepts and never answers fails the query at
 //      the connect timeout, a port with no listener fails it at once, and a
 //      full carrier answers PG_CARRIER_FULL.
@@ -529,6 +531,8 @@ class App {
   errorCode: string = ""
   afterError: i32 = 0
   full: i32 = 0
+  /** How many requests the last turn that took any took. */
+  lastTaken: i32 = 0
 
   constructor() {
     const router = new Router(new RouterLimits())
@@ -573,8 +577,13 @@ class App {
   turn(): void {
     this.backend.serve()
     this.h.wait(toI32(1))
+    let taken: i32 = 0
     while (this.h.ready()) {
       this.take(this.h.take())
+      taken += 1
+    }
+    if (taken > 0) {
+      this.lastTaken = taken
     }
     this.events()
   }
@@ -850,6 +859,7 @@ const routing = (app: App): void => {
   check(app, "keys from three clients: the first gets its own row", response(app, cs[0]) && answer(cs[0], 200, ascii("v7")))
   check(app, "the second, with no row, its 404", response(app, cs[1]) && answer(cs[1], 404, ascii("")))
   check(app, "the third its own row", response(app, cs[2]) && answer(cs[2], 200, ascii("v5")))
+  check(app, "all three taken in one handler turn", app.lastTaken === 3)
   check(app, "from one execution carrying all three keys", app.backend.batches === batches + 1 && app.backend.lastKeys === 3)
   closeAll(cs)
 }
@@ -886,7 +896,7 @@ const loss = (app: App): void => {
   sendAll(app, c, ascii("GET /echo/3 HTTP/1.1\r\nHost: t\r\n\r\nGET /users/8 HTTP/1.1\r\nHost: t\r\n\r\n"))
   check(app, "the next plain query is answered", response(app, c) && answer(c, 200, ascii("3")))
   check(app, "and the next batch", response(app, c) && answer(c, 200, ascii("v8")))
-  check(app, "on new connections", app.backend.killed === 2 && app.backend.accepted > accepted)
+  check(app, "after two connections ended, with a new one accepted", app.backend.killed === 2 && app.backend.accepted > accepted)
   netClose(c.fd)
 
   const batches: i32 = app.backend.batches
@@ -964,9 +974,17 @@ const closing = (app: App): void => {
   }
   check(app, "close() with it in flight ends its connection", app.backend.ended === ended + 1)
   app.backend.holding = false
+  const accepted: i32 = app.backend.accepted
+  extra.close()
+  const refuses: boolean = extra.run(null, SLOW) === PG_CARRIER_FULL && extra.next() === PG_CARRIER_NONE
+  for (let k: i32 = 0; k < 4; k++) {
+    app.turn()
+  }
+  check(app, "after close(), a second close() does nothing and the carrier refuses queries", refuses)
+  check(app, "and connects nothing", app.backend.accepted === accepted)
   const c = connect(app)
   sendAll(app, c, ascii("GET /echo/9 HTTP/1.1\r\nHost: t\r\n\r\n"))
-  check(app, "and the handler, its watch gone, goes on answering", response(app, c) && answer(c, 200, ascii("9")))
+  check(app, "and the handler goes on answering", response(app, c) && answer(c, 200, ascii("9")))
   netClose(c.fd)
 }
 

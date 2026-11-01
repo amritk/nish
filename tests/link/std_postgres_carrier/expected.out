@@ -5,6 +5,7 @@ PASS  and the key after it still gets its row
 PASS  keys from three clients: the first gets its own row
 PASS  the second, with no row, its 404
 PASS  the third its own row
+PASS  all three taken in one handler turn
 PASS  from one execution carrying all three keys
 PASS  the server holds the slow query
 PASS  another client is answered while it is held
@@ -16,7 +17,7 @@ PASS  a batch whose connection ends fails its request
 PASS  as lost with the connection
 PASS  the next plain query is answered
 PASS  and the next batch
-PASS  on new connections
+PASS  after two connections ended, with a new one accepted
 PASS  a lost execution of three keys fails all three requests
 PASS  the three were one execution, answered by none
 PASS  a statement the server refuses is the program's 503
@@ -32,7 +33,9 @@ PASS  and the arena stays flat
 PASS  and none was refused for room
 PASS  a second carrier's query is held by the server
 PASS  close() with it in flight ends its connection
-PASS  and the handler, its watch gone, goes on answering
+PASS  after close(), a second close() does nothing and the carrier refuses queries
+PASS  and connects nothing
+PASS  and the handler goes on answering
 PASS  a query is taken
 PASS  past the queries cap the carrier is full
 PASS  a server that never answers fails the query
