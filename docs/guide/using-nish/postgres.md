@@ -722,6 +722,9 @@ pool.register("article", "select body from articles where id = $1", [toI32(20)])
 const handler = new HttpHandler(new HandlerLimits(), listener, router)
 const carrier = new PgCarrier(new PgCarrierLimits(), pool, pgTarget("127.0.0.1", 5432), handler)
 const users: i32 = carrier.attach(new PgBatcher(usersConfig))
+// Whether query q's request was answered: a ROW answers it, and the final
+// event answers only one that no row did.
+const answered: boolean[] = new Array<boolean>(256)
 
 while (running) {
   handler.wait(50)
@@ -743,12 +746,16 @@ while (running) {
       conn.bindEnd()
       carrier.send()
     } else if (event === PG_CARRIER_ROW) {
-      const conn: PgConnection = carrier.connection()
-      handler.send(carrier.request(), 200, text, conn.inputBuffer(), conn.colStart(0), conn.colLength(0))
-    } else if (event === PG_CARRIER_MISSING) {
-      handler.send(carrier.request(), 404, text, none, 0, 0)
-    } else if (event === PG_CARRIER_FAILED) {
-      handler.send(carrier.request(), 503, text, none, 0, 0)
+      if (!answered[carrier.query]) {
+        const conn: PgConnection = carrier.connection()
+        handler.send(carrier.request(), 200, text, conn.inputBuffer(), conn.colStart(0), conn.colLength(0))
+        answered[carrier.query] = true
+      }
+    } else if (event === PG_CARRIER_DONE || event === PG_CARRIER_MISSING || event === PG_CARRIER_FAILED) {
+      if (!answered[carrier.query]) {
+        handler.send(carrier.request(), event === PG_CARRIER_FAILED ? 503 : 404, text, none, 0, 0)
+      }
+      answered[carrier.query] = false
     }
     event = carrier.next()
   }
@@ -764,7 +771,9 @@ carrier.close()
   (at most 8, attached before the first query). The carrier takes a batch
   whenever a connection is free and answers each key's rows to its own
   request; a key with no row is `PG_CARRIER_MISSING`.
-- **Events.** Each query gets its rows (`PG_CARRIER_ROW`, read on
+- **Events.** A query's final event comes whether or not it had rows, so
+  answer the request once: on its first row, or on the final event when no
+  row came. Each query gets its rows (`PG_CARRIER_ROW`, read on
   `connection()` before the next call), then exactly one of
   `PG_CARRIER_DONE`, `PG_CARRIER_MISSING` and `PG_CARRIER_FAILED`. On each,
   `query` is the number `run` answered, `tag` what you passed, and
@@ -774,7 +783,10 @@ carrier.close()
   authenticated within `connectTimeoutMs` (5000 by default) fails every query
   on it with `PG_CARRIER_FAILED`: `failure` is the connection's `PG_ERR_*`
   (9, closed, for a socket that failed) and `socketError` the socket's error,
-  `-110` for the timeout. The next query makes a new connection. A query the
+  `-110` for the timeout. The next query makes a new connection. While no
+  connection is up, each failed connect also fails the oldest waiting query,
+  one per slot per turn, so give `wait` a timeout: a server that cannot be
+  reached empties the queue over the following turns. A query the
   server refuses fails with `failure` 0 and its error on
   `connection().lastError`, after `PG_CARRIER_ERROR`.
 - **Caps.** `PgCarrierLimits` sets `queries` (256) and `executions` (64), each

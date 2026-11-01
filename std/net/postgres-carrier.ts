@@ -149,6 +149,9 @@ export class PgCarrier {
   // (0 for no deadline), and the socket error that failed it.
   private readonly fds: i32[]
   private readonly connected: boolean[]
+  // The events each slot's socket is watched for, so that one unchanged
+  // is not asked for again.
+  private readonly interest: i32[]
   private readonly made: boolean[]
   private readonly deadlines: i64[]
   private readonly errors: i32[]
@@ -239,6 +242,7 @@ export class PgCarrier {
     this.ready = new Array<i32>(2 * size)
     this.fds = new Array<i32>(size)
     this.connected = new Array<boolean>(size)
+    this.interest = new Array<i32>(size)
     this.made = new Array<boolean>(size)
     this.deadlines = new Array<i64>(size)
     this.errors = new Array<i32>(size)
@@ -478,7 +482,7 @@ export class PgCarrier {
     }
   }
 
-  /** Tells every connection the session is over, writes what it can of that, and closes the sockets and the carrier's poll set. The pool is the program's to `dispose()`. */
+  /** Tells every connection the session is over, writes what it can of that, and closes the sockets and the carrier's poll set, which closing takes off the handler's watch. Queries still held get no further event: answer their requests first. The pool is the program's to `dispose()`. */
   close(): void {
     for (let s: i32 = 0; s < toI32(this.fds.length); s++) {
       const fd: i32 = this.fds[s]
@@ -514,7 +518,8 @@ export class PgCarrier {
         if (now === 0) {
           now = monotonicNanos()
         }
-        if (now >= deadline) {
+        // A connection the server already failed keeps that failure.
+        if (now >= deadline && this.pool.connection(s).failure === PG_ERR_NONE) {
           this.fail(s, PG_CARRIER_TIMED_OUT)
         }
       }
@@ -799,6 +804,7 @@ export class PgCarrier {
         this.pool.connect(slot, this.nonce)
         this.made[slot] = true
         this.connected[slot] = false
+        this.interest[slot] = PG_CARRIER_WRITE
         this.errors[slot] = 0
         this.deadlines[slot] = monotonicNanos() + this.timeoutNs
         const fd: i32 = this.unix ? unixConnect(this.path) : tcpConnect(this.address)
@@ -830,7 +836,10 @@ export class PgCarrier {
       }
       const wants: i32 =
         conn.outputEnd() > conn.outputStart() ? PG_CARRIER_READ | PG_CARRIER_WRITE : PG_CARRIER_READ
-      pollModify(this.loop, fd, wants, s)
+      if (wants !== this.interest[s]) {
+        pollModify(this.loop, fd, wants, s)
+        this.interest[s] = wants
+      }
     }
     return failed
   }
