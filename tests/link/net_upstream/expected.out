@@ -1,0 +1,46 @@
+PASS  slow: the call reached the slow server, and get returned at once
+PASS  slow: another client is answered by the program meanwhile
+PASS  slow: and through a second upstream
+PASS  slow: both inside the slow call's deadline
+PASS  slow: the slow call ends UPSTREAM_E_TIMEOUT and its client gets a 504
+PASS  slow: its slot and connection are given back
+PASS  keep-alive: five calls in a row are answered, each tagged with its request
+PASS  keep-alive: on one connection
+PASS  keep-alive: the request head is the path and the origin's Host
+PASS  refusal: a malformed status line fails the call with code 1
+PASS  refusal: a bare LF fails the call with code 3
+PASS  refusal: conflicting framing fails the call with code 6
+PASS  refusal: a body past maxBody fails the call with code 14
+PASS  refusal: a body cut short fails the call with code 10
+PASS  refusal: the next call is answered on a new connection
+PASS  policy: a loopback origin is refused at start-up
+PASS  policy: and each call fails UPSTREAM_E_BLOCKED with nothing connected
+PASS  policy: permitted, the same origin is called
+PASS  origin: https, userinfo and a path are each UPSTREAM_E_ORIGIN
+PASS  request: a path that is not a request target is UPSTREAM_E_REQUEST
+PASS  warm pool: three thousand calls are answered
+PASS  warm pool: on the one connection, with every slot back and no body buffer grown
+PASS  warm pool: Arena.used() flat over two thousand calls past a thousand of warm-up
+PASS  idle: a connection the origin closed while idle is not reused, and the next call is answered
+PASS  idle: bytes the origin sent while the connection was idle are not the next call's response
+PASS  retry: a call the origin drops unanswered on a reused connection is made once more on a new one
+PASS  reset: a close-delimited body ends at the origin's close
+PASS  reset: a reset where the origin's close would end a close-delimited body fails the call UPSTREAM_E_RESET, not ok
+PASS  connections: three calls with one connection allowed share it, one after another
+PASS  request: an absolute-form or asterisk path is UPSTREAM_E_REQUEST, with nothing sent
+PASS  calls: with every slot taken, get answers UPSTREAM_E_FULL and holds nothing
+PASS  calls: once the slot is released, get takes a call again
+PASS  request: a request head past maxHead is UPSTREAM_E_REQUEST, with nothing sent
+PASS  request: and one that fits is called
+PASS  policy: a host name the policy does not allow is refused before any lookup
+PASS  late reply: a call past its deadline fails UPSTREAM_E_TIMEOUT and its connection is closed before the reply is due
+PASS  late reply: the next call gets its own response, on a new connection
+PASS  framing: a Connection: close response closes its connection, and the next call opens a new one
+PASS  framing: bytes past a response in the same read close its connection, and are not the next call's
+PASS  body: a body of maxBody is taken whole, in a buffer under twice maxBody
+PASS  request: a CR, LF or space in a path is UPSTREAM_E_REQUEST, with nothing sent
+PASS  closed: a call the origin drops on its retry's new connection too fails UPSTREAM_E_CLOSED, made twice in all
+PASS  deadline: a call queued behind the connections cap fails UPSTREAM_E_TIMEOUT at the deadline get gave it
+PASS  connect: a refused connection fails the call UPSTREAM_E_CONNECT
+PASS  policy: an allowed name that resolves only to refused addresses is UPSTREAM_E_BLOCKED
+PASS  lookup: a name with no address is UPSTREAM_E_LOOKUP

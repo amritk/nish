@@ -82,7 +82,8 @@ the record that found it. The notes below the table name each such finding.
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
-| **Total** ⁸ | | | **3 / 10 / 51 / 148** | **0 / 1 / 3 / 30** |
+| Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
+| **Total** ⁸ | | | **3 / 10 / 54 / 149** | **0 / 1 / 3 / 30** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -326,6 +327,13 @@ the record that found it. The notes below the table name each such finding.
     read went through `nish/bytes`' variable-time scan kernels, which
     BYTES-2 refuses in `std/crypto`). JWT-P1 to JWT-P9 are properties
     checked and found to hold.
+26. UPSTREAM-9 to UPSTREAM-11 (Low) are accepted, with the reason in their
+    record, and are not counted: a deadline is checked only when the program
+    reads the pool, the origin's one lookup blocks at start-up and is never
+    refreshed, and only `http:` is spoken. UPSTREAM-8 (Medium) was found
+    while writing the record, and UPSTREAM-7 (Low), UPSTREAM-12 and
+    UPSTREAM-13 (Medium) in review; each is fixed with a before/after test.
+    UPSTREAM-1 to UPSTREAM-6 are properties checked and found to hold.
 
 ## Fuzzed
 
@@ -384,7 +392,7 @@ only.
 | PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
-| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`) | Each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes` | — |
+| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `http-client.ts` and `websocket.ts` to spans mode |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |

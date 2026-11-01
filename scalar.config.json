@@ -116,6 +116,11 @@
           "/api-server": { "type": "page", "title": "An API server", "filepath": "docs/guide/using-nish/api-server.md" },
           "/websocket": { "type": "page", "title": "WebSocket", "filepath": "docs/guide/using-nish/websocket.md" },
           "/http-client": { "type": "page", "title": "HTTP client", "filepath": "docs/guide/using-nish/http-client.md" },
+          "/calling-services": {
+            "type": "page",
+            "title": "Calling other services",
+            "filepath": "docs/guide/using-nish/calling-services.md"
+          },
           "/postgres": { "type": "page", "title": "PostgreSQL", "filepath": "docs/guide/using-nish/postgres.md" },
           "/compression": { "type": "page", "title": "Compression", "filepath": "docs/guide/using-nish/compression.md" },
           "/to-typescript": { "type": "page", "title": "Back to TypeScript", "filepath": "docs/guide/using-nish/to-typescript.md" }
