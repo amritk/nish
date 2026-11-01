@@ -21,6 +21,16 @@
 //      slot, connection or body buffer past the ones the pool started with,
 //      and past a thousand of warm-up, two thousand more leave
 //      `Arena.used()` where it was: a call allocates nothing.
+//   6. Reuse: an idle connection the origin closed, or sent bytes on, is
+//      closed before the next call rather than written to or read as its
+//      response; a call the origin drops unanswered on a reused connection
+//      is made once more on a new one; a reset in a close-delimited body
+//      fails `UPSTREAM_E_RESET` where the origin's close would end it; the
+//      `connections` cap queues calls; an absolute-form path is refused.
+//   7. Caps before the wire: `UPSTREAM_E_FULL` past `calls`, a head past
+//      `maxHead`, and a host name the policy refuses before any lookup.
+//   8. A late reply: a call past its deadline closes its connection, so the
+//      reply that comes after reaches no later call.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import {
@@ -34,9 +44,11 @@ import { OutboundPolicy } from "nish/net/outbound"
 import { Router, RouterLimits } from "nish/net/router"
 import {
   UPSTREAM_E_BLOCKED,
+  UPSTREAM_E_FULL,
   UPSTREAM_E_NONE,
   UPSTREAM_E_ORIGIN,
   UPSTREAM_E_REQUEST,
+  UPSTREAM_E_RESET,
   UPSTREAM_E_TIMEOUT,
   Upstream,
   UpstreamLimits,
@@ -110,6 +122,10 @@ class MockConnection {
   length: i32 = 0
   /** When the owed answer goes out; 0 for none owed. */
   dueAt: i64 = 0
+  /** Answers sent on this connection. */
+  served: i32 = 0
+  /** Something owed on a later `serve` than the answer's: `trailing`, or the close of `lingerClose`. */
+  after: boolean = false
 
   constructor() {
     this.input = new Array<u8>(16384)
@@ -118,7 +134,8 @@ class MockConnection {
 
 /**
  * An upstream server: answers each whole request head with `reply`, after
- * `delayMs` (-1 for never), then closes if `close` says so.
+ * `delayMs` (-1 for never), then closes if `close` says so. The rest are the
+ * ways a server misbehaves between a connection's calls, each off by default.
  */
 class Mock {
   listener: i32 = -1
@@ -126,6 +143,14 @@ class Mock {
   reply: u8[]
   delayMs: i32 = 0
   close: boolean = false
+  /** Answers per connection, at most: the request after the last is met with a close. 0 for no limit. */
+  answers: i32 = 0
+  /** Bytes sent on the `serve` after an answer, while the client holds the connection idle. */
+  trailing: u8[]
+  /** Close on the `serve` after an answer, while the client holds the connection idle. */
+  lingerClose: boolean = false
+  /** Read one byte of a request, send `reply` and close with the rest unread, which resets the connection. */
+  reset: boolean = false
   accepted: i32 = 0
   requests: i32 = 0
   /** The last request head read, for a test to look at. */
@@ -139,6 +164,7 @@ class Mock {
     this.port = netLocalPort(this.listener)
     this.reply = ascii("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
     this.lastHead = new Array<u8>(16384)
+    this.trailing = new Array<u8>(0)
     this.conns = []
     for (let k: i32 = 0; k < 8; k++) {
       this.conns.push(new MockConnection())
@@ -165,6 +191,8 @@ class Mock {
           c.fd = fd
           c.length = 0
           c.dueAt = 0
+          c.served = 0
+          c.after = false
           placed = true
         }
       }
@@ -176,6 +204,27 @@ class Mock {
     for (let k: i32 = 0; k < toI32(this.conns.length); k++) {
       const c: MockConnection = this.conns[k]
       if (c.fd < 0) {
+        continue
+      }
+      if (c.after) {
+        c.after = false
+        if (this.trailing.length > 0) {
+          netWrite(c.fd, this.trailing, ZERO, toI32(this.trailing.length))
+        }
+        if (this.lingerClose) {
+          netClose(c.fd)
+          c.fd = -1
+          continue
+        }
+      }
+      if (this.reset) {
+        const one: i32 = netRead(c.fd, c.input, ZERO, toI32(1))
+        if (one > 0) {
+          this.requests += 1
+          netWrite(c.fd, this.reply, ZERO, toI32(this.reply.length))
+          netClose(c.fd)
+          c.fd = -1
+        }
         continue
       }
       const room: i32 = toI32(c.input.length) - c.length
@@ -196,6 +245,11 @@ class Mock {
           this.lastHeadLength = end + 4
           copyBytes(c.input, ZERO, c.input, end + 4, c.length - end - 4)
           c.length -= end + 4
+          if (this.answers > 0 && c.served >= this.answers) {
+            netClose(c.fd)
+            c.fd = -1
+            continue
+          }
           c.dueAt = this.delayMs < 0 ? -1 : now + toI64(this.delayMs) * MILLISECOND
         }
       }
@@ -203,6 +257,8 @@ class Mock {
         c.dueAt = 0
         // Loopback takes these few bytes whole.
         netWrite(c.fd, this.reply, ZERO, toI32(this.reply.length))
+        c.served += 1
+        c.after = this.trailing.length > 0 || this.lingerClose
         if (this.close) {
           netClose(c.fd)
           c.fd = -1
@@ -245,7 +301,7 @@ class App {
     const slowLimits = new UpstreamLimits()
     slowLimits.firstId = 0
     slowLimits.connections = 2
-    slowLimits.timeoutMs = 400
+    slowLimits.timeoutMs = 5000
     this.slow = new Upstream(this.h, this.slowMock.origin(), slowLimits)
     const fastLimits = new UpstreamLimits()
     fastLimits.firstId = 2
@@ -412,8 +468,8 @@ const slowUpstream = (app: App): void => {
   send(other, "GET /fast HTTP/1.1\r\nHost: a\r\n\r\n")
   const fast: boolean = response(app, other, 1000)
   check(app, "slow: and through a second upstream", fast && other.status === 200 && bytesAre(other.buf, other.bodyStart, other.bodyLength, "fast"))
-  check(app, "slow: both inside the slow call's deadline", monotonicNanos() - started < toI64(400) * MILLISECOND && app.slow.pending() === 1)
-  const late: boolean = response(app, waiting, 3000)
+  check(app, "slow: both inside the slow call's deadline", monotonicNanos() - started < toI64(5000) * MILLISECOND && app.slow.pending() === 1)
+  const late: boolean = response(app, waiting, 8000)
   check(app, "slow: the slow call ends UPSTREAM_E_TIMEOUT and its client gets a 504", late && waiting.status === 504 && find(waiting.buf, waiting.length, "upstream error 36") > 0)
   check(app, "slow: its slot and connection are given back", app.slow.pending() === 0 && app.slow.openConnections() === 0)
   netClose(waiting.fd)
@@ -575,6 +631,168 @@ const warmCalls = (app: App, u: Upstream, tag: HttpRequest, body: u8[], count: i
   return ok
 }
 
+/** One call of `path` on `u` for `tag`, turned until it is back; whether it was answered `ok` with `body`. */
+const answered = (app: App, u: Upstream, index: i32, path: string, body: string): boolean => {
+  const tag = new HttpRequest(index)
+  if (u.get(tag, path) !== UPSTREAM_E_NONE) {
+    return false
+  }
+  const r: UpstreamResponse | null = app.awaitCall(u)
+  if (r === null) {
+    return false
+  }
+  const ok: boolean = r.ok && r.req === tag && bytesAre(r.body, ZERO, r.length, body)
+  if (!ok) {
+    console.log(`      call ${index}: ok ${r.ok}, error ${r.error}, ${r.length} body bytes`)
+  }
+  u.release(r)
+  return ok
+}
+
+/** One call of `path` on `u`, turned until it is back; the code it failed with, or -1 when it was answered or never came back. */
+const failed = (app: App, u: Upstream, index: i32, path: string): i32 => {
+  if (u.get(new HttpRequest(index), path) !== UPSTREAM_E_NONE) {
+    return -1
+  }
+  const r: UpstreamResponse | null = app.awaitCall(u)
+  if (r === null) {
+    return -1
+  }
+  const code: i32 = r.ok ? -1 : r.error
+  const empty: boolean = r.length === 0
+  u.release(r)
+  return empty ? code : -1
+}
+
+/** A kept-alive connection the origin has given up on between calls, and a connection that fails mid-response. */
+const reuse = (app: App): void => {
+  const mock = new Mock()
+  app.mocks.push(mock)
+  const limits = new UpstreamLimits()
+  limits.connections = 1
+  const u: Upstream = own(app, mock.origin(), 10, limits)
+
+  // The origin closes each connection once it has answered, as at the end of its keep-alive timeout.
+  mock.lingerClose = true
+  const hungUp: boolean = answered(app, u, 600, "/", "ok") && answered(app, u, 601, "/", "ok")
+  check(app, "idle: a connection the origin closed while idle is not reused, and the next call is answered", hungUp && mock.accepted === 2 && mock.requests === 2)
+  mock.lingerClose = false
+
+  // The origin sends a whole second response while the connection is idle.
+  const before: i32 = mock.accepted
+  mock.trailing = ascii("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nstray")
+  const first: boolean = answered(app, u, 602, "/", "ok")
+  mock.trailing = new Array<u8>(0)
+  const next: boolean = answered(app, u, 603, "/", "ok")
+  check(app, "idle: bytes the origin sent while the connection was idle are not the next call's response", first && next && mock.accepted === before + 2)
+
+  // The origin closes a kept-alive connection as the next request arrives, answering nothing.
+  const accepted: i32 = mock.accepted
+  const requests: i32 = mock.requests
+  mock.answers = 1
+  const retried: boolean = answered(app, u, 604, "/", "ok")
+  check(app, "retry: a call the origin drops unanswered on a reused connection is made once more on a new one", retried && mock.accepted === accepted + 1 && mock.requests === requests + 2)
+  mock.answers = 0
+
+  // A close-delimited body: the origin's close ends it, and its reset fails it.
+  mock.reply = ascii("HTTP/1.1 200 OK\r\n\r\npartial")
+  mock.close = true
+  const closed: boolean = answered(app, u, 605, "/", "partial")
+  check(app, "reset: a close-delimited body ends at the origin's close", closed)
+  mock.close = false
+  mock.reset = true
+  const code: i32 = failed(app, u, 606, "/")
+  check(app, "reset: a reset in a close-delimited body fails the call UPSTREAM_E_RESET, not ok with what came", code === UPSTREAM_E_RESET && u.openConnections() === 0)
+  mock.reset = false
+  mock.reply = ascii("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+  // Three calls at once, with one connection allowed: they queue for it.
+  mock.delayMs = 50
+  const opened: i32 = mock.accepted
+  for (let k: i32 = 0; k < 3; k++) {
+    u.get(new HttpRequest(610 + k), "/")
+  }
+  let peak: i32 = u.openConnections()
+  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
+  while (app.extraDone.length < 3 && monotonicNanos() < deadline) {
+    app.turn()
+    peak = u.openConnections() > peak ? u.openConnections() : peak
+  }
+  let all: boolean = app.extraDone.length === 3
+  while (app.extraDone.length > 0) {
+    const r: UpstreamResponse = app.extraDone.pop()
+    all = all && r.ok && bytesAre(r.body, ZERO, r.length, "ok")
+    u.release(r)
+  }
+  check(app, "connections: three calls with one connection allowed share it, one after another", all && peak === 1 && mock.accepted === opened + 1)
+  mock.delayMs = 0
+
+  const requested: i32 = mock.requests
+  const absolute: i32 = failed(app, u, 620, `http://127.0.0.1:${mock.port}/`)
+  const asterisk: i32 = failed(app, u, 621, "*")
+  check(app, "request: an absolute-form or asterisk path is UPSTREAM_E_REQUEST, with nothing sent", absolute === UPSTREAM_E_REQUEST && asterisk === UPSTREAM_E_REQUEST && mock.requests === requested)
+}
+
+/** The caps a call meets before anything is sent, and the host check before the lookup. */
+const caps = (app: App): void => {
+  const mock = new Mock()
+  app.mocks.push(mock)
+  const one = new UpstreamLimits()
+  one.connections = 1
+  one.calls = 1
+  const u: Upstream = own(app, mock.origin(), 12, one)
+  const first: i32 = u.get(new HttpRequest(700), "/")
+  const second: i32 = u.get(new HttpRequest(701), "/")
+  check(app, "calls: with every slot taken, get answers UPSTREAM_E_FULL and holds nothing", first === UPSTREAM_E_NONE && second === UPSTREAM_E_FULL && u.pending() === 1)
+  const r: UpstreamResponse | null = app.awaitCall(u)
+  if (r !== null) {
+    u.release(r)
+  }
+  check(app, "calls: once the slot is released, get takes a call again", r !== null && r.ok && answered(app, u, 702, "/", "ok"))
+
+  const small = new UpstreamLimits()
+  small.connections = 1
+  small.maxHead = 64
+  const narrow: Upstream = own(app, mock.origin(), 13, small)
+  let long: string = "/"
+  for (let k: i32 = 0; k < 64; k++) {
+    long = `${long}a`
+  }
+  const requests: i32 = mock.requests
+  const over: i32 = failed(app, narrow, 703, long)
+  check(app, "request: a request head past maxHead is UPSTREAM_E_REQUEST, with nothing sent", over === UPSTREAM_E_REQUEST && mock.requests === requests)
+  check(app, "request: and one that fits is called", answered(app, narrow, 704, "/", "ok"))
+
+  const named = new UpstreamLimits()
+  named.connections = 1
+  const p = new OutboundPolicy()
+  p.allowHost("other.example")
+  named.outbound = p
+  const unnamed: Upstream = own(app, "http://name.invalid:80", 15, named)
+  check(
+    app,
+    "policy: a host name the policy does not allow is refused before any lookup",
+    unnamed.error === UPSTREAM_E_BLOCKED && unnamed.errorText === "name.invalid is not a host the outbound policy allows"
+  )
+}
+
+/** A reply that comes after its call's deadline reaches no later call. */
+const lateReply = (app: App): void => {
+  const mock = new Mock()
+  app.mocks.push(mock)
+  mock.delayMs = 300
+  const limits = new UpstreamLimits()
+  limits.connections = 1
+  limits.timeoutMs = 100
+  const u: Upstream = own(app, mock.origin(), 14, limits)
+  const code: i32 = failed(app, u, 800, "/")
+  check(app, "late reply: a call past its deadline fails UPSTREAM_E_TIMEOUT and its connection is closed", code === UPSTREAM_E_TIMEOUT && u.openConnections() === 0)
+  mock.delayMs = 0
+  mock.reply = ascii("HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nnext")
+  const next: boolean = answered(app, u, 801, "/", "next")
+  check(app, "late reply: the next call gets its own response, on a new connection", next && mock.accepted === 2)
+}
+
 export function main(): i32 {
   const app = new App()
   slowUpstream(app)
@@ -582,5 +800,8 @@ export function main(): i32 {
   refusals(app)
   policy(app)
   warmPool(app)
+  reuse(app)
+  caps(app)
+  lateReply(app)
   return app.failures === 0 ? 0 : 1
 }

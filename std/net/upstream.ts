@@ -39,6 +39,15 @@
  * deadline passed, the path could not be written). The program answers its
  * own client either way and gives the call back with `release`.
  *
+ * **A kept-alive connection is checked before it is reused.** One the origin
+ * closed or sent bytes on while it was idle is closed instead, so no call is
+ * written to a dead socket or handed bytes it did not ask for. A call the
+ * origin drops unanswered on a reused connection anyway (it closed as the
+ * request crossed) is made once more, on a new connection; a `GET` is safe
+ * to repeat. Two `Upstream`s on one handler must be given watch ids that do
+ * not overlap: nothing checks it, and two with the default limits would both
+ * take ids 8 to 11, each taking the other's wake-ups for its own.
+ *
  * **The origin is fixed at start-up.** The constructor parses it, looks its
  * host up (blocking, once, as a program's start-up may), and keeps one
  * address; nothing is looked up again, so no later answer can move the pool
@@ -109,10 +118,16 @@ export const UPSTREAM_E_CONNECT: i32 = 35
 export const UPSTREAM_E_TIMEOUT: i32 = 36
 /** The connection failed or closed before a response began. */
 export const UPSTREAM_E_CLOSED: i32 = 37
-/** The codec refused to write the request (the path is not a request target), or it did not fit `maxHead`. */
+/**
+ * The path does not start with `/` (an absolute-form or asterisk target is
+ * not this pool's to send), the codec refused to write it, or the head did
+ * not fit `maxHead`.
+ */
 export const UPSTREAM_E_REQUEST: i32 = 38
 /** Every call slot is taken: `get` answers this and holds nothing. */
 export const UPSTREAM_E_FULL: i32 = 39
+/** The connection failed (it was reset, say) while the response was being read: what came is not the whole of it. */
+export const UPSTREAM_E_RESET: i32 = 40
 
 const UPSTREAM_READ: i32 = 1
 const UPSTREAM_WRITE: i32 = 2
@@ -177,6 +192,8 @@ export class UpstreamResponse {
   ok: boolean = false
   /** Taken by the program and not yet released. */
   taken: boolean = false
+  /** Made once more already, after a reused connection dropped it unanswered. */
+  retried: boolean = false
 
   constructor(index: i32, headRoom: i32, placeholder: HttpRequest) {
     this.index = index
@@ -200,6 +217,10 @@ class UpstreamConnection {
   sent: i32 = 0
   /** The poll interest it is registered with, 0 for none. */
   events: i32 = 0
+  /** Whether the call it carries went out on a connection kept alive from an earlier call. */
+  reused: boolean = false
+  /** Whether any byte of the call's response has arrived. */
+  answered: boolean = false
 
   constructor(id: i32, parser: Http1ResponseParser) {
     this.id = id
@@ -246,7 +267,12 @@ export class Upstream {
     if (limits.connections < 1 || limits.calls < 1 || limits.maxHead < 1 || limits.timeoutMs < 1) {
       panic("Upstream: connections, calls, maxHead and timeoutMs must each be at least 1")
     }
-    if (limits.firstId < 0 || limits.firstId + limits.connections > HANDLER_MAX_WATCHED) {
+    // Each operand on its own: their sum could pass i32's range.
+    if (
+      limits.firstId < 0 ||
+      limits.connections > HANDLER_MAX_WATCHED ||
+      limits.firstId > HANDLER_MAX_WATCHED - limits.connections
+    ) {
       panic(
         `Upstream: watch ids ${limits.firstId} to ${limits.firstId + limits.connections - 1} are outside 0 to ${HANDLER_MAX_WATCHED - 1}`
       )
@@ -348,9 +374,15 @@ export class Upstream {
     r.status = 0
     r.error = UPSTREAM_E_NONE
     r.length = 0
+    r.retried = false
     r.deadline = monotonicNanos() + toI64(this.limits.timeoutMs) * UPSTREAM_NS_PER_MS
     if (this.error !== UPSTREAM_E_NONE) {
       this.end(r, this.error)
+      return UPSTREAM_E_NONE
+    }
+    // An origin-form target only: an absolute-form one would name another host on this pool's connection.
+    if (path.length === 0 || path.charCodeAt(0) !== 47) {
+      this.end(r, UPSTREAM_E_REQUEST)
       return UPSTREAM_E_NONE
     }
     const n: i32 = http1WriteRequestHead(
@@ -465,7 +497,9 @@ export class Upstream {
       this.waitingCount -= 1
       c.call = index
       c.sent = 0
-      if (c.state === UPSTREAM_C_IDLE) {
+      c.answered = false
+      c.reused = c.state === UPSTREAM_C_IDLE
+      if (c.reused) {
         c.state = UPSTREAM_C_BUSY
         c.parser.expect(false, false)
         this.send(c)
@@ -475,12 +509,16 @@ export class Upstream {
     }
   }
 
-  /** A connection free for the next call: open and idle if one is, else closed, else null. */
+  /**
+   * A connection free for the next call: open, idle and still usable if one
+   * is, else closed, else null. An idle connection the origin has closed or
+   * sent bytes on is closed here, before a call is put on it.
+   */
   idle(): UpstreamConnection | null {
     let closed: UpstreamConnection | null = null
     for (let k: i32 = 0; k < toI32(this.connections.length); k += 1) {
       const c: UpstreamConnection = this.connections[k]
-      if (c.state === UPSTREAM_C_IDLE) {
+      if (c.state === UPSTREAM_C_IDLE && this.usable(c)) {
         return c
       }
       if (c.state === UPSTREAM_C_CLOSED && closed === null) {
@@ -488,6 +526,20 @@ export class Upstream {
       }
     }
     return closed
+  }
+
+  /**
+   * Whether the idle `c` has nothing to read. Anything else closes it: an end
+   * of stream or an error means the origin has given it up, and bytes no call
+   * asked for would be read as the next call's response.
+   */
+  usable(c: UpstreamConnection): boolean {
+    const start: i32 = 0
+    if (netRead(c.fd, c.input, start, toI32(c.input.length)) === UPSTREAM_WOULD_BLOCK) {
+      return true
+    }
+    this.close(c)
+    return false
   }
 
   /** Starts a connection for the call `c` holds; a failure ends the call. */
@@ -557,13 +609,19 @@ export class Upstream {
         this.close(c)
         return
       }
+      if (n < 0) {
+        // Not the origin's close: a close-delimited body cut off here must not end as whole.
+        this.finish(c, UPSTREAM_E_RESET)
+        return
+      }
       if (n > 0) {
+        c.answered = true
         c.parser.feed(c.input, start, n)
       } else {
         c.parser.finish()
       }
       this.parse(c)
-      if (n <= 0 && c.fd >= 0) {
+      if (n === 0 && c.fd >= 0) {
         this.close(c)
       }
     }
@@ -605,12 +663,25 @@ export class Upstream {
    * Ends the call `c` carries with `code`. A connection whose call ended any
    * way but `UPSTREAM_E_NONE` is closed: what is left on it cannot be trusted
    * to start the next response.
+   *
+   * A call that failed on a reused connection before any byte of its response
+   * came is not ended but put back at the front of the queue, once: the
+   * origin closed the connection as the request crossed it, and a `GET` is
+   * safe to send again. Past its deadline it is not.
    */
   finish(c: UpstreamConnection, code: i32): void {
     if (c.call >= 0) {
       const r: UpstreamResponse = this.calls[c.call]
       c.call = -1
-      this.end(r, code)
+      if (code !== UPSTREAM_E_NONE && code !== UPSTREAM_E_TIMEOUT && c.reused && !c.answered && !r.retried) {
+        r.retried = true
+        const length: i32 = toI32(this.waiting.length)
+        this.waitingStart = (this.waitingStart + length - 1) % length
+        this.waiting[this.waitingStart] = r.index
+        this.waitingCount += 1
+      } else {
+        this.end(r, code)
+      }
     }
     if (code !== UPSTREAM_E_NONE) {
       this.close(c)

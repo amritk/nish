@@ -21,3 +21,17 @@ PASS  request: a path that is not a request target is UPSTREAM_E_REQUEST
 PASS  warm pool: three thousand calls are answered
 PASS  warm pool: on the one connection, with every slot back and no body buffer grown
 PASS  warm pool: Arena.used() flat over two thousand calls past a thousand of warm-up
+PASS  idle: a connection the origin closed while idle is not reused, and the next call is answered
+PASS  idle: bytes the origin sent while the connection was idle are not the next call's response
+PASS  retry: a call the origin drops unanswered on a reused connection is made once more on a new one
+PASS  reset: a close-delimited body ends at the origin's close
+PASS  reset: a reset in a close-delimited body fails the call UPSTREAM_E_RESET, not ok with what came
+PASS  connections: three calls with one connection allowed share it, one after another
+PASS  request: an absolute-form or asterisk path is UPSTREAM_E_REQUEST, with nothing sent
+PASS  calls: with every slot taken, get answers UPSTREAM_E_FULL and holds nothing
+PASS  calls: once the slot is released, get takes a call again
+PASS  request: a request head past maxHead is UPSTREAM_E_REQUEST, with nothing sent
+PASS  request: and one that fits is called
+PASS  policy: a host name the policy does not allow is refused before any lookup
+PASS  late reply: a call past its deadline fails UPSTREAM_E_TIMEOUT and its connection is closed
+PASS  late reply: the next call gets its own response, on a new connection

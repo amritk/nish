@@ -105,13 +105,23 @@ with `release`; releasing it twice panics.
 | `UPSTREAM_E_CONNECT` | the connection could not be made |
 | `UPSTREAM_E_TIMEOUT` | `timeoutMs` passed before the response ended |
 | `UPSTREAM_E_CLOSED` | the connection failed or closed before a response began |
-| `UPSTREAM_E_REQUEST` | the path is not a request target, or the head outgrew `maxHead` |
+| `UPSTREAM_E_REQUEST` | the path does not start with `/` or is not a request target, or the head outgrew `maxHead` |
+| `UPSTREAM_E_RESET` | the connection failed (was reset, say) while the response was being read, so what came is not all of it |
 
 `get` itself answers `UPSTREAM_E_FULL` when every call slot is taken. It then
 holds nothing, and the request is still yours to answer, with a 503 say.
 
 A connection whose call failed is closed, so nothing the origin sent on it can
 be read as the next answer. The next call opens a new one.
+
+A kept-alive connection is read once before it carries the next call. If the
+origin closed it or sent something on it while it sat idle, it is closed and
+the call takes another. An origin may still close a kept-alive connection
+just as a call is sent on it; a call that fails that way before any byte of
+its answer arrives is made once more, on a new connection. It is never made a
+third time, and a call that timed out is not made again. A `get` may
+therefore reach the origin twice, so call this way only paths that are safe
+to repeat.
 
 ## The origin
 
@@ -159,6 +169,13 @@ export const servicesLimits = (): UpstreamLimits => {
 
 The handler watches at most 16 descriptors besides its clients, so
 `firstId + connections` is at most 16; the constructor panics otherwise.
+
+**Two `Upstream`s on one handler need watch ids that do not overlap.** The
+handler wakes an id, not a socket, and nothing checks that two pools' ids are
+apart: two made with the default limits both take ids 8 to 11, and each reads
+the other's wake-ups as its own. Give the second pool its own range, for
+example `firstId = 12` beside a first with `firstId = 8` and four
+connections.
 
 A call's deadline is checked when you call `ready` after a turn, so wait with
 a timeout, as above, not `h.wait(-1)`. The slots, the connections and their
