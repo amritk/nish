@@ -188,7 +188,7 @@ class Driver {
     }
   }
 
-  /** One round: `n` requests, keys by `keyOf`, taken as one execution and answered; false, the reason printed, when the connection fails. */
+  /** One round: `n` requests, spread or colliding keys, taken as one execution and answered; false, the reason printed, when the connection fails. */
   round(collide: boolean): boolean {
     const n: i32 = toI32(this.keys.length)
     const distinct: i32 = n - n / toI32(4)

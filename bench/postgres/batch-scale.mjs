@@ -208,7 +208,9 @@ for (let r = 0; r < runs; r++) {
 const show = (xs, digits) =>
   `${median(xs).toFixed(digits)} (${Math.min(...xs).toFixed(digits)}–${Math.max(...xs).toFixed(digits)})`
 console.log(`\n${runs} runs per cell; median (min–max)\n`)
-console.log("| keys | requests per take | wall ns/request | client CPU ns/request | built KiB | peak bytes/request above 1 |")
+console.log(
+  "| keys | requests per take | wall ns/request | client CPU ns/request | built KiB | peak bytes/request above 1 |"
+)
 console.log("| --- | ---: | ---: | ---: | ---: | ---: |")
 for (const mode of MODES) {
   const base = median(results.get(`${mode} 1`).map((o) => o.peak))
@@ -217,7 +219,15 @@ for (const mode of MODES) {
     const wall = list.map((o) => o.ns / o.keys)
     const cpu = list.map((o) => (o.cpu * 1000) / o.keys)
     const built = list.map((o) => o.built)
-    const perKey = n === 1 ? "—" : show(list.map((o) => ((o.peak - base) * 1024) / (n - 1)), 0)
-    console.log(`| ${mode} | ${n.toLocaleString("en")} | ${show(wall, 0)} | ${show(cpu, 0)} | ${show(built, 0)} | ${perKey} |`)
+    const perKey =
+      n === 1
+        ? "—"
+        : show(
+            list.map((o) => ((o.peak - base) * 1024) / (n - 1)),
+            0
+          )
+    console.log(
+      `| ${mode} | ${n.toLocaleString("en")} | ${show(wall, 0)} | ${show(cpu, 0)} | ${show(built, 0)} | ${perKey} |`
+    )
   }
 }
