@@ -38,24 +38,50 @@ const body = (W, unroll = false) => {
   }
   // `n` is the round pair's first P index: the loop's counter, or a literal
   // when `unroll` writes the 8 pairs out and the names take the pair's number.
+  const update = (x, y, n, plus, pad, tag, k) => {
+    const o = S * k
+    const nIndex = `${o ? `${o} + ` : ""}n${plus ? " + 1" : ""}`
+    const pn = typeof n === "number" ? `${o + n + plus}` : nIndex
+    p(
+      `${pad}${y}${k} ^= st[${pn}] ^ (((st[${o + 18} + ${x}${k}a${tag}] + st[${o + 274} + ${x}${k}b${tag}]) ^ st[${o + 530} + ${x}${k}c${tag}]) + st[${o + 786} + ${x}${k}d${tag}])`
+    )
+  }
+  // From three lanes up, each lane's half-round is written whole before the
+  // next lane's, and its two middle bytes come from one copy of the word
+  // moved down by 8, behind the value barrier (`ctSelect(v, ~0, 0)` is `v`,
+  // opaque): the copy's low byte is byte 1 and its second byte byte 2, so the
+  // word is copied once for both. Three to five lanes rotate it, which a BMI2
+  // target does in one `rorx`; six shift it, which measured faster there on
+  // the default target. Two lanes keep the four shifts of the word itself,
+  // every lane's bytes before any lane's update: the copy measured slower
+  // there (docs/security/crypto-bcrypt.md, "Cascade Lake").
+  const copied = W >= 3
+  const copy = (v) => (W === 6 ? `${v} >>> 8` : `(${v} >>> 8) | (${v} << 24)`)
   const half = (x, y, n, plus, pad, tag) => {
     for (const k of lanes) {
+      const v = `${x}${k}`
+      if (copied) {
+        p(`${pad}const ${v}e${tag}: u32 = ctSelect(${copy(v)}, 0xffffffff, 0)`)
+        p(`${pad}const ${v}a${tag}: i32 = toI32(${v} >>> 24) & 0xff`)
+        p(`${pad}const ${v}b${tag}: i32 = toI32(${v}e${tag} >>> 8) & 0xff`)
+        p(`${pad}const ${v}c${tag}: i32 = toI32(${v}e${tag}) & 0xff`)
+        p(`${pad}const ${v}d${tag}: i32 = toI32(${v}) & 0xff`)
+        update(x, y, n, plus, pad, tag, k)
+        continue
+      }
       for (const [c, sh] of [
         ["a", 24],
         ["b", 16],
         ["c", 8],
         ["d", 0],
       ]) {
-        p(`${pad}const ${x}${k}${c}${tag}: i32 = toI32(${sh ? `${x}${k} >>> ${sh}` : `${x}${k}`}) & 0xff`)
+        p(`${pad}const ${v}${c}${tag}: i32 = toI32(${sh ? `${v} >>> ${sh}` : v}) & 0xff`)
       }
     }
-    for (const k of lanes) {
-      const o = S * k
-      const nIndex = `${o ? `${o} + ` : ""}n${plus ? " + 1" : ""}`
-      const pn = typeof n === "number" ? `${o + n + plus}` : nIndex
-      p(
-        `${pad}${y}${k} ^= st[${pn}] ^ (((st[${o + 18} + ${x}${k}a${tag}] + st[${o + 274} + ${x}${k}b${tag}]) ^ st[${o + 530} + ${x}${k}c${tag}]) + st[${o + 786} + ${x}${k}d${tag}])`
-      )
+    if (!copied) {
+      for (const k of lanes) {
+        update(x, y, n, plus, pad, tag, k)
+      }
     }
   }
   if (unroll) {

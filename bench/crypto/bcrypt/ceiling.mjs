@@ -1,10 +1,12 @@
 /**
  * The ceiling for a bcrypt cost loop on this core: hand-written x86-64 bodies
- * (kernel/gen.mjs: every lane's L and R in a register, no spills) at five and
+ * (kernel/gen.mjs: every lane's L and R in a register, no spills) at four to
  * six lanes, in four ways of taking the bytes of a word (`base-shr`,
- * `base-ah`, `rorx-shr`, `rorx-ah`; the last two need BMI2), and the same
- * interleave in C under `cc -O2` (kernel/harness.c's `C_BODY`), against
- * `bcryptHashN` at the same widths. It answers whether a BMI2 kernel in the
+ * `base-ah`, `rorx-shr`, `rorx-ah`; the last two need BMI2), the two tighter
+ * ways the challenge's leading entries take them (kernel/gen-tight.mjs:
+ * `shrx`, BMI2, at up to five lanes, and `dh`, baseline, at up to six), and
+ * the same interleave in C under `cc -O2` (kernel/harness.c's `C_BODY`),
+ * against `bcryptHashN` at the same widths. It answers whether a BMI2 kernel in the
  * runtime would pay: the row to beat is Nish's best width.
  *
  * Each kernel is first run three bodies on a random state and compared word
@@ -26,6 +28,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { kernel, VARIANTS } from "./kernel/gen.mjs"
+import { TIGHT_VARIANTS, tightFits, tightKernel } from "./kernel/gen-tight.mjs"
 import {
   argValue,
   band,
@@ -43,7 +46,7 @@ const compiler = argValue("--compiler", path.join(root, "build", "nish"))
 const hashes = intArg("--hashes", 4, 1, 1e6)
 const rounds = intArg("--rounds", 5, 1, 1e3)
 const cost = intArg("--cost", 10, 4, 31)
-const widths = [5, 6]
+const widths = [4, 5, 6]
 
 const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
 const skip = (why) => {
@@ -78,14 +81,14 @@ for (const w of widths) {
   })
 }
 for (const w of widths) {
-  for (const v of [...VARIANTS, "c"]) {
+  for (const v of [...VARIANTS, ...TIGHT_VARIANTS.filter((t) => tightFits(w, t)), "c"]) {
     const exe = path.join(dir, `kernel${w}-${v}`)
     const sources = [harness]
     const flags = ["-O2", `-DW=${w}`]
     if (v === "c") {
       flags.push("-DC_BODY")
     } else {
-      fs.writeFileSync(`${exe}.s`, kernel(w, v))
+      fs.writeFileSync(`${exe}.s`, TIGHT_VARIANTS.includes(v) ? tightKernel(w, v) : kernel(w, v))
       sources.push(`${exe}.s`)
     }
     const built = run(cc, [...flags, ...sources, "-o", exe])
