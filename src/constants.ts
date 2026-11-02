@@ -19,6 +19,7 @@
 // that computes the fold is done in `u64`, whose wrapping *is* defined, so
 // this module never overflows a signed value of its own to describe one.
 
+import { outsideAsyncMessage } from "./async-check"
 import { CheckContext } from "./context"
 import { withoutSeparators } from "./lexer"
 import {
@@ -424,6 +425,9 @@ const foldIdentifier = (ctx: CheckContext, info: ConstInfo, expr: Node): ConstVa
 }
 
 const foldUnary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
+  if (expr.text === "await") {
+    return reject(ctx, info, expr, outsideAsyncMessage("await")) // a constant is no async function (NL2623)
+  }
   const operand = fold(ctx, info, expr.children[0], expected)
   if (operand.type === T_ERROR) {
     return operand

@@ -22,13 +22,14 @@ import Node from "./nodes" -> struct Node
 const AWAIT_ALL_MIN: i32 = 2
 const AWAIT_ALL_MAX: i32 = 8
 const AWAIT_ALL_FORM: string = "`awaitAll` is awaited into one name per call: `const [a, b] = await awaitAll(f(x), g(y))`, from two to eight calls"
+const AWAIT_SITE_MESSAGE: string = "`await` stands at the top of a statement — an expression statement, a declaration's initializer, a `return` or the right side of `=` — and not inside another expression, which would hold a value across the wait"
 const AWAIT_CALL_MESSAGE: string = "`await` is written before its call with no parentheses around it, `await f(x)`: `await(...)` is a call to a function named `await`, and there is none" [exported]
 struct AwaitCycle (class) size=24 align=8 exported
   field fn: FunctionSig index=0 offset=0
   field site: Node index=1 offset=8
   field message: string index=2 offset=16
   constructor -> @AwaitCycle.constructor
-function outsideAsyncMessage(what: string): string -> @outsideAsyncMessage
+function outsideAsyncMessage(what: string): string -> @outsideAsyncMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
@@ -103,13 +104,13 @@ function checkAwait(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkA
   callee +1:32 outsideAsyncMessage -> @outsideAsyncMessage
   callee +3:8 isAwaitSite -> @isAwaitSite
   callee +4:12 CheckContext.errorType -> @CheckContext.errorType
-  local +9:9 call: Node | null (const)
-  callee +9:16 directCall -> @directCall
-  callee +11:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +11:44 directCallMessage -> @directCallMessage
-  local +13:9 callee: FunctionSig | null (const)
-  callee +13:18 checkTakenCall -> @checkTakenCall
-  callee +17:3 recordAwait -> @recordAwait
+  local +6:9 call: Node | null (const)
+  callee +6:16 directCall -> @directCall
+  callee +8:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +8:44 directCallMessage -> @directCallMessage
+  local +10:9 callee: FunctionSig | null (const)
+  callee +10:18 checkTakenCall -> @checkTakenCall
+  callee +14:3 recordAwait -> @recordAwait
 function refuseUnawaitedCall(ctx: CheckContext, expr: Node, isAsync: boolean): boolean -> @refuseUnawaitedCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -174,8 +175,8 @@ function isAwaitAllShape(decl: Node): boolean -> @isAwaitAllShape [exported]
 function checkAwaitAllDeclaration(ctx: CheckContext, decl: Node, scope: Scope): i32[] | null -> @checkAwaitAllDeclaration [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error CheckedProgram.builtinImport Scope.lookup asyncBuiltinOf checkTakenCall directCall directCallMessage insideAsync nish_array_grow nish_panic_index nish_str_eq outsideAsyncMessage recordAwait unwrapParens
-  pointer ctx: size=296 writesThrough=true captured=true passedTo=CheckContext.error#0 insideAsync#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkTakenCall#0 recordAwait#0
+  calls: CheckContext.error CheckedProgram.builtinImport Scope.lookup asyncBuiltinOf checkTakenCall directCall directCallMessage insideAsync isAwaitSite nish_array_grow nish_panic_index nish_str_eq outsideAsyncMessage recordAwait unwrapParens
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=CheckContext.error#0 insideAsync#0 CheckContext.error#0 isAwaitSite#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkTakenCall#0 recordAwait#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=Scope.lookup#0 checkTakenCall#2
   stackSites=0 stackLocals=0
@@ -192,17 +193,19 @@ function checkAwaitAllDeclaration(ctx: CheckContext, decl: Node, scope: Scope): 
   callee +1:8 insideAsync -> @insideAsync
   callee +2:5 CheckContext.error -> @CheckContext.error
   callee +2:21 outsideAsyncMessage -> @outsideAsyncMessage
-  local +5:9 args: Node[] (const)
-  callee +7:5 CheckContext.error -> @CheckContext.error
-  local +10:9 types: i32[] (const)
-  local +11:14 arg: Node (const)
-  local +12:11 taken: Node | null (const)
-  callee +12:19 directCall -> @directCall
-  callee +14:7 CheckContext.error -> @CheckContext.error
-  callee +14:22 directCallMessage -> @directCallMessage
-  local +17:11 callee: FunctionSig | null (const)
-  callee +17:20 checkTakenCall -> @checkTakenCall
-  callee +21:5 recordAwait -> @recordAwait
+  callee +5:8 isAwaitSite -> @isAwaitSite
+  callee +6:5 CheckContext.error -> @CheckContext.error
+  local +9:9 args: Node[] (const)
+  callee +11:5 CheckContext.error -> @CheckContext.error
+  local +14:9 types: i32[] (const)
+  local +15:14 arg: Node (const)
+  local +16:11 taken: Node | null (const)
+  callee +16:19 directCall -> @directCall
+  callee +18:7 CheckContext.error -> @CheckContext.error
+  callee +18:22 directCallMessage -> @directCallMessage
+  local +21:11 callee: FunctionSig | null (const)
+  callee +21:20 checkTakenCall -> @checkTakenCall
+  callee +25:5 recordAwait -> @recordAwait
 function AwaitCycle.constructor(this: AwaitCycle, fn: FunctionSig, site: Node, message: string): void -> @AwaitCycle.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: fn message site

@@ -3220,15 +3220,15 @@ async function run(): Promise<void> {
 - **`Promise<T>` is only an `async` function's return type.** An `async`
   function without it is
   `` An `async` function's return type is `Promise<T>` `` (NL2620,
-  `reject_async_function`, `reject_async_arrow_declaration`); `T` is written
-  inside it, `Promise<void>` for none. Anywhere else — a parameter, a field,
+  `reject_async_function`, `reject_async_arrow_declaration`,
+  `reject_async_return_missing`); `T` is written inside it, `Promise<void>` for none. Anywhere else — a parameter, a field,
   a local, a type alias, an interface member — `Promise<T>` is
   `` `Promise<T>` is only an `async` function's return type `` (NL2619,
   `reject_async_promise_parameter`, `_field`, `_local`, `_alias`,
   `_interface_member`).
 - **`await` is written inside an `async` function**
   (`` `await` is only written inside an `async` function ``, NL2623,
-  `reject_await`), **on a direct call to one**: `await x` on a value is NL2625
+  `reject_await`, `reject_await_constant`), **on a direct call to one**: `await x` on a value is NL2625
   (`reject_async_await_value`), `await` on a plain function's call NL2626
   (`reject_async_await_plain_call`), and `await(f(x))` is a call to a function
   named `await`, NL2633 (`reject_async_await_parenthesised`).
@@ -3236,8 +3236,9 @@ async function run(): Promise<void> {
   declaration's initializer, a `return` or the right side of a plain `=`.
   Inside another expression — an argument, a condition, an operand, a
   compound assignment — it would hold a value across the wait, and is NL2624
-  (`reject_async_await_nested`, `_condition`, `_compound`). Bind the answer to
-  a `const` first.
+  (`reject_async_await_nested`, `_condition`, `_compound`); a `for`
+  initializer is not a declaration statement, for `awaitAll` too
+  (`reject_async_await_all_for`). Bind the answer to a `const` first.
 - **A call to an `async` function is awaited where it is made**, or handed to
   `spawn` or `awaitAll`. Anything else would make a promise a value:
   `` `load` is `async`: a call to it is awaited where it is made `` (NL2627,
@@ -11630,7 +11631,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
 | type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
 | generators (`function*`, `*m()`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator`, `reject_generator_method` |
-| `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function`, `reject_async_method`, `reject_async_arrow`, `reject_async_arrow_declaration` |
+| an `async` method, field or constructor ([Async functions](#async-functions-async-and-await) has the rest) | `` Only a top-level function or an arrow may be `async` `` (NL1063) | `reject_async_method` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
 | enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed`; the numeric form compiles ([Enums](#enums)) |
 | `namespace` / `module` blocks, `declare module "m"` | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace`, `reject_module_declared` |
@@ -11682,7 +11683,6 @@ fragment `tests/run.js` matches and the case that proves it.
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
 | `typeof x` | `` `typeof` is forbidden in Nish (no runtime type tags) `` | `reject_typeof_operator` |
 | `delete x.y` | `` `delete` is forbidden in Nish (object layout is fixed) `` | `reject_delete` |
-| `await` | `` `await` is forbidden in Nish (no event loop or promises) `` | `reject_await` |
 | `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | `reject_yield` |
 | regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex`, `reject_regex_class` |
 | `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |

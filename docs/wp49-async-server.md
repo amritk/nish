@@ -388,11 +388,11 @@ before. The lowering of §3 and the emitted TypeScript are part 2.
 | --- | --- | --- |
 | NL1063 | `async` on a method, field or constructor | `reject_async_method` |
 | NL2619 | `Promise<T>` anywhere but an `async` function's return type | `reject_async_promise_parameter`, `_field`, `_local`, `_alias`, `_interface_member` |
-| NL2620 | an `async` function whose return type is not `Promise<T>` | `reject_async_function`, `reject_async_arrow_declaration` |
+| NL2620 | an `async` function whose return type is not `Promise<T>` | `reject_async_function`, `reject_async_arrow_declaration`, `reject_async_return_missing` |
 | NL2621 | an `async` arrow where the function type answers a plain `T` | `reject_async_arrow` |
 | NL2622 | a plain function where the function type answers `Promise<T>` | `reject_async_plain_to_promise_parameter` |
-| NL2623 | `await` outside an `async` function | `reject_await` |
-| NL2624 | `await` inside a larger expression | `reject_async_await_nested`, `_condition`, `_compound` |
+| NL2623 | `await` outside an `async` function, a module constant included | `reject_await`, `reject_await_constant` |
+| NL2624 | `await` inside a larger expression | `reject_async_await_nested`, `_condition`, `_compound`, `reject_async_await_all_for` |
 | NL2625 | `await` on anything but a call | `reject_async_await_value` |
 | NL2626 | `await` or `spawn` on a plain function's call | `reject_async_await_plain_call` |
 | NL2627 | an `async` call that is not awaited, spawned or joined | `reject_async_unawaited_call`, `_argument` |

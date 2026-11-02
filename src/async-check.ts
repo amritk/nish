@@ -39,8 +39,12 @@ const AWAIT_ALL_FORM: string =
   "`awaitAll` is awaited into one name per call: `const [a, b] = await awaitAll(f(x), g(y))`, from two to eight calls"
 
 /** `what` written outside an `async` function, where there is no task to suspend. */
-const outsideAsyncMessage = (what: string): string =>
+export const outsideAsyncMessage = (what: string): string =>
   `\`${what}\` is only written inside an \`async\` function: make the function that holds it \`async\`, and \`await\` its calls`
+
+/** An `await` (or `awaitAll`) somewhere other than an await site (`isAwaitSite`). */
+const AWAIT_SITE_MESSAGE: string =
+  "`await` stands at the top of a statement — an expression statement, a declaration's initializer, a `return` or the right side of `=` — and not inside another expression, which would hold a value across the wait"
 
 /** The callee an `await`, a `spawn` or an `awaitAll` takes, refused as not a direct call. */
 const directCallMessage = (what: string): string =>
@@ -141,10 +145,7 @@ export const checkAwait = (ctx: CheckContext, expr: Node, scope: Scope): i32 => 
     return ctx.errorType(expr, outsideAsyncMessage("await"))
   }
   if (!isAwaitSite(ctx, expr)) {
-    return ctx.errorType(
-      expr,
-      "`await` stands at the top of a statement — an expression statement, a declaration's initializer, a `return` or the right side of `=` — and not inside another expression, which would hold a value across the wait"
-    )
+    return ctx.errorType(expr, AWAIT_SITE_MESSAGE)
   }
   const call = directCall(expr.children[0])
   if (call === null) {
@@ -289,6 +290,10 @@ export const checkAwaitAllDeclaration = (ctx: CheckContext, decl: Node, scope: S
   ctx.program.nodeBuiltins[call.id] = imported.canonical
   if (!insideAsync(ctx)) {
     ctx.error(init, outsideAsyncMessage("await"))
+    return null
+  }
+  if (!isAwaitSite(ctx, init)) {
+    ctx.error(init, AWAIT_SITE_MESSAGE)
     return null
   }
   const args = call.children[1].children

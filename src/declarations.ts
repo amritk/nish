@@ -15,7 +15,7 @@ import { Lexer } from "./lexer"
 import { isNishSpecifier, nishModuleNames } from "./nish-modules"
 import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
-import { promiseArgument, rejectForeignPointer, resolveType } from "./annotations"
+import { ASYNC_RETURN_MESSAGE, promiseArgument, rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import { functionTypeHereMessage, isContextualLiteral, isFunctionParameter } from "./generics"
 import { isScalarArgument } from "./escape"
@@ -424,15 +424,12 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
   collectParams(ctx, sig, decl.children[1], -1, foreign)
   const returnAnnotation = decl.children[2]
   if (returnAnnotation.kind === N_EMPTY) {
-    // The pass 1 sweep has refused it (NL2096, `refuseUnsupportedForms`).
+    // The pass 1 sweep has refused it (NL2096, or NL2620 when async; `refuseUnsupportedForms`).
     sig.returnType = T_ERROR
   } else if (sig.isAsync()) {
     const answer = promiseArgument(returnAnnotation)
     if (answer === null) {
-      ctx.error(
-        returnAnnotation,
-        "An `async` function's return type is `Promise<T>`: write the answer `T` inside it, `Promise<void>` for none"
-      )
+      ctx.error(returnAnnotation, ASYNC_RETURN_MESSAGE)
       sig.returnType = T_ERROR
     } else {
       sig.returnType = resolveType(answer, ctx)

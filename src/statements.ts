@@ -45,7 +45,7 @@ import { isMaybeAnnotation } from "./validator"
 import { syntaxKindName } from "./checker"
 import { checkAwaitAllDeclaration, isAwaitAllShape } from "./async-check"
 import { CheckContext, LOOP_BLOCK, LOOP_ITERATION, LOOP_SWITCH, SwitchFrame } from "./context"
-import { refuseTypeForm, resolveType } from "./annotations"
+import { ASYNC_RETURN_MESSAGE, refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { isChannelClass, isIteratorMethod } from "./parallel"
@@ -59,6 +59,7 @@ import {
   FLAG_ABSTRACT,
   FLAG_ACCESSOR,
   FLAG_AWAIT,
+  FLAG_ASYNC,
   FLAG_CONST,
   FLAG_DEFAULT,
   FLAG_FOREIGN,
@@ -522,7 +523,8 @@ const declareLocal = (
   const local = new Local(name, type, mutable, STORAGE_LOCAL)
   local.origin = origin
   if (!scope.declare(local)) {
-    ctx.error(decl.children[0], `Duplicate declaration of \`${name}\``)
+    // An `awaitAll` name is its own bare identifier; a declarator's is its first child.
+    ctx.error(decl.kind === N_IDENT ? decl : decl.children[0], `Duplicate declaration of \`${name}\``)
     return
   }
   ctx.program.nodeLocals[decl.id] = local
@@ -986,7 +988,9 @@ const refuseAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node | null
   if (i === 2 && node.children[2].kind === N_EMPTY) {
     ctx.error(
       node.children[0],
-      `Function \`${node.children[0].text}\` needs an explicit return type annotation`
+      (node.flags & FLAG_ASYNC) !== 0
+        ? ASYNC_RETURN_MESSAGE
+        : `Function \`${node.children[0].text}\` needs an explicit return type annotation`
     )
   } else if (i === 3 && node.children[3].kind === N_EMPTY && (node.flags & FLAG_FOREIGN) === 0) {
     ctx.error(node, "Functions must have a body")
