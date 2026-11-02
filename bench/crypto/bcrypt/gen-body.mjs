@@ -7,15 +7,18 @@
 // the bodies are written again. `bcryptBody4` is the hand-written original,
 // with a longer doc comment; below that comment, width 4's output is its text.
 // `--check` compares every width's output with the module and exits 1 on a
-// difference, so a kernel edited by hand is caught.
+// difference, so a kernel edited by hand is caught. `--unroll` writes the 8
+// round pairs out with literal P indexes, freeing the loop counter's register;
+// `--module <out.ts>` writes a copy of the module with every width's body
+// written again, which `unroll.mjs` times against the module.
 //
-// Usage: node bench/crypto/bcrypt/gen-body.mjs <width> | --check
+// Usage: node bench/crypto/bcrypt/gen-body.mjs <width> [--unroll] | --check | --module <out.ts> [--unroll]
 import fs from "node:fs"
 
 const S = 1042
 const words = ["one", "two", "three", "four", "five", "six"]
 
-const body = (W) => {
+const body = (W, unroll = false) => {
   const L = []
   const p = (s) => L.push(s)
   const lanes = [...Array(W).keys()]
@@ -33,8 +36,9 @@ const body = (W) => {
   for (const k of lanes) {
     p(`    l${k} ^= st[${S * k}]`)
   }
-  p("    for (let n: i32 = 1; n < 17; n += 2) {")
-  const half = (x, y, plus) => {
+  // `n` is the round pair's first P index: the loop's counter, or a literal
+  // when `unroll` writes the 8 pairs out and the names take the pair's number.
+  const half = (x, y, n, plus, pad, tag) => {
     for (const k of lanes) {
       for (const [c, sh] of [
         ["a", 24],
@@ -42,20 +46,28 @@ const body = (W) => {
         ["c", 8],
         ["d", 0],
       ]) {
-        p(`      const ${x}${k}${c}: i32 = toI32(${sh ? `${x}${k} >>> ${sh}` : `${x}${k}`}) & 0xff`)
+        p(`${pad}const ${x}${k}${c}${tag}: i32 = toI32(${sh ? `${x}${k} >>> ${sh}` : `${x}${k}`}) & 0xff`)
       }
     }
     for (const k of lanes) {
       const o = S * k
-      const pn = o ? `${o} + n${plus}` : `n${plus}`
+      const pn = typeof n === "number" ? `${o + n + plus}` : o ? `${o} + n${plus ? " + 1" : ""}` : `n${plus ? " + 1" : ""}`
       p(
-        `      ${y}${k} ^= st[${pn}] ^ (((st[${o + 18} + ${x}${k}a] + st[${o + 274} + ${x}${k}b]) ^ st[${o + 530} + ${x}${k}c]) + st[${o + 786} + ${x}${k}d])`
+        `${pad}${y}${k} ^= st[${pn}] ^ (((st[${o + 18} + ${x}${k}a${tag}] + st[${o + 274} + ${x}${k}b${tag}]) ^ st[${o + 530} + ${x}${k}c${tag}]) + st[${o + 786} + ${x}${k}d${tag}])`
       )
     }
   }
-  half("l", "r", "")
-  half("r", "l", " + 1")
-  p("    }")
+  if (unroll) {
+    for (let n = 1; n < 17; n += 2) {
+      half("l", "r", n, 0, "    ", `${n >> 1}`)
+      half("r", "l", n, 1, "    ", `${n >> 1}`)
+    }
+  } else {
+    p("    for (let n: i32 = 1; n < 17; n += 2) {")
+    half("l", "r", "n", 0, "      ", "")
+    half("r", "l", "n", 1, "      ", "")
+    p("    }")
+  }
   for (const k of lanes) {
     const o = S * k
     p(`    const t${k}: u32 = r${k}`)
@@ -70,8 +82,31 @@ const body = (W) => {
   return L
 }
 
+const module = new URL("../../../std/crypto/bcrypt.ts", import.meta.url)
+
+if (process.argv[2] === "--module") {
+  // A copy of the module with every width's body written again, unrolled
+  // with `--unroll`: the experiment `unroll.mjs` times against the module.
+  const to = process.argv[3]
+  if (!to) {
+    console.error("usage: node bench/crypto/bcrypt/gen-body.mjs --module <out.ts> [--unroll]")
+    process.exit(2)
+  }
+  const src = fs.readFileSync(module, "utf8").split("\n")
+  for (const W of [2, 3, 4, 5, 6]) {
+    const was = body(W).slice(1)
+    const at = src.indexOf(was[0])
+    if (at < 0 || !was.every((line, i) => src[at + i] === line)) {
+      console.error(`bcryptBody${W} differs from the generator; run --check`)
+      process.exit(1)
+    }
+    src.splice(at, was.length, ...body(W, process.argv.includes("--unroll")).slice(1))
+  }
+  fs.writeFileSync(to, src.join("\n"))
+  process.exit(0)
+}
 if (process.argv[2] === "--check") {
-  const src = fs.readFileSync(new URL("../../../std/crypto/bcrypt.ts", import.meta.url), "utf8").split("\n")
+  const src = fs.readFileSync(module, "utf8").split("\n")
   let bad = 0
   for (const W of [2, 3, 4, 5, 6]) {
     // The doc comment (the first line) is not compared: `bcryptBody4`'s is longer.
@@ -91,4 +126,4 @@ if (![2, 3, 4, 5, 6].includes(width)) {
   console.error("usage: node bench/crypto/bcrypt/gen-body.mjs <2|3|4|5|6> | --check")
   process.exit(2)
 }
-console.log(body(width).join("\n"))
+console.log(body(width, process.argv.includes("--unroll")).join("\n"))

@@ -22,37 +22,30 @@
  * the median of `--rounds` rounds and their spread, which is the noise band;
  * one more round runs first as a warm-up and is not counted.
  *
- * Usage: node bench/crypto/bcrypt/run.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N] [--ghz F]
+ * `--cpu-both` builds the six `bcryptHashN` programs a second time with
+ * `--cpu x86-64-v3` (BMI2, AVX2), times them in the same interleaved rounds,
+ * and adds a table of each width under both builds in ms per hash and ns per
+ * Blowfish block, a lane's hash over its blocks; a v3 binary needs such a CPU
+ * to start, so on another the flag is refused. When objdump is there it also
+ * counts the BMI2 instructions (shrx, rorx, bextr ...) in each v3 binary.
+ *
+ * Usage: node bench/crypto/bcrypt/run.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N] [--ghz F] [--cpu-both]
  * A missing C compiler, libxcrypt or network leaves its rows out with a note.
  * Build products and the fetched C files go to build/bench/bcrypt/; nothing
  * fetched is copied into the repository.
  */
-import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import { argValue, band, blocksPerHash, buildNish, intArg, median, nishLoopN, root, run, timeRounds } from "./common.mjs"
 
-const root = path.resolve(import.meta.dirname, "..", "..", "..")
 const dir = path.join(root, "build", "bench", "bcrypt")
 
-const argValue = (name, fallback) => {
-  const at = process.argv.indexOf(name)
-  return at >= 0 && at + 1 < process.argv.length ? process.argv[at + 1] : fallback
-}
 const compiler = argValue("--compiler", path.join(root, "build", "nish"))
-const hashes = Number(argValue("--hashes", "8"))
-const rounds = Number(argValue("--rounds", "5"))
-const cost = Number(argValue("--cost", "10"))
-for (const [name, value, lo, hi] of [
-  ["--hashes", hashes, 1, 1e6],
-  ["--rounds", rounds, 1, 1e3],
-  ["--cost", cost, 4, 31],
-]) {
-  if (!Number.isInteger(value) || value < lo || value > hi) {
-    console.error(`${name} must be an integer from ${lo} to ${hi}`)
-    process.exit(1)
-  }
-}
-const blocks = 2 ** cost * 1042 + 713
+const hashes = intArg("--hashes", 8, 1, 1e6)
+const rounds = intArg("--rounds", 5, 1, 1e3)
+const cost = intArg("--cost", 10, 4, 31)
+const cpuBoth = process.argv.includes("--cpu-both")
+const blocks = blocksPerHash(cost)
 const cpuinfo = fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : ""
 const mhz = cpuinfo.match(/^cpu MHz\s*:\s*([0-9.]+)/m)
 const given = argValue("--ghz", "")
@@ -155,59 +148,6 @@ export const main = (): i32 => {
 }
 `
 
-/** `bcryptHashN` with lanes 0 to `width` - 1 given, printing each given lane's last hash. */
-const NISH_LOOPN = (width) => `import { bcryptHashN } from "nish/crypto/bcrypt"
-import { Secret, secret, wipe } from "nish:secret"
-
-const given = (k: i32): Secret<u8[]> | null => {
-  if (k >= ${width}) {
-    return null
-  }
-  const raw: u8[] = [85, 42, 85]
-  return secret(raw)
-}
-
-export const main = (): i32 => {
-  const r0: u8[] = [85, 42, 85]
-  const p0: Secret<u8[]> = secret(r0)
-  const p1: Secret<u8[]> | null = given(1)
-  const p2: Secret<u8[]> | null = given(2)
-  const p3: Secret<u8[]> | null = given(3)
-  const p4: Secret<u8[]> | null = given(4)
-  const p5: Secret<u8[]> | null = given(5)
-  const salts: u8[] = new Array<u8>(96)
-  let last: string[] = []
-  for (let i: i32 = 0; i < ${hashes}; i++) {
-    const h: Result<string[], string> = bcryptHashN(p0, p1, p2, p3, p4, p5, salts, ${cost})
-    if (h.isOk()) {
-      last = h.value
-    }
-  }
-  wipe(p0)
-  if (p1 !== null) {
-    wipe(p1)
-  }
-  if (p2 !== null) {
-    wipe(p2)
-  }
-  if (p3 !== null) {
-    wipe(p3)
-  }
-  if (p4 !== null) {
-    wipe(p4)
-  }
-  if (p5 !== null) {
-    wipe(p5)
-  }
-  for (const hash of last) {
-    if (hash !== "") {
-      console.log(hash)
-    }
-  }
-  return 0
-}
-`
-
 const NISH_LOOP4 = `import { bcryptHash4 } from "nish/crypto/bcrypt"
 import { Secret, secret, wipe } from "nish:secret"
 
@@ -240,35 +180,31 @@ export const main = (): i32 => {
 `
 
 const notes = []
-const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: "utf8", ...opts })
 const have = (cmd) => run(cmd, ["--version"]).status === 0
 
 fs.mkdirSync(dir, { recursive: true })
 const programs = []
 
-for (const [name, source, exe, per] of [
-  ["Nish (`nish/crypto/bcrypt`)", NISH_LOOP, "nish", 1],
-  ["Nish `bcryptHash4`, four lanes", NISH_LOOP4, "nish4", 4],
-  ...[1, 2, 3, 4, 5, 6].map((w) => [
-    `Nish \`bcryptHashN\`, ${w === 1 ? "one lane" : `${w} lanes`}`,
-    NISH_LOOPN(w),
-    `nishn${w}`,
-    w,
-  ]),
+if (cpuBoth && !/^flags\s*:.*\bbmi2\b.*\bavx2\b|^flags\s*:.*\bavx2\b.*\bbmi2\b/m.test(cpuinfo)) {
+  console.error("--cpu-both: this CPU has no AVX2 and BMI2 in /proc/cpuinfo, so an x86-64-v3 binary would not start")
+  process.exit(1)
+}
+const widths = [1, 2, 3, 4, 5, 6]
+const builds = cpuBoth ? [["", []], ["v3", ["--cpu", "x86-64-v3"]]] : [["", []]]
+for (const [name, source, exe, per, flags] of [
+  ["Nish (`nish/crypto/bcrypt`)", NISH_LOOP, "nish", 1, []],
+  ["Nish `bcryptHash4`, four lanes", NISH_LOOP4, "nish4", 4, []],
+  ...builds.flatMap(([tag, flags]) =>
+    widths.map((w) => [
+      `Nish \`bcryptHashN\`, ${w === 1 ? "one lane" : `${w} lanes`}${tag ? `, \`--cpu x86-64-${tag}\`` : ""}`,
+      nishLoopN(w, hashes, cost),
+      `nish${tag}n${w}`,
+      w,
+      flags,
+    ])
+  ),
 ]) {
-  fs.writeFileSync(path.join(dir, `${exe}.ts`), source)
-  const nish = run(
-    compiler,
-    [path.join(dir, `${exe}.ts`), "-o", `${dir}/${exe}-out/`, "--link", path.join(dir, exe)],
-    {
-      cwd: root,
-    }
-  )
-  if (nish.status !== 0) {
-    console.error(`the Nish program ${exe}.ts did not build:\n${nish.stderr}`)
-    process.exit(1)
-  }
-  programs.push({ name, exe: path.join(dir, exe), per })
+  programs.push({ name, exe: buildNish(compiler, dir, exe, source, flags), per })
 }
 
 const cc = process.env.CC || "cc"
@@ -404,16 +340,11 @@ if (!Object.keys(TIGOKRAFT).every((file) => fs.existsSync(path.join(tigokraft, f
 }
 
 const outputs = new Set()
-const samples = programs.map(() => [])
-// Round 0 warms the page cache and the CPU's clocks and is not counted.
-for (let round = 0; round <= rounds; round++) {
-  programs.forEach((p, i) => {
-    const r = run("bash", ["-c", 'TIMEFORMAT=%3U; time "$0" > "$0.out"', p.exe])
-    if (r.status !== 0) {
-      console.error(`${p.name} failed:\n${r.stderr}`)
-      process.exit(1)
-    }
-    const lines = fs.readFileSync(`${p.exe}.out`, "utf8").trim().split("\n")
+const samples = timeRounds(
+  programs.map((p) => ({ ...p, argv: [p.exe], scale: 1000 / (hashes * (p.per ?? 1)) })),
+  rounds,
+  (p, stdout) => {
+    const lines = stdout.trim().split("\n")
     if (lines.length !== (p.per ?? 1)) {
       console.error(`${p.name} printed ${lines.length} hashes, not one a lane`)
       process.exit(1)
@@ -421,37 +352,43 @@ for (let round = 0; round <= rounds; round++) {
     for (const line of lines) {
       outputs.add(line)
     }
-    const seconds = Number(r.stderr.trim())
-    if (r.stderr.trim() === "" || !Number.isFinite(seconds)) {
-      console.error(`${p.name}: no CPU time in bash's output: ${JSON.stringify(r.stderr)}`)
-      process.exit(1)
-    }
-    if (round > 0) {
-      samples[i].push((seconds * 1000) / (hashes * (p.per ?? 1)))
-    }
-  })
-}
+  }
+)
 if (outputs.size !== 1) {
   console.error(`the programs disagree on the hash: ${[...outputs].join(", ")}`)
   process.exit(1)
 }
 
-const median = (xs) => {
-  const s = [...xs].sort((a, b) => a - b)
-  return s[Math.floor(s.length / 2)]
-}
 console.log(
   `CPU ms per cost-${cost} hash (${hashes} hashes or batches a round, median and spread of ${rounds} rounds)`
 )
 console.log(`hash: ${[...outputs][0]}\n`)
 console.log("| Implementation | ms per hash |")
 console.log("| --- | ---: |")
-programs.forEach((p, i) => {
-  const xs = samples[i]
-  const lo = Math.min(...xs).toFixed(1)
-  const hi = Math.max(...xs).toFixed(1)
-  console.log(`| ${p.name} | ${median(xs).toFixed(1)} (${lo}–${hi}) |`)
-})
+programs.forEach((p, i) => console.log(`| ${p.name} | ${band(samples[i])} |`))
+if (cpuBoth) {
+  const row = (exe) => samples[programs.findIndex((p) => p.exe === path.join(dir, exe))]
+  const ns = (xs) => ((median(xs) * 1e6) / blocks).toFixed(1)
+  const objdump = run("objdump", ["--version"]).status === 0
+  // BMI2's instructions anywhere in a binary: what `--cpu x86-64-v3` let the backend pick.
+  const bmi2 = (exe) =>
+    (run("objdump", ["-d", "--no-show-raw-insn", path.join(dir, exe)], { maxBuffer: 1 << 28 }).stdout.match(
+      /\t(shrx|shlx|sarx|rorx|bextr|bzhi|andn|pdep|pext|mulx)\s/g
+    ) ?? []).length
+  console.log(`\nEach width under both builds: ms per hash, and ns per Blowfish block (the hash's ${blocks} blocks)`)
+  console.log(`\n| Lanes | default ms | default ns/block | v3 ms | v3 ns/block | v3 / default |${objdump ? " BMI2 insns, v3 |" : ""}`)
+  console.log(`| ---: | ---: | ---: | ---: | ---: | ---: |${objdump ? " ---: |" : ""}`)
+  for (const w of widths) {
+    const [d, v] = [row(`nishn${w}`), row(`nishv3n${w}`)]
+    const same = objdump ? ` ${bmi2(`nishv3n${w}`)} |` : ""
+    console.log(
+      `| ${w} | ${band(d)} | ${ns(d)} | ${band(v)} | ${ns(v)} | ${(median(v) / median(d)).toFixed(3)} |${same}`
+    )
+  }
+  if (!objdump) {
+    notes.push("the BMI2 column is left out: no objdump")
+  }
+}
 if (ghz > 0) {
   const single = median(samples[0]) / 1000
   console.log(
