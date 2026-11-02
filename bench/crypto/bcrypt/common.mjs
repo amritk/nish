@@ -3,6 +3,12 @@
  * Nish program, and timing programs in interleaved rounds by the child's user
  * CPU time (bash's `time`), so a report is CPU, not wall, time. Round 0 warms
  * the page cache and the CPU's clocks and is not counted.
+ *
+ * A row gives two estimators: the median with its spread, and the fastest
+ * round. On a shared host another tenant can only slow a CPU-bound round
+ * (cache and port contention, a lower clock), never speed it up, so the
+ * fastest round is the robust one and the ratios are taken on it; the median
+ * stays beside it to show how noisy the host was.
  */
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -138,6 +144,9 @@ export const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b)
   return s[Math.floor(s.length / 2)]
 }
+
+/** The fastest round: the estimator a shared host's interference cannot inflate. */
+export const fastest = (xs) => Math.min(...xs)
 
 /** "median (min–max)" to `digits` places. */
 export const band = (xs, digits = 1) =>

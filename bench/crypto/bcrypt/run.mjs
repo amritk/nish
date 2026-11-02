@@ -19,13 +19,15 @@
  * be the same hash. The programs run in
  * interleaved rounds; a round's figure is the child's user CPU time (bash's
  * `time`) over the hashes, so the report is CPU, not wall, time. Each row is
- * the median of `--rounds` rounds and their spread, which is the noise band;
- * one more round runs first as a warm-up and is not counted.
+ * the median of `--rounds` rounds and their spread, which is the noise band,
+ * and the fastest round, which a shared host's interference cannot inflate
+ * (common.mjs); one more round runs first as a warm-up and is not counted.
  *
  * `--cpu-both` builds the six `bcryptHashN` programs a second time with
  * `--cpu x86-64-v3` (BMI2, AVX2), times them in the same interleaved rounds,
  * and adds a table of each width under both builds in ms per hash and ns per
- * Blowfish block, a lane's hash over its blocks; a v3 binary needs such a CPU
+ * Blowfish block, a lane's hash over its blocks, with the v3 / default ratio
+ * on fastest rounds and on medians; a v3 binary needs such a CPU
  * to start, so on another the flag is refused. When objdump is there it also
  * counts the BMI2 instructions (shrx, rorx, bextr ...) in each v3 binary.
  *
@@ -39,6 +41,7 @@ import path from "node:path"
 import {
   argValue,
   band,
+  fastest,
   blocksPerHash,
   buildNish,
   intArg,
@@ -378,17 +381,17 @@ if (outputs.size !== 1) {
 }
 
 console.log(
-  `CPU ms per cost-${cost} hash (${hashes} hashes or batches a round, median and spread of ${rounds} rounds)`
+  `CPU ms per cost-${cost} hash (${hashes} hashes or batches a round, ${rounds} rounds: median and spread, and fastest)`
 )
 console.log(`hash: ${[...outputs][0]}\n`)
-console.log("| Implementation | ms per hash |")
-console.log("| --- | ---: |")
+console.log("| Implementation | ms per hash | fastest |")
+console.log("| --- | ---: | ---: |")
 for (const [i, p] of programs.entries()) {
-  console.log(`| ${p.name} | ${band(samples[i])} |`)
+  console.log(`| ${p.name} | ${band(samples[i])} | ${fastest(samples[i]).toFixed(1)} |`)
 }
 if (cpuBoth) {
   const row = (exe) => samples[programs.findIndex((p) => p.exe === path.join(dir, exe))]
-  const ns = (xs) => ((median(xs) * 1e6) / blocks).toFixed(1)
+  const ns = (ms) => ((ms * 1e6) / blocks).toFixed(1)
   const objdump = run("objdump", ["--version"]).status === 0
   // BMI2's instructions anywhere in a binary: what `--cpu x86-64-v3` let the backend pick.
   const bmi2 = (exe) =>
@@ -401,14 +404,15 @@ if (cpuBoth) {
     `\nEach width under both builds: ms per hash, and ns per Blowfish block (the hash's ${blocks} blocks)`
   )
   console.log(
-    `\n| Lanes | default ms | default ns/block | v3 ms | v3 ns/block | v3 / default |${objdump ? " BMI2 insns, v3 |" : ""}`
+    `\n| Lanes | default ms | default fastest | default ns/block, fastest | v3 ms | v3 fastest | v3 ns/block, fastest | v3 / default, fastest | on medians |${objdump ? " BMI2 insns, v3 |" : ""}`
   )
-  console.log(`| ---: | ---: | ---: | ---: | ---: | ---: |${objdump ? " ---: |" : ""}`)
+  console.log(`| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |${objdump ? " ---: |" : ""}`)
   for (const w of widths) {
     const [d, v] = [row(`nishn${w}`), row(`nishv3n${w}`)]
     const same = objdump ? ` ${bmi2(`nishv3n${w}`)} |` : ""
     console.log(
-      `| ${w} | ${band(d)} | ${ns(d)} | ${band(v)} | ${ns(v)} | ${(median(v) / median(d)).toFixed(3)} |${same}`
+      `| ${w} | ${band(d)} | ${fastest(d).toFixed(1)} | ${ns(fastest(d))} | ${band(v)} | ${fastest(v).toFixed(1)} | ${ns(fastest(v))} | ` +
+        `${(fastest(v) / fastest(d)).toFixed(3)} | ${(median(v) / median(d)).toFixed(3)} |${same}`
     )
   }
   if (!objdump) {

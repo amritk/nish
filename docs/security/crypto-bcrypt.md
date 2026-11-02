@@ -525,6 +525,10 @@ BMI2 kernel halving the time. Four candidates were measured, each against the
 bar of the [Adler-32 verdict](../wp38-simd.md): a candidate ships only if it
 beats Nish's best width by at least 20%, in two runs, and by more than the
 noise band.
+A row is read two ways: its median with the spread of its rounds, and its
+fastest round. On a shared host another tenant can only slow a CPU-bound
+round, never speed it up, so the fastest round is the robust estimator, and
+the bar is judged on it; the bench scripts print both.
 The band is the module timed against a byte-identical copy of itself
 (`unroll.mjs`), which here moved by up to 18% (five lanes, once) and otherwise
 by 8.4% or less.
@@ -544,7 +548,8 @@ by 8.4% or less.
 **Machines.** D is a quiet 4-core Xeon (Emerald Rapids) whose clock measures
 3.15 GHz. E is a shared 4-core Xeon of the same family, cpuinfo 2.10 GHz,
 measured 2.92 GHz, whose rows spread by up to 30%; its figures are two passes
-of `--rounds 9`. Both list `bmi2`, `avx2` and `avx512f`. No AMD and no AArch64
+of `--rounds 9`. F is a third, quieter container of the same family (cpuinfo
+"@ 2.10GHz"), run twice with `ceiling.mjs --rounds 9`. All list `bmi2`, `avx2` and `avx512f`. No AMD and no AArch64
 core was measured.
 
 **Per width, default and v3** (`run.mjs --cpu-both`; ms per hash, then ns per
@@ -576,19 +581,51 @@ time over the row's, so above 1 is faster than Nish):
 | hand `rorx-ah` | 15.8 (1.04) | 18.9 (1.19) / 16.7 (1.34) | 19.1 (0.95) / 16.6 (1.10) |
 | C interleave, `cc -O2` | 16.0 (1.03) | 22.6 (0.99) / 23.3 (0.96) | 21.9 (0.83) / 21.3 (0.86) |
 
-On D the best hand kernel, BMI2's `rorx-shr` at six lanes, is 9% ahead of
-Nish's six lanes, under the bar. On E the best hand kernel was 34% ahead in
-the first pass (`rorx-ah`), 10% in the second, and 31% in a third,
-`--rounds 5` (`rorx-shr`, 15.6 (15.0–22.6) against Nish's 20.5 (16.3–29.2)):
-two runs of three over 20%, by different kernels. The quiet machine is the
-one to read: on E, Nish's best median moved from 18.3 to 22.4 ms between
-passes while `rorx-ah`'s held at 16.6 to 16.7, and Nish's fastest rounds
-(15.8 to 16.9 ms) are within 10% of the hand kernels' (15.0 to 15.9). The gap
-on E is mostly the noise reaching Nish's rows; a quiet Intel run that clears
-20% twice would reverse this verdict. The
+The table's ratios are on medians. On D the best hand kernel, BMI2's
+`rorx-shr` at six lanes, is 9% ahead of Nish's six lanes, under the bar. On E
+the best hand kernel was 34% ahead in the first pass (`rorx-ah`), 10% in the
+second, and 31% in a third, `--rounds 5` (`rorx-shr`, 15.6 (15.0–22.6)
+against Nish's 20.5 (16.3–29.2)): two runs of three over 20%, by different
+kernels, which met the stop rule. Those are medians inflated by noise. On E
+Nish's best median moved from 18.3 to 22.4 ms between passes while
+`rorx-ah`'s held at 16.6 to 16.7, and on fastest rounds the third run's 1.31
+is 1.09 (16.3 against 15.0); Nish's fastest rounds there (15.8 to 16.9 ms)
+are within 10% of the hand kernels' (15.0 to 15.9).
+
+F, at six lanes, gives both estimators; ms per hash per lane, median then
+fastest round, and Nish's time over the row's on each:
+
+| Body | F run 1 | F run 2 | Nish / this, fastest | Nish / this, median |
+| --- | ---: | ---: | ---: | ---: |
+| Nish `bcryptHashN` | 16.7 (15.9) | 18.9 (15.2) | 1 / 1 | 1 / 1 |
+| hand `base-shr` | 20.2 (14.7) | 19.3 (14.6) | 1.08 / 1.04 | 0.83 / 0.98 |
+| hand `base-ah` | 16.3 (15.5) | 16.9 (15.6) | 1.03 / 0.97 | 1.02 / 1.12 |
+| hand `rorx-shr` | 15.7 (14.8) | 15.9 (14.7) | 1.07 / 1.03 | 1.06 / 1.19 |
+| hand `rorx-ah` | 19.5 (15.8) | 18.4 (17.3) | 1.01 / 0.88 | 0.86 / 1.03 |
+
+On fastest rounds the hand-kernel ceiling is 4 to 8% over Nish's best width.
+The spill-free baseline kernel, `base-shr`, gets most of it (1.08 and 1.04),
+and BMI2 adds a few percent at most: `rorx-shr`'s fastest rounds are level
+with `base-shr`'s on F (14.8 and 14.7 against 14.7 and 14.6), and 9% ahead
+on D's medians. The medians on F swing the same rows from 0.83 to 1.19
+between two runs, which is why they are not the estimator to judge on. The
+stop rule's outcome was put to the project's maintainer, who kept this
+verdict: no runtime kernel is built. A quiet run on a core of another
+family whose fastest rounds clear 20% twice would reopen it. The
 unrolled bodies never beat the copy's band and were often slower (unrolled
 over module 0.95 to 1.15), so `gen-body.mjs --unroll` stays an option and
 `std/crypto/bcrypt.ts` is unchanged.
+
+**Does LLVM need an upstream change? No.** The data bounds what each part of
+the backend could give. Instruction selection, the missing `shrx` and `rorx`
+for shifts by a constant, is worth BMI2's share: a few percent, `rorx-shr`
+over `base-shr`. Register allocation, the spills and reloads of Nish's
+six-lane round, is worth at most the gap between Nish and the spill-free
+`base-shr`, 4 to 8% on fastest rounds. Neither reaches 20%, and both
+together do not: past the spills the core is bound by ALU and load
+throughput, 2.9 cycles per lane half-round against the issue bound of 2.6
+(the bounds above), so no choice of instructions for the same work moves it
+far.
 
 **Why v3 does not help: the assembly.** In `bcryptBodyN` built with `-g`,
 the default and v3 round loops for widths 2, 6, 4, 5 and 3 are 58, 188, 123,

@@ -14,7 +14,10 @@
  * 192 blocks of the magic string and the key mixing (under 0.1% of a hash at
  * cost 10); their ms per hash is that CPU time over hashes × lanes, beside
  * Nish's whole hashes. Everything runs in interleaved rounds (common.mjs),
- * and a row is the median and spread of `--rounds`.
+ * and a row is the median and spread of `--rounds` and the fastest round.
+ * "Nish's best / this" is taken on the fastest round (Nish's fastest width
+ * over the row), and again on medians: interference only slows a CPU-bound
+ * round, so on a shared host the fastest-round ratio is the one to read.
  *
  * Usage: node bench/crypto/bcrypt/ceiling.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N]
  * Off x86-64, or on a CPU whose /proc/cpuinfo lists no bmi2, it prints why and
@@ -23,7 +26,18 @@
 import fs from "node:fs"
 import path from "node:path"
 import { kernel, VARIANTS } from "./kernel/gen.mjs"
-import { argValue, band, buildNish, intArg, median, nishLoopN, root, run, timeRounds } from "./common.mjs"
+import {
+  argValue,
+  band,
+  buildNish,
+  fastest,
+  intArg,
+  median,
+  nishLoopN,
+  root,
+  run,
+  timeRounds,
+} from "./common.mjs"
 
 const compiler = argValue("--compiler", path.join(root, "build", "nish"))
 const hashes = intArg("--hashes", 4, 1, 1e6)
@@ -110,13 +124,19 @@ const samples = timeRounds(programs, rounds, (p, stdout) => {
   sums.set(p.w, sum)
 })
 
-const best = Math.min(...programs.flatMap((p, i) => (p.nish ? [median(samples[i])] : [])))
+const nishRows = programs.flatMap((p, i) => (p.nish ? [samples[i]] : []))
+const best = Math.min(...nishRows.map(fastest))
+const bestMedian = Math.min(...nishRows.map(median))
 console.log(
-  `${model}: CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, median and spread of ${rounds} rounds)`
+  `${model}: CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, ${rounds} rounds: median and spread, and fastest)`
 )
-console.log("A kernel's row is its cost-loop bodies only; Nish's is whole hashes.\n")
-console.log("| Lanes | Body | ms per hash | Nish's best / this |")
-console.log("| ---: | --- | ---: | ---: |")
-programs.forEach((p, i) => {
-  console.log(`| ${p.w} | ${p.name} | ${band(samples[i])} | ${(best / median(samples[i])).toFixed(3)} |`)
-})
+console.log("A kernel's row is its cost-loop bodies only; Nish's is whole hashes.")
+console.log("Interference only slows a CPU-bound round, so the fastest-round ratio is the one to read.\n")
+console.log("| Lanes | Body | ms per hash | fastest | Nish's best / this, fastest | on medians |")
+console.log("| ---: | --- | ---: | ---: | ---: | ---: |")
+for (const [i, p] of programs.entries()) {
+  const xs = samples[i]
+  console.log(
+    `| ${p.w} | ${p.name} | ${band(xs)} | ${fastest(xs).toFixed(1)} | ${(best / fastest(xs)).toFixed(3)} | ${(bestMedian / median(xs)).toFixed(3)} |`
+  )
+}
