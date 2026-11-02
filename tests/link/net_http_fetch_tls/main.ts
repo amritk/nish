@@ -1,4 +1,4 @@
-// nish/net/http-client over https, against TLS servers on loopback.
+// nish/net/fetch over https, against TLS servers on loopback.
 //
 // The parent runs four TLS servers, one for each certificate in `certs.ts`
 // (good, expired, for another name, from a root the client never trusts),
@@ -17,7 +17,7 @@
 // A CONNECT from proxy user `alert` is answered with the 200 and a fatal
 // alert in one segment, and nothing after.
 
-import { HTTP_E_CERTIFICATE, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
+import { HTTP_E_CERTIFICATE, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
 import { kill, monotonicNanos, platform, spawn, waitPid } from "nish:process";
 import { realpathSync, writeFileSync } from "nish:fs";
@@ -453,7 +453,7 @@ const conn = (res: HttpResponse | null): string => {
   return v !== null ? v : "none";
 };
 
-const fails = (client: HttpClient, res: HttpResponse | null, code: i32): boolean => {
+const fails = (client: FetchSyncClient, res: HttpResponse | null, code: i32): boolean => {
   if (res !== null || client.error !== code) {
     console.log(`  got ${res !== null ? `status ${res.status}` : "null"}, error ${client.error}: ${client.errorText}`);
     return false;
@@ -484,7 +484,7 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   const t: Tally = new Tally();
   const good: string = `https://localhost:${ports[0]}`;
   const options: HttpOptions = trusting(trusted);
-  const client: HttpClient = new HttpClient(options);
+  const client: FetchSyncClient = new FetchSyncClient(options);
 
   // --- a trusted server
   const a: HttpResponse | null = client.fetch(get(`${good}/hello`));
@@ -501,40 +501,40 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   const cached: HttpResponse | null = client.fetch(get(`${good}/cached`));
   t.check(bodyOf(cached) === "GET /cached HTTP/1.1" && conn(cached) !== conn(ip), "a client reads its roots once, not again for each connection");
   writeFileSync(trusted, trustedRootPem);
-  const once: HttpResponse | null = httpFetch(get(`${good}/once`), options);
-  t.check(bodyOf(once) === "GET /once HTTP/1.1", "httpFetch fetches over https too");
+  const once: HttpResponse | null = fetchSync(get(`${good}/once`), options);
+  t.check(bodyOf(once) === "GET /once HTTP/1.1", "fetchSync fetches over https too");
   const told: HttpResponse | null = client.fetch(get(`${good}/notified-${conn(once)}`));
   t.check(bodyOf(told) === "yes", "and once its body is read, it ends the connection with a close_notify");
 
   // --- certificates that are refused
-  const expired: HttpClient = new HttpClient(options);
+  const expired: FetchSyncClient = new FetchSyncClient(options);
   t.check(fails(expired, expired.fetch(get(`https://localhost:${ports[1]}/`)), HTTP_E_CERTIFICATE), "an expired certificate is HTTP_E_CERTIFICATE");
   t.check(expired.errorText.indexOf("refused") >= 0, "and the error says the certificate was refused");
-  const wrong: HttpClient = new HttpClient(options);
+  const wrong: FetchSyncClient = new FetchSyncClient(options);
   t.check(fails(wrong, wrong.fetch(get(`https://localhost:${ports[2]}/`)), HTTP_E_CERTIFICATE), "a certificate for another name is HTTP_E_CERTIFICATE");
-  const untrusted: HttpClient = new HttpClient(options);
+  const untrusted: FetchSyncClient = new FetchSyncClient(options);
   t.check(fails(untrusted, untrusted.fetch(get(`https://localhost:${ports[3]}/`)), HTTP_E_CERTIFICATE), "a chain to a root the client does not trust is HTTP_E_CERTIFICATE");
-  const other: HttpClient = new HttpClient(trusting(stranger));
+  const other: FetchSyncClient = new FetchSyncClient(trusting(stranger));
   t.check(fails(other, other.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "and so is a good server under roots that are not its own");
-  const system: HttpClient = new HttpClient(trusting(""));
+  const system: FetchSyncClient = new FetchSyncClient(trusting(""));
   t.check(fails(system, system.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "the system roots do not trust the test's root");
 
   // --- no roots at all: refused before any connection
-  const fresh: HttpClient = new HttpClient(options);
+  const fresh: FetchSyncClient = new FetchSyncClient(options);
   const before: HttpResponse | null = fresh.fetch(get(`${good}/before`));
   bodyOf(before);
-  const none: HttpClient = new HttpClient(trusting(missing));
+  const none: FetchSyncClient = new FetchSyncClient(trusting(missing));
   t.check(fails(none, none.fetch(get(`${good}/`)), HTTP_E_CERTIFICATE), "with no root certificate to trust, https is HTTP_E_CERTIFICATE");
   t.check(none.errorText.indexOf("no trusted root certificate") >= 0, "and the error says there was no root to trust");
-  const after: HttpClient = new HttpClient(options);
+  const after: FetchSyncClient = new FetchSyncClient(options);
   const next: HttpResponse | null = after.fetch(get(`${good}/after`));
   bodyOf(next);
   t.check(conn(before) !== "none" && parsePort(conn(next)) === parsePort(conn(before)) + 1, "and no connection was opened for it");
 
   // --- what is not TLS, and TLS cut short
-  const plain: HttpClient = new HttpClient(options);
+  const plain: FetchSyncClient = new FetchSyncClient(options);
   t.check(fails(plain, plain.fetch(get(`https://127.0.0.1:${proxy}/`)), HTTP_E_TLS), "a server that does not speak TLS is HTTP_E_TLS");
-  const cut: HttpClient = new HttpClient(options);
+  const cut: FetchSyncClient = new FetchSyncClient(options);
   const c: HttpResponse | null = cut.fetch(get(`${good}/cut`));
   const got: u8[] | null = c !== null ? c.body.readAll(65536) : null;
   t.check(c !== null && got === null && cut.error === HTTP_E_TLS, "a body cut off without a close_notify is HTTP_E_TLS, not a short body");
@@ -542,12 +542,12 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
     console.log(`  error ${cut.error}: ${cut.errorText}`);
   }
   t.check(cut.errorText.indexOf("close_notify") >= 0, "and the error says the close_notify never came");
-  const whole: HttpClient = new HttpClient(options);
+  const whole: FetchSyncClient = new FetchSyncClient(options);
   const ended: HttpResponse | null = whole.fetch(get(`${good}/until-close`));
   t.check(bodyOf(ended) === "until close", "a body with no length ends at the server's close_notify");
   const again: u8[] = new Array<u8>(16);
   t.check(ended !== null && ended.body.read(again, 0, 16) === 0 && whole.error === 0, "and read again, it answers 0 with no error");
-  const stale: HttpClient = new HttpClient(options);
+  const stale: FetchSyncClient = new FetchSyncClient(options);
   const s1: HttpResponse | null = stale.fetch(get(`${good}/stale`));
   const s1Body: string = bodyOf(s1);
   const s2: HttpResponse | null = stale.fetch(get(`${good}/fresh`));
@@ -555,7 +555,7 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   if (s2 === null) {
     console.log(`  error ${stale.error}: ${stale.errorText}`);
   }
-  const alerting: HttpClient = new HttpClient(options);
+  const alerting: FetchSyncClient = new FetchSyncClient(options);
   const a1: HttpResponse | null = alerting.fetch(get(`${good}/warm`));
   const a1Body: string = bodyOf(a1);
   const a2: HttpResponse | null = alerting.fetch(get(`${good}/alert-once`));
@@ -563,10 +563,10 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   if (a2 === null) {
     console.log(`  error ${alerting.error}: ${alerting.errorText}`);
   }
-  const alerted: HttpClient = new HttpClient(options);
+  const alerted: FetchSyncClient = new FetchSyncClient(options);
   t.check(fails(alerted, alerted.fetch(get(`${good}/alert`)), HTTP_E_TLS), "a fresh TLS connection the server ends with an alert is HTTP_E_TLS");
   t.check(alerted.errorText.indexOf("the server sent TLS alert 80") >= 0, "and the error names the alert the server sent");
-  const idle: HttpClient = new HttpClient(options);
+  const idle: FetchSyncClient = new FetchSyncClient(options);
   const n1: HttpResponse | null = idle.fetch(get(`${good}/then-notify`));
   const n1Body: string = bodyOf(n1);
   const n2: HttpResponse | null = idle.fetch(get(`${good}/after-notify`));
@@ -577,7 +577,7 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   const silent: i32 = tcpListen("127.0.0.1", 0, 8);
   const quiet: HttpOptions = trusting(trusted);
   quiet.readTimeoutMs = 300;
-  const mute: HttpClient = new HttpClient(quiet);
+  const mute: FetchSyncClient = new FetchSyncClient(quiet);
   t.check(fails(mute, mute.fetch(get(`https://127.0.0.1:${netLocalPort(silent)}/`)), HTTP_E_READ_TIMEOUT), "a server that never answers the handshake is HTTP_E_READ_TIMEOUT");
   netClose(silent);
 
@@ -585,12 +585,12 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   const downgrade: HttpOptions = trusting(trusted);
   downgrade.followRedirects = true;
   downgrade.crossOriginRedirects = true;
-  const down: HttpClient = new HttpClient(downgrade);
+  const down: FetchSyncClient = new FetchSyncClient(downgrade);
   t.check(fails(down, down.fetch(get(`${good}/tohttp`)), HTTP_E_REDIRECT_REFUSED), "a redirect from https to http is refused even with crossOriginRedirects");
   t.check(down.errorText.endsWith("from https to http (http://localhost:1/?...)"), "and the error says why, naming the Location without its password or query");
 
   // --- through a proxy
-  const tunnelled: HttpClient = new HttpClient(options);
+  const tunnelled: FetchSyncClient = new FetchSyncClient(options);
   tunnelled.setProxies("", `http://127.0.0.1:${proxy}`, "");
   const p: HttpResponse | null = tunnelled.fetch(get(`${good}/tunnel`));
   t.check(bodyOf(p) === "GET /tunnel HTTP/1.1", "https through an http proxy is a CONNECT tunnel, then TLS to the origin");
@@ -600,7 +600,7 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   const p2: HttpResponse | null = tunnelled.fetch(get(`${good}/tunnel2`));
   t.check(bodyOf(p2) === "GET /tunnel2 HTTP/1.1" && conn(p2) === conn(p), "and the tunnelled connection is reused");
   tunnelled.close();
-  const authed: HttpClient = new HttpClient(options);
+  const authed: FetchSyncClient = new FetchSyncClient(options);
   authed.setProxies("", `http://user:pass@127.0.0.1:${proxy}`, "");
   const headReq: HttpRequest = get(`${good}/head`);
   headReq.header("Proxy-Authorization", "Basic c2VjcmV0");
@@ -615,7 +615,7 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   authed.close();
   const coalescing: HttpOptions = trusting(trusted);
   coalescing.readTimeoutMs = 300;
-  const alerting2: HttpClient = new HttpClient(coalescing);
+  const alerting2: FetchSyncClient = new FetchSyncClient(coalescing);
   alerting2.setProxies("", `http://alert:x@127.0.0.1:${proxy}`, "");
   t.check(fails(alerting2, alerting2.fetch(get(`${good}/never`)), HTTP_E_TLS), "an alert the proxy sends in the same segment as its 200 is read by TLS, not lost");
 

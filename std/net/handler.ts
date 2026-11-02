@@ -80,7 +80,7 @@
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { httpFieldBytes } from "nish/net/http-fields"
-import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1"
+import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1-codec"
 import {
   H1_AGAIN,
   H1_BODY,

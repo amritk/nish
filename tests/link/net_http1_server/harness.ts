@@ -24,7 +24,7 @@ import {
   tcpConnect,
   tcpListen,
 } from "nish:net";
-import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1";
+import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import {
   H1_AGAIN,
   H1_BODY,

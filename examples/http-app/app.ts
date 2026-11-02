@@ -3,7 +3,7 @@
 // drives the same code over loopback.
 import { JsonWriter, jsonField } from "nish/json"
 import { HttpHandler, HttpRequest } from "nish/net/handler"
-import { http1Text } from "nish/net/http1"
+import { http1Text } from "nish/net/http1-codec"
 import { ROUTER_METHOD_NOT_ALLOWED, Router, RouterLimits } from "nish/net/router"
 import { Notes } from "./notes"
 

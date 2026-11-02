@@ -1,6 +1,6 @@
 /**
  * `nish/net/http1-server` — the server side of HTTP/1.1 (RFC 9112): a
- * sans-IO connection that drives `nish/net/http1`'s parser, and two pools of
+ * sans-IO connection that drives `nish/net/http1-codec`'s parser, and two pools of
  * them for a program that owns its readiness loop, one on `nish:net`'s plain
  * TCP and one on `nish/net/tls-tcp` with ALPN `http/1.1`.
  *
@@ -76,12 +76,12 @@
  * given later, reads the clock then. `date.pin(unixMs)` fixes it, for a test
  * that compares bytes.
  *
- * **Refusals.** Every refusal of `nish/net/http1`'s parser — the smuggling
+ * **Refusals.** Every refusal of `nish/net/http1-codec`'s parser — the smuggling
  * shapes, a `Content-Length` with a `Transfer-Encoding`, two that disagree,
  * a malformed chunk size — is answered with its status (400, 413, 414, 431,
  * 501, 505), `Content-Length: 0` and `Connection: close`, and ends the
  * connection; so does a malformed WebSocket frame, with its close code.
- * `docs/security/http1.md` is the record.
+ * `docs/security/http1-codec.md` is the record.
  *
  * **WebSocket.** A request that asked to upgrade reaches the program like any
  * other; `acceptWebSocket(protocol)` answers it with the 101 of
@@ -145,7 +145,7 @@ import {
   http1WriteChunk,
   http1WriteLastChunk,
   http1WriteResponseHead,
-} from "nish/net/http1"
+} from "nish/net/http1-codec"
 import {
   WS_CLOSE,
   WS_ERROR,

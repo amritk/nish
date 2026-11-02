@@ -32,7 +32,7 @@ matched before it is decoded (ROUTE-9).
 | `std/net/router.ts` | `RouterLimits`; `Router` (`add`, `splitPattern`, `childFor`, `addChild`, `methodIndex`, `match`, `walk`, `endpointFor`, and the accessors `routes`, `nodeCount`, `paramCount`, `lastVisited`); `routerDecode`; the helpers `routerLimit`, `routerTchar`, `routerSegmentKind`, `routerSameName`, `routerLabelIsText`, `routerSameBytes`, `routerHex` |
 
 Out of scope: the carriers that hand the router its method and target
-(`docs/security/http1.md`, `http2.md`, `http3.md`), which have already refused
+(`docs/security/http1-codec.md`, `http2.md`, `http3.md`), which have already refused
 a malformed request line or pseudo-header before a program routes it, and what
 a program does with a decoded parameter.
 

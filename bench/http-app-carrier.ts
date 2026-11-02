@@ -98,7 +98,7 @@ import {
   Http1Connection,
   Http1Server,
 } from "nish/net/http1-server"
-import { Http1Parser } from "nish/net/http1"
+import { Http1Parser } from "nish/net/http1-codec"
 import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router"
 import { JsonWriter } from "nish/json"
 import { JsonLimits } from "nish/json-tokenizer"

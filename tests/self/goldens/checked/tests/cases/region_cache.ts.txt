@@ -422,11 +422,12 @@ struct Session (class) size=24 align=8
   field hits: i32 index=1 offset=8 initialized
   field payload: u8[] index=2 offset=16
   constructor -> @Session.constructor
-struct Cache (class) size=24 align=8
+struct Cache (class) size=32 align=8
   field regions: Map<i64, Region<Session>> index=0 offset=0
   field order: i64[] index=1 offset=8
   field head: i32 index=2 offset=16 initialized
   field held: i32 index=3 offset=20 initialized
+  field reused: i32 index=4 offset=24 initialized
   constructor -> @Cache.constructor
   method get -> @Cache.get
   method hits -> @Cache.hits
@@ -464,7 +465,7 @@ function Cache.constructor(this: Cache, live: i32): void -> @Cache.constructor [
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: live
   calls: nish.Map$i64$rgn.$Session.constructor nish_alloc_struct nish_panic
-  pointer this: size=24 writesThrough=true captured=false
+  pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:20 new Map<i64, Region<Session>> -> @nish.Map$i64$rgn.$Session.constructor
 function Cache.get(this: Cache, id: i64, out: u8[]): i32 -> @Cache.get [method]
@@ -472,27 +473,27 @@ function Cache.get(this: Cache, id: i64, out: u8[]): i32 -> @Cache.get [method]
   sharedWrite: +0:7
   escaping: id
   calls: nish.Map$i64$rgn.$Session.delete nish.Map$i64$rgn.$Session.probe nish.Map$i64$rgn.$Session.set nish.Map$i64$rgn.$Session.valueAt nish.enterWith$$Session$arr.u8$i32$fn.5.serve nish.free$$Session nish.regionWith$i64$$Session$fn.4.open nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=24 writesThrough=true captured=false
+  pointer this: size=32 writesThrough=true captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.enterWith$$Session$arr.u8$i32$fn.5.serve#1 nish.enterWith$$Session$arr.u8$i32$fn.5.serve#1
   stackSites=0 stackLocals=0
-  local -12:11 hit: Region<Session> | undefined (const)
-  callee -12:17 Map<i64, Region<Session>>.probe -> @nish.Map$i64$rgn.$Session.probe
-  callee -10:14 enterWith<Session, u8[], i32, serve> -> @nish.enterWith$$Session$arr.u8$i32$fn.5.serve
-  local -7:13 old: i64 (const)
-  local -6:13 gone: Region<Session> | undefined (const)
-  callee -6:20 Map<i64, Region<Session>>.probe -> @nish.Map$i64$rgn.$Session.probe
-  callee -4:9 free<Session> -> @nish.free$$Session
-  callee -3:9 Map<i64, Region<Session>>.delete -> @nish.Map$i64$rgn.$Session.delete
-  local +2:11 r: Region<Session> (const)
-  callee +2:15 regionWith<i64, Session, open> -> @nish.regionWith$i64$$Session$fn.4.open
-  callee +3:5 Map<i64, Region<Session>>.set -> @nish.Map$i64$rgn.$Session.set
-  callee +6:12 enterWith<Session, u8[], i32, serve> -> @nish.enterWith$$Session$arr.u8$i32$fn.5.serve
+  local -2:11 hit: Region<Session> | undefined (const)
+  callee -2:17 Map<i64, Region<Session>>.probe -> @nish.Map$i64$rgn.$Session.probe
+  callee +1:14 enterWith<Session, u8[], i32, serve> -> @nish.enterWith$$Session$arr.u8$i32$fn.5.serve
+  local +4:13 old: i64 (const)
+  local +5:13 gone: Region<Session> | undefined (const)
+  callee +5:20 Map<i64, Region<Session>>.probe -> @nish.Map$i64$rgn.$Session.probe
+  callee +7:9 free<Session> -> @nish.free$$Session
+  callee +8:9 Map<i64, Region<Session>>.delete -> @nish.Map$i64$rgn.$Session.delete
+  local +13:11 r: Region<Session> (const)
+  callee +13:15 regionWith<i64, Session, open> -> @nish.regionWith$i64$$Session$fn.4.open
+  callee +14:5 Map<i64, Region<Session>>.set -> @nish.Map$i64$rgn.$Session.set
+  callee +17:12 enterWith<Session, u8[], i32, serve> -> @nish.enterWith$$Session$arr.u8$i32$fn.5.serve
 function Cache.hits(this: Cache, id: i64): i32 -> @Cache.hits [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.enter$$Session$i32$fn.6.hitsOf
   escaping: id
   calls: nish.Map$i64$rgn.$Session.probe nish.Map$i64$rgn.$Session.valueAt nish.enter$$Session$i32$fn.6.hitsOf
-  pointer this: size=24 writesThrough=false captured=false
+  pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 r: Region<Session> | undefined (const)
   callee +0:15 Map<i64, Region<Session>>.probe -> @nish.Map$i64$rgn.$Session.probe
@@ -520,11 +521,11 @@ function main(): i32 -> @nish_main [exported entry]
   local +1:9 out: u8[] (const)
   local +2:7 served: i32 (let)
   local +3:12 round: i32 (let)
-  local +4:11 id: i64 (const)
-  callee +5:23 Cache.get -> @Cache.get
-  callee +9:29 Cache.hits -> @Cache.hits
-  callee +10:29 Cache.hits -> @Cache.hits
-  local +11:9 squares: Region<i32[]> (const)
-  callee +11:19 region<i32[], build> -> @nish.region$arr.i32$fn.5.build
-  callee +12:22 enter<i32[], i32, sum> -> @nish.enter$arr.i32$i32$fn.3.sum
-  callee +13:3 free<i32[]> -> @nish.free$arr.i32
+  local +5:11 id: i64 (const)
+  callee +6:23 Cache.get -> @Cache.get
+  callee +11:29 Cache.hits -> @Cache.hits
+  callee +12:29 Cache.hits -> @Cache.hits
+  local +13:9 squares: Region<i32[]> (const)
+  callee +13:19 region<i32[], build> -> @nish.region$arr.i32$fn.5.build
+  callee +14:22 enter<i32[], i32, sum> -> @nish.enter$arr.i32$i32$fn.3.sum
+  callee +15:3 free<i32[]> -> @nish.free$arr.i32

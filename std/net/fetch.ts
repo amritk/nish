@@ -1,21 +1,21 @@
 /**
- * `nish/net/http-client` — a blocking HTTP/1.1 client for command-line
- * programs: `httpFetch(request, options)` dials, sends, and answers the
- * response's head with a reader for its body, and an `HttpClient` does the
+ * `nish/net/fetch` — a blocking HTTP/1.1 client for command-line
+ * programs: `fetchSync(request, options)` dials, sends, and answers the
+ * response's head with a reader for its body, and a `FetchSyncClient` does the
  * same while keeping one connection alive between fetches.
  *
- *     import { HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
+ *     import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
  *
  *     const req = new HttpRequest("GET", "http://example.com/");
  *     req.header("Accept", "application/json");
- *     const res: HttpResponse | null = httpFetch(req, new HttpOptions());
+ *     const res: HttpResponse | null = fetchSync(req, new HttpOptions());
  *     if (res !== null) {
  *       const body: u8[] | null = res.body.readAll(1048576);
  *     }
  *
  * **It blocks the thread** at every step, the way a CLI wants it to: the
  * lookup, the connect, each write and each read. A server, which must not
- * stall every connection for one slow peer, drives `nish/net/http1-client`'s
+ * stall every connection for one slow peer, drives `nish/net/http1-client-codec`'s
  * parser from its own loop instead. Every wait is bounded: `connectTimeoutMs`
  * for the lookup and the connect (one budget across every address the name
  * has), `readTimeoutMs` for each wait on the peer, and `totalTimeoutMs`, when
@@ -25,7 +25,7 @@
  * **Framing is the parser's.** The head is written by `http1RequestHead` and
  * every byte read goes through `Http1ResponseParser`, so a value holding a CR
  * or LF is refused rather than sent, and every response-smuggling shape is
- * refused with the parser's own code (see `docs/security/http1-client.md`).
+ * refused with the parser's own code (see `docs/security/http1-client-codec.md`).
  *
  * **Keep-alive** holds one connection, to the last origin (or proxy) used. A
  * fetch to the same place reuses it once the last body has been read to its
@@ -70,14 +70,14 @@ import {
   HTTP1_HEAD,
   HTTP1_NEED_MORE,
   HTTP1_UPGRADE,
-} from "nish/net/http1"
+} from "nish/net/http1-codec"
 import {
   HTTP1_E_BODY_LIMIT,
   HTTP1_E_TRUNCATED,
   HTTP1_INFORMATIONAL,
   Http1ResponseParser,
   http1RequestHead,
-} from "nish/net/http1-client"
+} from "nish/net/http1-client-codec"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { Url, urlDecode, urlDefaultPort, urlOrigin, urlParse, urlResolve } from "nish/net/url"
 import { resolveHost } from "nish/net/dns"
@@ -293,10 +293,10 @@ export class HttpResponse {
  * client that made it, and only until that client starts its next fetch.
  */
 export class HttpBodyReader {
-  client: HttpClient
+  client: FetchSyncClient
   generation: i32
 
-  constructor(client: HttpClient, generation: i32) {
+  constructor(client: FetchSyncClient, generation: i32) {
     this.client = client
     this.generation = generation
   }
@@ -371,7 +371,7 @@ export class HttpBodyReader {
  * A client: the options, the proxy settings, and at most one open
  * connection, kept between fetches. Not for two threads at once.
  */
-export class HttpClient {
+export class FetchSyncClient {
   // Declared widest first, so no byte of a client is padding.
   options: HttpOptions
   errorText: string = ""
@@ -416,7 +416,7 @@ export class HttpClient {
   lost: boolean = false
   /** Whether the latest response's body is unread. */
   bodyOpen: boolean = false
-  /** Whether this is `httpFetch`'s client, closed whole once its one body is done with. */
+  /** Whether this is `fetchSync`'s client, closed whole once its one body is done with. */
   once: boolean = false
 
   constructor(options: HttpOptions) {
@@ -1336,7 +1336,7 @@ export class HttpClient {
     return take
   }
 
-  /** Closes the connection a body is done with, and `httpFetch`'s whole client with it. */
+  /** Closes the connection a body is done with, and `fetchSync`'s whole client with it. */
   release(): void {
     if (this.once) {
       this.close()
@@ -1391,10 +1391,10 @@ export class HttpClient {
 /**
  * One fetch on a client of its own, closed once the body has been read or
  * the fetch failed. Null on a failure, with no way to say why: a program
- * that reports its errors fetches through an `HttpClient`.
+ * that reports its errors fetches through a `FetchSyncClient`.
  */
-export const httpFetch = (req: HttpRequest, options: HttpOptions): HttpResponse | null => {
-  const client: HttpClient = new HttpClient(options)
+export const fetchSync = (req: HttpRequest, options: HttpOptions): HttpResponse | null => {
+  const client: FetchSyncClient = new FetchSyncClient(options)
   client.once = true
   const res: HttpResponse | null = client.fetch(req)
   if (res === null) {

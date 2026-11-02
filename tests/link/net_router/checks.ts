@@ -14,7 +14,7 @@
 // - **Carriers and decoding**: one table answering an HTTP/1 request line and
 //   an HTTP/2 `:path`; `%2F` decoded inside a parameter only, `+` kept,
 //   malformed escapes and too small a buffer refused.
-import { HTTP1_HEAD, Http1Parser } from "nish/net/http1";
+import { HTTP1_HEAD, Http1Parser } from "nish/net/http1-codec";
 import { HTTP_FIELDS_OK, HttpFields, httpFieldBytes } from "nish/net/http-fields";
 import {
   ROUTER_AMBIGUOUS,
