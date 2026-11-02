@@ -83,7 +83,7 @@ URLs under "Properties verified").
 
 | File | Functions |
 | --- | --- |
-| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue`; `PgBatcher.shed` |
+| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, `paramInt4Array` and `paramInt8Array`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, the binary array builder `binaryArrayStart`, `binaryArrayInt` and `binaryArrayNull`, the parameter format codes written at `bindEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue`; `PgBatcher.shed` |
 | `std/net/postgres-carrier.ts` | `PgCarrierLimits`; `PgCarrier` (the constructor, `attach`, `run`, `runInt`, `runText`, `request`, `connection`, `send`, `next`, `close`, and the private helpers they call: the poll pass, connect and its timeout, the read and write of each slot, the routing of pool events to queries and batched executions, the ticket map, the free stacks and the shedding of a lost execution's requests) |
 
 Out of scope: the `nish:net` calls themselves, which the carrier makes and
@@ -198,6 +198,13 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `arrayElement` | a window outside its source ("arrayElement() outside its source") | `link/std_postgres_array_window_panic` (one byte past the end, after an in-bounds window) |
 | `paramIntArray` | a window outside its array ("paramIntArray() outside its array") | `link/std_postgres_int_array_range_panic` (one value past the end, after an in-bounds window) |
 | `arrayInt` | no array open ("an array element with no arrayStart()") | `link/std_postgres_array_int_panic` (after a parameter is taken with no array) |
+| `paramInt4Array`, `paramInt8Array` | a window outside its array ("an int array parameter outside its array") | `link/std_postgres_binary_window_panic` (an `int8[]` window one value past the end, after a text parameter is taken); `link/std_postgres_binary_window_start_panic` (an `int4[]` window starting at −1); `link/std_postgres_binary_window_count_panic` (an `int8[]` count of −1) |
+| `paramInt4Array` | an element outside int4 ("paramInt4Array() with an element outside int4"), checked before a byte is written | `link/std_postgres_binary_int4_range_panic` (2^31, after a text parameter is taken) |
+| `binaryArrayStart` | an element OID other than 23 or 20 ("binaryArrayStart() with an element OID other than int4 (23) or int8 (20)") | `link/std_postgres_binary_array_oid_panic` (OID 21, int2) |
+| `binaryArrayStart` | an array already open ("binaryArrayStart() while an array is open") | `link/std_postgres_binary_array_start_panic` (a second start, after the first opens) |
+| `binaryArrayInt` | an element outside int4 in an `int4[]` ("binaryArrayInt() with an element outside int4") | `link/std_postgres_binary_array_int_panic` (−2^31 − 1) |
+| `binaryArrayInt`, `binaryArrayNull` | no binary array open ("a binary array element with no binaryArrayStart()") | `link/std_postgres_binary_array_element_panic` (`binaryArrayInt` in a text array); `link/std_postgres_binary_array_int_none_panic` and `link/std_postgres_binary_array_null_none_panic` (each with no array open at all) |
+| `arrayElement`, `arrayInt` | a binary array open ("a text array element in a binary array") | `link/std_postgres_binary_array_text_element_panic` (`arrayInt` in an `int8[]`) |
 | `paramBytes`, `paramNull`, `paramTextArray`, `paramIntArray` | an array open ("a parameter while an array is open") | `link/std_postgres_array_param_bytes_panic`, `_null_panic`, `_text_array_panic`, `_int_array_panic` (each inside an open array, after the array opens) |
 | `PgBatcher` constructor | a `keyType` other than `PG_BATCH_INT` or `PG_BATCH_TEXT` ("a PgBatchConfig keyType out of range") | `link/std_postgres_batch_config_key_panic` (after a text batcher is made) |
 | `PgBatcher` constructor | an empty `name` or `select`, or a NUL in them or in `orderBy` ("a PgBatchConfig name or query empty or with a NUL") | `link/std_postgres_batch_config_query_panic` (after an ordered batcher is made); `link/std_postgres_batch_config_empty_panic` (an empty `select`); `link/std_postgres_batch_config_name_empty_panic` (an empty `name`); `link/std_postgres_batch_config_name_nul_panic` and `link/std_postgres_batch_config_select_nul_panic` (a NUL in each) |
@@ -424,6 +431,31 @@ element, so "the array still ends". With an array open, "no sync while an
 array is open", "no prepare", "no closeStatement", "no bindStart"; a
 compaction under it leaves "the array's length patched where it moved to";
 and "terminate drops an open array with its bind".
+
+**Binary integer arrays**: `paramInt4Array`, `paramInt8Array` and the binary
+builder write PostgreSQL's array wire form (`array_send`): ndim 1, the
+has-nulls flag, the element OID (23 or 20), the length and lower bound 1, then
+each element as its length word (4 or 8, or −1 for NULL) and its big-endian
+bytes; an empty array is ndim 0 with no dimension, 12 bytes. Every byte is the
+program's own integer, so nothing a client hands it can end the array early or
+be read as another element: "an int4[] in binary: format code 1, then ndim 1,
+no NULLs, OID 23, length 2, lower bound 1, each element 4 bytes", "an empty
+int8[] in a binary bind: ndim 0 and no dimension, 12 bytes", "a NULL element
+is length -1", and `PgBinaryArray` reads each back, int4 and int8 minimum and
+maximum included. An `int4` element past int4 is a panic, never a value cut to
+32 bits that would match another row. A Bind with a binary parameter carries
+one format code per parameter: the first binary one holds room for a code per
+parameter so far and one more, each later parameter holds two bytes, and
+`bindEnd` moves the parameters down and writes the codes into room already
+counted against `maxOutput` ("a binary parameter among text ones: a code for
+each, text 0 but its own 1", "an int4[] one element too long is refused",
+"one that fits is taken", "and bindEnd and Sync stay within maxOutput"). A
+bind with no binary parameter keeps its single zero word, so text binds are
+byte for byte what they were ("a bind after a cancelled binary one owes no
+codes", "a text int array after a binary one keeps code 0"). The element OID
+must be the statement's: an `int4[]` sent to an `int8[]` parameter is the
+server's `ErrorResponse` (SQLSTATE 42804), read like any other, and the live
+`intarrays` scenario shows the next request on the connection succeeding.
 
 **Server errors**: "an error during startup fails the connection", "FATAL
 once ready fails it too", "an ERROR ends the statement, then the group", and

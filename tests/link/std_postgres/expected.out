@@ -340,6 +340,7 @@ PASS  bindEnd
 PASS  one result format code, 1: every column binary
 PASS  the next bindStart is text again: no format codes
 PASS  nor after a binary bind cancelled
+PASS  an int array in a binary bind is still text: no parameter format codes, only the result's
 PASS  a text bind takes a parameter up to 17 short of maxOutput
 PASS  its bindEnd and Sync fill maxOutput exactly
 PASS  a binary bind refuses that one
@@ -349,6 +350,37 @@ PASS  nor is Sync
 PASS  which fill maxOutput exactly, two bytes more
 PASS  bindStartBinary keeps its two bytes too
 PASS  where bindStart fits
+PASS  paramInt4Array
+PASS  an int4[] in binary: format code 1, then ndim 1, no NULLs, OID 23, length 2, lower bound 1, each element 4 bytes
+PASS  a binary parameter among text ones: a code for each, text 0 but its own 1
+PASS  an empty int8[] in a binary bind: ndim 0 and no dimension, 12 bytes, and the result's code after it
+PASS  PgBinaryArray reads it back: int4 min and max
+PASS  int8 min and max
+PASS  its element OID
+PASS  an empty window at the end
+PASS  binaryArrayStart
+PASS  binaryArrayInt
+PASS  binaryArrayNull
+PASS  the builder's int8[]: NULLs and all
+PASS  its has-nulls flag
+PASS  its length
+PASS  a NULL element is length -1
+PASS  its int4[]
+PASS  with no NULLs, flag 0
+PASS  an empty one drops its dimension
+PASS  one NULL
+PASS  a bind after a cancelled binary one owes no codes
+PASS  a text int array after a binary one keeps code 0
+PASS  binaryArrayStart with no Bind open is refused
+PASS  and so is paramInt8Array
+PASS  leaving nothing open: a Bind after them is taken
+PASS  an int4[] one element too long is refused
+PASS  one that fits is taken
+PASS  and bindEnd and Sync stay within maxOutput
+PASS  the builder takes elements until there is no room
+PASS  and refuses a NULL too
+PASS  the array ends with the elements it has
+PASS  which fill maxOutput but for that byte
 PASS  a binary row
 PASS  int2
 PASS  int4
@@ -450,4 +482,4 @@ PASS  it is failed
 PASS  a window before it
 PASS  it is failed too
 PASS  int on a refused walk fails
-postgres: 452 passed, 0 failed, 0 skipped
+postgres: 484 passed, 0 failed, 0 skipped

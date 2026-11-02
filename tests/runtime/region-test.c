@@ -4,7 +4,7 @@
  *
  * With no argument it runs the positive checks and exits 0: a region's
  * allocations land in it and not in the thread's arena, its chunks start at
- * the first allocation's size and double, `enter` answers the root `leave`
+ * the first allocation's size and double up to 1 MiB, `enter` answers the root `leave`
  * recorded, nesting restores each arena, a freed slot is reused under a new
  * handle, and making, filling and freeing 100,000 regions ten times over
  * leaves the resident set where the first round put it.
@@ -15,6 +15,9 @@
 
 #include <pthread.h>
 #include <stdint.h>
+#ifdef __linux__
+#include <sys/resource.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -109,6 +112,19 @@ static void positive(void) {
   CHECK(nish_region_enter(r) == root, "enter answers the root leave recorded");
   nish_region_leave(r, root);
 
+  /* RT-47: the doubling stops at 1 MiB. A 3 MiB allocation gets a chunk of
+     its own size, and the next chunk is 1 MiB, not 6. */
+  uint64_t big = nish_region_new();
+  nish_region_enter(big);
+  nish_alloc_struct((uint64_t)3 << 20);
+  CHECK(nish_arena.cap == (uint64_t)3 << 20, "a chunk still takes a large allocation's size, got %llu", (unsigned long long)nish_arena.cap);
+  nish_alloc_struct(8);
+  CHECK(nish_arena.cap == (uint64_t)1 << 20, "the next chunk is the 1 MiB ceiling, got %llu", (unsigned long long)nish_arena.cap);
+  for (int i = 0; i < 4; i++) nish_alloc_struct((uint64_t)1 << 20);
+  CHECK(nish_arena.cap == (uint64_t)1 << 20, "and every chunk after it stays there, got %llu", (unsigned long long)nish_arena.cap);
+  nish_region_leave(big, NULL);
+  nish_region_free(big);
+
   nish_region_free(inner);
   nish_region_free(r);
   uint64_t again = nish_region_new();
@@ -149,6 +165,37 @@ static void *enter_elsewhere(void *arg) {
 }
 #endif
 
+#if defined(NISH_THREADS) && defined(__linux__)
+/* RT-46: a panic in `nish_region_new` must let go of the table's lock. The
+   panic exits through `exit(1)`, so this atexit handler runs after it and
+   takes the lock to free a region. Were the lock still held, the free would
+   spin forever; the alarm then ends the process with SIGALRM, not exit 1. */
+static uint64_t unlock_probe;
+static void free_at_exit(void) {
+  alarm(10);
+  nish_region_free(unlock_probe);
+}
+
+/* Fills the table's first page, caps the address space just past what the
+   process has and spends the rest, so the next `new` finds no memory for a
+   second page and panics out of memory. */
+static void oom_in_new(uint64_t r) {
+  unlock_probe = r;
+  atexit(free_at_exit);
+  for (int i = 1; i < 1024; i++) nish_region_new();
+  FILE *f = fopen("/proc/self/statm", "r");
+  unsigned long pages = 0;
+  if (!f || fscanf(f, "%lu", &pages) != 1) return;
+  fclose(f);
+  rlim_t cap = (rlim_t)pages * (rlim_t)sysconf(_SC_PAGESIZE) + ((rlim_t)1 << 20);
+  struct rlimit lim = { cap, cap };
+  if (setrlimit(RLIMIT_AS, &lim) != 0) return;
+  /* Kept in a volatile, or the compiler drops a malloc whose block is unused. */
+  for (void *volatile spent = malloc(4096); spent; spent = malloc(4096)) {}
+  nish_region_new();
+}
+#endif
+
 int main(int argc, char **argv) {
   if (argc < 2) {
     positive();
@@ -181,6 +228,9 @@ int main(int argc, char **argv) {
     pthread_t t;
     if (pthread_create(&t, NULL, enter_elsewhere, &r) == 0) pthread_join(t, NULL);
   }
+#endif
+#if defined(NISH_THREADS) && defined(__linux__)
+  else if (!strcmp(mode, "oom-unlocks")) oom_in_new(r);
 #endif
   else {
     fprintf(stderr, "region-test: unknown mode %s\n", mode);

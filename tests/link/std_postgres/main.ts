@@ -1157,6 +1157,11 @@ const binaryBinds = (t: Suite): void => {
   conn.bindStart("q");
   conn.bindEnd();
   t.eqStr("nor after a binary bind cancelled", drain(conn), "B|||<13>|q|||||||E|||<9>|||||");
+  const pair: i64[] = [toI64(7), toI64(-1)];
+  conn.bindStartBinary("q");
+  conn.paramIntArray(pair, 0, 2);
+  conn.bindEnd();
+  t.eqStr("an int array in a binary bind is still text: no parameter format codes, only the result's", drain(conn), "B|||<25>|q||||<1>|||<6>{7,-1}|<1>|<1>E|||<9>|||||");
   conn.sync();
   drain(conn);
 
@@ -1183,6 +1188,154 @@ const binaryBinds = (t: Suite): void => {
   full.prepare("", repeat("x", 1024 - 17 - 16 - 11), none());
   t.ok("bindStartBinary keeps its two bytes too", !full.bindStartBinary(""));
   t.ok("where bindStart fits", full.bindStart(""));
+};
+
+/** The bytes of the one parameter of the drained `bindStart("q")` bind with a single binary parameter. */
+const binaryParam = (conn: PgConnection): u8[] => {
+  const out: u8[] = conn.outputBuffer();
+  // 'B', its length, the portal, `q`, one format code, the code, the count.
+  const at: i32 = conn.outputStart() + 1 + 4 + 1 + 2 + 2 + 2 + 2;
+  const bytes: u8[] = slice(out, at + 4, at + 4 + getI32BE(out, at));
+  conn.sent(conn.outputEnd() - conn.outputStart());
+  return bytes;
+};
+
+const MAX_I64 = (): i64 => -(MIN_I64() + toI64(1));
+
+const binaryParams = (t: Suite): void => {
+  const conn = ready(config());
+  const p = new PgBinary();
+  const w = new PgBinaryArray(p);
+  const values: i64[] = [toI64(9), toI64(-2147483648), toI64(2147483647), toI64(1)];
+
+  conn.bindStart("q");
+  t.ok("paramInt4Array", conn.paramInt4Array(values, 1, 2));
+  conn.bindEnd();
+  t.eqStr(
+    "an int4[] in binary: format code 1, then ndim 1, no NULLs, OID 23, length 2, lower bound 1, each element 4 bytes",
+    drain(conn),
+    "B|||7|q||<1>|<1>|<1>|||$|||<1>|||||||<23>|||<2>|||<1>|||<4><128>||||||<4><127><255><255><255>||E|||<9>|||||",
+  );
+  conn.bindStart("q");
+  conn.paramText("a");
+  conn.paramInt8Array(values, 0, 1);
+  conn.paramInt(toI64(5));
+  conn.bindEnd();
+  t.eqStr(
+    "a binary parameter among text ones: a code for each, text 0 but its own 1",
+    drain(conn),
+    "B|||A|q||<3>|||<1>|||<3>|||<1>a||| |||<1>|||||||<20>|||<1>|||<1>|||<8>|||||||<9>|||<1>5||E|||<9>|||||",
+  );
+  conn.bindStartBinary("q");
+  conn.paramInt8Array(values, 0, 0);
+  conn.bindEnd();
+  t.eqStr(
+    "an empty int8[] in a binary bind: ndim 0 and no dimension, 12 bytes, and the result's code after it",
+    drain(conn),
+    "B|||!|q||<1>|<1>|<1>|||<12>|||||||||||<20>|<1>|<1>E|||<9>|||||",
+  );
+
+  conn.bindStart("q");
+  conn.paramInt4Array(values, 0, 4);
+  conn.bindEnd();
+  t.eqStr("PgBinaryArray reads it back: int4 min and max", walkArray(w, p, binaryParam(conn)), "[9,-2147483648,2147483647,1] end");
+  const wide: i64[] = [MIN_I64(), MAX_I64()];
+  conn.bindStart("q");
+  conn.paramInt8Array(wide, 0, 2);
+  conn.bindEnd();
+  t.eqStr("int8 min and max", walkArray(w, p, binaryParam(conn)), "[-9223372036854775808,9223372036854775807] end");
+  t.eqI32("its element OID", w.elementOid, 20);
+  conn.bindStart("q");
+  conn.paramInt4Array(values, 4, 0);
+  conn.bindEnd();
+  t.eqStr("an empty window at the end", walkArray(w, p, binaryParam(conn)), "[] end");
+
+  // The builder: the header is patched at arrayEnd.
+  conn.bindStart("q");
+  t.ok("binaryArrayStart", conn.binaryArrayStart(20));
+  t.ok("binaryArrayInt", conn.binaryArrayInt(MIN_I64()));
+  t.ok("binaryArrayNull", conn.binaryArrayNull());
+  conn.binaryArrayInt(toI64(3));
+  conn.arrayEnd();
+  conn.bindEnd();
+  const built: u8[] = binaryParam(conn);
+  t.eqStr("the builder's int8[]: NULLs and all", walkArray(w, p, built), "[-9223372036854775808,NULL,3] end");
+  t.eqI32("its has-nulls flag", getI32BE(built, 4), 1);
+  t.eqI32("its length", getI32BE(built, 12), 3);
+  t.eqI32("a NULL element is length -1", getI32BE(built, 32), -1);
+  conn.bindStart("q");
+  conn.binaryArrayStart(23);
+  conn.binaryArrayInt(toI64(-2147483648));
+  conn.binaryArrayInt(toI64(2147483647));
+  conn.arrayEnd();
+  conn.bindEnd();
+  const fours: u8[] = binaryParam(conn);
+  t.eqStr("its int4[]", walkArray(w, p, fours), "[-2147483648,2147483647] end");
+  t.eqI32("with no NULLs, flag 0", getI32BE(fours, 4), 0);
+  conn.bindStart("q");
+  conn.binaryArrayStart(23);
+  conn.arrayEnd();
+  conn.bindEnd();
+  t.eqStr("an empty one drops its dimension", drain(conn), "B|||<31>|q||<1>|<1>|<1>|||<12>|||||||||||<23>||E|||<9>|||||");
+  conn.bindStart("q");
+  conn.binaryArrayStart(23);
+  conn.binaryArrayNull();
+  conn.arrayEnd();
+  conn.bindEnd();
+  t.eqStr("one NULL", walkArray(w, p, binaryParam(conn)), "[NULL] end");
+  conn.bindStart("q");
+  conn.binaryArrayStart(20);
+  conn.binaryArrayInt(toI64(1));
+  conn.bindCancel();
+  conn.bindStart("q");
+  conn.paramInt(toI64(7));
+  conn.bindEnd();
+  t.eqStr("a bind after a cancelled binary one owes no codes", drain(conn), "B|||<18>|q||||<1>|||<1>7||E|||<9>|||||");
+  conn.bindStart("q");
+  conn.binaryArrayStart(20);
+  conn.binaryArrayInt(toI64(1));
+  conn.arrayEnd();
+  conn.paramIntArray(values, 0, 1);
+  conn.bindEnd();
+  t.eqStr("a text int array after a binary one keeps code 0", drain(conn), "B|||<|q||<2>|<1>|||<2>||| |||<1>|||||||<20>|||<1>|||<1>|||<8>|||||||<1>|||<3>{9}||E|||<9>|||||");
+  t.ok("binaryArrayStart with no Bind open is refused", !conn.binaryArrayStart(20));
+  t.ok("and so is paramInt8Array", !conn.paramInt8Array(values, 0, 1));
+  t.ok("leaving nothing open: a Bind after them is taken", conn.bindStart("q") && conn.bindCancel());
+
+  // Room: the first binary parameter owes a code for itself and each one before
+  // it, every later parameter one more; a text-only bind owes none.
+  const c = config();
+  c.maxOutput = 1024;
+  const fit = ready(c);
+  fit.bindStart("q");
+  // 1024 - 17 for the tail, - 12 for the Bind of `q`, - 4 + 20 for the text parameter, - 2 * 2 owed codes.
+  const room: i32 = 1024 - 17 - 12 - 24 - 4;
+  // The int4[] takes 4 + 20 + 8 per element.
+  const most: i32 = (room - 24) / 8;
+  const ints: i64[] = [];
+  for (let i: i32 = 0; i < most + 1; i++) {
+    ints.push(toI64(i));
+  }
+  fit.paramText(repeat("p", 20));
+  t.ok("an int4[] one element too long is refused", !fit.paramInt4Array(ints, 0, most + 1));
+  t.ok("one that fits is taken", fit.paramInt4Array(ints, 0, most));
+  fit.bindEnd();
+  fit.sync();
+  t.ok("and bindEnd and Sync stay within maxOutput", fit.outputEnd() <= 1024 && fit.outputEnd() > 1024 - 8);
+  const tight = ready(c);
+  tight.bindStart("q");
+  tight.binaryArrayStart(23);
+  let n: i32 = 0;
+  while (tight.binaryArrayInt(toI64(n))) {
+    n += 1;
+  }
+  t.eqI32("the builder takes elements until there is no room", n, (1024 - 17 - 12 - 4 - 2 * 1 - 20) / 8);
+  t.ok("and refuses a NULL too", !tight.binaryArrayNull());
+  tight.arrayEnd();
+  t.ok("the array ends with the elements it has", tight.bindEnd());
+  tight.sync();
+  // 969 bytes of room hold 121 elements; the one byte left is too few for another.
+  t.eqI32("which fill maxOutput but for that byte", tight.outputEnd(), 1023);
 };
 
 const binaryRows = (t: Suite): void => {
@@ -1453,6 +1606,7 @@ export const main = (): number => {
   intArrays(t);
   arrayBuilder(t);
   binaryBinds(t);
+  binaryParams(t);
   binaryRows(t);
   binaryInts(t);
   binaryTimes(t);

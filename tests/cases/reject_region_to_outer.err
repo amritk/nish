@@ -1,0 +1,1 @@
+stores `b` into `h.box`: region memory kept by memory outside the region

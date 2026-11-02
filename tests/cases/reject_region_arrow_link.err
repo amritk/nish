@@ -1,0 +1,1 @@
+stores `h.node` into `b.child`: memory outside a region kept by the region's memory

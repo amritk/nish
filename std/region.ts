@@ -1,0 +1,95 @@
+/**
+ * `nish:region` — memory a program frees when it says so (docs/LANGUAGE.md,
+ * "Regions").
+ *
+ *     import { Region, enterWith, free, regionWith } from "nish:region"
+ *
+ *     const r: Region<Session> = regionWith(id, open)
+ *     const n: i32 = enterWith(r, out, serve)
+ *     free(r)
+ *
+ * This file is the source behind the builtin module, and it is imported only
+ * by that name: `nish/region` is refused, so there is one spelling for the
+ * checker's rules to be read under (`src/region-check.ts`). What is written
+ * here is the meaning, over five intrinsics the compiler gives bodies of their
+ * own (`src/emit-region.ts`), which swap the thread's arena for the region's
+ * around the function they run:
+ *
+ *   - `region(f)` makes a region, runs `f` with every allocation landing in
+ *     it, and keeps what `f` answers as the region's root;
+ *   - `enter(r, f)` runs `f(root)` the same way, and answers `f`'s scalar;
+ *   - `free(r)` gives the region's memory back. A handle used after it is
+ *     freed, or entered twice, or freed while entered, stops the program.
+ *
+ * A `Region<T>` is a handle, a 64-bit integer, and not a pointer: the root
+ * never leaves the region except through `enter`'s function, and that
+ * function answers a scalar, so nothing outside a region can point into it.
+ *
+ * Under Node the module is answered by `runtime/nish.mjs`, where a region is
+ * an entry in a table and `free` drops it.
+ */
+
+/**
+ * A region whose root is a `T`. The compiler resolves the name to a type of
+ * its own, a 64-bit handle; this declaration is what `tsc` and the editor
+ * read through `runtime/nish.d.ts`.
+ */
+export class Region<T> {
+  /** Never read: the compiler's type has no fields. */
+  root: T | null = null
+}
+
+// The five intrinsics below are the runtime's region calls. Each is written
+// here as a call of itself, so it has a type and nothing more; the compiler
+// gives every instance a body of its own (`src/emit-region.ts`), one call into
+// `runtime/runtime-region.c`.
+
+/** `nish_region_new`: a fresh handle, never 0. */
+const handleNew = (): i64 => handleNew()
+
+/** `nish_region_enter` on a new region, whose root is still null. */
+const open = (h: i64): void => open(h)
+
+/** `nish_region_leave` keeping `root`: the handle, typed by its root. */
+const close = <T>(h: i64, root: T): Region<T> => close(h, root)
+
+/** `nish_region_enter` on a made region: its root. */
+const reopen = <T>(r: Region<T>): T => reopen(r)
+
+/** `nish_region_leave` with the root `reopen` gave. */
+const leave = <T>(r: Region<T>, root: T): void => leave(r, root)
+
+/** A new region, whose root is what `f` answers; everything `f` allocates is in it. */
+export const region = <T>(f: () => T): Region<T> => {
+  const h: i64 = handleNew()
+  open(h)
+  return close(h, f())
+}
+
+/** `region` with one argument for `f`, because the arrow `region` runs captures nothing. */
+export const regionWith = <A, T>(arg: A, f: (arg: A) => T): Region<T> => {
+  const h: i64 = handleNew()
+  open(h)
+  return close(h, f(arg))
+}
+
+/** `f(root)`, allocating in the region: the one way to reach what a region holds. */
+export const enter = <T, R>(r: Region<T>, f: (root: T) => R): R => {
+  const root: T = reopen(r)
+  const result: R = f(root)
+  leave(r, root)
+  return result
+}
+
+/** `enter` with one argument for `f`. */
+export const enterWith = <T, A, R>(r: Region<T>, arg: A, f: (root: T, arg: A) => R): R => {
+  const root: T = reopen(r)
+  const result: R = f(root, arg)
+  leave(r, root)
+  return result
+}
+
+/** Give the region's memory back. The handle is dead after it. The compiler writes the body. */
+export const free = <T>(_r: Region<T>): void => {
+  // `nish_region_free`: see above.
+}

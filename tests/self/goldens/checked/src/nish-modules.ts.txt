@@ -5,6 +5,7 @@ import BUILTIN_SCHEME from "./branding" -> const BUILTIN_SCHEME
 const SIMD_SPECIFIER: string = "nish:simd" [exported]
 const SIMD_TYPE_NAMES: string = "u8x16, u16x8, i32x4, u32x4, f32x4, f64x2"
 const SECRET_SPECIFIER: string = "nish:secret" [exported]
+const REGION_SPECIFIER: string = "nish:region" [exported]
 const NET_INT: i32 = 105 [exported]
 const NET_STRING: i32 = 115 [exported]
 const NET_WRITTEN: i32 = 119
@@ -66,7 +67,7 @@ function nishModuleNames(): string -> @nishModuleNames [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat unsafeModule
   stackSites=0 stackLocals=0
-  callee +0:163 unsafeModule -> @unsafeModule
+  callee +0:188 unsafeModule -> @unsafeModule
 function isNishSourceModule(specifier: string): boolean -> @isNishSourceModule [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

@@ -1,0 +1,1 @@
+hands `seen` to `Set<i32>.add`, which may grow it

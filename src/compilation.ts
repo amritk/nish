@@ -48,6 +48,7 @@
 // answers with the IR text per module and the stem each module's file should
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
+import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings } from "./escape"
@@ -63,6 +64,7 @@ import {
   isBuiltinSpecifier,
   isNishSourceModule,
   nishModuleExports,
+  REGION_SPECIFIER,
   SECRET_SPECIFIER,
   unsafeModule,
 } from "./nish-modules"
@@ -113,6 +115,7 @@ import {
   EnumInfo,
   FunctionSig,
   ImportBinding,
+  ParallelCall,
   STRUCT_CLASS,
   StructRegistry,
   StructTemplateInfo,
@@ -181,7 +184,9 @@ import {
   voidTaskResultMessage,
   destinationEdits,
   threadsModuleName,
+  scopeSymbol,
 } from "./parallel"
+import { crossingMessage, holdsRegion, regionCallFindings } from "./region-rules"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
 import { jsonQuote, splitByte } from "./strings"
@@ -881,17 +886,28 @@ export class Compilation {
    */
   resolveSpecifier(dir: string, specifier: string): ResolvedModule {
     if (isNishSourceModule(specifier)) {
-      // `nish:secret` is a builtin module with source behind it
-      // (`src/nish-modules.ts`): the library's `std/secret.ts`, in package
-      // `nish`, which is what the rules of `src/secret.ts` recognise it by.
+      // `nish:secret` and `nish:region` are builtin modules with source behind
+      // them (`src/nish-modules.ts`): the library's `std/secret.ts` or
+      // `std/region.ts`, in package `nish`, which is what their rules
+      // (`src/secret.ts`, `src/region-check.ts`) recognise them by.
       const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
-      const secretModule: ResolvedModule = {
-        path: stdModulePath(root, SECRET_STD_SPECIFIER),
-        name: stdModuleName(SECRET_STD_SPECIFIER),
+      const std = specifier === REGION_SPECIFIER ? REGION_STD_SPECIFIER : SECRET_STD_SPECIFIER
+      const sourceModule: ResolvedModule = {
+        path: stdModulePath(root, std),
+        name: stdModuleName(std),
         packageName: CLI,
         error: "",
       }
-      return secretModule
+      return sourceModule
+    }
+    if (specifier === REGION_STD_SPECIFIER) {
+      const spelled: ResolvedModule = {
+        path: "",
+        name: "",
+        packageName: "",
+        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
+      }
+      return spelled
     }
     if (specifier === SECRET_STD_SPECIFIER) {
       // One spelling for one module: the rules are the builtin module's, so it
@@ -2246,6 +2262,7 @@ export class Compilation {
     const facts = this.analyze()
     this.checkScopes(facts)
     this.checkSecrets(facts)
+    this.checkRegions(facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.parallelCalls) {
@@ -2283,6 +2300,89 @@ export class Compilation {
         const warning = allocationWarning(this.table, sig, fn, result, facts)
         if (!refused && warning.length > 0) {
           this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning)
+        }
+      }
+    }
+  }
+
+  /**
+   * `nish:region`: what the function a region runs may do there, and where a
+   * `Region` may not travel (`src/region-rules.ts`). The function's own rules
+   * are reported at the call that ran it, a store that breaks them at the
+   * store; a handle that reaches another thread at the call or send that
+   * hands it over.
+   */
+  checkRegions(facts: FactsTable): void {
+    const programs: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      programs.push(unit.checker.program)
+    }
+    const fresh = new FreshResults(programs, this.table, facts)
+    const scopeName = scopeSymbol(programs)
+    const table = this.table
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const call of program.regionCalls) {
+        const findings = regionCallFindings(
+          programs,
+          table,
+          facts,
+          program,
+          call.node,
+          call.sig,
+          scopeName,
+          fresh
+        )
+        for (const finding of findings) {
+          this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
+        }
+      }
+      const crossings: ParallelCall[] = []
+      for (const call of program.spawnCalls) {
+        crossings.push(call)
+      }
+      for (const call of program.parallelCalls) {
+        crossings.push(call)
+      }
+      for (const call of crossings) {
+        const fn = parallelBodyOf(call.sig)
+        const instance = call.sig.instance
+        if (fn === null || instance === null) {
+          continue
+        }
+        const types: i32[] = []
+        for (const type of instance.typeArgs) {
+          types.push(type)
+        }
+        for (const type of fn.paramTypes) {
+          types.push(type)
+        }
+        types.push(fn.returnType)
+        for (const type of types) {
+          if (holdsRegion(programs, table, type)) {
+            const what = `A value \`${fn.sourceName}\` is handed or answers on another thread`
+            this.sink.report(
+              program.source,
+              call.node.start,
+              call.node.end,
+              crossingMessage(table, what, type)
+            )
+            break
+          }
+        }
+      }
+      for (const call of program.channelSends) {
+        for (const type of call.sig.paramTypes) {
+          if (holdsRegion(programs, table, type)) {
+            const what = "The value a channel sends to another thread"
+            this.sink.report(
+              program.source,
+              call.node.start,
+              call.node.end,
+              crossingMessage(table, what, type)
+            )
+            break
+          }
         }
       }
     }
@@ -2959,7 +3059,12 @@ export class Compilation {
     let i = 0
     while (i < this.modules.length && i < units.length) {
       const program = this.modules[i].checker.program
-      if (program.isCollections() || program.isSecretLibrary() || program.isMathLibrary()) {
+      if (
+        program.isCollections() ||
+        program.isSecretLibrary() ||
+        program.isRegionLibrary() ||
+        program.isMathLibrary()
+      ) {
         out.push(units[i])
       }
       i = i + 1

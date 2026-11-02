@@ -1,9 +1,10 @@
 # Memory
 
-Nish has no garbage collector and no `free`. The compiler decides where every
-object, array and string lives, and when its memory is reused, while it
-compiles the program; at run time there is nothing scanning for garbage and
-nothing for you to release. Most programs never need to think about memory at
+Nish has no garbage collector, and outside a region nothing to `free`. The
+compiler decides where every object, array and string lives, and when its
+memory is reused, while it compiles the program; at run time there is nothing
+scanning for garbage and, unless you make a [region](regions.md), nothing for
+you to release. Most programs never need to think about memory at
 all. This page says why, and what the exceptions are. The reference sections
 are [Memory model](../../LANGUAGE.md#memory-model) and
 [`using a = arena()`](../../LANGUAGE.md#using-a--arena).
@@ -49,7 +50,8 @@ throughout.
 None of this changes what a program computes, only where its memory lives
 and when it is reused. Unlike in C or Rust:
 
-- you never free anything, and so never free something twice;
+- you never free anything but a [region](regions.md), and freeing one twice
+  stops the program with a message rather than corrupting memory;
 - a value you can still reach is never released under you;
 - there are no lifetimes or ownership annotations to write.
 
@@ -152,3 +154,7 @@ ends. Under Node, where the program runs as plain TypeScript, it does nothing.
 without checking that nothing still pointed into it. They were removed before
 1.0, and a call to either is now an unknown builtin: write `using a = arena()`
 instead.
+
+Memory that has to outlive one block but not the program, such as the state a
+server keeps per connection, goes in a region you free yourself:
+[Regions](regions.md).
