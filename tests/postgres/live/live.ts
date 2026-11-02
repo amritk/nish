@@ -1492,6 +1492,14 @@ const scaleCase = (target: PgTarget, label: string, n: i32, select: string, fail
         if (!fails) {
           console.log(failed(pool.ticket, conn))
           code = 1
+        } else {
+          // The run fails for the reason the statement gives, division by zero, and no other.
+          const error = conn.lastError
+          const sqlstate: string = error === null ? "no error" : error.code
+          if (sqlstate !== "22012") {
+            console.log(`${label}: failed with ${sqlstate}, not 22012`)
+            code = 1
+          }
         }
         b.fail(r)
       } else if (r >= 0 && event === PG_ROW && !b.row(r, conn)) {
@@ -1553,8 +1561,9 @@ const scaleCase = (target: PgTarget, label: string, n: i32, select: string, fail
 /**
  * `batchscale`: one execution answers a whole take at each size up to the
  * most, 65536. Keys repeat (a quarter of each batch asks again for an earlier
- * key), a third have no row and the rest one or two, which come in order. At
- * 4096 every key collides in the batcher's table, so past its probe bound
+ * key), a third have no row and the rest one or two, which come in order;
+ * and a batch of three requests, a key of two rows asked twice and a key
+ * with none. At 4096 every key collides in the batcher's table, so past its probe bound
  * repeats go to the server as keys of their own and are answered the same.
  * Then a run the server fails, and one with no row for any key, at 65536.
  */
@@ -1566,6 +1575,8 @@ const batchscale = (target: PgTarget): i32 => {
     const distinct: i32 = n - n / toI32(4)
     code += scaleCase(target, `batch of ${n}`, n, select, false, (t: i32): i64 => toI64((t % distinct) + toI32(1)))
   }
+  // Keys 2, 3 and 2: one key of two rows asked twice, and one with none.
+  code += scaleCase(target, "batch of 3", toI32(3), select, false, (t: i32): i64 => toI64(t === toI32(1) ? toI32(3) : toI32(2)))
   code += scaleCase(target, "colliding batch of 4096", toI32(4096), select, false, (t: i32): i64 => collidingKey((t % toI32(3072)) + toI32(1)))
   code += scaleCase(target, "failed batch of 65536", toI32(65536), "select 1 / (q.key - q.key) as g", true, (t: i32): i64 => toI64(t + toI32(1)))
   code += scaleCase(target, "empty batch of 65536", toI32(65536), select, false, (t: i32): i64 => toI64((t + toI32(1)) * toI32(3)))

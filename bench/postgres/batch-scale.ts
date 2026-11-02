@@ -1,7 +1,7 @@
 // What a `PgBatcher` take costs per key as `maxRequests` grows from 1 to its
 // most, 65536, against a live PostgreSQL on this machine:
 //
-//   batch-scale <spread|collide> <port> <user> <password> <database> <n> <rounds>
+//   batch-scale <spread|ranges|collide> <port> <user> <password> <database> <n> <rounds>
 //
 // `bench/postgres/batch-scale.mjs` builds it with `--link` and runs every
 // size. One connection, one batcher of int8 keys taking at most `n`
@@ -13,7 +13,10 @@
 //
 // - spread: request `t`'s key is `1 + t % d`, `d` three quarters of `n`, so
 //   the last quarter repeat earlier keys.
-// - collide: the same, each key `j` made `collidingKey(j)`, whose high half
+// - ranges: the same keys split into two dense runs of ids, from 1 and from
+//   131073, whose slots would overlap in the batcher's table under a hash
+//   near the identity: the shape of two id sequences in one lookup.
+// - collide: the same as spread, each key `j` made `collidingKey(j)`, whose high half
 //   cancels its low one in the batcher's int hash: every key lands in the
 //   same slot of the batcher's table, the probe's worst case.
 //
@@ -195,13 +198,21 @@ class Driver {
     }
   }
 
-  /** One round: `n` requests, spread or colliding keys, taken as one execution and answered; false, the reason printed, when the connection fails. */
-  round(collide: boolean): boolean {
+  /** One round: `n` requests of `mode`'s keys, taken as one execution and answered; false, the reason printed, when the connection fails. */
+  round(mode: string): boolean {
     const n: i32 = toI32(this.keys.length)
     const distinct: i32 = n - n / toI32(4)
+    const half: i32 = distinct / toI32(2)
     for (let t: i32 = 0; t < n; t++) {
-      const j: i64 = toI64((t % distinct) + toI32(1))
-      this.keys[t] = collide ? collidingKey(j) : j
+      const i: i32 = t % distinct
+      const j: i64 = toI64(i + toI32(1))
+      if (mode === "collide") {
+        this.keys[t] = collidingKey(j)
+      } else if (mode === "ranges") {
+        this.keys[t] = i < half ? j : toI64(131073 + (i - half))
+      } else {
+        this.keys[t] = j
+      }
       this.seen[t] = 0
       this.ended[t] = false
       if (!this.batcher.addInt(this.keys[t], t)) {
@@ -301,17 +312,16 @@ class Driver {
 
 export const main = (): i32 => {
   if (process.argv.length < 8) {
-    console.log("usage: batch-scale <spread|collide> <port> <user> <password> <database> <n> <rounds>")
+    console.log("usage: batch-scale <spread|ranges|collide> <port> <user> <password> <database> <n> <rounds>")
     return 2
   }
   const mode: string = process.argv[1]
   const n: i32 = parseInt(process.argv[6])
   const rounds: i32 = parseInt(process.argv[7])
-  if ((mode !== "spread" && mode !== "collide") || n < 1 || n > 65536 || rounds < 1) {
+  if ((mode !== "spread" && mode !== "ranges" && mode !== "collide") || n < 1 || n > 65536 || rounds < 1) {
     console.log(`bad arguments: ${mode} ${n} ${rounds}`)
     return 2
   }
-  const collide: boolean = mode === "collide"
   const before: i64 = peakKiB()
   const config = new PgBatchConfig()
   config.name = "scale"
@@ -336,7 +346,7 @@ export const main = (): i32 => {
   netAddress(address, "127.0.0.1", parseInt(process.argv[2]))
   const driver = new Driver(pool, batcher, address, n)
   // The connect, SCRAM, the prepare and the plan fall in this one.
-  if (!driver.round(collide)) {
+  if (!driver.round(mode)) {
     return 1
   }
   driver.rows = 0
@@ -344,7 +354,7 @@ export const main = (): i32 => {
   const cpu0: i64 = cpuMicros()
   const t0: i64 = monotonicNanos()
   for (let r: i32 = 0; r < rounds; r++) {
-    if (!driver.round(collide)) {
+    if (!driver.round(mode)) {
       return 1
     }
   }

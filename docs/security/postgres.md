@@ -64,7 +64,8 @@ the key the last row was for, and fails the run rather than route the row,
 so a server cannot hand one request's rows to another, nor make the helper
 read past its arrays (PG-14). Its state is bounded by its config — at most
 `queueSize` requests and `queueBytes` of text keys waiting, `runs` executions
-of `maxRequests` requests each. The queue is allocated in its constructor;
+of `maxRequests` requests each. A run holds two `i32` arrays of `maxRequests`,
+512 KiB at the most, 65,536, so 512 MiB at the most `runs`, 1024. The queue is allocated in its constructor;
 the dedup table and each run's arrays grow, by doubling, only to the largest
 take the program's own `add` calls queued, never past `maxRequests`, so no
 server answer makes it grow. A key refused for room, by `maxBytes` or by the

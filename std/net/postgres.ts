@@ -149,7 +149,8 @@
  * **Batching.** `PgBatcher` turns many reads of one row shape by key — a user
  * by id, an article by slug — into one execution of a statement over
  * `unnest($1) with ordinality`. `addInt` or `addText` queues a request's key
- * and tag; `take(conn)` binds the oldest waiting, each distinct key once, up
+ * and tag; `take(conn)` binds the oldest waiting, each distinct key once (past
+ * `PG_BATCH_PROBES` slots of its table probe, a key is bound again), up
  * to `maxRequests` and `maxBytes`, and answers a run's handle; `row`, `end`
  * and `fail` take that execution's events (a handle already answered makes
  * them a no-op counted in `stray`, so a server's late event cannot panic),
@@ -3265,7 +3266,9 @@ export const PG_BATCH_FAILED: i32 = 4
 // with it: each request probes at most `PG_BATCH_PROBES` slots, and the
 // arrays sized by it grow with the batches taken, not with the cap. It is
 // 65536 so that one full run's arrays stay at 512 KiB, and one execution's
-// key array, which the server reads into memory whole, at a few MiB.
+// int8 key array, which the server reads into memory whole, at about 1.4 MiB
+// (65536 keys of at most 20 digits and a comma); a text key array is bounded
+// by `maxBytes` instead.
 const PG_BATCH_MAX_REQUESTS: i32 = 65536
 // The most occupied slots one request's probe visits in `take` before its key
 // is bound again rather than found. A take of n requests holds at most n - 1
@@ -3282,11 +3285,8 @@ const PG_BATCH_USES: i32 = 1048576
 // The array's `{}` and the longest int8 element, `-9223372036854775808`.
 const PG_BATCH_MIN_BYTES: i32 = 22
 
-// The 32-bit halves of an int8 key, and the odd multipliers `pgIntHash` mixes them with.
+// The low 32 bits of an int8 key.
 const PG_LOW32: i64 = 4294967295
-const PG_HASH_HIGH: u32 = 2654435769
-const PG_HASH_MIX1: u32 = 2246822507
-const PG_HASH_MIX2: u32 = 3266489909
 
 /**
  * The batcher's table hash of an int8 key, 31 bits: the high half times an
@@ -3300,9 +3300,9 @@ const PG_HASH_MIX2: u32 = 3266489909
 const pgIntHash = (key: i64): i32 => {
   const lo: u32 = toU32(key & PG_LOW32)
   const hi: u32 = toU32((key >> toI64(32)) & PG_LOW32)
-  let h: u32 = lo ^ (hi * PG_HASH_HIGH)
-  h = (h ^ (h >> 16)) * PG_HASH_MIX1
-  h = (h ^ (h >> 13)) * PG_HASH_MIX2
+  let h: u32 = lo ^ (hi * 2654435769)
+  h = (h ^ (h >> 16)) * 2246822507
+  h = (h ^ (h >> 13)) * 3266489909
   h = h ^ (h >> 16)
   return toI32(h >> 1)
 }
@@ -3373,7 +3373,9 @@ class PgBatchRun {
  * it reads no clock and makes no socket. Each request is a key and the
  * caller's `tag`, queued by `addInt` or `addText`. When a connection is free,
  * `take(conn)` binds up to `maxRequests` of them, and up to `maxBytes` of
- * keys, as one execution of `sql`, each distinct key once, and answers the
+ * keys, as one execution of `sql`, each distinct key once (a key whose
+ * probe of the batcher's table passes 1024 slots, which takes keys chosen to
+ * collide, is bound again and answered the same), and answers the
  * execution's run handle. Each `PG_ROW` of that execution goes to
  * `row(run, conn)`, its `PG_COMPLETE` to `end(run)`, and an error or a lost
  * connection to `fail(run)`; after each, `next(run)` answers events until

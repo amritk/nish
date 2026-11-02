@@ -223,13 +223,16 @@ const ints = (most: i32): PgBatchConfig => {
   return c;
 };
 
+const GOLDEN: i64 = 2654435769;
+const LOW32: i64 = 4294967295;
+
 /**
  * The int8 key `j * 2^32 + (j * 2654435769 mod 2^32)`: its low half is its
  * high half times the multiplier the batcher's int hash xors in, so the two
  * cancel and every such key hashes alike.
  */
 const colliding = (j: i32): i64 => {
-  return (toI64(j) << toI64(32)) + ((toI64(j) * toI64(2654435769)) & toI64(4294967295));
+  return (toI64(j) << toI64(32)) + ((toI64(j) * GOLDEN) & LOW32);
 };
 
 /** The elements of an array `{...}`, by its commas. */
@@ -309,7 +312,12 @@ const collisions = (t: Suite): void => {
   const lost: i32 = b.take(conn);
   keys(conn);
   const failed: string = route(b, lost, conn, failure(row("only", "1")));
-  t.ok("a failed run of 1100 keys answers each request PG_BATCH_FAILED", failed.startsWith("0=only,0!,1!,2!") && failed.endsWith(",1098!,1099!"));
+  // The one row routed, then every request failed once, in tag order.
+  const want: string[] = ["0=only"];
+  for (let j: i32 = 0; j < 1100; j++) {
+    want.push(`${j}!`);
+  }
+  t.eqStr("a failed run of 1100 keys answers each request PG_BATCH_FAILED", failed, want.join(","));
   b.addInt(toI64(1), 0);
   t.ok("and the next take answers a run", b.take(conn) >= 0);
 };

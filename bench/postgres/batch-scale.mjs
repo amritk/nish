@@ -13,8 +13,8 @@
 // postgres account. A timed run refuses a server whose major version is not
 // 18; --validate prints the version and runs on any.
 //
-// The cells are both modes (spread keys, and keys that all collide in the
-// batcher's table) at 1, 1024, 1025, 4096 and 65536 requests per take. A
+// The cells are every mode (spread keys, the same keys in two dense id
+// ranges, and keys that all collide in the batcher's table) at 1, 1024, 1025, 4096 and 65536 requests per take. A
 // run of a cell takes enough rounds to answer at least 262,144 requests.
 // Its figures:
 //
@@ -27,7 +27,10 @@
 //   of the take costs, the batcher, its run, the connection's buffers and
 //   the bench's own arrays together.
 //
-// Each figure is the median over the runs, with its min and max.
+// Each figure is the median over the runs, with its min and max. Under the
+// table, per mode, the flatness of the wall time: the median at 65536
+// requests over the median at 1024, and the noise band beside it, the widest
+// (max - min) / median of those two cells.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import { createServer } from "node:net"
@@ -42,7 +45,7 @@ const outDir = path.join(root, "build", "bench", "postgres")
 const pgBin = process.env.PG_BIN || "/usr/lib/postgresql/18/bin"
 const nishc = compilerFrom(process.argv)
 
-const MODES = ["spread", "collide"]
+const MODES = ["spread", "ranges", "collide"]
 const SIZES = [1, 1024, 1025, 4096, 65536]
 /** The requests a timed run of a cell answers, at least. */
 const REQUESTS = 262_144
@@ -230,4 +233,15 @@ for (const mode of MODES) {
       `| ${mode} | ${n.toLocaleString("en")} | ${show(wall, 0)} | ${show(cpu, 0)} | ${show(built, 0)} | ${perKey} |`
     )
   }
+}
+
+console.log("\nwall ns/request, 65536 over 1024 requests per take:\n")
+for (const mode of MODES) {
+  const at = (n) => results.get(`${mode} ${n}`).map((o) => o.ns / o.keys)
+  const band = (xs) => (Math.max(...xs) - Math.min(...xs)) / median(xs)
+  const ratio = median(at(65536)) / median(at(1024))
+  const noise = Math.max(band(at(65536)), band(at(1024)))
+  console.log(
+    `- ${mode}: ${ratio.toFixed(2)}x, noise band ${(noise * 100).toFixed(0)}% (max - min over median)`
+  )
 }

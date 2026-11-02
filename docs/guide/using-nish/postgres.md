@@ -585,7 +585,9 @@ select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord)
 `<select>` is the query for one key, which it reads as `q.key`:
 `select a.title from articles a where a.slug = q.key`. Each distinct key is
 bound once however many requests ask for it, and each row goes back to every
-one of them.
+one of them. The one exception is keys chosen to collide in the batcher's
+table: past 1024 slots of probing a key is bound again rather than found,
+and each copy is answered the same.
 
 `PG_BATCH_INT` keys are bound as a text `int8[]`, one `arrayInt` each. The
 statement's `$1::int8[]` would take the [binary builder](#binary-integer-array-parameters)
