@@ -29,7 +29,8 @@
  * Blowfish block, a lane's hash over its blocks, with the v3 / default ratio
  * on fastest rounds and on medians; a v3 binary needs such a CPU
  * to start, so on another the flag is refused. When objdump is there it also
- * counts the BMI2 instructions (shrx, rorx, bextr ...) in each v3 binary.
+ * counts the BMI1 and BMI2 instructions (shrx, rorx, bextr, andn ...) in each
+ * whole v3 binary, not only its body.
  *
  * Usage: node bench/crypto/bcrypt/run.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N] [--ghz F] [--cpu-both]
  * A missing C compiler, libxcrypt or network leaves its rows out with a note.
@@ -393,7 +394,7 @@ if (cpuBoth) {
   const row = (exe) => samples[programs.findIndex((p) => p.exe === path.join(dir, exe))]
   const ns = (ms) => ((ms * 1e6) / blocks).toFixed(1)
   const objdump = run("objdump", ["--version"]).status === 0
-  // BMI2's instructions anywhere in a binary: what `--cpu x86-64-v3` let the backend pick.
+  // BMI1 and BMI2 instructions anywhere in the binary, not only the body: what `--cpu x86-64-v3` let the backend pick.
   const bmi2 = (exe) =>
     (
       run("objdump", ["-d", "--no-show-raw-insn", path.join(dir, exe)], { maxBuffer: 1 << 28 }).stdout.match(
@@ -404,7 +405,7 @@ if (cpuBoth) {
     `\nEach width under both builds: ms per hash, and ns per Blowfish block (the hash's ${blocks} blocks)`
   )
   console.log(
-    `\n| Lanes | default ms | default fastest | default ns/block, fastest | v3 ms | v3 fastest | v3 ns/block, fastest | v3 / default, fastest | on medians |${objdump ? " BMI2 insns, v3 |" : ""}`
+    `\n| Lanes | default ms | default fastest | default ns/block, fastest | v3 ms | v3 fastest | v3 ns/block, fastest | v3 / default, fastest | on medians |${objdump ? " BMI1/2 insns, v3, whole binary |" : ""}`
   )
   console.log(`| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |${objdump ? " ---: |" : ""}`)
   for (const w of widths) {

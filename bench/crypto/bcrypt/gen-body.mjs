@@ -89,7 +89,7 @@ if (process.argv[2] === "--module") {
   // A copy of the module with every width's body written again, unrolled
   // with `--unroll`: the experiment `unroll.mjs` times against the module.
   const to = process.argv[3]
-  if (!to) {
+  if (!to || to.startsWith("--")) {
     console.error("usage: node bench/crypto/bcrypt/gen-body.mjs --module <out.ts> [--unroll]")
     process.exit(2)
   }

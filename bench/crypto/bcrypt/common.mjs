@@ -140,9 +140,11 @@ export const timeRounds = (programs, rounds, check) => {
   return samples
 }
 
+/** The middle round, or the mean of the two middle rounds for an even count. */
 export const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b)
-  return s[Math.floor(s.length / 2)]
+  const mid = Math.floor(s.length / 2)
+  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid]
 }
 
 /** The fastest round: the estimator a shared host's interference cannot inflate. */

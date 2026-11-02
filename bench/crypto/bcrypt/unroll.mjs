@@ -7,14 +7,27 @@
  * through `nish/crypto/bcrypt`. The module against its copy is the noise
  * band; `unrolled` is a change only where it beats the module by more than
  * that band. All programs must print the same hash. They run in interleaved
- * rounds (common.mjs); a row is the median and spread of `--rounds`.
+ * rounds (common.mjs); a row is the median and spread of `--rounds` and the
+ * fastest round, and each ratio over the module is given on fastest rounds
+ * (the one to read on a shared host) and on medians.
  *
  * Usage: node bench/crypto/bcrypt/unroll.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N] [--widths 4,5,6]
  * Build products go to build/bench/bcrypt/unroll/.
  */
 import fs from "node:fs"
 import path from "node:path"
-import { argValue, band, buildNish, intArg, median, nishLoopN, root, run, timeRounds } from "./common.mjs"
+import {
+  argValue,
+  band,
+  buildNish,
+  fastest,
+  intArg,
+  median,
+  nishLoopN,
+  root,
+  run,
+  timeRounds,
+} from "./common.mjs"
 
 const compiler = argValue("--compiler", path.join(root, "build", "nish"))
 const hashes = intArg("--hashes", 6, 1, 1e6)
@@ -75,12 +88,18 @@ if (outputs.size !== 1) {
 }
 
 console.log(
-  `CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, median and spread of ${rounds} rounds)\n`
+  `CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, ${rounds} rounds: median and spread, then fastest)\n`
 )
-console.log("| Lanes | module | copy | unrolled | copy / module | unrolled / module |")
-console.log("| ---: | ---: | ---: | ---: | ---: | ---: |")
+console.log(
+  "| Lanes | module | copy | unrolled | copy / module, fastest | unrolled / module, fastest | copy / module, median | unrolled / module, median |"
+)
+console.log("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
 for (const w of widths) {
   const [m, c, u] = kinds.map(([kind]) => samples[programs.findIndex((p) => p.w === w && p.name === kind)])
-  const ratio = (xs) => (median(xs) / median(m)).toFixed(3)
-  console.log(`| ${w} | ${band(m)} | ${band(c)} | ${band(u)} | ${ratio(c)} | ${ratio(u)} |`)
+  const quick = (xs) => (fastest(xs) / fastest(m)).toFixed(3)
+  const mid = (xs) => (median(xs) / median(m)).toFixed(3)
+  const row = (xs) => `${band(xs)}, ${fastest(xs).toFixed(1)}`
+  console.log(
+    `| ${w} | ${row(m)} | ${row(c)} | ${row(u)} | ${quick(c)} | ${quick(u)} | ${mid(c)} | ${mid(u)} |`
+  )
 }
