@@ -2743,6 +2743,21 @@ request. It reads no clock: when to take is the loop's choice, or a `PgBatchCloc
 guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
 
+**Call another service from a route handler** — there is no `await fetch()`
+in a handler and no event-loop callback: `nish/net/upstream`'s `Upstream(h,
+origin, limits)` is a pool of keep-alive connections to one `http:` origin on
+the `HttpHandler`'s own loop. `users.get(req, path)` returns at once — test it
+for `UPSTREAM_E_FULL`, which holds nothing — and keeps `req` held; after each
+`h.wait(ms)`, `while (users.ready())` `take()`s every finished call, answers
+`r.req` (`r.ok`, `r.status` and `r.body[0 .. r.length)`, or `r.error`: the
+codec's `HTTP1_E_` refusal or an `UPSTREAM_E_` code such as `TIMEOUT`) and
+`release`s it once. The origin is looked up once at start-up; set
+`UpstreamLimits.outbound` when it comes from input. Each connection takes a
+handler watch id from `firstId` (8) up, so keep your own `h.watch` ids below
+it. (No block, as for `nish/text`; `tests/link/net_upstream` is its program,
+and the user guide's [calling-services page](guide/using-nish/calling-services.md)
+its walk-through.)
+
 **Draw to the whole terminal** (a game, a dashboard) — there is no curses and
 no `process.stdout.on("resize")`: `runTerminal(options, state, update, render)`
 from `nish/term-io` opens the terminal, probes what it can draw, steps
