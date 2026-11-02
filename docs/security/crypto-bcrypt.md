@@ -375,8 +375,9 @@ over 8w; every row prints the same hash):
 | tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 62.0 (61.6–68.1) |
 | tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 24.6 (23.0–27.0) |
 
-The `bcryptHashN` rows this table held, one to six lanes, no longer match
-the module: five and six lanes gained nothing on four there, and lead now. The current figures, per width, are in
+The `bcryptHashN` rows this table held, one to six lanes, were measured on
+machine C and are removed. Five and six lanes did not lead there; on machine
+D they do. The current figures, per width, are in
 [BMI2 and x86-64-v3](#bmi2-and-x86-64-v3-measured-not-built), where six lanes
 lead.
 
@@ -610,8 +611,8 @@ about 4 to 9% across D's medians (1.09) and F's fastest rounds (1.08 and
 told inside the noise: on F's fastest rounds the spill-free baseline
 `base-shr` is level with BMI2's `rorx-shr` (14.7 and 14.6 against 14.8 and
 14.7), while on D's medians `rorx-shr` is 9 to 11% ahead of `base-shr`
-(15.1 against 16.5 to 16.8). The medians on F swing the same rows from 0.83
-to 1.19 between two runs, which is why they are not the estimator to judge
+(15.1 against 16.5 to 16.8). The medians on F move each row's ratio by up to
+0.17 between two runs (`rorx-ah` 0.86 to 1.03), which is why they are not the estimator to judge
 on. The stop rule's outcome was put to the project's maintainer, who kept
 this verdict: no runtime kernel is built. A quiet run on a core of another
 family whose fastest rounds clear 20% twice would reopen it.
@@ -630,9 +631,11 @@ Rapids the data bounds what the backend could give. Instruction selection
 allocation (the spills and reloads of Nish's six-lane round) together can
 reach at most the hand kernels, which hold every lane in registers and take
 the bytes the best way measured: 4 to 9% over Nish. No change to either, or
-to both, reaches the 20% bar or the 30% goal there; past the spills the core
-is bound by ALU and load throughput, 2.9 cycles per lane half-round against
-the issue bound of 2.6 (the bounds above). AMD is unmeasured (below), and
+to both, reaches the 20% bar there, nor the 30% gain the request this record
+answers aimed for. Which resource limits the core past the spills these
+measurements do not identify: `rorx-ah` runs about 12.3 instructions a lane
+half-round, about 2.05 cycles at a 6-wide issue, yet is no faster than Nish's
+15.7. The ceiling is the measured one, not a derived bound. AMD is unmeasured (below), and
 the answer there is open.
 
 **Why v3 does not help: the assembly.** In `bcryptBodyN` built with `-g`,

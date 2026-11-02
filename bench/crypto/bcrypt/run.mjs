@@ -200,9 +200,15 @@ const have = (cmd) => run(cmd, ["--version"]).status === 0
 fs.mkdirSync(dir, { recursive: true })
 const programs = []
 
-if (cpuBoth && !/^flags\s*:.*\bbmi2\b.*\bavx2\b|^flags\s*:.*\bavx2\b.*\bbmi2\b/m.test(cpuinfo)) {
+// x86-64-v3 beyond v2: AVX, AVX2, BMI1, BMI2, F16C, FMA, LZCNT (`abm` in
+// /proc/cpuinfo), MOVBE and XSAVE. A CPU missing any of them cannot start the
+// v3 binary, so all are checked before building it.
+const v3Flags = ["avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "abm", "movbe", "xsave"]
+const hostFlags = new Set((cpuinfo.match(/^flags\s*:(.*)$/m)?.[1] ?? "").trim().split(/\s+/))
+const missing = v3Flags.filter((f) => !hostFlags.has(f))
+if (cpuBoth && missing.length > 0) {
   console.error(
-    "--cpu-both: this CPU has no AVX2 and BMI2 in /proc/cpuinfo, so an x86-64-v3 binary would not start"
+    `--cpu-both: /proc/cpuinfo lacks ${missing.join(", ")}, so an x86-64-v3 binary would not start`
   )
   process.exit(1)
 }
