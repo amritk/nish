@@ -796,9 +796,14 @@ const intArray = (conn: PgConnection, c: IntCase, binary: boolean): boolean => {
   return true
 }
 
-/** What `intarrays` reads back of every array: its length, its non-NULL elements, their least, greatest and sum, and the elements of a short one. */
+/**
+ * What `intarrays` reads back of every array: its length, its non-NULL
+ * elements, their least, greatest and sum, each element weighted by its
+ * position (so an array sent out of order differs), and the elements of a
+ * short one.
+ */
 const INT_SUMMARY: string =
-  "count(*), count(x), min(x), max(x), sum(x), case when count(*) <= 4 then string_agg(coalesce(x::text, 'NULL'), ' ' order by ord) else '...' end"
+  "count(*), count(x), min(x), max(x), sum(x), sum(x::numeric * ord), case when count(*) <= 4 then string_agg(coalesce(x::text, 'NULL'), ' ' order by ord) else '...' end"
 
 /** The request `t` of `intarrays` names: a case in text or binary, the mismatch, or the request after it. */
 const intLabel = (cases: IntCase[], t: i32): string => {
@@ -884,7 +889,7 @@ const intarrays = (target: PgTarget): i32 => {
       if (event === PG_ROW) {
         const label: string = intLabel(cases, t)
         const cols: string[] = []
-        for (let c: i32 = 0; c < 6; c++) {
+        for (let c: i32 = 0; c < 7; c++) {
           cols.push(conn.isNull(c) ? "NULL" : conn.columnText(c))
         }
         const row: string = cols.join(" ")

@@ -1298,6 +1298,9 @@ const binaryParams = (t: Suite): void => {
   conn.paramIntArray(values, 0, 1);
   conn.bindEnd();
   t.eqStr("a text int array after a binary one keeps code 0", drain(conn), "B|||<|q||<2>|<1>|||<2>||| |||<1>|||||||<20>|||<1>|||<1>|||<8>|||||||<1>|||<3>{9}||E|||<9>|||||");
+  t.ok("binaryArrayStart with no Bind open is refused", !conn.binaryArrayStart(20));
+  t.ok("and so is paramInt8Array", !conn.paramInt8Array(values, 0, 1));
+  t.ok("leaving nothing open: a Bind after them is taken", conn.bindStart("q") && conn.bindCancel());
 
   // Room: the first binary parameter owes a code for itself and each one before
   // it, every later parameter one more; a text-only bind owes none.

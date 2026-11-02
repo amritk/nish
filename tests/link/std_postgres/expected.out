@@ -371,6 +371,9 @@ PASS  an empty one drops its dimension
 PASS  one NULL
 PASS  a bind after a cancelled binary one owes no codes
 PASS  a text int array after a binary one keeps code 0
+PASS  binaryArrayStart with no Bind open is refused
+PASS  and so is paramInt8Array
+PASS  leaving nothing open: a Bind after them is taken
 PASS  an int4[] one element too long is refused
 PASS  one that fits is taken
 PASS  and bindEnd and Sync stay within maxOutput
@@ -479,4 +482,4 @@ PASS  it is failed
 PASS  a window before it
 PASS  it is failed too
 PASS  int on a refused walk fails
-postgres: 481 passed, 0 failed, 0 skipped
+postgres: 484 passed, 0 failed, 0 skipped

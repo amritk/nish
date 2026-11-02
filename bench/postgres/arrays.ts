@@ -1,6 +1,7 @@
-// What a binary `int4[]` or `int8[]` parameter would save over the text one
-// `paramIntArray` writes, and what `PgBinaryArray` saves over walking an
-// `array_agg` column as text, against a live PostgreSQL on this machine:
+// What a binary `int4[]` or `int8[]` parameter (`paramInt4Array`,
+// `paramInt8Array`) saves over the text one `paramIntArray` writes, and what
+// `PgBinaryArray` saves over walking an `array_agg` column as text, against a
+// live PostgreSQL on this machine:
 //
 //   arrays <mode> <port> <user> <password> <database> <count> <4|8> <length> <text|binary>
 //
@@ -15,23 +16,17 @@
 // - check: unnest's array through `select count(*), bit_xor(x) from
 //   unnest($1) x`, each answer compared with the count and xor of the array
 //   as sent; a difference is a failure. `--validate` runs it for both formats.
-// - encode: no query. text times `count` rounds of `bindStart`,
-//   `paramIntArray` and `bindCancel`, less as many of `bindStart`,
-//   `paramNull` and `bindCancel`; binary times `count` encodes of the array in
-//   PostgreSQL's binary layout into a buffer of its own (`encodeBinary` below,
-//   the encoder a binary parameter would need).
+// - encode: no query. Both formats time `count` rounds of `bindStart`, the
+//   array's parameter (`paramIntArray`, or `paramInt4Array` /
+//   `paramInt8Array`) and `bindCancel`, less as many of `bindStart`,
+//   `paramNull` and `bindCancel`, so each side pays the same Bind around it.
 // - decode: one query, `select array_agg(...)` of `length` hashed integers of
 //   the type, its result in text (`bindStart`) or binary
 //   (`bindStartBinary`); the one row's column is decoded `count` times in
 //   place, by `PgArrayWalker` and `PgText.int`, or by `PgBinaryArray`.
 //
-// A text parameter goes as `paramIntArray` writes it. A binary one goes as
-// `paramBytes` of `encodeBinary`'s bytes, its Bind patched in the output
-// buffer to give that parameter format code 1: the Bind names the statement
-// `qAB`, which leaves the two bytes the format code takes, and the patch
-// rewrites `qAB\0` and the format count 0 to `q\0`, a count of 1 and the
-// code 1, the message's length unchanged. Nothing in `nish/net/postgres`
-// writes a parameter format code; this is a measurement, not an API.
+// A text parameter goes as `paramIntArray` writes it, a binary one as
+// `paramInt4Array` or `paramInt8Array` does: the shipped API, nothing patched.
 //
 // It prints `rows R checksum S failed F count N ns T user U sys K` and, for
 // unnest, any and check, ` server_ns C server_ticks B`: T the timed loop's
@@ -40,7 +35,7 @@
 // loop in nanoseconds (`/proc/<pid>/schedstat` of `pg_backend_pid()`) and B
 // its utime + stime in clock ticks (`/proc/<pid>/stat`). S folds every
 // answer: the counts, or the decoded elements, so text and binary print the
-// same S for the same cell.
+// same S for the same cell; for encode, the elements of every array written.
 import {
   connectResult,
   netAddress,
@@ -91,10 +86,6 @@ const OID_INT4_ARRAY: i32 = 1007
 const OID_INT8_ARRAY: i32 = 1016
 /** The ids `bench_pk` holds, 1 to this; arrays.mjs makes it. */
 const IDS: i64 = 100000
-/** A Bind of statement `qAB` with one parameter and no result format codes, less the parameter's bytes. */
-const BIND_FIXED: i32 = 20
-/** The Execute `bindEnd` writes after the Bind. */
-const EXECUTE_BYTES: i32 = 10
 const AGAIN: i32 = -11
 const WANT_READ: i32 = 1
 const WANT_WRITE: i32 = 2
@@ -191,44 +182,6 @@ const serverTicks = (pid: i64): i64 => {
 
 const serverNanos = (pid: i64): i64 => procNumber(`/proc/${pid}/schedstat`, 0)
 
-/** `v`'s low `size` bytes, most significant first, at `out[at, at + size)`. */
-const putBE = (out: u8[], at: i32, v: i64, size: i32): void => {
-  let x: i64 = v
-  for (let k: i32 = size - 1; k >= 0; k--) {
-    out[at + k] = toU8(toI32(x & 255))
-    x = x >> 8
-  }
-}
-
-/** The bytes `encodeBinary` writes for `count` elements of `size` bytes. */
-const binarySize = (count: i32, size: i32): i32 => (count > 0 ? 20 + count * (4 + size) : 12)
-
-/**
- * `values[0, count)` as a one-dimensional array of element type `oid` (23 or
- * 20) in PostgreSQL's binary layout at `out[0, binarySize(count, size))`:
- * `ndim` (1, or 0 when empty), `hasnull` 0, the element OID, then the length
- * and a lower bound of 1, and each element as its length and its bytes.
- * Answers the bytes written.
- */
-const encodeBinary = (out: u8[], values: i64[], count: i32, oid: i32): i32 => {
-  const size: i32 = oid === OID_INT4 ? 4 : 8
-  putBE(out, 0, count > 0 ? toI64(1) : toI64(0), 4)
-  putBE(out, 4, toI64(0), 4)
-  putBE(out, 8, toI64(oid), 4)
-  if (count === 0) {
-    return 12
-  }
-  putBE(out, 12, toI64(count), 4)
-  putBE(out, 16, toI64(1), 4)
-  let at: i32 = 20
-  for (let i: i32 = 0; i < count && i < toI32(values.length); i++) {
-    putBE(out, at, toI64(size), 4)
-    putBE(out, at + 4, values[i], size)
-    at += 4 + size
-  }
-  return at
-}
-
 /** One connection on an epoll loop, one group in flight, and what its answers fold to. */
 class Driver {
   readonly pool: PgPool
@@ -239,10 +192,9 @@ class Driver {
   readonly length: i32
   readonly oid: i32
   readonly binary: boolean
-  /** `encodeBinary` of `values`, made once. */
-  readonly encoded: u8[]
-  readonly encodedLength: i32
   readonly walker: PgArrayWalker
+  /** The decoder `array` reads with; its `failed` is a decode's failure. */
+  readonly decoder: PgBinary
   readonly array: PgBinaryArray
   /** The decodes each `DECODE` row is given. */
   decodes: i32 = 1
@@ -269,10 +221,9 @@ class Driver {
     this.length = toI32(values.length)
     this.oid = oid
     this.binary = binary
-    this.encoded = new Array<u8>(binarySize(this.length, 8))
-    this.encodedLength = encodeBinary(this.encoded, values, this.length, oid)
     this.walker = new PgArrayWalker()
-    this.array = new PgBinaryArray(new PgBinary())
+    this.decoder = new PgBinary()
+    this.array = new PgBinaryArray(this.decoder)
     for (const v of values) {
       this.xor = this.xor ^ v
     }
@@ -282,27 +233,23 @@ class Driver {
     this.sum = this.sum * 31 + toU32(v & 4294967295)
   }
 
-  /** The array as `paramIntArray` writes it, or as `encodeBinary` does with format code 1. */
-  bindArray(conn: PgConnection, name: string): void {
+  /** The array's parameter, in text or binary; false when refused. */
+  param(conn: PgConnection): boolean {
     if (!this.binary) {
-      conn.bindStart(name)
-      conn.paramIntArray(this.values, 0, this.length)
-      conn.bindEnd()
-      return
+      return conn.paramIntArray(this.values, 0, this.length)
     }
-    conn.bindStart(`${name}AB`)
-    conn.paramBytes(this.encoded, 0, this.encodedLength)
+    return this.oid === OID_INT4
+      ? conn.paramInt4Array(this.values, 0, this.length)
+      : conn.paramInt8Array(this.values, 0, this.length)
+  }
+
+  /** A Bind of statement `name` with the array; a refused parameter is a failure. */
+  bindArray(conn: PgConnection, name: string): void {
+    conn.bindStart(name)
+    if (!this.param(conn)) {
+      this.failed += 1
+    }
     conn.bindEnd()
-    const out: u8[] = conn.outputBuffer()
-    const at: i32 = conn.outputEnd() - EXECUTE_BYTES - BIND_FIXED - this.encodedLength
-    if (at < 0 || out[at] !== 66 || out[at + 7] !== 65 || out[at + 8] !== 66 || out[at + 9] !== 0) {
-      panic("arrays: the Bind is not where it was looked for")
-    }
-    out[at + 7] = toU8(0)
-    out[at + 8] = toU8(0)
-    out[at + 9] = toU8(1)
-    out[at + 10] = toU8(0)
-    out[at + 11] = toU8(1)
   }
 
   bind(conn: PgConnection, mode: i32): void {
@@ -366,7 +313,7 @@ class Driver {
     this.decodeMicros = cpuMicros() - cpu0
     this.decodeSys = sysMicros() - sys0
     this.sum = sum
-    if (elements !== this.length || conn.text.failed || conn.binary.failed) {
+    if (elements !== this.length || conn.text.failed || this.decoder.failed) {
       this.failed += 1
     }
   }
@@ -383,7 +330,7 @@ class Driver {
     }
     const count: i64 = conn.int(0)
     this.add(count)
-    if (mode === UNNEST && count !== toI64(this.length)) {
+    if ((mode === UNNEST || mode === ANY) && count !== toI64(this.length)) {
       this.failed += 1
     } else if (mode === CHECK && (count !== toI64(this.length) || conn.int(1) !== this.xor)) {
       this.failed += 1
@@ -499,45 +446,35 @@ class Driver {
   }
 
   /**
-   * `count` encodes of the array, on `conn` with nothing in flight: text is
-   * `paramIntArray` in a Bind that is cancelled, less a Bind of one NULL
-   * cancelled as often; binary is `encodeBinary`. Answers CPU microseconds
-   * and puts wall nanoseconds in `decodeNanos`; a refused call is a failure.
+   * `count` encodes of the array, on `conn` with nothing in flight: a Bind
+   * holding it in this driver's format, cancelled, less a Bind of one NULL
+   * cancelled as often. Answers CPU microseconds and puts wall nanoseconds in
+   * `decodeNanos`; folds the elements of each array written into `sum`, and
+   * counts a refused call a failure.
    */
   encode(conn: PgConnection, count: i32): i64 {
-    const out: u8[] = new Array<u8>(binarySize(this.length, 8))
-    let base: i64 = 0
-    let baseNanos: i64 = 0
-    if (!this.binary) {
-      const cpu0: i64 = cpuMicros()
-      const t0: i64 = monotonicNanos()
-      for (let i: i32 = 0; i < count; i++) {
-        if (!conn.bindStart("q") || !conn.paramNull() || !conn.bindCancel()) {
-          this.failed += 1
-        }
+    const cpuBase: i64 = cpuMicros()
+    const tBase: i64 = monotonicNanos()
+    for (let i: i32 = 0; i < count; i++) {
+      if (!conn.bindStart("q") || !conn.paramNull() || !conn.bindCancel()) {
+        this.failed += 1
       }
-      baseNanos = monotonicNanos() - t0
-      base = cpuMicros() - cpu0
     }
+    const baseNanos: i64 = monotonicNanos() - tBase
+    const base: i64 = cpuMicros() - cpuBase
     const cpu0: i64 = cpuMicros()
     const t0: i64 = monotonicNanos()
     let sum: u32 = 0
     for (let i: i32 = 0; i < count; i++) {
-      if (this.binary) {
-        sum = sum * 31 + toU32(encodeBinary(out, this.values, this.length, this.oid))
+      if (conn.bindStart("q") && this.param(conn) && conn.bindCancel()) {
+        sum = sum * 31 + toU32(this.length)
       } else {
-        if (!conn.bindStart("q") || !conn.paramIntArray(this.values, 0, this.length) || !conn.bindCancel()) {
-          this.failed += 1
-        }
-        sum = sum * 31 + toU32(conn.outputEnd())
+        this.failed += 1
       }
     }
     this.decodeNanos = monotonicNanos() - t0 - baseNanos
     const cpu: i64 = cpuMicros() - cpu0 - base
-    // The sum keeps the encodes from being dropped; it is not a checksum.
-    if (sum === toU32(1)) {
-      console.log("")
-    }
+    this.sum = sum
     this.rows = toI64(count)
     return cpu
   }
