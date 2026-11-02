@@ -4,7 +4,7 @@ entry: src/nish-modules.ts src/branding.ts
 import BUILTIN_SCHEME from "./branding" -> const BUILTIN_SCHEME
 const SIMD_SPECIFIER: string = "nish:simd" [exported]
 const SIMD_TYPE_NAMES: string = "u8x16, u16x8, i32x4, u32x4, f32x4, f64x2"
-const ASYNC_SPECIFIER: string = "nish:async" [exported]
+const ASYNC_SPECIFIER: string = "nish:async"
 const SECRET_SPECIFIER: string = "nish:secret" [exported]
 const REGION_SPECIFIER: string = "nish:region" [exported]
 const NET_INT: i32 = 105 [exported]

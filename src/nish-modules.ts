@@ -154,7 +154,7 @@ export const simdSuffix = (name: string, prefix: string): string => {
  * (`src/async-check.ts`). They are dotted under `async` so that `spawn` is
  * not `nish:process`'s, which the global name already is.
  */
-export const ASYNC_SPECIFIER: string = "nish:async"
+const ASYNC_SPECIFIER: string = "nish:async"
 
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
