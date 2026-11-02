@@ -248,7 +248,8 @@ the SQL text:
 - `prepare(name, sql, paramTypes)` parses and describes a statement. The types
   are OIDs, and `0` lets the server infer one.
 - `bindStart(name)`, then one `paramInt`, `paramText`, `paramBytes`,
-  `paramTextArray`, `paramIntArray`, `paramNull` or array (below) per
+  `paramTextArray`, `paramIntArray`, `paramInt4Array`, `paramInt8Array`,
+  `paramNull` or array (below) per
   parameter, then `bindEnd()`, runs it. `bindStartBinary(name)` does the
   same and asks for the rows in [binary](#binary-results).
 - `closeStatement(name)` frees it on the server.
@@ -313,6 +314,67 @@ server parsed before the error: count them to know which statements exist (a
 named one outlives its group) and which to prepare again. The connection does
 not track names: a second `prepare("x")` while `x` exists fails its group with
 SQLSTATE `42P05`, so keep names unique or `closeStatement` first.
+
+### Binary integer array parameters
+
+`paramInt4Array(values, start, count)` and `paramInt8Array(values, start,
+count)` bind the same `i64[]` window as `paramIntArray`, but as an `int4[]` or
+`int8[]` in PostgreSQL's binary layout: a fixed header, then four or eight
+bytes an element, with no digits to write on the client or parse on the
+server. `binaryArrayStart(oid)` (`23` for `int4`, `20` for `int8`), then
+`binaryArrayInt(value)` or `binaryArrayNull()` for each element, then the
+same `arrayEnd()`, builds one element at a time, NULLs included.
+
+```ts
+conn.bindStart("posts_by_ids"); // where id = any($1::int8[])
+conn.paramInt8Array(ids, 0, toI32(ids.length));
+conn.bindEnd();
+
+conn.bindStart("scores"); // from unnest($1::int4[])
+conn.binaryArrayStart(23);
+for (let i: i32 = 0; i < count; i++) {
+  if (!(missing[i] ? conn.binaryArrayNull() : conn.binaryArrayInt(scores[i]))) {
+    break; // no room: end the array, send the rest next time
+  }
+}
+conn.arrayEnd();
+conn.bindEnd();
+```
+
+A binary array is not a literal the server reinterprets: its element type
+must be the statement's. Send an `int4[]` where the parameter is `int8[]`
+and the server fails that execution with SQLSTATE `42804`
+(`PG_ERROR`, as any error); the connection and the rest of the pipeline go
+on. An `int4` element outside `-2^31..2^31-1` panics rather than wrapping,
+as do a `binaryArrayStart` OID other than `23` or `20`, a binary element in a
+text array or a text element in a binary one, and a window outside `values`.
+Room is refused, and `bindCancel()` works, exactly as for the text arrays.
+
+A bind whose parameters are all text sends one format code, as before; the
+first binary parameter makes `bindEnd()` write a code for every parameter,
+two bytes each, which the bind keeps free under `maxOutput` from then on.
+
+Binary pays wherever the array is long. On PostgreSQL 18, with seven runs of
+[`bench/postgres/arrays.mjs`](../../../bench/postgres/arrays.mjs) (median, at
+1,000 elements):
+
+| measure | type | text | binary | cut |
+| --- | --- | ---: | ---: | ---: |
+| server CPU per Bind/Execute, `unnest($1)` | `int4` | 259.4 µs | 180.3 µs | 30%, within spread |
+| server CPU per Bind/Execute, `unnest($1)` | `int8` | 357.4 µs | 176.2 µs | 51% |
+| server CPU per Bind/Execute, `id = any($1)` | `int8` | 1255.4 µs | 1085.0 µs | within spread |
+| client CPU per array encoded | `int4` | 52.3 µs | 5.60 µs | 89% |
+| client CPU per array encoded | `int8` | 98.2 µs | 7.65 µs | 92% |
+| client CPU per `array_agg` column decoded | `int8` | 62.6 µs | 10.3 µs | 84% |
+
+The encode rows time the whole parameter both ways: a Bind holding the
+array, cancelled, less a Bind holding one NULL.
+
+At ten elements the server's cost is the same either way; where the
+statement's own work dominates, as an index probe per element in
+`id = any($1)` does, the format barely shows. Use binary for long `unnest`
+batches and for any client that encodes many arrays; `paramIntArray` remains
+for a statement whose parameter type is not `int4[]` or `int8[]`.
 
 ## Connecting over a Unix socket
 
@@ -524,6 +586,12 @@ select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord)
 `select a.title from articles a where a.slug = q.key`. Each distinct key is
 bound once however many requests ask for it, and each row goes back to every
 one of them.
+
+`PG_BATCH_INT` keys are bound as a text `int8[]`, one `arrayInt` each. The
+statement's `$1::int8[]` would take the [binary builder](#binary-integer-array-parameters)
+as it is, which the benchmark puts at about a tenth of the client's encoding
+CPU and, for a batch of 1,000 keys, a 51% cut in the server's on the `unnest`;
+the batcher does not use it yet.
 
 ```ts
 const config = new PgBatchConfig();
@@ -817,7 +885,8 @@ program that serves HTTP while a query sleeps on a live server.
 ## What it does not do
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
-cancellation, binary-format parameters, binary results for a type other
+cancellation, binary-format parameters other than `int4[]` and `int8[]`,
+binary results for a type other
 than an integer, `bool`, `float8`, time, text or a one-dimensional `int2[]`,
 `int4[]` or `int8[]`, so a `text[]`, a `numeric` and an array of more than
 one dimension stay in text, a mix of text and binary columns in one execution,

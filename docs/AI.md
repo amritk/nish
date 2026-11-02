@@ -2705,7 +2705,12 @@ parameter. `paramIntArray(values, start, count)` binds an `i64[]` window;
 element, then `arrayEnd()`, builds a `text[]` straight into the Bind from
 windows of a buffer. An element refused for room answers `false` and leaves
 the array open: end it and send the rest in the next statement. Every other
-`param...` call and `bindEnd()` panic until `arrayEnd()`. (No block, as for
+`param...` call and `bindEnd()` panic until `arrayEnd()`. For a long
+`int4[]` or `int8[]`, `paramInt4Array` / `paramInt8Array` (same window) or
+`binaryArrayStart(23 or 20)`, `binaryArrayInt` / `binaryArrayNull`,
+`arrayEnd()` send it in binary, at a tenth of the client CPU; the element type
+must be the statement's (`int4[]` to an `int8[]` parameter is SQLSTATE
+`42804`), and an `int4` element out of range panics. (No block, as for
 `nish/text`; `tests/postgres/live` runs it against a server, and the user
 guide's [PostgreSQL page](guide/using-nish/postgres.md#array-parameters) its
 walk-through.)
