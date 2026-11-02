@@ -60,15 +60,8 @@
  * links alone (a C host's one file, and the direct `clang` lines in `tests/run.js`) and
  * its own panics call it: defined in `runtime-term.c` the core measured 3,675, and a
  * lone `runtime.c` no longer linked.
- *
- * Raised by 26, to 3,724, for regions (docs/wp46-long-running-memory.md, stage 1):
- * `nish_arena_grow`'s slow path reads the thread-local `nish_region_chunk`, so a region's
- * chunks start at its first allocation's size and double while a thread's own arena
- * keeps its 64 KiB floor. The read lives here because the grow does; the rest of regions
- * is `runtime-region.c`'s own row. Measured 3,479 against 3,453 on 2026-11-01 with clang
- * 18.1.3 on linux-x64; the ceiling moves by that difference and no more.
  */
-const RUNTIME_TEXT_BUDGET = 3724
+const RUNTIME_TEXT_BUDGET = 3698
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -181,12 +174,8 @@ const RUNTIME_OS_TEXT_BUDGET = 4864
  *
  * Raised by 14, to 3,899, for `nish_fatal_exit` (as above), measured 3,899 against 3,885
  * on 2026-10-23 with clang 18 on linux-x64.
- *
- * Raised by 40, to 3,939, for the chunk-size read of regions (as above), which costs
- * more here because `nish_region_chunk` is `_Thread_local`. Measured 3,694 against 3,654
- * on 2026-11-01 with clang 18.1.3 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3939
+const RUNTIME_THREADS_TEXT_BUDGET = 3899
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
