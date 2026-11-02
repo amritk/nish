@@ -1,0 +1,47 @@
+PASS  a plain query's row answers its request
+PASS  a batched key's row answers its own request
+PASS  a key with no row is the program's 404
+PASS  and the key after it still gets its row
+PASS  keys from three clients: the first gets its own row
+PASS  the second, with no row, its 404
+PASS  the third its own row
+PASS  all three taken in one handler turn
+PASS  from one execution carrying all three keys
+PASS  the server holds the slow query
+PASS  another client is answered while it is held
+PASS  and the held one has no answer yet
+PASS  once the server goes on, the held client is answered
+PASS  a query whose connection ends is the program's 503
+PASS  with the connection closed behind it
+PASS  a batch whose connection ends fails its request
+PASS  as lost with the connection
+PASS  the next plain query is answered
+PASS  and the next batch
+PASS  after two connections ended, with a new one accepted
+PASS  a lost execution of three keys fails all three requests
+PASS  the three were one execution, answered by none
+PASS  a statement the server refuses is the program's 503
+PASS  after PG_CARRIER_ERROR for its query, with the server's SQLSTATE
+PASS  then PG_CARRIER_FAILED, with failure 0
+PASS  the queries after it are answered
+PASS  on the connection that refused it, still open
+PASS  a batch the server refuses fails each of its requests
+PASS  with failure 0, and no PG_CARRIER_ERROR for a batch
+PASS  and the next batch is answered
+PASS  every round of four pipelined queries is answered
+PASS  and the arena stays flat
+PASS  and none was refused for room
+PASS  a second carrier's query is held by the server
+PASS  close() with it in flight ends its connection
+PASS  after close(), a second close() does nothing and the carrier refuses queries
+PASS  and connects nothing
+PASS  and the handler goes on answering
+PASS  a query is taken
+PASS  past the queries cap the carrier is full
+PASS  a server that never answers fails the query
+PASS  at the connect timeout, as ETIMEDOUT
+PASS  not before it
+PASS  its query is held until the next read
+PASS  and once read past, it takes another
+PASS  a refused connect fails the query
+PASS  without waiting for the timeout
