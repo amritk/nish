@@ -577,11 +577,15 @@ time over the row's, so above 1 is faster than Nish):
 | C interleave, `cc -O2` | 16.0 (1.03) | 22.6 (0.99) / 23.3 (0.96) | 21.9 (0.83) / 21.3 (0.86) |
 
 On D the best hand kernel, BMI2's `rorx-shr` at six lanes, is 9% ahead of
-Nish's six lanes, under the bar. On E, `rorx-ah` at six lanes was 34% ahead
-in the first pass and 10% in the second: one run over 20%, not two. Its own
-median held at 16.6 to 16.7 ms in both; Nish's best moved from 22.4 to 18.3,
-and Nish's fastest rounds (15.8 to 16.9 ms) match the hand kernels'. The gap
-on E is the noise reaching Nish's rows, not a kernel Nish cannot reach. The
+Nish's six lanes, under the bar. On E the best hand kernel was 34% ahead in
+the first pass (`rorx-ah`), 10% in the second, and 31% in a third,
+`--rounds 5` (`rorx-shr`, 15.6 (15.0–22.6) against Nish's 20.5 (16.3–29.2)):
+two runs of three over 20%, by different kernels. The quiet machine is the
+one to read: on E, Nish's best median moved from 18.3 to 22.4 ms between
+passes while `rorx-ah`'s held at 16.6 to 16.7, and Nish's fastest rounds
+(15.8 to 16.9 ms) are within 10% of the hand kernels' (15.0 to 15.9). The gap
+on E is mostly the noise reaching Nish's rows; a quiet Intel run that clears
+20% twice would reverse this verdict. The
 unrolled bodies never beat the copy's band and were often slower (unrolled
 over module 0.95 to 1.15), so `gen-body.mjs --unroll` stays an option and
 `std/crypto/bcrypt.ts` is unchanged.
