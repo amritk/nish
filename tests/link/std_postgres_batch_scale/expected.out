@@ -1,0 +1,22 @@
+PASS  1025 requests of one hash, one run
+PASS  1024 keys of one hash are each found: none is bound twice
+PASS  the last key's two requests share its rows
+PASS  1102 requests, one execution
+PASS  a key in the table is found, one past it is bound again
+PASS  the key bound again is the last element
+PASS  each copy routes by its own ordinal, to its own request
+PASS  nothing refused
+PASS  a failed run of 1100 keys answers each request PG_BATCH_FAILED
+PASS  and the next take answers a run
+PASS  a batch of one
+PASS  routes
+PASS  forty requests, the one run under its next handle
+PASS  twenty keys, the arrays grown past their first size
+PASS  each key's two requests share its rows
+PASS  65537 waiting: one execution takes 65536
+PASS  each key once
+PASS  from 0 to 65535
+PASS  the first and last route
+PASS  a small batch after it reuses the grown arrays
+PASS  and routes
+postgres batch scale: 21 passed, 0 failed, 0 skipped

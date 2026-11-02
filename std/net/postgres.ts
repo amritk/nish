@@ -3261,10 +3261,20 @@ export const PG_BATCH_MISSING: i32 = 3
 /** `PgBatcher.next(run)`: the request `tag`'s execution failed, and its rows so far may be incomplete. */
 export const PG_BATCH_FAILED: i32 = 4
 
-// `take` probes at most maxRequests^2 / 2 slots, so the cap keeps that near 5 * 10^5;
-// a probe whose hash matches in full compares the key's bytes, so the bytes
-// compared are at most that times the longest key, which `maxBytes` bounds.
-const PG_BATCH_MAX_REQUESTS: i32 = 1024
+// The most requests one execution answers. The cost of a take does not grow
+// with it: each request probes at most `PG_BATCH_PROBES` slots, and the
+// arrays sized by it grow with the batches taken, not with the cap. It is
+// 65536 so that one full run's arrays stay at 512 KiB, and one execution's
+// key array, which the server reads into memory whole, at a few MiB.
+const PG_BATCH_MAX_REQUESTS: i32 = 65536
+// The most occupied slots one request's probe visits in `take` before its key
+// is bound again rather than found. A take of n requests holds at most n - 1
+// keys when it probes, so up to 1024 requests (the cap this replaced) no probe
+// stops; past that, keys chosen to collide cost each request this many probes
+// and key comparisons, not one per key before it.
+const PG_BATCH_PROBES: i32 = 1024
+// The fewest entries the arrays that grow with the batches taken start at.
+const PG_BATCH_MIN_GROWTH: i32 = 16
 const PG_BATCH_MAX_QUEUE: i32 = 1048576
 const PG_BATCH_MAX_RUNS: i32 = 1024
 // The takes a run's handles count before they wrap: handles stay under 2^30.
@@ -3298,9 +3308,9 @@ export class PgBatchConfig {
 
 /** One execution's requests, grouped by key, and how far its rows have been routed. */
 class PgBatchRun {
-  /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added. */
-  readonly tags: i32[]
-  readonly first: i32[]
+  /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch. */
+  tags: i32[]
+  first: i32[]
   keys: i32 = 0
   /** The key rows are being read for, whether it has had one, and the next of its requests to answer. */
   cur: i32 = 0
@@ -3315,9 +3325,9 @@ class PgBatchRun {
   ended: boolean = false
   failed: boolean = false
 
-  constructor(maxRequests: i32) {
-    this.tags = new Array<i32>(maxRequests)
-    this.first = new Array<i32>(maxRequests + 1)
+  constructor() {
+    this.tags = []
+    this.first = []
   }
 
   /** Opens the run for `keys` keys, none of whose rows have been read. */
@@ -3378,12 +3388,13 @@ export class PgBatcher {
   private readonly qLengths: i32[]
   private readonly store: u8[]
   // `take`'s open-addressed table of the keys it has bound, each a key number
-  // plus one, 0 for an empty slot; and for each key, its slot and its first request.
-  private readonly table: i32[]
-  private readonly keySlots: i32[]
-  private readonly keyEntries: i32[]
-  private readonly keyCounts: i32[]
-  private readonly takenKeys: i32[]
+  // plus one, 0 for an empty slot; and for each key, its slot (-1 when its
+  // probe stopped) and its first request. Grown by `take` to the batch.
+  private table: i32[]
+  private keySlots: i32[]
+  private keyEntries: i32[]
+  private keyCounts: i32[]
+  private takenKeys: i32[]
   private readonly runs: PgBatchRun[]
   /** The request the last `next(run)` answered about; -1 for none. */
   tag: i32 = -1
@@ -3450,19 +3461,14 @@ export class PgBatcher {
     this.qStarts = new Array<i32>(textSize)
     this.qLengths = new Array<i32>(textSize)
     this.store = new Array<u8>(storeSize)
-    // At least twice the keys a take can hold, a power of two for the mask.
-    let tableSize: i32 = 2
-    while (tableSize < 2 * maxRequests) {
-      tableSize *= 2
-    }
-    this.table = new Array<i32>(tableSize)
-    this.keySlots = new Array<i32>(maxRequests)
-    this.keyEntries = new Array<i32>(maxRequests)
-    this.keyCounts = new Array<i32>(maxRequests)
-    this.takenKeys = new Array<i32>(maxRequests)
+    this.table = []
+    this.keySlots = []
+    this.keyEntries = []
+    this.keyCounts = []
+    this.takenKeys = []
     this.runs = []
     for (let r: i32 = 0; r < config.runs; r++) {
-      this.runs.push(new PgBatchRun(maxRequests))
+      this.runs.push(new PgBatchRun())
     }
   }
 
@@ -3650,20 +3656,29 @@ export class PgBatcher {
       return -1
     }
     const ring: i32 = toI32(this.qTags.length)
+    this.grow(this.count < this.maxRequests ? this.count : this.maxRequests)
     const mask: i32 = toI32(this.table.length) - 1
     let keys: i32 = 0
     let taken: i32 = 0
     let bytes: i32 = 2
     while (taken < this.count && taken < this.maxRequests && taken < toI32(this.takenKeys.length)) {
       const q: i32 = (this.head + taken) % ring
-      // Probe for the key: a slot holding it, or the empty slot it would take.
+      // Probe for the key: a slot holding it, or the empty slot it would take;
+      // -1 after `PG_BATCH_PROBES` occupied ones, when the key is bound again,
+      // its own ordinal and rows, and left out of the table.
       let slot: i32 = this.qHashes[q] & mask
       let k: i32 = -1
+      let probes: i32 = 0
       while (this.table[slot] > 0) {
         const seen: i32 = this.table[slot] - 1
         const e: i32 = this.keyEntries[seen]
         if (this.qHashes[e] === this.qHashes[q] && this.sameKey(e, q)) {
           k = seen
+          break
+        }
+        probes += 1
+        if (probes === PG_BATCH_PROBES) {
+          slot = -1
           break
         }
         slot = (slot + 1) & mask
@@ -3676,7 +3691,9 @@ export class PgBatcher {
         bytes += cost
         k = keys
         keys += 1
-        this.table[slot] = keys
+        if (slot >= 0) {
+          this.table[slot] = keys
+        }
         this.keySlots[k] = slot
         this.keyEntries[k] = q
         this.keyCounts[k] = 0
@@ -3686,7 +3703,10 @@ export class PgBatcher {
       taken += 1
     }
     for (let k: i32 = 0; k < keys && k < toI32(this.keySlots.length); k++) {
-      this.table[this.keySlots[k]] = 0
+      const slot: i32 = this.keySlots[k]
+      if (slot >= 0) {
+        this.table[slot] = 0
+      }
     }
     if (taken === 0) {
       conn.bindCancel()
@@ -3696,6 +3716,11 @@ export class PgBatcher {
     conn.bindEnd()
     // The requests grouped by key, each key's in the order they were added.
     const run: PgBatchRun = this.runs[r]
+    if (toI32(run.tags.length) < taken) {
+      // Grown together: `first` holds one more than `tags`, which bounds the keys too.
+      run.tags = new Array<i32>(toI32(this.takenKeys.length))
+      run.first = new Array<i32>(toI32(this.takenKeys.length) + 1)
+    }
     run.first[0] = 0
     for (let k: i32 = 0; k < keys && k < toI32(this.keyCounts.length); k++) {
       run.first[k + 1] = run.first[k] + this.keyCounts[k]
@@ -3715,6 +3740,34 @@ export class PgBatcher {
       this.storeEnd = 0
     }
     return run.handle
+  }
+
+  /**
+   * Grows `take`'s arrays, when they are smaller, to hold `need` requests:
+   * to a power of two, at least `PG_BATCH_MIN_GROWTH` and at most
+   * `maxRequests`, and the table to twice that, so it is at most half full.
+   * A batcher whose batches stay small never holds arrays the size of its cap.
+   */
+  private grow(need: i32): void {
+    if (toI32(this.takenKeys.length) >= need) {
+      return
+    }
+    let size: i32 = PG_BATCH_MIN_GROWTH
+    while (size < need) {
+      size *= 2
+    }
+    if (size > this.maxRequests) {
+      size = this.maxRequests
+    }
+    let tableSize: i32 = 2
+    while (tableSize < 2 * size) {
+      tableSize *= 2
+    }
+    this.table = new Array<i32>(tableSize)
+    this.keySlots = new Array<i32>(size)
+    this.keyEntries = new Array<i32>(size)
+    this.keyCounts = new Array<i32>(size)
+    this.takenKeys = new Array<i32>(size)
   }
 
   /** Writes the queued request `q`'s key as the open array's next element; false when `conn` has no room. */
