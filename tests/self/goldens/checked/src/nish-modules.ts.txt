@@ -4,6 +4,7 @@ entry: src/nish-modules.ts src/branding.ts
 import BUILTIN_SCHEME from "./branding" -> const BUILTIN_SCHEME
 const SIMD_SPECIFIER: string = "nish:simd" [exported]
 const SIMD_TYPE_NAMES: string = "u8x16, u16x8, i32x4, u32x4, f32x4, f64x2"
+const ASYNC_SPECIFIER: string = "nish:async" [exported]
 const SECRET_SPECIFIER: string = "nish:secret" [exported]
 const REGION_SPECIFIER: string = "nish:region" [exported]
 const NET_INT: i32 = 105 [exported]
@@ -67,7 +68,7 @@ function nishModuleNames(): string -> @nishModuleNames [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat unsafeModule
   stackSites=0 stackLocals=0
-  callee +0:188 unsafeModule -> @unsafeModule
+  callee +0:208 unsafeModule -> @unsafeModule
 function isNishSourceModule(specifier: string): boolean -> @isNishSourceModule [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -149,6 +150,7 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   callee +46:33 new BuiltinExport -> @BuiltinExport.constructor
   callee +49:12 isSimdExport -> @isSimdExport
   callee +49:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +51:21 unsafeModule -> @unsafeModule
-  callee +52:12 isUnsafeExport -> @isUnsafeExport
-  callee +52:35 new BuiltinExport -> @BuiltinExport.constructor
+  callee +52:54 new BuiltinExport -> @BuiltinExport.constructor
+  callee +54:21 unsafeModule -> @unsafeModule
+  callee +55:12 isUnsafeExport -> @isUnsafeExport
+  callee +55:35 new BuiltinExport -> @BuiltinExport.constructor

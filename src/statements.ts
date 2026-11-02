@@ -43,6 +43,7 @@ import {
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
 import { syntaxKindName } from "./checker"
+import { checkAwaitAllDeclaration, isAwaitAllShape } from "./async-check"
 import { CheckContext, LOOP_BLOCK, LOOP_ITERATION, LOOP_SWITCH, SwitchFrame } from "./context"
 import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
@@ -280,6 +281,17 @@ const keySteadyVariables = (ctx: CheckContext, list: Node, within: Node[]): void
 }
 
 const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  // WP49: an `await` stands at the top of an expression statement, a
+  // `let`/`const` or a `return`, and nowhere else (`isAwaitSite`).
+  const saved = ctx.awaitStatement
+  const site = stmt.kind === N_EXPR_STMT || stmt.kind === N_VAR || stmt.kind === N_RETURN
+  ctx.awaitStatement = site ? stmt : null
+  const ends = checkStatementKind(ctx, stmt, scope)
+  ctx.awaitStatement = saved
+  return ends
+}
+
+const checkStatementKind = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // This statement has been refused already: stage0's `throw` would have left
   // it by now and reported nothing further (`context.ts`, `errored`).
   // Answering "does not fall through" would invent a terminator, so this
@@ -368,6 +380,10 @@ export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): 
 const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
   const mutable = (list.flags & FLAG_CONST) === 0
   for (const decl of list.children[0].children) {
+    if (decl.children[0].kind === N_BINDING_PATTERN) {
+      declareAwaitAll(ctx, decl, scope)
+      continue
+    }
     const name = decl.children[0].text
     const annotation = decl.children[1]
     // The annotation is resolved first, so that a refused initializer still
@@ -447,6 +463,30 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
       local.fresh = allocatesArray(ctx, initializer)
     }
+  }
+}
+
+/**
+ * WP49: `const [a, b] = await awaitAll(f(x), g(y))`, the one pattern a
+ * declaration takes (the sweep refused every other). Each name is a `const`
+ * of its call's answer type; a refused declarator still declares them, as
+ * `T_ERROR`, so later uses stay silent (#275).
+ */
+const declareAwaitAll = (ctx: CheckContext, decl: Node, scope: Scope): void => {
+  if (!isAwaitAllShape(decl)) {
+    return // refused by the sweep
+  }
+  const types = checkAwaitAllDeclaration(ctx, decl, scope)
+  const names = decl.children[0].children
+  let i = 0
+  while (i < names.length) {
+    let type = types !== null && i < types.length ? types[i] : T_ERROR
+    if (type === T_VOID) {
+      ctx.error(names[i], "Cannot declare a variable of type void")
+      type = T_ERROR
+    }
+    declareLocal(ctx, scope, names[i], names[i].text, type, false, null)
+    i = i + 1
   }
 }
 
@@ -832,7 +872,10 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
   refuseStructHeader(ctx, node)
   if (node.kind === N_FOR_OF) {
     if ((node.flags & FLAG_AWAIT) !== 0) {
-      ctx.error(node, "`for await` is not supported")
+      ctx.error(
+        node,
+        "`for await` is not supported here: a stream of promises would hold each as a value — `await` each call inside a plain `for` loop"
+      )
     } else if (node.children[0].kind !== N_VAR) {
       ctx.error(
         node.children[0],
@@ -1019,7 +1062,9 @@ const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
  * (NL2273).
  */
 const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
-  if (decl.children[0].kind === N_BINDING_PATTERN) {
+  // WP49: `const [a, b] = await awaitAll(...)` is the checker's to decide.
+  const awaitAll = owner.kind === N_VAR && (owner.flags & FLAG_CONST) !== 0 && isAwaitAllShape(decl)
+  if (decl.children[0].kind === N_BINDING_PATTERN && !awaitAll) {
     ctx.error(
       decl,
       owner.kind === N_MODULE_CONST

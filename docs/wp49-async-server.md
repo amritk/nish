@@ -378,6 +378,55 @@ page for anything a user sees.
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.
 
+## Stage 4, part 1: the checker's codes and decisions
+
+Part 1 checks the language of §2 and refuses a program that keeps an `async`
+function (NL2635), so a program with no `async` compiles byte for byte as
+before. The lowering of §3 and the emitted TypeScript are part 2.
+
+| Code | Refuses | Test |
+| --- | --- | --- |
+| NL1063 | `async` on a method, field or constructor | `reject_async_method` |
+| NL2619 | `Promise<T>` anywhere but an `async` function's return type | `reject_async_promise_parameter`, `_field`, `_local`, `_alias`, `_interface_member` |
+| NL2620 | an `async` function whose return type is not `Promise<T>` | `reject_async_function`, `reject_async_arrow_declaration` |
+| NL2621 | an `async` arrow where the function type answers a plain `T` | `reject_async_arrow` |
+| NL2622 | a plain function where the function type answers `Promise<T>` | `reject_async_plain_to_promise_parameter` |
+| NL2623 | `await` outside an `async` function | `reject_await` |
+| NL2624 | `await` inside a larger expression | `reject_async_await_nested`, `_condition`, `_compound` |
+| NL2625 | `await` on anything but a call | `reject_async_await_value` |
+| NL2626 | `await` or `spawn` on a plain function's call | `reject_async_await_plain_call` |
+| NL2627 | an `async` call that is not awaited, spawned or joined | `reject_async_unawaited_call`, `_argument` |
+| NL2628 | `spawn` of a task answering neither `void` nor a `Result` | `reject_async_spawn_answer` |
+| NL2629 | `awaitAll` of one call, or not awaited into one name per call | `reject_async_await_all_one`, `_bare` |
+| NL2630 | recursion through `await`, direct or mutual | `reject_async_await_self`, `_mutual` |
+| NL2631 | `Promise.all` and the other `Promise` statics | `reject_async_promise_all` |
+| NL2632 | `.then`, `.catch`, `.finally` | `reject_async_then` |
+| NL2633 | `await(f(x))`, a call to a function named `await` | `reject_async_await_parenthesised` |
+| NL2634 | `async` in a wasm build, `--target wasm32` or `--profile wasi` | `reject_async_wasm`, `reject_async_wasi_profile` |
+| NL2635 | an `async` function in a program that passes every rule: not yet lowered | `reject_async_not_lowered` |
+
+NL2133 (`for await`) keeps its code with a new message. NL1015 (`async`
+refused outright), NL2173 and NL2174 (`Promise` and `.then` unknown) are
+retired, and NL1004 loses its "no event loop" tail.
+
+Decisions taken in part 1:
+
+- **`await` stands at the top of a statement** (an expression statement, a
+  declaration's initializer, a `return`, the right side of a plain `=`). An
+  `await` inside another expression would hold the values already computed
+  across the wait, which the frame of §3 would have to carry; binding to a
+  `const` first costs one line and keeps every frame slot a named local.
+- **`awaitAll` is itself awaited**, `const [a, b] = await awaitAll(...)`, so
+  every wait in a function is spelled `await` and the frame's resume points
+  are exactly its `await`s.
+- **`await(f(x))` is refused** (NL2633) rather than read as `await f(x)`:
+  TypeScript parses it as a call to a function named `await`.
+- **A method is never `async`** (NL1063, a parse-time code beside the other
+  declaration-form refusals), since a task keeps no `this`.
+- **The cycle check runs over the whole program** once every module is
+  checked, and reports at the `await` that closes the cycle, in the module
+  that wrote it.
+
 ## Not in this work package
 
 - Promises as values: arrays of them, `Promise.all` over an array, `.then`.

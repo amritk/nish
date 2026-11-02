@@ -310,6 +310,7 @@ struct Parser (class) size=112 align=8 exported
   method parseParameter -> @Parser.parseParameter
   method parameterModifierAhead -> @Parser.parameterModifierAhead
   method parseBindingName -> @Parser.parseBindingName
+  method parseNamePattern -> @Parser.parseNamePattern
   method parseReturnType -> @Parser.parseReturnType
   method parseTypeAnnotation -> @Parser.parseTypeAnnotation
   method parseClass -> @Parser.parseClass
@@ -1540,15 +1541,41 @@ function Parser.parameterModifierAhead(this: Parser): boolean -> @Parser.paramet
 function Parser.parseBindingName(this: Parser): Node -> @Parser.parseBindingName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:5
-  calls: Parser.at Parser.node Parser.parseIdentifier Parser.skipBindingPattern
-  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.parseIdentifier#0 Parser.node#0 Parser.skipBindingPattern#0
+  calls: Parser.at Parser.node Parser.parseIdentifier Parser.parseNamePattern Parser.skipBindingPattern
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.parseIdentifier#0 Parser.node#0 Parser.at#0 Parser.parseNamePattern#0 Parser.skipBindingPattern#0
   stackSites=0 stackLocals=0
-  callee -5:10 Parser.at -> @Parser.at
-  callee -5:34 Parser.at -> @Parser.at
-  callee -4:14 Parser.parseIdentifier -> @Parser.parseIdentifier
-  local -2:11 pattern: Node (const)
-  callee -2:21 Parser.node -> @Parser.node
-  callee -1:5 Parser.skipBindingPattern -> @Parser.skipBindingPattern
+  callee -9:10 Parser.at -> @Parser.at
+  callee -9:34 Parser.at -> @Parser.at
+  callee -8:14 Parser.parseIdentifier -> @Parser.parseIdentifier
+  local -6:11 pattern: Node (const)
+  callee -6:21 Parser.node -> @Parser.node
+  callee -5:9 Parser.at -> @Parser.at
+  callee -4:7 Parser.parseNamePattern -> @Parser.parseNamePattern
+  callee -2:7 Parser.skipBindingPattern -> @Parser.skipBindingPattern
+function Parser.parseNamePattern(this: Parser, pattern: Node): void -> @Parser.parseNamePattern [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: Parser.advance Parser.at Parser.eat Parser.node nish_array_grow nish_panic_overflow
+  pointer this: size=112 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.at#0 Parser.node#0 Parser.advance#0 Parser.eat#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0
+  pointer pattern: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee -4:5 Parser.advance -> @Parser.advance
+  local -3:9 flat: boolean (let)
+  callee -2:20 Parser.at -> @Parser.at
+  local -1:13 name: Node (const)
+  callee -1:20 Parser.node -> @Parser.node
+  callee +2:7 Parser.advance -> @Parser.advance
+  callee +3:12 Parser.eat -> @Parser.eat
+  callee +4:16 Parser.at -> @Parser.at
+  callee +8:17 Parser.at -> @Parser.at
+  callee +9:7 Parser.advance -> @Parser.advance
+  local +13:9 depth: i32 (let)
+  callee +14:13 Parser.at -> @Parser.at
+  callee +15:11 Parser.at -> @Parser.at
+  callee +15:34 Parser.at -> @Parser.at
+  callee +17:18 Parser.at -> @Parser.at
+  callee +17:41 Parser.at -> @Parser.at
+  callee +20:7 Parser.advance -> @Parser.advance
 function Parser.parseReturnType(this: Parser): Node -> @Parser.parseReturnType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via Parser.eat

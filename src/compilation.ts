@@ -186,6 +186,7 @@ import {
   threadsModuleName,
   scopeSymbol,
 } from "./parallel"
+import { rejectAwaitCycles } from "./async-check"
 import { crossingMessage, holdsRegion, regionCallFindings } from "./region-rules"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
@@ -1239,6 +1240,10 @@ export class Compilation {
       }
     }
     this.rejectInstantiatedStructClashes()
+    if (this.sink.hasErrors()) {
+      return false
+    }
+    this.rejectAsync()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -2566,6 +2571,54 @@ export class Compilation {
    * both declare `Holder<T>` and both use it at `i32` and at `string` have made
    * one mistake, not two.
    */
+  /**
+   * WP49: the whole-program rules of `async`, once every body is checked and
+   * every await edge is known — no recursion through `await` (a cycle is
+   * reported at the await that closes it, in the module that wrote it), and
+   * no `async` in a wasm build, whose module has no event loop to resume a
+   * task. The lowering of an async function is not in this release, so a
+   * program that keeps one is refused here too.
+   */
+  rejectAsync(): void {
+    const functions: FunctionSig[] = []
+    for (const unit of this.modules) {
+      for (const fn of unit.checker.program.functions) {
+        functions.push(fn)
+      }
+    }
+    for (const cycle of rejectAwaitCycles(functions)) {
+      this.unitOf(cycle.fn).checker.ctx.error(cycle.site, cycle.message)
+    }
+    if (this.sink.hasErrors()) {
+      return
+    }
+    for (const fn of functions) {
+      if (fn.isAsync()) {
+        const ctx = this.unitOf(fn).checker.ctx
+        ctx.error(
+          fn.decl,
+          isWasmBuild(this.opts)
+            ? `\`async\` function \`${fn.sourceName}\` cannot be built for wasm: a task is resumed by the native event loop, which a wasm module does not have`
+            : `\`async\` function \`${fn.sourceName}\` is checked, but not yet compiled: the lowering of \`async\` is not in this release`
+        )
+        return
+      }
+    }
+  }
+
+  /** The module `fn` is checked in: the one whose source it came from, or the entry. */
+  unitOf(fn: FunctionSig): ModuleUnit {
+    const origin = fn.origin
+    if (origin !== null) {
+      for (const unit of this.modules) {
+        if (origin === unit.source) {
+          return unit
+        }
+      }
+    }
+    return this.entry()
+  }
+
   rejectInstantiatedStructClashes(): void {
     const owners = new StringMap()
     const ownerPackages: string[] = []

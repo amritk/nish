@@ -672,7 +672,7 @@ export class Parser {
       return this.exportable(this.parseFunction(start, false), exported)
     }
     // `async function`, a modifier only with no line break before `function`,
-    // which is TypeScript's rule; Phase 0 refuses it (NL1015).
+    // which is TypeScript's rule; the checker reads it (WP49).
     if (
       this.at(TOK_IDENT) &&
       this.value === "async" &&
@@ -2008,8 +2008,8 @@ export class Parser {
       return false
     }
     scan.next()
-    // `const f = async (x: i32): i32 => x`, whose `async` Phase 0 refuses
-    // (NL1015). It is the modifier only with no line break before the
+    // `const f = async (x: i32): Promise<i32> => x`, an `async` arrow
+    // (WP49). It is the modifier only with no line break before the
     // parameters, as in TypeScript; otherwise it is a name, and a call of it
     // is still a call.
     if (scan.kind === TOK_IDENT && scan.value === "async") {
@@ -2213,9 +2213,49 @@ export class Parser {
       return this.parseIdentifier()
     }
     const pattern = this.node(N_BINDING_PATTERN, this.start, this.end)
-    this.skipBindingPattern()
+    if (this.at(TOK_LBRACKET)) {
+      this.parseNamePattern(pattern)
+    } else {
+      this.skipBindingPattern()
+    }
     pattern.end = this.previousEnd
     return pattern
+  }
+
+  /**
+   * `[a, b]`: a flat array pattern of plain names keeps them as its
+   * children, the one destructuring the checker takes (WP49's
+   * `const [a, b] = await awaitAll(...)`). Any other shape — a hole, a
+   * default, a rest, a nested pattern — keeps none, and is refused as
+   * every pattern was.
+   */
+  parseNamePattern(pattern: Node): void {
+    this.advance() // `[`
+    let flat = true
+    while (flat && this.at(TOK_IDENT)) {
+      const name = this.node(N_IDENT, this.start, this.end)
+      name.text = this.value
+      pattern.children.push(name)
+      this.advance()
+      if (!this.eat(TOK_COMMA)) {
+        flat = this.at(TOK_RBRACKET)
+        break
+      }
+    }
+    if (flat && this.at(TOK_RBRACKET) && pattern.children.length > 0) {
+      this.advance()
+      return
+    }
+    pattern.children = []
+    let depth = 1
+    while (!this.at(TOK_END) && depth > 0) {
+      if (this.at(TOK_LBRACE) || this.at(TOK_LBRACKET)) {
+        depth = depth + 1
+      } else if (this.at(TOK_RBRACE) || this.at(TOK_RBRACKET)) {
+        depth = depth - 1
+      }
+      this.advance()
+    }
   }
 
   /**
@@ -2369,9 +2409,9 @@ export class Parser {
         }
         flags = flags | FLAG_STATIC
       } else if (word === "async") {
-        // Phase 0's (NL1015), and a modifier only where TypeScript reads one:
-        // on the line of what follows it, and in front of a name, a `[` or the
-        // `*` of a generator.
+        // A method's is refused (NL1063), and it is a modifier only where
+        // TypeScript reads one: on the line of what follows it, and in front
+        // of a name, a `[` or the `*` of a generator.
         if (!this.asyncModifierAhead()) {
           return flags
         }
@@ -3387,7 +3427,7 @@ export class Parser {
           return this.parseVariableStatement(start)
         }
         // `async function` in a body: the nested function below, which
-        // Phase 0 refuses first for its modifier (NL1015).
+        // the validator refuses, as only a top-level one may be `async` (NL1063).
         if (this.value === "async" && this.peek() === TOK_FUNCTION && this.aheadOnSameLine()) {
           this.advance() // `async`
           return this.flagged(this.parseFunction(start, false), FLAG_ASYNC)
@@ -3528,8 +3568,9 @@ export class Parser {
 
   /**
    * Step over a destructuring pattern, from its `{` or `[` to the bracket that
-   * closes it. Only a refused form reads one — a `catch` binding, or the
-   * N_BINDING_PATTERN of `parseBindingName` — so nothing is built from it.
+   * closes it. Only a refused form reads one — a `catch` binding, or a `{`
+   * pattern of `parseBindingName` (a `[` one is `parseNamePattern`'s) — so
+   * nothing is built from it.
    */
   skipBindingPattern(): void {
     let depth = 0
@@ -4219,7 +4260,7 @@ export class Parser {
         if (this.peek() === TOK_ARROW) {
           return this.parseArrowExpression(start)
         }
-        // `async (x) => x` and `async x => x`, for Phase 0 to refuse (NL1015).
+        // `async (x) => x` and `async x => x`, an `async` arrow (WP49).
         if (this.asyncArrowAhead()) {
           this.advance() // `async`
           const arrow = this.parseArrowExpression(start)

@@ -212,6 +212,11 @@ export class CheckContext {
   /** How many variables have been given a `$n` index key (`Local.pathIndex`). */
   pathIndexCount: i32
   /**
+   * WP49: the call node an `await` is checking as its operand — the one call
+   * to an async function that is not refused as unawaited (-1 for none).
+   */
+  awaitedCall: i32
+  /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
    * parameter scope, and what it may read of its function's names, one of the
    * `CAPTURE_*` modes (`src/parallel.ts`): every arrow argument but one given
@@ -281,6 +286,12 @@ export class CheckContext {
    */
   statementExpression: Node | null
   /**
+   * WP49: the statement being checked when it is one an `await` may stand at
+   * the top of — an expression statement, a `let`/`const` or a `return`.
+   * `awaitedCall`, declared beside `pathIndexCount`, is its partner.
+   */
+  awaitStatement: Node | null
+  /**
    * WP32: the `for...of` whose iterable is being checked, while it is. A
    * `keys()` or `values()` call of the global `Map` or `Set` is legal only as
    * that iterable, and `checkMethodCall` asks this rather than a parent
@@ -328,6 +339,8 @@ export class CheckContext {
     this.switchFrames = []
     this.flowFrames = []
     this.statementExpression = null
+    this.awaitStatement = null
+    this.awaitedCall = -1
     this.forOfWalk = null
     this.errored = false
     this.typeBindings = new StringMap()

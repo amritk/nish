@@ -1,0 +1,1 @@
+returns a `Promise<T>`: only an async function or an `async` arrow is passed where the function type is awaited

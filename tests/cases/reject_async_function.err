@@ -1,1 +1,1 @@
-`async` functions are forbidden in Nish (no event loop or promises)
+An `async` function's return type is `Promise<T>`

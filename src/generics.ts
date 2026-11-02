@@ -28,7 +28,8 @@
 import { isNishSourceModule } from "./nish-modules"
 import { isCReservedSymbol } from "./c-symbols"
 import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./json-typed"
-import { namesRegion, resolveType } from "./annotations"
+import { refuseUnawaitedCall } from "./async-check"
+import { ASYNC_RETURN_MESSAGE, namesRegion, promiseArgument, resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectForeignPointer, unionArgumentMessage } from "./annotations"
 import { rejectHandleArgument } from "./handles"
@@ -93,6 +94,7 @@ import {
   referencedStructNames,
 } from "./structs"
 import {
+  FLAG_ASYNC,
   FLAG_FOREIGN,
   isGatheredRest,
   N_ARRAY,
@@ -1470,6 +1472,9 @@ export const checkGenericCall = (
   template: TemplateInfo,
   scope: Scope
 ): i32 => {
+  if (refuseUnawaitedCall(ctx, expr, (template.decl.flags & FLAG_ASYNC) !== 0)) {
+    return T_ERROR
+  }
   const parameters = template.decl.children[1]
   const args = expr.children[1]
   if (!fitTemplateArguments(ctx, expr, args, parameters, template.sourceName)) {
@@ -2053,8 +2058,35 @@ const resolveFunctionArgument = (
     unifyAnnotation(ctx, wanted[k].children[1], fn.paramTypes[k], names, bindings)
     k = k + 1
   }
-  unifyAnnotation(ctx, fnType.children[1], fn.returnType, names, bindings)
+  if (fn.isAsync() !== promisesAnswer(fnType)) {
+    refuseOnce(ctx, arg, asyncArgumentMessage(template, index, param, fn.isAsync()))
+    return null
+  }
+  unifyAnnotation(ctx, answerAnnotation(fnType), fn.returnType, names, bindings)
   return fn
+}
+
+/**
+ * WP49: what a function type answers — `T` of a `(...) => Promise<T>`, which
+ * is the type an async function's signature carries, or the return as
+ * written. Only a function-typed parameter spells a promise in a function
+ * type, and only an async function or arrow is passed for one.
+ */
+const answerAnnotation = (fnType: Node): Node => {
+  const promised = promiseArgument(fnType.children[1])
+  return promised === null ? fnType.children[1] : promised
+}
+
+/** `(...) => Promise<T>`: a function type only an async function fits. */
+const promisesAnswer = (fnType: Node): boolean => promiseArgument(fnType.children[1]) !== null
+
+/** An async function passed where the parameter is not `=> Promise<T>`, or the other way. */
+const asyncArgumentMessage = (template: TemplateInfo, index: i32, param: Node, isAsync: boolean): string => {
+  const lead = `Argument ${index + 1} of \`${template.sourceName}\``
+  const name = param.children[0].text
+  return isAsync
+    ? `${lead} is \`async\`, and \`${name}\` does not return a \`Promise<T>\`: an async function is passed only where the function type says it is awaited`
+    : `${lead} is not \`async\`, and \`${name}\` returns a \`Promise<T>\`: only an async function or an \`async\` arrow is passed where the function type is awaited`
 }
 
 /**
@@ -2077,8 +2109,13 @@ const liftArrowArgument = (
   const param = template.decl.children[1].children[index]
   const fnType = unwrapTypeParens(param.children[1])
   const wanted = fnType.children[0].children
-  const returns = fnType.children[1]
+  const returns = answerAnnotation(fnType)
   const params = arrow.children[1].children
+  const isAsync = (arrow.flags & FLAG_ASYNC) !== 0
+  if (isAsync !== promisesAnswer(fnType)) {
+    refuseOnce(ctx, arrow, asyncArgumentMessage(template, index, param, isAsync))
+    return null
+  }
   if (params.length !== wanted.length) {
     refuseOnce(
       ctx,
@@ -2139,7 +2176,15 @@ const liftArrowArgument = (
     k = k + 1
   }
   let returnType = -1
-  const annotated = arrow.children[2]
+  let annotated = arrow.children[2]
+  if (isAsync && annotated.kind !== N_EMPTY) {
+    const promised = promiseArgument(annotated)
+    if (promised === null) {
+      refuseOnce(ctx, annotated, ASYNC_RETURN_MESSAGE)
+      return null
+    }
+    annotated = promised
+  }
   if (annotated.kind !== N_EMPTY) {
     returnType = resolveType(annotated, ctx)
     if (returnType === T_ERROR) {
@@ -2284,6 +2329,7 @@ const liftArrow = (
   const savedLoopFrames = ctx.loopFrames
   const savedFlowFrames = ctx.flowFrames
   const savedStatement = ctx.statementExpression
+  const savedAwaitStatement = ctx.awaitStatement
   const savedFunctions = ctx.functionBindings
   ctx.arrowOuterScopes.push(outer)
   ctx.arrowOuterFunctions.push(savedFunctions)
@@ -2301,8 +2347,12 @@ const liftArrow = (
   ctx.loopFrames = []
   ctx.flowFrames = []
   ctx.statementExpression = null
+  // WP49: the arrow's body is not the statement it is written in, so an
+  // `await` there stands at the top of its own statement or nowhere.
+  ctx.awaitStatement = null
   checkSignatureBody(ctx, fn, scope, returnType < 0)
   ctx.current = enclosing
+  ctx.awaitStatement = savedAwaitStatement
   ctx.loopKinds = savedLoopKinds
   ctx.loopBreaks = savedLoopBreaks
   ctx.loopLabels = savedLoopLabels
@@ -2521,8 +2571,8 @@ const matchFunctionArguments = (
         }
         types.push(type)
       }
-      const returnType = resolveInTemplate(template, fnType.children[1], bindings)
-      if (returnType === T_ERROR) {
+      const returnType = resolveInTemplate(template, answerAnnotation(fnType), bindings)
+      if (returnType === T_ERROR || fn.isAsync() !== promisesAnswer(fnType)) {
         return false
       }
       // WP29: an arrow's captures follow the parameters it wrote, and are no
