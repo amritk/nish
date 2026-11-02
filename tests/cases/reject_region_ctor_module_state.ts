@@ -1,6 +1,7 @@
-// NL2609: a constructor reached by `new` inside the region stores a field of
-// `this`, a string the region allocated, into module state, which outlives
-// the region.
+// A constructor reached by `new` inside the region stores a field of `this`,
+// a string the region allocated, into module state. Nish has no mutable
+// module state for it to reach: the top-level `let` is refused first (NL2084),
+// so region memory never outlives its region this way.
 import { free, region } from "nish:region";
 
 let lastName: string = "";
