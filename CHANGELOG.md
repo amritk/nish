@@ -26,6 +26,34 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-02
+
+### Breaking changes
+
+- net: Name the HTTP clients fetchSync and the codecs http1-codec ([#1154](https://github.com/amritk/nish/pull/1154))
+
+### Added
+
+- interop: Binary int4[] and int8[] parameters for nish/net/postgres ([#1150](https://github.com/amritk/nish/pull/1150))
+- checker: Nish:region, regions in the language (WP46 stage 2) ([#1152](https://github.com/amritk/nish/pull/1152))
+- interop: Every TechEmpower test type on the Postgres carrier ([#1157](https://github.com/amritk/nish/pull/1157))
+- interop: PgBatchConfig.maxRequests up to 65536 ([#1158](https://github.com/amritk/nish/pull/1158))
+- runtime: Pin prefork workers to cores and steer connections by incoming CPU ([#1159](https://github.com/amritk/nish/pull/1159))
+
+### Fixed
+
+- cli: Create the runtime cache's scratch names exclusively, so concurrent links never share one ([#1155](https://github.com/amritk/nish/pull/1155))
+
+### Documentation
+
+- crypto: Bcrypt BMI2 kernel — measured, not built ([#1151](https://github.com/amritk/nish/pull/1151))
+
+### Build
+
+- Regenerate package-lock.json for v0.30.0 ([#1147](https://github.com/amritk/nish/pull/1147))
+- ci: Read release.yml's std presence lists from src/std-modules.ts ([#1156](https://github.com/amritk/nish/pull/1156))
+
+
 ## [0.30.0] - 2026-11-02
 
 ### Added
@@ -1502,3 +1530,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.28.0]: https://github.com/amritk/nish/releases/tag/v0.28.0
 [0.29.0]: https://github.com/amritk/nish/releases/tag/v0.29.0
 [0.30.0]: https://github.com/amritk/nish/releases/tag/v0.30.0
+[0.31.0]: https://github.com/amritk/nish/releases/tag/v0.31.0
