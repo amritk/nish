@@ -2191,7 +2191,7 @@ export class PgConnection {
    */
   private startBinaryParam(size: i32): i32 {
     this.noArrayOpen()
-    const owed: i32 = this.binaryParamCount > 0 ? 2 : 2 * (this.paramCount + 1)
+    const owed: i32 = this.binaryParamCount > 0 ? toI32(2) : toI32(2) * (this.paramCount + toI32(1))
     if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
       return -1
     }
@@ -2314,7 +2314,7 @@ export class PgConnection {
     const end: i32 = start + count
     // Its exact size first, so that room is asked for once and a refusal writes nothing.
     let size: i64 = count > 0 ? toI64(count + 1) : toI64(2)
-    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       size += toI64(pgDecimalLength(values[i]))
     }
     const at: i32 = this.startParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
@@ -2322,7 +2322,7 @@ export class PgConnection {
       return false
     }
     this.putByte(PG_LBRACE)
-    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       // Read before the comma's call, which could drop the length fact.
       const value: i64 = values[i]
       if (i > start) {
@@ -2394,7 +2394,7 @@ export class PgConnection {
   paramInt4Array(values: i64[], start: i32, count: i32): boolean {
     pgIntWindow(values, start, count)
     const end: i32 = start + count
-    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       if (!pgFitsInt4(values[i])) {
         panic("nish/net/postgres: paramInt4Array() with an element outside int4")
       }
@@ -2426,7 +2426,7 @@ export class PgConnection {
     this.reserve(this.outEnd + toI32(size))
     this.putArrayHeader(oid, count)
     const end: i32 = start + count
-    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       setI32BE(this.out, this.outEnd, width)
       if (width === 4) {
         setI32BE(this.out, this.outEnd + 4, toI32(values[i]))
@@ -2441,7 +2441,7 @@ export class PgConnection {
 
   /** A binary array's header with no NULLs: no dimension when it is empty, as `array_send` writes one, else one of `count` elements from 1. */
   private putArrayHeader(oid: i32, count: i32): void {
-    this.putI32(count > 0 ? 1 : 0)
+    this.putI32(count > 0 ? toI32(1) : PG_ZERO)
     this.putI32(PG_ZERO)
     this.putI32(oid)
     if (count > 0) {

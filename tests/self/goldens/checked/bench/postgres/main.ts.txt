@@ -1734,7 +1734,7 @@ function PgConnection.paramInt4Array(this: PgConnection, values: i64[], start: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.paramBinaryInts
   escaping: count start
-  calls: nish.PgConnection.paramBinaryInts nish.pgFitsInt4 nish.pgIntWindow nish_panic nish_panic_index nish_panic_overflow
+  calls: nish.PgConnection.paramBinaryInts nish.pgFitsInt4 nish.pgIntWindow nish_panic nish_panic_overflow
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.paramBinaryInts#0
   pointer values: size=0 writesThrough=true captured=false passedTo=nish.pgIntWindow#0 nish.PgConnection.paramBinaryInts#1
   stackSites=0 stackLocals=0
@@ -1757,7 +1757,7 @@ function PgConnection.paramBinaryInts(this: PgConnection, values: i64[], start: 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: count oid start
-  calls: nish.PgConnection.endParam nish.PgConnection.putArrayHeader nish.PgConnection.reserve nish.PgConnection.startBinaryParam nish.setI32BE nish.setI64BE nish_panic_index nish_panic_overflow
+  calls: nish.PgConnection.endParam nish.PgConnection.putArrayHeader nish.PgConnection.reserve nish.PgConnection.startBinaryParam nish.setI32BE nish.setI64BE nish_panic_overflow
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.startBinaryParam#0 nish.PgConnection.reserve#0 nish.PgConnection.putArrayHeader#0 nish.PgConnection.endParam#0
   pointer values: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
