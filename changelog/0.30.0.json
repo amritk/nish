@@ -1,0 +1,187 @@
+{
+  "version": "0.30.0",
+  "date": "2026-11-02",
+  "tag": "v0.30.0",
+  "range": {
+    "from": "v0.29.0",
+    "to": "6074bbec"
+  },
+  "entries": [
+    {
+      "id": "linear-time-declaration-lookup-metadata-interning-and-union",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "linear-time declaration lookup, metadata interning and union narrowing",
+      "body": "A discriminated union the size of typescript-go's node data now compiles in near-linear time, and every program compiles to the same IR as before.\n\n- The attribute pass gathers a function's declarations once, into a name-to-bucket table, instead of re-walking the body on every lookup.\n- Round-1 facts no longer allocate a stack-site table the size of the whole program.\n- IR metadata is interned through a text-to-index map instead of a linear scan.\n- Union narrowing in a switch walks the case's variants beside the remaining ones in one merge pass.\n- Operator and equality checks build a union's type name only when they refuse.\n\nSuperlinear costs remain in `src/escape.ts`, which allocates a whole-program table per function, and in `src/statements.ts`, where the case-label checks are quadratic in the case count.\n\nMeasured: compile time of the generated union program, median of 5, base vs head, with interleaved base/base-copy/head rounds:\n- 100 variants: 63 to 43 ms\n- 200 variants: 148 to 85 ms\n- 400 variants: 540 to 175 ms\n- 800 variants: 2699 to 396 ms\n- 1600 variants: 13293 to 1085 ms (12.3x)\n- self-compile: 2280 to 2248 ms, inside the 4.5% band\nBase vs base-copy noise is at most 9%. Per doubling of the variant count, head grows 2.0-2.7x and base 2.3-5.0x. An independent build found all 897 positive cases, all 2315 negative cases and the compiler's own 113 modules byte-identical between base and head.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/union_scale"
+      ],
+      "commits": [
+        "ff605ff"
+      ],
+      "pr": 1136,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-29-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.29.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "888393c"
+      ],
+      "pr": 1138,
+      "author": "github-actions[bot]",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "connect-nish-net-postgres-through-a-unix-socket",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "connect nish/net/postgres through a Unix socket",
+      "body": "* feat(interop): connect nish/net/postgres through a Unix socket\n\npgTarget and pgTargetUrl resolve libpq's host and port, or a postgres://\nURL, into a PgTarget: a host starting with / or @ is the socket\n<host>/.s.PGSQL.<port>, anything else TCP, unchanged. The URL's host, port\nand query are percent-decoded; a bad escape or %00 is refused, and so is a\nsocket path over sun_path, never cut short. The live suite gains a unix\nscenario that logs in by peer or trust with a wrong password and reads\nover the socket.\n\nTests: tests/link/std_postgres_unix_target\nTests: tests/postgres/live (unix)\n\n* docs(interop): record and document Unix socket targets for nish/net/postgres\n\nThe guide page gains \"Connecting over a Unix socket\": what pgTarget and\npgTargetUrl take, the 107-byte sun_path limit, and that peer and trust send\nno password. The security record adds PG-18 to PG-20 (sun_path, escapes,\nhost and port splitting) and accepts PG-21 (no socket owner check) and\nPG-22 (a socket file taken as a directory, as libpq does). The unit test\ngains 3000 seeded URLs pinning that the parser never panics. CI's\npostgres-live job mounts the service's socket directory so the unix\nscenario runs there under trust.\n\nTests: tests/link/std_postgres_unix_target, tests/postgres/live (unix)\n\n* refactor(interop): decode postgres URL targets with nish/net/url's urlDecode\n\npgTargetUrl's own hex decoder is replaced by urlDecode, the audited\npercent-decoder in std/net/url.ts. It refuses the same bad escapes and\n%00, and also escapes that decode to bytes that are not UTF-8, which is\nnow PG_TARGET_BAD_ESCAPE.\n\nTests: tests/link/std_postgres_unix_target\n\n* style(interop): format pgDecoded\n\n* perf(interop): prove the Unix-target URL parser's indexes in range\n\nThe performance gate found five bounds checks in pgTargetUrl that the\nprover could not drop: loops bounded by the authority's end, which it does\nnot know lies within the URL. Each loop now also tests the index against\nzero and the URL's length, always true, so every check is proven away.\n\n* fix(interop): end a URL's user information at the first @ and refuse a raw NUL anywhere\n\npgTargetUrl ended the user information at the authority's last `@`, where\nlibpq ends it at the first, so `postgres://u:p@ss@db/app` named `db` here\nand `ss@db` to libpq. A second raw `@` in the authority, or a first `@`\nafter a `?`, is now refused rather than read either way; an `@` in a\npassword is written `%40`. A raw NUL byte in any part of the URL, the\nparts the parser does not otherwise read included, is refused too, as the\nrecord already claimed.\n\nThe guide lists the bracket refusals, IPv6 hosts, that pgTarget does not\npercent-decode, and that an empty port or host is refused where libpq takes\nit as unset.\n\nRefs: docs/security/postgres.md\nTests: tests/link/std_postgres_unix_target\n\n* test(self): regenerate the postgres bench goldens for the target parser\n\n* test(interop): fuzz connection targets with NUL and non-ASCII bytes\n\nThe seeded URLs now include a raw NUL, `é` and its escape, and every\naccepted target must hold no NUL in its host or path, so the fuzz backs\nPG-19 rather than only \"no panic\". The security index counts PG-20, fixed\nin review.\n\nTests: tests/link/std_postgres_unix_target",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a9fcb8d"
+      ],
+      "pr": 1111,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "time-nish-break-s-scripted-keys-by-the",
+      "type": "test",
+      "scope": "cli",
+      "breaking": false,
+      "title": "time nish break's scripted keys by the clock, not by frames",
+      "body": "The two `nish break on a terminal` stage checks failed on main from\na9fcb8d on, and on every PR built on it, with no change to the game or its\nterminal code. The relay sent each key once a count of frames had passed,\nbut the game steps 120 times a second whatever the frame rate, and since\n#1100 the rate starts at the best tier and falls under load. At a steady\n120 fps the Space meant to start play came three steps before the title's\n1 s outro ended, so the `p` after it reached a level still in its intro\nand did not pause. After F4 reopened the terminal at 30 fps, the `q` taps\ncame 333 ms apart, inside KeyState's 700 ms in which a second press of a\nkey is a repeat, so the game ignored one and never quit.\n\nA scripted key may now carry `afterMs`, the least time since the key\nbefore it. The Space after Enter waits out the outro, each key after a wait\nis spaced so it gets a step of its own, and taps of one key are a second\napart. The keys and what each checks are unchanged.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js break (3 of 3 runs",
+        "and with all four cores busy)"
+      ],
+      "commits": [
+        "07b8715"
+      ],
+      "pr": 1140,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-01"
+    },
+    {
+      "id": "parse-and-answer-http-1-1-requests-in",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "parse and answer HTTP/1.1 requests in a third fewer instructions",
+      "body": "The TechEmpower plaintext entry spent more than half its CPU in user space,\nand most of that in nish/net/http1 walking the same bytes several times. The\nparser now reads each field line once: the scan for the line's end reads\nsixteen bytes at a time with one bounds check (a nish:simd load and a\nword-at-a-time test for control bytes and DEL), and records whether the line\nholds a byte no field value may, so http1FieldLine no longer scans the value\nagain. A token byte is one shift and mask instead of fourteen comparisons.\nThe Connection list is walked once for close, keep-alive and upgrade instead\nof three times, and a field's four spans are set after one capacity check.\nThe response writer copies field names, values and the date with one move\neach, writes the status, CRLF and \": \" with plain stores, and counts digits\nwithout a division loop.\n\nWhat is refused, and with which status and reason, is unchanged. New checks\nput NUL, 0x01, 0x1f, DEL and a bare CR at each byte of a 40-byte value, and\nHTAB and obs-text likewise, cutting the stream at every byte at the block\nboundaries; the output under Node matches the native one.\n\nThe vector load is made in a helper of its own, http1Load16: inside\nhttp1TakeLine's loop the compiler emitted it without its array (invalid IR,\n\"bitcast i8*  to i8*\"), a codegen bug to fix separately.\n\nAlso in this change: docs/wp49-async-server.md, the design for async/await\non the server (D1, reversing WP24's refusal for a restricted async, accepted\nby the owner), and .claude/plans/wp49-async-server.plan.md, its stages.",
+      "metrics": [
+        "user instructions per plaintext request (callgrind, 32,000 requests 16-deep with TFB's headers, exact): 10,941 before, 7,146 after (-35%)",
+        "plaintext 16-deep, server on one core of a shared 4-vCPU VM, wrk on the other three, medians of 3 interleaved rounds of 5 s: 857k / 733k / 694k / 608k req/s at 256 / 1,024 / 4,096 / 16,384 connections, from 589k / 573k / 548k / 451k; uWebSockets.js 607k / 522k / 560k / 552k; noise band 5.7% / 1.1% / 4.0% / 6.6%"
+      ],
+      "refs": [
+        "docs/security/http1.md",
+        "docs/wp49-async-server.md"
+      ],
+      "tests": [
+        "tests/link/net_http1"
+      ],
+      "commits": [
+        "924e0ee"
+      ],
+      "pr": 1139,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-01"
+    },
+    {
+      "id": "load-a-nish-simd-vector-from-an-array",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "load a nish:simd vector from an array whose header a loop hoisted",
+      "body": "A loop's header hoist collected the arrays its body indexes, takes the\nlength of, or reads through uncheckedGet/uncheckedSet, but not those a\nnish:simd load or store reaches. An inner loop that read only `buf.length`\nitself lifted a header with no `data`, and that header shadowed the outer\nloop's, so `loadU8x16(buf, i)` inside it took an empty value as its\npointer and emitted `bitcast i8*  to i8*`. The vector access now asks the\nhoist for both `len` and `data`, as its bounds check and its load use them.\n\nstd/net/http1.ts no longer needs the http1Load16 helper that worked\naround it: http1TakeLine calls loadU8x16 directly.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/simd_load_field_loop"
+      ],
+      "commits": [
+        "1d7b69c"
+      ],
+      "pr": 1144,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-01"
+    },
+    {
+      "id": "read-the-clock-once-per-serve-call-for",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "read the clock once per serve call for the Date field",
+      "body": "HttpDate.current() read Date.now() for every response. Http1Server now\nreads the clock once when readable or writable begins a serve call, and\nevery response written before the flush that ends it carries that reading.\nA response written outside a serve call, an answer given later, reads the\nclock as it is written; a pinned date wins over both.\n\nMeasured: 7,137.1 -> 7,107.8 Ir per request (-29.3, -0.41%), callgrind on\nbench/techempower plaintext, 16 pipelined requests per round on one\nconnection, Ir differenced between 3,200 and 19,200 requests; two runs of\neach binary agree within 0.03 Ir per request. Callgrind does not count the\nclock syscall valgrind substitutes for the vDSO, so the native saving per\navoided read is larger than this figure.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_http1_server"
+      ],
+      "commits": [
+        "b68bd1a"
+      ],
+      "pr": 1146,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-01"
+    },
+    {
+      "id": "pgcarrier-postgres-queries-on-the-handler-s-loop",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "PgCarrier, Postgres queries on the handler's loop",
+      "body": "* feat(interop): PgCarrier, Postgres queries on the handler's loop\n\nPgCarrier runs PgPool and PgBatcher queries on an HttpHandler's loop, so a\nroute handler queries Postgres without blocking its worker. Checkpoint:\nthe loopback test, seven panic tests and the live suite pass, but placing\nthe carrier in std/net/postgres.ts breaks the module's deny-every-capability\nchecks (link/std_postgres_caps and the other std_postgres programs compiled\nunder --deny), which the security record states as a property. Not ready to\nmerge until that is resolved.\n\nTests: tests/link/std_postgres_carrier\n\n* refactor(interop): move PgCarrier into nish/net/postgres-carrier\n\nPgCarrier reads sockets, the clock and the entropy source, and\nnish/net/postgres is checked to reach none of them: the std_postgres\nprograms compile under a policy that denies every capability. The carrier\nmoves to a module of its own, registered in stdModuleNames, the release\npresence gates and std/README.md, and nish/net/postgres goes back to\nsans-IO with only the batcher's shed() and readable maxRequests added.\n\nTests: tests/link/std_postgres_caps, tests/link/std_postgres_carrier\n\n* docs(interop): record PgCarrier's scope, caps and findings, and guide route handlers to it\n\ndocs/security/postgres.md now covers std/net/postgres-carrier.ts: its\nscope, PG-23 (connect timeout) and PG-24 (a lost execution's batched\nrequests shed) fixed, PG-25 holding, PG-26 (no per-query deadline)\naccepted, its panic sites and its fixed caps. The postgres guide gains\n\"Querying from a route handler\".\n\nRefs: docs/security/postgres.md#findings\nTests: tests/link/std_postgres_carrier\n\n* chore(interop): format nish/net/postgres-carrier\n\nLine breaks only, as biome formats them.\n\n* fix(interop): keep a server's failure past the connect deadline, answer the guide's queries once\n\nThe connect deadline no longer overwrites a failure the server already\nreported with -110, and a slot's poll interest is changed only when it\ndiffers. The guide's handler example answers each request once, a query\nwith no row included; PG-23 says how queries waiting on an unreachable\nserver fail.\n\n* refactor(interop): share the carrier's poll bits and fold its repeated steps\n\nPgCarrier takes its readiness bits from nish/net/http1-server, names the\nquery an event is about, closes a slot's socket and fills its free stacks\nthrough one helper each, and reads the clock once per connect pass.\n\n* test(self): regenerate the checked goldens for PgBatcher.shed\n\n* test(interop): pin PgCarrier's batching, refusals and close\n\nThe carrier's loopback test now counts the batcher's executions on its\nstand-in server: three clients' keys go out in one execution and each\nclient gets its own row or 404, and an execution of three keys lost with\nits connection fails all three requests. The stand-in answers a refused\nstatement with an ErrorResponse, so a plain query's refusal is shown\nreaching its own request as PG_CARRIER_ERROR then PG_CARRIER_FAILED with\nfailure 0, a refused batch failing each of its requests, and the\nconnection answering the queries after them. close() with a query held by\nthe server ends that connection while the handler goes on answering.\n\nThe live `refused` check now pins ECONNREFUSED (-111), which the old\npattern let the connect timeout's -110 pass as. The panic tests lose their\nunused imports, and request_panic's header names what it pins: no event\nhas named a query yet.\n\nTests: tests/link/std_postgres_carrier\n\n* docs(interop): name every cause of PgCarrier.attach's panic\n\nattach panics wherever PgPool.register refuses, which is also on a NUL in\nthe batcher's name or SQL and past 256 statements; the message, the guide\nand the security record's panic table now say so. The record's carrier\nparagraph describes the new checks and the live suite's current output,\nthe PostgreSQL row's two Medium findings are counted in the index's Total,\nand the class JSDoc sits on PgCarrier rather than on fillFree.\n\n* fix(interop): make PgCarrier.close() final and range-check its watch id\n\nclose() is now idempotent and marks the carrier closed: after it, run,\nrunInt and runText answer PG_CARRIER_FULL and next() answers\nPG_CARRIER_NONE, so a carrier used after close() connects nothing on its\nclosed poll set. Queries in flight at close() get no further event; their\nrequests are the program's to answer, which the guide and the security\nrecord now say. The constructor checks limits.watch against\nHANDLER_MAX_WATCHED before it makes the poll set, so a bad id panics\nwithout leaking a descriptor.\n\nThe carrier test now asserts the three clients were taken in one handler\nturn, pins the close() refusals, and words its labels to what they check.\nThe record adds PG-27, a reconnect with no backoff while the server is\ndown, accepted because the attempts are bounded by the queries waiting,\nand states that the flat-arena window excludes the error and reconnect\npaths. The live carrier scenario disposes its pool after close().\n\nRefs: docs/security/postgres.md\nTests: tests/link/std_postgres_carrier",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8c4e91f"
+      ],
+      "pr": 1145,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-01"
+    },
+    {
+      "id": "regions-in-the-runtime-wp46-stage-1-1142",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "regions in the runtime (WP46 stage 1)",
+      "body": "A fifteenth runtime unit, runtime/runtime-region.c, makes, enters, leaves\nand frees a region: an arena of its own behind a 64-bit handle (a 24-bit\nslot index and a 40-bit generation). Every call checks the handle first and\npanics on a zero handle, a stale or forged one, one made on another thread,\na re-enter, a free while entered and a leave out of order. Entering swaps the\nregion's arena with the thread's, so the inlined bump allocates into it.\n\nnish_arena_grow reads a thread-local next-chunk size: a region's chunks\nstart at their first allocation and double, while a thread's own arena keeps\nits 64 KiB floor, so 100,000 small regions stay small. The unit is paired in\nscripts/build.sh and src/run-cache.ts together, and `--profile wasm` refuses\nIR naming @nish_region_ with exit 2, pointing at `--profile wasi`.\n\nThe larger slow path shifts LTO's inlining around it: nish_str_from_i32 is\nno longer inlined into the map loop, a constant of about 458k instructions a\nrun. The map-proto-ordered and map-proto-unordered baselines are raised by\nthat cost; the region path itself runs once per 64 KiB chunk. Mark and\nrelease across a region boundary, the lock held across a region panic and\nthe unbounded chunk doubling are recorded open for stage 2.",
+      "metrics": [
+        "runtime.c .text 3,453 -> 3,479 (+26) and threads 3,654 -> 3,694 (+40), within their existing ceilings; runtime-region.c 664 (852 threaded); 100,000 regions x 10 rounds resident 38,620 KiB flat; map-proto-ordered +0.181%, map-proto-unordered +0.105% (cachegrind, CI run 41373575079)"
+      ],
+      "refs": [
+        "docs/wp46-long-running-memory.md",
+        "docs/security/runtime.md#findings"
+      ],
+      "tests": [
+        "tests/runtime/region-test.c (node tests/run.js region)"
+      ],
+      "commits": [
+        "6074bbe"
+      ],
+      "pr": 1142,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-01"
+    }
+  ]
+}

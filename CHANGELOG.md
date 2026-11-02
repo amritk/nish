@@ -26,6 +26,33 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-02
+
+### Added
+
+- interop: Connect nish/net/postgres through a Unix socket ([#1111](https://github.com/amritk/nish/pull/1111))
+- interop: PgCarrier, Postgres queries on the handler's loop ([#1145](https://github.com/amritk/nish/pull/1145))
+- runtime: Regions in the runtime (WP46 stage 1) ([#1142](https://github.com/amritk/nish/pull/1142))
+
+### Fixed
+
+- codegen: Load a nish:simd vector from an array whose header a loop hoisted ([#1144](https://github.com/amritk/nish/pull/1144))
+
+### Performance
+
+- checker: Linear-time declaration lookup, metadata interning and union narrowing ([#1136](https://github.com/amritk/nish/pull/1136))
+- net: Parse and answer HTTP/1.1 requests in a third fewer instructions ([#1139](https://github.com/amritk/nish/pull/1139))
+- net: Read the clock once per serve call for the Date field ([#1146](https://github.com/amritk/nish/pull/1146))
+
+### Tests
+
+- cli: Time nish break's scripted keys by the clock, not by frames ([#1140](https://github.com/amritk/nish/pull/1140))
+
+### Build
+
+- Regenerate package-lock.json for v0.29.0 ([#1138](https://github.com/amritk/nish/pull/1138))
+
+
 ## [0.29.0] - 2026-10-31
 
 ### Breaking changes
@@ -1473,3 +1500,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.27.2]: https://github.com/amritk/nish/releases/tag/v0.27.2
 [0.28.0]: https://github.com/amritk/nish/releases/tag/v0.28.0
 [0.29.0]: https://github.com/amritk/nish/releases/tag/v0.29.0
+[0.30.0]: https://github.com/amritk/nish/releases/tag/v0.30.0
