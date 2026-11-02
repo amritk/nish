@@ -800,6 +800,22 @@ const intArray = (conn: PgConnection, c: IntCase, binary: boolean): boolean => {
 const INT_SUMMARY: string =
   "count(*), count(x), min(x), max(x), sum(x), case when count(*) <= 4 then string_agg(coalesce(x::text, 'NULL'), ' ' order by ord) else '...' end"
 
+/** The request `t` of `intarrays` names: a case in text or binary, the mismatch, or the request after it. */
+const intLabel = (cases: IntCase[], t: i32): string => {
+  const paired: i32 = 2 * toI32(cases.length)
+  if (t < 0 || t > paired + 1) {
+    return `request ${t}`
+  }
+  if (t === paired) {
+    return "int4[] binary to int8[]"
+  }
+  if (t > paired) {
+    return "int8[] binary after it"
+  }
+  const k: i32 = t >> 1
+  return `${cases[k].name} ${(t & 1) === 1 ? "binary" : "text"}`
+}
+
 /**
  * `intarrays`: `int4[]` and `int8[]` parameters in text and in binary, read
  * back alike: empty, one element, NULLs, the type's extremes, arrays that grow
@@ -811,13 +827,13 @@ const INT_SUMMARY: string =
 const intarrays = (target: PgTarget): i32 => {
   const config = liveConfig()
   config.maxOutput = INT_OUTPUT
-  const pool = poolOf(config, toI32(1), toI32(8), "")
-  pool.register("int4s", `select ${INT_SUMMARY} from unnest($1::int4[]) with ordinality as u(x, ord)`, noTypes())
-  pool.register("int8s", `select ${INT_SUMMARY} from unnest($1::int8[]) with ordinality as u(x, ord)`, noTypes())
   const cases = intCases()
   const paired: i32 = 2 * toI32(cases.length)
   // Then the mismatch, and a request after it.
   const requests: i32 = paired + 2
+  const pool = poolOf(config, toI32(1), requests, "")
+  pool.register("int4s", `select ${INT_SUMMARY} from unnest($1::int4[]) with ordinality as u(x, ord)`, noTypes())
+  pool.register("int8s", `select ${INT_SUMMARY} from unnest($1::int8[]) with ordinality as u(x, ord)`, noTypes())
   const seen: string[] = []
   for (let t: i32 = 0; t < requests; t++) {
     pool.request()
@@ -825,9 +841,13 @@ const intarrays = (target: PgTarget): i32 => {
   }
   const d = new Driver(pool, target)
   let done: i32 = 0
+  let sent: i32 = 0
   while (done < requests) {
-    let slot: i32 = pool.dispatch()
-    while (slot >= 0) {
+    // One request in flight at a time, so a bind meets an empty output buffer
+    // and only the case past `maxOutput` is refused.
+    const slot: i32 = sent === done ? pool.dispatch() : toI32(-1)
+    if (slot >= 0) {
+      sent += 1
       const t: i32 = pool.ticket
       const conn = pool.connection(slot)
       if (t < paired) {
@@ -852,7 +872,6 @@ const intarrays = (target: PgTarget): i32 => {
       }
       conn.bindEnd()
       pool.send()
-      slot = pool.dispatch()
     }
     if (!d.pump(PATIENCE)) {
       console.log("timed out")
@@ -862,10 +881,8 @@ const intarrays = (target: PgTarget): i32 => {
     while (event !== PG_NEED_MORE) {
       const conn = pool.connection(d.slot)
       const t: i32 = pool.ticket
-      const k: i32 = t >> 1
-      const label: string =
-        t < paired ? `${cases[k].name} ${(t & 1) === 1 ? "binary" : "text"}` : t === paired ? "int4[] binary to int8[]" : "int8[] binary after it"
       if (event === PG_ROW) {
+        const label: string = intLabel(cases, t)
         const cols: string[] = []
         for (let c: i32 = 0; c < 6; c++) {
           cols.push(conn.isNull(c) ? "NULL" : conn.columnText(c))
@@ -874,7 +891,7 @@ const intarrays = (target: PgTarget): i32 => {
         seen[t] = row
         console.log(`${label}: ${row}`)
       } else if (event === PG_ERROR) {
-        console.log(`${label}: ${codeOf(conn)}`)
+        console.log(`${intLabel(cases, t)}: ${codeOf(conn)}`)
       } else if (event === PG_GROUP_DONE) {
         done += 1
       } else if (event === PG_LOST || event === PG_FAILED) {
