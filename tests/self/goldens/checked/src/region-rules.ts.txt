@@ -550,23 +550,25 @@ function RegionWalk.visitArguments(this: RegionWalk, node: Node, handed: Node[],
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.bindArrowParam
   escaping: seed
-  calls: RegionWalk.bindArrowParam RegionWalk.origin RegionWalk.visit joinOrigin nish_panic_index unwrapParens
-  pointer this: size=104 writesThrough=true captured=false passedTo=RegionWalk.origin#0 RegionWalk.bindArrowParam#0 RegionWalk.visit#0 RegionWalk.visit#0
+  calls: RegionWalk.arrowResult RegionWalk.bindArrowParam RegionWalk.origin RegionWalk.visit joinOrigin nish_panic_index unwrapParens
+  pointer this: size=104 writesThrough=true captured=false passedTo=RegionWalk.arrowResult#0 RegionWalk.origin#0 RegionWalk.bindArrowParam#0 RegionWalk.visit#0 RegionWalk.visit#0
   pointer node: size=40 writesThrough=false captured=false
   pointer handed: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 around: i32 (let)
   local +1:16 arg: Node (const)
-  callee +2:11 unwrapParens -> @unwrapParens
-  callee +3:18 joinOrigin -> @joinOrigin
-  callee +3:37 RegionWalk.origin -> @RegionWalk.origin
-  local +6:16 arg: Node (const)
-  local +7:13 a: Node (const)
-  callee +7:17 unwrapParens -> @unwrapParens
-  local +9:20 param: Node (const)
-  callee +11:13 RegionWalk.bindArrowParam -> @RegionWalk.bindArrowParam
-  callee +14:9 RegionWalk.visit -> @RegionWalk.visit
-  callee +16:9 RegionWalk.visit -> @RegionWalk.visit
+  local +2:13 a: Node (const)
+  callee +2:17 unwrapParens -> @unwrapParens
+  callee +3:16 joinOrigin -> @joinOrigin
+  callee +3:56 RegionWalk.arrowResult -> @RegionWalk.arrowResult
+  callee +3:78 RegionWalk.origin -> @RegionWalk.origin
+  local +5:16 arg: Node (const)
+  local +6:13 a: Node (const)
+  callee +6:17 unwrapParens -> @unwrapParens
+  local +8:20 param: Node (const)
+  callee +10:13 RegionWalk.bindArrowParam -> @RegionWalk.bindArrowParam
+  callee +13:9 RegionWalk.visit -> @RegionWalk.visit
+  callee +15:9 RegionWalk.visit -> @RegionWalk.visit
 function RegionWalk.visitBuiltin(this: RegionWalk, node: Node, handed: Node[]): void -> @RegionWalk.visitBuiltin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit

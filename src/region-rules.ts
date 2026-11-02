@@ -594,15 +594,17 @@ class RegionWalk {
   /**
    * A call's arguments, walking each arrow's body as part of `f`: the callee
    * runs it here, with its captures (`sourceLocal`), and hands its parameters
-   * what the call is handed or, from a user function (`seed` region), memory
-   * it allocated.
+   * what the call is handed, what any arrow of the call answers (`compose`
+   * hands `g()` to `f`, `twice` hands `f`'s answer back to `f`) or, from a
+   * user function (`seed` region), memory it allocated. An arrow's answer
+   * reads its own parameters, so it is taken from the run before: the
+   * fixpoint in `regionFindings` reruns the walk until no binding moves.
    */
   visitArguments(node: Node, handed: Node[], seed: i32): void {
     let around = seed
     for (const arg of handed) {
-      if (unwrapParens(arg).kind !== N_ARROW) {
-        around = joinOrigin(around, this.origin(arg))
-      }
+      const a = unwrapParens(arg)
+      around = joinOrigin(around, a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a))
     }
     for (const arg of node.children[1].children) {
       const a = unwrapParens(arg)

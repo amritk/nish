@@ -7558,7 +7558,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 | Refused | Code |
 | --- | --- |
 | region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`) |
-| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_fixpoint_chain`) |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
 | `enter`'s or `enterWith`'s `f` answering anything but a number, a `boolean`, an `enum` or a `Region`: an array, an object or a string | **NL2611** (`reject_region_enter_result`, `reject_region_enter_string`) |
 | `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | **NL2612** (`reject_region_threads`) |
 | a value whose type holds a `Region` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, a value sent on a channel | **NL2613** (`reject_region_task_arg_field`, `reject_region_task_answer`, `reject_region_channel_map`, `reject_region_parallel_capture`) |
@@ -7576,10 +7576,12 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   (`docs/security/runtime.md`, RT-45).
 - **An arrow handed to a function runs inside `f`, and is judged as `f`'s
   own code.** Its body is walked with what it captures, its parameters take
-  what the call is handed or memory the callee allocated, and what it answers
-  is part of what the call answers, so `pick(() => a.node)` stored in the root
-  is NL2610 as `a.node` is (`reject_region_arrow_keep`, `_grow`, `_link`,
-  `_result`, `_generic`). The walk runs to a fixpoint however long a chain of
+  what the call is handed, what any arrow of the same call answers (the callee
+  may feed one arrow's answer to another, or to itself) or memory the callee
+  allocated, and what it answers is part of what the call answers, so
+  `pick(() => a.node)` stored in the root is NL2610 as `a.node` is
+  (`reject_region_arrow_keep`, `_grow`, `_link`, `_result`, `_generic`,
+  `_compose`, `_compose_temp`, `_twice`, `_twice_temp`). The walk runs to a fixpoint however long a chain of
   assignments is, never a fixed number of rounds (`reject_region_fixpoint_chain`).
 - **The rules are on types for threads, on values inside `f`.** NL2613 follows
   the type, so a handle hidden in a field of a task's argument is caught where
