@@ -76,8 +76,9 @@
  * **Binary integer arrays.** `paramInt4Array` and `paramInt8Array` send an
  * `i64[]` window as an `int4[]` or `int8[]` in PostgreSQL's binary layout:
  * four or eight bytes an element and no digits to write or parse, which the
- * benchmark (`bench/postgres/arrays.mjs`) measured at less than a tenth of the
- * text encoder's client CPU and up to half the server's on `unnest`.
+ * benchmark (`bench/postgres/arrays.mjs`) measured at about a tenth of the
+ * text encoder's client CPU, and at 1,000 elements a 51% cut in the server's
+ * on `unnest` for `int8[]`, 30% for `int4[]`.
  * `binaryArrayStart(oid)`, `binaryArrayInt` and `binaryArrayNull` build one
  * element at a time, NULLs included, and `arrayEnd` closes it. The Bind's
  * format codes stay a single zero word while every parameter is text; the

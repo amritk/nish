@@ -360,12 +360,15 @@ Binary pays wherever the array is long. On PostgreSQL 18, with seven runs of
 
 | measure | type | text | binary | cut |
 | --- | --- | ---: | ---: | ---: |
-| server CPU per Bind/Execute, `unnest($1)` | `int4` | 265.0 µs | 187.2 µs | 29% |
-| server CPU per Bind/Execute, `unnest($1)` | `int8` | 340.7 µs | 183.2 µs | 46% |
-| server CPU per Bind/Execute, `id = any($1)` | `int8` | 1236.6 µs | 1235.2 µs | within spread |
-| client CPU per array encoded | `int4` | 51.6 µs | 3.77 µs | 93% |
-| client CPU per array encoded | `int8` | 95.6 µs | 6.89 µs | 93% |
-| client CPU per `array_agg` column decoded | `int8` | 68.4 µs | 10.9 µs | 84% |
+| server CPU per Bind/Execute, `unnest($1)` | `int4` | 259.4 µs | 180.3 µs | 30%, within spread |
+| server CPU per Bind/Execute, `unnest($1)` | `int8` | 357.4 µs | 176.2 µs | 51% |
+| server CPU per Bind/Execute, `id = any($1)` | `int8` | 1255.4 µs | 1085.0 µs | within spread |
+| client CPU per array encoded | `int4` | 52.3 µs | 5.60 µs | 89% |
+| client CPU per array encoded | `int8` | 98.2 µs | 7.65 µs | 92% |
+| client CPU per `array_agg` column decoded | `int8` | 62.6 µs | 10.3 µs | 84% |
+
+The encode rows time the whole parameter both ways: a Bind holding the
+array, cancelled, less a Bind holding one NULL.
 
 At ten elements the server's cost is the same either way; where the
 statement's own work dominates, as an index probe per element in
@@ -587,7 +590,7 @@ one of them.
 `PG_BATCH_INT` keys are bound as a text `int8[]`, one `arrayInt` each. The
 statement's `$1::int8[]` would take the [binary builder](#binary-integer-array-parameters)
 as it is, which the benchmark puts at about a tenth of the client's encoding
-CPU and, for a batch of 1,000 keys, under half the server's on the `unnest`;
+CPU and, for a batch of 1,000 keys, a 51% cut in the server's on the `unnest`;
 the batcher does not use it yet.
 
 ```ts
