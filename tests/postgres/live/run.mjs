@@ -3,7 +3,9 @@
 // PostgreSQL server: the scenarios of `live.ts`, each compared with
 // `expected/<scenario>.out`, `../carrier.ts` serving HTTP while a query
 // sleeps, and the carrier reporting a server it cannot reach (`refused`) and
-// one that resets the connection (`reset`).
+// one that resets the connection (`reset`), and the TechEmpower database
+// entry (bench/techempower/db-main.ts) answering each of its test types from
+// TFB's World and Fortune tables (`tfb`).
 //
 //   node tests/postgres/live/run.mjs [--update] [scenario ...]
 //
@@ -41,7 +43,7 @@ const ROOT = join(HERE, "..", "..", "..");
 const NISH = join(ROOT, "build", "nish");
 const BIN = process.env.PG_BIN ?? "/usr/lib/postgresql/18/bin";
 const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "intarrays", "binary", "conduit", "batch", "unix"];
-const CHECKS = [...SCENARIOS, "carrier", "refused", "reset"];
+const CHECKS = [...SCENARIOS, "carrier", "refused", "reset", "tfb"];
 const UPDATE = process.argv.includes("--update");
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 for (const name of ONLY) {
@@ -334,6 +336,259 @@ const reset = async (exe) => {
   };
 };
 
+/**
+ * TFB's Fortune table, as its setup scripts load it, and one row of ours: an
+ * `&` in a message, which TFB's twelve rows lack, so the page's escaping of
+ * it is checked.
+ */
+const FORTUNES = [
+  "fortune: No such file or directory",
+  "A computer scientist is someone who fixes things that aren't broken.",
+  "After enough decimal places, nobody gives a damn.",
+  "A bad random number generator: 1, 1, 1, 1, 1, 4.33e+67, 1, 1, 1",
+  "A computer program does what you tell it to do, not what you want it to do.",
+  "Emacs is a nice operating system, but I prefer UNIX. — Tom Christaensen",
+  "Any program that runs right is obsolete.",
+  "A list is only as strong as its weakest link. — Donald Knuth",
+  "Feature: A bug with seniority.",
+  "Computers make very fast, very accurate mistakes.",
+  '<script>alert("This should not be displayed in a browser alert box.");</script>',
+  "フレームワークのベンチマーク",
+  "Fortune & Co: fish & chips.",
+];
+
+/** The fortunes page TFB's verifier expects: the request-time row added, sorted by message bytes, escaped. */
+const fortunesPage = () => {
+  const rows = FORTUNES.map((m, k) => [k + 1, m]);
+  rows.push([0, "Additional fortune added at request time."]);
+  rows.sort((a, b) => Buffer.compare(Buffer.from(a[1]), Buffer.from(b[1])));
+  const escape = (m) =>
+    m
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  return (
+    "<!DOCTYPE html><html><head><title>Fortunes</title></head><body><table><tr><th>id</th><th>message</th></tr>" +
+    rows.map(([id, m]) => `<tr><td>${id}</td><td>${escape(m)}</td></tr>`).join("") +
+    "</table></body></html>"
+  );
+};
+
+/** `GET path` on `port`: its status, headers and body. */
+const get = (port, path) =>
+  new Promise((resolve) => {
+    const req = request({ host: "127.0.0.1", port, path }, (res) => {
+      const chunks = [];
+      res.on("data", (d) => chunks.push(d));
+      res.on("end", () =>
+        resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }),
+      );
+    });
+    req.on("error", (e) => resolve({ status: 0, headers: {}, body: `error: ${e.message}` }));
+    req.end();
+  });
+
+/** Whether `rows` is `n` `{id, randomNumber}` objects, ids 1 to 10000, and rows sharing an id share its number. */
+const worldRows = (rows, n) => {
+  if (!Array.isArray(rows) || rows.length !== n) return false;
+  const seen = new Map();
+  for (const r of rows) {
+    if (Object.keys(r).join() !== "id,randomNumber") return false;
+    if (!Number.isInteger(r.id) || r.id < 1 || r.id > 10000) return false;
+    if (!Number.isInteger(r.randomNumber) || r.randomNumber < 1 || r.randomNumber > 10000) return false;
+    if (seen.has(r.id) && seen.get(r.id) !== r.randomNumber) return false;
+    seen.set(r.id, r.randomNumber);
+  }
+  return true;
+};
+
+/** A statement that fails unless every row of `rows` is the table's row now. */
+const rowsAreTable = (rows) => {
+  const pairs = [...new Map(rows.map((r) => [r.id, r.randomNumber])).entries()];
+  const values = pairs.map(([id, n]) => `(${id}, ${n})`).join(", ");
+  return (
+    `select 1 / (case when count(*) = ${pairs.length} then 1 else 0 end) from world ` +
+    `where (id, randomnumber) in (values ${values})`
+  );
+};
+
+/**
+ * A statement that fails when every distinct row of `rows` still holds the
+ * number `world_before` (the table copied before an update) had for its id.
+ */
+const rowsChanged = (rows) => {
+  const pairs = [...new Map(rows.map((r) => [r.id, r.randomNumber])).entries()];
+  const values = pairs.map(([id, n]) => `(${id}, ${n})`).join(", ");
+  return (
+    `select 1 / (case when count(*) < ${pairs.length} then 1 else 0 end) from world_before ` +
+    `where (id, randomnumber) in (values ${values})`
+  );
+};
+
+/**
+ * The TechEmpower database entry against TFB's tables: each test type's
+ * shape, headers and count clamping, its rows read back from the server, an
+ * update's rows written and changed, the fortunes page byte for byte, 64
+ * requests at once, and a clean exit on SIGTERM. It runs two prefork workers
+ * on one `SO_REUSEPORT` port. The sequential requests go over one kept-alive
+ * connection, so one worker likely answers them all; the 64 at once open
+ * their own connections and can reach both.
+ *
+ * The `world` and `fortune` tables are created unqualified, through `live`,
+ * whose connections set `search_path=nish_live`, so they land in that schema.
+ * The server sets no `search_path` and its SQL names the tables bare, as TFB's
+ * does: it finds them only because the throwaway cluster's role is also
+ * `nish_live`, which the default `"$user"` entry resolves to. Against a
+ * `$PG_TEST_URL` with another role it would not.
+ */
+const tfb = async (exe, tfbExe, db) => {
+  const quote = (s) => `'${s.replaceAll("'", "''")}'`;
+  const setup = [
+    "drop table if exists world",
+    "drop table if exists fortune",
+    "create table world (id integer primary key, randomnumber integer not null default 0)",
+    "insert into world select g, floor(random() * 10000 + 1)::integer from generate_series(1, 10000) g",
+    "create table fortune (id integer primary key, message varchar(2048) not null)",
+    `insert into fortune values ${FORTUNES.map((m, k) => `(${k + 1}, ${quote(m)})`).join(", ")}`,
+  ];
+  const made = live(exe, db, "exec", setup);
+  if (made.status !== 0) return { ok: false, detail: `tables: ${made.out}${made.err}` };
+  const http = await freePort();
+  const child = spawn(tfbExe, [
+    String(db.port),
+    db.user,
+    db.password,
+    db.database,
+    String(http),
+    "127.0.0.1",
+    "127.0.0.1",
+    "2",
+    "2",
+  ]);
+  let out = "";
+  child.stdout.on("data", (d) => {
+    out += d;
+  });
+  const exited = new Promise((resolve) => child.on("exit", resolve));
+  const problems = [];
+  const expect = (name, ok) => {
+    if (!ok) problems.push(name);
+  };
+  try {
+    if (!(await waitFor(child, () => out, `listening ${http}`, 30_000))) {
+      return { ok: false, detail: `no "listening" line: stdout ${JSON.stringify(out)}` };
+    }
+    const json = (r) => {
+      try {
+        return JSON.parse(r.body);
+      } catch {
+        return null;
+      }
+    };
+    const headed = (r, type) =>
+      r.status === 200 && r.headers.server === "nish" && typeof r.headers.date === "string" && r.headers["content-type"] === type;
+    const read = [];
+
+    const one = await get(http, "/db");
+    expect("/db headers", headed(one, "application/json"));
+    const row = json(one);
+    expect("/db is one object", row !== null && !Array.isArray(row) && worldRows([row], 1));
+    if (row && !Array.isArray(row)) read.push(row);
+    for (const [path, n] of [
+      ["/queries?queries=20", 20],
+      ["/queries", 1],
+      ["/queries?queries=foo", 1],
+      ["/queries?queries=0", 1],
+      ["/queries?queries=", 1],
+      ["/queries?queries=-3", 1],
+      ["/queries?queries=501", 500],
+      ["/queries?queries=99999999999999", 500],
+    ]) {
+      const r = await get(http, path);
+      expect(`${path} headers`, headed(r, "application/json"));
+      const rows = json(r);
+      expect(`${path} is ${n} rows`, worldRows(rows, n));
+      if (Array.isArray(rows)) read.push(...rows);
+    }
+    const check = live(exe, db, "exec", [rowsAreTable(read)]);
+    expect("the rows read are the table's", check.status === 0);
+
+    for (const [path, n] of [
+      ["/cached-queries?count=20", 20],
+      ["/cached-queries?count=x", 1],
+      ["/cached-queries?count=0", 1],
+      ["/cached-queries?count=501", 500],
+    ]) {
+      const r = await get(http, path);
+      expect(`${path} headers`, headed(r, "application/json"));
+      const rows = json(r);
+      expect(`${path} is ${n} rows`, worldRows(rows, n));
+      // No update has run yet, so the cache still matches the table.
+      if (worldRows(rows, n)) {
+        const cached = live(exe, db, "exec", [rowsAreTable(rows)]);
+        expect(`${path}'s rows are the table's`, cached.status === 0);
+      }
+    }
+
+    for (const [path, n] of [
+      ["/updates?queries=20", 20],
+      ["/updates?queries=bar", 1],
+      ["/updates?queries=0", 1],
+      ["/updates?queries=-3", 1],
+      ["/updates?queries=501", 500],
+    ]) {
+      const copied = live(exe, db, "exec", [
+        "drop table if exists world_before",
+        "create table world_before as select * from world",
+      ]);
+      expect(`${path}: the table is copied first`, copied.status === 0);
+      const r = await get(http, path);
+      expect(`${path} headers`, headed(r, "application/json"));
+      const rows = json(r);
+      expect(`${path} is ${n} rows`, worldRows(rows, n));
+      if (worldRows(rows, n)) {
+        const written = live(exe, db, "exec", [rowsAreTable(rows)]);
+        expect(`${path}'s rows are written`, written.status === 0);
+        // One row draws its old number again 1 time in 10000, so only the
+        // many-row counts require a change.
+        if (n > 1) {
+          const changed = live(exe, db, "exec", [rowsChanged(rows)]);
+          expect(`${path}'s rows carry new numbers`, changed.status === 0);
+        }
+      }
+    }
+
+    const page = fortunesPage();
+    for (let k = 0; k < 2; k++) {
+      const f = await get(http, "/fortunes");
+      expect(`/fortunes ${k} headers`, headed(f, "text/html; charset=utf-8"));
+      expect(`/fortunes ${k} page`, f.body === page);
+    }
+
+    const many = await Promise.all(
+      Array.from({ length: 64 }, (_, k) => get(http, k % 2 ? "/queries?queries=20" : "/db")),
+    );
+    expect(
+      "64 requests at once",
+      many.every((r, k) => r.status === 200 && worldRows(k % 2 ? json(r) : [json(r)], k % 2 ? 20 : 1)),
+    );
+  } finally {
+    child.kill("SIGTERM");
+    const timer = setTimeout(() => child.kill("SIGKILL"), 10_000);
+    const status = await exited;
+    clearTimeout(timer);
+    expect("exits 0 on SIGTERM", status === 0);
+    live(exe, db, "exec", [
+      "drop table if exists world",
+      "drop table if exists fortune",
+      "drop table if exists world_before",
+    ]);
+  }
+  return { ok: problems.length === 0, detail: `failed: ${problems.join("; ")}; stdout ${JSON.stringify(out)}` };
+};
+
 const main = async () => {
   const db = process.env.PG_TEST_URL
     ? fromUrl(process.env.PG_TEST_URL)
@@ -346,6 +601,7 @@ const main = async () => {
     const exe = join(work, "live");
     compile(join(HERE, "live.ts"), exe);
     compile(join(HERE, "..", "carrier.ts"), join(work, "carrier"));
+    if (wanted("tfb")) compile(join(ROOT, "bench", "techempower", "db-main.ts"), join(work, "tfb"));
 
     const setup = [
       "drop schema if exists nish_live cascade",
@@ -387,6 +643,7 @@ const main = async () => {
       ["carrier", () => carrier(join(work, "carrier"), db)],
       ["refused", () => refused(join(work, "carrier"))],
       ["reset", () => reset(join(work, "carrier"))],
+      ["tfb", () => tfb(exe, join(work, "tfb"), db)],
     ];
     for (const [name, check] of checks) {
       if (!wanted(name)) continue;

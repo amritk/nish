@@ -21,6 +21,30 @@
         "notes": "One process, one thread: the standard library's Http1Server on one pollWait loop. The JSON is serialized by JsonWriter on every request.",
         "versus": "None"
       }
+    },
+    {
+      "postgres": {
+        "db_url": "/db",
+        "query_url": "/queries?queries=",
+        "update_url": "/updates?queries=",
+        "cached_query_url": "/cached-queries?count=",
+        "fortune_url": "/fortunes",
+        "port": 8080,
+        "approach": "Realistic",
+        "classification": "Platform",
+        "database": "Postgres",
+        "framework": "None",
+        "language": "Nish",
+        "flavor": "None",
+        "orm": "Raw",
+        "platform": "nish",
+        "webserver": "None",
+        "os": "Linux",
+        "database_os": "Linux",
+        "display_name": "nish [postgres]",
+        "notes": "One process a core under nish/net/prefork, each its own HttpHandler and PgCarrier on an SO_REUSEPORT listener. Every in-flight request's World reads ride one PgBatcher execution; an update writes its rows in one statement; cached-query reads a table loaded at start-up.",
+        "versus": "None"
+      }
     }
   ]
 }
