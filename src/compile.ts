@@ -161,6 +161,57 @@ const makeDirectory = (dir: string): boolean => {
   return mkdirSync(dir)
 }
 
+/**
+ * The name of a scratch entry under `parent`, `tmp-`, the clock and the
+ * attempt, then `suffix`. The clock alone is not unique: two processes sharing
+ * a cache read it in the same tick (CI's macOS runners do), so each name is
+ * taken by an exclusive create and a taken one is never reused.
+ */
+const scratchName = (parent: string, attempt: i32, suffix: string): string =>
+  `${parent}/tmp-${hexOfI64(monotonicNanos(), 16)}-${attempt}${suffix}`
+
+/**
+ * A new directory under `parent` that this process made and no other shares:
+ * `mkdir` refuses a name already there (-17), so of two processes that pick
+ * one name exactly one gets it and the other tries the next. "" when none
+ * could be made.
+ */
+const makeScratchDirectory = (parent: string): string => {
+  if (!makeDirectory(parent)) {
+    return ""
+  }
+  for (let attempt: i32 = 0; attempt < 16; attempt++) {
+    const dir = scratchName(parent, attempt, "")
+    const made = mkdirSyncMode(dir, 0o700)
+    if (made === 0) {
+      return dir
+    }
+    if (made !== -17) {
+      return ""
+    }
+  }
+  return ""
+}
+
+/**
+ * A new empty file under `parent`, ending in `suffix`, that this process
+ * created and no other shares, as `makeScratchDirectory` takes a directory.
+ * "" when none could be made.
+ */
+const makeScratchFile = (parent: string, suffix: string): string => {
+  for (let attempt: i32 = 0; attempt < 16; attempt++) {
+    const file = scratchName(parent, attempt, suffix)
+    const made = createFileExclusiveSync(file, "", 0o600)
+    if (made === 0) {
+      return file
+    }
+    if (made !== -17) {
+      return ""
+    }
+  }
+  return ""
+}
+
 /** `makeDirectory(dirname(file))`, reported once and the same way everywhere. */
 const makeDirectoryFor = (file: string): boolean => {
   const dir = dirname(file)
@@ -2048,9 +2099,9 @@ const buildIntoCache = (
   if (!makePrivateRoot(cacheRoot, json)) {
     return 3
   }
-  const work = `${cacheEntry}/tmp-${hexOfI64(monotonicNanos(), 16)}`
-  if (!makeDirectory(work)) {
-    console.error(`run: cannot create directory ${work}`)
+  const work = makeScratchDirectory(cacheEntry)
+  if (work.length === 0) {
+    console.error(`run: cannot create a scratch directory in ${cacheEntry}`)
     return 1
   }
   const outputs: string[] = []
@@ -2281,7 +2332,8 @@ const sqliteCflags = (): string => {
  * Every link also writes one file of its own into the root before it can look
  * anything up: the key holds what `cc --version` prints, the language reads a
  * process's output only through `spawnSyncTo` into a file, so that output goes
- * to `<root>/tmp-<hex>.cc`, is read back, and the file is removed.
+ * to `<root>/tmp-<hex>-<attempt>.cc`, a name created exclusively so two links
+ * never share it, is read back, and the file is removed.
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
@@ -2322,7 +2374,10 @@ const cachedRuntime = (
     return none
   }
   const cc = cCompiler()
-  const probe = `${cacheRoot}/tmp-${hexOfI64(monotonicNanos(), 16)}.cc`
+  const probe = makeScratchFile(cacheRoot, ".cc")
+  if (probe.length === 0) {
+    return none
+  }
   const ask: string[] = [cc, "--version"]
   const answered = spawnSyncTo(ask, probe, "/dev/null")
   const version = readFileSyncOrNull(probe)
@@ -2563,8 +2618,8 @@ const cachedEntry = (
   if (stored !== null && stored === key) {
     return cacheEntry
   }
-  const work = `${cacheEntry}/tmp-${hexOfI64(monotonicNanos(), 16)}`
-  if (!makeDirectory(work)) {
+  const work = makeScratchDirectory(cacheEntry)
+  if (work.length === 0) {
     return ""
   }
   const script = `${root}/scripts/build.sh`
