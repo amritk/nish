@@ -43,6 +43,17 @@ export const ROLE_CONSTRUCTOR: i32 = 2
 export const STRUCT_CLASS: i32 = 0
 export const STRUCT_INTERFACE: i32 = 1
 
+/** One `await` in a function's body: the async function it awaits, and the expression that does. */
+export class AwaitEdge {
+  callee: FunctionSig
+  site: Node
+
+  constructor(callee: FunctionSig, site: Node) {
+    this.callee = callee
+    this.site = site
+  }
+}
+
 /**
  * One function, method or constructor.
  *
@@ -114,8 +125,7 @@ export class FunctionSig {
    * of, each beside the call that does it — the await graph, which may not
    * have a cycle (`src/async-check.ts`, `rejectAwaitCycles`).
    */
-  awaits: FunctionSig[]
-  awaitSites: Node[]
+  awaits: AwaitEdge[]
   /** WP49: the cycle walk's colour: 0 unvisited, 1 on the path, 2 done. */
   awaitMark: i32
   /**
@@ -283,7 +293,6 @@ export class FunctionSig {
     this.lifted = false
     this.arrowCount = 0
     this.awaits = []
-    this.awaitSites = []
     this.awaitMark = 0
     this.captures = []
     this.captureHost = null

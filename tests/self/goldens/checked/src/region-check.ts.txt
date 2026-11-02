@@ -50,7 +50,7 @@ function isRegionRunner(template: TemplateInfo): boolean -> @isRegionRunner [exp
 function regionRoleOf(sig: FunctionSig | null): i32 -> @regionRoleOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: regionRole
-  pointer sig: size=184 writesThrough=false captured=false
+  pointer sig: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +4:9 template: TemplateInfo | null (const)
@@ -59,7 +59,7 @@ function regionRoleIn(program: CheckedProgram, sig: FunctionSig): i32 -> @region
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn isRegionSource regionRoleOf roleNamed
   pointer program: size=672 writesThrough=false captured=false passedTo=isRegionSource#0
-  pointer sig: size=184 writesThrough=false captured=false passedTo=regionRoleOf#0 FunctionSig.definedIn#0
+  pointer sig: size=176 writesThrough=false captured=false passedTo=regionRoleOf#0 FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee +0:12 regionRoleOf -> @regionRoleOf
   callee +2:32 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -69,6 +69,6 @@ function isRegionIntrinsic(program: CheckedProgram, sig: FunctionSig): boolean -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: regionRoleIn
   pointer program: size=672 writesThrough=false captured=false passedTo=regionRoleIn#0
-  pointer sig: size=184 writesThrough=false captured=false passedTo=regionRoleIn#1
+  pointer sig: size=176 writesThrough=false captured=false passedTo=regionRoleIn#1
   stackSites=0 stackLocals=0
   callee +0:3 regionRoleIn -> @regionRoleIn

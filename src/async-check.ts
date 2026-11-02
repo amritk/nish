@@ -15,7 +15,7 @@ import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
 import { unwrapParens } from "./emit-util"
 import { BuiltinExport } from "./nish-modules"
-import { FunctionSig } from "./program"
+import { AwaitEdge, FunctionSig } from "./program"
 import { Scope } from "./symbols"
 import { T_ERROR, T_VOID } from "./types"
 import {
@@ -88,8 +88,7 @@ const checkTakenCall = (ctx: CheckContext, call: Node, scope: Scope, what: strin
 const recordAwait = (ctx: CheckContext, callee: FunctionSig, site: Node): void => {
   const current = ctx.current
   if (current !== null) {
-    current.awaits.push(callee)
-    current.awaitSites.push(site)
+    current.awaits.push(new AwaitEdge(callee, site))
   }
 }
 
@@ -110,11 +109,8 @@ const isAwaitSite = (ctx: CheckContext, expr: Node): boolean => {
   const stmt = ctx.awaitStatement
   if (stmt === null) {
     const current = ctx.current
-    if (current === null || current.decl.children.length < 4) {
-      return false
-    }
-    const body = current.decl.children[3]
-    return body.kind !== N_BLOCK && unwrapParens(body) === expr
+    const body: Node | null = current !== null ? current.body() : null
+    return body !== null && body.kind !== N_BLOCK && unwrapParens(body) === expr
   }
   if (stmt.kind === N_EXPR_STMT) {
     const whole = unwrapParens(stmt.children[0])
@@ -137,15 +133,29 @@ const isAwaitSite = (ctx: CheckContext, expr: Node): boolean => {
 }
 
 /**
+ * Whether `expr`, an `await` (of a call or of an `awaitAll`), stands where
+ * none may — outside an async function, or not at an await site — having
+ * said why. Every form of `await` passes this one gate.
+ */
+const refuseAwaitHere = (ctx: CheckContext, expr: Node): boolean => {
+  if (!insideAsync(ctx)) {
+    ctx.error(expr, outsideAsyncMessage("await"))
+    return true
+  }
+  if (!isAwaitSite(ctx, expr)) {
+    ctx.error(expr, AWAIT_SITE_MESSAGE)
+    return true
+  }
+  return false
+}
+
+/**
  * `await f(args)`: the answer type of `f`, an async function, called
  * directly at an await site inside an async function.
  */
 export const checkAwait = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
-  if (!insideAsync(ctx)) {
-    return ctx.errorType(expr, outsideAsyncMessage("await"))
-  }
-  if (!isAwaitSite(ctx, expr)) {
-    return ctx.errorType(expr, AWAIT_SITE_MESSAGE)
+  if (refuseAwaitHere(ctx, expr)) {
+    return T_ERROR
   }
   const call = directCall(expr.children[0])
   if (call === null) {
@@ -187,8 +197,7 @@ export const promiseMethodMessage = (ctx: CheckContext, callee: Node, scope: Sco
   }
   if (
     (callee.text === "then" || callee.text === "catch" || callee.text === "finally") &&
-    receiver.kind === N_CALL &&
-    receiver.children[0].kind === N_IDENT &&
+    directCall(receiver) !== null &&
     scope.lookup(receiver.children[0].text) === null
   ) {
     const sig = ctx.signature(receiver.children[0].text)
@@ -288,12 +297,7 @@ export const checkAwaitAllDeclaration = (ctx: CheckContext, decl: Node, scope: S
     return null
   }
   ctx.program.nodeBuiltins[call.id] = imported.canonical
-  if (!insideAsync(ctx)) {
-    ctx.error(init, outsideAsyncMessage("await"))
-    return null
-  }
-  if (!isAwaitSite(ctx, init)) {
-    ctx.error(init, AWAIT_SITE_MESSAGE)
+  if (refuseAwaitHere(ctx, init)) {
     return null
   }
   const args = call.children[1].children
@@ -354,9 +358,9 @@ const walkAwaits = (fn: FunctionSig, path: FunctionSig[], found: AwaitCycle[]): 
   path.push(fn)
   let i = 0
   while (i < fn.awaits.length) {
-    const callee = fn.awaits[i]
+    const callee = fn.awaits[i].callee
     if (callee.awaitMark === 1) {
-      found.push(new AwaitCycle(fn, fn.awaitSites[i], cycleMessage(path, callee)))
+      found.push(new AwaitCycle(fn, fn.awaits[i].site, cycleMessage(path, callee)))
     } else if (callee.awaitMark === 0) {
       walkAwaits(callee, path, found)
     }

@@ -22,7 +22,7 @@ function emitRegionBody(emitter: Emitter, sig: FunctionSig, role: i32): void -> 
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue asBytes nish_panic_index nish_str_concat paramValue
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.llvm#0 Emitter.useRuntime#0 Emitter.llvm#0 asBytes#0 Emitter.useRuntime#0 Emitter.useRuntime#0
-  pointer sig: size=184 writesThrough=false captured=false
+  pointer sig: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +2:11 h: string (const)

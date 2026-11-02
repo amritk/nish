@@ -419,7 +419,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void -
   callee -2:15 collectMethodSignature -> @collectMethodSignature
   callee -1:3 StringMap.set -> @StringMap.set
 function collectMethodSignature(ctx: CheckContext, owner: StructInfo, decl: Node, symbol: string, shownName: string): FunctionSig -> @collectMethodSignature [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
   sharedWrite: via collectParams
   escaping: owner shownName symbol
   calls: FunctionSig.constructor annotationSpelling collectParams nish_alloc_struct nish_panic_index rejectForeignPointer resolveType
@@ -558,7 +558,7 @@ function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet
   sharedWrite: via noteStructNames
   calls: nish_panic_index noteStructNames
   pointer table: size=96 writesThrough=false captured=false passedTo=noteStructNames#0 noteStructNames#0
-  pointer sig: size=184 writesThrough=false captured=false
+  pointer sig: size=176 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)

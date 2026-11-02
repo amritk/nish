@@ -288,7 +288,6 @@ export class CheckContext {
   /**
    * WP49: the statement being checked when it is one an `await` may stand at
    * the top of — an expression statement, a `let`/`const` or a `return`.
-   * `awaitedCall`, declared beside `pathIndexCount`, is its partner.
    */
   awaitStatement: Node | null
   /**

@@ -2178,7 +2178,7 @@ function refuseForeignNullable(ctx: CheckContext, sig: FunctionSig, i: i32, arg:
   escaping: got i
   calls: CheckContext.error FunctionSig.foreign TypeTable.isNullable TypeTable.stripNull nish_str_concat nish_str_from_i32 unwrapParens
   pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer sig: size=184 writesThrough=false captured=false passedTo=FunctionSig.foreign#0
+  pointer sig: size=176 writesThrough=false captured=false passedTo=FunctionSig.foreign#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:8 FunctionSig.foreign -> @FunctionSig.foreign
@@ -2195,7 +2195,7 @@ function checkDirectCall(ctx: CheckContext, expr: Node, sig: FunctionSig, shown:
   calls: CheckContext.error CheckContext.errorType FunctionSig.isAsync FunctionSig.writtenArity TypeTable.assignable TypeTable.typeName checkExpression nish_panic_index nish_str_concat nish_str_from_i32 refuseForeignNullable refuseUnawaitedCall
   pointer ctx: size=296 writesThrough=true captured=true passedTo=refuseUnawaitedCall#0 CheckContext.errorType#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=refuseUnawaitedCall#1 CheckContext.errorType#1
-  pointer sig: size=184 writesThrough=true captured=true passedTo=FunctionSig.isAsync#0 FunctionSig.writtenArity#0 refuseForeignNullable#1
+  pointer sig: size=176 writesThrough=true captured=true passedTo=FunctionSig.isAsync#0 FunctionSig.writtenArity#0 refuseForeignNullable#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
   callee -32:7 refuseUnawaitedCall -> @refuseUnawaitedCall

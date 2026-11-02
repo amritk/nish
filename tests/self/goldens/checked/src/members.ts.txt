@@ -273,7 +273,7 @@ function exposeMethod(ctx: CheckContext, method: FunctionSig): void -> @exposeMe
   sharedWrite: +0:5
   calls: FunctionSig.definedIn
   pointer ctx: size=296 writesThrough=false captured=false
-  pointer method: size=184 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0
+  pointer method: size=176 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee -1:28 FunctionSig.definedIn -> @FunctionSig.definedIn
 function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMethodCall [exported]
@@ -393,7 +393,7 @@ function isWalkIterable(ctx: CheckContext, info: StructInfo, call: Node, access:
   callee +1:53 CheckedProgram.isCollections -> @CheckedProgram.isCollections
   callee +7:10 unwrapParens -> @unwrapParens
 function walkReaderOf(ctx: CheckContext, info: StructInfo, name: string): FunctionSig -> @walkReaderOf [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
   sharedWrite: via nish_exit
   calls: StructInfo.method internalErrorFor isMapOwner nish_exit nish_str_eq
   pointer ctx: size=296 writesThrough=false captured=false
@@ -429,7 +429,7 @@ function checkMethodArguments(ctx: CheckContext, call: Node, callee: FunctionSig
   calls: CheckContext.error TypeTable.assignable TypeTable.typeName checkExpression fitArguments isGatheredRest nish_panic_index nish_str_concat nish_str_from_i32 takesDeclaredContext
   pointer ctx: size=296 writesThrough=true captured=true passedTo=fitArguments#0 checkExpression#0 CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=fitArguments#1
-  pointer callee: size=184 writesThrough=false captured=false passedTo=fitArguments#3
+  pointer callee: size=176 writesThrough=false captured=false passedTo=fitArguments#3
   pointer args: size=40 writesThrough=true captured=false passedTo=fitArguments#2
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0

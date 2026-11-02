@@ -285,37 +285,37 @@ function checkVariableList(ctx: CheckContext, list: Node, scope: Scope): void ->
   pointer list: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=declareAwaitAll#2 declaredOrigin#3 declareLocal#1 checkExpression#2 typedArraySpelling#2 declareLocal#1 declaredOrigin#3 literalIndexName#1 holdMembers#1
   stackSites=0 stackLocals=0
-  local -69:9 mutable: boolean (const)
-  local -68:14 decl: Node (const)
-  callee -66:7 declareAwaitAll -> @declareAwaitAll
-  local -63:11 name: string (const)
-  local -62:11 annotation: Node (const)
-  local -58:9 declared: i32 (let)
-  callee -56:18 isMaybeAnnotation -> @isMaybeAnnotation
-  callee -55:11 resolveMaybeAnnotation -> @resolveMaybeAnnotation
-  callee -54:11 resolveType -> @resolveType
-  local -52:11 initializer: Node (const)
-  callee -50:7 CheckContext.error -> @CheckContext.error
-  local -49:13 origin: TypeOrigin | null (const)
-  callee -49:22 declaredOrigin -> @declaredOrigin
-  callee -48:7 declareLocal -> @declareLocal
-  local -43:9 want: i32 (let)
-  callee -40:27 TypeTable.isMaybe -> @TypeTable.isMaybe
-  local -35:11 initType: i32 (const)
-  callee -35:22 checkExpression -> @checkExpression
-  local -31:9 type: i32 (let)
-  callee -31:31 unproven -> @unproven
-  callee -30:51 TypeTable.assignable -> @TypeTable.assignable
+  local -87:9 mutable: boolean (const)
+  local -86:14 decl: Node (const)
+  callee -84:7 declareAwaitAll -> @declareAwaitAll
+  local -81:11 name: string (const)
+  local -80:11 annotation: Node (const)
+  local -76:9 declared: i32 (let)
+  callee -74:18 isMaybeAnnotation -> @isMaybeAnnotation
+  callee -73:11 resolveMaybeAnnotation -> @resolveMaybeAnnotation
+  callee -72:11 resolveType -> @resolveType
+  local -70:11 initializer: Node (const)
+  callee -68:7 CheckContext.error -> @CheckContext.error
+  local -67:13 origin: TypeOrigin | null (const)
+  callee -67:22 declaredOrigin -> @declaredOrigin
+  callee -66:7 declareLocal -> @declareLocal
+  local -52:9 want: i32 (let)
+  callee -49:27 TypeTable.isMaybe -> @TypeTable.isMaybe
+  local -44:11 initType: i32 (const)
+  callee -44:22 checkExpression -> @checkExpression
+  local -40:9 type: i32 (let)
+  callee -40:31 unproven -> @unproven
+  callee -39:51 TypeTable.assignable -> @TypeTable.assignable
+  callee -38:7 CheckContext.error -> @CheckContext.error
+  callee -36:30 TypeTable.typeName -> @TypeTable.typeName
+  callee -36:88 TypeTable.typeName -> @TypeTable.typeName
+  callee -32:7 refuseNarrowingStore -> @refuseNarrowingStore
   callee -29:7 CheckContext.error -> @CheckContext.error
-  callee -27:30 TypeTable.typeName -> @TypeTable.typeName
-  callee -27:88 TypeTable.typeName -> @TypeTable.typeName
-  callee -23:7 refuseNarrowingStore -> @refuseNarrowingStore
-  callee -20:7 CheckContext.error -> @CheckContext.error
-  local -7:11 typedArray: string (const)
-  callee -5:11 annotationSpelling -> @annotationSpelling
-  callee -4:11 typedArraySpelling -> @typedArraySpelling
-  callee -3:5 declareLocal -> @declareLocal
-  callee -3:57 declaredOrigin -> @declaredOrigin
+  local -16:11 typedArray: string (const)
+  callee -14:11 annotationSpelling -> @annotationSpelling
+  callee -13:11 typedArraySpelling -> @typedArraySpelling
+  callee -12:5 declareLocal -> @declareLocal
+  callee -4:7 declaredOrigin -> @declaredOrigin
   local -2:11 local: Local | null (const)
   local +4:13 literal: string (const)
   callee +4:38 literalIndexName -> @literalIndexName
@@ -349,19 +349,20 @@ function allocatesArray(ctx: CheckContext, init: Node): boolean -> @allocatesArr
   local +3:9 e: Node (const)
   callee +3:13 unwrapParens -> @unwrapParens
   callee +7:10 builtinNameOf -> @builtinNameOf
-function declareLocal(ctx: CheckContext, scope: Scope, decl: Node, name: string, type: i32, mutable: boolean, origin: TypeOrigin | null): void -> @declareLocal
+function declareLocal(ctx: CheckContext, scope: Scope, decl: Node, site: Node, name: string, type: i32, mutable: boolean, origin: TypeOrigin | null): void -> @declareLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: mutable name origin type
   calls: CheckContext.error Local.constructor Scope.declare nish_alloc_struct nish_panic_index nish_str_concat
   pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.declare#0
-  pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  pointer decl: size=40 writesThrough=false captured=false
+  pointer site: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   pointer origin: size=32 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local -7:9 local: Local (const)
-  callee -7:17 new Local -> @Local.constructor
-  callee -5:8 Scope.declare -> @Scope.declare
+  local -6:9 local: Local (const)
+  callee -6:17 new Local -> @Local.constructor
+  callee -4:8 Scope.declare -> @Scope.declare
   callee -3:5 CheckContext.error -> @CheckContext.error
 function checkIf(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkIf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -607,19 +608,19 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   local +22:9 origin: TypeOrigin | null (const)
   callee +22:18 elementOrigin -> @elementOrigin
   callee +23:3 declareLocal -> @declareLocal
-  local +27:9 local: Local | null (const)
-  callee +29:24 elementSpelling -> @elementSpelling
-  callee +29:40 typedArraySpelling -> @typedArraySpelling
-  callee +31:3 keySteadyVariables -> @keySteadyVariables
-  callee +32:3 flowHead -> @flowHead
-  callee +33:3 CheckContext.pushLoop -> @CheckContext.pushLoop
-  local +34:9 inner: Scope (const)
-  callee +34:17 Scope.child -> @Scope.child
-  callee +35:8 checkStatement -> @checkStatement
-  callee +36:5 flowNoteBack -> @flowNoteBack
-  callee +38:3 CheckContext.popLoop -> @CheckContext.popLoop
-  callee +39:3 Scope.adopt -> @Scope.adopt
-  callee +40:3 flowEnd -> @flowEnd
+  local +36:9 local: Local | null (const)
+  callee +38:24 elementSpelling -> @elementSpelling
+  callee +38:40 typedArraySpelling -> @typedArraySpelling
+  callee +40:3 keySteadyVariables -> @keySteadyVariables
+  callee +41:3 flowHead -> @flowHead
+  callee +42:3 CheckContext.pushLoop -> @CheckContext.pushLoop
+  local +43:9 inner: Scope (const)
+  callee +43:17 Scope.child -> @Scope.child
+  callee +44:8 checkStatement -> @checkStatement
+  callee +45:5 flowNoteBack -> @flowNoteBack
+  callee +47:3 CheckContext.popLoop -> @CheckContext.popLoop
+  callee +48:3 Scope.adopt -> @Scope.adopt
+  callee +49:3 flowEnd -> @flowEnd
 function refuseUnsupportedForms(ctx: CheckContext, node: Node): void -> @refuseUnsupportedForms [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via sweepForms

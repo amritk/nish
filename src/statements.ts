@@ -400,7 +400,16 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     if (initializer.kind === N_EMPTY) {
       ctx.error(decl, `Variable \`${name}\` must be initialized`)
       const origin = declaredOrigin(ctx, annotation, initializer, scope)
-      declareLocal(ctx, scope, decl, name, declared < 0 ? T_ERROR : declared, mutable, origin)
+      declareLocal(
+        ctx,
+        scope,
+        decl,
+        decl.children[0],
+        name,
+        declared < 0 ? T_ERROR : declared,
+        mutable,
+        origin
+      )
       continue
     }
     // WP32: a `const` is one of the places a maybe may go, and a `let` is not,
@@ -445,7 +454,16 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       annotation.kind !== N_EMPTY
         ? annotationSpelling(ctx, true, annotation)
         : typedArraySpelling(ctx, initializer, scope)
-    declareLocal(ctx, scope, decl, name, type, mutable, declaredOrigin(ctx, annotation, initializer, scope))
+    declareLocal(
+      ctx,
+      scope,
+      decl,
+      decl.children[0],
+      name,
+      type,
+      mutable,
+      declaredOrigin(ctx, annotation, initializer, scope)
+    )
     const local = ctx.program.nodeLocals[decl.id]
     if (local !== null) {
       local.typedArray = typedArray
@@ -486,7 +504,7 @@ const declareAwaitAll = (ctx: CheckContext, decl: Node, scope: Scope): void => {
       ctx.error(names[i], "Cannot declare a variable of type void")
       type = T_ERROR
     }
-    declareLocal(ctx, scope, names[i], names[i].text, type, false, null)
+    declareLocal(ctx, scope, names[i], names[i], names[i].text, type, false, null)
     i = i + 1
   }
 }
@@ -515,6 +533,7 @@ const declareLocal = (
   ctx: CheckContext,
   scope: Scope,
   decl: Node,
+  site: Node,
   name: string,
   type: i32,
   mutable: boolean,
@@ -523,8 +542,7 @@ const declareLocal = (
   const local = new Local(name, type, mutable, STORAGE_LOCAL)
   local.origin = origin
   if (!scope.declare(local)) {
-    // An `awaitAll` name is its own bare identifier; a declarator's is its first child.
-    ctx.error(decl.kind === N_IDENT ? decl : decl.children[0], `Duplicate declaration of \`${name}\``)
+    ctx.error(site, `Duplicate declaration of \`${name}\``)
     return
   }
   ctx.program.nodeLocals[decl.id] = local
@@ -804,7 +822,16 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   // `for (let x of a)` binds a mutable element, `for (const x of a)` does not,
   // and an element of a `T[]` came from `T` (WP18 G6).
   const origin = elementOrigin(ctx, stmt.children[1], scope)
-  declareLocal(ctx, outer, decl, name, element, (stmt.children[0].flags & FLAG_CONST) === 0, origin)
+  declareLocal(
+    ctx,
+    outer,
+    decl,
+    decl.children[0],
+    name,
+    element,
+    (stmt.children[0].flags & FLAG_CONST) === 0,
+    origin
+  )
   // WP33 R2: an element of a `Float64Array[]` is a `Float64Array` to
   // TypeScript, and so is a value of a `Map<K, Float64Array>` walked by
   // `values()`, which `mapReadSpelling` answers as an array of them.
