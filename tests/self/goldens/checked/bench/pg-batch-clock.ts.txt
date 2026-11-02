@@ -108,6 +108,7 @@ const PG_BATCH_MAX_QUEUE: i32 = 1048576
 const PG_BATCH_MAX_RUNS: i32 = 1024
 const PG_BATCH_USES: i32 = 1048576
 const PG_BATCH_MIN_BYTES: i32 = 22
+const PG_LOW32: i64 = 4294967295
 const PG_CLOCK_WAIT: i32 = 0 [exported]
 const PG_CLOCK_COUNT: i32 = 1 [exported]
 const PG_CLOCK_AVERAGE: i32 = 2 [exported]
@@ -2104,6 +2105,12 @@ function PgPool.dispose(this: PgPool): void -> @nish.PgPool.dispose [exported me
   local +2:16 slot: PgPoolSlot (const)
   local +3:13 conn: PgConnection | null (const)
   callee +5:9 PgConnection.dispose -> @nish.PgConnection.dispose
+function pgIntHash(key: i64): i32 -> @nish.pgIntHash
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 lo: u32 (const)
+  local +1:9 hi: u32 (const)
+  local +2:7 h: u32 (let)
 function PgBatchRun.constructor(this: PgBatchRun): void -> @nish.PgBatchRun.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
@@ -2149,14 +2156,14 @@ function PgBatcher.addInt(this: PgBatcher, key: i64, tag: i32): boolean -> @nish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: key tag
-  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.pgDecimalLength nish_panic nish_panic_index
+  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.pgDecimalLength nish.pgIntHash nish_panic nish_panic_index
   pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.slotToAdd#0 nish.PgBatcher.added#0
   stackSites=0 stackLocals=0
-  local -6:11 q: i32 (const)
-  callee -6:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
-  local -1:11 h: i32 (const)
+  local -4:11 q: i32 (const)
+  callee -4:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
   callee +1:5 PgBatcher.added -> @nish.PgBatcher.added
-  callee +1:39 pgDecimalLength -> @nish.pgDecimalLength
+  callee +1:24 pgIntHash -> @nish.pgIntHash
+  callee +1:40 pgDecimalLength -> @nish.pgDecimalLength
 function PgBatcher.addText(this: PgBatcher, bytes: u8[], start: i32, length: i32, tag: i32): boolean -> @nish.PgBatcher.addText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
