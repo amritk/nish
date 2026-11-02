@@ -173,8 +173,8 @@ export const anyCallsSqlite = (modules: EmittedModule[]): boolean => {
  * name is one the entry already uses for itself. A script called `key.ts` would
  * otherwise be linked to `<entry>/key`, and then overwritten by the key and
  * started as text (docs/security/cli.md, CLI-1). `.bin` makes the name differ
- * from `key` and from every scratch directory, which is `tmp-` and sixteen hex
- * digits with no dot; and since the key carries the name, one entry only ever
+ * from `key` and from every scratch directory, which is `tmp-`, sixteen hex
+ * digits, a dash and an attempt number with no dot; and since the key carries the name, one entry only ever
  * holds one script's binary, so no other script's name can meet the result.
  */
 export const runBinaryName = (name: string): string =>

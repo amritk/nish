@@ -3256,6 +3256,33 @@ function makeDirectory(dir: string): boolean -> @makeDirectory
   local +0:9 parent: string (const)
   callee +0:18 dirname -> @dirname
   callee +1:26 makeDirectory -> @makeDirectory
+function scratchName(parent: string, attempt: i32, suffix: string): string -> @scratchName
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: hexOfI64 nish_monotonic_nanos nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee +0:20 hexOfI64 -> @hexOfI64
+function makeScratchDirectory(parent: string): string -> @makeScratchDirectory
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via makeDirectory
+  escaping: parent
+  calls: makeDirectory nish_mkdir_mode scratchName
+  stackSites=0 stackLocals=0
+  callee +0:8 makeDirectory -> @makeDirectory
+  local +3:12 attempt: i32 (let)
+  local +4:11 dir: string (const)
+  callee +4:17 scratchName -> @scratchName
+  local +5:11 made: i32 (const)
+function makeScratchFile(parent: string, suffix: string): string -> @makeScratchFile
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via scratchName
+  escaping: parent suffix
+  calls: nish_create_file_exclusive scratchName
+  stackSites=0 stackLocals=0
+  local +0:12 attempt: i32 (let)
+  local +1:11 file: string (const)
+  callee +1:18 scratchName -> @scratchName
+  local +2:11 made: i32 (const)
 function makeDirectoryFor(file: string): boolean -> @makeDirectoryFor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via makeDirectory
@@ -3771,8 +3798,8 @@ function makePrivateRoot(cacheRoot: string, json: boolean): boolean -> @makePriv
 function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot: string, cacheEntry: string, keyFile: string, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, sqlite: boolean, sqliteLines: string, json: boolean): i32 -> @buildIntoCache
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via missingToolchain
-  escaping: cacheRoot cpu debugInfo json profile sqlite sqliteLines threads
-  calls: hexOfI64 linkProgram makeDirectory makePrivateRoot missingToolchain nish_array_grow nish_monotonic_nanos nish_spawn nish_str_concat nish_write nish_write_file reportToolchainFailure
+  escaping: cacheEntry cacheRoot cpu debugInfo json profile sqlite sqliteLines threads
+  calls: linkProgram makePrivateRoot makeScratchDirectory missingToolchain nish_array_grow nish_spawn nish_str_concat nish_write nish_write_file reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   pointer pkg: size=32 writesThrough=false captured=false passedTo=linkProgram#2
   stackSites=2 stackLocals=2
@@ -3781,8 +3808,7 @@ function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot:
   callee +2:5 reportToolchainFailure -> @reportToolchainFailure
   callee +5:8 makePrivateRoot -> @makePrivateRoot
   local +8:9 work: string (const)
-  callee +8:37 hexOfI64 -> @hexOfI64
-  callee +9:8 makeDirectory -> @makeDirectory
+  callee +8:16 makeScratchDirectory -> @makeScratchDirectory
   local +13:9 outputs: string[] (const)
   local +14:9 irs: string[] (const)
   local +15:14 module: EmittedModule (const)
@@ -3842,7 +3868,7 @@ function cachedRuntime(root: string, outputs: string[], profile: string, cpu: st
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via runtimeCacheRoot
   escaping: cpu debugInfo json profile root sqliteLines threads
-  calls: CachedObjects.constructor cCompiler cachedEntry distrustOf hexOfI64 makeDirectory nish_alloc_struct nish_monotonic_nanos nish_read_file_or_null nish_realpath nish_spawn nish_spawn_to nish_str_concat nish_str_eq runtimeCacheKey runtimeCacheRoot runtimeUnits sqliteCacheKey sqliteCflags sqliteFingerprint sqliteUnits
+  calls: CachedObjects.constructor cCompiler cachedEntry distrustOf makeDirectory makeScratchFile nish_alloc_struct nish_read_file_or_null nish_realpath nish_spawn nish_spawn_to nish_str_concat nish_str_eq runtimeCacheKey runtimeCacheRoot runtimeUnits sqliteCacheKey sqliteCflags sqliteFingerprint sqliteUnits
   pointer outputs: size=0 writesThrough=false captured=false passedTo=cachedEntry#6 cachedEntry#6
   stackSites=2 stackLocals=2
   local +0:9 none: CachedObjects (const)
@@ -3855,30 +3881,30 @@ function cachedRuntime(root: string, outputs: string[], profile: string, cpu: st
   local +18:9 cc: string (const)
   callee +18:14 cCompiler -> @cCompiler
   local +19:9 probe: string (const)
-  callee +19:37 hexOfI64 -> @hexOfI64
-  local +20:9 ask: string[] (const)
-  local +21:9 answered: i32 (const)
-  local +22:9 version: string | null (const)
-  local +23:9 forget: string[] (const)
-  local +25:9 runtimeDir: string | null (const)
-  local +29:9 key: string (const)
-  callee +29:15 runtimeCacheKey -> @runtimeCacheKey
-  local +30:9 recipe: string[] (const)
-  local +31:9 runtime: string | null (const)
-  callee +31:19 cachedEntry -> @cachedEntry
-  callee +36:5 runtimeUnits -> @runtimeUnits
-  callee +49:12 new CachedObjects -> @CachedObjects.constructor
-  local +51:9 sqliteDir: string | null (const)
-  callee +53:12 new CachedObjects -> @CachedObjects.constructor
-  local +55:9 sqliteKey: string (const)
-  callee +55:21 sqliteCacheKey -> @sqliteCacheKey
-  callee +64:44 sqliteFingerprint -> @sqliteFingerprint
-  callee +64:68 sqliteCflags -> @sqliteCflags
-  local +66:9 sqliteRecipe: string[] (const)
-  local +67:9 objects: string | null (const)
-  callee +67:19 cachedEntry -> @cachedEntry
-  callee +72:5 sqliteUnits -> @sqliteUnits
-  callee +81:36 new CachedObjects -> @CachedObjects.constructor
+  callee +19:17 makeScratchFile -> @makeScratchFile
+  local +23:9 ask: string[] (const)
+  local +24:9 answered: i32 (const)
+  local +25:9 version: string | null (const)
+  local +26:9 forget: string[] (const)
+  local +28:9 runtimeDir: string | null (const)
+  local +32:9 key: string (const)
+  callee +32:15 runtimeCacheKey -> @runtimeCacheKey
+  local +33:9 recipe: string[] (const)
+  local +34:9 runtime: string | null (const)
+  callee +34:19 cachedEntry -> @cachedEntry
+  callee +39:5 runtimeUnits -> @runtimeUnits
+  callee +52:12 new CachedObjects -> @CachedObjects.constructor
+  local +54:9 sqliteDir: string | null (const)
+  callee +56:12 new CachedObjects -> @CachedObjects.constructor
+  local +58:9 sqliteKey: string (const)
+  callee +58:21 sqliteCacheKey -> @sqliteCacheKey
+  callee +67:44 sqliteFingerprint -> @sqliteFingerprint
+  callee +67:68 sqliteCflags -> @sqliteCflags
+  local +69:9 sqliteRecipe: string[] (const)
+  local +70:9 objects: string | null (const)
+  callee +70:19 cachedEntry -> @cachedEntry
+  callee +75:5 sqliteUnits -> @sqliteUnits
+  callee +84:36 new CachedObjects -> @CachedObjects.constructor
 function StagedModules.constructor(this: StagedModules, dir: string): void -> @StagedModules.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: dir
@@ -3934,7 +3960,7 @@ function cachedEntry(root: string, cacheRoot: string, key: string, recipe: strin
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_or_null
   escaping: cpu debugInfo json key profile threads
-  calls: hexOfI64 makeDirectory nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_slice nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat nish_str_eq nish_str_from_i32 nish_str_new nish_write_file pushRecipeFlags reportToolchainFailure sha256Hex
+  calls: makeScratchDirectory nish_alloc_struct nish_array_grow nish_panic_slice nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat nish_str_eq nish_str_from_i32 nish_str_new nish_write_file pushRecipeFlags reportToolchainFailure sha256Hex
   pointer recipe: size=0 writesThrough=false captured=false
   pointer units: size=0 writesThrough=false captured=false
   pointer outputs: size=0 writesThrough=false captured=false
@@ -3944,8 +3970,7 @@ function cachedEntry(root: string, cacheRoot: string, key: string, recipe: strin
   local +1:9 keyFile: string (const)
   local +2:9 stored: string | null (const)
   local +6:9 work: string (const)
-  callee +6:37 hexOfI64 -> @hexOfI64
-  callee +7:8 makeDirectory -> @makeDirectory
+  callee +6:16 makeScratchDirectory -> @makeScratchDirectory
   local +10:9 script: string (const)
   local +11:9 argv: string[] (const)
   local +12:14 arg: string (const)
