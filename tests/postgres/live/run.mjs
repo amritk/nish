@@ -284,7 +284,7 @@ const carrier = async (exe, db) => {
   };
 };
 
-/** With nothing listening on its PostgreSQL port, the carrier must report the query lost and the slot failed, not wait. */
+/** With nothing listening on its PostgreSQL port, the carrier must fail the query at once with the connect's error, not wait. */
 const refused = async (exe) => {
   const port = await freePort();
   const http = await freePort();
@@ -292,7 +292,9 @@ const refused = async (exe) => {
     encoding: "utf8",
     timeout: 30_000,
   });
-  const want = "listening\nrequest 0 lost\nslot 0 failed: 9\n";
+  // -111 is ECONNREFUSED, whether the connect fails at once or at its result;
+  // -110 would be the connect timeout, the wait this check rules out.
+  const want = "listening\nnap failed: failure 9, socket -111\n";
   return {
     ok: r.status === 1 && r.stdout === want,
     detail: `status ${r.status}, stdout ${JSON.stringify(r.stdout)}`,
@@ -302,8 +304,8 @@ const refused = async (exe) => {
 /**
  * A server that resets the connection once the startup message arrives: the
  * carrier's read fails with ECONNRESET, not 0, and must end the connection
- * there, reporting the query lost and the slot failed, rather than leave the
- * readable socket to the next turn.
+ * there, failing the query with that error, rather than leave the readable
+ * socket to the next turn.
  */
 const reset = async (exe) => {
   const server = createServer((socket) => {
@@ -323,10 +325,9 @@ const reset = async (exe) => {
   clearTimeout(timer);
   await new Promise((resolve) => server.close(resolve));
   // -104 is ECONNRESET; Linux reports it to one read, and the next reads 0.
-  // `failure 9` (PG_ERR_CLOSED) is printed after the carrier's closed(), so it
-  // pins the close to the failed read rather than to that later 0.
-  const want =
-    "listening\nslot 0 read failed: -104, failure 9\nrequest 0 lost\nslot 0 failed: 9\n";
+  // The socket error pins the close to the failed read rather than to that
+  // later 0, which ends the connection with no error.
+  const want = "listening\nnap failed: failure 9, socket -104\n";
   return {
     ok: status === 1 && out === want,
     detail: `status ${status}, stdout ${JSON.stringify(out)}`,
