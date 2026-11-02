@@ -10,7 +10,6 @@ import isNishSpecifier from "./nish-modules" -> function @isNishSpecifier
 import nishModuleNames from "./nish-modules" -> function @nishModuleNames
 import STD_PREFIX from "./branding" -> const STD_PREFIX
 import parseBareSpecifier from "./packages" -> function @parseBareSpecifier
-import ASYNC_RETURN_MESSAGE from "./annotations" -> const ASYNC_RETURN_MESSAGE
 import promiseArgument from "./annotations" -> function @promiseArgument
 import rejectForeignPointer from "./annotations" -> function @rejectForeignPointer
 import resolveType from "./annotations" -> function @resolveType
