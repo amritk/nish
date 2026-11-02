@@ -34,7 +34,7 @@ nothing else wants it). Each answers 0 or a negative errno and never throws;
 `SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
 normal-priority fallback for work that must finish, and call either at the top
 of `main`, before any thread starts. See
-[Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
+[Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority-setcpuaffinity).
 
 `spawnPiped(argv, stdin, stdout, stderr)` runs a child with every stream in
 memory: the child reads `stdin`'s bytes and then end of file, and what it
