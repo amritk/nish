@@ -74,7 +74,9 @@ const roleNamed = (name: string): i32 => {
 
 /** The `REGION_*` role of an instantiation of `template`. */
 const regionRole = (template: TemplateInfo): i32 =>
-  template.owner !== null || !isRegionSource(template.home.program) ? REGION_NONE : roleNamed(template.sourceName)
+  template.owner !== null || !isRegionSource(template.home.program)
+    ? REGION_NONE
+    : roleNamed(template.sourceName)
 
 /** Whether `template` runs an arrow that must capture nothing (`captureMode` in `src/generics.ts`). */
 export const isRegionRunner = (template: TemplateInfo): boolean => {

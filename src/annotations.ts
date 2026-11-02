@@ -338,7 +338,10 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     // class could be, here and inside that module alike.
     if (namesRegion(ctx, name)) {
       if (argc !== 1) {
-        return ctx.errorType(node, "`Region` needs exactly one type argument, its root's type, e.g. `Region<Session>`")
+        return ctx.errorType(
+          node,
+          "`Region` needs exactly one type argument, its root's type, e.g. `Region<Session>`"
+        )
       }
       return ctx.table.regionOf(resolveType(args.children[0], ctx))
     }

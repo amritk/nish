@@ -2379,7 +2379,9 @@ export const thisCaptureMessageFor = (mode: i32): string => {
  * reason a function parameter is out of its reach.
  */
 export const outerFunctionMessage = (ctx: CheckContext, name: string): string =>
-  capturesNothing(ctx.arrowMode()) ? noCaptureMessage(ctx.arrowMode(), name) : functionParamCaptureMessage(name)
+  capturesNothing(ctx.arrowMode())
+    ? noCaptureMessage(ctx.arrowMode(), name)
+    : functionParamCaptureMessage(name)
 
 /**
  * WP29: `expr` names `name` in a function an arrow argument is written inside

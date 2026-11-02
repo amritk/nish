@@ -36,7 +36,6 @@ import {
   N_NULL,
   N_OBJECT,
   N_PARAM,
-  N_PAREN,
   N_PROPERTY,
   N_RETURN,
   N_SPREAD,

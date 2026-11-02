@@ -1825,7 +1825,13 @@ export class CheckedProgram {
    * (docs/wp32-map.md §4.1, §9.2).
    */
   writesNoOutput(): boolean {
-    return this.collectionsLibrary || this.mapExtrasLibrary || this.secretLibrary || this.regionLibrary || this.mathLibrary
+    return (
+      this.collectionsLibrary ||
+      this.mapExtrasLibrary ||
+      this.secretLibrary ||
+      this.regionLibrary ||
+      this.mathLibrary
+    )
   }
 
   /** Whether this module is `std/secret.ts`, the source behind `nish:secret`, copied like `std/collections.ts`. */

@@ -9,7 +9,14 @@
 import { Emitter } from "./emit"
 import { paramValue } from "./ir"
 import { FunctionSig } from "./program"
-import { REGION_CLOSE, REGION_FREE, REGION_LEAVE, REGION_NEW, REGION_OPEN, REGION_REOPEN } from "./region-check"
+import {
+  REGION_CLOSE,
+  REGION_FREE,
+  REGION_LEAVE,
+  REGION_NEW,
+  REGION_OPEN,
+  REGION_REOPEN,
+} from "./region-check"
 
 /** `root`, of the LLVM pointer type `type`, as the `i8*` the runtime keeps. */
 const asBytes = (emitter: Emitter, type: string, root: string): string =>

@@ -2323,7 +2323,16 @@ export class Compilation {
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.regionCalls) {
-        const findings = regionCallFindings(programs, table, facts, program, call.node, call.sig, scopeName, fresh)
+        const findings = regionCallFindings(
+          programs,
+          table,
+          facts,
+          program,
+          call.node,
+          call.sig,
+          scopeName,
+          fresh
+        )
         for (const finding of findings) {
           this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
         }
@@ -2352,7 +2361,12 @@ export class Compilation {
         for (const type of types) {
           if (holdsRegion(programs, table, type)) {
             const what = `A value \`${fn.sourceName}\` is handed or answers on another thread`
-            this.sink.report(program.source, call.node.start, call.node.end, crossingMessage(what, table.typeName(type)))
+            this.sink.report(
+              program.source,
+              call.node.start,
+              call.node.end,
+              crossingMessage(what, table.typeName(type))
+            )
             break
           }
         }
@@ -2361,7 +2375,12 @@ export class Compilation {
         for (const type of call.sig.paramTypes) {
           if (holdsRegion(programs, table, type)) {
             const what = "The value a channel sends to another thread"
-            this.sink.report(program.source, call.node.start, call.node.end, crossingMessage(what, table.typeName(type)))
+            this.sink.report(
+              program.source,
+              call.node.start,
+              call.node.end,
+              crossingMessage(what, table.typeName(type))
+            )
             break
           }
         }
@@ -3040,7 +3059,12 @@ export class Compilation {
     let i = 0
     while (i < this.modules.length && i < units.length) {
       const program = this.modules[i].checker.program
-      if (program.isCollections() || program.isSecretLibrary() || program.isRegionLibrary() || program.isMathLibrary()) {
+      if (
+        program.isCollections() ||
+        program.isSecretLibrary() ||
+        program.isRegionLibrary() ||
+        program.isMathLibrary()
+      ) {
         out.push(units[i])
       }
       i = i + 1

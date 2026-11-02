@@ -67,7 +67,13 @@ import {
 } from "./nodes"
 import { fitArguments } from "./declarations"
 import { ParentTable } from "./parents"
-import { channelCapacityMessage, isChannelClass, isChannelSend, isThreadsStruct, spawnFormFor } from "./parallel"
+import {
+  channelCapacityMessage,
+  isChannelClass,
+  isChannelSend,
+  isThreadsStruct,
+  spawnFormFor,
+} from "./parallel"
 import { isRegionSource, isRegionTemplate } from "./region-check"
 import { recordRegionCall, regionNewMessage } from "./region-rules"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
