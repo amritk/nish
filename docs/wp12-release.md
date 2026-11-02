@@ -120,8 +120,11 @@ joined it on 2026-09-20; every release from
 "nish/<module>"`. `nish-cmp` found that on its first run, and it is why
 `cmpSince` in `.github/seed-targets.json` skips those seeds. `release.yml` has
 three presence gates — the tarball, the platform package and the main
-package — and `tests/run.js` checks that each names every standard-library
-module.
+package — and each takes the standard-library modules from
+`scripts/std-module-paths.mjs`, which reads `stdModuleNames` in
+`src/std-modules.ts` of the commit being released; `tests/run.js` checks that
+the script's answer is every module `std/` has and that each gate calls it, so
+adding a module never edits the workflow.
 
 ## The lockfile's copy of the platform pins
 

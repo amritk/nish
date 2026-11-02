@@ -51,6 +51,9 @@ which happened twice in WP34's crypto lane.
    the file, they carry its licence text too. `runtime/` ships whole, so a
    licence file there ships with it; the check also requires each presence gate
    in `.github/workflows/release.yml` that names the file to name its licence.
+   A gate takes the std modules from `scripts/std-module-paths.mjs`, so it names
+   every one of them: a licence beside a `std/` file goes on all three lists by
+   hand.
 4. **A row in `THIRD_PARTY_NOTICES.md`.** File, what it derives from, licence,
    licence text. A copy of an Are We Fast Yet port goes in the table in
    `bench/awfy/LICENSE.md` instead, with that file's header.
