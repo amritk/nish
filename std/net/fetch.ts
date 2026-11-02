@@ -1,7 +1,7 @@
 /**
  * `nish/net/fetch` — a blocking HTTP/1.1 client for command-line
  * programs: `fetchSync(request, options)` dials, sends, and answers the
- * response's head with a reader for its body, and an `FetchSyncClient` does the
+ * response's head with a reader for its body, and a `FetchSyncClient` does the
  * same while keeping one connection alive between fetches.
  *
  *     import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
@@ -1391,7 +1391,7 @@ export class FetchSyncClient {
 /**
  * One fetch on a client of its own, closed once the body has been read or
  * the fetch failed. Null on a failure, with no way to say why: a program
- * that reports its errors fetches through an `FetchSyncClient`.
+ * that reports its errors fetches through a `FetchSyncClient`.
  */
 export const fetchSync = (req: HttpRequest, options: HttpOptions): HttpResponse | null => {
   const client: FetchSyncClient = new FetchSyncClient(options)

@@ -2239,7 +2239,7 @@ the port big-endian); hosts are numeric literals; to reach a name, resolve it fi
 To fetch a URL from a CLI, skip all of this: `nish/net/fetch`'s
 `fetchSync(new HttpRequest("GET", url), new HttpOptions())` blocks until the
 response's head is in and answers it with `body.readAll(limit)`, or null on a
-failure (an `FetchSyncClient` keeps the connection and says why in `error`).
+failure (a `FetchSyncClient` keeps the connection and says why in `error`).
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux

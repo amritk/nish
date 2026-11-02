@@ -2553,7 +2553,7 @@ shows it.
 
 `nish/net/fetch` is a blocking client for command-line programs:
 `fetchSync(request, options)` answers the response with a reader for its
-body, and an `FetchSyncClient` keeps a connection alive between fetches. Every
+body, and a `FetchSyncClient` keeps a connection alive between fetches. Every
 wait has a timeout, every body a cap, and redirects and proxies are followed
 only as `HttpOptions` says; [HTTP client](http-client.md) shows it.
 
