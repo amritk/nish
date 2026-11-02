@@ -1,6 +1,11 @@
 # WP46: Memory for programs that do not exit — regions
 
-**Status: proposed.** Nothing here is built. The anchors below are at
+**Status: stage 1 built** (2026-11-01): the runtime makes, enters, leaves and
+frees a region (`runtime/runtime-region.c`, `nish_region_new`, `_enter`,
+`_leave`, `_free`; its record is RT-41 to RT-44 in
+[security/runtime.md](security/runtime.md)), and `node tests/run.js region`
+holds the resident set flat over 100,000 of them. The language construct
+(stage 2) is not built. The anchors below are at
 `c8a00d6`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this note is
 a proposal and is not compiled by `npm test`.
 

@@ -607,6 +607,24 @@ const RUNTIME_SANDBOX_TEXT_BUDGET = 2560
  * every ceiling here was set.
  */
 const RUNTIME_SHM_TEXT_BUDGET = 2816
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
+ * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
+ * table, `nish_region_new`, `_enter`, `_leave` and `_free` with their zero, stale,
+ * thread and entered checks, and the panic table (docs/security/runtime.md).
+ *
+ * Measured **664 bytes** on 2026-11-01 with clang 18.1.3 on linux-x64. A fifteenth
+ * translation unit, so a program that makes no region links none of it. The budget is
+ * the next 256-byte boundary above the measurement.
+ */
+const RUNTIME_REGION_TEXT_BUDGET = 768
+/**
+ * The same file with `-DNISH_THREADS=1`: the table's spin lock, the thread number taken
+ * from a process-wide counter, and the innermost entered handle, which is thread-local.
+ * Measured **852 bytes** on 2026-11-01 with clang 18.1.3 on linux-x64; a row of its own,
+ * as `runtime.c`'s threads build has, so neither number covers the other's room.
+ */
+const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1024
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
@@ -762,6 +780,13 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-sandbox.c", RUNTIME_SANDBOX_TEXT_BUDGET, "RUNTIME_SANDBOX_TEXT_BUDGET", []],
   ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", []],
   ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
+  ["runtime/runtime-region.c", RUNTIME_REGION_TEXT_BUDGET, "RUNTIME_REGION_TEXT_BUDGET", []],
+  [
+    "runtime/runtime-region.c",
+    RUNTIME_REGION_THREADS_TEXT_BUDGET,
+    "RUNTIME_REGION_THREADS_TEXT_BUDGET",
+    ["-DNISH_THREADS=1"],
+  ],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
