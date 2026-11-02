@@ -28,7 +28,7 @@ import { Edit } from "./diagnostics"
 import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
-import { isBuiltinSpecifier, SECRET_SPECIFIER } from "./nish-modules"
+import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
@@ -42,9 +42,6 @@ const ENTRY_FILE: string = "entry.ts"
 
 /** The specifier the corpus refuses whole (NL4011). */
 const NET_SPECIFIER: string = "nish:net"
-
-/** The specifier refused until the TypeScript runtime answers regions (NL4015). */
-const REGION_SPECIFIER: string = "nish:region"
 
 /** One file `--emit-ts` writes: a path relative to the output directory, and its text. */
 export class EmittedFile {

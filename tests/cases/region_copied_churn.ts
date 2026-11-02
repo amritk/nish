@@ -1,5 +1,5 @@
 // What the region rules let leave a region is copied, not pointed at: a
-// number, a boolean, an enum and another region's handle. Each is read after
+// number of every width, a boolean, an enum and another region's handle. Each is read after
 // its region is freed and after `churn` has reused the freed memory
 // (.claude/selfhost.md, "A rule that lets a value outlive its scope").
 import { Region, enter, enterWith, free, region, regionWith } from "nish:region"
@@ -14,11 +14,17 @@ class Room {
   w: f64
   open: boolean
   mood: Mood
+  h: f32
+  big: i64
+  b: u8
   constructor(n: i32) {
     this.n = n
     this.w = toF64(n) / 4
     this.open = n % 2 === 0
     this.mood = n > 2 ? Mood.Busy : Mood.Calm
+    this.h = toF32(n) / 8
+    this.big = toI64(n) * 1000000000000
+    this.b = toU8(n + 250)
   }
 }
 
@@ -27,11 +33,17 @@ class Out {
   ws: f64[]
   opens: boolean[]
   moods: Mood[]
+  hs: f32[]
+  bigs: i64[]
+  bs: u8[]
   constructor() {
     this.ns = [0]
     this.ws = [0]
     this.opens = [false]
     this.moods = [Mood.Calm]
+    this.hs = [0]
+    this.bigs = [0]
+    this.bs = [0]
   }
 }
 
@@ -42,6 +54,9 @@ const copyOut = (room: Room, out: Out): i32 => {
   out.ws[0] = room.w
   out.opens[0] = room.open
   out.moods[0] = room.mood
+  out.hs[0] = room.h
+  out.bigs[0] = room.big
+  out.bs[0] = room.b
   return room.n
 }
 
@@ -49,6 +64,9 @@ const nOf = (room: Room): i32 => room.n
 const wOf = (room: Room): f64 => room.w
 const openOf = (room: Room): boolean => room.open
 const moodOf = (room: Room): Mood => room.mood
+const hOf = (room: Room): f32 => room.h
+const bigOf = (room: Room): i64 => room.big
+const bOf = (room: Room): u8 => room.b
 
 function churn(): i32 {
   const t: string[] = []
@@ -66,12 +84,17 @@ export const main = (): i32 => {
   const w = enter(r, wOf)
   const open = enter(r, openOf)
   const mood = enter(r, moodOf)
+  const h = enter(r, hOf)
+  const big = enter(r, bigOf)
+  const b = enter(r, bOf)
   enterWith(r, out, copyOut)
   held.push(regionWith(3, make))
   free(r)
   console.log(`${churn() > 0}`)
   console.log(`${n} ${w} ${open} ${mood === Mood.Busy}`)
   console.log(`${out.ns[0]} ${out.ws[0]} ${out.opens[0]} ${out.moods[0] === Mood.Busy}`)
+  console.log(`${h} ${big} ${b}`)
+  console.log(`${out.hs[0]} ${out.bigs[0]} ${out.bs[0]}`)
   console.log(`${enter(held[0], nOf)}`)
   free(held[0])
   return 0

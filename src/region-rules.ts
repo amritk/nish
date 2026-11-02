@@ -56,7 +56,7 @@ import {
   REGION_NONE,
   regionRoleOf,
 } from "./region-check"
-import { Local, STORAGE_PARAM } from "./symbols"
+import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
 import { TypeTable } from "./types"
 
 /** Not yet known: the walk has not reached a binding's value. Joins as nothing. */
@@ -403,7 +403,8 @@ class RegionWalk {
   }
 
   identOrigin(e: Node): i32 {
-    const local = this.program.nodeLocals[e.id]
+    // An arrow argument's capture is handed the value of the local it copies.
+    const local = sourceLocal(this.program.nodeLocals[e.id])
     if (local === null) {
       // A module-level binding: a number, a boolean, a string literal or a function.
       return ORIGIN_SCALAR
@@ -458,12 +459,8 @@ class RegionWalk {
     let out = ORIGIN_REGION
     for (const arg of this.handedTo(call, callee)) {
       const a = unwrapParens(arg)
-      if (a.kind !== N_ARROW) {
-        out = joinOrigin(out, this.origin(a))
-      } else if (callee === null) {
-        // What a builtin's callback answers may be what the builtin answers (`map`).
-        out = joinOrigin(out, this.arrowResult(a))
-      }
+      // What a callback answers may be what the call answers (`map`, `pick(() => a.node)`).
+      out = joinOrigin(out, a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a))
     }
     return out
   }
@@ -583,19 +580,25 @@ class RegionWalk {
     }
     // A method's receiver is visited with the callee position it sits in.
     this.visit(node.children[0])
-    for (const arg of node.children[1].children) {
-      this.visit(arg)
-    }
     if (regionRoleOf(callee) !== REGION_NONE) {
       // Another region's call is judged at its own call; a nested `region` only makes a handle.
+      for (const arg of node.children[1].children) {
+        this.visit(arg)
+      }
       return
     }
+    this.visitArguments(node, handed, ORIGIN_REGION)
     this.judgeCallee(node, callee, false)
   }
 
-  visitBuiltin(node: Node, handed: Node[]): void {
-    this.visit(node.children[0])
-    let around = ORIGIN_SCALAR
+  /**
+   * A call's arguments, walking each arrow's body as part of `f`: the callee
+   * runs it here, with its captures (`sourceLocal`), and hands its parameters
+   * what the call is handed or, from a user function (`seed` region), memory
+   * it allocated.
+   */
+  visitArguments(node: Node, handed: Node[], seed: i32): void {
+    let around = seed
     for (const arg of handed) {
       if (unwrapParens(arg).kind !== N_ARROW) {
         around = joinOrigin(around, this.origin(arg))
@@ -614,6 +617,11 @@ class RegionWalk {
         this.visit(a)
       }
     }
+  }
+
+  visitBuiltin(node: Node, handed: Node[]): void {
+    this.visit(node.children[0])
+    this.visitArguments(node, handed, ORIGIN_SCALAR)
     const receiver = methodReceiver(node)
     const method = arrayMethodName(this.program, this.table, node)
     if (receiver === null || method.length === 0) {
@@ -651,7 +659,8 @@ class RegionWalk {
     let anyOuter = false
     for (const arg of handed) {
       const a = unwrapParens(arg)
-      const o = a.kind === N_ARROW ? ORIGIN_SCALAR : this.origin(a)
+      // An arrow argument has no pointer facts; what it answers may be stored by the callee.
+      const o = a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a)
       origins.push(o)
       anyOuter = anyOuter || mayBeOuter(o)
     }
@@ -825,13 +834,13 @@ export const regionCallFindings = (
     walk.paramNames.push(names[1])
     walk.paramOrigins.push(ORIGIN_OUTER)
   }
-  // Each run can only raise an origin, and there are four, so this ends.
-  let runs = 0
+  // A run that changes anything adds a binding or raises one a step up
+  // none, scalar, region or outer, unknown, and bindings are finite, so this
+  // reaches the fixpoint; a cap would report from origins not yet settled.
   walk.changed = true
-  while (walk.changed && runs < 64) {
+  while (walk.changed) {
     walk.changed = false
     walk.visit(body)
-    runs = runs + 1
   }
   walk.collect = false
   walk.visit(body)

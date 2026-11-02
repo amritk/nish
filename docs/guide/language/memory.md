@@ -50,8 +50,8 @@ throughout.
 None of this changes what a program computes, only where its memory lives
 and when it is reused. Unlike in C or Rust:
 
-- you never free anything but a [region](regions.md), and the compiler
-  refuses a region's values once it is freed, so nothing is freed twice;
+- you never free anything but a [region](regions.md), and freeing one twice
+  stops the program with a message rather than corrupting memory;
 - a value you can still reach is never released under you;
 - there are no lifetimes or ownership annotations to write.
 

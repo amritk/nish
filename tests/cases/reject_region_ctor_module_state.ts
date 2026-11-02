@@ -1,7 +1,7 @@
 // A constructor reached by `new` inside the region stores a field of `this`,
-// a string the region allocated, into module state. Nish has no mutable
-// module state for it to reach: the top-level `let` is refused first (NL2084),
-// so region memory never outlives its region this way.
+// a string the region allocated, into module state. The shape is
+// unreachable because module state is immutable: the top-level `let` is
+// refused first (NL2084), so region memory never outlives its region this way.
 import { free, region } from "nish:region";
 
 let lastName: string = "";

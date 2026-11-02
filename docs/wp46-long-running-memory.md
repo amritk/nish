@@ -1,13 +1,16 @@
 # WP46: Memory for programs that do not exit — regions
 
-**Status: stage 1 built** (2026-11-01): the runtime makes, enters, leaves and
-frees a region (`runtime/runtime-region.c`, `nish_region_new`, `_enter`,
-`_leave`, `_free`; its record is RT-41 to RT-44 in
+**Status: stages 1 and 2 built** (2026-11-02). Stage 1, the runtime, makes,
+enters, leaves and frees a region (`runtime/runtime-region.c`,
+`nish_region_new`, `_enter`, `_leave`, `_free`; its record is RT-41 to RT-44 in
 [security/runtime.md](security/runtime.md)), and `node tests/run.js region`
-holds the resident set flat over 100,000 of them. The language construct
-(stage 2) is not built. The anchors below are at
-`c8a00d6`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this note is
-a proposal and is not compiled by `npm test`.
+holds the resident set flat over 100,000 of them. Stage 2, the language, is
+the `nish:region` module (`region`, `regionWith`, `enter`, `enterWith`,
+`free`, `Region<T>`) and the rules NL2609 to NL2618 that keep region memory
+and memory outside it from pointing at each other (RT-45 to RT-47).
+[LANGUAGE.md](LANGUAGE.md) → "Regions: `nish:region`" is normative and its
+cases are compiled by `npm test`; where this note's proposal differs, the
+language wins. The anchors below are at `c8a00d6`.
 
 **2026-10-30:** an arrow passed to a function-typed parameter of a top-level
 function may read the `const` locals and the parameters of the function it is

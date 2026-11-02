@@ -1,4 +1,4 @@
-// NL2371: a parallel body that reaches `region` through a callee.
+// NL2351: a parallel body that reaches `region` through a callee.
 import { Region, enter, enterWith, free, region, regionWith } from "nish:region";
 import { parallelMap } from "nish/threads";
 

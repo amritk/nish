@@ -3393,7 +3393,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -4042,7 +4042,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -7557,15 +7557,15 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 
 | Refused | Code |
 | --- | --- |
-| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`) |
-| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`) |
+| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`) |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_fixpoint_chain`) |
 | `enter`'s or `enterWith`'s `f` answering anything but a number, a `boolean`, an `enum` or a `Region`: an array, an object or a string | **NL2611** (`reject_region_enter_result`, `reject_region_enter_string`) |
 | `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | **NL2612** (`reject_region_threads`) |
 | a value whose type holds a `Region` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, a value sent on a channel | **NL2613** (`reject_region_task_arg_field`, `reject_region_task_answer`, `reject_region_channel_map`, `reject_region_parallel_capture`) |
 | `region`'s or `regionWith`'s `f` answering anything but memory it allocated: `region(() => moduleValue)`, `regionWith(g, (a) => a)` | **NL2614** (`reject_region_root_module`, `reject_region_root_arg`) |
-| outer storage growing inside `f`, directly or through a callee: `push`, `unshift` or `splice` on an outer array, `Map.set` or `Set.add` on an outer `Map` or `Set` | **NL2615** (`reject_region_grow_push`, `reject_region_grow_map`, `reject_region_grow_set`, each with a `_callee` twin) |
+| outer storage growing inside `f`, directly or through a callee: `push` on an outer array (arrays have no `unshift` or `splice`; the rule names them so it holds if they come), `Map.set` or `Set.add` on an outer `Map` or `Set` | **NL2615** (`reject_region_grow_push`, `reject_region_grow_map`, `reject_region_grow_set`, each with a `_callee` twin, `reject_region_arrow_grow`) |
 | a call inside `f` the region rules have no facts for. No program reaches it today, since every function, instantiation, lifted arrow and `declare function` has whole-program facts; it stays so that such a callee is never let through unexamined (`tests/wordings/unreachable.txt`) | **NL2616** |
-| `Arena.mark` or `Arena.used` inside `f`, or a callee reaching one: inside a region they would read the region's own arena, not the thread's | **NL2617** (`reject_region_arena_mark`) |
+| `Arena.mark` or `Arena.used` inside `f`, or a callee reaching one: inside a region they would read the region's own arena, not the thread's | **NL2617** (`reject_region_arena_mark` through `region`, `reject_region_arena_used_callee` through `enter` and a callee) |
 | `new Region<T>()` | **NL2618** (`reject_region_new`) |
 | `region`, `regionWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`) |
 | `using r = region(f)`, in any declarator: a block does not free a region | NL2387 (`reject_region_using_first`, `reject_region_using_second`) |
@@ -7574,6 +7574,13 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   region they read the region's arena, not the thread's, so a mark taken there
   names nothing the thread's arena knows once `f` returns
   (`docs/security/runtime.md`, RT-45).
+- **An arrow handed to a function runs inside `f`, and is judged as `f`'s
+  own code.** Its body is walked with what it captures, its parameters take
+  what the call is handed or memory the callee allocated, and what it answers
+  is part of what the call answers, so `pick(() => a.node)` stored in the root
+  is NL2610 as `a.node` is (`reject_region_arrow_keep`, `_grow`, `_link`,
+  `_result`, `_generic`). The walk runs to a fixpoint however long a chain of
+  assignments is, never a fixed number of rounds (`reject_region_fixpoint_chain`).
 - **The rules are on types for threads, on values inside `f`.** NL2613 follows
   the type, so a handle hidden in a field of a task's argument is caught where
   it crosses, whatever route brought it there. A handle stored in region
@@ -7587,8 +7594,11 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   is a `region` site under [`--deny-panics`](#panic-sites)
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
-- Under Node (`runtime/nish.mjs`) a region is an entry in a table, `free` drops
-  it, and the same handle checks throw.
+- A program run under Node as it is written (`runtime/nish.mjs`) gets a
+  region as an entry in a table, `free` drops it, and the same handle checks
+  throw. `--emit-ts` output is different: the runtime it imports
+  (`nish/runtime`) has no regions yet, so it refuses the module (NL4015,
+  `reject_emit_ts_region`).
 
 ### `process`
 
@@ -11222,8 +11232,9 @@ by the caller.
   `uncalled-copy.ts`, `uncalled-ctor-zero.ts`, `uncalled-field-zero.ts`,
   `uncalled-wide-zero.ts`); in the standard library the same body is a stub,
   without a warning, and the program is written. The sixth is a module that
-  imports `nish:region`, whose regions the TypeScript runtime does not answer
-  yet (NL4015, `reject_emit_ts_region`); keep it native.
+  imports `nish:region`, whose regions the runtime the output imports
+  (`nish/runtime`) does not answer yet, though a program run under Node as it
+  is written does (NL4015, `reject_emit_ts_region`); keep it native.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

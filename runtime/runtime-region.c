@@ -180,7 +180,9 @@ uint64_t nish_region_new(void) {
       nish_region_unlock();
       nish_region_die(NISH_REGION_FULL);
     }
-    index = nish_region_used++;
+    /* The slot is counted once its page is there: a failed page leaves the
+       count as it was (RT-46). */
+    index = nish_region_used;
     nish_region_slot **page = &nish_region_pages[index / NISH_REGION_PAGE];
     if (!*page) {
       nish_region_slot *p = calloc(NISH_REGION_PAGE, sizeof *p);
@@ -190,6 +192,7 @@ uint64_t nish_region_new(void) {
       }
       __atomic_store_n(page, p, __ATOMIC_RELEASE);
     }
+    nish_region_used = index + 1;
     s = &(*page)[index % NISH_REGION_PAGE];
     __atomic_store_n(&s->gen, 1, __ATOMIC_RELAXED);
   }

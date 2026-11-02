@@ -1,4 +1,4 @@
-// NL2371: a spawned function may not enter a region: the task's thread has
+// NL2351: a spawned function may not enter a region: the task's thread has
 // an arena of its own.
 import { Region, enter, enterWith, free, region, regionWith } from "nish:region";
 import { scope } from "nish/threads";

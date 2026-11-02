@@ -36,6 +36,7 @@ class Cache {
   order: i64[]
   head: i32 = 0
   held: i32 = 0
+  reused: i32 = 0
   constructor(live: i32) {
     this.regions = new Map<i64, Region<Session>>()
     this.order = new Array<i64>(live)
@@ -43,6 +44,7 @@ class Cache {
   get(id: i64, out: u8[]): i32 {
     const hit = this.regions.get(id)
     if (hit !== undefined) {
+      this.reused = this.reused + 1
       return enterWith(hit, out, serve)
     }
     if (this.held === this.order.length) {
@@ -89,10 +91,12 @@ export const main = (): i32 => {
   const out = new Array<u8>(8)
   let served: i32 = 0
   for (let round: i32 = 0; round < 50; round++) {
-    const id: i64 = toI64(round % 5)
+    // Each id twice in a row: the second `get` re-enters a live region.
+    const id: i64 = toI64((round >> 1) % 5)
     served = served + cache.get(id, out)
   }
   console.log(`served ${served}`)
+  console.log(`reused ${cache.reused}`)
   console.log(`last byte ${out[0]}`)
   console.log(`hits of 4: ${cache.hits(toI64(4))}`)
   console.log(`hits of 0: ${cache.hits(toI64(0))}`)

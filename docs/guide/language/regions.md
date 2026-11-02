@@ -141,8 +141,9 @@ The other way is refused as well: memory from outside the region may not be
 stored into the region, and a region's function may not grow an array, `Map`
 or `Set` from outside it. A region's handle stays on the thread that made it,
 so it may not be handed to a task, a channel or a parallel body, and a region's
-function may not read `Arena.mark` or `Arena.used`. The reference lists each
-refusal with its code.
+function may not read `Arena.mark` or `Arena.used`. An arrow the function
+hands to a helper runs inside the region too, so its body is checked the same
+way. The reference lists each refusal with its code.
 
 ## Mistakes stop the program
 
