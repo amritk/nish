@@ -21,7 +21,7 @@
 //      with `Connection: close` and no pipelined request read behind it.
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
-import { HTTP1_CHUNKED } from "nish/net/http1"
+import { HTTP1_CHUNKED } from "nish/net/http1-codec"
 import {
   HANDLER_ABSENT,
   HANDLER_DROPPED,

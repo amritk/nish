@@ -31,7 +31,7 @@ import {
   tcpConnect,
   tcpListen,
 } from "nish:net";
-import { HTTP1_CHUNKED, HTTP1_FIRST_HEAD, HTTP1_FIRST_INPUT, HTTP1_NO_BODY } from "nish/net/http1";
+import { HTTP1_CHUNKED, HTTP1_FIRST_HEAD, HTTP1_FIRST_INPUT, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import { HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields";
 import {
   H1_AGAIN,
@@ -535,7 +535,7 @@ export const serverChecks = (): i32 => {
   t.eqStr(
     "a GET is answered with its length, byte for byte",
     `${hello.head}\r\n${hello.text()}`,
-    `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n${PINNED_DATE}Content-Length: 26\r\n\r\nhello from nish/net/http1\n`
+    `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n${PINNED_DATE}Content-Length: 26\r\n\r\nhello from nish/net/http1-codec\n`
   );
 
   const post: u8[] = ascii("POST /echo HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;x=y\r\nhello\r\n6\r\n world\r\n0\r\n\r\n");
@@ -560,7 +560,7 @@ export const serverChecks = (): i32 => {
   lb.send(a, ascii(`${get}POST /echo HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n\r\nabcde`));
   const first = lb.response(a, false);
   const second = lb.response(a, false);
-  t.eqStr("a pipelined pair is answered in order", `${first.text()}|${second.text()}`, "hello from nish/net/http1\n|abcde");
+  t.eqStr("a pipelined pair is answered in order", `${first.text()}|${second.text()}`, "hello from nish/net/http1-codec\n|abcde");
 
   const bigBody: u8[] = patterned(BIG_SIZE);
   lb.send(a, ascii(`POST /echo HTTP/1.1\r\nHost: a\r\nContent-Length: ${BIG_SIZE}\r\n\r\n`));
@@ -638,7 +638,7 @@ export const serverChecks = (): i32 => {
   lb.send(a, ascii(`HEAD /hello HTTP/1.1\r\nHost: a\r\n\r\n${get}`));
   const head = lb.response(a, true);
   t.ok("HEAD has the length of the GET and no body", head.status === 200 && head.has("Content-Length: 26"));
-  t.eqStr("so the next response on the connection is read right", lb.response(a, false).text(), "hello from nish/net/http1\n");
+  t.eqStr("so the next response on the connection is read right", lb.response(a, false).text(), "hello from nish/net/http1-codec\n");
 
   lb.send(a, ascii("POST /echo HTTP/1.1\r\nHost: a\r\nExpect: 100-continue\r\nContent-Length: 5\r\n\r\n"));
   const proceed = lb.response(a, false);
@@ -649,7 +649,7 @@ export const serverChecks = (): i32 => {
   lb.send(a, ascii(`GET /hello HTTP/1.1\r\nHost: a\r\nConnection: upgrade\r\nUpgrade: websocket\r\n\r\n${get}`));
   const declined = lb.response(a, false);
   t.ok("an upgrade the program answers without switching is a plain response", declined.status === 200 && !declined.has("Connection: close"));
-  t.eqStr("and the next request on the connection is HTTP again", lb.response(a, false).text(), "hello from nish/net/http1\n");
+  t.eqStr("and the next request on the connection is HTTP again", lb.response(a, false).text(), "hello from nish/net/http1-codec\n");
 
   lb.send(a, ascii("GET /missing HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n"));
   const missing = lb.response(a, false);
@@ -659,7 +659,7 @@ export const serverChecks = (): i32 => {
   const old: i32 = lb.connect(false);
   lb.send(old, ascii("GET /hello HTTP/1.0\r\nConnection: keep-alive\r\n\r\n"));
   const keep10 = lb.response(old, false);
-  t.ok("an HTTP/1.0 request asking for keep-alive gets it", keep10.has("Connection: keep-alive") && keep10.text() === "hello from nish/net/http1\n");
+  t.ok("an HTTP/1.0 request asking for keep-alive gets it", keep10.has("Connection: keep-alive") && keep10.text() === "hello from nish/net/http1-codec\n");
   lb.send(old, ascii("POST /echo HTTP/1.0\r\nConnection: keep-alive\r\nContent-Length: 4\r\n\r\nold!"));
   const unframed = lb.response(old, false);
   t.ok(
@@ -909,7 +909,7 @@ export const serverChecks = (): i32 => {
   lb.send(patient, ascii("GET /hello HTTP/1.1\r\n"));
   lb.settle();
   lb.send(patient, ascii("Host: a\r\n\r\n"));
-  t.eqStr("a head finished in pieces within headTimeout is answered", lb.response(patient, false).text(), "hello from nish/net/http1\n");
+  t.eqStr("a head finished in pieces within headTimeout is answered", lb.response(patient, false).text(), "hello from nish/net/http1-codec\n");
   t.eqI32("and its slot outlives headTimeout", lb.plain.expire(monotonicNanos() + toI64(750000000)), ZERO);
   // A kept-alive slot quiet past headTimeout waits for no head: a head clock
   // it starts later starts no sooner than now, so the slot is not yet due.
@@ -933,7 +933,7 @@ export const serverChecks = (): i32 => {
   // exchange is open, and starts one when the exchange is over.
   const piped: i32 = lb.connect(false);
   lb.send(piped, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n\r\nGET /hello HTTP/1.1\r\n"));
-  t.eqStr("a request with an unfinished head pipelined behind it is answered", lb.response(piped, false).text(), "hello from nish/net/http1\n");
+  t.eqStr("a request with an unfinished head pipelined behind it is answered", lb.response(piped, false).text(), "hello from nish/net/http1-codec\n");
   lb.settle();
   t.eqI32(
     "and the pipelined head, still unfinished past headTimeout, closes the slot",
@@ -1019,7 +1019,7 @@ export const serverChecks = (): i32 => {
       lb.secure.tls.connection(toI32(3)) !== lb.secure.tls.connection(ZERO)
   );
   s.send(get);
-  t.eqStr("a GET over TLS", s.response(new ClientReader(false)).text(), "hello from nish/net/http1\n");
+  t.eqStr("a GET over TLS", s.response(new ClientReader(false)).text(), "hello from nish/net/http1-codec\n");
   const tlsExchange: string = `${get}POST /echo HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nwarm\r\n0\r\n\r\n`;
   s.send(tlsExchange);
   s.response(new ClientReader(false));
@@ -1076,7 +1076,7 @@ export const serverChecks = (): i32 => {
   const noAlpn: string[] = [];
   t.ok("a client offering no ALPN completes the handshake", n.handshake(noAlpn));
   n.send(get);
-  t.eqStr("and is served HTTP/1.1", n.response(new ClientReader(false)).text(), "hello from nish/net/http1\n");
+  t.eqStr("and is served HTTP/1.1", n.response(new ClientReader(false)).text(), "hello from nish/net/http1-codec\n");
   lb.settle();
   t.eqI32("an idle TLS slot is closed past idleTimeout", lb.secure.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(n.index) && lb.secure.busy() === 0);

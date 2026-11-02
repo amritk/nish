@@ -3,7 +3,7 @@
 // `Http1ResponseParser`, told to expect the upgrade, to `websocketCheckResponse`,
 // and what follows an accepted head goes to a client's `WsDecoder`. `fuzzOne`
 // takes one input and keeps nothing past it; a refusal is a `WS_HS_*` code or
-// `HTTP1_ERROR`, so a panic here is a finding (docs/security/http1.md, which
+// `HTTP1_ERROR`, so a panic here is a finding (docs/security/http1-codec.md, which
 // covers it).
 //
 // The first two bytes are settings and the rest is the response stream:
@@ -21,8 +21,8 @@
 // accepted (a forged accept), and checked with nothing offered is accepted
 // only when no protocol was chosen; and the tunnel's bytes decode as a
 // server's frames, unmasked, with every text message UTF-8.
-import { HTTP1_CLOSED, HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, HTTP1_UPGRADE } from "nish/net/http1"
-import { HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client"
+import { HTTP1_CLOSED, HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, HTTP1_UPGRADE } from "nish/net/http1-codec"
+import { HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client-codec"
 import {
   WS_CLOSE,
   WS_ERROR,

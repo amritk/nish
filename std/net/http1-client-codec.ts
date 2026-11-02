@@ -1,14 +1,14 @@
 /**
- * `nish/net/http1-client` — the client side of HTTP/1.1, sans-IO: a request
+ * `nish/net/http1-client-codec` — the client side of HTTP/1.1, sans-IO: a request
  * writer and an incremental response parser, bytes in, events and bytes out,
- * and no socket anywhere. `nish/net/http1` is the server side; the event
+ * and no socket anywhere. `nish/net/http1-codec` is the server side; the event
  * constants and the chunk writers are shared and imported from there.
  *
  * **The writer** is `http1RequestHead`, which answers a request line and
  * header section with the framing field the body needs, and
  * `http1WriteRequestHead`, which writes the same head into a caller's buffer
  * with nothing allocated. A chunked body is written with `http1Chunk` and
- * `http1LastChunk` from `nish/net/http1`. The writer refuses anything that
+ * `http1LastChunk` from `nish/net/http1-codec`. The writer refuses anything that
  * would let a caller's string end a line early or frame the body itself — the
  * request-splitting and request-smuggling shapes. `http1UpgradeRequestHead`
  * is the one way to ask the server to switch protocols: it writes `Upgrade`
@@ -19,8 +19,8 @@
  * what it asked (`expect`), `feed`s whatever slice the socket gave it, cut
  * anywhere, and calls `next()` until it answers `HTTP1_NEED_MORE`:
  *
- *     import { HTTP1_NEED_MORE, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1";
- *     import { Http1ResponseParser } from "nish/net/http1-client";
+ *     import { HTTP1_NEED_MORE, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
+ *     import { Http1ResponseParser } from "nish/net/http1-client-codec";
  *
  *     const p = new Http1ResponseParser(maxStatusLine, maxHeaderBytes, maxHeaders, maxBody, maxTrailerBytes);
  *     p.expect(false, false);
@@ -96,7 +96,7 @@ import {
   http1PutText,
   http1SameWord,
   http1Text,
-} from "nish/net/http1"
+} from "nish/net/http1-codec"
 
 /** `next()`: an interim 1xx response was read; `status` and the fields are its. */
 export const HTTP1_INFORMATIONAL: i32 = 7

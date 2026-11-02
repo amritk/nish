@@ -1,7 +1,7 @@
-// The HTTP/1.1 request parser (`nish/net/http1`) over a peer's bytes, as a
+// The HTTP/1.1 request parser (`nish/net/http1-codec`) over a peer's bytes, as a
 // libFuzzer target: `fuzzOne` takes one input and keeps nothing past it, and a
 // refusal is `HTTP1_ERROR` with a status, so a panic here is a finding
-// (docs/security/http1.md).
+// (docs/security/http1-codec.md).
 //
 // The first five bytes are settings and the rest is the request stream:
 //
@@ -30,7 +30,7 @@ import {
   HTTP1_NEED_MORE,
   HTTP1_UPGRADE,
   Http1Parser,
-} from "nish/net/http1"
+} from "nish/net/http1-codec"
 
 /** The parser the first byte asks for. */
 const makeParser = (config: i32): Http1Parser => {

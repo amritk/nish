@@ -24,7 +24,7 @@ import {
   tcpConnect,
   tcpListen,
 } from "nish:net";
-import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1";
+import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import {
   H1_AGAIN,
   H1_BODY,
@@ -120,7 +120,7 @@ export class App {
     this.names = [ascii("Content-Type")];
     this.values = [ascii("text/plain")];
     this.none = [];
-    this.hello = ascii("hello from nish/net/http1\n");
+    this.hello = ascii("hello from nish/net/http1-codec\n");
     this.pattern = new Array<u8>(16384);
     for (let k: i32 = 0; k < 16384; k++) {
       this.pattern[k] = toU8(bigByte(k));

@@ -10,8 +10,8 @@ commit `924e0ee`, rather than after an audit. It names functions rather than
 lines, so it holds at any commit that has them.
 
 **Result.** The module adds no parser: a response's status line, fields,
-framing and body are read by the `nish/net/http1-client` codec
-([http-client.md](http-client.md)) under caps the program sets once, and every
+framing and body are read by the `nish/net/http1-client-codec` codec
+([fetch.md](fetch.md)) under caps the program sets once, and every
 refusal of the codec ends the call that was reading, as a failure with the
 codec's code. What the module adds is bookkeeping — a fixed pool of call slots
 and connections on the handler's poll loop — and each piece of it is bounded:
@@ -41,10 +41,10 @@ connection reused without a look at what the origin did to it while idle
 | `std/net/upstream.ts` | `UpstreamLimits`; `UpstreamResponse`; `Upstream` (`settle`, `fail`, `get`, `ready`, `take`, `release`, `pending`, `openConnections`, `pump`, `dispatch`, `idle`, `usable`, `connect`, `service`, `send`, `receive`, `parse`, `finish`, `end`, `interest`, `close`); `UpstreamConnection`; the helpers `upstreamParser`, `upstreamAppend` |
 
 The codec's spans mode, added for UPSTREAM-8, is
-[http1-client.md](http1-client.md)'s to review, with the rest of the codec.
+[http1-client-codec.md](http1-client-codec.md)'s to review, with the rest of the codec.
 
 Out of scope: the response codec, its spans mode included, and `http1WriteRequestHead`
-(`std/net/http1-client.ts`, [http-client.md](http-client.md)); the outbound
+(`std/net/http1-client-codec.ts`, [fetch.md](fetch.md)); the outbound
 policy's address and host checks (`std/net/outbound.ts`,
 [outbound.md](outbound.md)), which this module calls; the stub resolver
 (`std/net/dns.ts`, [dns.md](dns.md)); the URL parser (`std/net/url.ts`,

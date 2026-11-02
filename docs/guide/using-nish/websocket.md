@@ -86,8 +86,8 @@ Over TLS, with `tlsConnect`:
 
 ```ts nish:ok
 import { netAddress } from "nish:net";
-import { HTTP1_HEAD, HTTP1_NEED_MORE } from "nish/net/http1";
-import { HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client";
+import { HTTP1_HEAD, HTTP1_NEED_MORE } from "nish/net/http1-codec";
+import { HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client-codec";
 import { tlsConnect } from "nish/net/tls-tcp";
 import {
   WS_HS_OK,

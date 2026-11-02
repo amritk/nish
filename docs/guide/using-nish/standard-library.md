@@ -2481,7 +2481,7 @@ a record written with their code); the records are in
 
 The protocol stack written on `nish/crypto`: TLS 1.3 (`nish/net/tls`), QUIC
 (`nish/net/quic` and its parts), HPACK and QPACK, HTTP/1.1
-(`nish/net/http1`, `nish/net/http1-server`), HTTP/2 (`nish/net/http2`),
+(`nish/net/http1-codec`, `nish/net/http1-server`), HTTP/2 (`nish/net/http2`),
 HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`, the server's and
 the client's side of its handshake) and WebTransport.
 Most of these modules are *sans-IO*: they take bytes and answer bytes, and
@@ -2546,14 +2546,14 @@ socket loop, so it is native only; [API server](api-server.md) shows it.
 and `Http1Connection.respondEncoded` sends one with `Content-Encoding` and
 `Content-Length` set; [Compression](compression.md) shows it.
 
-`nish/net/http1-client` is the client side of HTTP/1.1: `http1RequestHead`
+`nish/net/http1-client-codec` is the client side of HTTP/1.1: `http1RequestHead`
 writes a request's head and `Http1ResponseParser` reads the response, fed
 any slice, refusing every response-smuggling shape RFC 9112 names; [HTTP client](http-client.md)
 shows it.
 
-`nish/net/http-client` is a blocking client for command-line programs:
-`httpFetch(request, options)` answers the response with a reader for its
-body, and an `HttpClient` keeps a connection alive between fetches. Every
+`nish/net/fetch` is a blocking client for command-line programs:
+`fetchSync(request, options)` answers the response with a reader for its
+body, and an `FetchSyncClient` keeps a connection alive between fetches. Every
 wait has a timeout, every body a cap, and redirects and proxies are followed
 only as `HttpOptions` says; [HTTP client](http-client.md) shows it.
 
@@ -2588,7 +2588,7 @@ own: once one server stops, any other listener, connection or server made with
 the same configuration would sign its Retry tokens and stateless resets with a
 key of zeros, which anyone can forge. The HTTP/1.1 and WebSocket modules were
 written with a security record of their own
-([docs/security/http1.md](../../security/http1.md)) rather than audited after
+([docs/security/http1-codec.md](../../security/http1-codec.md)) rather than audited after
 the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
 `tlsTrafficKey` and the rest of `nish/net/tls/schedule`) and QUIC's
 `quicKeys`, `quicKeysUpdate` and `quicKeyUpdateSecret` take a traffic secret
@@ -2666,7 +2666,7 @@ if ((wants & TLS_RECORD_TICKET) !== 0) {
 ```
 
 ```ts nish:ok
-import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";
+import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1-codec";
 
 const bytesOf = (text: string): u8[] => {
   const out: u8[] = [];

@@ -1,9 +1,9 @@
 # HTTP client
 
-Two modules speak HTTP/1.1 as a client. `nish/net/http-client` is the one a
-command-line program wants: `httpFetch` takes a URL and blocks until the
+Two modules speak HTTP/1.1 as a client. `nish/net/fetch` is the one a
+command-line program wants: `fetchSync` takes a URL and blocks until the
 response is in, with a timeout on every wait and a cap on every body.
-`nish/net/http1-client`, below it, is the protocol alone: it writes a
+`nish/net/http1-client-codec`, below it, is the protocol alone: it writes a
 request's head and reads the response, bytes in and events out, and opens no
 socket, for a program that runs its own loop. Both are imported like any other
 library module ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
@@ -11,14 +11,14 @@ library module ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
 ## Fetching a URL
 
 ```ts nish:ok
-import { HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
+import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
 
 export const main = (): i32 => {
   const req = new HttpRequest("GET", "http://example.com/");
   req.header("Accept", "text/html");
   const options = new HttpOptions();
   options.totalTimeoutMs = 20000;
-  const res: HttpResponse | null = httpFetch(req, options);
+  const res: HttpResponse | null = fetchSync(req, options);
   if (res === null) {
     console.error("the fetch failed");
     return 1;
@@ -35,14 +35,14 @@ export const main = (): i32 => {
 };
 ```
 
-`httpFetch` looks the host up, connects, sends the request and answers once
+`fetchSync` looks the host up, connects, sends the request and answers once
 the response's head is in: `status`, `reason`, the `url` that answered and
 `header(name)`, in any case. The body is read through `res.body`:
 `readAll(limit)` answers it whole, or null past `limit` or on a failure, and
 `read(buf, off, n)` answers the next bytes as they arrive, 0 at the end and a
 negative code on a failure, for a stream you want as it comes; a read of 0
 bytes answers 0 at once. Once the body
-ends or fails, `httpFetch` closes its connection; read it to the end, or, when
+ends or fails, `fetchSync` closes its connection; read it to the end, or, when
 you only want the status, close it with `res.body.client.close()`, since an
 unread body holds its socket open until the program exits. A request
 carries a body when you set `req.body`, with its `Content-Length` sent for
@@ -51,7 +51,7 @@ refused before a byte is sent.
 
 ## Knowing why it failed
 
-`httpFetch` answers null with no reason. An `HttpClient` does the same work,
+`fetchSync` answers null with no reason. An `FetchSyncClient` does the same work,
 says why in `error` (an `HTTP_E_*` code; `httpErrorName` names it) and
 `errorText` (a sentence, such as `could not connect to example.com port 80
 (errno 111)`), and keeps the connection alive between fetches to the same
@@ -62,10 +62,10 @@ parse is not echoed at all. The URL is named as it parses: in
 path, which is echoed, so put credentials in a header, not in a URL:
 
 ```ts nish:ok
-import { HttpClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/http-client";
+import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/fetch";
 
 export const main = (): i32 => {
-  const client = new HttpClient(new HttpOptions());
+  const client = new FetchSyncClient(new HttpOptions());
   const res: HttpResponse | null = client.fetch(new HttpRequest("GET", "http://example.com/"));
   if (res === null) {
     console.error(`${httpErrorName(client.error)}: ${client.errorText}`);
@@ -156,7 +156,7 @@ local callers; a name that resolves to either does the same. Give such a
 client an `OutboundPolicy`, from `nish/net/outbound`:
 
 ```ts nish:ok
-import { HTTP_E_BLOCKED, HttpClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/http-client";
+import { HTTP_E_BLOCKED, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch";
 import { OutboundPolicy } from "nish/net/outbound";
 
 export const main = (): i32 => {
@@ -165,7 +165,7 @@ export const main = (): i32 => {
   options.outbound = policy;
   options.followRedirects = true;
   options.crossOriginRedirects = true;
-  const client = new HttpClient(options);
+  const client = new FetchSyncClient(options);
   const res: HttpResponse | null = client.fetch(new HttpRequest("GET", "http://127.0.0.1/"));
   if (res === null && client.error === HTTP_E_BLOCKED) {
     console.log(client.errorText);
@@ -223,17 +223,17 @@ trust. Read the body under your own limits, as for any server you do not run.
 
 ## The protocol alone
 
-`nish/net/http1-client` is the client side of HTTP/1.1 without the socket: it
+`nish/net/http1-client-codec` is the client side of HTTP/1.1 without the socket: it
 writes a request's head and reads the response, bytes in and events out. It
 opens no socket and knows no TLS: your program sends the bytes the writer
 answers, and feeds the parser whatever it receives, cut anywhere. The event
-constants are shared with the server side and come from `nish/net/http1`.
+constants are shared with the server side and come from `nish/net/http1-codec`.
 
 ### A first request
 
 ```ts nish:ok
-import { HTTP1_BODY, HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, HTTP1_NO_BODY } from "nish/net/http1";
-import { Http1ResponseParser, http1RequestHead } from "nish/net/http1-client";
+import { HTTP1_BODY, HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, HTTP1_NO_BODY } from "nish/net/http1-codec";
+import { Http1ResponseParser, http1RequestHead } from "nish/net/http1-client-codec";
 
 const bytesOf = (text: string): u8[] => {
   const out: u8[] = [];
@@ -300,7 +300,7 @@ for it, after yours:
 | `bodyLength` | The head ends with |
 | --- | --- |
 | `n`, 0 or more | `Content-Length: n` |
-| `HTTP1_CHUNKED` (-1) | `Transfer-Encoding: chunked`; write each piece with `http1Chunk` and the end with `http1LastChunk`, from `nish/net/http1` |
+| `HTTP1_CHUNKED` (-1) | `Transfer-Encoding: chunked`; write each piece with `http1Chunk` and the end with `http1LastChunk`, from `nish/net/http1-codec` |
 | `HTTP1_NO_BODY` (-2) | neither, for a request without a body, such as a `GET` |
 
 `http1WriteRequestHead(out, at, method, target, names, values, bodyLength)`
@@ -329,7 +329,7 @@ the body on its own:
 
 | Event | What it means |
 | --- | --- |
-| `HTTP1_INFORMATIONAL` | an interim 1xx response was read; `status` and the fields are its, and the final response follows. It comes from `nish/net/http1-client` |
+| `HTTP1_INFORMATIONAL` | an interim 1xx response was read; `status` and the fields are its, and the final response follows. It comes from `nish/net/http1-client-codec` |
 | `HTTP1_HEAD` | the final response's status line and fields are in: `status`, `reason`, `minor` (the HTTP minor version), `names` and `values` (names in lowercase), `header(name)` (any case), `contentLength` (the body's length, or -1 when the response is not framed by one; it is always -1 for a response to HEAD, a 204, a 304 and a 2xx to CONNECT, which have no body, so read `header("content-length")` there) |
 | `HTTP1_BODY` | some body bytes, de-chunked: `body[bodyOff .. bodyOff + bodyLen)`, valid until the next call |
 | `HTTP1_END` | the response is complete, trailers included |
@@ -371,7 +371,7 @@ feeding the same parser; the next response follows the last.
 A response the parser cannot read in exactly one way is refused, never
 repaired, since a client that repairs it differently from a proxy on the path
 disagrees with it about where the next response starts. Each code is a
-constant of `nish/net/http1-client`:
+constant of `nish/net/http1-client-codec`:
 
 | `error` | Code | Refused |
 | --- | --- | --- |

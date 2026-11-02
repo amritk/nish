@@ -34,7 +34,7 @@ length is the caller's to bound, and a host's trailing dot is kept, so
 | `std/net/url.ts` (URL parser) | `Url`; `urlParse`, `urlResolve`, `urlSerialize`, `urlDefaultPort`, `urlOrigin`; the helpers `urlLowerString`, `urlFind`, `urlIsAlpha`, `urlIsDigit`, `urlIsUnreserved`, `urlIsIpv4`, `urlIsIpv6`, `urlLooksNumeric`, `urlReadAuthority`, `urlReadReference`, `urlDotAt`, `urlDotSegment`, `urlSlashFrom`, `urlRemoveDotSegments`, `urlFinish`, `urlMerge`, `urlHostText` |
 
 Out of scope: the HTTP/1.1 parser that hands the target over
-(`docs/security/http1.md`); the WHATWG URL Standard's lenient parse (a
+(`docs/security/http1-codec.md`); the WHATWG URL Standard's lenient parse (a
 backslash read as `/`, tabs and newlines stripped, a host percent-decoded,
 `127.1` and `0x7f.1` read as IPv4), which `urlParse` refuses rather than
 repairs; IDNA, so a non-ASCII host is refused and a program passes the
