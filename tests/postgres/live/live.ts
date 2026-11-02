@@ -26,6 +26,9 @@
 //               for (peer or trust): the user, `select 1`, and 100 rows
 //   batch       keyed reads through PgBatcher: users by id, articles by slug,
 //               tags by article; duplicate and missing keys, two takes
+//   batchscale  PgBatcher takes of 1, 1024, 1025, 4096 and 65536 requests,
+//               each one execution: duplicate, missing and multi-row keys;
+//               keys that collide in its table; a failed and an empty run
 //
 // The `conduit` statement is the multicore server challenge's SPEC.md
 // `ARTICLE_LIST_SELECT ORDER_PAGE`,
@@ -1423,6 +1426,163 @@ const batch = (target: PgTarget): i32 => {
   return code
 }
 
+/** The rows `batchscale`'s statement gives key `k`: its low 31 bits mod 3, numbered from 1, so none when they divide by 3. */
+const rowsOf = (k: i64): i32 => toI32((k & toI64(2147483647)) % toI64(3))
+
+const LOW32: i64 = 4294967295
+const GOLDEN: i64 = 2654435769
+
+/** The int8 key `j * 2^32 + (j * 2654435769 mod 2^32)`: its low half is its high half times the multiplier the batcher's int hash xors in, so every such key hashes to the same slot. */
+const collidingKey = (j: i32): i64 => (toI64(j) << toI64(32)) + ((toI64(j) * GOLDEN) & LOW32)
+
+/**
+ * One `batchscale` case: a batcher taking at most `n` requests, `n` of them
+ * queued, request `t`'s key `keyOf(t)`, one take on one pooled connection.
+ * Checks every request was answered as `rowsOf` says, each row naming the
+ * request's own key, rows in order and `done` after them; or `failed`, when
+ * `fails`. Prints a line of counts.
+ */
+const scaleCase = (target: PgTarget, label: string, n: i32, select: string, fails: boolean, keyOf: (t: i32) => i64): i32 => {
+  const config = new PgBatchConfig()
+  config.name = "scale"
+  config.keyType = PG_BATCH_INT
+  config.select = select
+  config.maxRequests = n
+  config.maxBytes = toI32(4194304)
+  config.queueSize = n
+  const b = new PgBatcher(config)
+  const pgConfig = liveConfig()
+  pgConfig.maxOutput = toI32(8388608)
+  const pool = poolOf(pgConfig, toI32(1), toI32(1), "")
+  pool.register(b.name, b.sql, noTypes())
+  const keys: i64[] = new Array<i64>(n)
+  for (let t: i32 = 0; t < n; t++) {
+    keys[t] = keyOf(t)
+    if (!b.addInt(keys[t], t)) {
+      console.log(`${label}: request ${t} refused`)
+      return 1
+    }
+  }
+  // Per request: rows seen, and its outcome, 0 open, 1 done, 2 missing, 3 failed.
+  const seen: i32[] = new Array<i32>(n)
+  const outcome: i32[] = new Array<i32>(n)
+  let wrong: i32 = 0
+  let rows: i32 = 0
+  const d = new Driver(pool, target)
+  pool.request()
+  let r: i32 = -1
+  let over: boolean = false
+  let code: i32 = 0
+  while (!over) {
+    const slot: i32 = pool.dispatch()
+    if (slot >= 0) {
+      r = b.take(pool.connection(slot))
+      pool.send()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log(`${label}: timed out`)
+      return 1
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      if (r >= 0 && event === PG_COMPLETE) {
+        b.end(r)
+      } else if (r >= 0 && event === PG_ERROR) {
+        if (!fails) {
+          console.log(failed(pool.ticket, conn))
+          code = 1
+        } else {
+          // The run fails for the reason the statement gives, division by zero, and no other.
+          const error = conn.lastError
+          const sqlstate: string = error === null ? "no error" : error.code
+          if (sqlstate !== "22012") {
+            console.log(`${label}: failed with ${sqlstate}, not 22012`)
+            code = 1
+          }
+        }
+        b.fail(r)
+      } else if (r >= 0 && event === PG_ROW && !b.row(r, conn)) {
+        console.log(`${label}: a row refused`)
+        code = 1
+      } else if (event === PG_GROUP_DONE) {
+        over = true
+      } else if (event === PG_LOST || event === PG_FAILED) {
+        console.log(`${label}: connection failed: ${conn.failure} ${errorOf(conn)}`)
+        return 1
+      }
+      if (r >= 0 && (event === PG_ROW || event === PG_COMPLETE || event === PG_ERROR)) {
+        let e: i32 = b.next(r)
+        while (e !== PG_BATCH_NONE) {
+          const t: i32 = b.tag
+          if (t < 0 || t >= n || outcome[t] !== 0) {
+            wrong += 1
+          } else if (e === PG_BATCH_ROW) {
+            seen[t] += 1
+            rows += 1
+            if (conn.columnText(toI32(0)) !== `${keys[t]}` || parseInt(conn.columnText(toI32(1))) !== seen[t]) {
+              wrong += 1
+            }
+          } else if (e === PG_BATCH_DONE) {
+            outcome[t] = 1
+          } else if (e === PG_BATCH_MISSING) {
+            outcome[t] = 2
+          } else if (e === PG_BATCH_FAILED) {
+            outcome[t] = 3
+          }
+          e = b.next(r)
+        }
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  let done: i32 = 0
+  let missing: i32 = 0
+  let failures: i32 = 0
+  for (let t: i32 = 0; t < n; t++) {
+    const want: i32 = fails ? 0 : rowsOf(keys[t])
+    if (outcome[t] === 1) {
+      done += 1
+    } else if (outcome[t] === 2) {
+      missing += 1
+    } else if (outcome[t] === 3) {
+      failures += 1
+    }
+    const ok: boolean = fails ? outcome[t] === 3 : want === 0 ? outcome[t] === 2 && seen[t] === 0 : outcome[t] === 1 && seen[t] === want
+    if (!ok) {
+      wrong += 1
+    }
+  }
+  console.log(`${label}: ${n} requests, ${b.waiting()} waiting; ${rows} rows, ${done} done, ${missing} missing, ${failures} failed, ${wrong} wrong`)
+  return wrong === 0 ? code : 1
+}
+
+/**
+ * `batchscale`: one execution answers a whole take at each size up to the
+ * most, 65536. Keys repeat (a quarter of each batch asks again for an earlier
+ * key), a third have no row and the rest one or two, which come in order;
+ * and a batch of three requests, a key of two rows asked twice and a key
+ * with none. At 4096 every key collides in the batcher's table, so past its probe bound
+ * repeats go to the server as keys of their own and are answered the same.
+ * Then a run the server fails, and one with no row for any key, at 65536.
+ */
+const batchscale = (target: PgTarget): i32 => {
+  const select: string = "select q.key as k, g from generate_series(1, (q.key & 2147483647) % 3) as g"
+  let code: i32 = 0
+  const sizes: i32[] = [toI32(1), toI32(1024), toI32(1025), toI32(4096), toI32(65536)]
+  for (const n of sizes) {
+    const distinct: i32 = n - n / toI32(4)
+    code += scaleCase(target, `batch of ${n}`, n, select, false, (t: i32): i64 => toI64((t % distinct) + toI32(1)))
+  }
+  // Keys 2, 3 and 2: one key of two rows asked twice, and one with none.
+  code += scaleCase(target, "batch of 3", toI32(3), select, false, (t: i32): i64 => toI64(t === toI32(1) ? toI32(3) : toI32(2)))
+  code += scaleCase(target, "colliding batch of 4096", toI32(4096), select, false, (t: i32): i64 => collidingKey((t % toI32(3072)) + toI32(1)))
+  code += scaleCase(target, "failed batch of 65536", toI32(65536), "select 1 / (q.key - q.key) as g", true, (t: i32): i64 => toI64(t + toI32(1)))
+  code += scaleCase(target, "empty batch of 65536", toI32(65536), select, false, (t: i32): i64 => toI64((t + toI32(1)) * toI32(3)))
+  return code === 0 ? 0 : 1
+}
+
 /** The ticket's rows of `sql`, on a connection of its own: how many, and the sum of their first column; "" if it failed. */
 const rows = (target: PgTarget, sql: string): string => {
   const pool = makePool(toI32(1), toI32(1), "")
@@ -1510,6 +1670,8 @@ export const main = (): i32 => {
     return conduit(target)
   } else if (scenario === "batch") {
     return batch(target)
+  } else if (scenario === "batchscale") {
+    return batchscale(target)
   } else if (scenario === "unix") {
     return unix(target)
   }
