@@ -175,6 +175,14 @@ const K_UNION: i32 = 21
  * register, sixteen bytes in memory and sixteen-byte aligned there.
  */
 const K_VECTOR: i32 = 22
+/**
+ * A region handle from `nish:region`, `Region<T>` (docs/LANGUAGE.md,
+ * "Regions"): `refs[type]` is the root's type. It is a value, an `i64` the
+ * runtime issued, and never a pointer, so a handle stored anywhere keeps
+ * nothing in the region alive and points at nothing a `free` could leave
+ * dangling.
+ */
+const K_REGION: i32 = 23
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -636,6 +644,18 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_VECTOR
   }
 
+  // ---- `nish:region` (WP46) -------------------------------------------------
+
+  /** The handle of a region whose root is a `root`. */
+  regionOf(root: i32): i32 {
+    return this.intern(K_REGION, root, "")
+  }
+
+  /** Whether `type` is a `nish:region` handle; -1, a node with no recorded type, is not. */
+  isRegion(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_REGION
+  }
+
   /** A vector's lane count: sixteen bytes over its lane's width. */
   laneCount(type: i32): i32 {
     return 16 / this.alignOf(this.refs[type])
@@ -807,6 +827,8 @@ export class TypeTable {
         return this.unionMangle(type)
       case K_VECTOR:
         return `vec.${this.scalarName(this.refs[type])}`
+      case K_REGION:
+        return `rgn.${this.mangle(this.refs[type])}`
       default:
         return this.scalarName(type)
     }
@@ -1058,6 +1080,8 @@ export class TypeTable {
         return UNION_TYPE
       case K_VECTOR:
         return `<${this.laneCount(type)} x ${this.llvmType(this.refs[type])}>`
+      case K_REGION:
+        return "i64"
       default:
         process.exit(internalErrorFor(`internal error: llvmType of kind ${this.kinds[type]}`, this.json))
     }
@@ -1124,6 +1148,8 @@ export class TypeTable {
         return this.unionName(type)
       case K_VECTOR:
         return `${this.scalarName(this.refs[type])}x${this.laneCount(type)}`
+      case K_REGION:
+        return `Region<${this.typeName(this.refs[type])}>`
       default:
         return this.scalarName(type)
     }

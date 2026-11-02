@@ -28,7 +28,7 @@
 import { isNishSourceModule } from "./nish-modules"
 import { isCReservedSymbol } from "./c-symbols"
 import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./json-typed"
-import { resolveType } from "./annotations"
+import { namesRegion, resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectForeignPointer, unionArgumentMessage } from "./annotations"
 import { rejectHandleArgument } from "./handles"
@@ -52,6 +52,8 @@ import {
   CAPTURE_NONE,
   CAPTURE_PARALLEL,
   CAPTURE_TASK,
+  CAPTURE_REGION,
+  capturesNothing,
   callLetCaptureMessage,
   callThisCaptureMessage,
   captureTypeMessage,
@@ -70,6 +72,7 @@ import {
   taskThisCaptureMessage,
   thisCaptureMessage,
 } from "./parallel"
+import { isRegionRunner } from "./region-check"
 import {
   isExposeTemplate,
   isSecretPayload,
@@ -636,6 +639,12 @@ const unifyAnnotation = (
     return
   }
   if ((name === "Array" || name === "ReadonlyArray") && argc === 1 && table.kindOf(arg) === K_ARRAY) {
+    unifyAnnotation(ctx, list.children[0], table.refOf(arg), names, bindings)
+    return
+  }
+  // `nish:region`'s `Region<T>` against a handle binds `T` to its root. A name
+  // that spells some other class still meets the argument check, which refuses.
+  if (argc === 1 && table.isRegion(arg) && (name === "Region" || namesRegion(ctx, name))) {
     unifyAnnotation(ctx, list.children[0], table.refOf(arg), names, bindings)
     return
   }
@@ -1990,7 +1999,7 @@ const resolveFunctionArgument = (
   }
   if (ctx.capturesOuter(name)) {
     const local = ctx.arrowOuterScopes.length > 0 && ctx.arrowOuterScopes[0].lookup(name) !== null
-    if (local && ctx.arrowMode() !== CAPTURE_NONE) {
+    if (local && !capturesNothing(ctx.arrowMode())) {
       refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
     } else {
       refuseOnce(ctx, arg, outerFunctionMessage(ctx, name))
@@ -2171,6 +2180,9 @@ const captureMode = (template: TemplateInfo): i32 => {
   if (role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM) {
     return CAPTURE_PARALLEL
   }
+  if (isRegionRunner(template)) {
+    return CAPTURE_REGION
+  }
   return role !== PAR_NONE || isExposeTemplate(template) ? CAPTURE_NONE : CAPTURE_CALL
 }
 
@@ -2329,6 +2341,21 @@ export const capturedMessage = (name: string): string =>
   "`exposeWith` reads only its own parameters and the module's top-level names, so nothing it computes from the " +
   "plaintext leaves but its result; pass what it needs as `exposeWith`'s argument"
 
+/**
+ * WP46: an arrow given to `region`, `regionWith`, `enter` or `enterWith` reads
+ * `name`, a local or parameter of the function it is written in. Such an arrow
+ * allocates in the region, and a capture would put memory outside the region
+ * within its reach.
+ */
+export const regionCapturedMessage = (name: string): string =>
+  `The arrow reads \`${name}\`, which belongs to the function it is written in: an arrow given to \`region\`, ` +
+  "`regionWith`, `enter` or `enterWith` reads only its own parameters and the module's top-level names, so nothing " +
+  "outside the region is in its reach; pass what it needs as `regionWith`'s or `enterWith`'s argument"
+
+/** The refusal for an arrow of mode `mode`, which captures nothing, reading `name`. */
+export const noCaptureMessage = (mode: i32, name: string): string =>
+  mode === CAPTURE_REGION ? regionCapturedMessage(name) : capturedMessage(name)
+
 /** The refusal for `this` in an arrow argument, by the arrow's `CAPTURE_*` mode. */
 export const thisCaptureMessageFor = (mode: i32): string => {
   if (mode === CAPTURE_TASK) {
@@ -2337,7 +2364,7 @@ export const thisCaptureMessageFor = (mode: i32): string => {
   if (mode === CAPTURE_PARALLEL) {
     return thisCaptureMessage()
   }
-  return mode === CAPTURE_CALL ? callThisCaptureMessage() : capturedMessage("this")
+  return mode === CAPTURE_CALL ? callThisCaptureMessage() : noCaptureMessage(mode, "this")
 }
 
 /**
@@ -2346,7 +2373,7 @@ export const thisCaptureMessageFor = (mode: i32): string => {
  * reason a function parameter is out of its reach.
  */
 export const outerFunctionMessage = (ctx: CheckContext, name: string): string =>
-  ctx.arrowMode() === CAPTURE_NONE ? capturedMessage(name) : functionParamCaptureMessage(name)
+  capturesNothing(ctx.arrowMode()) ? noCaptureMessage(ctx.arrowMode(), name) : functionParamCaptureMessage(name)
 
 /**
  * WP29: `expr` names `name` in a function an arrow argument is written inside
@@ -2366,9 +2393,9 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
     depth === 0 ||
     depth > ctx.arrowScopes.length ||
     depth > ctx.arrowModes.length ||
-    mode === CAPTURE_NONE
+    capturesNothing(mode)
   ) {
-    refuseOnce(ctx, expr, capturedMessage(name))
+    refuseOnce(ctx, expr, noCaptureMessage(mode, name))
     return null
   }
   if (depth > 1 || ctx.arrowOuterScopes.length !== 1) {

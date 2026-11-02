@@ -48,6 +48,7 @@
 // answers with the IR text per module and the stem each module's file should
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
+import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings } from "./escape"
@@ -63,6 +64,7 @@ import {
   isBuiltinSpecifier,
   isNishSourceModule,
   nishModuleExports,
+  REGION_SPECIFIER,
   SECRET_SPECIFIER,
   unsafeModule,
 } from "./nish-modules"
@@ -881,17 +883,28 @@ export class Compilation {
    */
   resolveSpecifier(dir: string, specifier: string): ResolvedModule {
     if (isNishSourceModule(specifier)) {
-      // `nish:secret` is a builtin module with source behind it
-      // (`src/nish-modules.ts`): the library's `std/secret.ts`, in package
-      // `nish`, which is what the rules of `src/secret.ts` recognise it by.
+      // `nish:secret` and `nish:region` are builtin modules with source behind
+      // them (`src/nish-modules.ts`): the library's `std/secret.ts` or
+      // `std/region.ts`, in package `nish`, which is what their rules
+      // (`src/secret.ts`, `src/region-check.ts`) recognise them by.
       const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
-      const secretModule: ResolvedModule = {
-        path: stdModulePath(root, SECRET_STD_SPECIFIER),
-        name: stdModuleName(SECRET_STD_SPECIFIER),
+      const std = specifier === REGION_SPECIFIER ? REGION_STD_SPECIFIER : SECRET_STD_SPECIFIER
+      const sourceModule: ResolvedModule = {
+        path: stdModulePath(root, std),
+        name: stdModuleName(std),
         packageName: CLI,
         error: "",
       }
-      return secretModule
+      return sourceModule
+    }
+    if (specifier === REGION_STD_SPECIFIER) {
+      const spelled: ResolvedModule = {
+        path: "",
+        name: "",
+        packageName: "",
+        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
+      }
+      return spelled
     }
     if (specifier === SECRET_STD_SPECIFIER) {
       // One spelling for one module: the rules are the builtin module's, so it
@@ -2959,7 +2972,7 @@ export class Compilation {
     let i = 0
     while (i < this.modules.length && i < units.length) {
       const program = this.modules[i].checker.program
-      if (program.isCollections() || program.isSecretLibrary() || program.isMathLibrary()) {
+      if (program.isCollections() || program.isSecretLibrary() || program.isRegionLibrary() || program.isMathLibrary()) {
         out.push(units[i])
       }
       i = i + 1

@@ -28,7 +28,7 @@ import { Edit } from "./diagnostics"
 import { applyModuleEdits, emitModule, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
-import { isBuiltinSpecifier, SECRET_SPECIFIER } from "./nish-modules"
+import { isBuiltinSpecifier, isNishSourceModule } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
@@ -269,9 +269,9 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       if (holds(walk.specifierFrom, stmt.text)) {
         continue
       }
-      // `nish:secret` has source behind it, but it is answered by the runtime
-      // like every other builtin module (`outputPathOf`).
-      if (isBuiltinSpecifier(stmt.text) || stmt.text === SECRET_SPECIFIER) {
+      // `nish:secret` and `nish:region` have source behind them, but are
+      // answered by the runtime like every other builtin module (`outputPathOf`).
+      if (isBuiltinSpecifier(stmt.text) || isNishSourceModule(stmt.text)) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(RUNTIME)
         continue

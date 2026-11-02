@@ -21,7 +21,7 @@ import { CheckContext, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo, STRUCT_CLASS, StructInfo } from "./program"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
-import { SIMD_SPECIFIER } from "./nish-modules"
+import { REGION_SPECIFIER, SIMD_SPECIFIER } from "./nish-modules"
 import {
   FLAG_DEFAULT,
   FLAG_READONLY,
@@ -185,6 +185,15 @@ export const rejectForeignPointer = (ctx: CheckContext, type: i32, position: str
  * rejection: the language has no `any`, no `unknown`, no union but `T | null`, no
  * generics beyond `Array<T>`, and no structural object types.
  */
+/** Whether `name` spells `nish:region`'s `Region` here: imported from it, under any local name, or inside it. */
+export const namesRegion = (ctx: CheckContext, name: string): boolean => {
+  const imported = ctx.program.importNamed(name)
+  if (imported !== null) {
+    return imported.specifier === REGION_SPECIFIER && imported.importedName === "Region"
+  }
+  return name === "Region" && ctx.program.isRegionLibrary()
+}
+
 export const resolveType = (node: Node, ctx: CheckContext): i32 => {
   switch (node.kind) {
     case N_TYPE_PAREN:
@@ -324,6 +333,15 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   // with the wrong number of arguments is refused by the rule that names it
   // rather than by "unsupported type reference".
   if (argc > 0) {
+    // `nish:region`'s `Region<T>` is a handle, not the class `std/region.ts`
+    // declares for `tsc` (docs/LANGUAGE.md, "Regions"): answered before the
+    // class could be, here and inside that module alike.
+    if (namesRegion(ctx, name)) {
+      if (argc !== 1) {
+        return ctx.errorType(node, "`Region` needs exactly one type argument, its root's type, e.g. `Region<Session>`")
+      }
+      return ctx.table.regionOf(resolveType(args.children[0], ctx))
+    }
     const written = ctx.program.structTemplate(name)
     if (written !== null) {
       const instantiated = instantiateWritten(ctx, written, args, node)

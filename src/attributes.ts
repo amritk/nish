@@ -38,6 +38,7 @@
 
 import { WIPE_MEMSET } from "./emit-secret"
 import { isPureRuntime, SECRET_MAKE, SECRET_WIPE, secretRoleOf } from "./secret"
+import { isRegionIntrinsic } from "./region-check"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
 import { openedHandle } from "./handles"
 import {
@@ -3825,6 +3826,12 @@ const collectFacts = (
     return facts
   }
 
+  // WP46: one of `nish:region`'s intrinsics, whose body the emitter writes.
+  if (isRegionIntrinsic(program, sig)) {
+    markRegionIntrinsic(facts)
+    return facts
+  }
+
   // WP27 S1: a `declare function` has no body, and `FunctionFacts` starts from
   // the *pure* defaults because purity here is discovered by walking a body and
   // finding nothing impure in it. An absent body is not an empty one: leaving
@@ -4134,6 +4141,29 @@ const markAtomic = (facts: FunctionFacts): void => {
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
     facts.pointerParams[0].writesShared = true
+  }
+}
+
+/**
+ * WP46: one of `std/region.ts`'s intrinsics (`src/emit-region.ts`). Each source
+ * body is a call of itself, so nothing is read off it: the instance says what
+ * its one runtime call does. Each swaps or reads the thread's arena, or the
+ * region table, so it writes memory no parameter reaches and is not
+ * `willreturn` (a bad handle panics). A root handed to `close` or `leave` is
+ * kept by the region past the call, so it is captured and outlives it: an
+ * arena scope around the call may not release it, and no caller may put it on
+ * the stack.
+ */
+const markRegionIntrinsic = (facts: FunctionFacts): void => {
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.willReturn = false
+  facts.sharedWrite = true
+  facts.writesPastParams = true
+  facts.writesElsewhere = true
+  for (const pp of facts.pointerParams) {
+    pp.captured = true
+    pp.outlives = true
   }
 }
 

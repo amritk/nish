@@ -1148,6 +1148,15 @@ export const CAPTURE_CALL: i32 = 1
 export const CAPTURE_PARALLEL: i32 = 2
 /** A scope's task: the captures are handed over at the `spawn` and read at the join. */
 export const CAPTURE_TASK: i32 = 3
+/**
+ * WP46: `nish:region`'s `region`, `regionWith`, `enter` and `enterWith`.
+ * Nothing, as `CAPTURE_NONE`, so nothing outside a region is in reach of the
+ * code that allocates in it; the mode is its own so the refusal can say why.
+ */
+export const CAPTURE_REGION: i32 = 4
+
+/** Whether an arrow given for a parameter of mode `mode` may capture nothing at all. */
+export const capturesNothing = (mode: i32): boolean => mode === CAPTURE_NONE || mode === CAPTURE_REGION
 
 /** One value an instance carries for an arrow it was handed: capture `index` of `arrow`. */
 export class CaptureSlot {
