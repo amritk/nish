@@ -18289,7 +18289,7 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
 // ---- Regions (WP46 stage 1): runtime-region.c from C ---------------------------------
 // tests/runtime/region-test.c, linked with the whole runtime in the default
 // build and with -DNISH_THREADS: with no argument it runs the positive checks
-// (chunk sizes, nesting, the root, a hundred thousand regions freed ten times
+// (chunk sizes and their 1 MiB ceiling, nesting, the root, a hundred thousand regions freed ten times
 // with the resident set flat); with a mode it misuses a handle, and each mode
 // must exit 1 with its panic. Then `scripts/build.sh --profile wasm` must refuse
 // IR that names a region function, pointing at `--profile wasi`.
@@ -18322,13 +18322,23 @@ if (!only || "region".includes(only)) {
   ]
   for (const [name, flags, extra] of [
     ["region_test", [], []],
-    ["region_test_threads", ["-DNISH_THREADS=1", "-pthread"], [["thread", "nish: a region handle made on another thread"]]],
+    [
+      "region_test_threads",
+      ["-DNISH_THREADS=1", "-pthread"],
+      [
+        ["thread", "nish: a region handle made on another thread"],
+        // RT-46: new's out-of-memory panic lets go of the lock, so an atexit
+        // free finishes and the exit is 1, not SIGALRM. Linux caps the
+        // address space; macOS does not enforce RLIMIT_AS.
+        ...(process.platform === "linux" ? [["oom-unlocks", "nish: out of memory"]] : []),
+      ],
+    ],
   ]) {
     const built = regionBuild(name, flags)
     const label = flags.length > 0 ? "runtime-region.c -DNISH_THREADS" : "runtime-region.c"
     const run = built.ok ? spawnSync(built.exe, [], { encoding: "utf8" }) : null
     check(
-      `${label}: chunks start at the first allocation and double, regions nest, and 100,000 freed ten times leave the resident set flat`,
+      `${label}: chunks start at the first allocation and double up to 1 MiB, regions nest, and 100,000 freed ten times leave the resident set flat`,
       run !== null && run.status === 0,
       built.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "")
     )
