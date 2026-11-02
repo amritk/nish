@@ -6600,30 +6600,27 @@ if (dealtHere("selfHosting")) {
     })
     const expectedPaths = stdModuleFiles().join("\n")
     const printedPaths = scriptPaths.stdout.trim().split("\n").sort().join("\n")
-    const gateFaults = gateAt.flatMap((i) => {
-      const line = releaseYmlLines[i]
-      return [
-        ...(releaseYmlLines[i - 1].trim() === 'std="$(node scripts/std-module-paths.mjs)"'
-          ? []
-          : ["the line before it is not std=\"$(node scripts/std-module-paths.mjs)\""]),
-        ...(line.trim().endsWith(" $std; do") ? [] : ["it does not loop over $std"]),
-        ...line
-          .split(/\s+/)
-          .filter((t) => /^std\/.*\.ts$/.test(t))
-          .map((t) => `it spells ${t} by hand`),
-      ].map((fault) => `${fault}: ${line.trim()}`)
-    })
+    const assign = 'std="$(node scripts/std-module-paths.mjs)"'
+    const faults = [
+      ...(scriptPaths.status === 0 && printedPaths === expectedPaths
+        ? []
+        : [
+            `scripts/std-module-paths.mjs exited ${scriptPaths.status} and printed:\n${scriptPaths.stdout}${scriptPaths.stderr}\nexpected:\n${expectedPaths}`,
+          ]),
+      ...(gateAt.length === 3 ? [] : [`expected 3 \`for f in ...\` gates in release.yml, found ${gateAt.length}`]),
+    ]
+    for (const i of gateAt) {
+      const line = releaseYmlLines[i].trim()
+      if (releaseYmlLines[i - 1].trim() !== assign) faults.push(`the line before it is not ${assign}: ${line}`)
+      if (!line.endsWith(" $std; do")) faults.push(`it does not loop over $std: ${line}`)
+      for (const t of line.split(/\s+/).filter((t) => /^std\/.*\.ts$/.test(t))) {
+        faults.push(`it spells ${t} by hand: ${line}`)
+      }
+    }
     check(
       `release.yml's ${gateAt.length} presence gates take every std module, nested ones included, from scripts/std-module-paths.mjs, whose answer is what std/ has`,
-      scriptPaths.status === 0 &&
-        printedPaths === expectedPaths &&
-        gateAt.length === 3 &&
-        gateFaults.length === 0,
-      scriptPaths.status !== 0 || printedPaths !== expectedPaths
-        ? `scripts/std-module-paths.mjs exited ${scriptPaths.status} and printed:\n${scriptPaths.stdout}${scriptPaths.stderr}\nexpected:\n${expectedPaths}`
-        : gateAt.length !== 3
-          ? `expected 3 \`for f in ...\` gates in release.yml, found ${gateAt.length}`
-          : gateFaults.join("\n")
+      faults.length === 0,
+      faults.join("\n"),
     )
   }
 
@@ -28356,16 +28353,13 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
   const ships = (file) =>
     pkgFiles.some((entry) => !entry.startsWith("!") && (file === entry || file.startsWith(`${entry}/`))) &&
     !pkgFiles.includes(`!${file}`)
-  // A gate's `$std` is `scripts/std-module-paths.mjs`'s answer, so a std module it
-  // checks that way counts as named.
-  const stdPaths = spawnSync("node", [path.join(root, "scripts", "std-module-paths.mjs")], {
-    cwd: root,
-    encoding: "utf8",
-  }).stdout.trim()
+  // A gate's `$std` is every std module (the self-hosting section holds
+  // `scripts/std-module-paths.mjs` to that), so a module it checks that way
+  // counts as named.
   const gates = readRel(path.join(".github", "workflows", "release.yml"))
     .split("\n")
     .filter((line) => /^\s*for f in .*; do$/.test(line))
-    .map((line) => line.replace(" $std; do", ` ${stdPaths.split("\n").join(" ")}; do`))
+    .map((line) => line.replace("$std", stdModuleFiles().join(" ")))
   const shippedRows = rows.filter((r) => ships(r.file))
   const unshippedTexts = shippedRows.flatMap(({ file, licenceText }) => [
     ...(ships(licenceText) ? [] : [`${file} ships, but package.json's files does not ship ${licenceText}`]),

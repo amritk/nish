@@ -17,7 +17,7 @@ const source = fs.readFileSync(path.join(root, "src", "std-modules.ts"), "utf8")
 // The formatter may break the arrow before a long literal, so the literal is
 // read from the declaration wherever it wrapped (the same pattern tests/run.js uses).
 const listed = /stdModuleNames = \(\): string =>\s*"([^"]*)"/.exec(source)
-const names = listed === null ? [] : listed[1].split(", ").filter((name) => name.length > 0)
+const names = listed?.[1].split(", ").filter(Boolean) ?? []
 if (names.length === 0) {
   console.error('std-module-paths: no `stdModuleNames = (): string => "..."` in src/std-modules.ts')
   process.exit(1)
