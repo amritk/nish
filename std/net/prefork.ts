@@ -822,8 +822,9 @@ export const preforkSupervise = <S>(
   if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > fdMax)) {
     panic(`nish/net/prefork: serviceWorker not below ${count} workers, or above ${fdMax} workers`)
   }
-  if (pin && count > availableParallelism()) {
-    panic(`nish/net/prefork: pin with ${count} workers on ${availableParallelism()} CPUs`)
+  const cpus: i32 = pin ? availableParallelism() : 0
+  if (pin && count > cpus) {
+    panic(`nish/net/prefork: pin with ${count} workers on ${cpus} CPUs`)
   }
   if (config.pin && !pin) {
     console.error("nish/net/prefork: pinning needs Linux; the workers run unpinned")
