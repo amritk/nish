@@ -59,8 +59,9 @@
  * does not need: a program prepares a statement and executes it in the same
  * flight.
  *
- * **Text results, no copies.** Every parameter is in text format, and so is
- * every result column unless the bind asks otherwise. A row is read where it
+ * **Text results, no copies.** Every parameter is in text format unless it
+ * is one of the binary integer arrays below, and every result column is text
+ * unless the bind asks otherwise. A row is read where it
  * lies in the input buffer: `next()` frames each message once, validates its
  * layout, and records each column's start and length in two reused arrays, so
  * a row costs no allocation. `int`, `bool`, `isNull` and `PgText.timestamp`
@@ -71,6 +72,20 @@
  * `arrayNull` and `arrayEnd` build an array one element at a time into the
  * Bind, so a list needs no string built first. A program whose element was
  * refused for room can drop the whole bind, unsent, with `bindCancel`.
+ *
+ * **Binary integer arrays.** `paramInt4Array` and `paramInt8Array` send an
+ * `i64[]` window as an `int4[]` or `int8[]` in PostgreSQL's binary layout:
+ * four or eight bytes an element and no digits to write or parse, which the
+ * benchmark (`bench/postgres/arrays.mjs`) measured at less than a tenth of the
+ * text encoder's client CPU and up to half the server's on `unnest`.
+ * `binaryArrayStart(oid)`, `binaryArrayInt` and `binaryArrayNull` build one
+ * element at a time, NULLs included, and `arrayEnd` closes it. The Bind's
+ * format codes stay a single zero word while every parameter is text; the
+ * first binary one makes `bindEnd` write a code for each, so an all-text bind
+ * costs nothing more. An `int4` element outside `int4` panics rather than
+ * wrapping. The element type must match the statement's parameter: the server
+ * answers a mismatch with `ErrorResponse` (42804) for that execution, and the
+ * connection goes on.
  *
  * **Binary results.** A bind opened with `bindStartBinary` instead of
  * `bindStart` asks for every result column in binary format: an `int8` is
@@ -437,7 +452,6 @@ const pgDecimalLength = (value: i64): i32 => {
   return n
 }
 
-/** Whether `text` holds a NUL byte, which a protocol string cannot. */
 /** Whether `value` is an `int4`, -2^31..2^31-1. */
 const pgFitsInt4 = (value: i64): boolean => value >= toI64(-2147483648) && value <= toI64(2147483647)
 
@@ -448,6 +462,7 @@ const pgIntWindow = (values: i64[], start: i32, count: i32): void => {
   }
 }
 
+/** Whether `text` holds a NUL byte, which a protocol string cannot. */
 const pgHasNul = (text: string): boolean => {
   const n: i32 = toI32(text.length)
   for (let i: i32 = 0; i < n; i++) {
