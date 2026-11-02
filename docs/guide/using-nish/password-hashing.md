@@ -190,9 +190,11 @@ hash in any given lane makes the whole verify an `Err` that names the lane,
 before anything is hashed. `bcryptHash4` and `bcryptVerify4` are the same for
 up to four passwords, with 64 bytes of salts.
 
-How many lanes are fastest per hash depends on the core. On the Xeon the
-module was measured on, four lanes took 22.2 ms a hash at cost 10 against
-57.6 ms for one, and five or six were no faster than four. `bcryptCalibrate()` times
+How many lanes are fastest per hash depends on the core: a core that issues
+more instructions a cycle gains from wider batches, and on one Xeon five and
+six lanes were no faster than four while on a newer one six were fastest
+([the measurements](../../security/crypto-bcrypt.md#bmi2-and-x86-64-v3-measured-not-built)).
+So measure it rather than pick a number. `bcryptCalibrate()` times
 each width from one to six on throwaway passwords and returns the fastest. It
 takes a few tens of milliseconds and keeps nothing, so call it once, at
 startup, and keep the answer:
