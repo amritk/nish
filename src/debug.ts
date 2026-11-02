@@ -147,6 +147,9 @@ const bitsOfIn = (table: TypeTable, type: i32): i32 => {
   if (table.isVector(type)) {
     return 128
   }
+  if (table.isRegion(type)) {
+    return 64
+  }
   return table.enumBase(type) >= 0 || table.isRanged(type) ? 32 : bitsOf(type)
 }
 
@@ -309,6 +312,13 @@ export class DebugInfo {
       // cannot write, so a debugger sees `integer<0, 255>` and an `int`'s
       // encoding; the bounds are in the name.
       const base = this.typeRef(T_I32)
+      ref = this.module.addMetadata(
+        `!DIDerivedType(tag: DW_TAG_typedef, name: ${quote(this.table.typeName(type))}, file: ${this.file}, baseType: ${base})`
+      )
+    } else if (this.table.isRegion(type)) {
+      // A `nish:region` handle is an `i64` the runtime looks up, so a typedef
+      // of `long` named `Region<T>`.
+      const base = this.typeRef(T_I64)
       ref = this.module.addMetadata(
         `!DIDerivedType(tag: DW_TAG_typedef, name: ${quote(this.table.typeName(type))}, file: ${this.file}, baseType: ${base})`
       )

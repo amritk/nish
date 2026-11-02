@@ -1,0 +1,1 @@
+A `Region` is made by `region(f)` or `regionWith(arg, f)`, which run `f` in it, not by `new`

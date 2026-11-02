@@ -32,6 +32,8 @@
 
 import { emitWipeBody } from "./emit-secret"
 import { SECRET_WIPE, secretRoleOf } from "./secret"
+import { emitRegionBody } from "./emit-region"
+import { isRegionIntrinsic, regionRoleIn } from "./region-check"
 import { emitJsonParts, emitJsonRoute, JsonPart } from "./emit-json"
 import { jsonRouteOf } from "./json-typed"
 import {
@@ -641,6 +643,8 @@ export class Emitter {
     // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
     if (secretRoleOf(sig) === SECRET_WIPE) {
       emitWipeBody(this, sig)
+    } else if (isRegionIntrinsic(this.program, sig)) {
+      emitRegionBody(this, sig, regionRoleIn(this.program, sig)) // WP46
     } else if (isLockMethod(sig)) {
       emitLockBody(this, sig) // WP29 P3
     } else if (isChannelSend(sig)) {

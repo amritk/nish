@@ -173,14 +173,26 @@ uint64_t nish_region_new(void) {
     s = &nish_region_pages[index / NISH_REGION_PAGE][index % NISH_REGION_PAGE];
     nish_region_free_list = s->outer;
   } else {
-    if (nish_region_used == NISH_REGION_SLOTS) nish_region_die(NISH_REGION_FULL);
-    index = nish_region_used++;
+    /* Each panic lets go of the lock first: an atexit handler, or another
+       thread while the exit is on its way, may still make or free a region
+       (docs/security/runtime.md, RT-46). */
+    if (nish_region_used == NISH_REGION_SLOTS) {
+      nish_region_unlock();
+      nish_region_die(NISH_REGION_FULL);
+    }
+    /* The slot is counted once its page is there: a failed page leaves the
+       count as it was (RT-46). */
+    index = nish_region_used;
     nish_region_slot **page = &nish_region_pages[index / NISH_REGION_PAGE];
     if (!*page) {
       nish_region_slot *p = calloc(NISH_REGION_PAGE, sizeof *p);
-      if (!p) nish_region_die(NISH_REGION_OOM);
+      if (!p) {
+        nish_region_unlock();
+        nish_region_die(NISH_REGION_OOM);
+      }
       __atomic_store_n(page, p, __ATOMIC_RELEASE);
     }
+    nish_region_used = index + 1;
     s = &(*page)[index % NISH_REGION_PAGE];
     __atomic_store_n(&s->gen, 1, __ATOMIC_RELAXED);
   }

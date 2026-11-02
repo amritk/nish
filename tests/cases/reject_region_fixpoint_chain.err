@@ -1,0 +1,1 @@
+stores `a1` into `root.child`: memory outside a region kept by the region's memory

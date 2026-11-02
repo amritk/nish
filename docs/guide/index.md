@@ -52,7 +52,8 @@ Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385
   [discriminated unions](language/unions.md),
   [errors and `Result`](language/errors.md),
   [maps and sets](language/maps-and-sets.md), [generics](language/generics.md),
-  [modules](language/modules.md) and [memory](language/memory.md).
+  [modules](language/modules.md), [memory](language/memory.md) and
+  [regions](language/regions.md).
 - **Using Nish** — [the command-line interface](using-nish/cli.md),
   [the standard library](using-nish/standard-library.md),
   [calling Nish from other languages](using-nish/interop.md),

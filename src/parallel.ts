@@ -504,13 +504,13 @@ export const recyclesPerElement = (f: FunctionFacts): boolean =>
  */
 export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
-  if (own === null || (!own.readsArenaState && !own.opensArena)) {
+  if (own === null || (!own.readsArenaState && !own.opensArena && !own.usesRegion)) {
     return ""
   }
   return (
     `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
     "each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, " +
-    "nor open a `using a = arena()` block"
+    "nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)"
   )
 }
 
@@ -1148,6 +1148,15 @@ export const CAPTURE_CALL: i32 = 1
 export const CAPTURE_PARALLEL: i32 = 2
 /** A scope's task: the captures are handed over at the `spawn` and read at the join. */
 export const CAPTURE_TASK: i32 = 3
+/**
+ * WP46: `nish:region`'s `region`, `regionWith`, `enter` and `enterWith`.
+ * Nothing, as `CAPTURE_NONE`, so nothing outside a region is in reach of the
+ * code that allocates in it; the mode is its own so the refusal can say why.
+ */
+export const CAPTURE_REGION: i32 = 4
+
+/** Whether an arrow given for a parameter of mode `mode` may capture nothing at all. */
+export const capturesNothing = (mode: i32): boolean => mode === CAPTURE_NONE || mode === CAPTURE_REGION
 
 /** One value an instance carries for an arrow it was handed: capture `index` of `arrow`. */
 export class CaptureSlot {
@@ -2678,7 +2687,7 @@ const threadsLoaded = (programs: CheckedProgram[]): boolean => {
 }
 
 /** The symbol `nish/threads`'s `scope()` is called by, or "" when no program loaded the module. */
-const scopeSymbol = (programs: CheckedProgram[]): string => {
+export const scopeSymbol = (programs: CheckedProgram[]): string => {
   for (const program of programs) {
     if (isThreadsModule(program)) {
       for (const sig of program.functions) {
