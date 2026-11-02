@@ -159,7 +159,7 @@
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
-import { copyBytes, getF64BE, getI32BE, getI64BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
+import { copyBytes, getF64BE, getI32BE, getI64BE, getU16BE, setI32BE, setI64BE, setU16BE } from "nish/bytes"
 import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url"
 import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
@@ -256,7 +256,8 @@ const PG_TAIL: i32 = 17
 const PG_BINARY_TAIL: i32 = 2
 // The result format code for binary.
 const PG_FORMAT_BINARY: i32 = 1
-// The element types `PgBinaryArray` reads, by OID: int8, int2 and int4.
+// The element types `PgBinaryArray` reads, and the binary array parameters
+// write (int4 and int8), by OID: int8, int2 and int4.
 const PG_OID_INT8: i32 = 20
 const PG_OID_INT2: i32 = 21
 const PG_OID_INT4: i32 = 23
@@ -437,6 +438,16 @@ const pgDecimalLength = (value: i64): i32 => {
 }
 
 /** Whether `text` holds a NUL byte, which a protocol string cannot. */
+/** Whether `value` is an `int4`, -2^31..2^31-1. */
+const pgFitsInt4 = (value: i64): boolean => value >= toI64(-2147483648) && value <= toI64(2147483647)
+
+/** Panics unless `values[start, start + count)` is inside `values`. */
+const pgIntWindow = (values: i64[], start: i32, count: i32): void => {
+  if (start < 0 || count < 0 || count > toI32(values.length) - start) {
+    panic("nish/net/postgres: an int array parameter outside its array")
+  }
+}
+
 const pgHasNul = (text: string): boolean => {
   const n: i32 = toI32(text.length)
   for (let i: i32 = 0; i < n; i++) {
@@ -1211,9 +1222,19 @@ export class PgConnection {
   private bindAt: i32 = -1
   private paramCountAt: i32 = 0
   private paramCount: i32 = 0
+  // What the open bind's end owes beyond `PG_TAIL`: its binary result format
+  // code, and once it holds a binary parameter, a format code per parameter.
+  private bindOwed: i32 = 0
+  // The open bind's binary parameters, by index; `bindEnd` back-patches their format codes.
+  private binaryParams: i32[]
+  private binaryParamCount: i32 = 0
   // The open array parameter's length word, -1 when none is open, and its elements so far.
   private arrayAt: i32 = -1
   private arrayCount: i32 = 0
+  // The open array's element OID when it is binary (`binaryArrayStart`), 0 when it is a text literal.
+  private arrayOid: i32 = 0
+  // Whether the open binary array holds a NULL element.
+  private arrayNulls: boolean = false
   private state: i32 = 0
   private clientNonce: string = ""
   private serverSignature: u8[]
@@ -1239,6 +1260,7 @@ export class PgConnection {
     this.colStarts = new Array<i32>(16)
     this.colLengths = new Array<i32>(16)
     this.colTypes = new Array<i32>(16)
+    this.binaryParams = []
     this.serverSignature = []
     const head: u8[] = []
     for (let i: i32 = 0; i < PG_NONCE_BYTES && i < toI32(nonce.length); i++) {
@@ -1915,14 +1937,13 @@ export class PgConnection {
 
   /**
    * Whether a builder call may queue `size` more bytes and still leave
-   * `PG_TAIL` under `maxOutput`. When they would not fit after the end of the
+   * `PG_TAIL`, and what the open bind's end owes, under `maxOutput`. When they would not fit after the end of the
    * buffer, the unsent bytes move to its start first: a builder call asks
    * before it takes any offset into the buffer, so nothing it holds moves.
    */
   private room(size: i32): boolean {
     const queued: i32 = this.outEnd - this.outStart
-    const tail: i32 = this.bindAt >= 0 && this.bindBinary ? PG_TAIL + PG_BINARY_TAIL : PG_TAIL
-    if (size < 0 || size > this.config.maxOutput - tail - queued) {
+    if (size < 0 || size > this.config.maxOutput - PG_TAIL - this.bindOwed - queued) {
       return false
     }
     if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
@@ -2116,6 +2137,8 @@ export class PgConnection {
     }
     this.bindOpened = opens
     this.bindBinary = binary
+    this.bindOwed = extra
+    this.binaryParamCount = 0
     this.bindAt = this.startMessage(PG_FE_BIND)
     this.putByte(PG_ZERO)
     this.putCString(name)
@@ -2133,9 +2156,37 @@ export class PgConnection {
    */
   private startParam(size: i32): i32 {
     this.noArrayOpen()
-    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size)) {
+    // Once the bind holds a binary parameter, every parameter owes its format code.
+    const owed: i32 = this.binaryParamCount > 0 ? 2 : 0
+    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
       return -1
     }
+    this.bindOwed += owed
+    this.paramCount += 1
+    const at: i32 = this.outEnd
+    this.putI32(PG_ZERO)
+    return at
+  }
+
+  /**
+   * `startParam` for a parameter in binary format: the first one in a bind
+   * owes a format code for every parameter before it as well as its own,
+   * which `bindEnd` writes once the count is known. A text-only bind owes none
+   * and writes the zero count it always has.
+   */
+  private startBinaryParam(size: i32): i32 {
+    this.noArrayOpen()
+    const owed: i32 = this.binaryParamCount > 0 ? 2 : 2 * (this.paramCount + 1)
+    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
+      return -1
+    }
+    if (this.binaryParamCount < toI32(this.binaryParams.length)) {
+      this.binaryParams[this.binaryParamCount] = this.paramCount
+    } else {
+      this.binaryParams.push(this.paramCount)
+    }
+    this.binaryParamCount += 1
+    this.bindOwed += owed
     this.paramCount += 1
     const at: i32 = this.outEnd
     this.putI32(PG_ZERO)
@@ -2310,6 +2361,80 @@ export class PgConnection {
     return true
   }
 
+  // Binary `int4[]` and `int8[]` parameters, in PostgreSQL's binary array
+  // layout (`array_send`'s): the Bind's only parameters not in text, and its
+  // format codes say so. Their elements are fixed-size big-endian integers,
+  // so there are no digits to write and none for the server to parse. The
+  // element type is explicit and must be the statement's: an `int4[]` sent
+  // where the server expects `int8[]`, or the reverse, is refused by the
+  // server as that execution's `PG_ERROR`, and the connection goes on. An
+  // `int4` element outside -2^31..2^31-1 panics as a program error: false
+  // would read as "no room", and a batching loop would retry it forever.
+
+  /**
+   * An `int4[]` parameter in binary from `values[start, start + count)`;
+   * false as the `param...` calls are. Panics, writing nothing, when the
+   * window is not inside `values` or an element is outside `int4`.
+   */
+  paramInt4Array(values: i64[], start: i32, count: i32): boolean {
+    pgIntWindow(values, start, count)
+    const end: i32 = start + count
+    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+      if (!pgFitsInt4(values[i])) {
+        panic("nish/net/postgres: paramInt4Array() with an element outside int4")
+      }
+    }
+    return this.paramBinaryInts(values, start, count, PG_OID_INT4)
+  }
+
+  /**
+   * An `int8[]` parameter in binary from `values[start, start + count)`;
+   * false as the `param...` calls are. Panics when the window is not inside
+   * `values`.
+   */
+  paramInt8Array(values: i64[], start: i32, count: i32): boolean {
+    pgIntWindow(values, start, count)
+    return this.paramBinaryInts(values, start, count, PG_OID_INT8)
+  }
+
+  private paramBinaryInts(values: i64[], start: i32, count: i32, oid: i32): boolean {
+    const width: i32 = oid === PG_OID_INT4 ? 4 : 8
+    // The header, its one dimension when there are elements, then each element's length word and bytes.
+    const size: i64 =
+      count > 0
+        ? toI64(PG_ARRAY_HEADER + PG_ARRAY_DIM) + toI64(count) * toI64(4 + width)
+        : toI64(PG_ARRAY_HEADER)
+    const at: i32 = this.startBinaryParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
+    if (at < 0) {
+      return false
+    }
+    this.reserve(this.outEnd + toI32(size))
+    this.putArrayHeader(oid, count)
+    const end: i32 = start + count
+    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+      setI32BE(this.out, this.outEnd, width)
+      if (width === 4) {
+        setI32BE(this.out, this.outEnd + 4, toI32(values[i]))
+      } else {
+        setI64BE(this.out, this.outEnd + 4, values[i])
+      }
+      this.outEnd += 4 + width
+    }
+    this.endParam(at)
+    return true
+  }
+
+  /** A binary array's header with no NULLs: no dimension when it is empty, as `array_send` writes one, else one of `count` elements from 1. */
+  private putArrayHeader(oid: i32, count: i32): void {
+    this.putI32(count > 0 ? 1 : 0)
+    this.putI32(PG_ZERO)
+    this.putI32(oid)
+    if (count > 0) {
+      this.putI32(count)
+      this.putI32(toI32(1))
+    }
+  }
+
   // An array parameter built element by element: `arrayStart()`, then
   // `arrayElement`, `arrayInt` or `arrayNull` for each element, then `arrayEnd()`. An
   // element refused for room writes nothing and leaves the array open, so a
@@ -2338,6 +2463,9 @@ export class PgConnection {
   private arrayOpen(): void {
     if (this.arrayAt < 0) {
       panic("nish/net/postgres: an array element with no arrayStart()")
+    }
+    if (this.arrayOid !== 0) {
+      panic("nish/net/postgres: a text array element in a binary array")
     }
   }
 
@@ -2417,13 +2545,98 @@ export class PgConnection {
     return true
   }
 
-  /** Ends the open array parameter; never refused for room, which its elements kept. Panics when no array is open. */
+  // The binary twin: `binaryArrayStart(elementOid)` opens an `int4[]` (OID
+  // 23) or `int8[]` (OID 20) parameter in binary, `binaryArrayInt` and
+  // `binaryArrayNull` add its elements, and the same `arrayEnd()` closes it.
+  // The text builder's rules hold, and a text element in a binary array, or a
+  // binary element in a text one, panics.
+
+  /** Opens a binary array parameter of `elementOid`'s elements; false as the `param...` calls are. Panics on another OID, or while an array is open. */
+  binaryArrayStart(elementOid: i32): boolean {
+    if (this.arrayAt >= 0) {
+      panic("nish/net/postgres: binaryArrayStart() while an array is open")
+    }
+    if (elementOid !== PG_OID_INT4 && elementOid !== PG_OID_INT8) {
+      panic("nish/net/postgres: binaryArrayStart() with an element OID other than int4 (23) or int8 (20)")
+    }
+    // The header with its dimension; `arrayEnd()` fills in the length and the
+    // NULL flag, or drops the dimension when there are no elements.
+    const at: i32 = this.startBinaryParam(PG_ARRAY_HEADER + PG_ARRAY_DIM)
+    if (at < 0) {
+      return false
+    }
+    this.putArrayHeader(elementOid, toI32(1))
+    this.arrayAt = at
+    this.arrayCount = 0
+    this.arrayOid = elementOid
+    this.arrayNulls = false
+    return true
+  }
+
+  private binaryArrayOpen(): void {
+    if (this.arrayAt < 0 || this.arrayOid === 0) {
+      panic("nish/net/postgres: a binary array element with no binaryArrayStart()")
+    }
+  }
+
+  /**
+   * An integer element of the open binary array; false, and nothing written,
+   * when there is no room. Panics when no binary array is open, or when it is
+   * an `int4[]` and `value` is outside `int4`.
+   */
+  binaryArrayInt(value: i64): boolean {
+    this.binaryArrayOpen()
+    const width: i32 = this.arrayOid === PG_OID_INT4 ? 4 : 8
+    if (width === 4 && !pgFitsInt4(value)) {
+      panic("nish/net/postgres: binaryArrayInt() with an element outside int4")
+    }
+    if (!this.room(4 + width)) {
+      return false
+    }
+    this.putI32(width)
+    if (width === 4) {
+      this.putI32(toI32(value))
+    } else {
+      this.reserve(this.outEnd + 8)
+      setI64BE(this.out, this.outEnd, value)
+      this.outEnd += 8
+    }
+    this.arrayCount += 1
+    return true
+  }
+
+  /** A NULL element of the open binary array, length -1; false, and nothing written, when there is no room. Panics when no binary array is open. */
+  binaryArrayNull(): boolean {
+    this.binaryArrayOpen()
+    if (!this.room(toI32(4))) {
+      return false
+    }
+    this.putI32(toI32(-1))
+    this.arrayNulls = true
+    this.arrayCount += 1
+    return true
+  }
+
+  /** Ends the open array parameter, text or binary; never refused for room, which its elements kept. Panics when no array is open. */
   arrayEnd(): void {
     if (this.arrayAt < 0) {
       panic("nish/net/postgres: arrayEnd() with no arrayStart()")
     }
-    this.tailRoom(toI32(1))
-    this.putByte(PG_RBRACE)
+    if (this.arrayOid !== 0) {
+      // The header follows the parameter's length word: ndim, the NULL flag, the OID, then the dimension.
+      const header: i32 = this.arrayAt + 4
+      if (this.arrayCount === 0) {
+        setI32BE(this.out, header, PG_ZERO)
+        this.outEnd = header + PG_ARRAY_HEADER
+      } else {
+        setI32BE(this.out, header + 4, this.arrayNulls ? 1 : 0)
+        setI32BE(this.out, header + PG_ARRAY_HEADER, this.arrayCount)
+      }
+      this.arrayOid = 0
+    } else {
+      this.tailRoom(toI32(1))
+      this.putByte(PG_RBRACE)
+    }
     this.endParam(this.arrayAt)
     this.arrayAt = -1
   }
@@ -2442,8 +2655,11 @@ export class PgConnection {
       panic("nish/net/postgres: bindEnd() while an array is open")
     }
     const binary: boolean = this.bindBinary
-    this.tailRoom(binary ? PG_TAIL + PG_BINARY_TAIL : PG_TAIL)
+    this.tailRoom(PG_TAIL + this.bindOwed)
     const at: i32 = this.bindAt
+    if (this.binaryParamCount > 0) {
+      this.putFormatCodes()
+    }
     setU16BE(this.out, this.paramCountAt, toU16(this.paramCount))
     if (binary) {
       // One format code, which the server applies to every column.
@@ -2454,6 +2670,7 @@ export class PgConnection {
     }
     this.endMessage(at)
     this.bindAt = -1
+    this.bindOwed = 0
     const execute: i32 = this.startMessage(PG_FE_EXECUTE)
     this.putByte(PG_ZERO)
     this.putI32(PG_ZERO)
@@ -2482,7 +2699,30 @@ export class PgConnection {
   private dropBind(): void {
     this.outEnd = this.bindAt
     this.bindAt = -1
+    this.bindOwed = 0
     this.arrayAt = -1
+    this.arrayOid = 0
+  }
+
+  /**
+   * Writes the format codes a bind holding a binary parameter owes, in front
+   * of its parameter count: every parameter moves up by a code each, and
+   * every code is text's but the binary parameters'.
+   */
+  private putFormatCodes(): void {
+    const from: i32 = this.paramCountAt
+    const codes: i32 = 2 * this.paramCount
+    this.reserve(this.outEnd + codes)
+    copyBytes(this.out, from + codes, this.out, from, this.outEnd - from)
+    this.outEnd += codes
+    setU16BE(this.out, from - 2, toU16(this.paramCount))
+    for (let i: i32 = 0; i < this.paramCount; i++) {
+      setU16BE(this.out, from + 2 * i, toU16(0))
+    }
+    for (let k: i32 = 0; k < this.binaryParamCount && k < toI32(this.binaryParams.length); k++) {
+      setU16BE(this.out, from + 2 * this.binaryParams[k], toU16(PG_FORMAT_BINARY))
+    }
+    this.paramCountAt = from + codes
   }
 
   /** Sync: ends the open group, which the server answers with `PG_GROUP_DONE`. False when no group is open or a bind is; never for room. */

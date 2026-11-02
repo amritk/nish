@@ -16,6 +16,9 @@
 //               pool; the slot is built again on its next request
 //   pipeline    an error in the middle of five pipelined groups
 //   arrays      text[], int8[] and int4[] parameters, unnested by the server
+//   intarrays   int4[] and int8[] parameters in text and in binary, read back
+//               alike; a refusal under maxOutput; an element OID the
+//               statement does not take fails its request only
 //   binary      one statement's rows in binary and in text, read alike; two
 //               batches of creation times, binary and text, read alike
 //   conduit     the Conduit article list, prepared once and run pipelined
@@ -233,13 +236,21 @@ class Driver {
   }
 }
 
-/** A pool of `size` connections as the arguments say, `extra` appended to the password. */
-const makePool = (size: i32, queue: i32, extra: string): PgPool => {
+/** The connection settings the arguments name. */
+const liveConfig = (): PgConfig => {
   const config = new PgConfig()
   config.user = process.argv[3]
   config.database = process.argv[5]
   config.options = "-c search_path=nish_live"
   config.applicationName = "nish-live"
+  return config
+}
+
+/** A pool of `size` connections as the arguments say, `extra` appended to the password. */
+const makePool = (size: i32, queue: i32, extra: string): PgPool => poolOf(liveConfig(), size, queue, extra)
+
+/** A pool of `size` connections with `config`, `extra` appended to the password. */
+const poolOf = (config: PgConfig, size: i32, queue: i32, extra: string): PgPool => {
   const password = secret(bytesOf(process.argv[4] + extra))
   const pool = new PgPool(config, password, size, queue)
   wipe(password)
@@ -714,6 +725,172 @@ const arrays = (target: PgTarget): i32 => {
     }
   }
   d.close()
+  return 0
+}
+
+/** `intarrays`' cap on queued output: a 2,000-element array fits under it, a 10,000-element one does not. */
+const INT_OUTPUT: i32 = 65536
+
+/** One `intarrays` case: an `int4[]` or `int8[]` parameter, sent once in text and once in binary. */
+class IntCase {
+  readonly name: string
+  readonly int4: boolean
+  readonly values: i64[]
+  /** Built element by element, with a NULL where `nulls` holds true; otherwise from the `i64[]` window. */
+  readonly nulls: boolean[]
+
+  constructor(name: string, int4: boolean, values: i64[], nulls: boolean[]) {
+    this.name = name
+    this.int4 = int4
+    this.values = values
+    this.nulls = nulls
+  }
+}
+
+/** `count` values from `first`, `step` apart. */
+const intRun = (first: i64, step: i64, count: i32): i64[] => {
+  const out: i64[] = []
+  for (let i: i32 = 0; i < count; i++) {
+    out.push(first + step * toI64(i))
+  }
+  return out
+}
+
+const intCases = (): IntCase[] => {
+  const min8: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8)
+  const none: boolean[] = []
+  return [
+    new IntCase("int4 empty", true, [], none),
+    new IntCase("int4 one", true, [toI64(42)], none),
+    new IntCase("int4 nulls", true, [toI64(0), toI64(5), toI64(0)], [true, false, true]),
+    new IntCase("int4 edges", true, [toI64(-2147483648), toI64(2147483647)], none),
+    new IntCase("int4 2000", true, intRun(toI64(-1000000000), toI64(1000003), toI32(2000)), none),
+    new IntCase("int8 empty", false, [], none),
+    new IntCase("int8 one", false, [toI64(-1)], none),
+    new IntCase("int8 nulls", false, [min8, toI64(0), toI64(7)], [false, true, false]),
+    new IntCase("int8 edges", false, [min8, -(min8 + toI64(1))], none),
+    new IntCase("int8 2000", false, intRun(min8, toI64(4611686018427387), toI32(2000)), none),
+    new IntCase("int8 10000", false, intRun(min8, toI64(922337203685477), toI32(10000)), none),
+  ]
+}
+
+/** Binds `c`'s array in text or binary: from the window, or element by element when it has NULLs; false when refused for room. */
+const intArray = (conn: PgConnection, c: IntCase, binary: boolean): boolean => {
+  const n: i32 = toI32(c.values.length)
+  if (c.nulls.length === 0) {
+    if (!binary) {
+      return conn.paramIntArray(c.values, toI32(0), n)
+    }
+    return c.int4 ? conn.paramInt4Array(c.values, toI32(0), n) : conn.paramInt8Array(c.values, toI32(0), n)
+  }
+  if (binary ? !conn.binaryArrayStart(c.int4 ? toI32(23) : toI32(20)) : !conn.arrayStart()) {
+    return false
+  }
+  for (let i: i32 = 0; i < n; i++) {
+    const ok: boolean = c.nulls[i] ? (binary ? conn.binaryArrayNull() : conn.arrayNull()) : binary ? conn.binaryArrayInt(c.values[i]) : conn.arrayInt(c.values[i])
+    if (!ok) {
+      return false
+    }
+  }
+  conn.arrayEnd()
+  return true
+}
+
+/** What `intarrays` reads back of every array: its length, its non-NULL elements, their least, greatest and sum, and the elements of a short one. */
+const INT_SUMMARY: string =
+  "count(*), count(x), min(x), max(x), sum(x), case when count(*) <= 4 then string_agg(coalesce(x::text, 'NULL'), ' ' order by ord) else '...' end"
+
+/**
+ * `intarrays`: `int4[]` and `int8[]` parameters in text and in binary, read
+ * back alike: empty, one element, NULLs, the type's extremes, arrays that grow
+ * the output buffer and one past `maxOutput`, refused in both formats and
+ * sent empty instead. Then a binary `int4[]` sent where the statement takes
+ * `int8[]`: the server's error fails that request only, and the next one on
+ * the connection succeeds.
+ */
+const intarrays = (target: PgTarget): i32 => {
+  const config = liveConfig()
+  config.maxOutput = INT_OUTPUT
+  const pool = poolOf(config, toI32(1), toI32(8), "")
+  pool.register("int4s", `select ${INT_SUMMARY} from unnest($1::int4[]) with ordinality as u(x, ord)`, noTypes())
+  pool.register("int8s", `select ${INT_SUMMARY} from unnest($1::int8[]) with ordinality as u(x, ord)`, noTypes())
+  const cases = intCases()
+  const paired: i32 = 2 * toI32(cases.length)
+  // Then the mismatch, and a request after it.
+  const requests: i32 = paired + 2
+  const seen: string[] = []
+  for (let t: i32 = 0; t < requests; t++) {
+    pool.request()
+    seen.push("")
+  }
+  const d = new Driver(pool, target)
+  let done: i32 = 0
+  while (done < requests) {
+    let slot: i32 = pool.dispatch()
+    while (slot >= 0) {
+      const t: i32 = pool.ticket
+      const conn = pool.connection(slot)
+      if (t < paired) {
+        const c = cases[t >> 1]
+        const binary: boolean = (t & 1) === 1
+        conn.bindStart(c.int4 ? "int4s" : "int8s")
+        if (!intArray(conn, c, binary)) {
+          console.log(`${c.name} ${binary ? "binary" : "text"}: refused under maxOutput, sent empty`)
+          conn.bindCancel()
+          conn.bindStart(c.int4 ? "int4s" : "int8s")
+          conn.paramIntArray(c.values, toI32(0), toI32(0))
+        }
+      } else {
+        conn.bindStart("int8s")
+        const values: i64[] = [toI64(1), toI64(2)]
+        if (t === paired) {
+          conn.paramInt4Array(values, toI32(0), toI32(2))
+        } else {
+          conn.paramInt8Array(values, toI32(0), toI32(2))
+        }
+      }
+      conn.bindEnd()
+      pool.send()
+      slot = pool.dispatch()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      return 1
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      const t: i32 = pool.ticket
+      const label: string =
+        t < paired ? `${cases[t >> 1].name} ${(t & 1) === 1 ? "binary" : "text"}` : t === paired ? "int4[] binary to int8[]" : "int8[] binary after it"
+      if (event === PG_ROW) {
+        let row: string = ""
+        for (let c: i32 = 0; c < 6; c++) {
+          row += `${c > 0 ? " " : ""}${conn.isNull(c) ? "NULL" : conn.columnText(c)}`
+        }
+        seen[t] = row
+        console.log(`${label}: ${row}`)
+      } else if (event === PG_ERROR) {
+        console.log(`${label}: ${codeOf(conn)}`)
+      } else if (event === PG_GROUP_DONE) {
+        done += 1
+      } else if (event === PG_LOST || event === PG_FAILED) {
+        console.log(`connection failed: ${conn.failure} ${errorOf(conn)}`)
+        return 1
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  let agree: i32 = 0
+  for (let k: i32 = 0; k < toI32(cases.length); k++) {
+    if (seen[2 * k] !== "" && seen[2 * k] === seen[2 * k + 1]) {
+      agree += 1
+    } else {
+      console.log(`${cases[k].name}: text and binary differ`)
+    }
+  }
+  console.log(`text and binary agree on ${agree} of ${cases.length} cases`)
   return 0
 }
 
@@ -1300,6 +1477,8 @@ export const main = (): i32 => {
     return pipeline(target)
   } else if (scenario === "arrays") {
     return arrays(target)
+  } else if (scenario === "intarrays") {
+    return intarrays(target)
   } else if (scenario === "binary") {
     return binary(target)
   } else if (scenario === "conduit") {
