@@ -1157,6 +1157,11 @@ const binaryBinds = (t: Suite): void => {
   conn.bindStart("q");
   conn.bindEnd();
   t.eqStr("nor after a binary bind cancelled", drain(conn), "B|||<13>|q|||||||E|||<9>|||||");
+  const pair: i64[] = [toI64(7), toI64(-1)];
+  conn.bindStartBinary("q");
+  conn.paramIntArray(pair, 0, 2);
+  conn.bindEnd();
+  t.eqStr("an int array in a binary bind is still text: no parameter format codes, only the result's", drain(conn), "B|||<25>|q||||<1>|||<6>{7,-1}|<1>|<1>E|||<9>|||||");
   conn.sync();
   drain(conn);
 
