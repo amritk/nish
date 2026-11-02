@@ -67,7 +67,15 @@ import {
 } from "./nodes"
 import { fitArguments } from "./declarations"
 import { ParentTable } from "./parents"
-import { channelCapacityMessage, isChannelClass, isThreadsStruct, spawnFormFor } from "./parallel"
+import {
+  channelCapacityMessage,
+  isChannelClass,
+  isChannelSend,
+  isThreadsStruct,
+  spawnFormFor,
+} from "./parallel"
+import { isRegionSource, isRegionTemplate } from "./region-check"
+import { recordRegionCall, regionNewMessage } from "./region-rules"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
 import { simdCompareMessage } from "./simd"
 import { Scope } from "./symbols"
@@ -425,6 +433,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   )
   ctx.program.nodeCallees[expr.id] = method
   exposeMethod(ctx, method)
+  if (isChannelSend(method)) {
+    recordRegionCall(ctx.program.channelSends, expr, method) // `nish:region`: no handle crosses (`Compilation.checkRegions`)
+  }
   if (access.text === "set" && isCollectionStruct(info)) {
     recordUpdateFusion(ctx, expr) // WP32 S5: one probe for `m.set(k, (m.get(k) ?? 0) + 1)`
   }
@@ -603,6 +614,9 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     if (isSecretTemplate(template) && !isSecretSource(ctx.program)) {
       return ctx.errorType(expr, secretNewMessage())
+    }
+    if (isRegionTemplate(template) && !isRegionSource(ctx.program)) {
+      return ctx.errorType(expr, regionNewMessage())
     }
   } else {
     info = ctx.program.struct(name)

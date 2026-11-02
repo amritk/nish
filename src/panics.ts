@@ -87,6 +87,14 @@ export const PANIC_FFI_NULL: i32 = 15
  * (`foreignBufferCountProven` in `src/attributes.ts`).
  */
 export const PANIC_FFI_LENGTH: i32 = 16
+/**
+ * WP46: one of `nish:region`'s intrinsics, each a call into
+ * `runtime/runtime-region.c` that stops the program on a dead, foreign or
+ * already-entered handle, a `free` while entered, or a full slot table. The
+ * site is the intrinsic's own declaration, so `region`, `enter` and the rest
+ * reach it as a `call`.
+ */
+export const PANIC_REGION: i32 = 17
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -123,6 +131,8 @@ const panicKindName = (kind: i32): string => {
       return "ffi-null"
     case PANIC_FFI_LENGTH:
       return "ffi-length"
+    case PANIC_REGION:
+      return "region"
     default:
       return "oom"
   }
@@ -799,6 +809,11 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "a C function reads or writes as many bytes of the buffer as the count says, so a count larger than " +
         "the array's length panics before the call: pass `toU64(buf.length)` of the buffer itself, which " +
         "needs no check"
+      )
+    case PANIC_REGION:
+      return (
+        "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
+        "already or another thread's, and no proof removes that check: make the call from a module outside the scope"
       )
     default:
       // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.

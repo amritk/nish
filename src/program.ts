@@ -17,6 +17,7 @@
 // class — is a reference to the object rather than an index, because an index
 // would be into the wrong module's list. Everything local is an index.
 
+import { isRegionModule } from "./region"
 import { CheckContext } from "./context"
 import { SourceFile } from "./diagnostics"
 import { BuiltinExport } from "./nish-modules"
@@ -1516,6 +1517,10 @@ export class CheckedProgram {
   scopeChannels: ScopeChannels[]
   /** `nish:secret`: every `expose` and `exposeWith` call, judged once the facts are in (`Compilation.checkSecrets`). */
   exposeCalls: ParallelCall[]
+  /** `nish:region`: every `region`, `regionWith`, `enter` and `enterWith` call, judged once the facts are in (`Compilation.checkRegions`). */
+  regionCalls: ParallelCall[]
+  /** `nish:region`: every `Channel.send`, whose value may not hold a `Region` (`Compilation.checkRegions`). */
+  channelSends: ParallelCall[]
   /** `nish:secret`: what each `secret(v)` asks of the whole-program facts (`Compilation.checkSecrets`). */
   secretNeeds: SecretNeed[]
   /**
@@ -1559,6 +1564,8 @@ export class CheckedProgram {
   collectionsLibrary: boolean
   /** `isSecretLibrary()`, decided once, as `collectionsLibrary` is. */
   secretLibrary: boolean
+  /** `isRegionLibrary()`, decided once, as `collectionsLibrary` is. */
+  regionLibrary: boolean
   /** `isMapExtras()`, decided once, as `collectionsLibrary` is. */
   mapExtrasLibrary: boolean
   /** `isJsonTyped()`, decided once, as `collectionsLibrary` is. */
@@ -1736,6 +1743,8 @@ export class CheckedProgram {
     this.parallelCalls = []
     this.panicSites = []
     this.exposeCalls = []
+    this.regionCalls = []
+    this.channelSends = []
     this.secretNeeds = []
     this.spawnCalls = []
     this.scopeChannels = []
@@ -1747,6 +1756,7 @@ export class CheckedProgram {
     this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path)
     this.jsonTypedLibrary = isJsonTypedModule(packageName, source.path)
     this.secretLibrary = isSecretModule(packageName, source.path)
+    this.regionLibrary = isRegionModule(packageName, source.path)
     this.mathLibrary = isMathModule(packageName, source.path)
     this.usesArgv = false
     this.f64Mode = false
@@ -1815,12 +1825,23 @@ export class CheckedProgram {
    * (docs/wp32-map.md §4.1, §9.2).
    */
   writesNoOutput(): boolean {
-    return this.collectionsLibrary || this.mapExtrasLibrary || this.secretLibrary || this.mathLibrary
+    return (
+      this.collectionsLibrary ||
+      this.mapExtrasLibrary ||
+      this.secretLibrary ||
+      this.regionLibrary ||
+      this.mathLibrary
+    )
   }
 
   /** Whether this module is `std/secret.ts`, the source behind `nish:secret`, copied like `std/collections.ts`. */
   isSecretLibrary(): boolean {
     return this.secretLibrary
+  }
+
+  /** Whether this module is `std/region.ts`, the source behind `nish:region`, copied like `std/collections.ts`. */
+  isRegionLibrary(): boolean {
+    return this.regionLibrary
   }
 
   /** Whether this module is `std/math.ts`, `nish/math`, copied like `std/collections.ts`. */

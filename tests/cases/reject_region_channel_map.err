@@ -1,0 +1,1 @@
+The value a channel sends to another thread is `Channel<Map<i32, Region<Box>>>`, which holds a `Region`

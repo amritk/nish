@@ -28,7 +28,7 @@ import { nullableOfChecked, resolveType } from "./annotations"
 import {
   arrowElsewhereMessage,
   captureOuter,
-  capturedMessage,
+  noCaptureMessage,
   checkGenericCall,
   outerFunctionMessage,
   refuseOnce,
@@ -1020,7 +1020,7 @@ const isCapture = (ctx: CheckContext, local: Local | null): boolean => {
  */
 const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
   const mode = ctx.arrowMode()
-  let message = capturedMessage(target.text)
+  let message = noCaptureMessage(mode, target.text)
   if (mode === CAPTURE_TASK) {
     message = taskCaptureWriteMessage(target.text)
   } else if (mode === CAPTURE_PARALLEL) {
