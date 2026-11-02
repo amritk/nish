@@ -2,7 +2,7 @@ PASS  an https fetch from a server the roots trust answers
 PASS  and the next fetch reuses the TLS connection
 PASS  an IP literal is matched against the certificate's IP name, on its own connection
 PASS  a client reads its roots once, not again for each connection
-PASS  httpFetch fetches over https too
+PASS  fetchSync fetches over https too
 PASS  and once its body is read, it ends the connection with a close_notify
 PASS  an expired certificate is HTTP_E_CERTIFICATE
 PASS  and the error says the certificate was refused

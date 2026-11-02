@@ -1,4 +1,4 @@
-// nish/net/http-client against a scripted server on loopback.
+// nish/net/fetch against a scripted server on loopback.
 //
 // The parent listens on two ports (two origins) and serves; a child of the
 // same binary runs every fetch and prints the checks, since a blocking client
@@ -9,7 +9,7 @@
 // the connection a response came on, which is how the child sees a connection
 // reused, or a stale one replaced.
 
-import { HTTP_E_BODY_TOO_LARGE, HTTP_E_CONNECT_TIMEOUT, HTTP_E_DNS, HTTP_E_IO, HTTP_E_NONE, HTTP_E_PROTOCOL, HTTP_E_PROXY, HTTP_E_PROXY_REFUSED, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_REFUSED, HTTP_E_REQUEST, HTTP_E_TLS, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_TOTAL_TIMEOUT, HTTP_E_URL, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpChooseProxy, httpErrorName, httpFetch, httpNoProxyMatch, httpProxyFor } from "nish/net/http-client";
+import { HTTP_E_BODY_TOO_LARGE, HTTP_E_CONNECT_TIMEOUT, HTTP_E_DNS, HTTP_E_IO, HTTP_E_NONE, HTTP_E_PROTOCOL, HTTP_E_PROXY, HTTP_E_PROXY_REFUSED, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_REFUSED, HTTP_E_REQUEST, HTTP_E_TLS, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_TOTAL_TIMEOUT, HTTP_E_URL, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpChooseProxy, httpErrorName, fetchSync, httpNoProxyMatch, httpProxyFor } from "nish/net/fetch";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
 import { kill, monotonicNanos, platform, spawn, spawnSyncTo, waitPid } from "nish:process";
 import { readFileSyncOrNull, realpathSync, unlinkSync } from "nish:fs";
@@ -546,7 +546,7 @@ const conn = (res: HttpResponse | null): string => {
   return v !== null ? v : "none";
 };
 
-const fails = (client: HttpClient, res: HttpResponse | null, code: i32): boolean => {
+const fails = (client: FetchSyncClient, res: HttpResponse | null, code: i32): boolean => {
   if (res !== null || client.error !== code) {
     console.log(`  got ${res !== null ? `status ${res.status}` : "null"}, error ${client.error}: ${client.errorText}`);
     return false;
@@ -584,7 +584,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   options.useEnvProxy = false;
   options.readTimeoutMs = 5000;
   options.connectTimeoutMs = 5000;
-  const client: HttpClient = new HttpClient(options);
+  const client: FetchSyncClient = new FetchSyncClient(options);
 
   // --- plain fetches and keep-alive
   const a: HttpResponse | null = client.fetch(get(`${base}/hello`));
@@ -623,7 +623,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const stale: HttpResponse | null = client.fetch(get(`${base}/hello`));
   const urlFailed: boolean = fails(client, client.fetch(get("ftp://127.0.0.1/")), HTTP_E_URL);
   t.check(urlFailed && stale !== null && stale.body.read(buf, toI32(0), toI32(16)) === -HTTP_E_IO && client.error === HTTP_E_URL, "a stale body's read leaves the later fetch's error in place");
-  const cutter: HttpClient = new HttpClient(options);
+  const cutter: FetchSyncClient = new FetchSyncClient(options);
   const cut: HttpResponse | null = cutter.fetch(get(`${base}/big`));
   const cutRead: i32 = cut !== null ? cut.body.read(buf, toI32(0), toI32(4)) : -1;
   cutter.close();
@@ -659,7 +659,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(bodyOf(s3).endsWith("\r\n\r\nonce") && conn(s3) !== conn(s3a), "and so does a POST, which no retry could send");
 
   // --- a kept connection lost under a request
-  const dc: HttpClient = new HttpClient(options);
+  const dc: FetchSyncClient = new FetchSyncClient(options);
   const idempotent: string[] = ["GET", "PUT", "DELETE"];
   for (let k: i32 = 0; k < 3; k++) {
     const armed: HttpResponse | null = dc.fetch(get(`${base}/doom-close`));
@@ -685,12 +685,12 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const stallOptions: HttpOptions = new HttpOptions();
   stallOptions.useEnvProxy = false;
   stallOptions.readTimeoutMs = 300;
-  const sc: HttpClient = new HttpClient(stallOptions);
+  const sc: FetchSyncClient = new FetchSyncClient(stallOptions);
   const armedStall: string = bodyOf(sc.fetch(get(`${base}/doom-stall`)));
   t.check(armedStall === "armed" && fails(sc, sc.fetch(get(`${base}/hello`)), HTTP_E_READ_TIMEOUT), "nor one a kept connection never answers: it is HTTP_E_READ_TIMEOUT");
 
   // --- bytes nobody asked for
-  const ex: HttpClient = new HttpClient(options);
+  const ex: FetchSyncClient = new FetchSyncClient(options);
   const e1: HttpResponse | null = ex.fetch(get(`${base}/extra`));
   const e1Body: string = bodyOf(e1);
   const e2: HttpResponse | null = ex.fetch(get(`${base}/hello`));
@@ -705,7 +705,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const small: HttpOptions = new HttpOptions();
   small.useEnvProxy = false;
   small.maxBodyBytes = 10;
-  const limited: HttpClient = new HttpClient(small);
+  const limited: FetchSyncClient = new FetchSyncClient(small);
   t.check(fails(limited, limited.fetch(get(`${base}/big`)), HTTP_E_BODY_TOO_LARGE), "a Content-Length past maxBodyBytes is HTTP_E_BODY_TOO_LARGE before the body is read");
   const chunkedBig: HttpResponse | null = limited.fetch(get(`${base}/chunked`));
   t.check(chunkedBig !== null && chunkedBig.body.readAll(toI32(1000)) === null && limited.error === HTTP_E_BODY_TOO_LARGE, "and a chunked body is cut off as it passes maxBodyBytes");
@@ -722,12 +722,12 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const headLimit: HttpOptions = new HttpOptions();
   headLimit.useEnvProxy = false;
   headLimit.maxHeaderBytes = 1000;
-  const hl: HttpClient = new HttpClient(headLimit);
+  const hl: FetchSyncClient = new FetchSyncClient(headLimit);
   t.check(fails(hl, hl.fetch(get(`${base}/big-head`)), HTTP_E_PROTOCOL), "a response head past maxHeaderBytes is HTTP_E_PROTOCOL");
   const headRoom: HttpOptions = new HttpOptions();
   headRoom.useEnvProxy = false;
   headRoom.maxHeaderBytes = 4000;
-  t.check(bodyOf(new HttpClient(headRoom).fetch(get(`${base}/big-head`))) === "big head", "and read under a limit above it");
+  t.check(bodyOf(new FetchSyncClient(headRoom).fetch(get(`${base}/big-head`))) === "big head", "and read under a limit above it");
   const crlf: HttpRequest = get(`${base}/echo`);
   crlf.header("X-Evil", "a\r\nInjected: yes");
   t.check(fails(client, client.fetch(crlf), HTTP_E_REQUEST), "a header value with CR LF is refused before a byte is sent");
@@ -753,7 +753,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const quick: HttpOptions = new HttpOptions();
   quick.useEnvProxy = false;
   quick.readTimeoutMs = 300;
-  const q: HttpClient = new HttpClient(quick);
+  const q: FetchSyncClient = new FetchSyncClient(quick);
   let t0: i64 = monotonicNanos();
   t.check(fails(q, q.fetch(get(`${base}/stall`)), HTTP_E_READ_TIMEOUT), "a server that never answers is HTTP_E_READ_TIMEOUT");
   const stallMs: i64 = (monotonicNanos() - t0) / toI64(1000000);
@@ -762,7 +762,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   total.useEnvProxy = false;
   total.readTimeoutMs = 0;
   total.totalTimeoutMs = 400;
-  const tc: HttpClient = new HttpClient(total);
+  const tc: FetchSyncClient = new FetchSyncClient(total);
   t0 = monotonicNanos();
   const drip: HttpResponse | null = tc.fetch(get(`${base}/drip`));
   t.check(drip !== null && drip.body.readAll(toI32(4096)) === null && tc.error === HTTP_E_TOTAL_TIMEOUT, "a body dripped a byte at a time is cut off by totalTimeoutMs");
@@ -772,7 +772,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const od: HttpOptions = new HttpOptions();
   od.useEnvProxy = false;
   od.totalTimeoutMs = 150;
-  const oc: HttpClient = new HttpClient(od);
+  const oc: FetchSyncClient = new FetchSyncClient(od);
   const twoPart: HttpResponse | null = oc.fetch(get(`${base}/two-part`));
   pause(300);
   t.check(twoPart !== null && twoPart.body.readAll(toI32(100)) === null && oc.error === HTTP_E_TOTAL_TIMEOUT, "a body whose rest is already waiting is still cut off once totalTimeoutMs has passed");
@@ -786,15 +786,15 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const ct: HttpOptions = new HttpOptions();
   ct.useEnvProxy = false;
   ct.connectTimeoutMs = 300;
-  const cc: HttpClient = new HttpClient(ct);
+  const cc: FetchSyncClient = new FetchSyncClient(ct);
   t.check(fails(cc, cc.fetch(get(`http://127.0.0.1:${fullPort}/`)), HTTP_E_CONNECT_TIMEOUT), "a listener whose backlog is full is HTTP_E_CONNECT_TIMEOUT");
   const gone: i32 = tcpListen("127.0.0.1", 0, 1);
   const gonePort: i32 = netLocalPort(gone);
   netClose(gone);
   t.check(fails(client, client.fetch(get(`http://127.0.0.1:${gonePort}/`)), HTTP_E_REFUSED), "a port nothing listens on is HTTP_E_REFUSED");
   t.check(fails(cc, cc.fetch(get("http://nonexistent.invalid/")), HTTP_E_DNS), "a name that does not exist is HTTP_E_DNS");
-  t.check(httpFetch(get(`http://127.0.0.1:${gonePort}/`), ct) === null, "httpFetch answers null on a failure");
-  const once: HttpResponse | null = httpFetch(get(`${base}/hello`), options);
+  t.check(fetchSync(get(`http://127.0.0.1:${gonePort}/`), ct) === null, "fetchSync answers null on a failure");
+  const once: HttpResponse | null = fetchSync(get(`${base}/hello`), options);
   t.check(bodyOf(once) === "hello", "and the response on a success");
 
   // --- redirects
@@ -804,7 +804,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const follow: HttpOptions = new HttpOptions();
   follow.useEnvProxy = false;
   follow.followRedirects = true;
-  const rc: HttpClient = new HttpClient(follow);
+  const rc: FetchSyncClient = new FetchSyncClient(follow);
   const warm: HttpResponse | null = rc.fetch(get(`${base}/hello`));
   bodyOf(warm);
   const authed: HttpRequest = get(`${base}/to-echo-302`);
@@ -833,7 +833,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   limitOpts.useEnvProxy = false;
   limitOpts.followRedirects = true;
   limitOpts.maxRedirects = 3;
-  const lc: HttpClient = new HttpClient(limitOpts);
+  const lc: FetchSyncClient = new FetchSyncClient(limitOpts);
   t.check(fails(lc, lc.fetch(get(`${base}/loop`)), HTTP_E_TOO_MANY_REDIRECTS), "a redirect loop is HTTP_E_TOO_MANY_REDIRECTS after maxRedirects");
   t.check(lc.errorText.endsWith(`the last to ${base}/loop?...`), "and the error names its Location without the fragment");
   t.check(bodyOf(lc.fetch(get(`${base}/hops-3`))) === "landed", "exactly maxRedirects redirects are followed");
@@ -857,7 +857,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   cross.useEnvProxy = false;
   cross.followRedirects = true;
   cross.crossOriginRedirects = true;
-  const xc: HttpClient = new HttpClient(cross);
+  const xc: FetchSyncClient = new FetchSyncClient(cross);
   const x1: HttpResponse | null = xc.fetch(other);
   const x1body: string = bodyOf(x1);
   t.check(x1 !== null && x1.url === `http://127.0.0.1:${portB}/echo`, "allowed, it is followed to the other origin");
@@ -865,7 +865,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(x1body.indexOf(`\r\nHost: 127.0.0.1:${portB}\r\n`) >= 0 && x1body.indexOf("\r\nX-Kept: yes\r\n") >= 0, "with the new origin's Host and the caller's other fields");
 
   // --- proxies
-  const viaProxy: HttpClient = new HttpClient(options);
+  const viaProxy: FetchSyncClient = new FetchSyncClient(options);
   viaProxy.setProxies(`http://us%65r:pa%73s@127.0.0.1:${portA}`, "", "");
   const px: string = bodyOf(viaProxy.fetch(get("http://example.test:81/echo?q=1")));
   t.check(px.startsWith("GET http://example.test:81/echo?q=1 HTTP/1.1\r\nHost: example.test:81\r\n"), "through an http proxy the target is absolute-form, the Host the origin's");
@@ -896,7 +896,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const first: i32 = sse !== null ? sse.body.read(ev, toI32(0), toI32(256)) : -1;
   t.check(first > 0 && String.fromBytes(ev, 0, first) === "data: one\n\n", "an event stream's first event is read while the server holds the stream open");
   t.check(sse !== null && sse.body.read(ev, toI32(0), toI32(0)) === 0, "an empty read answers 0 at once, waiting for nothing");
-  const nudge: HttpResponse | null = httpFetch(get(`http://127.0.0.1:${portB}/sse-next`), options);
+  const nudge: HttpResponse | null = fetchSync(get(`http://127.0.0.1:${portB}/sse-next`), options);
   bodyOf(nudge);
   const rest: string = sse !== null ? text(sse.body.readAll(toI32(256))) : "";
   t.check(rest === "data: two\n\n", "and the next one, the stream ending with the connection");

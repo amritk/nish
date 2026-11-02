@@ -1,7 +1,7 @@
 // The WebSocket frame decoder (`nish/net/websocket`) over a peer's bytes, as a
 // libFuzzer target: `fuzzOne` takes one input and keeps nothing past it, and a
 // refusal is `WS_ERROR` with a close code, so a panic here is a finding
-// (docs/security/http1.md, which covers it).
+// (docs/security/http1-codec.md, which covers it).
 //
 // The first five bytes are settings and the rest is the frame stream:
 //

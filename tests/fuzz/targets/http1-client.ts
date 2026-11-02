@@ -1,7 +1,7 @@
-// The HTTP/1.1 response parser (`nish/net/http1-client`) over a server's
+// The HTTP/1.1 response parser (`nish/net/http1-client-codec`) over a server's
 // bytes, as a libFuzzer target: `fuzzOne` takes one input and keeps nothing
 // past it, and a refusal is `HTTP1_ERROR` with an `HTTP1_E_` code, so a panic
-// here is a finding (docs/security/http1-client.md).
+// here is a finding (docs/security/http1-client-codec.md).
 //
 // The first five bytes are settings and the rest is the response stream:
 //
@@ -32,8 +32,8 @@ import {
   HTTP1_HEAD,
   HTTP1_NEED_MORE,
   HTTP1_UPGRADE,
-} from "nish/net/http1"
-import { HTTP1_E_INFORMATIONAL_LIMIT, HTTP1_E_NONE, HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client"
+} from "nish/net/http1-codec"
+import { HTTP1_E_INFORMATIONAL_LIMIT, HTTP1_E_NONE, HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client-codec"
 
 /** The parser the first byte asks for. */
 const makeParser = (config: i32): Http1ResponseParser => {

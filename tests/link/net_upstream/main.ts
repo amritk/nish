@@ -47,7 +47,7 @@ import {
   HTTP1_E_FRAMING,
   HTTP1_E_STATUS_LINE,
   HTTP1_E_TRUNCATED,
-} from "nish/net/http1-client"
+} from "nish/net/http1-client-codec"
 import { OutboundPolicy } from "nish/net/outbound"
 import { Router, RouterLimits } from "nish/net/router"
 import {

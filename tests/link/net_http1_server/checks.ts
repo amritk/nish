@@ -31,7 +31,7 @@ import {
   tcpConnect,
   tcpListen,
 } from "nish:net";
-import { HTTP1_CHUNKED, HTTP1_FIRST_HEAD, HTTP1_FIRST_INPUT, HTTP1_NO_BODY } from "nish/net/http1";
+import { HTTP1_CHUNKED, HTTP1_FIRST_HEAD, HTTP1_FIRST_INPUT, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import { HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields";
 import {
   H1_AGAIN,

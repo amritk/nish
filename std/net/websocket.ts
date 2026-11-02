@@ -2,7 +2,7 @@
  * `nish/net/websocket` — RFC 6455 WebSocket framing and both sides of the
  * opening handshake, sans-IO: bytes in, events and bytes out.
  *
- * **The server's handshake.** `nish/net/http1` reads the client's request;
+ * **The server's handshake.** `nish/net/http1-codec` reads the client's request;
  * `websocketRequestKey(parser)` answers its `Sec-WebSocket-Key` when the head
  * is a valid opening handshake (§4.2.1), `websocketOfferedProtocols(parser)`
  * the subprotocols it offers, and `websocketUpgradeResponse(key, protocol)`
@@ -15,7 +15,7 @@
  * random bytes as the key, `websocketUpgradeRequest(host, target, key,
  * protocols)` writes the GET that asks to upgrade, and
  * `websocketCheckResponse(parser, key, offered)` reads the server's answer,
- * parsed by `nish/net/http1-client` after `expectUpgrade()`: it answers the
+ * parsed by `nish/net/http1-client-codec` after `expectUpgrade()`: it answers the
  * negotiated subprotocol, or which rule of §4.1 the response broke. What
  * `HTTP1_UPGRADE`'s `tunnelBytes()` answers is the first input for
  * `WsDecoder(false, …)`. This module draws no randomness: the nonce and every
@@ -77,8 +77,8 @@ import {
   http1ResponseHead,
   http1SameWord,
   http1Text,
-} from "nish/net/http1"
-import { Http1ResponseParser, http1UpgradeRequestHead } from "nish/net/http1-client"
+} from "nish/net/http1-codec"
+import { Http1ResponseParser, http1UpgradeRequestHead } from "nish/net/http1-client-codec"
 
 /** The GUID RFC 6455 §1.3 appends to the client's key before hashing it. */
 export const WS_GUID: string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -954,7 +954,7 @@ export const websocketClientKey = (nonce: u8[]): string | null => {
  * with `Host`, `Sec-WebSocket-Key`, `Sec-WebSocket-Version: 13`, the offered
  * `protocols` in one `Sec-WebSocket-Protocol` field when there are any, and
  * `Upgrade: websocket` and `Connection: Upgrade`, written by
- * `nish/net/http1-client`'s `http1UpgradeRequestHead`. Answers `null` for a
+ * `nish/net/http1-client-codec`'s `http1UpgradeRequestHead`. Answers `null` for a
  * key `websocketKeyIsValid` refuses, a protocol that is not a token (an empty
  * one, or one holding a comma, a space, CR or LF), a protocol offered twice, an
  * empty host, and everything the request writer refuses (CR, LF or another

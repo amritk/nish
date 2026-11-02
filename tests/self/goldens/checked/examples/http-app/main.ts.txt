@@ -5,9 +5,9 @@ module std/net/handler.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 import JsonWriter from "nish/json" -> struct JsonWriter
 import httpFieldBytes from "nish/net/http-fields" -> function @nish.httpFieldBytes
-import HTTP1_CHUNKED from "nish/net/http1" -> const HTTP1_CHUNKED
-import HTTP1_NO_BODY from "nish/net/http1" -> const HTTP1_NO_BODY
-import http1HexValue from "nish/net/http1" -> function @nish.http1HexValue
+import HTTP1_CHUNKED from "nish/net/http1-codec" -> const HTTP1_CHUNKED
+import HTTP1_NO_BODY from "nish/net/http1-codec" -> const HTTP1_NO_BODY
+import http1HexValue from "nish/net/http1-codec" -> function @nish.http1HexValue
 import H1_AGAIN from "nish/net/http1-server" -> const H1_AGAIN
 import H1_BODY from "nish/net/http1-server" -> const H1_BODY
 import H1_DONE from "nish/net/http1-server" -> const H1_DONE
@@ -2220,7 +2220,7 @@ function httpDateWrite(out: u8[], at: i32, seconds: i64): i32 -> @nish.httpDateW
   callee +9:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
   callee +11:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
   callee +13:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
-module std/net/http1.ts [package nish]
+module std/net/http1-codec.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 import extract from "nish:simd" -> builtin extract
 import loadU8x16 from "nish:simd" -> builtin loadU8x16
@@ -3014,22 +3014,22 @@ import netMss from "nish:net" -> builtin netMss
 import netRead from "nish:net" -> builtin netRead
 import netWrite from "nish:net" -> builtin netWrite
 import tcpAccept from "nish:net" -> builtin tcpAccept
-import HTTP1_BODY from "nish/net/http1" -> const HTTP1_BODY
-import HTTP1_CHUNKED from "nish/net/http1" -> const HTTP1_CHUNKED
-import HTTP1_CLOSED from "nish/net/http1" -> const HTTP1_CLOSED
-import HTTP1_END from "nish/net/http1" -> const HTTP1_END
-import HTTP1_ERROR from "nish/net/http1" -> const HTTP1_ERROR
-import HTTP1_FIRST_HEAD from "nish/net/http1" -> const HTTP1_FIRST_HEAD
-import HTTP1_FIRST_INPUT from "nish/net/http1" -> const HTTP1_FIRST_INPUT
-import HTTP1_HEAD from "nish/net/http1" -> const HTTP1_HEAD
-import HTTP1_NO_BODY from "nish/net/http1" -> const HTTP1_NO_BODY
-import HTTP1_REFUSED from "nish/net/http1" -> const HTTP1_REFUSED
-import HTTP1_UPGRADE from "nish/net/http1" -> const HTTP1_UPGRADE
-import Http1Parser from "nish/net/http1" -> struct Http1Parser
-import http1BytesAre from "nish/net/http1" -> function @nish.http1BytesAre
-import http1WriteChunk from "nish/net/http1" -> function @nish.http1WriteChunk
-import http1WriteLastChunk from "nish/net/http1" -> function @nish.http1WriteLastChunk
-import http1WriteResponseHead from "nish/net/http1" -> function @nish.http1WriteResponseHead
+import HTTP1_BODY from "nish/net/http1-codec" -> const HTTP1_BODY
+import HTTP1_CHUNKED from "nish/net/http1-codec" -> const HTTP1_CHUNKED
+import HTTP1_CLOSED from "nish/net/http1-codec" -> const HTTP1_CLOSED
+import HTTP1_END from "nish/net/http1-codec" -> const HTTP1_END
+import HTTP1_ERROR from "nish/net/http1-codec" -> const HTTP1_ERROR
+import HTTP1_FIRST_HEAD from "nish/net/http1-codec" -> const HTTP1_FIRST_HEAD
+import HTTP1_FIRST_INPUT from "nish/net/http1-codec" -> const HTTP1_FIRST_INPUT
+import HTTP1_HEAD from "nish/net/http1-codec" -> const HTTP1_HEAD
+import HTTP1_NO_BODY from "nish/net/http1-codec" -> const HTTP1_NO_BODY
+import HTTP1_REFUSED from "nish/net/http1-codec" -> const HTTP1_REFUSED
+import HTTP1_UPGRADE from "nish/net/http1-codec" -> const HTTP1_UPGRADE
+import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
+import http1BytesAre from "nish/net/http1-codec" -> function @nish.http1BytesAre
+import http1WriteChunk from "nish/net/http1-codec" -> function @nish.http1WriteChunk
+import http1WriteLastChunk from "nish/net/http1-codec" -> function @nish.http1WriteLastChunk
+import http1WriteResponseHead from "nish/net/http1-codec" -> function @nish.http1WriteResponseHead
 import WS_CLOSE from "nish/net/websocket" -> const WS_CLOSE
 import WS_ERROR from "nish/net/websocket" -> const WS_ERROR
 import WS_MAX_CONTROL from "nish/net/websocket" -> const WS_MAX_CONTROL
@@ -6983,15 +6983,15 @@ module std/net/websocket.ts [package nish]
 import base64StdPadEncode from "nish/crypto/base64url" -> function @nish.base64StdPadEncode
 import base64urlDecode from "nish/crypto/base64url" -> function @nish.base64urlDecode
 import sha1 from "nish/crypto/sha1" -> function @nish.sha1
-import HTTP1_NO_BODY from "nish/net/http1" -> const HTTP1_NO_BODY
-import Http1Parser from "nish/net/http1" -> struct Http1Parser
-import http1IsOws from "nish/net/http1" -> function @nish.http1IsOws
-import http1IsToken from "nish/net/http1" -> function @nish.http1IsToken
-import http1ResponseHead from "nish/net/http1" -> function @nish.http1ResponseHead
-import http1SameWord from "nish/net/http1" -> function @nish.http1SameWord
-import http1Text from "nish/net/http1" -> function @nish.http1Text
-import Http1ResponseParser from "nish/net/http1-client" -> struct Http1ResponseParser
-import http1UpgradeRequestHead from "nish/net/http1-client" -> function @nish.http1UpgradeRequestHead
+import HTTP1_NO_BODY from "nish/net/http1-codec" -> const HTTP1_NO_BODY
+import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
+import http1IsOws from "nish/net/http1-codec" -> function @nish.http1IsOws
+import http1IsToken from "nish/net/http1-codec" -> function @nish.http1IsToken
+import http1ResponseHead from "nish/net/http1-codec" -> function @nish.http1ResponseHead
+import http1SameWord from "nish/net/http1-codec" -> function @nish.http1SameWord
+import http1Text from "nish/net/http1-codec" -> function @nish.http1Text
+import Http1ResponseParser from "nish/net/http1-client-codec" -> struct Http1ResponseParser
+import http1UpgradeRequestHead from "nish/net/http1-client-codec" -> function @nish.http1UpgradeRequestHead
 const WS_GUID: string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11" [exported]
 const WS_OP_CONTINUATION: i32 = 0 [exported]
 const WS_OP_TEXT: i32 = 1 [exported]
@@ -7622,27 +7622,27 @@ function sha1(data: u8[]): u8[] -> @nish.sha1 [exported]
   local +30:9 out: u8[] (const)
   local +31:12 i: i32 (let)
   local +32:11 word: u32 (const)
-module std/net/http1-client.ts [package nish]
+module std/net/http1-client-codec.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
-import HTTP1_BODY from "nish/net/http1" -> const HTTP1_BODY
-import HTTP1_CLOSED from "nish/net/http1" -> const HTTP1_CLOSED
-import HTTP1_END from "nish/net/http1" -> const HTTP1_END
-import HTTP1_ERROR from "nish/net/http1" -> const HTTP1_ERROR
-import HTTP1_HEAD from "nish/net/http1" -> const HTTP1_HEAD
-import HTTP1_NEED_MORE from "nish/net/http1" -> const HTTP1_NEED_MORE
-import HTTP1_NO_ROOM from "nish/net/http1" -> const HTTP1_NO_ROOM
-import HTTP1_REFUSED from "nish/net/http1" -> const HTTP1_REFUSED
-import HTTP1_UPGRADE from "nish/net/http1" -> const HTTP1_UPGRADE
-import HTTP1_FIRST_INPUT from "nish/net/http1" -> const HTTP1_FIRST_INPUT
-import http1HexValue from "nish/net/http1" -> function @nish.http1HexValue
-import http1IsFieldText from "nish/net/http1" -> function @nish.http1IsFieldText
-import http1IsOws from "nish/net/http1" -> function @nish.http1IsOws
-import http1IsToken from "nish/net/http1" -> function @nish.http1IsToken
-import http1IsTokenByte from "nish/net/http1" -> function @nish.http1IsTokenByte
-import http1IsValueByte from "nish/net/http1" -> function @nish.http1IsValueByte
-import http1PutText from "nish/net/http1" -> function @nish.http1PutText
-import http1SameWord from "nish/net/http1" -> function @nish.http1SameWord
-import http1Text from "nish/net/http1" -> function @nish.http1Text
+import HTTP1_BODY from "nish/net/http1-codec" -> const HTTP1_BODY
+import HTTP1_CLOSED from "nish/net/http1-codec" -> const HTTP1_CLOSED
+import HTTP1_END from "nish/net/http1-codec" -> const HTTP1_END
+import HTTP1_ERROR from "nish/net/http1-codec" -> const HTTP1_ERROR
+import HTTP1_HEAD from "nish/net/http1-codec" -> const HTTP1_HEAD
+import HTTP1_NEED_MORE from "nish/net/http1-codec" -> const HTTP1_NEED_MORE
+import HTTP1_NO_ROOM from "nish/net/http1-codec" -> const HTTP1_NO_ROOM
+import HTTP1_REFUSED from "nish/net/http1-codec" -> const HTTP1_REFUSED
+import HTTP1_UPGRADE from "nish/net/http1-codec" -> const HTTP1_UPGRADE
+import HTTP1_FIRST_INPUT from "nish/net/http1-codec" -> const HTTP1_FIRST_INPUT
+import http1HexValue from "nish/net/http1-codec" -> function @nish.http1HexValue
+import http1IsFieldText from "nish/net/http1-codec" -> function @nish.http1IsFieldText
+import http1IsOws from "nish/net/http1-codec" -> function @nish.http1IsOws
+import http1IsToken from "nish/net/http1-codec" -> function @nish.http1IsToken
+import http1IsTokenByte from "nish/net/http1-codec" -> function @nish.http1IsTokenByte
+import http1IsValueByte from "nish/net/http1-codec" -> function @nish.http1IsValueByte
+import http1PutText from "nish/net/http1-codec" -> function @nish.http1PutText
+import http1SameWord from "nish/net/http1-codec" -> function @nish.http1SameWord
+import http1Text from "nish/net/http1-codec" -> function @nish.http1Text
 const HTTP1_INFORMATIONAL: i32 = 7 [exported]
 const HTTP1_MAX_CHUNK_LINE: i32 = 4096 [exported]
 const HTTP1_MAX_INFORMATIONAL: i32 = 32 [exported]

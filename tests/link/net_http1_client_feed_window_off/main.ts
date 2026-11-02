@@ -1,7 +1,7 @@
 // `Http1ResponseParser.feed` with a negative offset panics (exit 1, the same
 // message on stderr) even when the window's end is inside the buffer: bytes
 // before `data[0]` are not the response's.
-import { Http1ResponseParser } from "nish/net/http1-client";
+import { Http1ResponseParser } from "nish/net/http1-client-codec";
 
 export const main = (): i32 => {
   const maxBody: i64 = 1024;

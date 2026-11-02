@@ -1,7 +1,7 @@
 // `Http1ResponseParser.feed` with a negative length panics (exit 1, the same
 // message on stderr) rather than moving the parser's end of input backwards
 // over bytes it already holds.
-import { Http1ResponseParser } from "nish/net/http1-client";
+import { Http1ResponseParser } from "nish/net/http1-client-codec";
 
 export const main = (): i32 => {
   const maxBody: i64 = 1024;

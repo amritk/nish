@@ -3,7 +3,7 @@
 // than parsing a short read: a response read from the wrong bytes looks
 // exactly like one read from the right ones. Stdout stops at the line before
 // the call.
-import { Http1ResponseParser } from "nish/net/http1-client";
+import { Http1ResponseParser } from "nish/net/http1-client-codec";
 
 export const main = (): i32 => {
   const maxBody: i64 = 1024;
