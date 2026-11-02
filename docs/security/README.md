@@ -48,7 +48,7 @@ the record that found it. The notes below the table name each such finding.
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 15 / 14 ⁴ | 0 / 0 / 0 / 2 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 3 / 16 / 16 ⁴ | 0 / 0 / 1 / 3 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
@@ -73,7 +73,7 @@ the record that found it. The notes below the table name each such finding.
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
-| PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 3 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
+| PostgreSQL client and its handler carrier | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts` | 0 / 0 / 5 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
@@ -83,7 +83,7 @@ the record that found it. The notes below the table name each such finding.
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
-| **Total** ⁸ | | | **3 / 10 / 54 / 149** | **0 / 1 / 3 / 30** |
+| **Total** ⁸ | | | **3 / 11 / 57 / 151** | **0 / 1 / 4 / 31** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -133,7 +133,13 @@ the record that found it. The notes below the table name each such finding.
    window on Darwin before a received descriptor is close-on-exec, is counted
    as an open Low. RT-39, what `peerCredentials` reads and when, is a
    decision and is not counted. RT-17 and RT-19 were amended there, not
-   reopened.
+   reopened. RT-41 (High), RT-42 (Medium), RT-43 and RT-44 (Low), the region
+   handle's checks, the enter and leave order, the table's limits and the
+   chunk sizes, were found and fixed by the stage that added regions to the
+   runtime (WP46 stage 1) and are counted as fixed. RT-45 (Medium), a mark
+   carried across a region boundary, and RT-47 (Low), the unbounded chunk
+   doubling, are counted as open. RT-46, the lock a region panic holds, is a
+   decision and is not counted.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
@@ -271,7 +277,14 @@ the record that found it. The notes below the table name each such finding.
     where libpq ends it at the first, was found by the Unix-socket targets'
     first review and fixed before it merged. PG-21 (Low), a socket another
     local user can create, and PG-22 (Low), a socket file taken as its
-    directory, are accepted and not counted.
+    directory, are accepted and not counted. PG-23 (Medium), a carrier
+    query held for ever by a server that accepts and never answers, and
+    PG-24 (Medium), a batcher's requests held for ever behind an execution
+    lost before it was taken, were found as the carrier was written and
+    fixed before it merged. PG-25, a reset socket ending its connection,
+    holds and is not a finding; PG-26 (Low), no deadline on a query once
+    its connection is up, and PG-27 (Low), a connect attempt with no
+    backoff while the server is down, are accepted and not counted.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`

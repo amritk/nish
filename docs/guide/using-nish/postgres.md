@@ -505,9 +505,8 @@ outside 1 to 2^20, and on a `maxInFlight` over 1024, as well as on what
 and after `dispose()`; `connection` and `next` on a slot outside 0 to
 `size - 1` or one that never had a connection.
 
-[`tests/postgres/carrier.ts`](../../../tests/postgres/carrier.ts) is a whole
-program: one `pollWait` loop holding the pool's sockets beside an HTTP server,
-which answers requests while a query is in flight.
+To drive a pool from an HTTP server's route handlers, let `PgCarrier` own
+the sockets: [Querying from a route handler](#querying-from-a-route-handler).
 
 ## Batching keyed reads
 
@@ -699,6 +698,121 @@ The fixed window stays the default until measurements against a live server
 say otherwise. [`bench/pg-batch-clock.ts`](../../../bench/pg-batch-clock.ts)
 models a pool at three loads; there, the adaptive settings above match the
 better of a 10 ms and a 30 ms window at each.
+
+## Querying from a route handler
+
+`nish/net/postgres-carrier` puts a pool on an
+[`HttpHandler`](api-server.md)'s loop. `PgCarrier` connects the pool's
+slots, reads and writes their sockets, and watches them from the handler's
+own `wait`, so a route handler hands its request to the carrier and goes on
+serving: a slow query holds only the requests waiting on it. It is a module
+of its own because it reads sockets, the clock and the entropy source, and
+`nish/net/postgres` reaches none of them.
+
+```ts
+import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
+import { PgBatchConfig, PgBatcher, PgConfig, PgConnection, PgPool, pgTarget } from "nish/net/postgres"
+import {
+  PG_CARRIER_BUILD, PG_CARRIER_DONE, PG_CARRIER_FAILED, PG_CARRIER_FULL,
+  PG_CARRIER_MISSING, PG_CARRIER_NONE, PG_CARRIER_ROW, PgCarrier, PgCarrierLimits,
+} from "nish/net/postgres-carrier"
+
+const pool = new PgPool(config, password, 4, 256)
+pool.register("article", "select body from articles where id = $1", [toI32(20)])
+const handler = new HttpHandler(new HandlerLimits(), listener, router)
+const carrier = new PgCarrier(new PgCarrierLimits(), pool, pgTarget("127.0.0.1", 5432), handler)
+const users: i32 = carrier.attach(new PgBatcher(usersConfig))
+// Whether query q's request was answered: a ROW answers it, and the final
+// event answers only one that no row did.
+const answered: boolean[] = new Array<boolean>(256)
+
+while (running) {
+  handler.wait(50)
+  while (handler.ready()) {
+    const req: HttpRequest = handler.take()
+    const q: i32 = req.route === USER
+      ? carrier.runInt(req, users, toI64(req.paramDecimal(0)), USER)
+      : carrier.run(req, ARTICLE)
+    if (q === PG_CARRIER_FULL) {
+      handler.send(req, 503, text, none, 0, 0)
+    }
+  }
+  let event: i32 = carrier.next()
+  while (event !== PG_CARRIER_NONE) {
+    if (event === PG_CARRIER_BUILD) {
+      const conn: PgConnection = carrier.connection()
+      conn.bindStart("article")
+      conn.paramInt(toI64(carrier.request().paramDecimal(0)))
+      conn.bindEnd()
+      carrier.send()
+    } else if (event === PG_CARRIER_ROW) {
+      if (!answered[carrier.query]) {
+        const conn: PgConnection = carrier.connection()
+        handler.send(carrier.request(), 200, text, conn.inputBuffer(), conn.colStart(0), conn.colLength(0))
+        answered[carrier.query] = true
+      }
+    } else if (event === PG_CARRIER_DONE || event === PG_CARRIER_MISSING || event === PG_CARRIER_FAILED) {
+      if (!answered[carrier.query]) {
+        handler.send(carrier.request(), event === PG_CARRIER_FAILED ? 503 : 404, text, none, 0, 0)
+      }
+      answered[carrier.query] = false
+    }
+    event = carrier.next()
+  }
+}
+carrier.close()
+```
+
+- **`run(req, tag)`** queues a plain query and answers its number at once,
+  or `PG_CARRIER_FULL` when the carrier holds `queries` already. When a
+  connection takes it, `next()` answers `PG_CARRIER_BUILD`: bind the
+  statement on `connection()` and call `send()` before the next `next()`.
+- **`runInt` and `runText`** queue a key for a batcher `attach` gave you
+  (at most 8, attached before the pool connects). The carrier takes a batch
+  whenever a connection is free and answers each key's rows to its own
+  request; a key with no row is `PG_CARRIER_MISSING`.
+- **Events.** A query's final event comes whether or not it had rows, so
+  answer the request once: on its first row, or on the final event when no
+  row came. Each query gets its rows (`PG_CARRIER_ROW`, read on
+  `connection()` before the next call), then exactly one of
+  `PG_CARRIER_DONE`, `PG_CARRIER_MISSING` and `PG_CARRIER_FAILED`. On each,
+  `query` is the number `run` answered, `tag` what you passed, and
+  `request()` the request to answer; they hold until the following `next()`,
+  which frees the query.
+- **Failures.** A connection that is refused, reset, closed or not
+  authenticated within `connectTimeoutMs` (5000 by default) fails every query
+  on it with `PG_CARRIER_FAILED`: `failure` is the connection's `PG_ERR_*`
+  (9, closed, for a socket that failed) and `socketError` the socket's error,
+  `-110` for the timeout. The next query makes a new connection. While no
+  connection is up, each failed connect also fails the oldest waiting query,
+  one per slot per turn, so give `wait` a timeout: a server that cannot be
+  reached empties the queue over the following turns. A query the
+  server refuses fails with `failure` 0 and its error on
+  `connection().lastError`, after `PG_CARRIER_ERROR`.
+- **Caps.** `PgCarrierLimits` sets `queries` (256) and `executions` (64), each
+  at most 65536, before the carrier starts; nothing grows after, and once the
+  connections are up nothing is allocated per query. `watch` is the id the
+  carrier is watched under on the handler (0 to 15), if your program watches
+  other descriptors.
+- **The target** is a Unix socket or a numeric address: the carrier resolves
+  no names.
+
+There is no deadline on a query once its connection is up: bound a slow
+statement with the server's `statement_timeout`. `close()` closes the
+carrier's sockets; the pool's `dispose()` still wipes the password. Queries
+in flight at `close()` get no further event, so answer their requests
+yourself. After it, `run`, `runInt` and `runText` answer `PG_CARRIER_FULL`
+and `next()` answers `PG_CARRIER_NONE`, and a second `close()` does nothing.
+
+The constructor panics on a cap or `watch` id out of range, a target that failed or a host
+name; `attach` past 8 batchers, after the pool connected, on a NUL in the
+batcher's name or SQL, or past 256 statements; `runInt` and
+`runText` on an id `attach` never gave; `request()` for a query run with no
+request; `connection()` before an event named one; `send()` with no build
+open; and `next()` with one still open.
+
+[`tests/postgres/carrier.ts`](../../../tests/postgres/carrier.ts) is a whole
+program that serves HTTP while a query sleeps on a live server.
 
 ## What it does not do
 

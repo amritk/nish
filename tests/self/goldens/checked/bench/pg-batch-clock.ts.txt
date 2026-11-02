@@ -403,8 +403,8 @@ struct PgBatcher (class) size=160 align=8 exported
   field tag: i32 index=15 offset=120 initialized
   field refused: i32 index=16 offset=124 initialized
   field stray: i32 index=17 offset=128 initialized
-  field keyType: i32 index=18 offset=132 readonly
-  field maxRequests: i32 index=19 offset=136 readonly
+  field maxRequests: i32 index=18 offset=132 readonly
+  field keyType: i32 index=19 offset=136 readonly
   field maxBytes: i32 index=20 offset=140 readonly
   field binary: boolean index=21 offset=144 readonly
   field storeEnd: i32 index=22 offset=148 initialized
@@ -412,6 +412,7 @@ struct PgBatcher (class) size=160 align=8 exported
   field count: i32 index=24 offset=156 initialized
   constructor -> @nish.PgBatcher.constructor
   method waiting -> @nish.PgBatcher.waiting
+  method shed -> @nish.PgBatcher.shed
   method addInt -> @nish.PgBatcher.addInt
   method addText -> @nish.PgBatcher.addText
   method slotToAdd -> @nish.PgBatcher.slotToAdd
@@ -1988,6 +1989,13 @@ function PgBatcher.waiting(this: PgBatcher): i32 -> @nish.PgBatcher.waiting [exp
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function PgBatcher.shed(this: PgBatcher): i32 -> @nish.PgBatcher.shed [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_div nish_panic_index nish_panic_overflow
+  pointer this: size=160 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:11 tag: i32 (const)
 function PgBatcher.addInt(this: PgBatcher, key: i64, tag: i32): boolean -> @nish.PgBatcher.addInt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

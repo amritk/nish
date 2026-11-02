@@ -537,6 +537,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   link.push("runtime/runtime-bytes.c");
   link.push("runtime/runtime-sandbox.c");
   link.push("runtime/runtime-shm.c");
+  link.push("runtime/runtime-region.c");
   link.push("-lm");
   link.push("-o");
   link.push(exe);

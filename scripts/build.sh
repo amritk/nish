@@ -3,7 +3,7 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is fourteen translation units and is named as one: an input
+# The C runtime is fifteen translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
@@ -17,8 +17,9 @@
 # <dir>/runtime-checksum.c, CRC-32 on its carry-less multiply or CRC instructions,
 # <dir>/runtime-term.c, stdin and the terminal of `nish:term`,
 # <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`,
-# <dir>/runtime-sandbox.c, the confinement `--sandbox` applies, and
-# <dir>/runtime-shm.c, the shared-memory regions of `nish/sync/shm`. Each of those
+# <dir>/runtime-sandbox.c, the confinement `--sandbox` applies,
+# <dir>/runtime-shm.c, the shared-memory regions of `nish/sync/shm`, and
+# <dir>/runtime-region.c, the arenas a program makes and frees one at a time. Each of those
 # files says why they are compiled and measured apart.
 #
 # Profiles:
@@ -222,11 +223,11 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is fourteen translation units, and a caller names one: whoever passes
+# The runtime is fifteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
 # <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,
-# <dir>/runtime-bytes.c, <dir>/runtime-sandbox.c and <dir>/runtime-shm.c compiled beside it, on every profile,
+# <dir>/runtime-bytes.c, <dir>/runtime-sandbox.c, <dir>/runtime-shm.c and <dir>/runtime-region.c compiled beside it, on every profile,
 # wasi included: runtime-simd.c and runtime-bytes.c take their scalar paths there
 # unless the build adds -msimd128,
 # runtime-aes.c, runtime-sha256.c and runtime-checksum.c compile to an answer of 0 and
@@ -243,7 +244,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c"
+halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -671,6 +672,18 @@ case "$profile" in
     "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
       "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   wasm)
+    # A region's chunks come from malloc, and the freestanding wasm runtime
+    # (runtime-wasm.c) has none, so IR that makes or enters one is refused here
+    # rather than failing at the link on an undefined `nish_region_*`. The wasi
+    # profile links runtime-region.c with the rest of the runtime.
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        *.ll) if grep -q "@nish_region_" "$i"; then
+          echo "error: $i uses regions, which the wasm profile cannot link (it has no malloc); build it with --profile wasi" >&2
+          exit 2
+        fi ;;
+      esac
+    done
     # clang resolves wasm-ld next to its own binary first, then on PATH; ask it
     # rather than probing PATH so a Homebrew llvm without a PATH entry still works.
     wasm_ld=$("$CC" -print-prog-name=wasm-ld)

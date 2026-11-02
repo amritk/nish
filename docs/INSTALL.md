@@ -256,7 +256,7 @@ routes are
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
     runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-term.c \
     runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
-    runtime/runtime-shm.c -lm -o app
+    runtime/runtime-shm.c runtime/runtime-region.c -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -392,7 +392,7 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — fourteen translation units, the wasm subset and their
+`runtime/` (the C runtime — fifteen translation units, the wasm subset and their
 header — and `runtime/sqlite/`, SQLite's vendored source),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
 `docs/AI.md` (the rules card). The
@@ -405,7 +405,7 @@ working directory — and the binary runs from inside its own platform package
 for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is fourteen files:
+on the `clang` line, and it is fifteen files:
 
 ```bash
 clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \

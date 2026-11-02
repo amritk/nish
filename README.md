@@ -425,7 +425,7 @@ dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,712 bytes. The runtime is fourteen translation units
+`hello.ts` with `--link` is 4,712 bytes. The runtime is fifteen translation units
 with a measured ceiling each, so that the core does not grow every time the
 language reaches further into the operating system, and section GC drops
 whatever a program does not call: `runtime.c` is the 3,606 bytes every program
@@ -435,10 +435,10 @@ JavaScript-exact number formatting, string parsing, `Math.random`,
 that wrap a system call (exit, files, directories, subprocesses, the
 environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
 `runtime-host.c`, `runtime-net.c`, `runtime-simd.c`, `runtime-aes.c`,
-`runtime-sha256.c`, `runtime-term.c`, `runtime-bytes.c`, `runtime-checksum.c`, `runtime-sandbox.c` and `runtime-shm.c` hold threads, the copies that cross between
+`runtime-sha256.c`, `runtime-term.c`, `runtime-bytes.c`, `runtime-checksum.c`, `runtime-sandbox.c`, `runtime-shm.c` and `runtime-region.c` hold threads, the copies that cross between
 their arenas, the host calls (wall clock, entropy, signals), `nish:net`'s sockets,
 the vector text search, AES-GCM, SHA-256's block, `nish:term`'s stdin and terminal, the
-byte-class runs JSON steps over, the CRC-32 kernels, `--sandbox`'s confinement and the shared-memory regions of `nish/sync/shm` — see
+byte-class runs JSON steps over, the CRC-32 kernels, `--sandbox`'s confinement, the shared-memory regions of `nish/sync/shm` and the regions a program frees one at a time — see
 [docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for the
 budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
 stay `readnone`.

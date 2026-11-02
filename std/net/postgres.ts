@@ -123,9 +123,12 @@
  * `ticket` naming the request. Statements given to `register` are prepared on
  * each connection ahead of its first request. A connection that fails reports
  * `PG_LOST` for each request it took, then `PG_FAILED`; the program closes the
- * socket and the slot is built again on its next use. `tests/postgres/carrier.ts`
- * is a whole carrier: one `pollWait` loop holding the pool's sockets beside an
- * HTTP listener.
+ * socket and the slot is built again on its next use.
+ *
+ * **Carrier.** `PgCarrier`, in `nish/net/postgres-carrier`, moves a pool's
+ * bytes on an `HttpHandler`'s loop, so a route handler queries without
+ * blocking its worker. It is a module of its own because it reads sockets,
+ * the clock and the entropy source, and this one reaches none of them.
  *
  * **Batching.** `PgBatcher` turns many reads of one row shape by key — a user
  * by id, an article by slug — into one execution of a statement over
@@ -3132,8 +3135,9 @@ export class PgBatcher {
   refused: i32 = 0
   /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored, stopping at 2^31 - 1. */
   stray: i32 = 0
+  /** The most requests one execution takes, from `PgBatchConfig.maxRequests`. */
+  readonly maxRequests: i32
   private readonly keyType: i32
-  private readonly maxRequests: i32
   private readonly maxBytes: i32
   private readonly binary: boolean
   private storeEnd: i32 = 0
@@ -3209,6 +3213,24 @@ export class PgBatcher {
   /** The number of requests waiting for `take`. */
   waiting(): i32 {
     return this.count
+  }
+
+  /**
+   * Drops the oldest waiting request and answers its tag, or -1 when none
+   * waits: for a program that cannot reach the server to fail requests
+   * rather than hold them.
+   */
+  shed(): i32 {
+    if (this.count === 0) {
+      return -1
+    }
+    const tag: i32 = this.qTags[this.head]
+    this.head = (this.head + 1) % toI32(this.qTags.length)
+    this.count -= 1
+    if (this.count === 0) {
+      this.storeEnd = 0
+    }
+    return tag
   }
 
   /** Queues a request for the int8 `key`; false when `queueSize` are waiting. Panics on a text batcher. */

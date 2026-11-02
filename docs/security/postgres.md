@@ -9,7 +9,9 @@ rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
 Anchors are function names in `std/net/postgres.ts` at the commit that adds
-connection targets (`pgTarget`, `pgTargetUrl`), the last to change it.
+connection targets (`pgTarget`, `pgTargetUrl`), the last to change it, and
+in `std/net/postgres-carrier.ts` at the commit that adds `PgCarrier`, which
+also adds `PgBatcher.shed`.
 
 **Result.** Every message is framed once, by its length, and a length under 4
 or over `maxMessage` fails the connection before its body is read; every
@@ -81,9 +83,12 @@ URLs under "Properties verified").
 
 | File | Functions |
 | --- | --- |
-| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue` |
+| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue`; `PgBatcher.shed` |
+| `std/net/postgres-carrier.ts` | `PgCarrierLimits`; `PgCarrier` (the constructor, `attach`, `run`, `runInt`, `runText`, `request`, `connection`, `send`, `next`, `close`, and the private helpers they call: the poll pass, connect and its timeout, the read and write of each slot, the routing of pool events to queries and batched executions, the ticket map, the free stacks and the shedding of a lost execution's requests) |
 
-Out of scope: the socket and loop the program owns (`nish:net`); the HMAC,
+Out of scope: the `nish:net` calls themselves, which the carrier makes and
+the client never does, and `HttpHandler`, whose `watch` and `fired` the
+carrier uses ([handler.md](handler.md)); the HMAC,
 SHA-256, base64 and constant-time primitives the SCRAM exchange calls, which
 are [crypto-k1.md](crypto-k1.md)'s; and what a program does with a column's
 bytes.
@@ -123,7 +128,9 @@ was tried. PG-9 to PG-11 are accepted. PG-12 and PG-13 were found by the
 first review of this module and fixed before it merged; PG-15 to PG-17 by the
 batcher's first review, and fixed before it merged. PG-18 to PG-20 are the
 shapes a URL can take, checked as the parser was written; PG-21 and PG-22
-are accepted.
+are accepted. PG-23 to PG-27 are the carrier's (`std/net/postgres-carrier.ts`):
+PG-23 and PG-24 were found as it was written and fixed before it merged,
+PG-25 holds, and PG-26 and PG-27 are accepted.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -149,6 +156,11 @@ are accepted.
 | PG-20 | Medium if it failed | `pgTargetUrl`, `pgPortValue` | The host is the authority after the user information and before its port, or a query `host`; a password with an `@`, an encoded `,` (libpq's list of hosts) or a port past 65535 must not become a different host or wrap to another port. | **Fixed** in review: the user information first ended at the authority's last `@`, where `libpq` ends it at the first, so `postgres://u:p@ss@db/app` named `db` here and `ss@db` to libpq. Now a raw `@` after the first in the authority, or a first `@` after a `?` (libpq reads that `?` as the user's), is `PG_TARGET_BAD_HOST` rather than read either way; an `@` in a password is written `%40`. A `,` is `PG_TARGET_BAD_HOST`, since one target names one host; a port is 1 to 5 digits naming 1 to 65535, else `PG_TARGET_BAD_PORT`, so it cannot overflow. "a second @ is refused, not read as the host", "an encoded @ in the password is the user's", "an @ after a ? is refused", "an @ in the path is the database's", "an encoded , is two hosts", "two hosts are refused", "an empty port is refused", "a port of letters is refused", "a six-digit port is refused", "port 65536 is refused", "URL port 65536 is refused", "?port=0 is refused", "?host= overrides the authority, ?port= the port". An empty port, `?port=` or `?host=` is refused, where libpq takes it as unset: "an empty port is refused", "an empty ?port= is refused", "an empty ?host= is refused". |
 | PG-21 | Low | `PgConnection`, over a socket | A local user who can create the socket a target names, in a directory others may write such as `/tmp`, can answer as the server; under `peer` or `trust` the server asks for no password, so nothing proves it is the server. | **Accepted.** As PG-10: there is no `requirepeer` to check the socket's owner, which `nish:net` cannot report. Put the socket in a directory only the server's user may write, as `/var/run/postgresql` is; the guide says peer and trust send no password. |
 | PG-22 | Low | `pgTarget` | A host that is a path to the socket file itself, not its directory, is taken as a directory, as `libpq` takes it, and names `<file>/.s.PGSQL.<port>`, which does not exist. | **Accepted.** The connect fails (`ENOTDIR`); it reaches no other socket. Kept for `libpq`'s meaning of the same string; the guide says so. "a full socket path is taken as a directory, as libpq does", "a URL's socket file is a directory too". |
+| PG-23 | Medium | `PgCarrier.next`, its connect pass | A server, or anything at its address, that accepts the connection and never sends a byte holds every query queued on that slot for ever; a route's clients wait on requests that are never answered. | **Fixed** as written: each slot's connect has a deadline, `connectTimeoutMs` (default 5000, at most an hour) from the connect, checked on every `next()` until the connection is ready; past it the connection fails with socket error -110 (ETIMEDOUT), its socket is closed and each query on it is `PG_CARRIER_FAILED` with failure 9 (`PG_ERR_CLOSED`). The program's `wait` timeout bounds how late the check runs. A refused connect fails at once rather than at the deadline. A connect that fails while no connection is ready takes the oldest waiting query with it (`PgPool.next`), so the queries waiting behind an unreachable server fail one per slot per turn, a turn being bounded by the program's `wait` timeout; a program that waits with no timeout holds them until the handler next wakes. A deadline found past on a connection the server already failed keeps the server's failure. "a server that never answers fails the query", "at the connect timeout, as ETIMEDOUT", "not before it", "a refused connect fails the query", "without waiting for the timeout" (`link/std_postgres_carrier`); live, the `refused` check. |
+| PG-24 | Medium | `PgCarrier` routing, `PgBatcher.shed` | A batched execution whose connection is lost before it is taken leaves its requests in the batcher, where they wait on a server the carrier cannot reach and their clients are never answered. | **Fixed** as written: the carrier fails one execution's worth (`maxRequests`) of the batcher's oldest waiting requests, each `PG_CARRIER_FAILED` with the connection's failure, through `PgBatcher.shed`, which drops the oldest and answers its tag; the next request queues a new execution on a new connection. "a batch whose connection ends fails its request", "as lost with the connection", "and the next batch", "after two connections ended, with a new one accepted", "a lost execution of three keys fails all three requests", "the three were one execution, answered by none". |
+| PG-25 | Medium if it failed | `PgCarrier.next`, its read of a slot | A socket that reports an error or hang-up stays readable; a carrier that read nothing from it and went on would be woken by it on every turn, spinning a worker. | **Holds.** A read that answers an error, or 0 bytes, ends the connection there: the error is kept as `socketError`, the socket closed and removed from the poll set, and the queries on it fail. "a query whose connection ends is the program's 503", "with the connection closed behind it" (`link/std_postgres_carrier`); live, the `reset` check (ECONNRESET, -104). |
+| PG-26 | Low | `PgCarrier` | Once a connection is up there is no deadline on a query: a server that authenticates and then never answers a statement holds that query, and the ones behind it on its connection, until the connection ends. | **Accepted.** A statement's time is the server's to bound (`statement_timeout`); the carrier holds `request()` so the program can answer with its own deadline, and a backend ended by the server fails its queries as lost. |
+| PG-27 | Low | `PgCarrier.next`, its connect pass | While the server is down, each `next()` pass makes one connect attempt for each slot the pool wants, with no backoff, and each attempt makes a new `PgConnection` and its buffers, which the arena keeps. | **Accepted.** The attempts are bounded by the queries waiting, not by time: a slot is wanted only while more queries wait than the connections starting can take, and a connect that fails while no connection is ready fails the oldest waiting query with it (PG-23), so the attempts end when the queue is empty, and there is at most one for each slot in each pass, which the program's `wait` turns pace. The memory is a connection's for each query that failed for want of a server, which the Limits below record. A backoff would hold the clients of the queries waiting behind a server already down for longer; a program that would rather not pay it can answer 503 itself after failures instead of queueing more. "a refused connect fails the query", "without waiting for the timeout" (`link/std_postgres_carrier`). |
 
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
@@ -202,6 +214,14 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `PgBatchTurns` constructor | a size outside 1..1024 | — |
 | `PgBatchTurns.started`, `release` | a slot out of range or holding a batch ("PgBatchTurns slot out of range or holding a batch") | — |
 | `PgBatchTurns.finished` | a slot holding no batch ("PgBatchTurns.finished on a slot holding no batch") | `link/std_postgres_batch_clock_turns_panic` (slot 0 finished twice, after once) |
+| `PgCarrier` constructor | a cap out of range: `queries` or `executions` outside 1..65536, `connectTimeoutMs` outside 1..3,600,000, or a `watch` id outside 0..15 (`HANDLER_MAX_WATCHED` − 1), checked before the poll set is made so that none leaks ("a PgCarrierLimits cap out of range") | `link/std_postgres_carrier_limits_panic` (`queries` of 0, after 1 is taken); the other bounds share its condition |
+| `PgCarrier` constructor | a target that failed, a TCP host that is not a numeric address (the carrier resolves no names), or a poll set the kernel refuses | — |
+| `PgCarrier.attach` | past 8 batchers, or where `PgPool.register` refuses: after the pool connected, a NUL in the name or SQL, past 256 statements | `link/std_postgres_carrier_attach_panic` (a ninth, after eight) |
+| `PgCarrier.runInt`, `runText` | a batcher id `attach` never gave ("PgCarrier batcher id out of range") | `link/std_postgres_carrier_batcher_panic` (id 1 with only id 0 attached) |
+| `PgCarrier.request` | no event has named a query yet, or the event's query was run with no request | `link/std_postgres_carrier_request_panic` (a query run, no event read yet) |
+| `PgCarrier.connection` | before any event named a connection | `link/std_postgres_carrier_connection_panic` (a query run, no event yet) |
+| `PgCarrier.send` | no `PG_CARRIER_BUILD` open | `link/std_postgres_carrier_send_panic` (with no event read yet) |
+| `PgCarrier.next` | a `PG_CARRIER_BUILD` not yet ended by `send()` | `link/std_postgres_carrier_next_panic` (with a build open) |
 
 Apart from the array misuse above, the builder calls do not panic: `param*`,
 `arrayStart` and `bindEnd` with no bind open answer false and write nothing
@@ -211,9 +231,34 @@ array. An open array is the program's state, not the server's, so misusing it
 is a panic rather than a refusal a caller could miss and send a Bind whose
 array never closed.
 
+`PgCarrier.close()` is not a panic site either. Queries in flight when it is
+called get no further event: their requests are the program's to answer,
+before or after it. Once closed, `run`, `runInt` and `runText` answer
+`PG_CARRIER_FULL` and `next()` answers `PG_CARRIER_NONE`, so a carrier used
+after `close()` makes no connection on its closed poll set, and a second
+`close()` does nothing ("after close(), a second close() does nothing and
+the carrier refuses queries", "and connects nothing").
+
 ## Limits
 
 Edges of the module a caller owns, recorded so that no one assumes otherwise:
+
+- **The carrier's state is fixed at construction.** `PgCarrierLimits` sizes
+  its query and execution tables (each 1 to 65,536, 256 and 64 by default)
+  and its ticket map; at most 8 batchers attach, before the pool connects.
+  `run`, `runInt` and `runText` answer `PG_CARRIER_FULL` rather than grow
+  a table, so a flood of a route's clients costs refusals, not memory: "past
+  the queries cap the carrier is full". Once its connections are up nothing
+  is allocated per query ("and the arena stays flat", over thousands of
+  pipelined queries). That window is the connected steady state only: a
+  statement the server refuses and a reconnect are outside it. Making a connection allocates — the pool's
+  `PgConnection` and its buffers — so a server that drops connections in a
+  loop costs one connection's memory each time it is made again, as it does
+  for `PgPool` without the carrier.
+- **The carrier does not drive `PgBatchClock`.** A batcher it carries is
+  taken as soon as a connection can take it, never held for a batching
+  window; `PgBatchClock` stays the tool of a program that drives `PgPool`
+  itself.
 
 - **A server that skips authentication is believed.** An `AuthenticationOk`
   in place of a SASL request is taken; there is no `require_auth`
@@ -226,7 +271,8 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   takes the nonce it is given; the pool checks its length (18 bytes or
   more), not its freshness. A program that reuses one weakens SCRAM's
   replay protection; `crypto.getRandomValues` for each call is the rule.
-- **The sockets are the program's.** The pool never opens or closes one.
+- **A `PgPool`'s sockets are the program's.** The pool never opens or
+  closes one; under a `PgCarrier`, the carrier is that program.
   The program closes a slot's socket on `PG_FAILED`, calls `closed()` when
   a read answers 0 or an error other than `AGAIN`, or a write fails, and at
   the end sends `terminate()` and closes each socket itself: `dispose`
@@ -399,6 +445,37 @@ NULL; `row-counts` reads `UPDATE 3`, `DELETE 2` and `UPDATE 0` through
 policy that denies every capability, so the module reaches none; the
 `std_postgres` and replay programs compile under the same policy, the replay
 with `fs.read` for its recordings.
+`std/net/postgres-carrier.ts` is the module that reaches the network
+(`nish:net`), the clock (`monotonicNanos`) and the entropy source (the SCRAM
+nonce), and is its own module so that this one keeps to none.
+
+**The carrier on a handler's loop**: `link/std_postgres_carrier` runs a
+`PgCarrier` on an `HttpHandler` against a backend of its own in the same
+program, which answers each statement from its bytes, and HTTP clients on
+loopback. A plain query's row and a batched key's row each answer their own
+request, and a key with no row is the program's 404 without failing the key
+after it; three clients' keys go out in one execution, which the backend
+counts, after the handler took all three in one turn, and each client
+gets its own row or 404. With the backend holding a
+slow query, another client is answered while it is held, and the held one
+only once the backend goes on. A connection that ends fails its plain query
+and its batch (PG-24) and closes its socket (PG-25), an execution of three
+keys lost with its connection fails all three requests, and the next
+queries are answered on new connections. A statement the backend refuses
+with an ErrorResponse reaches its own request as `PG_CARRIER_ERROR`, with
+the server's SQLSTATE, then `PG_CARRIER_FAILED` with failure 0; a refused
+batch fails each of its requests, with failure 0 and no `PG_CARRIER_ERROR`;
+and the connection that refused them, still open, answers the queries after
+them. `close()` with a query held by the backend sends `Terminate` and
+closes that connection, which the backend sees end, and the handler goes on
+answering; the held query gets no further event, which `close()`'s
+documentation states. After it, a second `close()` does nothing, the
+carrier answers `PG_CARRIER_FULL` to a query and `PG_CARRIER_NONE` to
+`next()`, and the backend accepts no new connection.
+After 100 warm-up rounds, a thousand rounds of four pipelined queries, half
+of them batched, leave `Arena.used()` unchanged, with none refused for room; the queries cap answers
+`PG_CARRIER_FULL`; a backend that never answers fails at the connect timeout
+and not before it, and a refused connect fails at once (PG-23).
 
 **Decoders never write what they refuse**: "year 0000" "leaves out as it
 was", and a tag's count past an i64 is -1 and "leaves text.failed alone".
@@ -500,11 +577,13 @@ tags by article, several rows a key in name order), each with a duplicate
 key and a key with no row, answer every request its own rows and no
 other's through a pooled connection; and that the conduit
 article list decodes, escapes and truncates as its golden says. The carrier
-serves HTTP while a query sleeps, and with nothing listening on its database
-port reports the request lost and the slot failed rather than waiting. Its
-`reset` check points it at a server that resets the connection on the
-startup message: the read answers ECONNRESET (-104), and the carrier ends
-the connection there rather than leave the readable socket to spin. Its
+serves HTTP while a query sleeps. Its `refused` check points it at a port
+with nothing listening: the query fails at once, `failure 9, socket -111`
+(`PG_ERR_CLOSED`, ECONNREFUSED), rather than wait for the connect timeout's
+-110. Its `reset` check points it at a server that resets the connection on
+the startup message: the query fails `failure 9, socket -104` (ECONNRESET),
+and the carrier ends the connection there rather than leave the readable
+socket to spin. Its
 `unix` scenario connects through a `postgres://` URL whose host is the
 percent-encoded socket directory: the server asks for no password (`peer`
 for a cluster `run.mjs` starts, `trust` in CI's service), so a password the
