@@ -156,6 +156,8 @@ export const PREFORK_WORKERS_EXITED: i32 = -3
 
 /** The supervisor's numbers; every one is checked by `preforkWith`. */
 export class PreforkConfig {
+  /** The address the listeners of `listenPort` bind. */
+  listenHost: string = "0.0.0.0"
   /** Workers to start; 0 takes `NISH_WORKERS` or the platform's default. */
   workers: i32 = 0
   /** How often, in milliseconds, the supervisor reaps when nothing wakes it. */
@@ -168,13 +170,6 @@ export class PreforkConfig {
   quickExitMs: i32 = 1000
   /** How long the workers get to exit after SIGTERM before SIGKILL. */
   graceMs: i32 = 5000
-  /**
-   * Start a worker that exited again. Off, a worker that exits stays gone,
-   * and the supervisor returns once none is left.
-   */
-  restart: boolean = true
-  /** Give each worker a socketpair to the supervisor (`preforkSupervise`). */
-  supervisorChannels: boolean = false
   /** The worker every other worker gets a socketpair to; -1 for none. */
   serviceWorker: i32 = -1
   /**
@@ -184,22 +179,27 @@ export class PreforkConfig {
    */
   channelKind: i32 = 1
   /**
+   * The port the supervisor binds one listener per worker on, 0 for any; -1,
+   * the default, leaves each worker to bind its own.
+   */
+  listenPort: i32 = -1
+  /** Their backlog. */
+  listenBacklog: i32 = 1024
+  /** Their `tcpListenFlags` beyond `SO_REUSEPORT`, which is always set: 0, or 2 for `TCP_NODELAY`. */
+  listenFlags: i32 = 0
+  /**
+   * Start a worker that exited again. Off, a worker that exits stays gone,
+   * and the supervisor returns once none is left.
+   */
+  restart: boolean = true
+  /** Give each worker a socketpair to the supervisor (`preforkSupervise`). */
+  supervisorChannels: boolean = false
+  /**
    * Pin worker `k` to CPU `k` (`setCpuAffinity`), and with `listenPort`, steer
    * each connection to the listener of the CPU that received it. Linux only;
    * elsewhere the workers run unpinned.
    */
   pin: boolean = false
-  /**
-   * The port the supervisor binds one listener per worker on, 0 for any; -1,
-   * the default, leaves each worker to bind its own.
-   */
-  listenPort: i32 = -1
-  /** The address those listeners bind. */
-  listenHost: string = "0.0.0.0"
-  /** Their backlog. */
-  listenBacklog: i32 = 1024
-  /** Their `tcpListenFlags` beyond `SO_REUSEPORT`, which is always set: 0, or 2 for `TCP_NODELAY`. */
-  listenFlags: i32 = 0
 }
 
 /** True when `s` is one or more ASCII digits and nothing else. */
@@ -313,7 +313,7 @@ export const preforkListener = (args: string[]): i32 => {
     return -1
   }
   for (let back: i32 = 2; back <= 3 && back < toI32(args.length); back++) {
-    const flag: string = args[args.length - back]
+    const flag: string = args[toI32(args.length) - back]
     if (flag.startsWith(PREFORK_LISTENER_FLAG)) {
       const digits: string = flag.substring(PREFORK_LISTENER_FLAG.length)
       return preforkDigits(digits) ? parseInt(digits) : -1

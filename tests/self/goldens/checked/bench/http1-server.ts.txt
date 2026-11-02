@@ -40474,22 +40474,22 @@ const PREFORK_SPAWN_FAILED: i32 = -2 [exported]
 const PREFORK_WORKERS_EXITED: i32 = -3 [exported]
 const PREFORK_SIGTERM: i32 = 15
 const PREFORK_SIGKILL: i32 = 9
-struct PreforkConfig (class) size=64 align=8 exported
-  field workers: i32 index=0 offset=0 initialized
-  field tickMs: i32 index=1 offset=4 initialized
-  field backoffMs: i32 index=2 offset=8 initialized
-  field backoffCapMs: i32 index=3 offset=12 initialized
-  field quickExitMs: i32 index=4 offset=16 initialized
-  field graceMs: i32 index=5 offset=20 initialized
-  field restart: boolean index=6 offset=24 initialized
-  field supervisorChannels: boolean index=7 offset=25 initialized
-  field serviceWorker: i32 index=8 offset=28 initialized
-  field channelKind: i32 index=9 offset=32 initialized
-  field pin: boolean index=10 offset=36 initialized
-  field listenPort: i32 index=11 offset=40 initialized
-  field listenHost: string index=12 offset=48 initialized
-  field listenBacklog: i32 index=13 offset=56 initialized
-  field listenFlags: i32 index=14 offset=60 initialized
+struct PreforkConfig (class) size=56 align=8 exported
+  field listenHost: string index=0 offset=0 initialized
+  field workers: i32 index=1 offset=8 initialized
+  field tickMs: i32 index=2 offset=12 initialized
+  field backoffMs: i32 index=3 offset=16 initialized
+  field backoffCapMs: i32 index=4 offset=20 initialized
+  field quickExitMs: i32 index=5 offset=24 initialized
+  field graceMs: i32 index=6 offset=28 initialized
+  field serviceWorker: i32 index=7 offset=32 initialized
+  field channelKind: i32 index=8 offset=36 initialized
+  field listenPort: i32 index=9 offset=40 initialized
+  field listenBacklog: i32 index=10 offset=44 initialized
+  field listenFlags: i32 index=11 offset=48 initialized
+  field restart: boolean index=12 offset=52 initialized
+  field supervisorChannels: boolean index=13 offset=53 initialized
+  field pin: boolean index=14 offset=54 initialized
 struct PreforkSlot (class) size=24 align=8
   field at: i64 index=0 offset=0 initialized
   field pid: i32 index=1 offset=8 initialized
@@ -40607,7 +40607,7 @@ function PreforkSupervisor.constructor(this: PreforkSupervisor, config: PreforkC
   escaping: config loop
   calls: nish.preforkArgs nish_alloc_struct nish_array_grow nish_panic_index nish_platform nish_realpath nish_str_eq
   pointer this: size=80 writesThrough=true captured=false
-  pointer config: size=64 writesThrough=true captured=true
+  pointer config: size=56 writesThrough=true captured=true
   pointer args: size=0 writesThrough=true captured=false passedTo=nish.preforkArgs#0
   stackSites=0 stackLocals=0
   callee +0:17 preforkArgs -> @nish.preforkArgs
@@ -40778,7 +40778,7 @@ function PreforkSupervisor.stop(this: PreforkSupervisor, loop: i32, signals: i32
 function preforkInvalid(config: PreforkConfig): string -> @nish.preforkInvalid
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_platform nish_str_eq
-  pointer config: size=64 writesThrough=false captured=false
+  pointer config: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 channels: boolean (const)
 function preforkDiscard(buf: u8[], _index: i32, fd: i32, _events: i32): void -> @nish.preforkDiscard
@@ -40793,7 +40793,7 @@ function preforkWith(args: string[], config: PreforkConfig): i32 -> @nish.prefor
   sharedWrite: via nish.preforkSupervise$arr.u8$fn.19.nish.preforkDiscard
   calls: nish.preforkSupervise$arr.u8$fn.19.nish.preforkDiscard
   pointer args: size=0 writesThrough=true captured=false passedTo=nish.preforkSupervise$arr.u8$fn.19.nish.preforkDiscard#0
-  pointer config: size=64 writesThrough=true captured=true passedTo=nish.preforkSupervise$arr.u8$fn.19.nish.preforkDiscard#1
+  pointer config: size=56 writesThrough=true captured=true passedTo=nish.preforkSupervise$arr.u8$fn.19.nish.preforkDiscard#1
   stackSites=1 stackLocals=1
   local +0:9 buf: u8[] (const)
   callee +1:10 preforkSupervise<u8[], preforkDiscard> -> @nish.preforkSupervise$arr.u8$fn.19.nish.preforkDiscard
@@ -40809,7 +40809,7 @@ function preforkSupervise<u8[], preforkDiscard>(args: string[], config: PreforkC
   sharedWrite: via nish_set_cpu_affinity
   calls: nish.PreforkSupervisor.closeChannel nish.PreforkSupervisor.closeListeners nish.PreforkSupervisor.constructor nish.PreforkSupervisor.escalate nish.PreforkSupervisor.listen nish.PreforkSupervisor.reap nish.PreforkSupervisor.restart nish.PreforkSupervisor.stop nish.preforkDiscard nish.preforkIndex nish.preforkInvalid nish.preforkWorkerCount nish_cpu_online nish_getenv nish_net_close nish_panic nish_panic_index nish_panic_overflow nish_platform nish_poll_add nish_poll_create nish_poll_wait nish_read_signal nish_set_cpu_affinity nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_write
   pointer args: size=0 writesThrough=true captured=false passedTo=nish.preforkIndex#0 nish.PreforkSupervisor.constructor#2
-  pointer config: size=64 writesThrough=true captured=true passedTo=nish.preforkInvalid#0 nish.PreforkSupervisor.constructor#1
+  pointer config: size=56 writesThrough=true captured=true passedTo=nish.preforkInvalid#0 nish.PreforkSupervisor.constructor#1
   pointer state: size=0 writesThrough=true captured=false passedTo=nish.preforkDiscard#0
   stackSites=1 stackLocals=1
   local +0:9 invalid: string (const)
