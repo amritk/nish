@@ -769,8 +769,8 @@ const intCases = (): IntCase[] => {
     new IntCase("int8 one", false, [toI64(-1)], none),
     new IntCase("int8 nulls", false, [min8, toI64(0), toI64(7)], [false, true, false]),
     new IntCase("int8 edges", false, [min8, -(min8 + toI64(1))], none),
-    new IntCase("int8 2000", false, intRun(min8, toI64(4611686018427387), toI32(2000)), none),
-    new IntCase("int8 10000", false, intRun(min8, toI64(922337203685477), toI32(10000)), none),
+    new IntCase("int8 2000", false, intRun(min8, toI64(4611686) * toI64(1000000000) + toI64(18427387), toI32(2000)), none),
+    new IntCase("int8 10000", false, intRun(min8, toI64(922337) * toI64(1000000000) + toI64(203685477), toI32(10000)), none),
   ]
 }
 
@@ -831,7 +831,8 @@ const intarrays = (target: PgTarget): i32 => {
       const t: i32 = pool.ticket
       const conn = pool.connection(slot)
       if (t < paired) {
-        const c = cases[t >> 1]
+        const k: i32 = t >> 1
+        const c = cases[k]
         const binary: boolean = (t & 1) === 1
         conn.bindStart(c.int4 ? "int4s" : "int8s")
         if (!intArray(conn, c, binary)) {
@@ -861,13 +862,15 @@ const intarrays = (target: PgTarget): i32 => {
     while (event !== PG_NEED_MORE) {
       const conn = pool.connection(d.slot)
       const t: i32 = pool.ticket
+      const k: i32 = t >> 1
       const label: string =
-        t < paired ? `${cases[t >> 1].name} ${(t & 1) === 1 ? "binary" : "text"}` : t === paired ? "int4[] binary to int8[]" : "int8[] binary after it"
+        t < paired ? `${cases[k].name} ${(t & 1) === 1 ? "binary" : "text"}` : t === paired ? "int4[] binary to int8[]" : "int8[] binary after it"
       if (event === PG_ROW) {
-        let row: string = ""
+        const cols: string[] = []
         for (let c: i32 = 0; c < 6; c++) {
-          row += `${c > 0 ? " " : ""}${conn.isNull(c) ? "NULL" : conn.columnText(c)}`
+          cols.push(conn.isNull(c) ? "NULL" : conn.columnText(c))
         }
+        const row: string = cols.join(" ")
         seen[t] = row
         console.log(`${label}: ${row}`)
       } else if (event === PG_ERROR) {
