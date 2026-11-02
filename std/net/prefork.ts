@@ -197,7 +197,9 @@ export class PreforkConfig {
   /**
    * Pin worker `k` to CPU `k` (`setCpuAffinity`), and with `listenPort`, steer
    * each connection to the listener of the CPU that received it. Linux only;
-   * elsewhere the workers run unpinned.
+   * elsewhere the workers run unpinned. `k` is the CPU number, not the `k`-th
+   * allowed CPU: under a mask that skips CPU `k`, worker `k` runs unpinned and
+   * a connection received past the listeners falls back to the kernel's hash.
    */
   pin: boolean = false
 }

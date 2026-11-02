@@ -14,7 +14,9 @@
 //   4. (Linux) a client pinned to CPU k is answered by worker k: the loopback
 //      SYN is handled on the client's CPU, and the steering program hands it
 //      to listener k, which only worker k holds;
-//   5. SIGTERM stops it all, and the port then refuses a connection: the
+//   5. (Linux, with a CPU past the workers) a client pinned to CPU `count`,
+//      past the group, is still answered: the kernel's hash takes over;
+//   6. SIGTERM stops it all, and the port then refuses a connection: the
 //      supervisor closed the listeners it held.
 //
 // Workers are min(2, CPUs), so a one-CPU runner still runs every step. Each
@@ -311,6 +313,18 @@ const served = (): void => {
     }
   }
   console.log(steered);
+
+  // A CPU past the group has no listener of its index: the kernel's hash
+  // picks one, and the client is still answered.
+  let fallback = true;
+  if (platform === "linux" && availableParallelism() > count) {
+    const code = exitCode(spawn([selfPath(), "client", `${port}`, `${count}`]), 10000);
+    fallback = code >= 10 && code < 10 + count;
+    if (!fallback) {
+      console.log(`a client on CPU ${count}, past the group, exited ${code}`);
+    }
+  }
+  console.log(fallback);
 
   console.log(signal(sup, 15));
   console.log(exitCode(sup, 10000) === 0);

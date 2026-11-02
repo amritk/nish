@@ -334,8 +334,14 @@ export const main = (): i32 => {
 Pinning is for a machine the server has to itself: each worker owns a core,
 so `workers` should be at most `availableParallelism()`, and on Linux **more pinned
 workers than CPUs stops the program with a panic** rather than doubling two
-workers up on one core. A CPU outside the ones the program may run on
-(`taskset`, a container's limit) is never taken. Off Linux the workers run
+workers up on one core. That count is `availableParallelism()`, which a
+container's CPU quota or `NISH_NUM_THREADS` lowers. A CPU outside the ones the
+program may run on (`taskset`, a container's cpuset) is never taken, and worker
+`k` asks for CPU *number* `k`, not the `k`-th CPU allowed: under
+`taskset -c 4-7` every pin fails, each worker says so on stderr and runs
+unpinned, and a connection received on CPU 4 or above, past the listeners,
+falls back to the kernel's hash. Run a pinned server on CPUs that start at 0.
+Off Linux the workers run
 unpinned and unsteered, and the supervisor says so on stderr. A `listenPort`
 outside `-1..65535`, a `listenBacklog` of 0 or less, or other `listenFlags`
 stop the program with a panic.
