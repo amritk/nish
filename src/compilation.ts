@@ -115,6 +115,7 @@ import {
   EnumInfo,
   FunctionSig,
   ImportBinding,
+  ParallelCall,
   STRUCT_CLASS,
   StructRegistry,
   StructTemplateInfo,
@@ -183,7 +184,9 @@ import {
   voidTaskResultMessage,
   destinationEdits,
   threadsModuleName,
+  scopeSymbol,
 } from "./parallel"
+import { crossingMessage, holdsRegion, regionCallFindings } from "./region-rules"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
 import { jsonQuote, splitByte } from "./strings"
@@ -2259,6 +2262,7 @@ export class Compilation {
     const facts = this.analyze()
     this.checkScopes(facts)
     this.checkSecrets(facts)
+    this.checkRegions(facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.parallelCalls) {
@@ -2296,6 +2300,70 @@ export class Compilation {
         const warning = allocationWarning(this.table, sig, fn, result, facts)
         if (!refused && warning.length > 0) {
           this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning)
+        }
+      }
+    }
+  }
+
+  /**
+   * `nish:region`: what the function a region runs may do there, and where a
+   * `Region` may not travel (`src/region-rules.ts`). The function's own rules
+   * are reported at the call that ran it, a store that breaks them at the
+   * store; a handle that reaches another thread at the call or send that
+   * hands it over.
+   */
+  checkRegions(facts: FactsTable): void {
+    const programs: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      programs.push(unit.checker.program)
+    }
+    const fresh = new FreshResults(programs, this.table, facts)
+    const scopeName = scopeSymbol(programs)
+    const table = this.table
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const call of program.regionCalls) {
+        const findings = regionCallFindings(programs, table, facts, program, call.node, call.sig, scopeName, fresh)
+        for (const finding of findings) {
+          this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
+        }
+      }
+      const crossings: ParallelCall[] = []
+      for (const call of program.spawnCalls) {
+        crossings.push(call)
+      }
+      for (const call of program.parallelCalls) {
+        crossings.push(call)
+      }
+      for (const call of crossings) {
+        const fn = parallelBodyOf(call.sig)
+        const instance = call.sig.instance
+        if (fn === null || instance === null) {
+          continue
+        }
+        const types: i32[] = []
+        for (const type of instance.typeArgs) {
+          types.push(type)
+        }
+        for (const type of fn.paramTypes) {
+          types.push(type)
+        }
+        types.push(fn.returnType)
+        for (const type of types) {
+          if (holdsRegion(programs, table, type)) {
+            const what = `A value \`${fn.sourceName}\` is handed or answers on another thread`
+            this.sink.report(program.source, call.node.start, call.node.end, crossingMessage(what, table.typeName(type)))
+            break
+          }
+        }
+      }
+      for (const call of program.channelSends) {
+        for (const type of call.sig.paramTypes) {
+          if (holdsRegion(programs, table, type)) {
+            const what = "The value a channel sends to another thread"
+            this.sink.report(program.source, call.node.start, call.node.end, crossingMessage(what, table.typeName(type)))
+            break
+          }
         }
       }
     }

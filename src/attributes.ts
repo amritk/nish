@@ -209,6 +209,7 @@ import {
   PANIC_PARALLEL_LENGTH,
   PANIC_POP,
   PANIC_RANGE,
+  PANIC_REGION,
   PANIC_SLICE,
   PanicSite,
 } from "./panics"
@@ -772,6 +773,13 @@ export class FunctionFacts {
    * is what refuses the block in a parallel body (`arenaMessage`).
    */
   opensArena: boolean
+  /**
+   * WP46: calls one of `nish:region`'s functions, directly or through a
+   * callee (fixpoint): it swaps the thread's arena for a region's. What
+   * refuses `region`, `enter` and the rest in a parallel body or a task
+   * (`arenaMessage`), and what a region's own `f` is not refused for.
+   */
+  usesRegion: boolean
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
@@ -921,6 +929,7 @@ export class FunctionFacts {
     this.fillsParam = -1
     this.readsArenaState = false
     this.opensArena = false
+    this.usesRegion = false
     this.callSites = []
     this.escapingNodes = []
     this.carriedStores = []
@@ -3829,6 +3838,9 @@ const collectFacts = (
   // WP46: one of `nish:region`'s intrinsics, whose body the emitter writes.
   if (isRegionIntrinsic(program, sig)) {
     markRegionIntrinsic(facts)
+    if (opts.recordsPanics()) {
+      facts.panicSites.push(new PanicSite(sig.decl, program.source, PANIC_REGION, sig.name, false, ""))
+    }
     return facts
   }
 
@@ -4155,6 +4167,7 @@ const markAtomic = (facts: FunctionFacts): void => {
  * the stack.
  */
 const markRegionIntrinsic = (facts: FunctionFacts): void => {
+  facts.usesRegion = true
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.willReturn = false
@@ -4871,6 +4884,10 @@ const propagateCallee = (
     }
     if (calleeFacts.opensArena && !f.opensArena) {
       f.opensArena = true
+      changed = true
+    }
+    if (calleeFacts.usesRegion && !f.usesRegion) {
+      f.usesRegion = true
       changed = true
     }
   }

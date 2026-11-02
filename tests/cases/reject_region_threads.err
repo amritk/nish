@@ -1,0 +1,1 @@
+`make` runs inside a region, and reaches `scope()`, `spawn`, a parallel body or a channel

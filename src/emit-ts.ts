@@ -25,10 +25,10 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import { applyModuleEdits, emitModule, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
+import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
-import { isBuiltinSpecifier, isNishSourceModule } from "./nish-modules"
+import { isBuiltinSpecifier, SECRET_SPECIFIER } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
@@ -42,6 +42,9 @@ const ENTRY_FILE: string = "entry.ts"
 
 /** The specifier the corpus refuses whole (NL4011). */
 const NET_SPECIFIER: string = "nish:net"
+
+/** The specifier refused until the TypeScript runtime answers regions (NL4015). */
+const REGION_SPECIFIER: string = "nish:region"
 
 /** One file `--emit-ts` writes: a path relative to the output directory, and its text. */
 export class EmittedFile {
@@ -264,14 +267,18 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
         walk.refuse(stmt, SIGNAL_REFUSAL)
         continue
       }
+      if (stmt.text === REGION_SPECIFIER) {
+        walk.refuse(stmt, REGION_REFUSAL)
+        continue
+      }
       // A second import of one specifier: its rewrite is already listed, and
       // listing it twice would edit each import twice.
       if (holds(walk.specifierFrom, stmt.text)) {
         continue
       }
-      // `nish:secret` and `nish:region` have source behind them, but are
-      // answered by the runtime like every other builtin module (`outputPathOf`).
-      if (isBuiltinSpecifier(stmt.text) || isNishSourceModule(stmt.text)) {
+      // `nish:secret` has source behind it, but it is answered by the runtime
+      // like every other builtin module (`outputPathOf`).
+      if (isBuiltinSpecifier(stmt.text) || stmt.text === SECRET_SPECIFIER) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(RUNTIME)
         continue

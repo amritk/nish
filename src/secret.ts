@@ -2059,6 +2059,11 @@ class ReferenceScan {
       // `indexOf`, `join`, `set` and `fill` answer a number, a string or nothing.
       return true
     }
+    // A store into one of the local's fields (`local.n = v`) names the local
+    // once more only as the place written; the checker types no store target.
+    if (call !== null && call.kind === N_BINARY && call.text === "=" && call.children[0] === access) {
+      return true
+    }
     return !holdsReference(this.judge.table, this.judge.program.nodeTypes[access.id])
   }
 

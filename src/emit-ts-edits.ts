@@ -141,6 +141,13 @@ const WIDTH_TYPES: string =
 export const SIGNAL_REFUSAL: string =
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)"
 
+/**
+ * The message NL4015 carries. A region is an allocator swap, and the runtime
+ * the output imports (`nish/runtime`) has no regions to swap to yet.
+ */
+export const REGION_REFUSAL: string =
+  "--emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native"
+
 /** The message NL4013 carries; `src/codes.ts` keys the code on it. */
 const INSTANCES_REFUSAL: string =
   "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"

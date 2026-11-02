@@ -1,0 +1,1 @@
+hands `g.host` to `Game.constructor`, which may keep it

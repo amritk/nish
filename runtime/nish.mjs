@@ -328,11 +328,41 @@ provide("arena", shim.arena);
 // zero-fills it. `nish:unsafe` and `nish:term` are each answered by a module
 // that hands back the globals installed above: its functions are globals of this module either
 // way, and the import is what the compiler requires a program to write.
+// `nish:region` is answered by a module of its own, below.
 // `nish:simd` is `runtime/core.mjs`, whose vectors are typed arrays made once
 // and never written after, so `--emit-ts` output and a program run as it was
 // written share one implementation.
 const UNSAFE_EXPORTS = ["uncheckedGet", "uncheckedSet", "wrappingAdd", "wrappingSub", "wrappingMul"];
 const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
+// `nish:region` has no allocator to swap under Node: a region is an entry in a
+// table, keyed by its handle (a BigInt, as every `i64` is here), `enter` runs
+// its function on the root, and `free` drops the entry. The handle checks the
+// native runtime makes are made here too, so a freed handle or a second
+// `enter` throws where the native program stops.
+const regionSource = `
+const roots = new Map();
+const entered = new Set();
+let next = 0n;
+const rootOf = (r) => {
+  if (!roots.has(r)) throw new Error("nish:region: the region is freed or was never made");
+  if (entered.has(r)) throw new Error("nish:region: the region is entered already");
+  return roots.get(r);
+};
+const run = (r, f, arg, withArg) => {
+  const root = rootOf(r);
+  entered.add(r);
+  try { return withArg ? f(root, arg) : f(root); } finally { entered.delete(r); }
+};
+export class Region {}
+export const region = (f) => { next += 1n; roots.set(next, f()); return next; };
+export const regionWith = (arg, f) => { next += 1n; roots.set(next, f(arg)); return next; };
+export const enter = (r, f) => run(r, f, undefined, false);
+export const enterWith = (r, arg, f) => run(r, f, arg, true);
+export const free = (r) => {
+  if (entered.has(r)) throw new Error("nish:region: the region is freed while it is entered");
+  if (!roots.delete(r)) throw new Error("nish:region: the region is freed or was never made");
+};
+`;
 const TERM_EXPORTS = ["readStdin", "waitStdin", "isTerminal", "terminalSize", "setRawMode", "setTerminalRestore"];
 const termSource = TERM_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
 registerHooks({
@@ -345,6 +375,9 @@ registerHooks({
     }
     if (specifier === "nish:simd") {
       return next(new URL("./core.mjs", import.meta.url).href, context);
+    }
+    if (specifier === "nish:region") {
+      return { url: `data:text/javascript,${encodeURIComponent(regionSource)}`, shortCircuit: true };
     }
     if (specifier === "nish:term") {
       return { url: `data:text/javascript,${encodeURIComponent(termSource)}`, shortCircuit: true };

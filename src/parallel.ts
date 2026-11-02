@@ -504,13 +504,13 @@ export const recyclesPerElement = (f: FunctionFacts): boolean =>
  */
 export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
-  if (own === null || (!own.readsArenaState && !own.opensArena)) {
+  if (own === null || (!own.readsArenaState && !own.opensArena && !own.usesRegion)) {
     return ""
   }
   return (
     `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
     "each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, " +
-    "nor open a `using a = arena()` block"
+    "nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)"
   )
 }
 
@@ -2687,7 +2687,7 @@ const threadsLoaded = (programs: CheckedProgram[]): boolean => {
 }
 
 /** The symbol `nish/threads`'s `scope()` is called by, or "" when no program loaded the module. */
-const scopeSymbol = (programs: CheckedProgram[]): string => {
+export const scopeSymbol = (programs: CheckedProgram[]): string => {
   for (const program of programs) {
     if (isThreadsModule(program)) {
       for (const sig of program.functions) {

@@ -2596,6 +2596,46 @@ returns. To give memory back sooner, scope it with `using a = arena()`;
 `Arena.release` and `Arena.reset` are gone, and a call to either is an unknown
 builtin (NL2244).
 
+### Regions: `nish:region`
+
+**For memory a long-running program frees itself — per connection, per cache
+entry — use a region.** `region(f)` / `regionWith(arg, f)` make one and run
+`f` in it, and what `f` answers is the root; `enter(r, f)` /
+`enterWith(r, arg, f)` run `f(root)` / `f(root, arg)` in it again; `free(r)`
+gives all of it back. `f` is a named function or an arrow that captures
+nothing. `Region<T>` is a number, not a pointer.
+
+```ts nish:ok
+import { Region, enter, free, region } from "nish:region";
+
+class Session {
+  hits: i32 = 0;
+}
+
+const open = (): Session => new Session();
+const touch = (s: Session): i32 => {
+  s.hits = s.hits + 1;
+  return s.hits;
+};
+
+export const main = (): i32 => {
+  const r: Region<Session> = region(open);
+  console.log(enter(r, touch));
+  free(r);
+  return 0;
+};
+```
+
+The checker refuses every way region memory could outlive `free`, and every way
+outer memory could be pointed at from inside: only numbers, booleans, enums and
+`Region` handles cross. `enter` answers a scalar or a handle (NL2611), `f` may
+not store region memory into `arg` or other outer memory (NL2609) nor outer
+memory into the region (NL2610), nor `push`/`set`/`add` to an outer collection
+(NL2615). A handle stays on its thread (NL2612, NL2613, NL2351), is never a
+`using` (NL2387) and is never `new Region` (NL2618). A bad handle, a double
+`free` or a nested `enter` of one region stops the program. `--emit-ts` refuses
+the module (NL4015).
+
 ## Recipes for what is missing
 
 **Iterate and transform** — there is no `map`, and no function to pass it:

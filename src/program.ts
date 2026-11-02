@@ -1517,6 +1517,10 @@ export class CheckedProgram {
   scopeChannels: ScopeChannels[]
   /** `nish:secret`: every `expose` and `exposeWith` call, judged once the facts are in (`Compilation.checkSecrets`). */
   exposeCalls: ParallelCall[]
+  /** `nish:region`: every `region`, `regionWith`, `enter` and `enterWith` call, judged once the facts are in (`Compilation.checkRegions`). */
+  regionCalls: ParallelCall[]
+  /** `nish:region`: every `Channel.send`, whose value may not hold a `Region` (`Compilation.checkRegions`). */
+  channelSends: ParallelCall[]
   /** `nish:secret`: what each `secret(v)` asks of the whole-program facts (`Compilation.checkSecrets`). */
   secretNeeds: SecretNeed[]
   /**
@@ -1739,6 +1743,8 @@ export class CheckedProgram {
     this.parallelCalls = []
     this.panicSites = []
     this.exposeCalls = []
+    this.regionCalls = []
+    this.channelSends = []
     this.secretNeeds = []
     this.spawnCalls = []
     this.scopeChannels = []

@@ -21138,6 +21138,220 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end mem-using-arena -->
 
+### A region: `nish:region`
+
+`nish:region`'s functions are ordinary generic functions in `std/region.ts`,
+instantiated per root type and per `f`, so each call site gets its own small
+`define`: `@nish.region$$Session$fn.4.open` asks the runtime for a handle
+(`nish_region_new`), enters it (`nish_region_enter` swaps the region's arena in
+as the thread's current one), runs `open` there, and leaves with its root
+(`nish_region_leave` swaps the thread's own arena back and keeps the root
+pointer). `@nish.enter$$Session$i32$fn.5.touch` enters again, hands `touch` the root
+`nish_region_enter` answers, and leaves; `free` is one call to
+`nish_region_free`. The handle is an `i64`, which is why it can cross a
+function boundary, sit in a `Map` and come back. `open` and `touch` themselves
+are unchanged: they allocate through `nish_alloc_struct` as any function does,
+and the region is simply the arena that is current while they run. The checker
+has already refused anything `f` could leave behind outside the region, or
+bring into it ([LANGUAGE.md](LANGUAGE.md#regions-nishregion)).
+
+<!-- cookbook:begin mem-region -->
+```ts
+import { Region, enter, free, region } from "nish:region"
+
+class Session {
+  hits: i32 = 0
+}
+
+const open = (): Session => new Session()
+const touch = (s: Session): i32 => {
+  s.hits = s.hits + 1
+  return s.hits
+}
+
+export const serveOnce = (): i32 => {
+  const r: Region<Session> = region(open)
+  const n = enter(r, touch)
+  free(r)
+  return n
+}
+```
+
+```llvm
+%struct.Session = type { i32 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noundef i64 @nish_region_new() #0
+declare i8* @nish_region_enter(i64 noundef) #0
+declare void @nish_region_leave(i64 noundef, i8*) #0
+declare void @nish_region_free(i64 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define hidden noundef nonnull align 8 dereferenceable(4) %struct.Session* @open$() #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 4)
+  %1 = bitcast i8* %0 to %struct.Session*
+  %2 = getelementptr inbounds %struct.Session, %struct.Session* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !4
+  ret %struct.Session* %1
+}
+
+define hidden noundef i32 @touch$(%struct.Session* noundef nonnull align 8 dereferenceable(4) nocapture %s) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Session, %struct.Session* %s, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4, !tbaa !4
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %5 = getelementptr inbounds %struct.Session, %struct.Session* %s, i32 0, i32 0
+  store i32 %3, i32* %5, align 4, !tbaa !4
+  %6 = getelementptr inbounds %struct.Session, %struct.Session* %s, i32 0, i32 0
+  %7 = load i32, i32* %6, align 4, !tbaa !4
+  ret i32 %7
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @serveOnce() #1 {
+entry:
+  %r.addr = alloca i64, align 8
+  %n.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i64 @nish.region$$Session$fn.4.open()
+  store i64 %0, i64* %r.addr, align 8
+  %1 = load i64, i64* %r.addr, align 8
+  %2 = call i32 @nish.enter$$Session$i32$fn.5.touch(i64 %1)
+  store i32 %2, i32* %n.addr, align 4
+  %3 = load i64, i64* %r.addr, align 8
+  call void @nish.free$$Session(i64 %3)
+  %4 = load i32, i32* %n.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %4
+}
+
+define internal noundef i64 @nish.handleNew() #1 {
+entry:
+  %0 = call i64 @nish_region_new()
+  ret i64 %0
+}
+
+define internal void @nish.open(i64 noundef %h) #1 {
+entry:
+  call i8* @nish_region_enter(i64 %h)
+  ret void
+}
+
+define internal noundef i64 @nish.region$$Session$fn.4.open() #1 {
+entry:
+  %h.addr = alloca i64, align 8
+  %0 = call i64 @nish.handleNew()
+  store i64 %0, i64* %h.addr, align 8
+  %1 = load i64, i64* %h.addr, align 8
+  call void @nish.open(i64 %1)
+  %2 = load i64, i64* %h.addr, align 8
+  %3 = call %struct.Session* @open$()
+  %4 = call i64 @nish.close$$Session(i64 %2, %struct.Session* %3)
+  ret i64 %4
+}
+
+define internal noundef i32 @nish.enter$$Session$i32$fn.5.touch(i64 noundef %r) #1 {
+entry:
+  %root.addr = alloca %struct.Session*, align 8
+  %result.addr = alloca i32, align 4
+  %0 = call %struct.Session* @nish.reopen$$Session(i64 %r)
+  store %struct.Session* %0, %struct.Session** %root.addr, align 8
+  %1 = load %struct.Session*, %struct.Session** %root.addr, align 8
+  %2 = call i32 @touch$(%struct.Session* %1)
+  store i32 %2, i32* %result.addr, align 4
+  %3 = load %struct.Session*, %struct.Session** %root.addr, align 8
+  call void @nish.leave$$Session(i64 %r, %struct.Session* %3)
+  %4 = load i32, i32* %result.addr, align 4
+  ret i32 %4
+}
+
+define internal void @nish.free$$Session(i64 noundef %_r) #1 {
+entry:
+  call void @nish_region_free(i64 %_r)
+  ret void
+}
+
+define internal noundef i64 @nish.close$$Session(i64 noundef %h, %struct.Session* noundef nonnull align 8 dereferenceable(4) %root) #1 {
+entry:
+  %0 = bitcast %struct.Session* %root to i8*
+  call void @nish_region_leave(i64 %h, i8* %0)
+  ret i64 %h
+}
+
+define internal noundef nonnull align 8 dereferenceable(4) %struct.Session* @nish.reopen$$Session(i64 noundef %r) #1 {
+entry:
+  %0 = call i8* @nish_region_enter(i64 %r)
+  %1 = bitcast i8* %0 to %struct.Session*
+  ret %struct.Session* %1
+}
+
+define internal void @nish.leave$$Session(i64 noundef %r, %struct.Session* noundef nonnull align 8 dereferenceable(4) %root) #1 {
+entry:
+  %0 = bitcast %struct.Session* %root to i8*
+  call void @nish_region_leave(i64 %r, i8* %0)
+  ret void
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!5, !6, !7, !8, !9}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Session", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{i32 8, !"cf-protection-branch", i32 1}
+!6 = !{i32 8, !"cf-protection-return", i32 1}
+!7 = !{i32 8, !"branch-target-enforcement", i32 1}
+!8 = !{i32 8, !"sign-return-address", i32 1}
+!9 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end mem-region -->
+
 ### `T | null` and narrowing
 
 A nullable value is the same pointer type as `T`; `null` is the constant
@@ -25778,6 +25992,10 @@ declare void @nish_sandbox(i32, i32, i8*, i8*, i8*) #2
 declare void @nish_sandbox_check() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
+declare noundef i64 @nish_region_new() #2
+declare i8* @nish_region_enter(i64 noundef) #2
+declare void @nish_region_leave(i64 noundef, i8*) #2
+declare void @nish_region_free(i64 noundef) #2
 declare noundef i64 @nish_arena_used() #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
