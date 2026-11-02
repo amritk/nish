@@ -120,7 +120,7 @@ export class App {
     this.names = [ascii("Content-Type")];
     this.values = [ascii("text/plain")];
     this.none = [];
-    this.hello = ascii("hello from nish/net/http1-codec\n");
+    this.hello = ascii("hello from nish/net/http1\n");
     this.pattern = new Array<u8>(16384);
     for (let k: i32 = 0; k < 16384; k++) {
       this.pattern[k] = toU8(bigByte(k));

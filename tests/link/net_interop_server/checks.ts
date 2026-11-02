@@ -117,7 +117,7 @@ const carrierChecks = (t: Suite): void => {
   const plain: i32 = server.h1.connect(false);
   server.h1.send(plain, bytesOf("GET /hello HTTP/1.1\r\nHost: localhost\r\n\r\n"));
   const answer = server.h1.response(plain, false);
-  t.eqStr("HTTP/1.1: a GET of /hello", `${answer.status} ${textOf(answer.body)}`, "200 hello from nish/net/http1-codec\n");
+  t.eqStr("HTTP/1.1: a GET of /hello", `${answer.status} ${textOf(answer.body)}`, "200 hello from nish/net/http1\n");
 
   // HTTP/2 over TLS.
   // The server's date, pinned so the heads compare byte for byte.
