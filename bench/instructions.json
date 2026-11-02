@@ -13,7 +13,7 @@
     "vec3": { "n": 6000000, "instructions": 294151258 },
     "result": { "n": 40000000, "instructions": 340146474 },
     "math": { "n": 200000, "instructions": 263978929 },
-    "map-proto-ordered": { "n": 16384, "instructions": 253169464, "commit": "7b0a433", "valgrind": "valgrind-3.26.0" },
+    "map-proto-ordered": { "n": 16384, "instructions": 253628098, "commit": "f1df4697", "valgrind": "valgrind-3.26.0" },
     "map-proto-ordered-fp": { "n": 16384, "instructions": 225848596 },
     "map-proto-ordered-fp32": { "n": 16384, "instructions": 238168375 },
     "map-proto-unordered": { "n": 16384, "instructions": 209782412, "commit": "101f6331", "valgrind": "valgrind-3.22.0" },
