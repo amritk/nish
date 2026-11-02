@@ -223,9 +223,13 @@ const ints = (most: i32): PgBatchConfig => {
   return c;
 };
 
-/** The int8 key `j * 2^31 + j`: its two 31-bit halves are equal, so every such key folds to hash 0. */
+/**
+ * The int8 key `j * 2^32 + (j * 2654435769 mod 2^32)`: its low half is its
+ * high half times the multiplier the batcher's int hash xors in, so the two
+ * cancel and every such key hashes alike.
+ */
 const colliding = (j: i32): i64 => {
-  return (toI64(j) << toI64(31)) + toI64(j);
+  return (toI64(j) << toI64(32)) + ((toI64(j) * toI64(2654435769)) & toI64(4294967295));
 };
 
 /** The elements of an array `{...}`, by its commas. */
@@ -349,9 +353,53 @@ const growth = (t: Suite): void => {
   t.eqStr("and routes", route(b, small, conn, answer(row("three", "2"))), "65536?,1=three,2=three,1.,2.");
 };
 
+/**
+ * Two runs of 16384 consecutive keys, from `a` and from `b`, each key
+ * requested twice: 65536 requests in one take. Answers the keys bound, and
+ * closes the run with no rows.
+ */
+const ranges = (b: PgBatcher, conn: PgConnection, a: i64, c: i64): i32 => {
+  for (let i: i32 = 0; i < 65536; i++) {
+    const k: i64 = toI64(i % 16384);
+    b.addInt(i % 32768 < 16384 ? a + k : c + k, i);
+  }
+  const r: i32 = b.take(conn);
+  const bound: i32 = count(keys(conn));
+  route(b, r, conn, answer([]));
+  return bound;
+};
+
+/**
+ * Dense key ranges keep their dedupe: two runs whose slots would overlap
+ * under a hash near the identity, then two at offsets drawn from a fixed
+ * seed. Each key is bound once.
+ */
+const dense = (t: Suite): void => {
+  const c = ints(65536);
+  c.runs = 1;
+  const b = new PgBatcher(c);
+  const conn = prepared(b, config());
+  t.eqI32("two dense ranges 131072 apart: each key bound once", ranges(b, conn, toI64(1), toI64(131073)), 32768);
+  t.eqI32("and nothing waits", b.waiting(), 0);
+  let seed: i64 = toI64(12345);
+  let once: i32 = 0;
+  for (let trial: i32 = 0; trial < 8; trial++) {
+    seed = (seed * toI64(1103515245) + toI64(12345)) & toI64(2147483647);
+    const a: i64 = seed & toI64(1048575);
+    seed = (seed * toI64(1103515245) + toI64(12345)) & toI64(2147483647);
+    // The second range starts past the first's end, so the two never share a key.
+    const from: i64 = a + toI64(16384) + (seed & toI64(1048575));
+    if (ranges(b, conn, a, from) === 32768) {
+      once += 1;
+    }
+  }
+  t.eqI32("eight pairs at seeded offsets: each key bound once in every one", once, 8);
+};
+
 export const main = (): number => {
   const t = new Suite("postgres batch scale");
   collisions(t);
   growth(t);
+  dense(t);
   return t.done();
 };

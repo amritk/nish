@@ -7,22 +7,23 @@
 // size. One connection, one batcher of int8 keys taking at most `n`
 // requests; each round queues `n` requests, takes them all into one
 // execution and routes every answer back. The statement is
-// `select g from generate_series(1, (q.key & 2147483647) % 3) as g`, so a key
-// has none, one or two rows by its low 31 bits.
+// `select q.key as k, g from generate_series(1, (q.key & 2147483647) % 3) as g`,
+// so a key has none, one or two rows by its low 31 bits, each naming the key
+// it answers.
 //
 // - spread: request `t`'s key is `1 + t % d`, `d` three quarters of `n`, so
 //   the last quarter repeat earlier keys.
-// - collide: the same, each key `j` made `j * 2^31 + j`, whose two 31-bit
-//   halves are equal: every key lands in the same slot of the batcher's
-//   table, the probe's worst case.
+// - collide: the same, each key `j` made `collidingKey(j)`, whose high half
+//   cancels its low one in the batcher's int hash: every key lands in the
+//   same slot of the batcher's table, the probe's worst case.
 //
 // One untimed round first connects, prepares and warms the plan. It prints
 // `keys K rows R missing M wrong W ns T cpu U built B peak P`: K the
 // requests the timed rounds answered, R the rows and M the requests with
-// none; W the requests answered otherwise than the statement says (rows out
-// of order, a wrong count, a failure); T the timed rounds' wall time in
-// nanoseconds; U this process's user + system CPU time over them in
-// microseconds (getrusage); B the peak resident set the batcher's
+// none; W the requests answered otherwise than the statement says (a row of
+// another key, rows out of order, a wrong count, a failure); T the timed
+// rounds' wall time in nanoseconds; U this process's user + system CPU time
+// over them in microseconds (getrusage); B the peak resident set the batcher's
 // construction added, and P the peak resident set at the end, in KiB
 // (`ru_maxrss`).
 import {
@@ -110,6 +111,12 @@ const peakKiB = (): i64 => word(usage(), 32)
 /** The rows the statement gives key `k`. */
 const rowsOf = (k: i64): i32 => toI32((k & toI64(2147483647)) % toI64(3))
 
+const LOW32: i64 = 4294967295
+const GOLDEN: i64 = 2654435769
+
+/** The int8 key `j * 2^32 + (j * 2654435769 mod 2^32)`: its low half is its high half times the multiplier the batcher's int hash xors in, so every such key hashes alike. */
+const collidingKey = (j: i64): i64 => (j << toI64(32)) + ((j * GOLDEN) & LOW32)
+
 /** One connection on an epoll loop, one batcher, and what its answers came to. */
 class Driver {
   readonly pool: PgPool
@@ -171,7 +178,7 @@ class Driver {
       } else if (event === PG_BATCH_ROW) {
         this.seen[t] += 1
         this.rows += 1
-        if (conn.int(0) !== toI64(this.seen[t])) {
+        if (conn.int(0) !== this.keys[t] || conn.int(1) !== toI64(this.seen[t])) {
           this.wrong += 1
         }
       } else {
@@ -194,7 +201,7 @@ class Driver {
     const distinct: i32 = n - n / toI32(4)
     for (let t: i32 = 0; t < n; t++) {
       const j: i64 = toI64((t % distinct) + toI32(1))
-      this.keys[t] = collide ? (j << toI64(31)) + j : j
+      this.keys[t] = collide ? collidingKey(j) : j
       this.seen[t] = 0
       this.ended[t] = false
       if (!this.batcher.addInt(this.keys[t], t)) {
@@ -309,7 +316,7 @@ export const main = (): i32 => {
   const config = new PgBatchConfig()
   config.name = "scale"
   config.keyType = PG_BATCH_INT
-  config.select = "select g from generate_series(1, (q.key & 2147483647) % 3) as g"
+  config.select = "select q.key as k, g from generate_series(1, (q.key & 2147483647) % 3) as g"
   config.maxRequests = n
   config.maxBytes = 4194304
   config.queueSize = n

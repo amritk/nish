@@ -19,4 +19,7 @@ PASS  from 0 to 65535
 PASS  the first and last route
 PASS  a small batch after it reuses the grown arrays
 PASS  and routes
-postgres batch scale: 21 passed, 0 failed, 0 skipped
+PASS  two dense ranges 131072 apart: each key bound once
+PASS  and nothing waits
+PASS  eight pairs at seeded offsets: each key bound once in every one
+postgres batch scale: 24 passed, 0 failed, 0 skipped

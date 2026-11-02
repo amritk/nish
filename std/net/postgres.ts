@@ -3282,6 +3282,31 @@ const PG_BATCH_USES: i32 = 1048576
 // The array's `{}` and the longest int8 element, `-9223372036854775808`.
 const PG_BATCH_MIN_BYTES: i32 = 22
 
+// The 32-bit halves of an int8 key, and the odd multipliers `pgIntHash` mixes them with.
+const PG_LOW32: i64 = 4294967295
+const PG_HASH_HIGH: u32 = 2654435769
+const PG_HASH_MIX1: u32 = 2246822507
+const PG_HASH_MIX2: u32 = 3266489909
+
+/**
+ * The batcher's table hash of an int8 key, 31 bits: the high half times an
+ * odd constant xored into the low half, then MurmurHash3's 32-bit finalizer,
+ * whose unsigned multiplies wrap by definition. Every step is a bijection on
+ * 32 bits, so keys of one high half never collide, and the finalizer spreads
+ * a dense run of ids over the whole table: runs that would land on one
+ * another's slots under a near-identity hash do not merge into one cluster
+ * longer than `PG_BATCH_PROBES`.
+ */
+const pgIntHash = (key: i64): i32 => {
+  const lo: u32 = toU32(key & PG_LOW32)
+  const hi: u32 = toU32((key >> toI64(32)) & PG_LOW32)
+  let h: u32 = lo ^ (hi * PG_HASH_HIGH)
+  h = (h ^ (h >> 16)) * PG_HASH_MIX1
+  h = (h ^ (h >> 13)) * PG_HASH_MIX2
+  h = h ^ (h >> 16)
+  return toI32(h >> 1)
+}
+
 /** What a `PgBatcher` sends: one statement shape, its key, and its caps. */
 export class PgBatchConfig {
   /** The prepared statement's name, which `PgBatcher.sql` is prepared under. */
@@ -3504,10 +3529,8 @@ export class PgBatcher {
     if (q < 0) {
       return false
     }
-    // Both halves folded to 31 bits, so that no step can overflow.
-    const h: i32 = toI32(key & toI64(0x7fffffff)) ^ toI32((key >> toI64(31)) & toI64(0x7fffffff))
     this.qInts[q] = key
-    this.added(q, tag, h ^ (h >> 15), pgDecimalLength(key))
+    this.added(q, tag, pgIntHash(key), pgDecimalLength(key))
     return true
   }
 

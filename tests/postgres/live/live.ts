@@ -1429,14 +1429,18 @@ const batch = (target: PgTarget): i32 => {
 /** The rows `batchscale`'s statement gives key `k`: its low 31 bits mod 3, numbered from 1, so none when they divide by 3. */
 const rowsOf = (k: i64): i32 => toI32((k & toI64(2147483647)) % toI64(3))
 
-/** The int8 key `j * 2^31 + j`: its two 31-bit halves are equal, so every such key hashes to the same slot. */
-const collidingKey = (j: i32): i64 => (toI64(j) << toI64(31)) + toI64(j)
+const LOW32: i64 = 4294967295
+const GOLDEN: i64 = 2654435769
+
+/** The int8 key `j * 2^32 + (j * 2654435769 mod 2^32)`: its low half is its high half times the multiplier the batcher's int hash xors in, so every such key hashes to the same slot. */
+const collidingKey = (j: i32): i64 => (toI64(j) << toI64(32)) + ((toI64(j) * GOLDEN) & LOW32)
 
 /**
  * One `batchscale` case: a batcher taking at most `n` requests, `n` of them
  * queued, request `t`'s key `keyOf(t)`, one take on one pooled connection.
- * Checks every request was answered as `rowsOf` says, rows in order and
- * `done` after them; or `failed`, when `fails`. Prints a line of counts.
+ * Checks every request was answered as `rowsOf` says, each row naming the
+ * request's own key, rows in order and `done` after them; or `failed`, when
+ * `fails`. Prints a line of counts.
  */
 const scaleCase = (target: PgTarget, label: string, n: i32, select: string, fails: boolean, keyOf: (t: i32) => i64): i32 => {
   const config = new PgBatchConfig()
@@ -1508,7 +1512,7 @@ const scaleCase = (target: PgTarget, label: string, n: i32, select: string, fail
           } else if (e === PG_BATCH_ROW) {
             seen[t] += 1
             rows += 1
-            if (parseInt(conn.columnText(toI32(0))) !== seen[t]) {
+            if (conn.columnText(toI32(0)) !== `${keys[t]}` || parseInt(conn.columnText(toI32(1))) !== seen[t]) {
               wrong += 1
             }
           } else if (e === PG_BATCH_DONE) {
@@ -1555,7 +1559,7 @@ const scaleCase = (target: PgTarget, label: string, n: i32, select: string, fail
  * Then a run the server fails, and one with no row for any key, at 65536.
  */
 const batchscale = (target: PgTarget): i32 => {
-  const select: string = "select g from generate_series(1, (q.key & 2147483647) % 3) as g"
+  const select: string = "select q.key as k, g from generate_series(1, (q.key & 2147483647) % 3) as g"
   let code: i32 = 0
   const sizes: i32[] = [toI32(1), toI32(1024), toI32(1025), toI32(4096), toI32(65536)]
   for (const n of sizes) {
