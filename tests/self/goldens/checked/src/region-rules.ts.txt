@@ -127,19 +127,19 @@ function textOf(program: CheckedProgram, node: Node): string -> @textOf
   stackSites=0 stackLocals=0
   local +0:9 text: string (const)
   local +1:9 end: i32 (const)
-function regionToOuterMessage(fn: FunctionSig, what: string): string -> @regionToOuterMessage [exported]
+function regionToOuterMessage(fn: FunctionSig, what: string): string -> @regionToOuterMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0
   stackSites=0 stackLocals=0
   callee +0:6 fnName -> @fnName
-function outerToRegionMessage(fn: FunctionSig, what: string): string -> @outerToRegionMessage [exported]
+function outerToRegionMessage(fn: FunctionSig, what: string): string -> @outerToRegionMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0
   stackSites=0 stackLocals=0
   callee +0:6 fnName -> @fnName
-function enterResultMessage(fn: FunctionSig, table: TypeTable): string -> @enterResultMessage [exported]
+function enterResultMessage(fn: FunctionSig, table: TypeTable): string -> @enterResultMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName fnName nish_str_concat
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0
@@ -147,7 +147,7 @@ function enterResultMessage(fn: FunctionSig, table: TypeTable): string -> @enter
   stackSites=0 stackLocals=0
   callee +0:6 fnName -> @fnName
   callee +0:30 TypeTable.typeName -> @TypeTable.typeName
-function threadsMessage(fn: FunctionSig): string -> @threadsMessage [exported]
+function threadsMessage(fn: FunctionSig): string -> @threadsMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0
@@ -157,19 +157,19 @@ function crossingMessage(what: string, type: string): string -> @crossingMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function notFreshMessage(fn: FunctionSig, ref: string): string -> @notFreshMessage [exported]
+function notFreshMessage(fn: FunctionSig, ref: string): string -> @notFreshMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0
   stackSites=0 stackLocals=0
   callee +0:10 fnName -> @fnName
-function growthMessage(fn: FunctionSig, what: string): string -> @growthMessage [exported]
+function growthMessage(fn: FunctionSig, what: string): string -> @growthMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0
   stackSites=0 stackLocals=0
   callee +0:6 fnName -> @fnName
-function noFactsMessage(fn: FunctionSig, callee: FunctionSig): string -> @noFactsMessage [exported]
+function noFactsMessage(fn: FunctionSig, callee: FunctionSig): string -> @noFactsMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat regionCalleeName
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0
@@ -177,7 +177,7 @@ function noFactsMessage(fn: FunctionSig, callee: FunctionSig): string -> @noFact
   stackSites=0 stackLocals=0
   callee +0:6 fnName -> @fnName
   callee +0:52 regionCalleeName -> @regionCalleeName
-function arenaStateMessage(fn: FunctionSig): string -> @arenaStateMessage [exported]
+function arenaStateMessage(fn: FunctionSig): string -> @arenaStateMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fnName nish_str_concat
   pointer fn: size=160 writesThrough=false captured=false passedTo=fnName#0

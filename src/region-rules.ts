@@ -118,38 +118,38 @@ const textOf = (program: CheckedProgram, node: Node): string => {
   return end < 0 ? text : `${text.substring(0, end)} ...`
 }
 
-export const regionToOuterMessage = (fn: FunctionSig, what: string): string =>
+const regionToOuterMessage = (fn: FunctionSig, what: string): string =>
   `${fnName(fn)} runs inside a region, and ${what}: region memory kept by memory outside the region ` +
   "points at freed memory once `free` runs; copy the numbers out instead"
 
-export const outerToRegionMessage = (fn: FunctionSig, what: string): string =>
+const outerToRegionMessage = (fn: FunctionSig, what: string): string =>
   `${fnName(fn)} runs inside a region, and ${what}: memory outside a region kept by the region's memory ` +
   "may be released while the region still points at it; copy it into memory the region allocates instead"
 
-export const enterResultMessage = (fn: FunctionSig, table: TypeTable): string =>
+const enterResultMessage = (fn: FunctionSig, table: TypeTable): string =>
   `${fnName(fn)} answers \`${table.typeName(fn.returnType)}\`, and the function \`enter\` or \`enterWith\` runs ` +
   "may answer only a number, a `boolean`, an `enum` or a `Region`: anything else would point into the region " +
   "from outside it"
 
-export const threadsMessage = (fn: FunctionSig): string =>
+const threadsMessage = (fn: FunctionSig): string =>
   `${fnName(fn)} runs inside a region, and reaches \`scope()\`, \`spawn\`, a parallel body or a channel: ` +
   "another thread allocates from an arena of its own, not from the region"
 
 export const crossingMessage = (what: string, type: string): string =>
   `${what} is \`${type}\`, which holds a \`Region\`, and a region is entered only on the thread that made it`
 
-export const notFreshMessage = (fn: FunctionSig, ref: string): string =>
+const notFreshMessage = (fn: FunctionSig, ref: string): string =>
   `The function \`region\` or \`regionWith\` runs answers the region's root, which must be memory it allocated, ` +
   `and ${fnName(fn)} may not: ${ref}`
 
-export const growthMessage = (fn: FunctionSig, what: string): string =>
+const growthMessage = (fn: FunctionSig, what: string): string =>
   `${fnName(fn)} runs inside a region, and ${what}: storage outside the region that grows inside it ` +
   "would move into the region and be freed with it"
 
-export const noFactsMessage = (fn: FunctionSig, callee: FunctionSig): string =>
+const noFactsMessage = (fn: FunctionSig, callee: FunctionSig): string =>
   `${fnName(fn)} runs inside a region, and calls ${regionCalleeName(callee)}, which the region rules have no facts for`
 
-export const arenaStateMessage = (fn: FunctionSig): string =>
+const arenaStateMessage = (fn: FunctionSig): string =>
   `${fnName(fn)} runs inside a region, and reaches \`Arena.mark\` or \`Arena.used\`: ` +
   "inside a region they would read the region's own arena, not the thread's"
 

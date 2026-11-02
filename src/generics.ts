@@ -2342,7 +2342,7 @@ export const arrowElsewhereMessage = (): string =>
   "returned or called where it stands"
 
 /** The refusal for an arrow given to `expose` or `exposeWith` that reads a name of the function it is written in. */
-export const capturedMessage = (name: string): string =>
+const capturedMessage = (name: string): string =>
   `The arrow reads \`${name}\`, which belongs to the function it is written in: an arrow given to \`expose\` or ` +
   "`exposeWith` reads only its own parameters and the module's top-level names, so nothing it computes from the " +
   "plaintext leaves but its result; pass what it needs as `exposeWith`'s argument"
@@ -2353,7 +2353,7 @@ export const capturedMessage = (name: string): string =>
  * allocates in the region, and a capture would put memory outside the region
  * within its reach.
  */
-export const regionCapturedMessage = (name: string): string =>
+const regionCapturedMessage = (name: string): string =>
   `The arrow reads \`${name}\`, which belongs to the function it is written in: an arrow given to \`region\`, ` +
   "`regionWith`, `enter` or `enterWith` reads only its own parameters and the module's top-level names, so nothing " +
   "outside the region is in its reach; pass what it needs as `regionWith`'s or `enterWith`'s argument"
