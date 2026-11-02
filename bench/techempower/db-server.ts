@@ -46,6 +46,8 @@ export const TFB_FORTUNES: i32 = 4
 export const TFB_MAX_COUNT: i32 = 500
 /** The World table's ids are 1 to this. */
 export const TFB_WORLD_ROWS: i32 = 10000
+/** How many queries the carrier holds: room for every slot's every key. */
+export const TFB_QUERY_ROOM: i32 = 65536
 /** The most Fortune rows one request holds, and the bytes their messages may take. */
 const TFB_FORTUNE_ROWS: i32 = 256
 const TFB_FORTUNE_BYTES: i32 = 32768
@@ -193,9 +195,10 @@ export class TfbDb {
   /**
    * Builds the handler on `listener` with `slots` connections, registers the
    * entry's statements on `pool` (which must have no connection yet), and
-   * the carrier that connects it to `target`.
+   * the carrier that connects it to `target` with room for `queries`
+   * queries (`TFB_QUERY_ROOM`; a test passes fewer to fill it).
    */
-  constructor(listener: i32, slots: i32, pool: PgPool, target: PgTarget) {
+  constructor(listener: i32, slots: i32, pool: PgPool, target: PgTarget, queries: i32) {
     const router = new Router(new RouterLimits())
     router.add("GET", "/db")
     router.add("GET", "/queries")
@@ -214,7 +217,7 @@ export class TfbDb {
       types
     )
     const carrierLimits = new PgCarrierLimits()
-    carrierLimits.queries = 65536
+    carrierLimits.queries = queries
     carrierLimits.executions = 1024
     this.carrier = new PgCarrier(carrierLimits, pool, target, this.h)
     const batch = new PgBatchConfig()
@@ -572,8 +575,31 @@ export class TfbDb {
     }
   }
 
+  /** How many slots are free: every one of them once no request is in flight. */
+  freeSlots(): i32 {
+    return this.freeCount
+  }
+
+  /**
+   * Frees job `index`'s slot. A job answered while it still waits for room
+   * (a key failed after others were refused) leaves `waiting` here, so the
+   * slot's next request is never retried, or released, a second time.
+   */
   private release(index: i32): void {
-    this.jobs[index].req = null
+    const job: TfbJob = this.jobs[index]
+    job.req = null
+    if (job.listed) {
+      job.listed = false
+      let to: i32 = 0
+      for (let k: i32 = 0; k < this.waitingCount; k++) {
+        const other: i32 = this.waiting[k]
+        if (other !== index) {
+          this.waiting[to] = other
+          to += 1
+        }
+      }
+      this.waitingCount = to
+    }
     this.free[this.freeCount] = index
     this.freeCount += 1
   }

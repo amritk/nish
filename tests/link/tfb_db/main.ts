@@ -13,14 +13,20 @@
 //   4. /cached-queries: as many rows as asked, each the row the stand-in held
 //      when the table was read at start-up, the count clamped the same way.
 //   5. /updates: each row answered carries the number the stand-in now
-//      holds for its id, the update binds each id once, ascending, and the
-//      count is clamped like /queries.
+//      holds for its id, numbers that differ from the rows read before, the
+//      update binds each id once, ascending, and the count is clamped like
+//      /queries.
 //   6. /fortunes: the exact page TFB's verifier expects: the request-time
 //      row added, sorted by message, `& < > " '` escaped, the Japanese row
 //      byte for byte; `text/html; charset=utf-8`. A second request answers
 //      the same page from the reused buffer.
 //   7. A batch the stand-in refuses answers 503, and the next request is
 //      served again.
+//   8. With the carrier full, a request whose keys fail while the rest wait
+//      for room answers 503, and its slot's next request, a cached one while
+//      the table loads, is answered once: every slot comes back once.
+//   9. Every statement the entry prepares is the SQL it names, word for
+//      word, and header values match exactly, `Date` in its RFC 9110 form.
 import { copyBytes } from "nish/bytes"
 import { PgConfig, PgPool, pgTarget } from "nish/net/postgres"
 import {
@@ -39,12 +45,14 @@ import {
   tcpListen,
 } from "nish:net"
 import { secret, wipe } from "nish:secret"
-import { TfbDb } from "../../../bench/techempower/db-server"
+import { TFB_QUERY_ROOM, TfbDb } from "../../../bench/techempower/db-server"
 
 const ZERO: i32 = 0
 const AGAIN: i32 = -11
 const FIVE_SECONDS: i64 = 5000000000
 const ROWS: i32 = 10000
+/** The entry's connection slots. */
+const SLOTS: i32 = 64
 
 /** The statements the entry binds, by name; 0 for any other. */
 const KIND_OTHER: i32 = 0
@@ -252,6 +260,13 @@ class Backend {
   unordered: boolean = false
   /** Whether the next World batch is refused. */
   refuseWorld: boolean = false
+  /** Whether every read of the whole table is refused. */
+  refuseCache: boolean = false
+  /** The SQL each statement in `names` must be prepared with. */
+  sql: u8[][]
+  /** Statements prepared, and how many named one of `names` with other SQL or named none. */
+  parsed: i32 = 0
+  wrongSql: i32 = 0
 
   constructor() {
     this.listener = tcpListen("127.0.0.1", 0, 16)
@@ -261,6 +276,16 @@ class Backend {
       this.conns.push(new BackendConn())
     }
     this.names = [ascii("world"), ascii("fortune"), ascii("cache"), ascii("update")]
+    this.sql = [
+      ascii(
+        "select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord) cross join lateral (select id, randomnumber from world where id = q.key) as t order by q.ord"
+      ),
+      ascii("select id, message from fortune"),
+      ascii("select id, randomnumber from world"),
+      ascii(
+        "update world set randomnumber = v.r from (select unnest($1::int8[]) as id, unnest($2::int8[]) as r) as v where world.id = v.id"
+      ),
+    ]
     this.peer = new Array<u8>(32)
     this.world = new Array<i32>(ROWS + 1)
     for (let id: i32 = 1; id <= ROWS; id++) {
@@ -279,6 +304,7 @@ class Backend {
       ascii("Computers make very fast, very accurate mistakes."),
       ascii('<script>alert("This should not be displayed in a browser alert box.");</script>'),
       ascii("フレームワークのベンチマーク"),
+      ascii("Fortune & Co: fish & chips."),
     ]
     this.keys = new Array<i32>(4096)
     this.values = new Array<i32>(4096)
@@ -398,7 +424,13 @@ class Backend {
         continue
       }
       if (type === 80) {
-        // Parse
+        // Parse: the statement's SQL must be the one its name stands for.
+        const query: i32 = cstrEnd(input, body, end) + 1
+        const kind: i32 = this.kindOf(input, body, end)
+        this.parsed += 1
+        if (kind === KIND_OTHER || !cstrIs(input, query, end, this.sql[kind - 1])) {
+          this.wrongSql += 1
+        }
         c.begin(49)
         c.end()
       } else if (type === 68) {
@@ -430,6 +462,8 @@ class Backend {
         // Execute
         if (c.kind === KIND_WORLD && this.refuseWorld) {
           this.refuseWorld = false
+          c.error()
+        } else if (c.kind === KIND_CACHE && this.refuseCache) {
           c.error()
         } else {
           this.execute(c)
@@ -526,7 +560,8 @@ class App {
   /** The stand-in's World table as the entry read it at start-up. */
   snapshot: i32[]
 
-  constructor() {
+  /** `queries` is the carrier's room: `TFB_QUERY_ROOM`, or fewer to fill it. */
+  constructor(queries: i32) {
     const listener: i32 = tcpListen("127.0.0.1", 0, 64)
     this.port = netLocalPort(listener)
     this.backend = new Backend()
@@ -540,7 +575,7 @@ class App {
     const password = secret(ascii("pw"))
     this.pool = new PgPool(config, password, toI32(2), toI32(1024))
     wipe(password)
-    this.db = new TfbDb(listener, toI32(64), this.pool, pgTarget("127.0.0.1", this.backend.port))
+    this.db = new TfbDb(listener, SLOTS, this.pool, pgTarget("127.0.0.1", this.backend.port), queries)
     this.headEnd = ascii("\r\n\r\n")
     this.contentLength = ascii("content-length: ")
   }
@@ -692,15 +727,72 @@ const check = (app: App, name: string, ok: boolean): void => {
   }
 }
 
-/** Whether the head of the last response holds the header line `line` (lower case, no CRLF). */
-const header = (c: Client, line: string): boolean =>
-  find(c.buf, ZERO, c.headEnd + 2, ascii(`\r\n${line}\r\n`)) >= 0
+/** Where the value of header `name` (lower case; its name matched in any case) starts in the last head, or -1. */
+const valueAt = (c: Client, name: string): i32 => {
+  const label: u8[] = ascii(`\r\n${name}: `)
+  const at: i32 = find(c.buf, ZERO, c.headEnd, label)
+  return at < 0 ? -1 : at + toI32(label.length)
+}
 
-/** Whether the head carries `Server: nish`, a `Date` and `Content-Type: type`. */
+/** Whether the last head holds header `name` with exactly the value `value`: the name in any case, the value byte for byte. */
+const header = (c: Client, name: string, value: string): boolean => {
+  const at: i32 = valueAt(c, name)
+  const v: u8[] = ascii(`${value}\r\n`)
+  if (at < 0 || at + toI32(v.length) > c.headEnd + 2) {
+    return false
+  }
+  for (let k: i32 = 0; k < toI32(v.length); k++) {
+    if (c.buf[at + k] !== v[k]) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Whether `buf[at, at + n)` is all ASCII digits. */
+const digitsAt = (buf: u8[], at: i32, n: i32): boolean => {
+  for (let k: i32 = 0; k < n; k++) {
+    if (toI32(buf[at + k]) < 48 || toI32(buf[at + k]) > 57) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Whether `buf[at, at + 3)` is one of the three-letter names in `names`, byte for byte. */
+const nameAt = (buf: u8[], at: i32, names: string): boolean => {
+  const list: u8[] = ascii(names)
+  for (let n: i32 = 0; n + 3 <= toI32(list.length); n += 3) {
+    if (buf[at] === list[n] && buf[at + 1] === list[n + 1] && buf[at + 2] === list[n + 2]) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether the last head's `Date` is an RFC 9110 IMF-fixdate, `Sun, 06 Nov 1994 08:49:37 GMT`, and its line ends there. */
+const dated = (c: Client): boolean => {
+  const at: i32 = valueAt(c, "date")
+  if (at < 0 || at + 31 > c.headEnd + 2) {
+    return false
+  }
+  const b: u8[] = c.buf
+  // `0` is any digit; the day and month names are checked after.
+  const shape: u8[] = ascii("Www, 00 Mmm 0000 00:00:00 GMT\r\n")
+  for (let k: i32 = 0; k < toI32(shape.length); k++) {
+    const want: i32 = toI32(shape[k])
+    const got: i32 = toI32(b[at + k])
+    const name: boolean = k < 3 || (k >= 8 && k <= 10)
+    if (!name && (want === 48 ? got < 48 || got > 57 : got !== want)) {
+      return false
+    }
+  }
+  return nameAt(b, at, "MonTueWedThuFriSatSun") && nameAt(b, at + 8, "JanFebMarAprMayJunJulAugSepOctNovDec")
+}
+
+/** Whether the head carries `Server: nish`, a well-formed `Date` and `Content-Type: type`. */
 const headers = (c: Client, type: string): boolean =>
-  header(c, "server: nish") &&
-  find(c.buf, ZERO, c.headEnd, ascii("\r\ndate: ")) >= 0 &&
-  header(c, `content-type: ${type}`)
+  header(c, "server", "nish") && dated(c) && header(c, "content-type", type)
 
 /**
  * The rows of the last JSON body, `{"id":n,"randomNumber":m}` each, into
@@ -853,14 +945,46 @@ const cached = (app: App, ids: i32[], numbers: i32[]): void => {
 const updates = (app: App, ids: i32[], numbers: i32[]): void => {
   const c: Client = connect(app)
   const w: i32[] = app.backend.world
+  const prior: i32[] = new Array<i32>(ROWS + 1)
+  for (let id: i32 = 1; id <= ROWS; id++) {
+    prior[id] = w[id]
+  }
   const before: i32 = app.backend.updates
   check(app, "/updates?queries=20 answers 20 rows, each the row as written", count(app, c, "/updates?queries=20", w, ids, numbers) === 20)
   check(app, "the update is one statement", app.backend.updates === before + 1)
+  // A fresh number per row: one equals the row's old number once in 10000, so 20 all equal never passes.
+  let changed: i32 = 0
+  let inRange: boolean = true
+  for (let k: i32 = 0; k < 20; k++) {
+    if (numbers[k] !== prior[ids[k]]) {
+      changed += 1
+    }
+    if (numbers[k] < 1 || numbers[k] > ROWS) {
+      inRange = false
+    }
+  }
+  check(app, "the rows written carry new numbers, not the ones read", changed > 0)
+  check(app, "every number written is 1 to 10000", inRange)
+  let table: boolean = true
+  for (let id: i32 = 1; id <= ROWS; id++) {
+    let answered: boolean = false
+    for (let k: i32 = 0; k < 20; k++) {
+      if (ids[k] === id) {
+        answered = true
+      }
+    }
+    if (!answered && w[id] !== prior[id]) {
+      table = false
+    }
+  }
+  check(app, "no row the update did not answer changed", table)
   check(app, "an update with no count answers 1 row", count(app, c, "/updates", w, ids, numbers) === 1)
+  check(app, "an empty update count answers 1 row", count(app, c, "/updates?queries=", w, ids, numbers) === 1)
   check(app, "an update count of 0 answers 1 row", count(app, c, "/updates?queries=0", w, ids, numbers) === 1)
+  check(app, "a negative update count answers 1 row", count(app, c, "/updates?queries=-3", w, ids, numbers) === 1)
   check(app, "an update count that is not a number answers 1 row", count(app, c, "/updates?queries=bar", w, ids, numbers) === 1)
   check(app, "an update count of 501 answers 500 rows", count(app, c, "/updates?queries=501", w, ids, numbers) === 500)
-  check(app, "every update binds each id once, ascending", !app.backend.unordered && app.backend.updates === before + 5)
+  check(app, "every update binds each id once, ascending", !app.backend.unordered && app.backend.updates === before + 7)
   // 500 random ids of 10000 repeat one almost surely; the rows that share an id share its number.
   let shared: boolean = true
   for (let k: i32 = 0; k < 500; k++) {
@@ -874,7 +998,7 @@ const updates = (app: App, ids: i32[], numbers: i32[]): void => {
   netClose(c.fd)
 }
 
-/** The page TFB's verifier expects, its rows sorted by message. */
+/** The page TFB's verifier expects, its rows sorted by message; row 13 carries the `&` its rows lack. */
 const FORTUNES: string =
   "<!DOCTYPE html><html><head><title>Fortunes</title></head><body><table><tr><th>id</th><th>message</th></tr>" +
   "<tr><td>11</td><td>&lt;script&gt;alert(&quot;This should not be displayed in a browser alert box.&quot;);&lt;/script&gt;</td></tr>" +
@@ -888,6 +1012,7 @@ const FORTUNES: string =
   "<tr><td>10</td><td>Computers make very fast, very accurate mistakes.</td></tr>" +
   "<tr><td>6</td><td>Emacs is a nice operating system, but I prefer UNIX. — Tom Christaensen</td></tr>" +
   "<tr><td>9</td><td>Feature: A bug with seniority.</td></tr>" +
+  "<tr><td>13</td><td>Fortune &amp; Co: fish &amp; chips.</td></tr>" +
   "<tr><td>1</td><td>fortune: No such file or directory</td></tr>" +
   "<tr><td>12</td><td>フレームワークのベンチマーク</td></tr>" +
   "</table></body></html>"
@@ -917,18 +1042,45 @@ const fortunes = (app: App): void => {
   netClose(c.fd)
 }
 
+/**
+ * A second entry with room for 4 queries: a 20-key request fills it and
+ * waits for room, its keys fail, and it answers 503 while still waiting.
+ * Its slot's next request is a cached one taken while the table loads;
+ * it must be answered once, and every slot must come back once.
+ */
+const stale = (app: App, ids: i32[], numbers: i32[]): void => {
+  const full = new App(toI32(4))
+  full.backend.refuseCache = true
+  full.backend.refuseWorld = true
+  const c: Client = connect(full)
+  const refused: boolean = get(full, c, "/queries?queries=20") && c.status === 503
+  check(app, "keys failing while the rest wait for room answer 503", refused)
+  full.backend.refuseCache = false
+  const answered: boolean =
+    get(full, c, "/cached-queries?count=3") && c.status === 200 && worlds(c, true, ids, numbers) === 3
+  check(app, "its slot's next request, cached during warm-up, is answered", answered && rowsMatch(full.snapshot, ids, numbers, toI32(3)))
+  for (let k: i32 = 0; k < 20; k++) {
+    full.turn()
+  }
+  check(app, "every slot comes back once", full.db.freeSlots() === SLOTS)
+  const again: boolean = get(full, c, "/db") && c.status === 200 && worlds(c, false, ids, numbers) === 1
+  check(app, "the entry serves on after", again && full.db.freeSlots() === SLOTS)
+  check(app, "the full entry failed only the one request", full.db.failures === 1)
+  netClose(c.fd)
+}
+
 const refusal = (app: App, ids: i32[], numbers: i32[]): void => {
   const c: Client = connect(app)
   app.backend.refuseWorld = true
   const ok: boolean = get(app, c, "/db")
-  check(app, "a refused batch answers 503 with Server", ok && c.status === 503 && header(c, "server: nish"))
+  check(app, "a refused batch answers 503 with Server", ok && c.status === 503 && header(c, "server", "nish"))
   const next: boolean = get(app, c, "/db") && c.status === 200 && worlds(c, false, ids, numbers) === 1
   check(app, "the next /db is served again", next && rowsMatch(app.backend.world, ids, numbers, toI32(1)))
   netClose(c.fd)
 }
 
 export const main = (): i32 => {
-  const app = new App()
+  const app = new App(TFB_QUERY_ROOM)
   const ids: i32[] = new Array<i32>(512)
   const numbers: i32[] = new Array<i32>(512)
   single(app, ids, numbers)
@@ -939,5 +1091,12 @@ export const main = (): i32 => {
   fortunes(app)
   refusal(app, ids, numbers)
   check(app, "no query failed but the one refused", app.db.failures === 1)
+  check(app, "every slot is free at the end", app.db.freeSlots() === SLOTS)
+  stale(app, ids, numbers)
+  check(
+    app,
+    "every statement was prepared with the SQL its name stands for",
+    app.backend.parsed >= 4 && app.backend.wrongSql === 0
+  )
   return app.failures === 0 ? 0 : 1
 }

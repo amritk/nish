@@ -5,8 +5,9 @@ A Nish entry for every TechEmpower Framework Benchmarks (TFB) test type:
 `update`, `cached-query` and `fortune` on Postgres (the test named
 `postgres`), in the layout upstream keeps under
 `frameworks/<Language>/<name>/`: a benchmark config, `nish.dockerfile` for
-the test named `default` and `nish-postgres.dockerfile` for `postgres`. The config is `benchmark-config.json` here, because
-the repository's file names are kebab-case (`npm run lint`); it becomes
+the test named `default` and `nish-postgres.dockerfile` for `postgres`. The
+config is `benchmark-config.json` here, because the repository's file names
+are kebab-case (`npm run lint`); it becomes
 upstream's `benchmark_config.json` when it is copied into that layout (WP39
 D2). It is WP39's E5
 ([docs/wp39-http-server.md](../../docs/wp39-http-server.md)).
@@ -102,19 +103,40 @@ number, or below 1 is 1, and a count above 500 is 500. If the database fails a
 request, it is answered 503.
 
 - **Reads are batched across requests.** Every World id that an in-flight
-  `/db`, `/queries` or `/updates` asks for is keyed into one `PgBatcher`, so
-  one execution of `select ... where id = q.key` over an `unnest` of the keys
-  carries the ids of every request waiting in that turn. Each row is still a
-  read of its own id. TFB's rules forbid bulk-selecting a request's rows in
-  one `where id in (...)` query, and whether a cross-request batch counts as
-  such a query is the verifier's and the maintainers' call. That risk is open
-  until the entry is shown to them, which this stage does not do.
+  `/db`, `/queries` or `/updates` asks for is keyed into one `PgBatcher`. It
+  sends one statement for every id waiting in that turn:
+
+  ```sql
+  select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord)
+  cross join lateral (select id, randomnumber from world where id = q.key) as t
+  order by q.ord
+  ```
+
+  Each row is a lookup of its own id, but one statement carries many rows, and
+  a request that is alone in its turn gets one statement carrying all of its
+  rows. TFB's rules forbid bulk-selecting a request's rows in one query, so
+  whether this complies is **unresolved**. It is the owner's call, made before
+  any submission, and this stage does not make it. If the answer is no, the
+  fallback is a pipelined one-statement-per-row mode: each id is its own
+  `select id, randomnumber from world where id = $1`, many of them in flight
+  on a connection at once.
 - **An update is one statement.** A request's ids are sorted and made
   distinct, which keeps concurrent updates from deadlocking. Rows sharing an id
   share its new number. The update is
   `update world ... from (select unnest($1::int8[]), unnest($2::int8[]))`.
 - **Cached queries are read from memory.** Each worker reads World once at
   start-up into an array and answers from it. No response is cached.
+- **Each worker allocates about 55 MB at start-up.** It holds 1,024 request
+  slots, and each slot owns its buffers (about 54 KB), so the slots come to
+  about 55 MB a worker before the first request. One worker a core means
+  that figure times the core count.
+- **A request waiting for room has no time limit.** When the carrier has no
+  room for a request's queries, the request waits and is retried every turn.
+  A lost database connection fails its queries, which frees room for the
+  waiting requests. A database that keeps the connection open but
+  never answers is not detected: the carrier has no query timeout, so the
+  queries in flight and the requests waiting behind them hang until it does.
+  Adding one is the carrier's work, not this entry's.
 - **Fortunes are rendered into one reused buffer.** The rows are sorted by
   their UTF-8 bytes, `& < > " '` are escaped as `&amp; &lt; &gt; &quot; &#39;`,
   and every other byte, the Japanese row's included, is copied untouched.

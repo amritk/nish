@@ -22,8 +22,13 @@ PASS  a cached count of 501 answers 500 rows
 PASS  a cached query reads no row from the database
 PASS  /updates?queries=20 answers 20 rows, each the row as written
 PASS  the update is one statement
+PASS  the rows written carry new numbers, not the ones read
+PASS  every number written is 1 to 10000
+PASS  no row the update did not answer changed
 PASS  an update with no count answers 1 row
+PASS  an empty update count answers 1 row
 PASS  an update count of 0 answers 1 row
+PASS  a negative update count answers 1 row
 PASS  an update count that is not a number answers 1 row
 PASS  an update count of 501 answers 500 rows
 PASS  every update binds each id once, ascending
@@ -35,3 +40,10 @@ PASS  a second /fortunes answers the same page from the reused buffer
 PASS  a refused batch answers 503 with Server
 PASS  the next /db is served again
 PASS  no query failed but the one refused
+PASS  every slot is free at the end
+PASS  keys failing while the rest wait for room answer 503
+PASS  its slot's next request, cached during warm-up, is answered
+PASS  every slot comes back once
+PASS  the entry serves on after
+PASS  the full entry failed only the one request
+PASS  every statement was prepared with the SQL its name stands for

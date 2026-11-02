@@ -28,5 +28,7 @@ RUN nish db-main.ts --link db-entry --profile speed
 EXPOSE 8080
 
 # The carrier connects to a numeric address only, so the database's name is
-# resolved here, once, at start. One worker a core, 4 connections each.
-CMD ["sh", "-c", "exec ./db-entry 5432 benchmarkdbuser benchmarkdbpass hello_world 8080 0.0.0.0 \"$(getent ahostsv4 tfb-database | awk 'NR==1 {print $1}')\" 0 4"]
+# resolved here, once, at start; an empty answer stops the container with a
+# message rather than starting a server with no database. One worker a core,
+# 4 connections each.
+CMD ["sh", "-c", "db=$(getent ahostsv4 tfb-database | awk 'NR==1 {print $1}'); if [ -z \"$db\" ]; then echo 'nish-postgres: tfb-database does not resolve' >&2; exit 1; fi; exec ./db-entry 5432 benchmarkdbuser benchmarkdbpass hello_world 8080 0.0.0.0 \"$db\" 0 4"]

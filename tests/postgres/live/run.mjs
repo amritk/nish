@@ -336,7 +336,11 @@ const reset = async (exe) => {
   };
 };
 
-/** TFB's Fortune table, as its setup scripts load it. */
+/**
+ * TFB's Fortune table, as its setup scripts load it, and one row of ours: an
+ * `&` in a message, which TFB's twelve rows lack, so the page's escaping of
+ * it is checked.
+ */
 const FORTUNES = [
   "fortune: No such file or directory",
   "A computer scientist is someone who fixes things that aren't broken.",
@@ -350,6 +354,7 @@ const FORTUNES = [
   "Computers make very fast, very accurate mistakes.",
   '<script>alert("This should not be displayed in a browser alert box.");</script>',
   "フレームワークのベンチマーク",
+  "Fortune & Co: fish & chips.",
 ];
 
 /** The fortunes page TFB's verifier expects: the request-time row added, sorted by message bytes, escaped. */
@@ -410,11 +415,33 @@ const rowsAreTable = (rows) => {
 };
 
 /**
+ * A statement that fails when every distinct row of `rows` still holds the
+ * number `world_before` (the table copied before an update) had for its id.
+ */
+const rowsChanged = (rows) => {
+  const pairs = [...new Map(rows.map((r) => [r.id, r.randomNumber])).entries()];
+  const values = pairs.map(([id, n]) => `(${id}, ${n})`).join(", ");
+  return (
+    `select 1 / (case when count(*) < ${pairs.length} then 1 else 0 end) from world_before ` +
+    `where (id, randomnumber) in (values ${values})`
+  );
+};
+
+/**
  * The TechEmpower database entry against TFB's tables: each test type's
  * shape, headers and count clamping, its rows read back from the server, an
- * update's rows written, the fortunes page byte for byte, 64 requests at once,
- * and a clean exit on SIGTERM. It runs two prefork workers on one
- * `SO_REUSEPORT` port, so the requests are spread over two processes.
+ * update's rows written and changed, the fortunes page byte for byte, 64
+ * requests at once, and a clean exit on SIGTERM. It runs two prefork workers
+ * on one `SO_REUSEPORT` port. The sequential requests go over one kept-alive
+ * connection, so one worker likely answers them all; the 64 at once open
+ * their own connections and can reach both.
+ *
+ * The `world` and `fortune` tables are created unqualified, through `live`,
+ * whose connections set `search_path=nish_live`, so they land in that schema.
+ * The server sets no `search_path` and its SQL names the tables bare, as TFB's
+ * does: it finds them only because the throwaway cluster's role is also
+ * `nish_live`, which the default `"$user"` entry resolves to. Against a
+ * `$PG_TEST_URL` with another role it would not.
  */
 const tfb = async (exe, tfbExe, db) => {
   const quote = (s) => `'${s.replaceAll("'", "''")}'`;
@@ -474,7 +501,10 @@ const tfb = async (exe, tfbExe, db) => {
       ["/queries", 1],
       ["/queries?queries=foo", 1],
       ["/queries?queries=0", 1],
+      ["/queries?queries=", 1],
+      ["/queries?queries=-3", 1],
       ["/queries?queries=501", 500],
+      ["/queries?queries=99999999999999", 500],
     ]) {
       const r = await get(http, path);
       expect(`${path} headers`, headed(r, "application/json"));
@@ -488,18 +518,32 @@ const tfb = async (exe, tfbExe, db) => {
     for (const [path, n] of [
       ["/cached-queries?count=20", 20],
       ["/cached-queries?count=x", 1],
+      ["/cached-queries?count=0", 1],
       ["/cached-queries?count=501", 500],
     ]) {
       const r = await get(http, path);
       expect(`${path} headers`, headed(r, "application/json"));
-      expect(`${path} is ${n} rows`, worldRows(json(r), n));
+      const rows = json(r);
+      expect(`${path} is ${n} rows`, worldRows(rows, n));
+      // No update has run yet, so the cache still matches the table.
+      if (worldRows(rows, n)) {
+        const cached = live(exe, db, "exec", [rowsAreTable(rows)]);
+        expect(`${path}'s rows are the table's`, cached.status === 0);
+      }
     }
 
     for (const [path, n] of [
       ["/updates?queries=20", 20],
       ["/updates?queries=bar", 1],
+      ["/updates?queries=0", 1],
+      ["/updates?queries=-3", 1],
       ["/updates?queries=501", 500],
     ]) {
+      const copied = live(exe, db, "exec", [
+        "drop table if exists world_before",
+        "create table world_before as select * from world",
+      ]);
+      expect(`${path}: the table is copied first`, copied.status === 0);
       const r = await get(http, path);
       expect(`${path} headers`, headed(r, "application/json"));
       const rows = json(r);
@@ -507,6 +551,12 @@ const tfb = async (exe, tfbExe, db) => {
       if (worldRows(rows, n)) {
         const written = live(exe, db, "exec", [rowsAreTable(rows)]);
         expect(`${path}'s rows are written`, written.status === 0);
+        // One row draws its old number again 1 time in 10000, so only the
+        // many-row counts require a change.
+        if (n > 1) {
+          const changed = live(exe, db, "exec", [rowsChanged(rows)]);
+          expect(`${path}'s rows carry new numbers`, changed.status === 0);
+        }
       }
     }
 
@@ -530,7 +580,11 @@ const tfb = async (exe, tfbExe, db) => {
     const status = await exited;
     clearTimeout(timer);
     expect("exits 0 on SIGTERM", status === 0);
-    live(exe, db, "exec", ["drop table if exists world", "drop table if exists fortune"]);
+    live(exe, db, "exec", [
+      "drop table if exists world",
+      "drop table if exists fortune",
+      "drop table if exists world_before",
+    ]);
   }
   return { ok: problems.length === 0, detail: `failed: ${problems.join("; ")}; stdout ${JSON.stringify(out)}` };
 };

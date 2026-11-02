@@ -15,7 +15,7 @@ import { signalFd } from "nish:process"
 import { secret, wipe } from "nish:secret"
 import { PgConfig, PgPool, pgTarget } from "nish/net/postgres"
 import { PreforkConfig, preforkArgs, preforkWith } from "nish/net/prefork"
-import { TfbDb, tfbAscii } from "./db-server"
+import { TFB_QUERY_ROOM, TfbDb, tfbAscii } from "./db-server"
 
 /** `SO_REUSEPORT`, so each worker binds the port, and `TCP_NODELAY` on every accepted socket. */
 const LISTEN_FLAGS: i32 = 3
@@ -66,7 +66,7 @@ export const main = (): i32 => {
   const password = secret(tfbAscii(arg(args, 3, "")))
   const pool = new PgPool(config, password, connections, 65536)
   wipe(password)
-  const db = new TfbDb(listener, SLOTS, pool, pgTarget(pgHost, pgPort))
+  const db = new TfbDb(listener, SLOTS, pool, pgTarget(pgHost, pgPort), TFB_QUERY_ROOM)
   db.h.watch(signalFd(), SIGNAL)
   console.log(`listening ${port}`)
   while (true) {
