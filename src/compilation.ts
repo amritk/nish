@@ -2365,7 +2365,7 @@ export class Compilation {
               program.source,
               call.node.start,
               call.node.end,
-              crossingMessage(what, table.typeName(type))
+              crossingMessage(table, what, type)
             )
             break
           }
@@ -2379,7 +2379,7 @@ export class Compilation {
               program.source,
               call.node.start,
               call.node.end,
-              crossingMessage(what, table.typeName(type))
+              crossingMessage(table, what, type)
             )
             break
           }

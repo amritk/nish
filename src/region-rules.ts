@@ -118,6 +118,18 @@ const textOf = (program: CheckedProgram, node: Node): string => {
   return end < 0 ? text : `${text.substring(0, end)} ...`
 }
 
+/** What a literal does, for a message: "puts `value` in a literal". */
+const putsText = (program: CheckedProgram, value: Node): string =>
+  `puts \`${textOf(program, value)}\` in a literal`
+
+/** What a store does, for a message: "stores `value` into `target`". */
+const storesText = (program: CheckedProgram, value: Node, target: Node): string =>
+  `stores \`${textOf(program, value)}\` into \`${textOf(program, target)}\``
+
+/** What handing `arg` to `callee` does, for a message: "hands `arg` to `f`, which ...". */
+const handsText = (program: CheckedProgram, arg: Node, callee: string, which: string): string =>
+  `hands \`${textOf(program, arg)}\` to ${callee}, ${which}`
+
 const regionToOuterMessage = (fn: FunctionSig, what: string): string =>
   `${fnName(fn)} runs inside a region, and ${what}: region memory kept by memory outside the region ` +
   "points at freed memory once `free` runs; copy the numbers out instead"
@@ -125,6 +137,32 @@ const regionToOuterMessage = (fn: FunctionSig, what: string): string =>
 const outerToRegionMessage = (fn: FunctionSig, what: string): string =>
   `${fnName(fn)} runs inside a region, and ${what}: memory outside a region kept by the region's memory ` +
   "may be released while the region still points at it; copy it into memory the region allocates instead"
+
+/** `outerToRegionMessage` for a value put in a literal. */
+const literalMessage = (fn: FunctionSig, program: CheckedProgram, value: Node): string =>
+  outerToRegionMessage(fn, putsText(program, value))
+
+/** `outerToRegionMessage` for `arg` handed to `callee`. */
+const handsOuterMessage = (
+  fn: FunctionSig,
+  program: CheckedProgram,
+  arg: Node,
+  callee: string,
+  which: string
+): string => outerToRegionMessage(fn, handsText(program, arg, callee, which))
+
+/** `regionToOuterMessage` for `arg` handed to `callee`. */
+const handsRegionMessage = (
+  fn: FunctionSig,
+  program: CheckedProgram,
+  arg: Node,
+  callee: string,
+  which: string
+): string => regionToOuterMessage(fn, handsText(program, arg, callee, which))
+
+/** `growthMessage` for `arg` handed to `callee`, which may grow it. */
+const handsGrowthMessage = (fn: FunctionSig, program: CheckedProgram, arg: Node, callee: string): string =>
+  growthMessage(fn, handsText(program, arg, callee, "which may grow it"))
 
 const enterResultMessage = (fn: FunctionSig, table: TypeTable): string =>
   `${fnName(fn)} answers \`${table.typeName(fn.returnType)}\`, and the function \`enter\` or \`enterWith\` runs ` +
@@ -135,8 +173,8 @@ const threadsMessage = (fn: FunctionSig): string =>
   `${fnName(fn)} runs inside a region, and reaches \`scope()\`, \`spawn\`, a parallel body or a channel: ` +
   "another thread allocates from an arena of its own, not from the region"
 
-export const crossingMessage = (what: string, type: string): string =>
-  `${what} is \`${type}\`, which holds a \`Region\`, and a region is entered only on the thread that made it`
+export const crossingMessage = (table: TypeTable, what: string, type: i32): string =>
+  `${what} is \`${table.typeName(type)}\`, which holds a \`Region\`, and a region is entered only on the thread that made it`
 
 const notFreshMessage = (fn: FunctionSig, ref: string): string =>
   `The function \`region\` or \`regionWith\` runs answers the region's root, which must be memory it allocated, ` +
@@ -224,17 +262,6 @@ const collectArrowReturns = (node: Node, out: Node[]): void => {
   for (const child of node.children) {
     collectArrowReturns(child, out)
   }
-}
-
-/** The names an arrow's parameters bind. */
-const arrowParamNames = (arrow: Node): string[] => {
-  const out: string[] = []
-  for (const param of arrow.children[1].children) {
-    if (param.kind === N_PARAM && param.children[0].kind === N_IDENT) {
-      out.push(param.children[0].text)
-    }
-  }
-  return out
 }
 
 /**
@@ -524,8 +551,7 @@ class RegionWalk {
       return
     }
     if (target.kind === N_MEMBER || target.kind === N_INDEX) {
-      const what = `stores \`${textOf(this.program, value)}\` into \`${textOf(this.program, target)}\``
-      this.store(this.origin(target.children[0]), stored, node, what)
+      this.store(this.origin(target.children[0]), stored, node, storesText(this.program, value, target))
     }
   }
 
@@ -534,10 +560,7 @@ class RegionWalk {
       const value = child.kind === N_PROPERTY ? child.children[child.children.length - 1] : child
       const o = this.origin(value)
       if (o !== ORIGIN_NONE && mayBeOuter(o)) {
-        this.report(
-          child,
-          outerToRegionMessage(this.fn, `puts \`${textOf(this.program, value)}\` in a literal`)
-        )
+        this.report(child, literalMessage(this.fn, this.program, value))
       }
     }
   }
@@ -581,8 +604,10 @@ class RegionWalk {
     for (const arg of node.children[1].children) {
       const a = unwrapParens(arg)
       if (a.kind === N_ARROW) {
-        for (const name of arrowParamNames(a)) {
-          this.bindArrowParam(name, around)
+        for (const param of a.children[1].children) {
+          if (param.kind === N_PARAM && param.children[0].kind === N_IDENT) {
+            this.bindArrowParam(param.children[0].text, around)
+          }
         }
         this.visit(a.children[3])
       } else {
@@ -606,9 +631,8 @@ class RegionWalk {
     }
     if (method === "push" || method === "unshift" || method === "splice" || method === "fill") {
       for (const arg of node.children[1].children) {
-        const what = `stores \`${textOf(this.program, arg)}\` into \`${textOf(this.program, receiver)}\``
         if (!isCopied(this.table, this.typeOf(arg))) {
-          this.store(holder, this.origin(arg), node, what)
+          this.store(holder, this.origin(arg), node, storesText(this.program, arg, receiver))
         }
       }
     }
@@ -632,37 +656,37 @@ class RegionWalk {
       anyOuter = anyOuter || mayBeOuter(o)
     }
     const name = regionCalleeName(callee)
-    for (let i = 0; i < handed.length; i++) {
+    for (let i = 0; i < origins.length; i++) {
       const pp: PointerParamFacts | null = f.pointerParamAt(i + offset)
       const o = origins[i]
       if (o === ORIGIN_NONE || o === ORIGIN_SCALAR) {
         continue
       }
-      const arg = textOf(this.program, handed[i])
+      const arg = i < handed.length ? handed[i] : node
       if (pp === null) {
         // A `string` has no pointer facts, so a constructor is taken to keep it.
         if (isNew && mayBeOuter(o)) {
-          this.report(node, outerToRegionMessage(this.fn, `hands \`${arg}\` to ${name}, which may keep it`))
+          this.report(node, handsOuterMessage(this.fn, this.program, arg, name, "which may keep it"))
         }
         continue
       }
       if (mayBeOuter(o)) {
         if (pp.polluted) {
-          this.report(
-            node,
-            regionToOuterMessage(this.fn, `hands \`${arg}\` to ${name}, which stores into it`)
-          )
+          this.report(node, handsRegionMessage(this.fn, this.program, arg, name, "which stores into it"))
         } else if (pp.writesReach && f.allocates) {
-          this.report(node, growthMessage(this.fn, `hands \`${arg}\` to ${name}, which may grow it`))
+          this.report(node, handsGrowthMessage(this.fn, this.program, arg, name))
         } else if (isNew && (pp.keptInThis || pp.captured)) {
-          this.report(node, outerToRegionMessage(this.fn, `hands \`${arg}\` to ${name}, which keeps it`))
+          this.report(node, handsOuterMessage(this.fn, this.program, arg, name, "which keeps it"))
         }
       } else if (pp.polluted && anyOuter) {
         this.report(
           node,
-          outerToRegionMessage(
+          handsOuterMessage(
             this.fn,
-            `hands \`${arg}\` to ${name}, which may store memory outside the region into it`
+            this.program,
+            arg,
+            name,
+            "which may store memory outside the region into it"
           )
         )
       }

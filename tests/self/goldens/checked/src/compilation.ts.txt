@@ -1204,7 +1204,7 @@ function Compilation.checkParallel(this: Compilation): void -> @Compilation.chec
 function Compilation.checkRegions(this: Compilation, facts: FactsTable): void -> @Compilation.checkRegions [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: DiagnosticSink.report FreshResults.constructor TypeTable.typeName crossingMessage holdsRegion nish_array_grow nish_str_concat parallelBodyOf regionCallFindings scopeSymbol
+  calls: DiagnosticSink.report FreshResults.constructor crossingMessage holdsRegion nish_array_grow nish_str_concat parallelBodyOf regionCallFindings scopeSymbol
   pointer this: size=200 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=true captured=true passedTo=FreshResults.constructor#3 regionCallFindings#2
   stackSites=3 stackLocals=3
@@ -1237,14 +1237,12 @@ function Compilation.checkRegions(this: Compilation, facts: FactsTable): void ->
   local +45:19 what: string (const)
   callee +46:13 DiagnosticSink.report -> @DiagnosticSink.report
   callee +50:15 crossingMessage -> @crossingMessage
-  callee +50:37 TypeTable.typeName -> @TypeTable.typeName
   local +56:18 call: ParallelCall (const)
   local +57:20 type: i32 (const)
   callee +58:15 holdsRegion -> @holdsRegion
   local +59:19 what: string (const)
   callee +60:13 DiagnosticSink.report -> @DiagnosticSink.report
   callee +64:15 crossingMessage -> @crossingMessage
-  callee +64:37 TypeTable.typeName -> @TypeTable.typeName
 function Compilation.checkSecrets(this: Compilation, facts: FactsTable): void -> @Compilation.checkSecrets [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
