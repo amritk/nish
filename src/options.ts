@@ -230,6 +230,13 @@ export class Options {
   sandboxRead: string[]
   sandboxWrite: string[]
   /**
+   * WP40 §2a: the programs, and the interpreters the kernel runs them
+   * through, that a dependency's `process.spawn` grant names, when that grant
+   * is the only way the program spawns. Under `--sandbox` the wrapper passes
+   * them as the exec allowlist; empty leaves EXECUTE granted beneath `/`.
+   */
+  sandboxExec: string[]
+  /**
    * WP40: `--update-capability-lock` computes the capability lockfile instead
    * of holding the build to it (`Compilation.checkCapabilityLock`).
    */
@@ -269,6 +276,7 @@ export class Options {
     this.sandboxCapabilities = 0
     this.sandboxRead = []
     this.sandboxWrite = []
+    this.sandboxExec = []
     this.updateCapabilityLock = false
   }
 

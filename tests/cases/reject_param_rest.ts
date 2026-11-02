@@ -1,2 +1,5 @@
-// Rest parameters need a variadic ABI and an allocation per call.
-export const run = (...ns: number[]): number => 0;
+// An arrow expression's parameters end in no rest.
+export function main(): void {
+  const xs = [1, 2]
+  console.log(xs.map((x: i32, ...r: i32[]): i32 => x + r.length).length)
+}

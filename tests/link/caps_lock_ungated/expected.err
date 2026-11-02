@@ -1,1 +1,1 @@
-the dependency `pkg_mix` reaches `fs.read` through `config`, which `nish-capabilities.lock.json` does not record for it
+the dependency `pkg_mix` reaches `env` through `config`, which `nish-capabilities.lock.json` does not record for it

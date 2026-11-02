@@ -48,7 +48,7 @@ the record that found it. The notes below the table name each such finding.
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 15 / 14 ⁴ | 0 / 0 / 0 / 2 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 3 / 16 / 16 ⁴ | 0 / 0 / 1 / 3 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
@@ -56,6 +56,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 2 ⁷ |
 | HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [http-client.md](http-client.md) | `std/net/http-client.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 2 |
+| Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
@@ -68,18 +69,21 @@ the record that found it. The notes below the table name each such finding.
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
-| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts` | 0 / 0 / 0 / 0 | 0 / 1 / 0 / 0 |
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
-| A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
-| PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
+| A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
+| PostgreSQL client and its handler carrier | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts` | 0 / 0 / 5 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 46 / 144** | **0 / 0 / 2 / 30** |
+| JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
+| HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
+| Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
+| **Total** ⁸ | | | **3 / 11 / 57 / 151** | **0 / 1 / 4 / 31** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -129,7 +133,13 @@ the record that found it. The notes below the table name each such finding.
    window on Darwin before a received descriptor is close-on-exec, is counted
    as an open Low. RT-39, what `peerCredentials` reads and when, is a
    decision and is not counted. RT-17 and RT-19 were amended there, not
-   reopened.
+   reopened. RT-41 (High), RT-42 (Medium), RT-43 and RT-44 (Low), the region
+   handle's checks, the enter and leave order, the table's limits and the
+   chunk sizes, were found and fixed by the stage that added regions to the
+   runtime (WP46 stage 1) and are counted as fixed. RT-45 (Medium), a mark
+   carried across a region boundary, and RT-47 (Low), the unbounded chunk
+   doubling, are counted as open. RT-46, the lock a region panic holds, is a
+   decision and is not counted.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
@@ -245,7 +255,11 @@ the record that found it. The notes below the table name each such finding.
     the limits of a compile-time check (install scripts, the C behind a
     granted `ffi`, a function argument blamed on its template, nothing
     confined at run time), are accepted, with the reason in their record,
-    and are not counted.
+    and are not counted. Of the grant arguments' rows, CAPS-14 to CAPS-16
+    and CAPS-20 hold and are not findings, CAPS-17 (Medium) and CAPS-18
+    (Low), what the build check cannot see and a run-time scope shared by
+    every package, are accepted and not counted, and CAPS-19 (Medium), a
+    `net=<host>` grant that binds no computed host at run time, is open.
 17. PG-1 to PG-8 are the shapes a hostile server's bytes can take, checked
     and found to hold, and are not findings. PG-9 (Medium), no TLS, PG-10
     (Low), no way to require SCRAM, and PG-11 (Low), MD5 and cleartext
@@ -257,7 +271,20 @@ the record that found it. The notes below the table name each such finding.
     repeated server event panicking on or reaching a reused run, PG-16
     (Medium), one bad text key failing its whole batch, and PG-17 (Low),
     collidable key hashing, were found by the batcher's first review and
-    fixed before it merged.
+    fixed before it merged. PG-18, PG-19 and PG-20 are the shapes a
+    connection target can take; PG-18 and PG-19 hold and are not findings,
+    and PG-20 (Medium), a URL's user information ending at its last `@`
+    where libpq ends it at the first, was found by the Unix-socket targets'
+    first review and fixed before it merged. PG-21 (Low), a socket another
+    local user can create, and PG-22 (Low), a socket file taken as its
+    directory, are accepted and not counted. PG-23 (Medium), a carrier
+    query held for ever by a server that accepts and never answers, and
+    PG-24 (Medium), a batcher's requests held for ever behind an execution
+    lost before it was taken, were found as the carrier was written and
+    fixed before it merged. PG-25, a reset socket ending its connection,
+    holds and is not a finding; PG-26 (Low), no deadline on a query once
+    its connection is up, and PG-27 (Low), a connect attempt with no
+    backoff while the server is down, are accepted and not counted.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
@@ -303,6 +330,23 @@ the record that found it. The notes below the table name each such finding.
     tracks PKI-26 to PKI-28.
     PKI-29 (Informational), a common name not checked against the SANs, is
     not counted. PKI-1 to PKI-16 are properties checked and found to hold.
+25. JWT-1 to JWT-5 (Low) are accepted, with the reason in their record, and
+    are not counted: public-key verifies allocate, the public token is read
+    in variable time, unregistered members may repeat, `peekKid`'s `kid` is
+    unauthenticated by design, and what the wipes cannot reach. JWT-6
+    (Medium, a wiped key still MACed under zeroed pads) and JWT-7 (Low, a
+    hand-built key could pair an RS name with an HMAC check) were found in
+    review and fixed with a before/after test, as was JWT-8 (Low, the JSON
+    read went through `nish/bytes`' variable-time scan kernels, which
+    BYTES-2 refuses in `std/crypto`). JWT-P1 to JWT-P9 are properties
+    checked and found to hold.
+26. UPSTREAM-9 to UPSTREAM-11 (Low) are accepted, with the reason in their
+    record, and are not counted: a deadline is checked only when the program
+    reads the pool, the origin's one lookup blocks at start-up and is never
+    refreshed, and only `http:` is spoken. UPSTREAM-8 (Medium) was found
+    while writing the record, and UPSTREAM-7 (Low), UPSTREAM-12 and
+    UPSTREAM-13 (Medium) in review; each is fixed with a before/after test.
+    UPSTREAM-1 to UPSTREAM-6 are properties checked and found to hold.
 
 ## Fuzzed
 
@@ -327,6 +371,7 @@ building the runtime for the harness, not by a target.
 | [http1-client.md](http1-client.md) | `http1-client` |
 | [http2.md](http2.md) | `hpack` |
 | [crypto-x509.md](crypto-x509.md) | `x509-der`, `x509-pem` |
+| [crypto-jwt.md](crypto-jwt.md) | `jwt` |
 
 ## Not yet audited
 
@@ -355,10 +400,12 @@ only.
 
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
+| SBX-1 | High | `src/compilation.ts` (`narrowSandbox`), `runtime/runtime-sandbox.c` (`nish_sandbox`) | The exec allowlist grants a granted program's ELF loader, and the loader runs any program it is handed, so a dependency granted `process.spawn=<program>` that sets out to escape it can start any binary | — |
+| CAPS-19 | Medium | `src/capabilities.ts` (`refuseNarrowGrants`), the sandbox's seccomp filter | A `net=<host>` grant binds only literal hosts: a host computed at run time is not checked, with or without `--sandbox` | — |
 | PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
-| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`) | Each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes` | — |
+| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `http-client.ts` and `websocket.ts` to spans mode |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |

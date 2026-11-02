@@ -1,0 +1,9 @@
+{
+  "name": "caps-package",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": { "pkg_caps": ["fs.read"] }
+    }
+  }
+}

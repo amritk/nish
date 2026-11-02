@@ -4,6 +4,7 @@ entry: src/emit-ts-records.ts src/arrays.ts src/secret.ts src/attributes.ts src/
 import isSortInstance from "./arrays" -> function @isSortInstance
 import Operands from "./emit-ts-edits" -> struct Operands
 import Walk from "./emit-ts-edits" -> struct Walk
+import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_BIGINT from "./nodes" -> const N_BIGINT

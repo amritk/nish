@@ -232,6 +232,34 @@ const statusOf = (text: string): i32 => {
   return e === HTTP1_ERROR ? p.status : 0;
 };
 
+/**
+ * How many of the 40 places in a 40-byte field value `inner` can stand at
+ * give a status other than `status`. The line scan reads sixteen bytes at a
+ * time while a block is all field text and a byte at a time after one that
+ * is not, so the places cover every offset in a block and both sides of each
+ * boundary. At the boundaries the stream is also cut at every byte, which
+ * must not change the transcript: a CR that ends what has arrived so far is
+ * read again with the byte after it.
+ */
+const missesAcrossValue = (inner: string, status: i32): i32 => {
+  let misses: i32 = 0;
+  for (let k: i32 = 0; k < 40; k += 1) {
+    const parts: string[] = [];
+    for (let j: i32 = 0; j < 40; j += 1) {
+      parts.push(j === k ? inner : "a");
+    }
+    const text: string = `GET / HTTP/1.1\r\nHost: a\r\nX-Long: ${parts.join("")}\r\n\r\n`;
+    if (statusOf(text) !== status) {
+      misses += 1;
+    }
+    const boundary: boolean = k === 0 || k === 1 || k === 14 || k === 15 || k === 16 || k === 17 || k === 39;
+    if (boundary && firstBadCut(text) !== -1) {
+      misses += 1;
+    }
+  }
+  return misses;
+};
+
 /** Checks that `text` is refused with `status`. */
 const refused = (t: Suite, name: string, text: string, status: i32): void => {
   t.eqI32(`refused with ${status}: ${name}`, statusOf(text), status);
@@ -479,6 +507,14 @@ export const http1Checks = (): i32 => {
   refused(t, "a NUL in a field value", "GET / HTTP/1.1\r\nHost: a\x00b\r\n\r\n", 400);
   refused(t, "a bare CR in a field value", "GET / HTTP/1.1\r\nHost: a\rb\r\n\r\n", 400);
   refused(t, "a DEL in a field value", "GET / HTTP/1.1\r\nHost: a\x7fb\r\n\r\n", 400);
+  const noMisses: i32 = 0;
+  t.eqI32("a NUL anywhere in a 40-byte value is refused, every cut agreeing", missesAcrossValue("\x00", 400), noMisses);
+  t.eqI32("a 0x01 anywhere in a 40-byte value is refused, every cut agreeing", missesAcrossValue("\x01", 400), noMisses);
+  t.eqI32("a 0x1f anywhere in a 40-byte value is refused, every cut agreeing", missesAcrossValue("\x1f", 400), noMisses);
+  t.eqI32("a DEL anywhere in a 40-byte value is refused, every cut agreeing", missesAcrossValue("\x7f", 400), noMisses);
+  t.eqI32("a bare CR anywhere in a 40-byte value is refused, every cut agreeing", missesAcrossValue("\r", 400), noMisses);
+  t.eqI32("a HTAB anywhere in a 40-byte value is read, every cut agreeing", missesAcrossValue("\t", 0), noMisses);
+  t.eqI32("an obs-text byte anywhere in a 40-byte value is read, every cut agreeing", missesAcrossValue("\xe9", 0), noMisses);
   // 400, the request as a whole (RFC 9112 §3.2, §6).
   refused(t, "HTTP/1.1 without Host", "GET / HTTP/1.1\r\n\r\n", 400);
   refused(t, "HTTP/1.1 with two Host fields", "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n", 400);

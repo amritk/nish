@@ -1,0 +1,657 @@
+{
+  "version": "0.29.0",
+  "date": "2026-10-31",
+  "tag": "v0.29.0",
+  "range": {
+    "from": "v0.28.0",
+    "to": "6e79f1f2"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-28-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.28.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a96ef6a"
+      ],
+      "pr": 1099,
+      "author": "github-actions[bot]",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "skip-gzip-when-the-response-already-fits-one",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "skip gzip when the response already fits one segment",
+      "body": "Under segmentMode, Http1Connection.respondEncoded compressed every body\nbefore deciding whether gzip saved a TCP segment. When the response as it\nis, head included, already fits one segment, gzip cannot save one, so that\nwork was wasted. Such a response now goes out as it is with decision\nHTTP_COMPRESS_NO_FEWER_SEGMENTS and no Vary, and no encoder runs. The\ncheck uses the identity head respond actually wrote, and withdraws it with\nunrespond when head plus body do not fit. A request that refuses identity\nstill gets gzip. HttpCompressor.encoderRuns counts encoder runs (wrapping,\nnever panicking) so a test can show the skip.\n\nHttp1Parser no longer clears a kept-alive request's head at HTTP1_END. The\nmethod, target, version, fields and keep-alive stay readable until the\nnext next() call, so acceptEncoding(), targetIs(), a router, and HEAD and\nHTTP/1.0 framing at H1_END read the request being answered rather than\nthe next one. Before, a HEAD answered at H1_END got a body and an HTTP/1.0\nresponse got chunked framing. The head is held in place, not copied, and\nresting() stays false while it is held (H1-5 in docs/security/http1.md).",
+      "metrics": [
+        "50,000 responses of 0.5-8 KB JSON, MSS 1448, server CPU per response (median of 3): segment mode 37.4 / 36.4 µs base, 37.8 µs change, inside the ±1 µs base-to-base band; the skip removes the encoder run on 37.5% of responses (bench/http-compress)"
+      ],
+      "refs": [
+        "docs/guide/using-nish/compression.md",
+        "docs/security/http1.md"
+      ],
+      "tests": [
+        "tests/link/std_http_compress",
+        "tests/link/std_http1_end_head"
+      ],
+      "commits": [
+        "00fd8df"
+      ],
+      "pr": 1097,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "read-a-connected-socket-s-mss-from-nish",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "read a connected socket's MSS from nish:net",
+      "body": "netMss(fd: i32): i32 returns the send MSS of a connected TCP socket, the\npayload one segment carries, so a server can size its writes or a\ncompressor's segment test to the path it actually has. Natively it asks\ngetpeername first, so a socket with no peer answers -1 rather than the\nkernel's default 536; then Linux's TCP_INFO tcpi_snd_mss, read only when\nthe kernel's reply reaches that field; then TCP_MAXSEG, Darwin's only\nreading. A closed descriptor, a listener, UDP or a pipe answers -1, never\nan errno, and the call never panics. Under wasm32 and WASI, where every\nother nish:net call is refused, netMss compiles to the constant -1 after\nevaluating its argument, so no host import is needed; under the Node\nprelude it throws, as every nish:net reading does.\n\nruntime-net.c grows from 2,588 to 2,797 bytes of .text, inside its\nexisting 2,816-byte ceiling. RT-32 in docs/security/runtime.md records the\ndecision to trust only what the kernel wrote.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#socket-options",
+        "docs/guide/using-nish/networking.md",
+        "docs/security/runtime.md"
+      ],
+      "tests": [
+        "tests/cases/net_mss",
+        "tests/cases/reject_net_mss_arity",
+        "tests/cases/reject_net_mss_type"
+      ],
+      "commits": [
+        "5d5a2d2"
+      ],
+      "pr": 1096,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "start-the-adaptive-frame-rate-at-the-best",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "start the adaptive frame rate at the best tier on a local terminal",
+      "body": "The adaptive frame rate in `nish/term-rate` now starts a local terminal at the best tier the program allows (`options.maxFps`, and 120 with `options.allow120`), and falls back within half a second if the terminal cannot keep up, instead of climbing up from 30. A slow probe still starts at 30, and a slow remote session at 15.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/terminal.md"
+      ],
+      "tests": [
+        "tests/link/break_intro",
+        "tests/run.js break"
+      ],
+      "commits": [
+        "0555eab"
+      ],
+      "pr": 1100,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "http1server-reads-each-connection-s-mss-from-the",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "Http1Server reads each connection's MSS from the socket",
+      "body": "Http1Server.accept now asks netMss once per accepted connection and keeps\na positive answer in Http1Connection.socketMss. In segment mode,\nrespondEncoded sizes its segments to that path instead of to\nHTTP_DEFAULT_MSS, so a connection whose MSS is smaller or larger than\nEthernet's gets the compression decision its path calls for. A -1 (no\nreading on this platform or socket, and always on wasm) leaves the field\nat 0 and falls back as before. Keep-alive requests do not re-read it.\n\nThe segment size is the first of: conn.mss if the program set it after\naccept, enc.mss if set to anything but HTTP_DEFAULT_MSS, the socket's\nreading, then HTTP_DEFAULT_MSS. An explicit setting therefore always beats\nthe measurement, except that an enc.mss set to exactly 1448 cannot be told\nfrom the compressor's default and yields to the socket value; setting\nconn.mss covers that case. restart() now clears both per-connection\nvalues, so a pooled slot never carries one peer's MSS into the next\nconnection, and a conn.mss set before accept no longer survives it. TLS\nconnections read no socket MSS.\n\nEach accept costs one netMss call (getpeername plus at most two\ngetsockopt), and Http1Connection grows from 176 to 184 bytes.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/compression.md"
+      ],
+      "tests": [
+        "tests/link/std_http1_mss"
+      ],
+      "commits": [
+        "4a7fe8a"
+      ],
+      "pr": 1103,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "unix-stream-sockets-and-socketpair-in-nish-net",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "Unix stream sockets and socketpair in nish:net",
+      "body": "nish:net gains Unix domain sockets, so a program can talk to a local service without the TCP stack:\n- unixListen(path, backlog, flags) and unixListenMode(path, backlog, flags, mode) bind a path or a Linux abstract `@name`.\n- unixConnect(path) and unixAccept(fd) connect and accept.\n- unixSocketPair(kind, fds) makes a connected stream or seqpacket pair.\n\nEvery descriptor is non-blocking and close-on-exec, works with pollAdd, netRead, netWrite, netShutdown and netClose, and every failure is a negative errno like the other nish:net calls.\n\nA path that does not fit sun_path is -36 before any syscall, never a truncation. A socket file is created 0600 (bind, chmod, then listen, so nobody connects in between), or with the mode unixListenMode gives. An existing path is refused with -98. With NET_UNIX_UNLINK_STALE, only a socket file nobody listens on is replaced; a regular file is refused with -17 and left alone, and a live listener is never unlinked. Darwin refuses the flag and abstract names with -95, because a full backlog there looks like a dead listener. Under --sandbox, binding a pathname socket needs fs.write, and connecting to one is not confined; the security records say so.\n\nPrograms that do not call these are unchanged.\n\nRefs: docs/guide/using-nish/unix-sockets.md, docs/security/runtime.md (RT-33 to RT-36)\nTests: tests/cases/net_unix_calls, tests/cases/net_unix_paths, tests/cases/net_unix_fds, tests/cases/reject_net_unix_*\nPart of #1089",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7bdef2f"
+      ],
+      "pr": 1093,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "a-stack-size-for-scope-tasks-with-scopewithstack",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a stack size for scope tasks, with scopeWithStack",
+      "body": "`scopeWithStack(bytes)` from nish/threads opens a scope whose tasks run on threads with a stack of at least `bytes`. Deeply recursive work, such as a type checker walking a large program, no longer overflows the default thread stack. The size is rounded up to the page size and a guard page sits below it, so a task that still overflows faults. A constant below 131,072 bytes is refused at compile time (NL2584), and a computed one panics. Under Node the size is ignored.\n\nThe size is applied once per join, when the scope's tasks start, never per task. Programs that never ask for a size keep 0.28's join: the sized path is out of line, and the ordinary path pays one load and a branch hinted not taken. The data-parallel forms (parallelMap and friends) keep the default stack.",
+      "metrics": [
+        "spawn/join of a scope with many small tasks, 0.311 s at 0.28.0 vs 0.305 s, inside a 38% spread. nish_scope_join is 117 → 133 bytes."
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#scoped-tasks-using-s--scope",
+        "docs/guide/using-nish/threads.md"
+      ],
+      "tests": [
+        "tests/link/thread_stack_deep",
+        "tests/link/thread_stack_minimum",
+        "tests/link/thread_stack_computed_small",
+        "tests/cases/reject_thread_stack_small",
+        "tests/cases/reject_thread_stack_negative"
+      ],
+      "commits": [
+        "c5626cb"
+      ],
+      "pr": 1102,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "hand-pass-and-identify-descriptors-over-unix-sockets",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "hand, pass and identify descriptors over Unix sockets",
+      "body": "* feat(runtime): hand, pass and identify descriptors over Unix sockets\n\n`spawnWithFds(argv, fds)` in nish:process starts a child holding\n`fds[i]` as descriptor 3 + i. `sendFd` and `recvFd` in nish:net carry\none descriptor with a message over SCM_RIGHTS, and `peerCredentials`\nreads the peer's pid, uid and gid.\n\nRefs: docs/LANGUAGE.md\nTests: tests/cases/net_unix_scm, tests/cases/spawn_fds\n\n* test(runtime): round-trip descriptors and credentials through two processes\n\nspawn_fds_child hands files and a socket end to a child at 3..3+n-1, with\nself-dups, collisions, 64 and 65 descriptors and every refusal, and has the\nchild take a file over SCM_RIGHTS and check its peer's credentials.\nnet_unix_scm drives every refusal of sendFd, recvFd and peerCredentials,\ncounting descriptors around each, and reads the flags of what recvFd keeps.\n\nRefs: docs/security/runtime.md\nTests: tests/cases/spawn_fds_child, tests/cases/net_unix_scm\n\n* test(runtime): refuse the descriptor calls' misuses and label their capabilities\n\nNegative cases for each new call's arity, element type, readonly arrays\nand wasm32 build; caps_process_spawn_fds and caps_net_peer pin the\nprocess.spawn and net labels to the new calls themselves. --emit-ts now\nimports spawnWithFds from nish/runtime, as it does spawnPiped, rather\nthan calling a global Node never had.\n\nTests: tests/cases/reject_net_unix_scm_*, tests/cases/reject_net_unix_peer_*, tests/cases/reject_spawn_fds_*, tests/cases/caps_net_peer, tests/cases/caps_process_spawn_fds\n\n* test(runtime): pin the descriptor calls' range check and size\n\n`sendFd` and `recvFd` check their range in the compiled code, as `netRead`\ndoes, and a new driver case runs each out-of-range call in a child. The\nruntime-net.c and runtime-os.c budgets take in the four new functions, and\nthe file headers name the Darwin differences of the descriptor calls.\n\nRefs: docs/security/runtime.md\nTests: tests/cases/net_unix_scm_bounds, runtime-budget\n\n* docs(runtime): document and record descriptor passing over Unix sockets\n\nThe reference, the rules card, the guide pages and the cookbook now cover\n`sendFd`, `recvFd`, `peerCredentials` and `spawnWithFds`, each per\nplatform as the C does it. The runtime record gains RT-37 to RT-40 (the\ndescriptors `recvFd` closes, the Darwin close-on-exec window left open,\ncredentials read as they were at connect, and `spawnWithFds`' self-dups\nand collisions) and amends RT-17 and RT-19; the sandbox record and guide\npage note that a passed descriptor is not checked by Landlock.\n\nRefs: docs/security/runtime.md\nTests: tests/cases/net_unix_scm, tests/cases/spawn_fds_child\n\n* refactor(runtime): name recvFd's close-on-exec flag once\n\nTests: tests/cases/net_unix_scm\n\n* chore(runtime): format nish_peer_credentials and add its cookbook goldens\n\nTests: tests/self/goldens.js\n\n* fix(checker): code spawnWithFds's read-only descriptor-array message\n\nThe `takes an `i32[]`` wording that spawnWithFds gives a wrong-typed\ndescriptor array had no stable code, so the uncoded backlog grew to 1.\nIt takes NL2584, the checker band's next free code.\n\nTests: tests/cases/reject_spawn_fds_element\n\n* test(self): regenerate the codes golden for NL2584\n\nThe registry's rule count moved from 724 to 725 with the spawnWithFds\ndescriptor-array code; the checked golden follows it.\n\n* test(interop): list the descriptor calls' caps cases as known under --emit-ts\n\ncaps_net_peer is refused (NL4011) and caps_process_spawn_fds throws under\nNode, as their siblings caps_net and caps_process_wait already do.\n\n* test(interop): file spawnWithFds under the host row of the emit-ts ledger\n\nspawnWithFds throws under Node for the reason spawn does: a child is reaped\nby the event loop. HOST names it, so caps_process_spawn_fds is filed as a\nhost row and no longer falls through to numbers, which the known-list pin\nrefuses.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5461122"
+      ],
+      "pr": 1112,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "wait-half-an-hour-for-the-registry-before",
+      "type": "ci",
+      "breaking": false,
+      "title": "wait half an hour for the registry before giving up on the lockfile",
+      "body": "* build: regenerate package-lock.json for v0.28.0\n\nThe release's lockfile job gave up after its five-minute registry wait,\nso the platform package entries stayed on 0.27.2 and `npm ci` refused\nthe lockfile on main. Regenerated against the registry, which now\nserves every 0.28.0 package.\n\n* ci: wait half an hour for the registry before giving up on the lockfile\n\nrelease.yml's lockfile job asked npm for each package of the release 30\ntimes, 10 seconds apart, and failed after five minutes. For 0.28.0 the\nx86_64-linux package took longer than that to appear, so no lockfile\npull request opened and main stayed red until someone re-ran the job by\nhand. The wait is now 180 tries (half an hour), which is that re-run\ndone by the job itself, and the job is capped at 45 minutes so a stuck\nstep still ends.\n\nRefs: docs/wp12-release.md#the-lockfiles-copy-of-the-platform-pins\n\n* ci: one deadline for the registry wait, and main fetched again after it\n\nThe half-hour wait was 180 tries per package, so with several slow\npackages, or slow `npm view` calls, it ran past half an hour and into\nthe job's 45-minute timeout before it could say which package was\nmissing. It is now one deadline shared by every package, checked before\neach sleep, with each `npm view` cut at a minute and a 35-minute step\ntimeout as the backstop.\n\nThe wait also left the job regenerating the lockfile from a checkout of\nmain up to half an hour old. The regenerate step now fetches main again\nand checks its version a second time before it writes anything.\n\n* ci(release): name no seed asset in the registry wait's comment\n\nThe seed-targets test holds release.yml to reading asset names from\nseed-targets.json; the comment spelled one.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "adc867f"
+      ],
+      "pr": 1110,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-30"
+    },
+    {
+      "id": "arrows-passed-to-function-parameters-may-read-the",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "arrows passed to function parameters may read the caller's const locals",
+      "body": "An arrow written as the argument of a function-typed parameter of a top-level\nfunction may now read the `const` locals and the parameters of the function it\nis written in, and write through them as a reference (`infos.push(x)`,\n`log.last = v`). Each capture is lowered as one more parameter of the lifted\narrow and of the callee's instance, as the data-parallel forms already do: a\ndirect call, with no environment struct, no allocation and no indirect call.\nCaptures do not join the instantiation key, and a narrowing in force at the\ncall still holds inside the arrow.\n\nStill refused, each with its own message: reading `this` (NL2590), reading a\n`let` (NL2585, with a `--fix` that makes it a `const` when it is never\nreassigned), assigning to a captured name (NL2586), naming a function-typed\nparameter of the enclosing function (NL2587), capturing a `Secret`, a scope,\na lock, a guard, a channel, a foreign handle or a `CPtr` (NL2588), and a\ncapture by an arrow inside another arrow (NL2501). A method's or a\nconstructor's parameter cannot have a function type, so no arrow is given to\none (`reject_fnarg_capture_method`). The arrow\n`expose` or `exposeWith` runs still captures nothing, written at the call\n(NL2335) or handed on through another function (NL2589), and a recursive\nfunction that passes itself a new arrow on every call meets the\ninstantiation limit. The parallel forms and `spawn` keep their own rules.\n\nEscape analysis and the parameter attributes now count a capture as an\nescape of the local it names, so a value the arrow stores through a capture\nis not released by the caller's arena scope, and a `parts` array an arrow\nreads is a use for `join` (docs/security/codegen.md, CG-12, found and fixed\nbefore it shipped).\n\n`main` had given NL2584 to two rules, so the diagnostic-code check failed;\nthe `i32[]` descriptor rule, which nothing cites by number, is now NL2591.",
+      "metrics": [
+        "10^8 calls of a capturing arrow vs an env class passed through a generic `E`: 476 vs 457 ms median of 15 interleaved runs (445 vs 439 min, 551 vs 517 max), within noise on a 4-core cloud session; under the speed profile both link to identical machine code"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#function-parameters",
+        "docs/IR_COOKBOOK.md",
+        "docs/security/codegen.md",
+        "docs/security/secret.md"
+      ],
+      "tests": [
+        "tests/cases/fnarg_capture",
+        "fnarg_capture_local",
+        "fnarg_capture_narrow",
+        "fnarg_capture_escape",
+        "mem_join_parts_captured",
+        "tests/link/fnarg_capture_forward",
+        "tests/cases/reject_fnarg_capture_*"
+      ],
+      "commits": [
+        "d17fe11"
+      ],
+      "pr": 1115,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "keep-nish-break-s-settings-between-runs-1105",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "keep nish break's settings between runs",
+      "body": "* feat(cli): keep nish break's settings between runs\n\nThe Settings screen's choices now survive quitting `nish break`. They are\nkept in `$XDG_CONFIG_HOME/nish/break`, or `$HOME/.config/nish/break`, one\n`name=value` line per setting, read before the terminal opens and written\nwhen Settings is left and when the game ends. A missing, unreadable or\ncorrupt file gives the defaults for whatever it does not say well, and a\nfile that cannot be written is let go: neither stops the game. The write\ngoes to a temporary file renamed over the old one, so a failed save never\nleaves half a file. NISH_BREAK_SOUND=1 turns sound on for the run without\nbeing saved.\n\nTests: tests/link/break_settings\n\n* test(cli): show hostile settings values and paths reach no shell or terminal\n\nShell metacharacters, terminal escapes, a value cut by a newline, `../`\nand a 10000-digit number are each dropped by the parser, and an\nXDG_CONFIG_HOME full of shell syntax is used only as a path.\n\nTests: tests/link/break_settings\n\n* refactor(cli): keep the settings file's functions beside its format\n\nbreakSettingsPath, loadBreakSettings and saveBreakSettings move from\nbreak.ts to break-menu.ts, next to formatBreakSettings and\nparseBreakSettings. break-*.ts are knip entries and break.ts is not, so\nthe exports the link test reads were reported unused there.\n\nTests: tests/link/break_settings\n\n* test(cli): keep nish break's terminal runs out of the real config\n\nThe `nish break on a terminal` relay checks now give each run its own\ntemporary XDG_CONFIG_HOME, removed once the runs end, so the suite never\nreads or writes `~/.config/nish/break` on the machine running it, and the\nthree parallel runs cannot see each other's settings.\n\nTests: tests/run.js (nish break on a terminal)\n\n* fix(cli): keep nish break's settings only from a run that played\n\n`nish break` on a pipe is refused before the terminal opens, but still\nwrote the settings file on its way out, creating `~/.config/nish/break`\nfor a run that never played; the suite's own refusal check did that on\nevery machine it ran on. The end-of-run save now waits for a drawn frame.\n\nA SIGINT Ctrl-C, on a terminal without the kitty keyboard protocol, ends\nthe process before that save, so F3 to F9 now keep the settings as they\nchange them, as leaving Settings already did.\n\nTests: tests/run.js (nish break, refused on a pipe: writes no settings file)",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "33a827e"
+      ],
+      "pr": 1105,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "refuse-peercredentials-without-a-peer-and-correct-the",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "refuse peerCredentials without a peer, and correct the descriptor-passing docs and records",
+      "body": "peerCredentials on Linux answered a listening or never-connected Unix socket: SO_PEERCRED gives a listener its own credentials, or pid 0 and uid/gid -1 for an unconnected socket. A credential check could therefore read an answer that names no peer. It now asks getpeername first and refuses such a socket with -107 (ENOTCONN), which is what Darwin's getpeereid already answered. A socket whose peer has since closed still answers with the credentials taken at connect. On Darwin, a recvFd whose fcntl(FD_CLOEXEC) fails now closes the descriptor and returns the error, instead of handing over one that is not close-on-exec.\n\nThe descriptor-passing docs and records now match the code. A descriptor recvFd receives keeps the status flags of the open file the sender shares; AI.md had said it arrives blocking. The RT-17 amendment now claims only what its test pins, the shared status flags. On a stream socket, sendFd can send short, and the descriptor travels with the first bytes, so send the rest with netWrite. A uid or gid of 2^31 or more wraps into the i32. The -9, -22 and -24 the calls answer are listed. RT-37 to RT-40 state their anchor commit, RT-39 says its uid/gid check cannot tell swapped fields apart when uid equals gid, and the security index's Total row is recomputed from its rows. The wasm refusal is pinned for recvFd and peerCredentials as well as sendFd, and peerCredentials's array element type has its own negative test.\n\nRefs: docs/guide/using-nish/unix-sockets.md, docs/security/runtime.md (RT-17, RT-37 to RT-40)\nTests: tests/cases/net_unix_scm, tests/cases/reject_net_unix_scm_wasm, tests/cases/reject_net_unix_peer_element\nPart of #1089",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "071b437"
+      ],
+      "pr": 1116,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "measure-unix-sockets-against-loopback-tcp-1117",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "measure Unix sockets against loopback TCP",
+      "body": "bench/unix-ipc.mjs times an echo between two processes, over loopback TCP with TCP_NODELAY, a Unix stream socketpair, and a seqpacket socketpair handed to the peer with spawnWithFds, at 64 B and 4 KB. It reports the median and p99 round trip and each side's CPU per trip. bench/postgres/run.mjs --unix runs SELECT 1 and a 100-row read through nish/net/postgres over TCP 127.0.0.1 and over the server's socket, reporting wall time and client and server-backend CPU per query.\n\nEvery reply is checked byte for byte, the transports are interleaved and warmed up, and the noise band is a build against its byte-identical copy. A difference counts only outside the band and both IQRs, so the p99 and seqpacket-versus-stream differences are reported as noise. The echo client's CPU includes making and checking each message, a cost that is the same on every transport. The figures are recorded in docs/BENCHMARKS.md and bench/README.md.\n\nMeasured: Xeon @ 2.80 GHz, 4 CPUs, KVM, Linux 6.18, 12 rounds; Unix stream vs TCP echo 64 B median 42.59 vs 51.16 µs (−16.7 %, band 1.29), peer CPU/trip 20.52 vs 27.12 µs (−24.4 %, band 1.22); postgres SELECT 1 56.60 vs 66.13 µs/query (−14.4 %, band 1.38), server CPU 30.71 vs 37.39 µs (−17.9 %); 100 rows 173.30 vs 191.59 µs (−9.5 %, band 1.85); p99 inside TCP's IQR (noise)\nRefs: bench/README.md, docs/BENCHMARKS.md\nPart of #1089",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b61022c"
+      ],
+      "pr": 1117,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "labelled-break-continue-and-switch-fallthrough-1106",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "labelled break/continue and switch fallthrough",
+      "body": "A loop, a block or a `switch` may carry a label. `break label` leaves the labelled statement, and `continue label` goes to the next pass of a labelled loop, from inside any number of nested loops and blocks. A `switch` clause that does not end in `break`, `return` or `continue` now falls into the next clause, as in JavaScript. Both are legal TypeScript and mean the same thing under Node.\n\nEach jump is a direct branch to the target's exit or latch block, with no flag variable. Fall-through is a branch into the next clause's block, and the `switch` itself still lowers to an LLVM `switch`. A labelled exit closes everything it leaves on the way out: arena pass scopes, `using` blocks, Mutex guards and thread scopes. Bounds proofs, `Secret` wipes, definite assignment and narrowing all see the new edges. A variable a clause assigns is no longer narrowed when the next clause is entered by fall-through. Programs without labels or fall-through compile to the IR they did before.\n\nStill refused: a label on any other statement (NL1046), `continue` to a label that is not a loop, a jump to a label outside the enclosing function or arrow, a duplicate label, and a label on a label. The loop pre-pass gives up on a loop that contains a labelled statement or jump. The golden-case type-check keeps `noFallthroughCasesInSwitch` on, except for the two cases that fall through on purpose.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (labelled statements; switch)",
+        "docs/guide/language/control-flow.md"
+      ],
+      "tests": [
+        "tests/cases/cf_label_loops",
+        "cf_label_block",
+        "cf_label_switch",
+        "cf_label_walks",
+        "cf_label_dispose",
+        "cf_switch_fallthrough",
+        "tests/link/cf_label_dispose_threads",
+        "tests/cases/reject_label_*",
+        "reject_switch_fall_narrow",
+        "reject_top_level_label"
+      ],
+      "commits": [
+        "ab2587c"
+      ],
+      "pr": 1106,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "share-memory-and-hand-work-between-processes-1121",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "share memory and hand work between processes",
+      "body": "Nish programs can now share memory and hand work between processes on different cores without a socket: named shared-memory regions with checked atomic slots (nish/sync/shm) and bounded lock-free SPSC and MPSC rings built on them (nish/sync/ring), with a futex doorbell on Linux and SHM_UNSUPPORTED (-95) elsewhere. Every out-of-range offset, misaligned slot, bad ordering or corrupt ring length is a checked panic; --emit-ts refuses both modules. Programs that import neither are unchanged: the C half is its own runtime unit, runtime/runtime-shm.c.",
+      "metrics": [
+        "ring round trip p50 790 ns (740 to 810) vs 23,270 ns on a socketpair; 6.74M vs 0.93M msgs/s streamed"
+      ],
+      "refs": [
+        "docs/wp47-shared-memory.md",
+        "docs/security/shm.md"
+      ],
+      "tests": [
+        "tests/link/sync_shm",
+        "tests/link/sync_ring",
+        "tests/link/sync_shm_deny_ffi"
+      ],
+      "commits": [
+        "22dfd17"
+      ],
+      "pr": 1121,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "supervisor-and-service-channels-in-nish-net-prefork",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "supervisor and service channels in nish/net/prefork",
+      "body": "A prefork program can now ask the supervisor for channels instead of hand-rolling descriptor inheritance. With supervisorChannels, each worker gets one end of a unixSocketPair to the supervisor as descriptor 3, and a restarted worker gets a fresh pair. With serviceWorker set, every other worker also gets a pair to that worker, which receives all of them in index order. Each process reads its ends through preforkSupervisorChannel, preforkServiceChannel and preforkServiceChannelOf, which take their numbers from argv, never from guessed descriptor numbers. The pairs are handed over with spawnWithFds, so every other descriptor stays close-on-exec, and the supervisor closes its copies once the group has started.\n\nchannelKind chooses a stream or seqpacket channel. Stream is the default because it works on macOS too. A seqpacket channel off Linux is refused at start with \"seqpacket channels need Linux\". When a service worker is configured, a worker or the service worker exiting restarts the whole group, so no worker keeps a dead descriptor. With restart off, nothing is restarted. With the options off, prefork spawns exactly as before.\n\nRefs: docs/guide/using-nish/networking.md, docs/wp42-multicore-server.md\nTests: tests/link/net_prefork_channels\nPart of #1089",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e204c65"
+      ],
+      "pr": 1119,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "keyed-integer-map-hashes-and-a-composite-key",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "keyed integer Map hashes, and a composite-key idiom",
+      "body": "Map and Set now hash integer, boolean and enum keys under a key drawn at random when the program starts. In 0.28 these keys went through an unkeyed fmix32, so anyone who controlled the keys, from parsed JSON or network ids for example, could choose a set that all landed in one bucket and make inserts quadratic. Keys of 32 bits or fewer use a keyed multiply-add-shift. `i64` and `u64` keys use a keyed folded multiply. String keys keep SipHash-1-3. Map semantics are unchanged: SameValueZero, insertion order.\n\nTwo integers can serve as one map key by packing them into an `i64`: `(toI64(hi) << toI64(32)) | toI64(toU32(lo))`. The packed key is exact for every pair of `i32`s, including the extremes, compiles in both number modes, and gives the same keys under Node.\n\nStill open, and recorded in docs/security/json.md as JSON-16: float and `number` keys stay unkeyed. The `i64` hash is heuristic, not provably universal. A wasm32 reactor host that calls an export before `_initialize` probes under an all-zero key.",
+      "metrics": [
+        "get/has/insert for i32, i64 and enum keys at L1, L2 and past L3: 0.94 to 1.19 of 0.28.0, inside a 0.78 to 1.33 base-vs-base band (bench/map-keys). A Rust FxHashMap on the same keys is 2.4 to 7.8x faster on the i32 rows, mostly from the table's probe loop rather than the hash."
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#map-and-set",
+        "docs/guide/language/maps-and-sets.md",
+        "docs/security/json.md (JSON-15",
+        "JSON-16)",
+        "docs/wp32-map.md"
+      ],
+      "tests": [
+        "tests/cases/map_key_int_collide",
+        "tests/cases/map_key_composite"
+      ],
+      "commits": [
+        "3d47def"
+      ],
+      "pr": 1107,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "compressed-32-bit-references-designed-and-measured-1113",
+      "type": "docs",
+      "breaking": false,
+      "title": "compressed 32-bit references, designed and measured",
+      "body": "WP48 asks whether Nish should store object references in 32 bits, as the Rust ports of the TypeScript compiler do to save memory, and answers with numbers. It does not change the language.\n\nbench/wp48-refs builds one AST-shaped graph of 20k, 400k and 4M nodes five ways, all from the same seed: classes linked by references (`class`), first-child/next-sibling classes (`sibling`), records in arrays addressed by i32 (`records`), struct-of-arrays columns (`columns`), and a typed-handle pool (`pool`). It times a recursive visit and a parent climb over each. The bench refuses to report numbers if the five checksums differ.\n\nDesign A is a whole-program compressed-reference mode: 32-bit offsets into one reserved arena range, decompressed at every load. Because the arena rounds every allocation to 8 bytes, it would bring `sibling` to about 0.75x of its memory. `columns` already measures 0.63x today, in legal TypeScript, with no compiler change. A would cost the C ABI, interop headers, debug info, wasm32 and thread arena adoption a new representation. Design B is library handles (`Pool<T>`/`Ref<T>`). It works now, but every access in the source pays for it.\n\nThe recommendation is to build neither yet. Port code that needs compact graphs should use the columns layout, and the note records what is unknown.",
+      "metrics": [
+        "4M nodes: `sibling` 0.52x the memory of `class`; `columns` 0.63x of `sibling`'s memory, at 0.93x its walk time, inside a 3.6% class-vs-class-copy band."
+      ],
+      "refs": [
+        "docs/wp48-compressed-references.md",
+        "bench/wp48-refs/README.md"
+      ],
+      "tests": [],
+      "commits": [
+        "a3284da"
+      ],
+      "pr": 1113,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "shortest-digits-from-mij-written-two-at-a",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "shortest digits from Żmij, written two at a time",
+      "body": "String(x) on native and WASI now finds its shortest round-trip digits with a\nport of Żmij's scalar to_decimal_double (the yy algorithm from yyjson), in\nplace of the Ryu port. Żmij scales by one 128-bit power of ten, where Ryu\nmade three products, derives the rounding interval by shifting the table\nentry, and has no trailing-zero slow path. The output is unchanged: a new\nf64_format_oracle section compares every line with Node's String(x) over two\nmillion seeded bit patterns plus the edge classes (every power of two,\nsubnormals, ties, the 1e21 and 1e-7 layout switches, -0, NaN, ±Infinity).\n\nnish_str_from_f64 is split into nish_f64_format, which writes the\nECMAScript layout two digits at a time and the exponent without snprintf,\nand the wrapper that makes the string. The 617-row power-of-ten table is\nderived by scripts/gen-pow10-table.py, which tests/run.js now holds the\ncommitted table to. Ryu's tables, generator and licence are gone; Żmij is\ntaken under its BSL-1.0 option (runtime/LICENSE-zmij, THIRD_PARTY_NOTICES.md).\n\nMeasured: 78.6 ns per number against Ryu's 147.1 (1.87x); base vs a byte-identical base copy in the same 15 interleaved rounds differed by 1.9%\nMeasured: runtime.c .text at -Oz 3,698 -> 3,369 bytes; .rodata 10,570 bytes\nRefs: docs/wp15-performance.md#7a-formatting-a-double\nTests: tests/f64-format-oracle.c, tests/runtime-test.c\nPart of #1120",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "21d8764"
+      ],
+      "pr": 1124,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "fast-rebuilds-for-nish-run-1126",
+      "type": "perf",
+      "scope": "cli",
+      "breaking": false,
+      "title": "fast rebuilds for nish run",
+      "body": "`nish run` now keeps each module's compiled object between runs under the debug profile, so a one-line edit recompiles only the module whose IR changed. A server that imports nish/net/http1-server is about forty modules, and before this every rebuild recompiled all of them.\n\nThe module cache lives under $XDG_CACHE_HOME/nish/module/<sha256(key)>/. Its key is the compiler version, the runtime entry's recipe (profile and flags, CC and its --version, build.sh and the runtime files), the module's stem, and its IR's length and SHA-256. A lookup hits only on a byte-for-byte key match, and the key is written last. The cache root gets the same private-directory checks as the run and runtime caches. The speed and size recipes never read or write it, so release output is unchanged. What remains of a rebuild is the front end, IR emission and the link; docs/wp48-run-rebuilds.md records the measurements and that floor, and the CLI guide page says what `nish run` caches and when the module cache is skipped.",
+      "metrics": [
+        "one-line-edit rebuild of a 674-line HTTP + SQLite + JSON server, median 1.45 s (range 1.01–1.88 s, n=11) against 2.0–2.5 s before; a 5,030-line program 1.07–1.60 s; base-vs-base spread about ±0.25 s on a 4-core cloud session"
+      ],
+      "refs": [
+        "docs/wp48-run-rebuilds.md"
+      ],
+      "tests": [
+        "tests/run.js \"module cache\""
+      ],
+      "commits": [
+        "298e31f"
+      ],
+      "pr": 1126,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "typed-json-decode-reports-which-fields-were-present",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "typed JSON decode reports which fields were present",
+      "body": "A typed-JSON class can now record which of its fields were present in the input. A `presence` entry in the class's `json` options names a boolean field per recorded field, and the compiler-written decoder sets it as it reads the object, so a caller can tell an absent key from one given with the default value without parsing into a JsonDocument. Presence fields are off the wire: they are never read from or written to JSON. A key given as `null` counts as given. The flags are meant to be read only after `jsonDecode` answers `JSON_DECODE_OK`.\n\nThis is what an RFC 7396 merge patch needs: absent keeps the field, null clears a nullable field, and null on a non-nullable field is refused. `examples/merge-patch.ts` and the JSON guide page show the recipe, including that a non-object patch is refused rather than replacing the whole target. A class without `presence` compiles to the same IR as before, and misused presence options are refused with NL2592.",
+      "metrics": [
+        "decode without presence 0.97x (min) and 1.00x (median) of before, 9 interleaved rounds of 2M decodes, against a byte-identical-copy noise band of 3.9% (min) / 4.2% (median)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md (Typed JSON)",
+        "docs/IR_COOKBOOK.md (json-presence)"
+      ],
+      "tests": [
+        "tests/link/json_presence",
+        "tests/link/json_merge_patch",
+        "tests/cases/json_reject_presence_*"
+      ],
+      "commits": [
+        "73e4282"
+      ],
+      "pr": 1125,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "nish-net-handler-a-request-and-response-layer",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "nish/net/handler, a request and response layer over the HTTP/1 carrier",
+      "body": "A server can now be written against a request object and a response writer instead of driving Http1Server's events by hand. nish/net/handler routes each request at its head through nish/net/router, keeps the method, target, path parameters and header spans in the request's own storage, gathers the body (answering 413 past a configurable cap and closing a connection whose body does not finish within `bodyTimeout`), and hands the program one complete request at a time; the program dispatches on the route index with a switch and answers with a status, headers and a body written in one call or streamed, JSON through JsonWriter, or an RFC 9457 problem. Requests come from a pool on a free list, and a slot generation drops an answer that arrives after its connection closed, so a warmed-up server allocates nothing per request. Keep-alive, pipelining and a draining shutdown are the layer's job. HTTP/2 and HTTP/3 follow later; docs/wp43-http-app-layer.md says why.\n\nexamples/http-app is a small JSON API built on it, with logging, configuration and graceful shutdown. bench/http1-server.ts now runs through the handler, and bench/http-app-carrier.ts keeps the carrier-driven version for comparison. The guide gains an API-server page, and docs/security/handler.md records the module's findings and limits.",
+      "metrics": [
+        "bench/http.mjs, median of 5 interleaved rounds per scenario against the carrier, with a byte-identical copy of the carrier as the noise band (−23% to +14% on a 4-core cloud session); every handler delta is inside it (ping −1.3%, json −5.9%, plaintext c=256 +0.1%). The handler costs up to 0.35 µs of user time per small request against 4.6–16.3 µs of kernel time, and saves 0.8–1.6 µs on a JSON body."
+      ],
+      "refs": [
+        "docs/wp43-http-app-layer.md",
+        "#485"
+      ],
+      "tests": [
+        "tests/link/net_handler",
+        "tests/link/net_handler_*",
+        "tests/link/net_http_app"
+      ],
+      "commits": [
+        "7709100"
+      ],
+      "pr": 1123,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "compile-unions-of-200-variants-5-17-faster",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "compile unions of 200+ variants 5-17% faster",
+      "body": "A discriminated union the size of typescript-go's node data now has a test, and the type table no longer does quadratic work on it. scripts/gen-union-scale.mjs writes tests/cases/union_scale.ts. That program has:\n- an `enum Kind` of 200 members;\n- 200 classes, each with its tag as the first field and 2-6 fields of numbers, strings, `Node | null` and `Node[]`;\n- `type Node` over all of them;\n- a 200-case `switch` that reads variant fields;\n- a recursive visitor over a tree of 4,000 nodes.\n\nIt type-checks under `tsc --strict` and prints the same checksum natively and under Node. The switch lowers to an LLVM `switch`, a jump table at -O2, with only the tag load before it. tests/run.js checks that the case still matches its generator byte for byte.\n\nIn src/types.ts, `hasVariant` is now a binary search over a union's sorted variants. A union's display name and mangled name are now built by splitting the variant range in half, not by peeling one variant at a time. The names produced are unchanged, so no symbol, LLVM type name or golden moves.\n\nCompile time still grows super-linearly past about 400 variants. The rest of the cost is in passes outside this change: `FactCollector`/`declarationIn` in src/attributes.ts (about half), `addMetadata` in src/ir.ts, and `checkOperator`/`narrowToTags` in src/expressions.ts.",
+      "metrics": [
+        "compile time of union_scale at 200 variants 167/164 to 154/155 ms (-8.0%/-5.4%, band ±0.8%), at 400 variants 580 to 498 ms (-14.1%, band +0.8%), at 800 variants 3250 to 2698 ms (-17.0%, band +1.5%); 100 variants within noise. Base vs base-copy in the same interleaved rounds."
+      ],
+      "refs": [],
+      "tests": [
+        "tests/cases/union_scale"
+      ],
+      "commits": [
+        "03402e9"
+      ],
+      "pr": 1127,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "jsonwriter-writes-an-f64-without-building-a-string",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "JsonWriter writes an f64 without building a string",
+      "body": "A native JsonWriter now writes an f64 straight into its u8[] buffer. The\nprivate walk behind jsonWriterPutF64 in std/json.ts is a seam, like\nstd/bytes.ts's walks: for the standard library's own std/json.ts the\nemitter replaces the call with nish_json_put_f64, a runtime kernel that\nformats with nish_f64_format into a stack buffer and copies the bytes only\nwhen they fit, returning the new end or -1. Node and --emit-ts keep running\nthe Nish body, which writes the same bytes and refuses the same writes, so\nstd_json_writer stays byte-identical to JSON.stringify on both. A root-package\nfile that happens to be called std/json.ts gets no kernel.\n\nThe f64 path no longer allocates a string per number. The kernel's bounds\n(negative offset, offset at the end, exact fit, one byte short, a null\nbuffer, INT32_MAX) are pinned in tests/runtime-test.c and recorded in\ndocs/security/runtime.md and docs/security/json.md.\n\nMeasured: f64 document 435.9 -> 378.7 ns/op median (1.15x, 13.1%) against a compiler built from main; band 2.3% median (base vs its byte-identical copy)\nMeasured: minified and pretty modes do not call the kernel; pretty inside its band, minified +3.5% by median vs a 2.8% band and -16.9% by min vs a 17.6% band\nRefs: docs/wp15-performance.md, docs/IR_COOKBOOK.md\nTests: tests/link/std_json_writer/seam.ts, tests/runtime-test.c, tests/run.js json_f64_seam\nPart of #1120",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e10d993"
+      ],
+      "pr": 1128,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "nish-crypto-jwt-compact-jws-verify-and-sign",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "nish/crypto/jwt, compact JWS verify and sign with claims checks",
+      "body": "nish/crypto/jwt verifies and signs compact JWS tokens over the algorithms std/crypto already has: RS256, ES256, ES384, EdDSA (Ed25519) and HS256/384/512. The key decides the algorithm: a header whose `alg` does not name the key's algorithm is refused, so `none` and algorithm confusion cannot get through, and `crit` and `b64` headers are refused. Signatures are compared in constant time, a token over the size cap is refused before anything is decoded, base64url is strict, and claims are checked: `exp`, `nbf` and `iat` as integers with a configurable leeway, and `iss`, `aud` (a string or an array) and `sub`. An HMAC key is keyed once and its pad state copied per token, so a warmed-up verifier allocates nothing per HMAC verify. Signing keys are Secret and wiped. Header and claims are read by a strict in-module JSON reader, so the module pulls in no variable-time scanning kernel.\n\nIt ships with its security record (docs/security/crypto-jwt.md), the RFC 7515 A.1–A.3 and RFC 8037 A.4 vectors with flipped-byte failures, known-bad tokens (alg none in any case, confusion, escaped duplicate keys, crit, oversize, expiry and not-before windows), a fuzz target, wipe checks and an auth page in the guide.",
+      "metrics": [],
+      "refs": [
+        "docs/security/crypto-jwt.md"
+      ],
+      "tests": [
+        "tests/link/crypto_jwt",
+        "tests/link/crypto_jwt_f64",
+        "tests/fuzz/targets/jwt.ts"
+      ],
+      "commits": [
+        "fdda380"
+      ],
+      "pr": 1134,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "capability-grants-with-arguments-and-fs-gated-for",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "breakingNote": "a dependency that reads or writes files now needs an `fs.read` or `fs.write` grant in the root package.json, e.g. \"nish\": { \"capabilities\": { \"dependencies\": { \"pkg\": [\"fs.read\"] } } }.",
+      "title": "capability grants with arguments, and fs gated for dependencies",
+      "body": "A dependency's grant in the root package.json can now say what it is for: `fs.read=./data`, `fs.write=./out`, `process.spawn=git`, `net=127.0.0.1` or `net=/run/app.sock`. The build resolves each argument (a directory to its real path, a program on PATH to its real path, a numeric host or socket path) and refuses a literal the dependency passes to readFileSync, spawnSync, netAddress, unixConnect and their kin when it falls outside the grant (NL2594). `--sandbox` enforces the rest at run time: granted directories become the Landlock read and write scopes, and granted programs, with their ELF or #! interpreter, become an exec allowlist. The capability lockfile records the arguments, so an upgrade that widens them is caught (NL2593). A bare grant still grants the whole capability, so existing grants keep working.\n\nfs.read and fs.write are now gated for dependencies the same way net and process.spawn were. A dependency that reads or writes files needs a grant; without one the build fails with NL2576, whose message gives the JSON to add.\n\nThe exec allowlist has a known escape, recorded open as SBX-1 (High) in docs/security/sandbox.md and pinned by a test: a granted program's ELF loader is on the allowlist and runs any binary handed to it, so a program grant does not hold a dependency that sets out to escape it. CAPS-19 records that a net=<host> grant binds only literal hosts.",
+      "metrics": [],
+      "refs": [
+        "docs/wp40-dependency-capabilities.md",
+        "docs/security/capabilities.md",
+        "docs/security/sandbox.md"
+      ],
+      "tests": [
+        "tests/link/caps_dep_arg_*",
+        "tests/link/caps_dep_fs_*_refused",
+        "tests/link/caps_lock_args",
+        "tests/link/sandbox_dep_*"
+      ],
+      "commits": [
+        "327f321"
+      ],
+      "pr": 1122,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "nish-run-watch-rebuilds-and-swaps-the-running",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "nish run --watch rebuilds and swaps the running program",
+      "body": "`nish run --watch program.ts [args]` builds and runs a program, watches every file its module graph reads, and rebuilds on each edit. `std/` is watched only from a checkout. Edits are debounced, and a newer edit cancels a build that is already running.\n\nA failed build prints its diagnostics (JSON under `--json`) and leaves the running program alone.\n\nA server, meaning a program that uses `nish:net`, is swapped without dropping requests. The new process binds beside the old one with SO_REUSEPORT and starts first. The old one then gets SIGTERM, and SIGKILL after 5 s. Any other program is stopped and restarted.\n\nThe program sees `NISH_WATCH=1`, and each build prints how long it took. Ctrl-C stops both the watch and the program, and exits 130.\n\nThe supervisor is Nish source embedded in `src/watch.ts`. It is compiled into the run cache on first use, because the compiler also links for wasi and cannot call spawn or kill itself.\n\nA server that wants to finish in-flight requests before it exits has to handle SIGTERM itself until a draining shutdown lands.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/cli.md"
+      ],
+      "tests": [
+        "tests/run.js watch"
+      ],
+      "commits": [
+        "06a9f40"
+      ],
+      "pr": 1131,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "an-outbound-policy-for-the-http-client-1135",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "an outbound policy for the HTTP client",
+      "body": "`nish/net/outbound` is an opt-in policy that `nish/net/http-client` applies when a program fetches a URL it did not choose, such as a webhook target, a link preview, or a URL from a form. Set `HttpOptions.outbound` to use it. With no policy, the client behaves as before.\n\nWhat a policy enforces:\n\n- **Public addresses only, checked after resolution.** `dial` resolves the name once and drops every refused address from that answer, and only what is left is connected to. There is no second lookup, so a rebinding answer cannot move the connection.\n  - \"Public\" follows the IANA special-purpose registries, read strictly.\n  - IPv4-mapped, NAT64 and 6to4 addresses are judged by the IPv4 address they carry.\n- **Host allowlist (optional).** `allowHost` takes exact names or a leading-dot suffix. It is checked before the name is looked up.\n- **Every redirect hop is re-checked.** This covers both the address and the allowlist.\n- **`permit(cidr)`** admits a prefix the operator trusts.\n- **Caps on redirects, total time and body size.** The stricter of the policy's limit and the options' limit applies.\n- **No proxy, and no reused connection from another policy.** A policy turns the proxy off, and a kept connection is reused only under the policy it was dialled under.\n\nA refused fetch fails with `HTTP_E_BLOCKED`, and its text redacts any userinfo in the URL.\n\nSecurity record: docs/security/outbound.md.\n- Fixed while writing, each with a before/after check:\n  - OB-1: the proxy bypass.\n  - OB-2: the allowlist was not re-checked on redirect hops.\n  - OB-3: 6to4 addresses.\n  - OB-4: a dotted allowlist entry matched as the suffix of an IPv4 literal.\n  - OB-8: a kept connection was reused across a policy change.\n- Open, all Low: OB-5, OB-6, OB-7 and OB-9.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/http-client.md"
+      ],
+      "tests": [
+        "tests/link/net_outbound",
+        "tests/link/net_outbound_f64"
+      ],
+      "commits": [
+        "04211eb"
+      ],
+      "pr": 1135,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    },
+    {
+      "id": "default-parameters-and-rest-parameters-1133",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "default parameters and rest parameters",
+      "body": "A function, a method, a constructor or an arrow bound to a module const may give trailing parameters a default (`by: i32 = 2`) or end in one rest parameter (`...xs: i32[]`). Both are filled at the call site. A default is a constant (a number, boolean, string or enum member) or an earlier parameter, passed as an ordinary argument, so the callee has no branch on a missing one. A call that passes every argument compiles to the same IR as before.\n\nA rest call gathers its trailing arguments into one exact-size array. The array lives on the caller's stack unless the callee keeps it, in which case it goes to the arena. A rest of inline records takes only fresh object literals (NL2608), because a named record would be copied and the callee's write would not reach it as it does in Node.\n\n`x?: T` stays refused and now suggests `x: T = <default>`. Call spread, destructured parameters, function-typed defaults and rests, and non-constant defaults are refused with their own diagnostics. C, N-API and WASI hosts see every parameter as required and a rest as a plain array.",
+      "metrics": [
+        "total(1, 2, 3, 4) against the same call with an array literal: byte-identical IR, 173 vs 178 ms median over 10 runs (noise 132–273 ms), 1.00x"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#default-and-rest-parameters"
+      ],
+      "tests": [
+        "tests/cases/param_default",
+        "param_rest",
+        "param_method",
+        "param_generic",
+        "param_f64",
+        "param_eval_order",
+        "param_rest_escape",
+        "tests/link/param_default_import"
+      ],
+      "commits": [
+        "6e79f1f"
+      ],
+      "pr": 1133,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-31"
+    }
+  ]
+}

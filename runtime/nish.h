@@ -104,8 +104,9 @@ extern NISH_TLS struct nish_arena nish_arena;
 
 /* Bump allocation: 8-byte rounded and aligned, uninitialised. */
 void *nish_alloc_struct(uint64_t size);
-/* Slow path: push a new chunk (at least 64 KB) and bump from it. Called by
- * the inlined fast path when the current chunk is full; rarely by hosts. */
+/* Slow path: push a new chunk (at least 64 KB, or a region's next size) and
+ * bump from it. Called by the inlined fast path when the current chunk is
+ * full; rarely by hosts. */
 void *nish_arena_grow(uint64_t size);
 /* Recycle everything in O(1): keeps the newest chunk, frees the rest. Every
  * arena string and object becomes invalid. Call it between batches. */
@@ -131,6 +132,25 @@ void nish_arena_release(uint64_t mark);
 void *nish_arena_keep(uint64_t mark, void *p);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
 uint64_t nish_arena_used(void);
+
+/* ---- Regions (runtime-region.c) -----------------------------------------
+ * Arenas made, entered, left and freed one at a time
+ * (docs/wp46-long-running-memory.md). A handle is a nonzero `uint64_t`: a
+ * 24-bit slot and its 40-bit generation. Every call below panics on a zero
+ * handle, a freed (stale) one and one made on another thread.
+ * `nish_region_new` makes an empty region, owned by the calling thread.
+ * `nish_region_enter` makes the region the thread's arena until the matching
+ * `nish_region_leave`, so every allocation in between lands in it, and
+ * answers the root `leave` last recorded (null at first); entering a region
+ * already entered panics. `nish_region_leave` must name the region entered
+ * last on this thread, puts back the arena its enter displaced and records
+ * `root`. `nish_region_free` frees every chunk of a region that is not
+ * entered and makes its handle stale. The wasm profile has none of these
+ * (scripts/build.sh refuses IR that names them); wasi has. */
+uint64_t nish_region_new(void);
+void *nish_region_enter(uint64_t r);
+void nish_region_leave(uint64_t r, void *root);
+void nish_region_free(uint64_t r);
 
 /* ---- String operations ------------------------------------------------- */
 /* Copy `len` bytes into a new arena string (`bytes` need not be terminated). */
@@ -206,6 +226,10 @@ nish_str *nish_str_from_f64(double v);
    pins it). For a caller that writes numbers into its own buffer. */
 #define NISH_F64_MAX 32
 int nish_f64_format(double v, char out[NISH_F64_MAX]);
+/* `nish_f64_format`'s bytes into `buf[at]` (std/json.ts's JsonWriter): the new
+   end, or -1, with nothing written, when `at < 0` or they do not fit before
+   `len`. `buf` may be null only when nothing fits. */
+int32_t nish_json_put_f64(uint8_t *buf, int32_t len, int32_t at, double v);
 nish_str *nish_str_from_i64(int64_t v);
 /* Unsigned decimal (WP15). u8/u16/u32 are zero-extended by the caller, so one
    symbol serves every unsigned width. */
@@ -836,9 +860,12 @@ int64_t nish_cpu_online(void);
 /* WP37 `--sandbox` (runtime-sandbox.c): `nish_sandbox` confines the process to
    the capability mask `caps` from `.preinit_array`, `mode` 1 strict and 2
    best-effort, and `nish_sandbox_check` refuses to run at the top of `main`
-   when it never ran. The directory lists are a later stage's and are null.
+   when it never ran. `read_dirs` and `write_dirs` are the directories
+   Landlock scopes `fs.read` and `fs.write` to, `exec_paths` the programs
+   `process.spawn` may execute, each a run of NUL-terminated paths ended by an
+   empty one; null leaves the capability whole.
    `nish_cpu_prime` caches the pool's CPU count while /sys is still readable. */
-void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs);
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths);
 void nish_sandbox_check(void);
 void nish_cpu_prime(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);

@@ -1,0 +1,1 @@
+Function parameter `g` cannot have a default or be a rest parameter: a call names the function it passes, and that is what instantiates the callee

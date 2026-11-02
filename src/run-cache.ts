@@ -21,7 +21,7 @@
 //
 // The runtime cache beside it (`runtimeCacheRoot`, `runtimeCacheKey`) keeps
 // the C runtime compiled once per recipe, for every `--link` and every run's
-// link: an entry there holds the runtime's fourteen objects and a key, on the same
+// link: an entry there holds the runtime's fifteen objects and a key, on the same
 // terms. It is a cache of what a link reads, so this key does not mention it.
 
 import { CLI, RUNTIME_HEADER, VERSION } from "./branding"
@@ -69,7 +69,7 @@ export const runtimeCacheRoot = (): string => {
 
 /**
  * The runtime's translation units, in the order `scripts/build.sh` compiles
- * and links them: `runtime.c` and the twelve it pairs with it. One list for both
+ * and links them: `runtime.c` and the fourteen it pairs with it. One list for both
  * keys below and for the objects a runtime entry holds.
  */
 export const runtimeUnits = (): string[] => [
@@ -87,6 +87,7 @@ export const runtimeUnits = (): string[] => [
   "runtime-bytes.c",
   "runtime-sandbox.c",
   "runtime-shm.c",
+  "runtime-region.c",
 ]
 
 /**

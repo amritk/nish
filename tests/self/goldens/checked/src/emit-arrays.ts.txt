@@ -31,6 +31,7 @@ import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
+import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -44,6 +45,8 @@ import N_THIS from "./nodes" -> const N_THIS
 import N_UNARY from "./nodes" -> const N_UNARY
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
+import simdSuffix from "./nish-modules" -> function @simdSuffix
+import simdTypeLane from "./nish-modules" -> function @simdTypeLane
 import elementLLVMType from "./program" -> function @elementLLVMType
 import elementStride from "./program" -> function @elementStride
 import FieldInfo from "./program" -> struct FieldInfo
@@ -117,7 +120,7 @@ function slotType(emitter: Emitter, elem: i32): string -> @slotType
   stackSites=0 stackLocals=0
   callee +0:3 elementLLVMType -> @elementLLVMType
 function scopePair(emitter: Emitter, wantHeader: boolean): string -> @scopePair
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.metadata
   calls: Emitter.metadata nish_str_concat
   pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0
@@ -142,7 +145,7 @@ function headerAccess(emitter: Emitter, index: i32): string -> @headerAccess
   callee +0:13 scopePair -> @scopePair
   callee +0:40 headerTbaa -> @headerTbaa
 function elementAccess(emitter: Emitter): string -> @elementAccess
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via scopePair
   calls: scopePair
   pointer emitter: size=296 writesThrough=false captured=false passedTo=scopePair#0
@@ -461,21 +464,33 @@ function noteArrayUse(emitter: Emitter, expr: Node, len: boolean, data: boolean,
   callee -5:25 TypeTable.isArray -> @TypeTable.isArray
   local -2:14 found: ArrayUse (const)
   callee +5:12 new ArrayUse -> @ArrayUse.constructor
+function isVectorAccess(emitter: Emitter, call: Node): boolean -> @isVectorAccess
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_str_eq simdSuffix simdTypeLane
+  pointer emitter: size=296 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 name: string (const)
+  callee +1:30 simdTypeLane -> @simdTypeLane
+  callee +1:43 simdSuffix -> @simdSuffix
 function arrayUses(emitter: Emitter, node: Node, out: ArrayUse[]): void -> @arrayUses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteArrayUse
-  calls: arrayUses isUncheckedAccess nish_panic_index nish_str_eq noteArrayUse
-  pointer emitter: size=296 writesThrough=false captured=false passedTo=noteArrayUse#0 noteArrayUse#0 noteArrayUse#0 arrayUses#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=isUncheckedAccess#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=noteArrayUse#4 noteArrayUse#4 noteArrayUse#4 arrayUses#2
+  calls: arrayUses isUncheckedAccess isVectorAccess nish_panic_index nish_str_eq noteArrayUse
+  pointer emitter: size=296 writesThrough=false captured=false passedTo=noteArrayUse#0 noteArrayUse#0 isVectorAccess#0 noteArrayUse#0 noteArrayUse#0 arrayUses#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=isUncheckedAccess#1 isVectorAccess#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=noteArrayUse#4 noteArrayUse#4 noteArrayUse#4 noteArrayUse#4 arrayUses#2
   stackSites=0 stackLocals=0
   local +0:11 needsLen: boolean (const)
   callee +1:5 noteArrayUse -> @noteArrayUse
   callee +2:14 isUncheckedAccess -> @isUncheckedAccess
   callee +3:5 noteArrayUse -> @noteArrayUse
-  callee +5:5 noteArrayUse -> @noteArrayUse
-  local +7:14 child: Node (const)
-  callee +8:5 arrayUses -> @arrayUses
+  callee +4:14 isVectorAccess -> @isVectorAccess
+  local +8:11 args: Node[] (const)
+  callee +9:5 noteArrayUse -> @noteArrayUse
+  callee +11:5 noteArrayUse -> @noteArrayUse
+  local +13:14 child: Node (const)
+  callee +14:5 arrayUses -> @arrayUses
 function pathHoldsRecord(emitter: Emitter, expr: Node, records: i32[]): boolean -> @pathHoldsRecord
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index pathOf recordReaches unwrapParens
@@ -1647,6 +1662,21 @@ function emitBytesKernel(emitter: Emitter, walk: i32, values: string[]): string 
   callee +15:17 Emitter.useRuntime -> @Emitter.useRuntime
   callee +15:36 bytesKernelOf -> @bytesKernelOf
   callee +17:10 IRFunction.emitValue -> @IRFunction.emitValue
+function emitJsonPutF64Kernel(emitter: Emitter, values: string[]): string -> @emitJsonPutF64Kernel [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadData
+  calls: Emitter.useRuntime IRFunction.emitValue loadData loadLength nish_panic_index nish_str_concat
+  pointer emitter: size=296 writesThrough=false captured=false passedTo=loadData#0 loadLength#0 Emitter.useRuntime#0
+  pointer values: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 data: string (const)
+  callee +1:16 loadData -> @loadData
+  local +2:9 length: string (const)
+  callee +2:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:44 loadLength -> @loadLength
+  callee +3:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:17 Emitter.useRuntime -> @Emitter.useRuntime
 function bytePointer(emitter: Emitter, arr: string, at: string): string -> @bytePointer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via loadData

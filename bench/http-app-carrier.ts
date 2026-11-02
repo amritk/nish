@@ -1,0 +1,730 @@
+// `bench/http1-server.ts`'s contract answered by driving `nish/net/http1-server`
+// by hand: one `Http1Server` pool on plain TCP, one readiness loop, one
+// thread, its events read one by one with nothing between the socket and the
+// answer. `bench/http1-server.ts` answers the same requests through
+// `nish/net/handler`; given both builds, `bench/http.mjs` reads what the
+// request and response layer costs over the carrier it drives:
+//
+//   node bench/http.mjs handler=build/bench/h1 carrier=build/bench/h1-carrier
+//
+// Every request is routed by one `nish/net/router` table, built at start-up,
+// and answered by a `switch` on the route it matched; a path that matches no
+// route, or matches one only for another method, is a 404.
+//
+//   GET /plaintext  13 bytes of text/plain
+//   GET /json       {"message":"Hello, World!","n":<requests so far>}, written
+//                   by a `JsonWriter` reset onto one buffer per request
+//   POST /json-echo      an order (bench/http-payload.json) decoded by
+//                        `jsonDecode` into one reused `Order`, its revision
+//                        raised by one, and written back by `jsonEncode`
+//   POST /json-echo-doc  the same answer for an order, through one reused
+//                        `JsonDocument`: parse, `set` the revision, `write`.
+//                        It is laxer than /json-echo: any object with an
+//                        integer `revision` is echoed, where /json-echo
+//                        answers 400 to anything that is not a whole order
+//   GET /           `Hi`, the ping route
+//   GET /id/:id?name=<name>  `<id> <name>` and an `x-powered-by: benchmark`
+//                   field: the route's one parameter and one query parameter,
+//                   both taken as they are written, with no percent-decoding
+//   POST /json      any JSON document (bench/http-body.json), parsed into the
+//                   reused `JsonDocument` and written back compact
+//   the extra routes  the 112 patterns of bench/http-twins/extra-routes.mjs,
+//                   kept equal to it below, `ok` to a GET of one and to a POST
+//                   of one with `/submit` after it: every router twin
+//                   registers them
+//   the route table  bench/router.ts's 112 routes, copied below, in this
+//                   server only: 14 resources of six routes each and nested
+//                   routes up to nine segments deep. Each answers `ok`, but
+//                   GET /v1/orgs/:org/projects/:project/builds/:build/artifacts,
+//                   the "deep-route" scenario, answers `<org> <project> <build>`.
+//                   Its `GET /` is the ping route's, so it is left out
+//
+// The routes are added in that order, the real ones first. Added later, the
+// two tables' literals are tried before the real routes' at each node, so the
+// real routes pay for a table of 342, not of seven.
+//
+// A request body is gathered from `H1_BODY` events into a buffer its slot
+// keeps, and answered at `H1_END`: 400 when it is not an order. A body past
+// 4 KiB is the module's to refuse, with `maxBody`: 413, `Content-Length: 0`
+// and `Connection: close`, before the body is read. Once each buffer exists, /json-echo allocates nothing: the decoder
+// reuses the order's strings and arrays when they are equal or in place.
+// /json-echo-doc reuses the document's storage, and only `newI64` formats the
+// new revision into a short string.
+//
+// Usage: http-app-carrier <port> <slots> [requests]. It prints `listening <port>`
+// once the pool is built and serves until it is killed, or until it has
+// answered `requests` requests, when it returns from `main`: a profile-guided
+// build writes its profile at a normal exit, never at a signal. With
+// BENCH_CORES=N above 1 it runs as N workers under `nish/net/prefork` (see
+// `main`), `requests` counted per worker.
+//
+// BENCH_QUICKACK, read once at start-up, sets TCP_QUICKACK the ways
+// bench/quickack/ measures: `reset0` to 0 after each response, `once0` to 0
+// once per connection at accept, `reset1` to 1 after each response. Unset, or
+// any other value, the server makes no call at all.
+import {
+  netAddress,
+  NET_TCP_QUICKACK,
+  netClose,
+  netSetOption,
+  pollAdd,
+  pollCreate,
+  pollModify,
+  pollWait,
+  tcpListenFlags,
+  udpBind,
+  udpRecvFrom,
+  udpSendTo,
+} from "nish:net"
+import { getenv } from "nish:process"
+import {
+  PREFORK_STOPPED,
+  PreforkConfig,
+  preforkArgs,
+  preforkWith,
+  preforkWorkerCount,
+} from "nish/net/prefork"
+import {
+  H1_BODY,
+  H1_DONE,
+  H1_END,
+  H1_ERROR,
+  H1_NEED_MORE,
+  H1_POOL_FULL,
+  H1_REQUEST,
+  H1_WANT_READ,
+  H1_WANT_WRITE,
+  Http1Config,
+  Http1Connection,
+  Http1Server,
+} from "nish/net/http1-server"
+import { Http1Parser } from "nish/net/http1"
+import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router"
+import { JsonWriter } from "nish/json"
+import { JsonLimits } from "nish/json-tokenizer"
+import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed"
+import { JsonDocument } from "nish/json-value"
+import { extraRoutes, routeTable } from "./http-app-routes"
+
+/** The listener's token; a connection's token is its slot. */
+const LISTENER: i32 = -1
+const ZERO: i32 = 0
+/** The largest request body an echo takes; one byte more is answered 413. */
+const MAX_BODY: i32 = 4096
+/** BENCH_QUICKACK's modes; see the header. */
+const QUICKACK_NONE: i32 = 0
+const QUICKACK_RESET0: i32 = 1
+const QUICKACK_ONCE0: i32 = 2
+const QUICKACK_RESET1: i32 = 3
+/** The routes, in the order `Router.add` numbers them; a slot holds one until `H1_END`. */
+const ROUTE_NONE: i32 = -1
+const ROUTE_PLAINTEXT: i32 = 0
+const ROUTE_JSON: i32 = 1
+const ROUTE_ECHO: i32 = 2
+const ROUTE_ECHO_DOC: i32 = 3
+const ROUTE_PING: i32 = 4
+const ROUTE_QUERY: i32 = 5
+const ROUTE_BODY: i32 = 6
+/** The extra routes' first, a GET and its POST per pattern, then the route table's first. */
+const ROUTE_EXTRA: i32 = 7
+const ROUTE_TABLE: i32 = 231
+/** The route table's deep route, the 102nd row after its `GET /`; one past its last. */
+const ROUTE_DEEP: i32 = 332
+const ROUTE_COUNT: i32 = 342
+const DEEP_PATTERN: string = "/v1/orgs/:org/projects/:project/builds/:build/artifacts"
+const AMPERSAND: i32 = 38
+const EQUALS: i32 = 61
+/** The highest revision an echo raises; past it, an `i32` would overflow, which aborts. */
+const LAST_REVISION: i32 = 2147483646
+
+class Customer {
+  // `i64`, not `i32`: `jsonEncode` writes the fields in this order, so they
+  // cannot be sorted widest first, and an `i32` here would leave 8 bytes of padding.
+  id: i64 = 0
+  name: string = ""
+  email: string = ""
+  verified: boolean = false
+}
+
+class Item {
+  sku: string = ""
+  name: string = ""
+  qty: i32 = 0
+  // `f64` round-trips the payload's prices: `JsonWriter.f64` prints the
+  // shortest digits that read back as the same double, as `String(v)` does.
+  price: f64 = 0
+}
+
+class Shipping {
+  method: string = ""
+  street: string = ""
+  city: string = ""
+  region: string = ""
+  postal: string = ""
+}
+
+/** The order `bench/http-payload.json` holds; `jsonEncode` writes it in this field order. */
+class Order {
+  id: i32 = 0
+  revision: i32 = 0
+  name: string = ""
+  customer: Customer
+  currency: string = ""
+  total: f64 = 0
+  items: Item[]
+  tags: string[]
+  shipping: Shipping
+  notes: string | null = null
+  paid: boolean = false
+  constructor() {
+    this.customer = new Customer()
+    this.items = []
+    this.tags = []
+    this.shipping = new Shipping()
+  }
+}
+
+const bytesOf = (s: string): u8[] => {
+  const out: u8[] = new Array<u8>(s.length)
+  for (let k: i32 = 0; k < toI32(s.length) && k < toI32(out.length); k++) {
+    out[k] = toU8(s.charCodeAt(k))
+  }
+  return out
+}
+
+/** Where `head[start .. end)` first holds `b`, or `end`. */
+const indexOf = (head: u8[], start: i32, end: i32, b: i32): i32 => {
+  let i: i32 = start
+  while (i >= 0 && i < end && i < head.length && toI32(head[i]) !== b) {
+    i = i + 1
+  }
+  return i
+}
+
+class Bench {
+  server: Http1Server
+  loop: i32 = -1
+  listener: i32 = -1
+  ready: i32[]
+  plainBody: u8[]
+  textNames: u8[][]
+  textValues: u8[][]
+  jsonNames: u8[][]
+  jsonValues: u8[][]
+  notFound: u8[]
+  jsonBuf: u8[]
+  writer: JsonWriter
+  /** Each slot's request body; empty until the slot's first echo. */
+  bodies: u8[][]
+  /** How many body bytes each slot holds; past `MAX_BODY` once one is too long. */
+  bodyLength: i32[]
+  /** Each slot's `ROUTE_*`. */
+  route: i32[]
+  order: Order
+  decoder: JsonDecoder
+  doc: JsonDocument
+  badRequest: u8[]
+  tooLarge: u8[]
+  hi: u8[]
+  ok: u8[]
+  queryNames: u8[][]
+  queryValues: u8[][]
+  space: u8[]
+  router: Router
+  /** The matched route's parameters, `[start, end)` pairs into the head. */
+  params: i32[]
+  requests: i32 = 0
+  /** Return from `run` once this many requests are answered; 0 serves forever. */
+  limit: i32 = 0
+  /** BENCH_QUICKACK's `QUICKACK_*`, read once in `main`; 0 is `QUICKACK_NONE`. */
+  quickack: i32 = 0
+
+  constructor(listener: i32, slots: i32) {
+    this.listener = listener
+    const config: Http1Config = new Http1Config()
+    config.maxBody = MAX_BODY
+    this.server = new Http1Server(config, listener, slots)
+    this.loop = pollCreate()
+    this.ready = new Array<i32>(128)
+    this.plainBody = bytesOf("Hello, World!")
+    this.textNames = [bytesOf("Server"), bytesOf("Content-Type")]
+    this.textValues = [bytesOf("nish"), bytesOf("text/plain")]
+    this.jsonNames = [bytesOf("Server"), bytesOf("Content-Type")]
+    this.jsonValues = [bytesOf("nish"), bytesOf("application/json")]
+    this.notFound = bytesOf("not found")
+    this.jsonBuf = new Array<u8>(MAX_BODY + 256)
+    this.writer = new JsonWriter(this.jsonBuf, ZERO)
+    this.bodies = []
+    this.bodyLength = new Array<i32>(slots)
+    this.route = new Array<i32>(slots)
+    for (let k: i32 = 0; k < slots; k++) {
+      this.bodies.push(new Array<u8>(0))
+      this.route[k] = ROUTE_NONE
+    }
+    this.order = new Order()
+    this.decoder = new JsonDecoder(this.jsonBuf, ZERO, ZERO, new JsonLimits())
+    this.doc = new JsonDocument(new JsonLimits())
+    this.badRequest = bytesOf("bad request")
+    this.tooLarge = bytesOf("payload too large")
+    this.hi = bytesOf("Hi")
+    this.ok = bytesOf("ok")
+    this.queryNames = [bytesOf("Server"), bytesOf("Content-Type"), bytesOf("x-powered-by")]
+    this.queryValues = [bytesOf("nish"), bytesOf("text/plain"), bytesOf("benchmark")]
+    this.space = bytesOf(" ")
+    const limits: RouterLimits = new RouterLimits()
+    this.router = new Router(limits)
+    this.params = new Array<i32>(2 * limits.maxParams)
+    this.add("GET", "/plaintext", ROUTE_PLAINTEXT)
+    this.add("GET", "/json", ROUTE_JSON)
+    this.add("POST", "/json-echo", ROUTE_ECHO)
+    this.add("POST", "/json-echo-doc", ROUTE_ECHO_DOC)
+    this.add("GET", "/", ROUTE_PING)
+    this.add("GET", "/id/:id", ROUTE_QUERY)
+    this.add("POST", "/json", ROUTE_BODY)
+    let next: i32 = ROUTE_EXTRA
+    for (const pattern of extraRoutes()) {
+      this.add("GET", pattern, next)
+      this.add("POST", `${pattern}/submit`, next + 1)
+      next += 2
+    }
+    if (next !== ROUTE_TABLE) {
+      panic(`http-app-carrier: the extra routes end at ${next}, not ${ROUTE_TABLE}`)
+    }
+    const rows: string[] = routeTable()
+    for (let r: i32 = 1; r < toI32(rows.length); r++) {
+      const row: string = rows[r]
+      const space: i32 = toI32(row.indexOf(" "))
+      const pattern: string = row.slice(space + 1)
+      if ((pattern === DEEP_PATTERN) !== (next === ROUTE_DEEP)) {
+        panic(`http-app-carrier: ${row} is route ${next}, and ROUTE_DEEP is ${ROUTE_DEEP}`)
+      }
+      this.add(row.slice(0, space), pattern, next)
+      next += 1
+    }
+    if (next !== ROUTE_COUNT) {
+      panic(`http-app-carrier: the route table ends at ${next}, not ${ROUTE_COUNT}`)
+    }
+  }
+
+  /** Adds one route, which must be numbered `route`: the `switch` in `answer` is written against the numbers. */
+  add(method: string, pattern: string, route: i32): void {
+    const got: i32 = this.router.add(method, pattern)
+    if (got !== route) {
+      panic(`http-app-carrier: ${method} ${pattern} was answered ${got}, not route ${route}`)
+    }
+  }
+
+  /** Routes a request at its head: starts a body route's body, or answers any other request from the head alone. */
+  begin(slot: i32, conn: Http1Connection): void {
+    const p: Http1Parser = conn.parser
+    const route: i32 = this.router.match(
+      p.head,
+      p.methodStart,
+      p.methodEnd,
+      p.head,
+      p.targetStart,
+      p.targetEnd,
+      this.params
+    )
+    this.bodyLength[slot] = 0
+    switch (route) {
+      case ROUTE_ECHO:
+      case ROUTE_ECHO_DOC:
+      case ROUTE_BODY:
+        this.route[slot] = route
+        if (this.bodies[slot].length === 0) {
+          this.bodies[slot] = new Array<u8>(MAX_BODY)
+        }
+        break
+      default:
+        this.route[slot] = ROUTE_NONE
+        this.answer(conn, route)
+    }
+  }
+
+  /** Appends one `H1_BODY` chunk to the slot's body, or marks the body too long. */
+  gather(slot: i32, conn: Http1Connection): void {
+    if (this.route[slot] === ROUTE_NONE) {
+      return
+    }
+    const have: i32 = this.bodyLength[slot]
+    const n: i32 = conn.dataLength
+    if (have + n > MAX_BODY) {
+      this.bodyLength[slot] = MAX_BODY + 1
+      return
+    }
+    const body: u8[] = this.bodies[slot]
+    const data: u8[] = conn.data
+    for (let k: i32 = 0; k < n; k++) {
+      body[have + k] = data[conn.dataStart + k]
+    }
+    this.bodyLength[slot] = have + n
+  }
+
+  /** Answers an echo once its body is whole. */
+  finish(slot: i32, conn: Http1Connection): void {
+    const route: i32 = this.route[slot]
+    if (route === ROUTE_NONE) {
+      return
+    }
+    this.route[slot] = ROUTE_NONE
+    this.requests = this.requests + 1
+    const length: i32 = this.bodyLength[slot]
+    if (length > MAX_BODY) {
+      this.reply(conn, 413, this.tooLarge)
+      return
+    }
+    const w: JsonWriter = this.writer
+    w.reset(this.jsonBuf, ZERO)
+    let ok: boolean = false
+    if (route === ROUTE_ECHO) {
+      ok = this.echo(this.bodies[slot], length, w)
+    } else if (route === ROUTE_ECHO_DOC) {
+      ok = this.echoDoc(this.bodies[slot], length, w)
+    } else {
+      ok = this.rewrite(this.bodies[slot], length, w)
+    }
+    if (!ok || w.failed !== 0) {
+      this.reply(conn, 400, this.badRequest)
+      return
+    }
+    conn.respond(200, this.jsonNames, this.jsonValues, w.end)
+    conn.write(this.jsonBuf, ZERO, w.end)
+    conn.end()
+  }
+
+  /** `/json-echo`: decodes the order into `this.order`, raises its revision and encodes it onto `w`. */
+  echo(body: u8[], length: i32, w: JsonWriter): boolean {
+    const d: JsonDecoder = this.decoder
+    d.reset(body, ZERO, length)
+    const order: Order = this.order
+    if (jsonDecode(d, order) !== 0 || order.revision > LAST_REVISION) {
+      return false
+    }
+    order.revision += 1
+    jsonEncode(w, order)
+    return true
+  }
+
+  /** `/json-echo-doc`: parses the body into `this.doc`, sets its revision one higher and writes it onto `w`. */
+  echoDoc(body: u8[], length: i32, w: JsonWriter): boolean {
+    const doc: JsonDocument = this.doc
+    const root: i32 = doc.parse(body, ZERO, length)
+    if (root < 0) {
+      return false
+    }
+    const revision: i32 = doc.get(root, "revision")
+    // The typed route's range: an `i32` revision with a next one.
+    if (
+      revision < 0 ||
+      !doc.isI64(revision) ||
+      doc.i64(revision) > toI64(LAST_REVISION) ||
+      doc.i64(revision) < toI64(-2147483648)
+    ) {
+      return false
+    }
+    if (doc.set(root, "revision", doc.newI64(doc.i64(revision) + toI64(1))) !== 0) {
+      return false
+    }
+    doc.write(root, w)
+    return true
+  }
+
+  /** `POST /json`: parses any JSON document into `this.doc` and writes it back onto `w`, compact. */
+  rewrite(body: u8[], length: i32, w: JsonWriter): boolean {
+    const doc: JsonDocument = this.doc
+    const root: i32 = doc.parse(body, ZERO, length)
+    if (root < 0) {
+      return false
+    }
+    doc.write(root, w)
+    return true
+  }
+
+  reply(conn: Http1Connection, status: i32, body: u8[]): void {
+    conn.respond(status, this.textNames, this.textValues, toI32(body.length))
+    conn.write(body, ZERO, toI32(body.length))
+    conn.end()
+  }
+
+  /** Answers one request from its head and its `route`; a body, if any, is read and ignored. */
+  answer(conn: Http1Connection, route: i32): void {
+    this.requests = this.requests + 1
+    switch (route) {
+      case ROUTE_PLAINTEXT:
+        conn.respond(200, this.textNames, this.textValues, toI32(this.plainBody.length))
+        conn.write(this.plainBody, ZERO, toI32(this.plainBody.length))
+        conn.end()
+        break
+      case ROUTE_JSON: {
+        const w: JsonWriter = this.writer
+        w.reset(this.jsonBuf, ZERO)
+        w.beginObject()
+        w.key("message")
+        w.string("Hello, World!")
+        w.key("n")
+        w.i32(this.requests)
+        w.endObject()
+        conn.respond(200, this.jsonNames, this.jsonValues, w.end)
+        conn.write(this.jsonBuf, ZERO, w.end)
+        conn.end()
+        break
+      }
+      case ROUTE_PING:
+        this.reply(conn, 200, this.hi)
+        break
+      case ROUTE_QUERY:
+        this.query(conn)
+        break
+      case ROUTE_DEEP:
+        this.deep(conn)
+        break
+      case ROUTER_NOT_FOUND:
+      case ROUTER_METHOD_NOT_ALLOWED:
+        this.reply(conn, 404, this.notFound)
+        break
+      default:
+        // An extra route or a row of the route table; the router answers no other number.
+        this.reply(conn, 200, this.ok)
+    }
+  }
+
+  /** `GET /id/:id?name=<name>`: answers `<id> <name>`, the name empty when the query has none. */
+  query(conn: Http1Connection): void {
+    const head: u8[] = conn.parser.head
+    const end: i32 = conn.parser.targetEnd
+    const idStart: i32 = this.params[0]
+    const path: i32 = this.params[1]
+    // The first `name` parameter's value; empty when there is none.
+    let nameStart: i32 = path
+    let nameEnd: i32 = path
+    let at: i32 = path + 1
+    while (at < end) {
+      const next: i32 = indexOf(head, at, end, AMPERSAND)
+      const equals: i32 = indexOf(head, at, next, EQUALS)
+      if (
+        equals - at === 4 &&
+        at >= 0 &&
+        at + 3 < head.length &&
+        head[at] === 110 &&
+        head[at + 1] === 97 &&
+        head[at + 2] === 109 &&
+        head[at + 3] === 101
+      ) {
+        nameStart = equals < next ? equals + 1 : next
+        nameEnd = next
+        at = end
+      } else {
+        at = next + 1
+      }
+    }
+    conn.respond(200, this.queryNames, this.queryValues, path - idStart + 1 + nameEnd - nameStart)
+    conn.write(head, idStart, path - idStart)
+    conn.write(this.space, ZERO, 1)
+    conn.write(head, nameStart, nameEnd - nameStart)
+    conn.end()
+  }
+
+  /** The deep route: answers its three parameters, `<org> <project> <build>`, as they are written. */
+  deep(conn: Http1Connection): void {
+    const head: u8[] = conn.parser.head
+    const p: i32[] = this.params
+    conn.respond(200, this.textNames, this.textValues, p[1] - p[0] + p[3] - p[2] + p[5] - p[4] + 2)
+    conn.write(head, p[0], p[1] - p[0])
+    conn.write(this.space, ZERO, 1)
+    conn.write(head, p[2], p[3] - p[2])
+    conn.write(this.space, ZERO, 1)
+    conn.write(head, p[4], p[5] - p[4])
+    conn.end()
+  }
+
+  acceptAll(): void {
+    while (true) {
+      const slot: i32 = this.server.accept()
+      if (slot >= 0) {
+        if (this.quickack === QUICKACK_ONCE0) {
+          netSetOption(this.server.fd(slot), NET_TCP_QUICKACK, 0)
+        }
+        pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
+      } else if (slot !== H1_POOL_FULL) {
+        return
+      }
+    }
+  }
+
+  serve(slot: i32, events: i32): void {
+    if (!this.server.holds(slot)) {
+      return
+    }
+    const answered: i32 = this.requests
+    let wants: i32 = (events & 5) !== 0 ? this.server.readable(slot) : this.server.writable(slot)
+    const conn: Http1Connection = this.server.connection(slot)
+    let event: i32 = this.server.next(slot)
+    while (event !== H1_NEED_MORE && event !== H1_ERROR) {
+      if (event === H1_REQUEST) {
+        this.begin(slot, conn)
+      } else if (event === H1_BODY) {
+        this.gather(slot, conn)
+      } else if (event === H1_END) {
+        this.finish(slot, conn)
+      }
+      event = this.server.next(slot)
+    }
+    wants = this.server.flush(slot)
+    if ((wants & H1_DONE) !== 0) {
+      this.server.close(slot)
+      return
+    }
+    // One call per wakeup that answered something: a pipelined batch is one
+    // flush, and so one response as far as the peer's ACKs go. It is made even
+    // when the flush left bytes for a later writable wakeup: TCP_QUICKACK
+    // governs how the socket ACKs what it receives next, not what it sends, and
+    // the bench's responses fit one write, so a partial flush is rare here.
+    if (this.requests !== answered) {
+      if (this.quickack === QUICKACK_RESET0) {
+        netSetOption(this.server.fd(slot), NET_TCP_QUICKACK, 0)
+      } else if (this.quickack === QUICKACK_RESET1) {
+        netSetOption(this.server.fd(slot), NET_TCP_QUICKACK, 1)
+      }
+    }
+    if (this.server.rearm(slot, wants)) {
+      pollModify(this.loop, this.server.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot)
+    }
+  }
+
+  run(): void {
+    pollAdd(this.loop, this.listener, 1, LISTENER)
+    while (this.limit === 0 || this.requests < this.limit) {
+      const n: i32 = pollWait(this.loop, this.ready, -1)
+      for (let k: i32 = 0; k < n; k++) {
+        const token: i32 = this.ready[2 * k]
+        const events: i32 = this.ready[2 * k + 1]
+        if (token === LISTENER) {
+          this.acceptAll()
+        } else {
+          this.serve(token, events)
+        }
+      }
+    }
+  }
+}
+
+/** The worker count `BENCH_CORES` asks for; 1 when it is unset or not a number. */
+const benchCores = (): i32 => {
+  const env: string | null = getenv("BENCH_CORES")
+  const n: i32 = env !== null ? parseInt(env) : 1
+  // A worker's index travels in two bytes (`awaitPeers`).
+  if (n > 65535) {
+    return 65535
+  }
+  return n > 1 ? n : 1
+}
+
+/** The `QUICKACK_*` BENCH_QUICKACK names; `QUICKACK_NONE` when it is unset or unknown. */
+const benchQuickack = (): i32 => {
+  const env: string | null = getenv("BENCH_QUICKACK")
+  if (env === null) {
+    return QUICKACK_NONE
+  }
+  if (env === "reset0") {
+    return QUICKACK_RESET0
+  }
+  if (env === "once0") {
+    return QUICKACK_ONCE0
+  }
+  if (env === "reset1") {
+    return QUICKACK_RESET1
+  }
+  return QUICKACK_NONE
+}
+
+/** `value` (below 65536) into `buf`'s first two bytes, little-endian. */
+const twoBytesOf = (buf: u8[], value: i32): u8[] => {
+  buf[0] = toU8(value & 255)
+  buf[1] = toU8(value >> 8)
+  return buf
+}
+
+/**
+ * Worker `index` of `count`, its listener bound, until every worker has bound
+ * one: the others tell worker 0 over UDP on the same port number, resending
+ * until it answers, and worker 0 waits for them all. wrk opens its connections
+ * once, at `listening`, so one opened before a worker bound would stay on
+ * another worker for the whole run. Five seconds at most either way.
+ */
+const awaitPeers = (index: i32, count: i32, port: i32): void => {
+  const fd: i32 = udpBind("127.0.0.1", index === 0 ? port : 0, 0)
+  const loop: i32 = pollCreate()
+  pollAdd(loop, fd, 1, 0)
+  const ready: i32[] = new Array<i32>(2)
+  const buf: u8[] = new Array<u8>(2)
+  const from: u8[] = new Array<u8>(18)
+  const meta: i32[] = new Array<i32>(2)
+  const seen: boolean[] = new Array<boolean>(count)
+  let left: i32 = index === 0 ? count - 1 : 1
+  const to: u8[] = new Array<u8>(18)
+  netAddress(to, "127.0.0.1", port)
+  for (let tries: i32 = 0; tries < 500 && left > 0; tries++) {
+    if (index !== 0) {
+      udpSendTo(fd, twoBytesOf(buf, index), 0, 2, to, 0, 0)
+    }
+    if (pollWait(loop, ready, 10) > 0) {
+      let n: i32 = udpRecvFrom(fd, buf, 0, 2, from, meta)
+      while (n > 0) {
+        const peer: i32 = n === 2 ? toI32(buf[0]) | (toI32(buf[1]) << 8) : -1
+        if (index !== 0) {
+          left = 0
+        } else if (peer > 0 && peer < seen.length && !seen[peer]) {
+          seen[peer] = true
+          left = left - 1
+        }
+        if (index === 0) {
+          udpSendTo(fd, buf, 0, 2, from, 0, 0)
+        }
+        n = udpRecvFrom(fd, buf, 0, 2, from, meta)
+      }
+    }
+  }
+  netClose(loop)
+  netClose(fd)
+}
+
+export const main = (): i32 => {
+  // With BENCH_CORES above 1 (`bench/http.mjs --cores`) the same server runs
+  // once per core under `nish/net/prefork`, each worker on its own
+  // SO_REUSEPORT listener; the process wrk is timed against is the supervisor.
+  const cores: i32 = benchCores()
+  let worker: i32 = 0
+  let count: i32 = 1
+  if (cores > 1) {
+    const config: PreforkConfig = new PreforkConfig()
+    config.workers = cores
+    count = preforkWorkerCount(cores, getenv("NISH_WORKERS"))
+    worker = preforkWith(process.argv, config)
+    if (worker < 0) {
+      return worker === PREFORK_STOPPED ? 0 : 1
+    }
+  }
+  const args: string[] = preforkArgs(process.argv)
+  const port: i32 = args.length > 1 ? parseInt(args[1]) : 8080
+  const slots: i32 = args.length > 2 ? parseInt(args[2]) : 1024
+  const limit: i32 = args.length > 3 ? parseInt(args[3]) : 0
+  const listener: i32 = tcpListenFlags("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)
+  if (listener < 0) {
+    console.log(`listen failed ${listener}`)
+    return 1
+  }
+  const bench: Bench = new Bench(listener, slots)
+  bench.limit = limit
+  bench.quickack = benchQuickack()
+  if (count > 1) {
+    awaitPeers(worker, count, port)
+  }
+  // Only once the pool is built: a driver that starts timing on this line
+  // must not time the constructor. One line, from worker 0.
+  if (worker === 0) {
+    console.log(`listening ${port}`)
+  }
+  bench.run()
+  return 0
+}

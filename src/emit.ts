@@ -45,7 +45,13 @@ import {
 import { capabilityIndex } from "./capabilities"
 import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
-import { emitArrayLiteral, emitBytesKernel, emitElementAccess, emitForOf } from "./emit-arrays"
+import {
+  emitArrayLiteral,
+  emitBytesKernel,
+  emitElementAccess,
+  emitForOf,
+  emitJsonPutF64Kernel,
+} from "./emit-arrays"
 import {
   checksArgumentRange,
   emitBuiltinCall,
@@ -68,6 +74,7 @@ import {
   emitWhile,
 } from "./emit-control"
 import {
+  defaultValue,
   emitConstructorPrologue,
   emitMethodCall,
   emitNew,
@@ -151,6 +158,7 @@ import {
   isAesSeam,
   isCrc32Seam,
   isIndexOfAnyWalk,
+  isJsonPutF64Walk,
   isRegexScanWalk,
   isSha256Seam,
   SHA256_HW,
@@ -873,15 +881,19 @@ export class Emitter {
     const caps = this.opts.sandboxCapabilities
     const read = this.sandboxDirs("read", this.opts.sandboxRead, caps, "fs.read")
     const write = this.sandboxDirs("write", this.opts.sandboxWrite, caps, "fs.write")
+    const exec = this.sandboxDirs("exec", this.opts.sandboxExec, caps, "process.spawn")
     const apply = new IRFunction(".sandbox.apply", [], "void")
     apply.linkage = "internal"
-    apply.emit(`call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write})`)
+    apply.emit(
+      `call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write}, i8* ${exec})`
+    )
     apply.emit("ret void")
     this.module.addFunction(apply)
   }
 
   /**
-   * WP37 §2: the directories a scoped capability is held to, as one constant
+   * WP37 §2: the directories a scoped capability is held to (for
+   * `process.spawn`, the programs it may run), as one constant
    * of NUL-terminated paths ended by an empty one, and the operand that points
    * at it; `null` when `main` does not reach the capability or it is granted
    * whole, which the runtime reads as a rule beneath `/`.
@@ -1658,11 +1670,13 @@ export class Emitter {
     const operandValues: string[] = []
     // A non-exported callee takes and answers one slot per arm (WP15).
     const calleePrivate = privateAbi(this.opts, sig.visibleOutside())
+    const passed: string[] = []
     let i = 0
     while (i < args.children.length) {
       // WP29: a function argument chose which function this call reaches, and
       // that is the whole of it: there is no value to pass.
       if (sig.isCompileTime(i)) {
+        passed.push("")
         i = i + 1
         continue
       }
@@ -1680,7 +1694,18 @@ export class Emitter {
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)
+      passed.push(value)
       i = i + 1
+    }
+    // The parameters the call leaves out pass their defaults (`defaultValue`).
+    const written = sig.writtenArity()
+    for (let k = args.children.length; k < written; k = k + 1) {
+      const value = defaultValue(this, sig, k, passed)
+      const type = this.llvmAbi(sig.paramTypes[k], calleePrivate)
+      operands.push(`${type} ${value}`)
+      operandTypes.push(type)
+      operandValues.push(value)
+      passed.push(value)
     }
     // WP29: the values of the arrow's captures, after everything written.
     const captures = capturesOf(sig)
@@ -1754,6 +1779,11 @@ export class Emitter {
     }
     if (isRegexScanWalk(this.program, sig)) {
       return emitRegexScanKernel(this, operandValues)
+    }
+    // `nish/json`'s f64 walk is a kernel that writes into the array and
+    // allocates nothing.
+    if (isJsonPutF64Walk(this.program, sig)) {
+      return emitJsonPutF64Kernel(this, operandValues)
     }
     // WP38 S5: a seam of `nish/crypto/aes`, or `nish/crypto/sha256`'s block
     // function, runs the runtime kernel when its resolver says so and the

@@ -8,18 +8,18 @@ unsafe import 3:10 wrappingAdd from "nish:unsafe"
 unsafe import 3:23 wrappingMul from "nish:unsafe"
 unsafe import 3:36 wrappingSub from "nish:unsafe"
 unsafe call 6:10 wrappingMul (node 26)
-unsafe call 12:15 wrappingAdd (node 58)
-unsafe call 13:15 wrappingSub (node 68)
-unsafe call 14:15 wrappingMul (node 78)
-unsafe call 15:15 wrappingMul (node 88)
-unsafe call 16:15 wrappingSub (node 99)
-unsafe call 22:15 wrappingAdd (node 160)
-unsafe call 23:15 wrappingAdd (node 170)
-unsafe call 26:11 wrappingAdd (node 197)
-unsafe call 26:23 wrappingMul (node 200)
-unsafe call 31:9 wrappingMul (node 234)
-unsafe call 36:9 wrappingAdd (node 272)
-unsafe call 36:24 wrappingMul (node 276)
+unsafe call 12:15 wrappingAdd (node 60)
+unsafe call 13:15 wrappingSub (node 72)
+unsafe call 14:15 wrappingMul (node 84)
+unsafe call 15:15 wrappingMul (node 96)
+unsafe call 16:15 wrappingSub (node 109)
+unsafe call 22:15 wrappingAdd (node 182)
+unsafe call 23:15 wrappingAdd (node 194)
+unsafe call 26:11 wrappingAdd (node 222)
+unsafe call 26:23 wrappingMul (node 226)
+unsafe call 31:9 wrappingMul (node 262)
+unsafe call 36:9 wrappingAdd (node 302)
+unsafe call 36:24 wrappingMul (node 307)
 function times(a: i32, b: i32): i32 -> @times$
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

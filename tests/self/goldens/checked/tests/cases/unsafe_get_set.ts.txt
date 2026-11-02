@@ -6,11 +6,11 @@ import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
 unsafe import 7:10 uncheckedGet from "nish:unsafe"
 unsafe import 7:24 uncheckedSet from "nish:unsafe"
 unsafe call 9:51 uncheckedGet (node 23)
-unsafe call 12:3 uncheckedSet (node 49)
-unsafe call 15:60 uncheckedGet (node 71)
-unsafe call 18:3 uncheckedSet (node 97)
-unsafe call 21:51 uncheckedGet (node 118)
-unsafe call 24:3 uncheckedSet (node 144)
+unsafe call 12:3 uncheckedSet (node 50)
+unsafe call 15:60 uncheckedGet (node 73)
+unsafe call 18:3 uncheckedSet (node 100)
+unsafe call 21:51 uncheckedGet (node 122)
+unsafe call 24:3 uncheckedSet (node 149)
 function getI32(xs: i32[], i: i32): i32 -> @getI32 [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer xs: size=0 writesThrough=false captured=false

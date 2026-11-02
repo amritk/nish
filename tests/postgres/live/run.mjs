@@ -13,6 +13,13 @@
 // starts a throwaway PostgreSQL 18 cluster under `$PG_BIN`
 // (/usr/lib/postgresql/18/bin). It is not part of `tests/run.js`: CI's
 // `postgres-live` job runs it against a `postgres:18` service.
+//
+// The `unix` scenario connects through the server's Unix socket, named by a
+// `postgres://` URL with a percent-encoded directory as its host, and logs in
+// with a wrong password: the throwaway cluster maps this OS user to the role
+// by `peer`, and a server under `$PG_TEST_URL` must `trust` local
+// connections, with `$PG_TEST_SOCKET_DIR` naming its socket directory. With
+// `$PG_TEST_URL` and no `$PG_TEST_SOCKET_DIR`, `unix` is skipped.
 import { spawn, spawnSync } from "node:child_process";
 import {
   chownSync,
@@ -25,7 +32,7 @@ import {
 } from "node:fs";
 import { request } from "node:http";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,7 +40,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..", "..");
 const NISH = join(ROOT, "build", "nish");
 const BIN = process.env.PG_BIN ?? "/usr/lib/postgresql/18/bin";
-const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "binary", "conduit", "batch"];
+const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "binary", "conduit", "batch", "unix"];
 const CHECKS = [...SCENARIOS, "carrier", "refused", "reset"];
 const UPDATE = process.argv.includes("--update");
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -92,9 +99,13 @@ const startCluster = async () => {
   const hba = join(data, "pg_hba.conf");
   writeFileSync(
     hba,
-    "local all postgres trust\nhost all all 127.0.0.1/32 scram-sha-256\n",
+    "local all postgres trust\nlocal all nish_live peer map=live\nhost all all 127.0.0.1/32 scram-sha-256\n",
   );
   if (owner) chownSync(hba, owner.uid, owner.gid);
+  // Peer: whoever runs the live programs logs in as nish_live, no password.
+  const ident = join(data, "pg_ident.conf");
+  writeFileSync(ident, `live ${userInfo().username} nish_live\n`);
+  if (owner) chownSync(ident, owner.uid, owner.gid);
   const opts = `-c listen_addresses=127.0.0.1 -c port=${port} -c unix_socket_directories=${dir} -c fsync=off`;
   run(
     join(BIN, "pg_ctl"),
@@ -125,6 +136,7 @@ const startCluster = async () => {
     user: "nish_live",
     password: "nish-live",
     database: "nish_live",
+    socket: dir,
     stop,
   };
 };
@@ -143,6 +155,7 @@ const fromUrl = (text) => {
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: url.pathname.slice(1),
+    socket: process.env.PG_TEST_SOCKET_DIR || null,
     stop: () => {},
   };
 };
@@ -195,9 +208,14 @@ const compile = (source, out) => {
 
 /** `live <scenario>` against the server; its stdout and exit status. */
 const live = (exe, db, scenario, sql = []) => {
+  // `unix` names the socket's directory as a URL's percent-encoded host.
+  const where =
+    scenario === "unix"
+      ? `postgres://${db.user}@${encodeURIComponent(db.socket)}:${db.port}/${db.database}`
+      : String(db.port);
   const args = [
     scenario,
-    String(db.port),
+    where,
     db.user,
     db.password,
     db.database,
@@ -266,7 +284,7 @@ const carrier = async (exe, db) => {
   };
 };
 
-/** With nothing listening on its PostgreSQL port, the carrier must report the query lost and the slot failed, not wait. */
+/** With nothing listening on its PostgreSQL port, the carrier must fail the query at once with the connect's error, not wait. */
 const refused = async (exe) => {
   const port = await freePort();
   const http = await freePort();
@@ -274,7 +292,9 @@ const refused = async (exe) => {
     encoding: "utf8",
     timeout: 30_000,
   });
-  const want = "listening\nrequest 0 lost\nslot 0 failed: 9\n";
+  // -111 is ECONNREFUSED, whether the connect fails at once or at its result;
+  // -110 would be the connect timeout, the wait this check rules out.
+  const want = "listening\nnap failed: failure 9, socket -111\n";
   return {
     ok: r.status === 1 && r.stdout === want,
     detail: `status ${r.status}, stdout ${JSON.stringify(r.stdout)}`,
@@ -284,8 +304,8 @@ const refused = async (exe) => {
 /**
  * A server that resets the connection once the startup message arrives: the
  * carrier's read fails with ECONNRESET, not 0, and must end the connection
- * there, reporting the query lost and the slot failed, rather than leave the
- * readable socket to the next turn.
+ * there, failing the query with that error, rather than leave the readable
+ * socket to the next turn.
  */
 const reset = async (exe) => {
   const server = createServer((socket) => {
@@ -305,10 +325,9 @@ const reset = async (exe) => {
   clearTimeout(timer);
   await new Promise((resolve) => server.close(resolve));
   // -104 is ECONNRESET; Linux reports it to one read, and the next reads 0.
-  // `failure 9` (PG_ERR_CLOSED) is printed after the carrier's closed(), so it
-  // pins the close to the failed read rather than to that later 0.
-  const want =
-    "listening\nslot 0 read failed: -104, failure 9\nrequest 0 lost\nslot 0 failed: 9\n";
+  // The socket error pins the close to the failed read rather than to that
+  // later 0, which ends the connection with no error.
+  const want = "listening\nnap failed: failure 9, socket -104\n";
   return {
     ok: status === 1 && out === want,
     detail: `status ${status}, stdout ${JSON.stringify(out)}`,
@@ -322,7 +341,7 @@ const main = async () => {
   const work = mkdtempSync(join(tmpdir(), "nish-live-"));
   let failed = 0;
   let passed = 0;
-  const skipped = CHECKS.filter((name) => !wanted(name)).length;
+  let skipped = CHECKS.filter((name) => !wanted(name)).length;
   try {
     const exe = join(work, "live");
     compile(join(HERE, "live.ts"), exe);
@@ -344,6 +363,11 @@ const main = async () => {
     mkdirSync(join(HERE, "expected"), { recursive: true });
     for (const scenario of SCENARIOS) {
       if (!wanted(scenario)) continue;
+      if (scenario === "unix" && !db.socket) {
+        skipped += 1;
+        console.log("skip unix: $PG_TEST_URL without $PG_TEST_SOCKET_DIR");
+        continue;
+      }
       const got = live(exe, db, scenario);
       const text = `${got.out}exit ${got.status}\n`;
       const file = join(HERE, "expected", `${scenario}.out`);

@@ -3,10 +3,10 @@
 entry: tests/differential/corpus/recursion.ts
 import wrappingMul from "nish:unsafe" -> builtin wrappingMul
 unsafe import 2:10 wrappingMul from "nish:unsafe"
-unsafe call 19:23 wrappingMul (node 106)
-unsafe call 39:26 wrappingMul (node 232)
-unsafe call 39:52 wrappingMul (node 237)
-unsafe call 39:64 wrappingMul (node 240)
+unsafe call 19:23 wrappingMul (node 111)
+unsafe call 39:26 wrappingMul (node 243)
+unsafe call 39:52 wrappingMul (node 249)
+unsafe call 39:64 wrappingMul (node 253)
 function fib(n: i32): i32 -> @fib
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n

@@ -32,6 +32,7 @@ import {
   tcpListen,
 } from "nish:net";
 import { HTTP1_CHUNKED, HTTP1_FIRST_HEAD, HTTP1_FIRST_INPUT, HTTP1_NO_BODY } from "nish/net/http1";
+import { HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields";
 import {
   H1_AGAIN,
   H1_ALPN,
@@ -743,6 +744,64 @@ export const serverChecks = (): i32 => {
     "the server's slots share one date: a second set through one is formatted once and read through another",
     lb.plain.date.formats() - shared === toI64(1) && seen === "Fri, 16 Oct 2026 08:11:56 GMT"
   );
+  lb.plain.date.pin(PINNED_MS);
+
+  // --- 3b. The clock, read once per serve call --------------------------------------------------
+  lb.plain.date.unpin();
+  const burst: i32 = lb.connect(false);
+  const readsBefore: i64 = lb.plain.date.clockReads();
+  const servedBefore: i32 = lb.served;
+  const eight: string[] = [];
+  for (let k: i32 = 0; k < 8; k++) {
+    eight.push(get);
+  }
+  lb.send(burst, ascii(eight.join("")));
+  let dated: i32 = 0;
+  for (let k: i32 = 0; k < 8; k++) {
+    const r = lb.response(burst, false);
+    if (r.status === 200 && r.head.indexOf("\r\nDate: ") >= 0) {
+      dated = dated + 1;
+    }
+  }
+  const reads: i64 = lb.plain.date.clockReads() - readsBefore;
+  t.ok(
+    "eight pipelined responses, each with a Date, read the clock once per serve call, fewer times than they were answered",
+    dated === 8 && reads <= toI64(lb.served - servedBefore) && reads < toI64(8)
+  );
+  lb.hangUp(burst);
+
+  const later: i32 = lb.connect(false);
+  lb.send(later, ascii("GET /later HTTP/1.1\r\nHost: a\r\n\r\n"));
+  lb.settle();
+  let laterSlot: i32 = -1;
+  for (let k: i32 = 0; k < toI32(lb.app.plainStates.length); k++) {
+    if (lb.plain.holds(k) && lb.app.plainStates[k].mode === 5) {
+      laterSlot = k;
+    }
+  }
+  const readsLater: i64 = lb.plain.date.clockReads();
+  const fromSecond: i64 = toI64(Date.now()) / toI64(1000);
+  if (laterSlot >= 0) {
+    const laterConn: Http1Connection = lb.plain.connection(laterSlot);
+    laterConn.respond(toI32(204), lb.app.none, lb.app.none, HTTP1_NO_BODY);
+    laterConn.end();
+    lb.plain.flush(laterSlot);
+    lb.app.plainStates[laterSlot].reset();
+  }
+  const toSecond: i64 = toI64(Date.now()) / toI64(1000);
+  const answer = lb.response(later, false);
+  const fromDate: u8[] = new Array<u8>(HTTP_DATE_SIZE);
+  const toDate: u8[] = new Array<u8>(HTTP_DATE_SIZE);
+  httpDateWrite(fromDate, ZERO, fromSecond);
+  httpDateWrite(toDate, ZERO, toSecond);
+  t.ok(
+    "an answer given later, outside a serve call, reads the clock and carries the current second",
+    laterSlot >= 0 &&
+      answer.status === 204 &&
+      lb.plain.date.clockReads() - readsLater === toI64(1) &&
+      (answer.has(`Date: ${latin1(fromDate)}`) || answer.has(`Date: ${latin1(toDate)}`))
+  );
+  lb.hangUp(later);
   lb.plain.date.pin(PINNED_MS);
 
   // --- 4. The refusals ----------------------------------------------------------------------------

@@ -2536,6 +2536,12 @@ subprotocol. [WebSocket](websocket.md) shows both.
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
 shows it.
 
+`nish/net/handler` is a request and response layer over `Http1Server`: an
+`HttpHandler` accepts, reads and routes, and your loop takes whole requests
+(`wait`, `ready`, `take`) and answers each with `send`, `sendJson`,
+`problem` or a streamed `start`, `write`, `end`, now or later. It owns the
+socket loop, so it is native only; [API server](api-server.md) shows it.
+
 `nish/net/http-compress` reads `Accept-Encoding` and gzips a response body,
 and `Http1Connection.respondEncoded` sends one with `Content-Encoding` and
 `Content-Length` set; [Compression](compression.md) shows it.

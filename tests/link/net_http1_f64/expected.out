@@ -52,6 +52,13 @@ PASS  refused with 400: an empty field name
 PASS  refused with 400: a NUL in a field value
 PASS  refused with 400: a bare CR in a field value
 PASS  refused with 400: a DEL in a field value
+PASS  a NUL anywhere in a 40-byte value is refused, every cut agreeing
+PASS  a 0x01 anywhere in a 40-byte value is refused, every cut agreeing
+PASS  a 0x1f anywhere in a 40-byte value is refused, every cut agreeing
+PASS  a DEL anywhere in a 40-byte value is refused, every cut agreeing
+PASS  a bare CR anywhere in a 40-byte value is refused, every cut agreeing
+PASS  a HTAB anywhere in a 40-byte value is read, every cut agreeing
+PASS  an obs-text byte anywhere in a 40-byte value is read, every cut agreeing
 PASS  refused with 400: HTTP/1.1 without Host
 PASS  refused with 400: HTTP/1.1 with two Host fields
 PASS  refused with 400: HTTP/1.0 with two Host fields
@@ -205,4 +212,4 @@ PASS  one byte further on it is HTTP1_NO_ROOM
 PASS  http1WriteLastChunk writes the last chunk at its offset
 PASS  and is HTTP1_NO_ROOM four bytes from the end
 PASS  http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter
-http1: 207 passed, 0 failed, 0 skipped
+http1: 214 passed, 0 failed, 0 skipped

@@ -1003,7 +1003,7 @@ export class FunctionFacts {
 
   /** WP6: the allocation at `node` was proved not to outlive the function. */
   isStackSite(node: Node): boolean {
-    return this.stackSites[node.id]
+    return node.id < this.stackSites.length && this.stackSites[node.id]
   }
 
   /** Each pass of `body` is bracketed with its own arena scope: it is the body of a scoped loop. */
@@ -1593,24 +1593,33 @@ const isPartsUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): boolean =>
 }
 
 /**
- * The declaration under `node` that binds `local`, or null. It skips lifted
- * arrow bodies as `collectRefs` does, so the two walks see the same function.
+ * Every declaration under `node` that binds a local, in the order a walk
+ * from `node` meets them, filed by the local's name: `names` answers a
+ * bucket of `buckets`. It skips lifted arrow bodies as `collectRefs` does,
+ * so the two walks see the same function.
  */
-const declarationIn = (program: CheckedProgram, node: Node, local: Local): Node | null => {
+const gatherDeclarations = (
+  program: CheckedProgram,
+  node: Node,
+  names: StringMap,
+  buckets: Node[][]
+): void => {
   if (node.kind === N_ARROW) {
-    return null
+    return
   }
   const declared: Local | null = node.kind === N_VAR_DECL ? program.nodeLocals[node.id] : null
-  if (declared !== null && declared === local) {
-    return node
+  if (declared !== null) {
+    let at = names.get(declared.name, -1)
+    if (at < 0) {
+      at = buckets.length
+      names.set(declared.name, at)
+      buckets.push([])
+    }
+    buckets[at].push(node)
   }
   for (const child of node.children) {
-    const found = declarationIn(program, child, local)
-    if (found !== null) {
-      return found
-    }
+    gatherDeclarations(program, child, names, buckets)
   }
-  return null
 }
 
 /**
@@ -1844,8 +1853,16 @@ class FactCollector {
   facts: FunctionFacts
   /** Round 1's fixpoint, or `null` in round 1 itself; see `bodyMayExtend`. */
   known: FactsTable | null
+  /**
+   * The body's declarations by local name (`gatherDeclarations`), gathered
+   * the first time `declarationOf` is asked, so that a body of many
+   * references walks itself once rather than once per reference.
+   */
+  declNames: StringMap
+  declBuckets: Node[][]
   /** The next `PanicSite.order`: how many sites the walk has put in evaluation order. */
   siteOrder: i32
+  declsGathered: boolean
 
   constructor(
     unit: AnalysisUnit,
@@ -1862,6 +1879,31 @@ class FactCollector {
     this.facts = facts
     this.known = known
     this.siteOrder = 0
+    this.declNames = new StringMap()
+    this.declBuckets = []
+    this.declsGathered = false
+  }
+
+  /**
+   * The declaration in `body`, this function's body, that binds `local`, or
+   * null: the first one a walk of the body meets.
+   */
+  declarationOf(body: Node, local: Local): Node | null {
+    if (!this.declsGathered) {
+      gatherDeclarations(this.unit.program, body, this.declNames, this.declBuckets)
+      this.declsGathered = true
+    }
+    const at = this.declNames.get(local.name, -1)
+    if (at < 0) {
+      return null
+    }
+    for (const decl of this.declBuckets[at]) {
+      const declared = this.unit.program.nodeLocals[decl.id]
+      if (declared !== null && declared === local) {
+        return decl
+      }
+    }
+    return null
   }
 
   /** A reference to one of this function's parameters (`this` and `super` included), by name. */
@@ -2032,7 +2074,7 @@ class FactCollector {
     }
     const refs: Node[] = []
     collectRefs(this.unit.program, body, parts, refs)
-    return isJoinedParts(this.unit, this.table, parts, declarationIn(this.unit.program, body, parts), refs)
+    return isJoinedParts(this.unit, this.table, parts, this.declarationOf(body, parts), refs)
   }
 
   /** `expr` denotes a stack object: a stack allocation itself, or a local that only holds one. */
@@ -2195,7 +2237,7 @@ class FactCollector {
     }
     const body = this.sig.body()
     const decl: Node | null =
-      local.mutable || body === null || depth >= 8 ? null : declarationIn(this.unit.program, body, local)
+      local.mutable || body === null || depth >= 8 ? null : this.declarationOf(body, local)
     if (decl === null) {
       return new MemPath(ROOT_UNKNOWN, "", "")
     }
@@ -2290,8 +2332,7 @@ class FactCollector {
       return `o${at}`
     }
     const body = this.sig.body()
-    const decl: Node | null =
-      local.mutable || body === null ? null : declarationIn(this.unit.program, body, local)
+    const decl: Node | null = local.mutable || body === null ? null : this.declarationOf(body, local)
     const init: Node | null = decl === null ? null : unwrapParens(decl.children[2])
     if (init === null) {
       return ""
@@ -3712,13 +3753,18 @@ const collectFacts = (
   known: FactsTable | null
 ): FunctionFacts => {
   const program = unit.program
-  const facts = new FunctionFacts(sig.paramNames, nodeCount)
+  // WP29 P3: what a channel's `send` allocates in its source body is Node's
+  // (`markChannelSend`), so its escape analysis is not this instance's.
+  const ownMemory = memory !== null && !isChannelSend(sig) && jsonRouteOf(sig) === JSON_NONE
+  // `stackSites` is sized by the whole program's node count, so a table per
+  // function is quadratic. Round 1 (`known` is null) has no escape analysis yet
+  // and proves no site, and a function that takes the analysis's table needs
+  // none of its own; `isStackSite` reads past the end as false.
+  const facts = new FunctionFacts(sig.paramNames, known === null || ownMemory ? 0 : nodeCount)
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)
-  // WP29 P3: what a channel's `send` allocates in its source body is Node's
-  // (`markChannelSend`), so its escape analysis is not this instance's.
-  if (memory !== null && !isChannelSend(sig) && jsonRouteOf(sig) === JSON_NONE) {
+  if (memory !== null && ownMemory) {
     facts.stackSites = memory.stackSites
     facts.stackLocals = memory.stackLocals
     facts.stackParams = memory.stackParams

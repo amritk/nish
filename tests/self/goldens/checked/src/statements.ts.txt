@@ -54,6 +54,8 @@ import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import terminatesControlFlow from "./builtins" -> function @terminatesControlFlow
 import rejectDiscardedResult from "./result" -> function @rejectDiscardedResult
+import optionalParameterMessage from "./declarations" -> function @optionalParameterMessage
+import parameterFormHereMessage from "./declarations" -> function @parameterFormHereMessage
 import FLAG_ABSTRACT from "./nodes" -> const FLAG_ABSTRACT
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
 import FLAG_AWAIT from "./nodes" -> const FLAG_AWAIT
@@ -65,6 +67,7 @@ import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
 import FLAG_PROPERTY from "./nodes" -> const FLAG_PROPERTY
 import FLAG_READONLY from "./nodes" -> const FLAG_READONLY
 import FLAG_REST from "./nodes" -> const FLAG_REST
+import FLAG_SIGNATURE from "./nodes" -> const FLAG_SIGNATURE
 import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import FLAG_VAR from "./nodes" -> const FLAG_VAR
 import N_ARROW from "./nodes" -> const N_ARROW
@@ -606,7 +609,7 @@ function sweepNested(ctx: CheckContext, node: Node): void -> @sweepNested
 function sweepForms(ctx: CheckContext, node: Node, owner: Node | null): void -> @sweepForms
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseExpressionForm
-  calls: CheckContext.error isMemberList nish_panic_index refuseAtChild refuseBindingForm refuseDeclarator refuseExpressionForm refuseMembers refuseStructHeader refuseTypeForm sweepNested sweepTypeParameters typeParameterSlot
+  calls: CheckContext.error isMemberList nish_panic_index parameterFormHereMessage refuseAtChild refuseBindingForm refuseDeclarator refuseExpressionForm refuseMembers refuseStructHeader refuseTypeForm sweepNested sweepTypeParameters typeParameterSlot
   pointer ctx: size=288 writesThrough=true captured=false passedTo=refuseExpressionForm#0 refuseTypeForm#0 refuseBindingForm#0 refuseStructHeader#0 CheckContext.error#0 CheckContext.error#0 sweepTypeParameters#0 CheckContext.error#0 refuseAtChild#0 refuseMembers#0 refuseDeclarator#0 sweepNested#0 sweepNested#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=refuseExpressionForm#1 refuseTypeForm#1 refuseBindingForm#1 refuseStructHeader#1 CheckContext.error#1 typeParameterSlot#0 refuseAtChild#1 isMemberList#0 refuseMembers#1 refuseDeclarator#1 CheckContext.error#1
   pointer owner: size=40 writesThrough=false captured=false passedTo=refuseAtChild#3
@@ -631,12 +634,13 @@ function sweepForms(ctx: CheckContext, node: Node, owner: Node | null): void -> 
   callee +34:11 sweepNested -> @sweepNested
   callee +37:9 sweepNested -> @sweepNested
   callee +43:5 CheckContext.error -> @CheckContext.error
+  callee +43:21 parameterFormHereMessage -> @parameterFormHereMessage
 function refuseBindingForm(ctx: CheckContext, node: Node): void -> @refuseBindingForm
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
-  calls: CheckContext.error nish_panic_index nish_str_concat
-  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
+  calls: CheckContext.error nish_panic_index nish_str_concat optionalParameterMessage parameterFormHereMessage
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 optionalParameterMessage#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 optionalParameterMessage#1
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.error -> @CheckContext.error
   callee +2:5 CheckContext.error -> @CheckContext.error
@@ -645,8 +649,11 @@ function refuseBindingForm(ctx: CheckContext, node: Node): void -> @refuseBindin
   callee +9:9 CheckContext.error -> @CheckContext.error
   callee +17:7 CheckContext.error -> @CheckContext.error
   callee +22:7 CheckContext.error -> @CheckContext.error
+  callee +22:23 parameterFormHereMessage -> @parameterFormHereMessage
   callee +24:7 CheckContext.error -> @CheckContext.error
   callee +26:7 CheckContext.error -> @CheckContext.error
+  callee +29:13 optionalParameterMessage -> @optionalParameterMessage
+  callee +30:13 parameterFormHereMessage -> @parameterFormHereMessage
 function refuseAtChild(ctx: CheckContext, node: Node, i: i32, owner: Node | null): void -> @refuseAtChild
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseMemberAtChild

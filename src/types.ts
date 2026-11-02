@@ -554,15 +554,33 @@ export class TypeTable {
     return this.names[type]
   }
 
-  /** Whether the union `type` has `variant` among its variants. */
+  /**
+   * Whether the union `type` has `variant` among its variants: a binary search,
+   * since `variantsOf` is ascending and a switch over a 200-variant union asks
+   * once for every variant of every case (`tests/cases/union_scale.ts`).
+   */
   hasVariant(type: i32, variant: i32): boolean {
     const variants = this.variantsOf(type)
-    let i = 0
-    while (i < variants.length) {
-      if (variants[i] === variant) {
+    let lo = 0
+    let hi = variants.length
+    while (lo < hi) {
+      const mid = lo + ((hi - lo) >> 1)
+      // Never taken, since `lo <= mid < hi <= variants.length`, but the bounds
+      // pass cannot follow `lo` and `hi` through the loop. This test proves the
+      // read below in range, so it replaces that read's bounds check and its
+      // `nish_panic_index`, and adds no other check.
+      if (mid < 0 || mid >= variants.length) {
+        return false
+      }
+      const at = variants[mid]
+      if (at === variant) {
         return true
       }
-      i = i + 1
+      if (at < variant) {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
     }
     return false
   }
@@ -796,15 +814,22 @@ export class TypeTable {
 
   unionMangle(type: i32): string {
     const variants = this.variantsOf(type)
-    return `un${variants.length}${this.joinedMangles(variants, 0)}`
+    return `un${variants.length}${this.joinedMangles(variants, 0, variants.length)}`
   }
 
-  /** `.` and each variant's mangle from `at` on, recursively so that nothing is written. */
-  joinedMangles(variants: i32[], at: i32): string {
-    if (at < 0 || at >= variants.length) {
+  /**
+   * `.` and each variant's mangle in `[from, to)`, recursively so that nothing
+   * is written, and halving as `joinedNames` does.
+   */
+  joinedMangles(variants: i32[], from: i32, to: i32): string {
+    if (from < 0 || to > variants.length || from >= to) {
       return ""
     }
-    return `.${this.mangle(variants[at])}${this.joinedMangles(variants, at + 1)}`
+    if (to - from === 1) {
+      return `.${this.mangle(variants[from])}`
+    }
+    const mid = from + ((to - from) >> 1)
+    return `${this.joinedMangles(variants, from, mid)}${this.joinedMangles(variants, mid, to)}`
   }
 
   /** An array's element as its type spells it: a union in parentheses, `(A | B)[]`. */
@@ -815,16 +840,25 @@ export class TypeTable {
 
   /** The variant names joined as the source joins them, ascending by id. */
   unionName(type: i32): string {
-    return this.joinedNames(this.variantsOf(type), 0)
+    const variants = this.variantsOf(type)
+    return this.joinedNames(variants, 0, variants.length)
   }
 
-  /** The names from `at` on, joined by ` | `, recursively so that nothing is written. */
-  joinedNames(variants: i32[], at: i32): string {
-    if (at < 0 || at >= variants.length) {
+  /**
+   * The names in `[from, to)`, joined by ` | `, recursively so that nothing is
+   * written. Halving keeps the copying to O(n log n): peeling one name at a
+   * time copied the tail once per variant, quadratic in a union of hundreds
+   * that `checkOperator` names for every `!== null` (`union_scale`).
+   */
+  joinedNames(variants: i32[], from: i32, to: i32): string {
+    if (from < 0 || to > variants.length || from >= to) {
       return ""
     }
-    const head = this.typeName(variants[at])
-    return at + 1 < variants.length ? `${head} | ${this.joinedNames(variants, at + 1)}` : head
+    if (to - from === 1) {
+      return this.typeName(variants[from])
+    }
+    const mid = from + ((to - from) >> 1)
+    return `${this.joinedNames(variants, from, mid)} | ${this.joinedNames(variants, mid, to)}`
   }
 
   /** The LLVM struct name (without the `%struct.` prefix) backing a `Result`. */

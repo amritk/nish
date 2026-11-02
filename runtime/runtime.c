@@ -174,14 +174,24 @@ static NISH_COLD void nish_oom(void) { nish_die("nish: out of memory\n"); }
    `nish_array_grow` and `nish_str_concat`. */
 #define NISH_ARRAY_MAX 2147483647u
 
-/* Slow path (size 8-byte rounded): push a chunk (>= 64 KB), bump from it. */
+/* The size of the next chunk while a region is entered (runtime-region.c
+   swaps it in and out with the region's arena), or 0 for the thread's own
+   arena, whose chunks are at least 64 KB. Defined here, not there, so that
+   this file still links alone. */
+NISH_TLS uint64_t nish_region_chunk;
+
+/* Slow path (size 8-byte rounded): push a chunk (>= 64 KB, or a region's
+   next size), bump from it. A region's chunks double from its first. */
 void *nish_arena_grow(uint64_t size) {
 #ifdef NISH_ASAN
   /* An exact chunk leaves off == cap, so the inline bump never fits again and
      every block comes through here: one malloc, one redzone, per block. */
   uint64_t cap = size;
 #else
-  uint64_t cap = size > 65536 ? size : 65536;
+  uint64_t next = nish_region_chunk;
+  uint64_t floor = next ? next : 65536;
+  uint64_t cap = size > floor ? size : floor;
+  if (next) nish_region_chunk = cap * 2;
 #endif
   /* A 64-bit request cannot always be asked for: wasm32's `size_t` is 32 bits,
      and malloc would silently take the low half of a chunk nobody can address. */
@@ -1342,6 +1352,21 @@ int nish_f64_format(double v, char out[NISH_F64_MAX]) {
 nish_str *nish_str_from_f64(double v) {
   char out[NISH_F64_MAX];
   return nish_str_new(out, (uint64_t)nish_f64_format(v, out));
+}
+
+/* `JsonWriter.f64`'s digits straight into the writer's buffer (std/json.ts,
+   `jsonPutF64Walk`; the emitter makes the call, src/kernels.ts): `v`'s
+   spelling at `buf[at]`, all of it or none. Answers the new end, or -1 when
+   `at` is negative or the bytes do not fit before `len`, and then writes
+   nothing, as `jsonWriterPutText` does. `len` is the array's length as the
+   Nish code's `toI32` reads it, which is never more than the array holds; the
+   comparison is in 64 bits, so no `len` or `at` wraps it. */
+int32_t nish_json_put_f64(uint8_t *buf, int32_t len, int32_t at, double v) {
+  char out[NISH_F64_MAX];
+  int n = nish_f64_format(v, out);
+  if (at < 0 || (int64_t)at > (int64_t)len - n) return -1;
+  memcpy(buf + at, out, (size_t)n);
+  return at + n;
 }
 
 /* ---- Math.random: xorshift64*, seeded lazily from time and pid. The shifts

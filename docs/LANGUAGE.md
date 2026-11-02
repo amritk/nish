@@ -1547,11 +1547,12 @@ spelling; the two compile to identical IR, instruction for instruction
 - **A function may be generic**, and each instantiation is compiled on its
   own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
-  destructured / rest / optional / default parameters
-  (`Destructured parameters are not supported`, `reject_param_destructured`;
-  `Rest parameters are not supported`, `reject_param_rest`;
-  `Optional/default parameters are not supported`, `reject_param_default`),
-  in a declaration, a method or an arrow argument alike, overloads
+  destructured parameters (`Destructured parameters are not supported`,
+  `reject_param_destructured`), optional parameters (`x?: T`,
+  `Optional parameters are not supported`, `reject_param_optional`, which names
+  `x: T = <default>` instead), a default or rest parameter anywhere but the
+  declarations [Default and rest parameters](#default-and-rest-parameters)
+  lists (`reject_param_default`, `reject_param_rest`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
   signature with no body, `function f(): void;`, is
   `Functions must have a body`), an anonymous `export default function ()`
@@ -1566,6 +1567,74 @@ spelling; the two compile to identical IR, instruction for instruction
   (`` Function `f` must return a value of type i32 on every path ``,
   `tests/cases/reject_missing_return`, `reject_cf_missing_return_loop`); see
   [Termination](#termination-definite-return-and-unreachable-code).
+
+#### Default and rest parameters
+
+```ts
+function scale(x: number, by: number = 2): number { return x * by }
+function area(w: number, h: number = w): number { return w * h }
+function total(...xs: i64[]): i64 { let s: i64 = 0; for (const x of xs) { s = s + x } return s }
+
+scale(3)        // scale(3, 2)
+area(4)         // area(4, 4)
+total()         // total([])
+total(1, 2, 3)  // total([1, 2, 3])
+```
+
+A function, a method with a body, a constructor, and an arrow bound to a
+module `const` may give trailing parameters a **default** or end in one **rest
+parameter**. Both are filled in **at the call site**: the callee is compiled as
+if every argument were always passed, with no branch on a missing one, so a call
+that passes every argument compiles to the same IR it did before the function
+had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
+`param_generic`, across modules `tests/link/param_modules`).
+
+- **A default is a constant or an earlier parameter**: a numeric literal (a
+  negative one too), `true`/`false`, a string literal, an enum member, or the
+  name of a parameter written before it. Anything else is refused
+  (`reject_param_default_expression`, `reject_param_default_later`,
+  `reject_param_default_array`, `reject_param_default_fraction`).
+- **A default's parameter is annotated**, `n: i32 = 1`, never `n = 1`
+  (`reject_param_default_untyped`), and its type is a number, `boolean`,
+  `string` or enum (`reject_param_default_parameter_type`), not a type
+  parameter (`reject_param_default_generic`). Every parameter after one with a
+  default has one too (`reject_param_default_order`).
+- **A rest parameter is last, has an array type and no default**
+  (`reject_param_rest_not_last`, `reject_param_rest_not_array`,
+  `reject_param_rest_default`), and a function has a default or a rest, not
+  both (`reject_param_rest_and_default`). The call gathers its trailing
+  arguments into one array of exactly that many elements, on the stack unless
+  the callee lets it escape — the same array an explicit literal
+  `total([1, 2, 3])` builds.
+- **A rest of records takes only fresh object literals.** The array copies each
+  inline record (an interface no class implements) into its slot, so a named
+  record passed through a rest would be a copy the callee's write never
+  reaches, where TypeScript would write the caller's own: `bumpAll(p)` is
+  `` A rest parameter copies each `Cell` record it gathers, ... ``
+  (`reject_param_rest_record`). Pass `[p]` to a `Cell[]` parameter, where the
+  copy is written out. A class instance is a reference, so a rest of class
+  instances gathers the caller's objects.
+- **Not on a function-typed parameter**, which a call names by value
+  (`reject_param_function_default`, `reject_param_function_type`), and a
+  function with a rest parameter is never passed as a function value
+  (`reject_param_rest_function_value`): called through the parameter, Node
+  would gather differently.
+- **No spread argument**: `total(...xs)` is
+  `Spread arguments are not supported` (`reject_param_spread_call`); pass `xs`
+  to a parameter of array type.
+- Too few or too many arguments name the range the function takes
+  (`reject_param_arity`).
+- **A host sees neither.** Defaults and rest are filled in by a Nish call
+  site, so an exported function's symbol takes every parameter: the
+  `--emit-dts` typings, the `--emit-header` prototype and the `--emit-napi`
+  shim require each argument, and take a rest parameter as one plain array
+  ([wp8-interop.md](wp8-interop.md#the-c-abi)).
+- What a call evaluates is what TypeScript evaluates: each argument once, left
+  to right, whether it fills a default's place or gathers into a rest
+  (`tests/cases/param_eval_order`). A rest array the callee returns, stores in
+  a field or lets a caller keep is allocated in the arena, not on the stack
+  (`param_rest_escape`); a default on an imported class's constructor or method
+  is filled in by the importing module (`tests/link/param_default_import`).
 
 ### Module constants
 
@@ -5562,7 +5631,7 @@ close it.
 Each of these is refused, and each refusal is pinned by a case:
 
 - **A variadic C function, spelled variadically.** A rest parameter is
-  `Rest parameters are not supported` before its type is read, `...bytes:
+  `Rest parameters are not supported here` before its type is read, `...bytes:
   u8[]` included (`reject_ffi_variadic`, `reject_ffi_buffer_rest`). A variadic function declared with a
   fixed arity, `printf(fmt: string, x: i32)`, is accepted and is the
   declaration's contract: the compiler cannot tell `open` is variadic from its
@@ -8445,7 +8514,7 @@ bytes — natively and under WASI, and expect the same lines from both.
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
-| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2594); a second argument is refused too (`` `sort` takes one comparator ``, NL2593). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow that **captures nothing** — an arrow reading a local of the function it is written in is refused until closure capture lands. Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
+| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2610); a second argument is refused too (`` `sort` takes one comparator ``, NL2609). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -9777,8 +9846,9 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
 
 ##### A dependency's capabilities
 
-A dependency — a package loaded from `node_modules` — may reach `ffi`, `net`,
-`process.spawn` and `unsafe`, the **gated** capabilities, only when the root
+A dependency — a package loaded from `node_modules` — may reach `ffi`,
+`fs.read`, `fs.write`, `net`, `process.spawn` and `unsafe`, the **gated**
+capabilities, only when the root
 `package.json` grants them to it by name; it reaches every other capability
 without one ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)):
 
@@ -9823,6 +9893,51 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   (`caps_dep_manifest_ungated`). `unsafe` may be granted, keys are decoded as
   JSON, and a grant to a package the program does not load is no error
   (`caps_dep_manifest_unsafe`, `_escaped_name`, `_unloaded`).
+- `fs.read` and `fs.write` are gated: a dependency that reads or writes a file
+  needs its grant like one that dials (`caps_dep_fs_read_refused`,
+  `caps_dep_fs_write_refused`).
+
+A grant entry may carry an **argument**, `capability=argument`, which narrows
+it: a directory for `fs.read` and `fs.write`, a program for `process.spawn`,
+a numeric host, or a Unix socket's absolute path, for `net`. An entry
+without one grants the capability whole, as before:
+
+```json
+{ "nish": { "capabilities": { "dependencies": {
+  "pkg_tool": ["fs.read=./data", "process.spawn=git", "net=127.0.0.1"]
+} } } }
+```
+
+- A directory is resolved from the root package's directory and must exist
+  when the program is built (NL3047); a program is found on `PATH`, or as a
+  path from that directory (NL3046); a host is an IPv4 or IPv6 address, the
+  form `nish:net` takes (NL3045). `ffi`, `unsafe` and the ungated
+  capabilities take no argument (NL3048; all four in
+  `caps_dep_manifest_arg_refused`). A capability may be named more than once,
+  one argument each.
+- What the compiler can see it checks: a string literal a dependency hands
+  `readFileSync`, `writeFileSync`, `spawnSync` or `netAddress` outside its
+  grant is refused (NL2594), at the literal:
+
+  ```text
+  node_modules/pkg_conf/src/index.ts:2:38: error: the dependency `pkg_conf` hands `readFileSync` "/etc/passwd", which its `fs.read` grant does not cover: it is granted fs.read=data; name it in the grant, or grant `fs.read` whole
+  ```
+
+  (`caps_dep_arg_fs_too_narrow`, `_spawn_too_narrow`, `_net_too_narrow`; the
+  grant that covers each, `caps_dep_arg_granted`).
+- What it cannot see — a computed path, program or host — the build leaves to
+  `--sandbox`, which scopes Landlock to the granted directories and
+  programs ([The sandbox](#the-sandbox), `tests/link/sandbox_dep_*`).
+  Hosts have no run-time check: seccomp cannot read the address a socket is
+  given, so a `net=<host>` grant binds only the literals the build sees.
+- The lockfile records the arguments (`"pkg_conf": ["fs.read=data"]`). A
+  grant past them — a new directory, program or host for a capability the
+  row records narrowed — is NL2593 until the lock is updated; a row that
+  records the capability whole accepts any argument (`caps_lock_args`).
+- `@nish_sandbox` takes a fifth operand for the programs a
+  `process.spawn=<program>` grant allows, null when none is named:
+  `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
+  The four-operand call in "The sandbox" below predates it.
 
 ##### The capability lockfile
 
@@ -11510,7 +11625,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a function with no body (an overload signature) | `Functions must have a body` | `nl2204_function_without_body` |
 | `export default function ()` | `Functions must be named` | `reject_fn_anonymous` |
 | a destructuring pattern | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
-| a default, optional or rest parameter | `Optional/default parameters are not supported` / `Rest parameters are not supported` | `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest` |
+| an optional parameter; a default or rest outside a function, method, constructor or `const` arrow; a spread argument | `Optional parameters are not supported` / `Optional/default parameters are not supported here` / `Rest parameters are not supported here` / `Spread arguments are not supported` | `reject_param_optional`, `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest`, `reject_param_spread_call` |
 | an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
 | a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
 | more than one function or binding form in one declaration | the first in source order, alone | `reject_fn_sweep_together` |

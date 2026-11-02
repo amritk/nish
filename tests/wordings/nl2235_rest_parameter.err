@@ -1,1 +1,1 @@
-Rest parameters are not supported
+Rest parameters are not supported here: only a function, a method with a body or a constructor ends in one, not an arrow passed as an argument, a function type, an interface or object method, an accessor or a `declare function`

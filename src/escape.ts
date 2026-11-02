@@ -1684,8 +1684,15 @@ export const marksTailCall = (
   if (table.resultByValue(callee.returnType) || reclaimsReturnedString(callee, facts)) {
     return false
   }
-  if (callee.paramTypes.length !== argTypes.length) {
+  if (argTypes.length > callee.paramTypes.length) {
     return false
+  }
+  // A parameter the call leaves out passes its default, a constant or an
+  // earlier argument, which is as much a scalar as the parameter's type.
+  for (let k = argTypes.length; k < callee.paramTypes.length; k = k + 1) {
+    if (callee.defaultOf(k) === null || !isScalarArgument(table, callee.paramTypes[k])) {
+      return false
+    }
   }
   for (const type of argTypes) {
     if (!isScalarArgument(table, type)) {

@@ -121,7 +121,7 @@ function f64UnaryIntrinsic(name: string): string -> @f64UnaryIntrinsic
 function dispatchesRounding(opts: Options): boolean -> @dispatchesRounding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: buildsWasmModule nish_str_at resolveTarget
-  pointer opts: size=184 writesThrough=false captured=false passedTo=buildsWasmModule#0
+  pointer opts: size=192 writesThrough=false captured=false passedTo=buildsWasmModule#0
   stackSites=0 stackLocals=0
   callee +0:7 buildsWasmModule -> @buildsWasmModule
   local +3:9 target: Target | null (const)
@@ -130,7 +130,7 @@ function roundingCallee(opts: Options, intrinsic: string): string -> @roundingCa
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: intrinsic
   calls: dispatchesRounding nish_str_eq
-  pointer opts: size=184 writesThrough=false captured=false passedTo=dispatchesRounding#0
+  pointer opts: size=192 writesThrough=false captured=false passedTo=dispatchesRounding#0
   stackSites=0 stackLocals=0
   callee +0:8 dispatchesRounding -> @dispatchesRounding
 function emitRounding(emitter: Emitter, callee: string, x: string): string -> @emitRounding
@@ -493,8 +493,8 @@ function checksRangesInPrologue(table: TypeTable, opts: Options, sig: FunctionSi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.visibleOutside privateAbi takesRange
   pointer table: size=96 writesThrough=false captured=false passedTo=takesRange#0
-  pointer opts: size=184 writesThrough=false captured=false passedTo=privateAbi#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 takesRange#1
+  pointer opts: size=192 writesThrough=false captured=false passedTo=privateAbi#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 takesRange#1
   stackSites=0 stackLocals=0
   callee +0:4 privateAbi -> @privateAbi
   callee +0:21 FunctionSig.visibleOutside -> @FunctionSig.visibleOutside
@@ -503,7 +503,7 @@ function takesRange(table: TypeTable, sig: FunctionSig): boolean -> @takesRange 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 type: i32 (const)
   callee +1:9 TypeTable.isRanged -> @TypeTable.isRanged
@@ -512,7 +512,7 @@ function checksArgumentRange(emitter: Emitter, callee: FunctionSig, index: i32):
   escaping: index
   calls: TypeTable.isRanged checksRangesInPrologue nish_panic_index
   pointer emitter: size=296 writesThrough=false captured=false
-  pointer callee: size=144 writesThrough=false captured=false passedTo=checksRangesInPrologue#2
+  pointer callee: size=160 writesThrough=false captured=false passedTo=checksRangesInPrologue#2
   stackSites=0 stackLocals=0
   callee +0:4 TypeTable.isRanged -> @TypeTable.isRanged
   callee +1:4 checksRangesInPrologue -> @checksRangesInPrologue
@@ -521,7 +521,7 @@ function emitParamRangeChecks(emitter: Emitter, sig: FunctionSig): void -> @emit
   sharedWrite: via emitRangeEntry
   calls: FunctionSig.visibleOutside TypeTable.isRanged emitRangeEntry nish_panic_index paramValue privateAbi
   pointer emitter: size=296 writesThrough=false captured=false passedTo=emitRangeEntry#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   callee +0:7 privateAbi -> @privateAbi
   callee +0:32 FunctionSig.visibleOutside -> @FunctionSig.visibleOutside
@@ -598,7 +598,7 @@ function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, opts: Op
   calls: TypeTable.baseOf absIntrinsic copysignIntrinsic f64UnaryIntrinsic isFloat minMaxIntrinsic nish_array_grow nish_panic_index nish_str_at nish_str_eq nish_str_new roundingCallee stringifyCallee
   pointer program: size=656 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=absIntrinsic#0 TypeTable.baseOf#0 minMaxIntrinsic#0 minMaxIntrinsic#0
-  pointer opts: size=184 writesThrough=false captured=false passedTo=roundingCallee#0 roundingCallee#0
+  pointer opts: size=192 writesThrough=false captured=false passedTo=roundingCallee#0 roundingCallee#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)

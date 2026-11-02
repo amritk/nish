@@ -7,11 +7,11 @@ import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 unsafe import 2:10 wrappingAdd from "nish:unsafe"
 unsafe import 2:23 wrappingMul from "nish:unsafe"
 unsafe import 2:36 wrappingSub from "nish:unsafe"
-unsafe call 37:15 wrappingMul (node 279)
-unsafe call 37:27 wrappingMul (node 282)
-unsafe call 40:15 wrappingSub (node 312)
-unsafe call 41:23 wrappingMul (node 325)
-unsafe call 42:15 wrappingAdd (node 337)
+unsafe call 37:15 wrappingMul (node 296)
+unsafe call 37:27 wrappingMul (node 300)
+unsafe call 40:15 wrappingSub (node 333)
+unsafe call 41:23 wrappingMul (node 348)
+unsafe call 42:15 wrappingAdd (node 362)
 function xor(a: boolean, b: boolean): boolean -> @xor
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

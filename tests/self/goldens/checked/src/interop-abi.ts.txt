@@ -89,7 +89,7 @@ function ExternalFunction.constructor(this: ExternalFunction, sig: FunctionSig, 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: rangeInData sig unit vectorInData writtenParams
   pointer this: size=32 writesThrough=true captured=false
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   pointer unit: size=88 writesThrough=true captured=true
   pointer writtenParams: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -97,7 +97,7 @@ function externalFunctions(compilation: Compilation): ExternalFunction[] -> @ext
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via analyzeFunctions
   calls: AnalysisUnit.constructor ExternalFunction.constructor FactsTable.get FunctionSig.compileTimeOnly FunctionSig.definedIn analyzeFunctions nish_alloc_struct nish_array_grow nish_str_eq privateAbi signatureHidesRange signatureHidesVector structsHoldingRanges structsHoldingVectors writtenArrayParams
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=structsHoldingRanges#0 structsHoldingVectors#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=structsHoldingRanges#0 structsHoldingVectors#0
   stackSites=1 stackLocals=1
   local +0:9 units: AnalysisUnit[] (const)
   local +1:14 unit: ModuleUnit (const)
@@ -127,7 +127,7 @@ function externalFunctions(compilation: Compilation): ExternalFunction[] -> @ext
 function structsHoldingRanges(compilation: Compilation): StringSet -> @structsHoldingRanges
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.add StringSet.constructor StringSet.has holdsRange nish_alloc_struct
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   local +1:9 ranged: StringSet (const)
@@ -162,7 +162,7 @@ function signatureHidesRange(table: TypeTable, sig: FunctionSig, ranged: StringS
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged holdsRange
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 holdsRange#0 TypeTable.isRanged#0 holdsRange#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   pointer ranged: size=8 writesThrough=false captured=false passedTo=holdsRange#2 holdsRange#2
   stackSites=0 stackLocals=0
   callee +0:8 TypeTable.isRanged -> @TypeTable.isRanged
@@ -174,7 +174,7 @@ function signatureHidesVector(table: TypeTable, sig: FunctionSig, vectored: Stri
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: hidesVector
   pointer table: size=96 writesThrough=false captured=false passedTo=hidesVector#0 hidesVector#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   pointer vectored: size=8 writesThrough=false captured=false passedTo=hidesVector#2 hidesVector#2
   stackSites=0 stackLocals=0
   callee +0:7 hidesVector -> @hidesVector
@@ -196,7 +196,7 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: FunctionFacts.pointerParam StringSet.add StringSet.constructor TypeTable.isArray TypeTable.isReadonlyArray nish_alloc_struct nish_panic_index
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isReadonlyArray#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   pointer facts: size=408 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local +0:9 written: StringSet (const)
@@ -232,7 +232,7 @@ function typedView(table: TypeTable, t: i32): TypedView | null -> @typedView [ex
 function structsHoldingVectors(compilation: Compilation): StringSet -> @structsHoldingVectors [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.add StringSet.constructor StringSet.has holdsVector nish_alloc_struct
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   local +1:9 held: StringSet (const)
@@ -395,7 +395,7 @@ function tsSignatureLine(table: TypeTable, sig: FunctionSig, before: string, aft
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat tsKeyword
   pointer table: size=96 writesThrough=false captured=false passedTo=tsKeyword#0 tsKeyword#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 params: string[] (const)
   local +1:7 i: i32 (let)
@@ -459,13 +459,13 @@ function cFunctionName(symbol: string): CName -> @cFunctionName [exported]
 function jsExportName(sig: FunctionSig): string -> @jsExportName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: cStructName
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:59 cStructName -> @cStructName
 function cAliasReason(sig: FunctionSig): string -> @cAliasReason [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_index_of nish_str_index_of_from
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
   local +1:9 instance: Instantiation | null (const)
@@ -492,7 +492,7 @@ function acceptsSidecars(compilation: Compilation, fns: ExternalFunction[], cDec
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportUninstantiated
   calls: DiagnosticSink.report StringSet.add StringSet.constructor StringSet.has cFunctionName cNameClashes hasFunctionParameter nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 refuseUnions reportUninstantiated sigNameNode
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=reportUninstantiated#0 reportUninstantiated#0 reportUninstantiated#0 refuseUnions#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=reportUninstantiated#0 reportUninstantiated#0 reportUninstantiated#0 refuseUnions#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=refuseUnions#1
   pointer cDeclared: size=0 writesThrough=false captured=false passedTo=cNameClashes#1
   stackSites=2 stackLocals=2
@@ -532,7 +532,7 @@ function refuseUnions(compilation: Compilation, fns: ExternalFunction[]): boolea
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportUnion
   calls: TypeTable.typeName nish_panic_index nish_str_concat reportUnion sigNameNode unionField unionSlot unionStruct
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=reportUnion#0 reportUnion#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=reportUnion#0 reportUnion#0
   pointer fns: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -566,7 +566,7 @@ function unionSlot(table: TypeTable, sig: FunctionSig): i32 -> @unionSlot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsUnion
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0 TypeTable.holdsUnion#0
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.holdsUnion -> @TypeTable.holdsUnion
   local +3:7 i: i32 (let)
@@ -583,7 +583,7 @@ function reportUnion(compilation: Compilation, unit: ModuleUnit, at: Node, what:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report nish_str_concat
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   pointer unit: size=88 writesThrough=false captured=false
   pointer at: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -592,7 +592,7 @@ function reportUninstantiated(compilation: Compilation, unit: ModuleUnit, name: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report nish_panic_index nish_str_concat
-  pointer compilation: size=160 writesThrough=false captured=false
+  pointer compilation: size=200 writesThrough=false captured=false
   pointer unit: size=88 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -601,7 +601,7 @@ function reportUninstantiated(compilation: Compilation, unit: ModuleUnit, name: 
 function sigNameNode(sig: FunctionSig): Node -> @sigNameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function cPrototype(table: TypeTable, fn: ExternalFunction): string -> @cPrototype [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -671,7 +671,7 @@ function foldByte(c: i32): i32 -> @foldByte
 function banner(compilation: Compilation, flag: string, comment: string): string -> @banner [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.entry nish_str_concat
-  pointer compilation: size=160 writesThrough=false captured=false passedTo=Compilation.entry#0
+  pointer compilation: size=200 writesThrough=false captured=false passedTo=Compilation.entry#0
   stackSites=0 stackLocals=0
   callee +0:49 Compilation.entry -> @Compilation.entry
 function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fields: i32[]): string[] -> @resultDefinitions [exported]

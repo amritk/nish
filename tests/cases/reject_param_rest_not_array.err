@@ -1,0 +1,1 @@
+Rest parameter `xs` must have an array type, `...xs: T[]`

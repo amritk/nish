@@ -418,6 +418,12 @@ export class IRModule {
   targetHeader: string[]
   /** Metadata nodes by number (`!N = <text>`), for debug info (`-g`). Identical texts share a node. */
   metadata: string[]
+  /**
+   * The lowest number of each non-empty text in `metadata`, so that interning
+   * a node is a lookup rather than a scan of every node before it. A reserved
+   * number's empty text is not filed: `addMetadata("")` scans, as before.
+   */
+  metadataNumbers: StringMap
   /** Named metadata lines (`!llvm.dbg.cu = !{...}`), printed before the numbered nodes. */
   namedMetadata: string[]
   /** `!N` of each `!llvm.module.flags` entry, printed as that one named line after the others. */
@@ -438,6 +444,7 @@ export class IRModule {
     this.attrGroups = []
     this.targetHeader = []
     this.metadata = []
+    this.metadataNumbers = new StringMap()
     this.namedMetadata = []
     this.moduleFlags = []
     this.definitionAttrs = ""
@@ -445,12 +452,24 @@ export class IRModule {
 
   /** Intern a metadata node and answer its reference (`!N`). */
   addMetadata(text: string): string {
-    let index = this.metadata.indexOf(text)
+    let index = text.length === 0 ? this.metadata.indexOf(text) : this.metadataNumbers.get(text, -1)
     if (index < 0) {
       index = this.metadata.length
       this.metadata.push(text)
+      this.fileMetadata(text, index)
     }
     return `!${index}`
+  }
+
+  /** File `text`, now at `index`, in `metadataNumbers` unless a lower number already holds it. */
+  fileMetadata(text: string, index: i32): void {
+    if (text.length === 0) {
+      return
+    }
+    const known = this.metadataNumbers.get(text, -1)
+    if (known < 0 || known > index) {
+      this.metadataNumbers.set(text, index)
+    }
   }
 
   /**
@@ -465,7 +484,18 @@ export class IRModule {
   }
 
   setMetadata(ref: string, text: string): void {
-    this.metadata[metadataIndex(ref)] = text
+    const index = metadataIndex(ref)
+    const old = this.metadata[index]
+    this.metadata[index] = text
+    if (old.length > 0 && old !== text && this.metadataNumbers.get(old, -1) === index) {
+      // The old text's lowest number moves to its next copy, if it has one.
+      let next = index + 1
+      while (next < this.metadata.length && this.metadata[next] !== old) {
+        next = next + 1
+      }
+      this.metadataNumbers.set(old, next < this.metadata.length ? next : -1)
+    }
+    this.fileMetadata(text, index)
   }
 
   /** Add a `!llvm.module.flags` entry, interned like any other node. */

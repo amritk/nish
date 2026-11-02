@@ -345,7 +345,7 @@ function CheckContext.addFunction(this: CheckContext, sig: FunctionSig): void ->
   escaping: sig
   calls: StringMap.set nish_array_grow
   pointer this: size=288 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
 function CheckContext.pushLoop(this: CheckContext, kind: i32, label: string): void -> @CheckContext.pushLoop [exported method]

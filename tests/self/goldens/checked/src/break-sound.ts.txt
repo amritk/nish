@@ -1690,18 +1690,18 @@ import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 unsafe import 43:10 wrappingAdd from "nish:unsafe"
 unsafe import 43:23 wrappingMul from "nish:unsafe"
 unsafe import 43:36 wrappingSub from "nish:unsafe"
-unsafe call 77:30 wrappingSub (node 114)
-unsafe call 84:21 wrappingAdd (node 148)
-unsafe call 85:21 wrappingSub (node 163)
-unsafe call 86:24 wrappingSub (node 173)
-unsafe call 86:49 wrappingAdd (node 178)
-unsafe call 93:7 wrappingMul (node 213)
-unsafe call 95:7 wrappingMul (node 230)
-unsafe call 112:18 wrappingAdd (node 280)
-unsafe call 144:23 wrappingAdd (node 370)
-unsafe call 144:35 wrappingSub (node 373)
-unsafe call 149:36 wrappingSub (node 399)
-unsafe call 154:12 wrappingAdd (node 430)
+unsafe call 77:30 wrappingSub (node 115)
+unsafe call 84:21 wrappingAdd (node 150)
+unsafe call 85:21 wrappingSub (node 166)
+unsafe call 86:24 wrappingSub (node 177)
+unsafe call 86:49 wrappingAdd (node 183)
+unsafe call 93:7 wrappingMul (node 219)
+unsafe call 95:7 wrappingMul (node 237)
+unsafe call 112:18 wrappingAdd (node 288)
+unsafe call 144:23 wrappingAdd (node 385)
+unsafe call 144:35 wrappingSub (node 389)
+unsafe call 149:36 wrappingSub (node 418)
+unsafe call 154:12 wrappingAdd (node 453)
 const GOLDEN: i32 = -1640531527
 const MIX_1: i32 = -2048144789
 const MIX_2: i32 = -1028477387

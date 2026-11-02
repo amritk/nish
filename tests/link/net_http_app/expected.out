@@ -1,0 +1,19 @@
+PASS  a port and the flags are read
+PASS  a missing port is a usage error
+PASS  a flag without its number is a usage error
+PASS  a port out of range is refused
+PASS  health answers ok with no notes
+PASS  a note is created
+PASS  a second one takes the next id
+PASS  a third is past --max-notes: 507
+PASS  a body without text is 400
+PASS  as application/problem+json
+PASS  the list holds both, in order
+PASS  a note is shown by id
+PASS  and deleted with 204
+PASS  then it is gone: 404
+PASS  an id that is not a number is 404
+PASS  an unknown path is 404
+PASS  a method the path does not take is 405 with its Allow
+PASS  a drain closes the idle client
+PASS  and the handler holds no connection

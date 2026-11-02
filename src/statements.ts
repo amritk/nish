@@ -53,6 +53,7 @@ import { recordGuardFusion } from "./fusion"
 import { builtinNameOf, isOptionalChain, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
+import { optionalParameterMessage, parameterFormHereMessage } from "./declarations"
 import {
   FLAG_ABSTRACT,
   FLAG_ACCESSOR,
@@ -65,6 +66,7 @@ import {
   FLAG_PROPERTY,
   FLAG_READONLY,
   FLAG_REST,
+  FLAG_SIGNATURE,
   FLAG_STATIC,
   FLAG_VAR,
   N_ARROW,
@@ -866,8 +868,8 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
     }
   }
   // After the type, where a default is written.
-  if (node.kind === N_PARAM && (node.flags & FLAG_DEFAULT) !== 0) {
-    ctx.error(node, "Optional/default parameters are not supported")
+  if (node.kind === N_PARAM && (node.flags & (FLAG_DEFAULT | FLAG_SIGNATURE)) === FLAG_DEFAULT) {
+    ctx.error(node, parameterFormHereMessage(false))
   }
 }
 
@@ -903,12 +905,17 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
         node,
         "Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it"
       )
-    } else if ((node.flags & FLAG_REST) !== 0) {
-      ctx.error(node, "Rest parameters are not supported")
+    } else if ((node.flags & (FLAG_REST | FLAG_SIGNATURE)) === FLAG_REST) {
+      ctx.error(node, parameterFormHereMessage(true))
     } else if (node.children[0].kind === N_BINDING_PATTERN) {
       ctx.error(node, "Destructured parameters are not supported")
     } else if ((node.flags & FLAG_OPTIONAL) !== 0) {
-      ctx.error(node, "Optional/default parameters are not supported")
+      ctx.error(
+        node,
+        (node.flags & FLAG_SIGNATURE) !== 0
+          ? optionalParameterMessage(ctx, node)
+          : parameterFormHereMessage(false)
+      )
     }
   }
 }

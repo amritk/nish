@@ -32,15 +32,90 @@ export const main = (): i32 => {
   one is refused; so is a `let` bound to an arrow.
 - **Order does not matter.** A top-level function is in scope for the whole
   file, so two functions may call each other whichever is written first.
-- **A call passes every argument**, each of exactly the parameter's type.
-  Optional, default and rest parameters (`n?: i32`, `n = 1`, `...ns: i32[]`)
-  and destructured parameters are not supported; pass an array for a
-  variable number of values.
+- **A call passes every argument it has no default for**, each of exactly
+  the parameter's type. See [Default and rest
+  parameters](#default-and-rest-parameters); optional (`n?: i32`) and
+  destructured parameters are not supported.
 - **A non-`void` function returns on every path**, or ends in
   `panic(message)` or `process.exit(code)`.
 
 The `function` keyword is accepted too, and compiles to exactly the same
 thing; the arrow is the house style.
+
+## Default and rest parameters
+
+A trailing parameter may have a **default**, which a call that leaves it out
+passes. A default is a constant — a number, `true`/`false`, a string, an enum
+member — or the name of an earlier parameter, and the parameter keeps its type
+annotation:
+
+```ts nish:ok
+const scale = (x: i32, by: i32 = 2): i32 => x * by;
+const area = (w: i32, h: i32 = w): i32 => w * h;
+
+export const main = (): i32 => {
+  console.log(`${scale(3)} ${scale(3, 5)}`);   // 6 15
+  console.log(`${area(4)} ${area(4, 2)}`);     // 16 8
+  return 0;
+};
+```
+
+The last parameter may instead be a **rest parameter**, an array that gathers
+every remaining argument. A call with none passes an empty array:
+
+```ts nish:ok
+const total = (...xs: i32[]): i32 => {
+  let sum = 0;
+  for (const x of xs) {
+    sum += x;
+  }
+  return sum;
+};
+
+export const main = (): i32 => {
+  console.log(`${total()} ${total(1, 2, 3)}`);  // 0 6
+  return 0;
+};
+```
+
+The call fills both in, so a function with a default costs nothing when it is
+given every argument. Methods and constructors take them too. A function
+has a default or a rest parameter, not both.
+
+A rest parameter of records copies each record into its array, as `[p, q]`
+does, so it takes only fresh object literals: given a named record, the
+callee's write would not reach it as it does in TypeScript. Pass `[p, q]` to a
+parameter of array type instead, where the copy is written out. A class
+instance is the caller's object, so a rest of class instances takes any:
+
+```ts nish:err NL2608
+interface Cell {
+  v: i32;
+}
+const bumpAll = (...cs: Cell[]): void => {
+  for (const c of cs) {
+    c.v = c.v + 100;
+  }
+};
+export const main = (): void => {
+  const p: Cell = { v: 1 };
+  bumpAll(p);
+};
+```
+
+Optional parameters (`n?: i32`) are refused; write a default instead:
+
+```ts nish:err NL2605
+const greet = (name?: string): string => "hi";
+```
+
+A call never spreads an array into arguments; pass the array to a parameter
+of array type:
+
+```ts nish:err-body NL2606
+const xs: i32[] = [1, 2];
+console.log(`${Math.max(...xs)}`);
+```
 
 ## Parameters are read-only
 

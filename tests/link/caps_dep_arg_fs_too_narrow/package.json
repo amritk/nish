@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-arg-fs-too-narrow",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_conf": [
+          "fs.read=./data"
+        ]
+      }
+    }
+  }
+}

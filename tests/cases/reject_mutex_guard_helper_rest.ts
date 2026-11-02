@@ -1,4 +1,4 @@
-// R3, a guard handed to a helper: a rest parameter would gather guards into an array; Nish has no rest parameters.
+// R3, a guard handed to a helper: a rest parameter would gather guards into an array, which would outlive the block that holds the lock, so the guard is refused as the argument it gathers.
 import { Channel, Mutex, MutexGuard, scope } from "nish/threads";
 
 class Counter {

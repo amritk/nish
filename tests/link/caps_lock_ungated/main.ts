@@ -1,4 +1,4 @@
-// WP40: the lockfile records `net` for `pkg_mix`, which also reaches `fs.read`,
+// WP40: the lockfile records `net` for `pkg_mix`, which also reaches `env`,
 // a capability the dependency policy does not gate: the lock refuses it all
 // the same (NL2577), so a row is the whole set, not only the gated four.
 import { fetchText } from "pkg_mix";

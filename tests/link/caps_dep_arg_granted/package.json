@@ -1,0 +1,15 @@
+{
+  "name": "caps-dep-arg-granted",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_tool": [
+          "fs.read=./data",
+          "process.spawn=true",
+          "net=127.0.0.1"
+        ]
+      }
+    }
+  }
+}

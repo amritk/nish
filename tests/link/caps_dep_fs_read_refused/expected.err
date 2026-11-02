@@ -1,0 +1,1 @@
+the dependency `pkg_conf` reaches `fs.read` through `load`

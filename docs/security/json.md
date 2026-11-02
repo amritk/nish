@@ -529,7 +529,7 @@ JSON-10 is fixed; JSON-8, JSON-9 and JSON-11 are accepted, all Low.
 | File | What |
 | --- | --- |
 | `std/json-value.ts` | `JsonDocument`: `parse`, `parseRanged`, `parseText`, `parseTextRanged`, `close`, `closeRanged`, `duplicateKeys`, `duplicateKeysRanged`, `repeat`, `sortPending`, `sortPendingRanged`, `index`, `handle`, `newNode`, the readers (`kind` to `f64`, `unsigned`, `readNumber`), the ranges (`start`, `end`, `keyStart`, `keyEnd`, `hasValueRange`, `hasKeyRange`, `rangeArrays`, `ownRanges`, `keySlot`, `setRange`, `setKeyRange`), the builders (`new*`, `push`, `set`, `adoptable`, `append`, `moveSlots`, `moveKeyRanges`), `write`, `stringify`; the helpers `jsonValueGet`, `jsonValuePut`, `jsonValueRoom`, `jsonValueRoomI32`, `jsonValueCompareBytes` |
-| `std/json.ts` | `JsonWriter.keyBytes` and `stringBytes`, `jsonWriterPutBytes`, `jsonWriterBreakBeforeKey` |
+| `std/json.ts` | `JsonWriter.keyBytes` and `stringBytes`, `jsonWriterPutBytes`, `jsonWriterBreakBeforeKey`; `JsonWriter.f64`'s `jsonWriterPutF64` and `jsonPutF64Walk`, which a native build replaces with the runtime's `nish_json_put_f64` (its bounds are [`runtime.md`](runtime.md)'s) |
 
 ### Threat model
 
@@ -625,6 +625,21 @@ guarantee is the public methods'.
 builders take one byte per code unit, so non-ASCII text is stored differently
 there than natively; `parse` over a `u8[]` reads the same bytes both ways, and
 the Node check is ASCII for that reason.
+
+**A number goes out in place.** `JsonWriter.f64` writes a finite double
+through `jsonWriterPutF64`, which a native build lowers to one call of
+`nish_json_put_f64` on the writer's buffer, its length and its cursor: the
+digits are formatted on the runtime's stack and copied only when all of them
+fit, so the write makes no string and a write that does not fit is the
+writer's `JSON_WRITE_FULL` with the cursor and the buffer as they were, as for
+every other write. NaN and the infinities never reach it: `f64` writes `null`
+for them, or fails strict. The bytes are `JSON.stringify`'s (`-0` is `0`;
+`link/std_json_writer` against Node, and "json_f64_seam: seam.ts built
+natively writes through the kernel and prints seam.out", which holds the
+exact fit and the one byte short), and the recognition is the standard
+library's only: a root-package `std/json.ts` calls its walk ("json_f64_seam:
+std/json.ts compiled as a root is an ordinary module, so JsonWriter.f64 calls
+its walk and not the kernel").
 
 **The sort is n log n.** An object of more than eight members is checked by a
 bottom-up merge sort of its keys (`std/json-value.ts:795`, `sortPending`, and `:839`, `sortPendingRanged`), so no choice of

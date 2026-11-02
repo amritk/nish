@@ -3,12 +3,12 @@
 entry: tests/cases/ct_asm_k1_ct.ts
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 unsafe import 24:10 uncheckedGet from "nish:unsafe"
-unsafe call 30:25 uncheckedGet (node 51)
-unsafe call 30:46 uncheckedGet (node 56)
-unsafe call 39:25 uncheckedGet (node 112)
-unsafe call 39:46 uncheckedGet (node 117)
-unsafe call 48:25 uncheckedGet (node 181)
-unsafe call 48:60 uncheckedGet (node 191)
+unsafe call 30:25 uncheckedGet (node 52)
+unsafe call 30:46 uncheckedGet (node 58)
+unsafe call 39:25 uncheckedGet (node 116)
+unsafe call 39:46 uncheckedGet (node 122)
+unsafe call 48:25 uncheckedGet (node 188)
+unsafe call 48:60 uncheckedGet (node 200)
 function timingSafeEqual32(a: u8[], b: u8[]): boolean -> @timingSafeEqual32 [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer a: size=0 writesThrough=false captured=false

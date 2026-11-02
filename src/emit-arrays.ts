@@ -46,7 +46,7 @@ import { isChannelReader, isGuardedAccess } from "./parallel"
 import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
-import { BYTES_WALK_COPY, bytesKernelOf } from "./kernels"
+import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
 import {
   N_ARRAY,
   N_ARROW,
@@ -62,6 +62,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
+import { simdSuffix, simdTypeLane } from "./nish-modules"
 import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructInfo } from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
@@ -676,6 +677,21 @@ const noteArrayUse = (emitter: Emitter, expr: Node, len: boolean, data: boolean,
 }
 
 /**
+ * `nish:simd`'s `load…(xs, i)` or `store(v, xs, i)`, the calls that lower
+ * through `emitVectorAccess`: the array is the second argument from the end.
+ * The test is `isSimdAccess`'s in `src/simd.ts`, which imports this file. They
+ * are only reachable by import, so the checker's record of the imported name
+ * is the whole test: a local `store` closure has none.
+ */
+const isVectorAccess = (emitter: Emitter, call: Node): boolean => {
+  if (call.kind !== N_CALL || call.children[1].children.length < 2) {
+    return false
+  }
+  const name = emitter.program.nodeBuiltins[call.id]
+  return name === "store" || simdTypeLane(simdSuffix(name, "load")).length > 0
+}
+
+/**
  * Collect the array receivers `loop` reads through, one entry per distinct
  * location, with whether the loop needs that array's `len` (a `.length` read or
  * a bounds check) and its `data` (any element access).
@@ -698,6 +714,12 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
     noteArrayUse(emitter, node.children[0], needsLen, true, out)
   } else if (isUncheckedAccess(emitter.program, node)) {
     noteArrayUse(emitter, node.children[1].children[0], false, true, out)
+  } else if (isVectorAccess(emitter, node)) {
+    // `emitVectorAccess` checks against `len` and reads `data`, so it asks for
+    // both. Unasked, an inner loop that also reads `.length` lifted a header
+    // with no `data`, and the load took that empty value as its pointer.
+    const args = node.children[1].children
+    noteArrayUse(emitter, args[args.length - 2], true, true, out)
   } else if (node.kind === N_MEMBER && node.text === "length") {
     noteArrayUse(emitter, node.children[0], true, false, out)
   }
@@ -1858,6 +1880,22 @@ export const emitBytesKernel = (emitter: Emitter, walk: i32, values: string[]): 
     `call i64 ${emitter.useRuntime(bytesKernelOf(walk))}(i8* ${data}, i64 ${from}, i64 ${to})`
   )
   return fn.emitValue(`trunc i64 ${stop} to i32`)
+}
+
+/**
+ * `JsonWriter.f64`'s walk in `nish/json`, lowered to its kernel
+ * (`src/kernels.ts`): `values` are the `u8[]`, the cursor and the `f64`. The
+ * length is handed over as the walk's `toI32` reads it, which is never more
+ * than the array holds, and the kernel checks the cursor and the room itself,
+ * so nothing here is trusted to a caller.
+ */
+export const emitJsonPutF64Kernel = (emitter: Emitter, values: string[]): string => {
+  const fn = emitter.fn
+  const data = loadData(emitter, values[0])
+  const length = fn.emitValue(`trunc i64 ${loadLength(emitter, values[0])} to i32`)
+  return fn.emitValue(
+    `call i32 ${emitter.useRuntime(JSON_PUT_F64_KERNEL)}(i8* ${data}, i32 ${length}, i32 ${values[1]}, double ${values[2]})`
+  )
 }
 
 /** The address of byte `at`, an `i32` already checked to lie in `arr`, of a `u8[]`. */

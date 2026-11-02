@@ -431,7 +431,9 @@ commit, or `differential: the frozen rewrites` fails (#548).
     `async` and `function*` a function, method or arrow with `FLAG_ASYNC` /
     `FLAG_GENERATOR`, a default type argument the type parameter with
     `FLAG_DEFAULT`, a default, optional or rest parameter the parameter with
-    `FLAG_DEFAULT`, `FLAG_OPTIONAL` or `FLAG_REST`, `get x()` / `set x(v)`
+    `FLAG_DEFAULT`, `FLAG_OPTIONAL` or `FLAG_REST` (since
+    default and rest parameters landed, the checker accepts the first and
+    third and refuses only `FLAG_OPTIONAL`), `get x()` / `set x(v)`
     a method with `FLAG_ACCESSOR`, `abstract` the class or member with
     `FLAG_ABSTRACT`, `declare class`, `declare interface` and `declare enum`
     theirs with `FLAG_FOREIGN`, a parameter property the parameter with

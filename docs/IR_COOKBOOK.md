@@ -1359,6 +1359,173 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end fnarg-capture -->
 
+### Default and rest parameters, filled at the call
+
+A default and a rest parameter are both the **caller's** work
+([Default and rest parameters](LANGUAGE.md#default-and-rest-parameters)).
+`scale(3)` is `call i32 @scale(i32 3, i32 2)`: the default is a constant
+argument, and `@scale` itself is the function it would be without one, with no
+branch on a missing argument. `total(1, 2, 3)` builds the same array a literal
+`total([1, 2, 3])` would: a header and a `[3 x i32]` of exactly three elements,
+both `alloca`s because `total` does not keep its parameter, then one call with
+the header.
+
+<!-- cookbook:begin fn-default-rest -->
+```ts
+const scale = (x: i32, by: i32 = 2): i32 => x * by
+
+const total = (...xs: i32[]): i32 => {
+  let sum = 0
+  for (const x of xs) {
+    sum += x
+  }
+  return sum
+}
+
+export const main = (): i32 => scale(3) + total(1, 2, 3)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish_free_arena() #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
+
+define internal noundef i32 @scale(i32 noundef %x, i32 noundef %by) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %x, i32 %by)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+define internal noundef i32 @total(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %sum.addr = alloca i32, align 4
+  %x.addr = alloca i32, align 4
+  %forof.idx = alloca i64, align 8
+  store i32 0, i32* %sum.addr, align 4
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %8, i32* %x.addr, align 4
+  %9 = load i32, i32* %sum.addr, align 4
+  %10 = load i32, i32* %x.addr, align 4
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %12, i32* %sum.addr, align 4
+  br label %forof.inc
+
+forof.inc:
+  %14 = load i64, i64* %forof.idx, align 8
+  %15 = add i64 %14, 1
+  store i64 %15, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %16 = load i32, i32* %sum.addr, align 4
+  ret i32 %16
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i32], align 8
+  %0 = call i32 @scale(i32 3, i32 2)
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %3 = bitcast [3 x i32]* %arr.data to i8*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %5 = bitcast i8* %3 to i32*
+  %6 = getelementptr inbounds i32, i32* %5, i64 0
+  store i32 1, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %7 = getelementptr inbounds i32, i32* %5, i64 1
+  store i32 2, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %8 = getelementptr inbounds i32, i32* %5, i64 2
+  store i32 3, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %9 = call i32 @total(%struct.nish_array* %arr.hdr)
+  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %9)
+  %11 = extractvalue { i32, i1 } %10, 0
+  %12 = extractvalue { i32, i1 } %10, 1
+  br i1 %12, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %11
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{!9, !7, i64 8}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end fn-default-rest -->
+
 ### `nish/threads`: a map and a reduce over the partitioner
 
 `parallelMapInto` and `parallelReduce` are templates in `std/threads.ts`, so the
@@ -2905,6 +3072,43 @@ headers is reloaded after it:
 The walkers stay defined, `internal` and uncalled, and `opt` deletes them.
 The whole of `bytes.ll` is `tests/link/std_bytes`'s golden;
 `tests/link/std_bytes_runs` runs every class and clamp against the kernels.
+
+### `nish/json`: a writer's number goes straight into its buffer
+
+`JsonWriter.f64` calls the private walker `jsonPutF64Walk`, which spells the
+number as `${v}` does and copies it into the writer's `u8[]` at `end`, or
+answers `-1` when it does not fit. In the module that is `nish/json` that call
+becomes `nish_json_put_f64` (`src/kernels.ts`, `isJsonPutF64Walk`), which
+formats into a stack buffer and builds no string. The kernel is handed the
+data pointer and the length, narrowed to the `i32` the walker compares
+against, and a refusal is the walker's `JSON_WRITE_FULL`:
+
+```llvm
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %8 = trunc i64 %7 to i32
+  %9 = call i32 @nish_json_put_f64(i8* %5, i32 %8, i32 %3, double %v)
+  store i32 %9, i32* %stop.addr, align 4
+  %10 = load i32, i32* %stop.addr, align 4
+  %11 = icmp slt i32 %10, 0
+  br i1 %11, label %if.then, label %if.end
+
+if.then:
+  %12 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %w, i32 0, i32 3
+  store i32 -5, i32* %12, align 4, !tbaa !27
+  ret i1 false
+```
+
+```llvm
+declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef) #4
+```
+
+The kernel writes all of the number or none of it, so a refused write leaves
+the buffer and `end` as the walker's refusal does. `std/json.ts` compiled as a
+root keeps `call i32 @jsonPutF64Walk(` and declares no kernel, and Node and
+`--emit-ts` run the walker (`tests/run.js`, "json_f64_seam").
 
 ### `nish/regex`: a match's first byte on the runtime kernel
 
@@ -26052,7 +26256,7 @@ export const main = (): number => {
 @llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"
 
 declare void @nish_free_arena() #1
-declare void @nish_sandbox(i32, i32, i8*, i8*) #1
+declare void @nish_sandbox(i32, i32, i8*, i8*, i8*) #1
 declare void @nish_sandbox_check() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
@@ -26075,7 +26279,7 @@ entry:
 
 define internal void @.sandbox.apply() "probe-stack"="inline-asm" {
 entry:
-  call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null)
+  call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)
   ret void
 }
 
@@ -26573,7 +26777,7 @@ const identity = (s: string): string => s
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_reset_arena() #2
 declare void @nish_free_arena() #2
-declare void @nish_sandbox(i32, i32, i8*, i8*) #2
+declare void @nish_sandbox(i32, i32, i8*, i8*, i8*) #2
 declare void @nish_sandbox_check() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
@@ -26590,6 +26794,7 @@ declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef,
 declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_bytes_skip_json_plain(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
+declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef) #2
 declare double @nish_floor(double) #0
 declare double @nish_ceil(double) #0
 declare double @nish_trunc(double) #0

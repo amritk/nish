@@ -1,0 +1,1 @@
+hands `spawnSync` "sh", which its `process.spawn` grant does not cover

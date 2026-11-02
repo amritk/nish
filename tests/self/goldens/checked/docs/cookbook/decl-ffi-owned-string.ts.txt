@@ -3,7 +3,7 @@
 entry: docs/cookbook/decl-ffi-owned-string.ts
 import readCString from "nish:unsafe" -> builtin readCString
 unsafe import 1:10 readCString from "nish:unsafe"
-unsafe call 11:15 readCString (node 70)
+unsafe call 11:15 readCString (node 71)
 function realpath(path: string, resolved: CPtr | null): CPtr | null -> @realpath
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign

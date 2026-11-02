@@ -1,0 +1,1 @@
+`f` has both a parameter with a default and a rest parameter, which this version does not combine: write every argument before the rest, or pass the rest as an array

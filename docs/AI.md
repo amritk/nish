@@ -180,7 +180,7 @@ rejects. This table is the highest-value part of the page.
 | `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
-| `const [a, b] = xs`, `({ x }: Point) =>`, `(n = 1)`, `(n?: i32)`, `(...ns: i32[])` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional/default parameters are not supported` / `Rest parameters are not supported` | one name per binding, every parameter passed; an array for a variable count |
+| `const [a, b] = xs`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default; `...ns: i32[]` as the last parameter, or pass the array itself |
 | `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, `declare class`, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class` is not supported `` / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
@@ -2749,6 +2749,21 @@ request. It reads no clock: when to take is the loop's choice, or a `PgBatchCloc
 guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
 
+**Call another service from a route handler** — there is no `await fetch()`
+in a handler and no event-loop callback: `nish/net/upstream`'s `Upstream(h,
+origin, limits)` is a pool of keep-alive connections to one `http:` origin on
+the `HttpHandler`'s own loop. `users.get(req, path)` returns at once — test it
+for `UPSTREAM_E_FULL`, which holds nothing — and keeps `req` held; after each
+`h.wait(ms)`, `while (users.ready())` `take()`s every finished call, answers
+`r.req` (`r.ok`, `r.status` and `r.body[0 .. r.length)`, or `r.error`: the
+codec's `HTTP1_E_` refusal or an `UPSTREAM_E_` code such as `TIMEOUT`) and
+`release`s it once. The origin is looked up once at start-up; set
+`UpstreamLimits.outbound` when it comes from input. Each connection takes a
+handler watch id from `firstId` (8) up, so keep your own `h.watch` ids below
+it. (No block, as for `nish/text`; `tests/link/net_upstream` is its program,
+and the user guide's [calling-services page](guide/using-nish/calling-services.md)
+its walk-through.)
+
 **Draw to the whole terminal** (a game, a dashboard) — there is no curses and
 no `process.stdout.on("resize")`: `runTerminal(options, state, update, render)`
 from `nish/term-io` opens the terminal, probes what it can draw, steps
@@ -2788,8 +2803,11 @@ export const main = (): i32 => {
 };
 ```
 
-**Optional parameters** — there are none. Write two functions with different
-names, or take the value and document the sentinel.
+**Optional parameters** — write a default instead: `(n: i32 = 1)`. A default
+is a literal, an enum member or an earlier parameter, and the call site fills
+it in. `x?: T` is refused. A variable count of one type is a rest parameter,
+`(...ns: i32[])`, last in the list; a call never spreads (`f(...xs)`), it passes
+`xs` to an array parameter.
 
 **A calendar, regex, JSON, threads of your own** — not in the language (the
 wall clock is `Date.now()`, and that is all of `Date`). Say so rather than

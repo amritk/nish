@@ -27,6 +27,11 @@ and is the name a JavaScript caller sees. `Int32Array` and `BigInt64Array` are
 exported signature, so it means the same thing whatever `--number-mode` the
 module is compiled in.
 
+A host calls the exported function as it is compiled, with every argument: a
+[default](../language/functions.md#default-and-rest-parameters) is filled in only by a Nish caller, so a
+JavaScript or C caller passes it, and a rest parameter `...xs: f64[]` takes one
+plain `Float64Array`.
+
 A compile writes the IR and, with these flags, the file each host needs:
 
 | Flag | Writes | For |

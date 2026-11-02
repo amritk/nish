@@ -14,20 +14,31 @@ import rejectForeignPointer from "./annotations" -> function @rejectForeignPoint
 import resolveType from "./annotations" -> function @resolveType
 import annotationSpelling from "./arrays" -> function @annotationSpelling
 import functionTypeHereMessage from "./generics" -> function @functionTypeHereMessage
+import isContextualLiteral from "./generics" -> function @isContextualLiteral
 import isFunctionParameter from "./generics" -> function @isFunctionParameter
+import isScalarArgument from "./escape" -> function @isScalarArgument
 import isThreadsSource from "./parallel" -> function @isThreadsSource
 import FLAG_COMPUTED from "./nodes" -> const FLAG_COMPUTED
+import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
+import FLAG_GATHERED from "./nodes" -> const FLAG_GATHERED
+import FLAG_REST from "./nodes" -> const FLAG_REST
+import FLAG_SIGNATURE from "./nodes" -> const FLAG_SIGNATURE
 import FLAG_TYPE_ONLY from "./nodes" -> const FLAG_TYPE_ONLY
+import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_EMPTY from "./nodes" -> const N_EMPTY
 import N_IDENT from "./nodes" -> const N_IDENT
 import N_LIST from "./nodes" -> const N_LIST
+import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
+import FieldInfo from "./program" -> struct FieldInfo
 import FunctionSig from "./program" -> struct FunctionSig
 import ImportBinding from "./program" -> struct ImportBinding
 import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
+import checkLiteralInitializer from "./structs" -> function @checkLiteralInitializer
 import isForeignBuffer from "./types" -> function @isForeignBuffer
 import isForeignType from "./types" -> function @isForeignType
+import isNumeric from "./types" -> function @isNumeric
 import K_ARRAY from "./types" -> const K_ARRAY
 import T_ERROR from "./types" -> const T_ERROR
 import T_I32 from "./types" -> const T_I32
@@ -43,27 +54,179 @@ function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: owner
-  calls: CheckContext.error functionTypeHereMessage isFunctionParameter isThreadsSource nish_array_grow nish_panic_index nish_str_concat nish_str_eq rejectForeignPointer resolveType
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0
-  pointer sig: size=144 writesThrough=false captured=false
-  pointer list: size=40 writesThrough=false captured=false
+  calls: CheckContext.error collectParamForm followsDefaultMessage functionParameterFormMessage functionTypeHereMessage isFunctionParameter isThreadsSource nish_array_grow nish_panic_index nish_str_concat nish_str_eq refuseMixedForms rejectForeignPointer resolveType
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0 collectParamForm#0 refuseMixedForms#0
+  pointer sig: size=160 writesThrough=true captured=false passedTo=collectParamForm#1 refuseMixedForms#1
+  pointer list: size=40 writesThrough=false captured=false passedTo=collectParamForm#4 refuseMixedForms#2
   stackSites=0 stackLocals=0
   local +3:14 param: Node (const)
   local +4:11 name: string (const)
   callee +9:9 isFunctionParameter -> @isFunctionParameter
-  callee +12:27 isThreadsSource -> @isThreadsSource
-  local +13:15 what: string (const)
-  callee +14:9 CheckContext.error -> @CheckContext.error
-  callee +14:38 functionTypeHereMessage -> @functionTypeHereMessage
-  callee +18:9 CheckContext.error -> @CheckContext.error
-  local +29:11 type: i32 (const)
-  callee +29:18 resolveType -> @resolveType
-  local +30:9 duplicate: boolean (let)
-  local +31:16 seen: string (const)
-  callee +37:7 CheckContext.error -> @CheckContext.error
-  callee +41:7 rejectForeignPointer -> @rejectForeignPointer
+  callee +13:9 CheckContext.error -> @CheckContext.error
+  callee +13:26 functionParameterFormMessage -> @functionParameterFormMessage
+  callee +15:9 CheckContext.error -> @CheckContext.error
+  callee +15:26 followsDefaultMessage -> @followsDefaultMessage
+  callee +19:27 isThreadsSource -> @isThreadsSource
+  local +20:15 what: string (const)
+  callee +21:9 CheckContext.error -> @CheckContext.error
+  callee +21:38 functionTypeHereMessage -> @functionTypeHereMessage
+  callee +25:9 CheckContext.error -> @CheckContext.error
+  local +38:11 untypedDefault: boolean (const)
+  local +41:11 type: i32 (const)
+  callee +41:45 resolveType -> @resolveType
+  local +42:9 duplicate: boolean (let)
+  local +43:16 seen: string (const)
+  callee +49:7 CheckContext.error -> @CheckContext.error
+  callee +53:7 rejectForeignPointer -> @rejectForeignPointer
+  callee +58:7 collectParamForm -> @collectParamForm
+  callee +61:3 refuseMixedForms -> @refuseMixedForms
+function collectParamForm(ctx: CheckContext, sig: FunctionSig, param: Node, type: i32, list: Node): void -> @collectParamForm
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: type
+  calls: CheckContext.error FieldInfo.constructor FunctionSig.isCompileTime TypeTable.isArray TypeTable.isRanged TypeTable.typeName checkLiteralInitializer followsDefaultMessage isContextualLiteral isNumeric isScalarDefault mentionsBound nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq spellingOf
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 spellingOf#0 mentionsBound#0 CheckContext.error#0 isScalarDefault#0 CheckContext.error#0 spellingOf#0 CheckContext.error#0 isScalarDefault#0 CheckContext.error#0 CheckContext.error#0 checkLiteralInitializer#0
+  pointer sig: size=160 writesThrough=true captured=false passedTo=FunctionSig.isCompileTime#0
+  pointer param: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 FieldInfo.constructor#3
+  pointer list: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -13:9 name: string (const)
+  local -12:9 position: i32 (const)
+  callee -9:7 CheckContext.error -> @CheckContext.error
+  callee -7:7 CheckContext.error -> @CheckContext.error
+  callee -3:37 TypeTable.isArray -> @TypeTable.isArray
+  callee -2:7 CheckContext.error -> @CheckContext.error
+  callee +6:7 CheckContext.error -> @CheckContext.error
+  callee +6:24 followsDefaultMessage -> @followsDefaultMessage
+  local +10:9 init: Node (const)
+  callee +12:5 CheckContext.error -> @CheckContext.error
+  callee +14:120 spellingOf -> @spellingOf
+  callee +21:7 mentionsBound -> @mentionsBound
+  callee +22:5 CheckContext.error -> @CheckContext.error
+  callee +28:8 isScalarDefault -> @isScalarDefault
+  callee +29:5 CheckContext.error -> @CheckContext.error
+  callee +31:37 spellingOf -> @spellingOf
+  local +36:11 none: FieldInfo | null (const)
+  local +39:9 value: FieldInfo (const)
+  callee +39:17 new FieldInfo -> @FieldInfo.constructor
+  local +50:9 notLiteral: string (const)
+  local +52:11 source: i32 (const)
+  callee +53:69 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +54:7 CheckContext.error -> @CheckContext.error
+  callee +55:52 isScalarDefault -> @isScalarDefault
+  callee +56:7 CheckContext.error -> @CheckContext.error
+  callee +64:7 isContextualLiteral -> @isContextualLiteral
+  callee +64:37 isNumeric -> @isNumeric
+  callee +64:57 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +65:5 CheckContext.error -> @CheckContext.error
+  callee +65:49 TypeTable.typeName -> @TypeTable.typeName
+  callee +68:3 checkLiteralInitializer -> @checkLiteralInitializer
+function isScalarDefault(ctx: CheckContext, type: i32): boolean -> @isScalarDefault
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: TypeTable.isRanged isScalarArgument
+  pointer ctx: size=288 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 isScalarArgument -> @isScalarArgument
+  callee +0:40 TypeTable.isRanged -> @TypeTable.isRanged
+function refuseMixedForms(ctx: CheckContext, sig: FunctionSig, list: Node): void -> @refuseMixedForms
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: CheckContext.error nish_panic_index nish_str_concat
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer sig: size=160 writesThrough=true captured=false
+  pointer list: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee -4:3 CheckContext.error -> @CheckContext.error
+function mentionsBound(ctx: CheckContext, annotation: Node): boolean -> @mentionsBound
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: StringMap.has StringMap.size mentionsBound nish_str_eq
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=mentionsBound#0
+  pointer annotation: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:7 StringMap.size -> @StringMap.size
+  callee +3:33 StringMap.has -> @StringMap.has
+  local +6:14 child: Node (const)
+  callee +7:9 mentionsBound -> @mentionsBound
+function fitArguments(ctx: CheckContext, call: Node, args: Node, sig: FunctionSig, skip: i32, shown: string): boolean -> @fitArguments [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error FunctionSig.requiredArity FunctionSig.writtenArity gatherRest nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 gatherRest#0 CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 gatherRest#1 CheckContext.error#1
+  pointer args: size=40 writesThrough=true captured=false passedTo=gatherRest#2
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0 FunctionSig.requiredArity#0
+  stackSites=0 stackLocals=0
+  local +0:9 written: i32 (const)
+  callee +0:19 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  local +1:9 got: i32 (const)
+  local +3:11 fixed: i32 (const)
+  callee +5:7 CheckContext.error -> @CheckContext.error
+  callee +8:5 gatherRest -> @gatherRest
+  local +11:9 least: i32 (const)
+  callee +11:17 FunctionSig.requiredArity -> @FunctionSig.requiredArity
+  local +15:9 count: string (const)
+  callee +16:3 CheckContext.error -> @CheckContext.error
+function fitTemplateArguments(ctx: CheckContext, call: Node, args: Node, parameters: Node, shown: string): boolean -> @fitTemplateArguments [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error gatherRest nish_panic_index nish_str_concat nish_str_from_i32
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 gatherRest#0 CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 gatherRest#1 CheckContext.error#1
+  pointer args: size=40 writesThrough=true captured=false passedTo=gatherRest#2
+  pointer parameters: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 written: i32 (const)
+  local +1:9 got: i32 (const)
+  callee +7:7 CheckContext.error -> @CheckContext.error
+  callee +10:5 gatherRest -> @gatherRest
+  local +13:7 least: i32 (let)
+  local +23:9 count: string (const)
+  callee +24:3 CheckContext.error -> @CheckContext.error
+function gatherRest(ctx: CheckContext, call: Node, args: Node, from: i32): void -> @gatherRest
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: from
+  calls: Node.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
+  pointer ctx: size=288 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  pointer args: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +1:9 elements: Node[] (const)
+  local +2:9 kept: Node[] (const)
+  local +3:14 arg: Node (const)
+  local +10:9 start: i32 (const)
+  local +11:9 end: i32 (const)
+  local +12:9 array: Node (const)
+  callee +12:17 new Node -> @Node.constructor
+function spellingOf(ctx: CheckContext, node: Node): string -> @spellingOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_slice nish_str_new
+  pointer ctx: size=288 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function followsDefaultMessage(name: string): string -> @followsDefaultMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function functionParameterFormMessage(name: string): string -> @functionParameterFormMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function optionalParameterMessage(ctx: CheckContext, param: Node): string -> @optionalParameterMessage [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_concat spellingOf
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=spellingOf#0
+  pointer param: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 name: string (const)
+  local +1:9 type: string (const)
+  callee +1:59 spellingOf -> @spellingOf
+function parameterFormHereMessage(rest: boolean): string -> @parameterFormHereMessage [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig -> @collectFunctionSignature [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=144
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=160
   sharedWrite: via CheckContext.error
   calls: CheckContext.error FunctionSig.constructor FunctionSig.foreign annotationSpelling checkForeignSignature collectParams isExported nish_alloc_struct nish_panic_index nish_str_at rejectForeignPointer resolveType
   pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.error#0 collectParams#0 resolveType#1 annotationSpelling#0 checkForeignSignature#0 rejectForeignPointer#0
@@ -88,7 +251,7 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   escaping: name
   calls: CheckContext.error FunctionSig.body TypeTable.isRanged TypeTable.kindOf TypeTable.stripNull TypeTable.typeName isForeignBuffer isForeignType nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
-  pointer sig: size=144 writesThrough=false captured=false passedTo=FunctionSig.body#0
+  pointer sig: size=160 writesThrough=false captured=false passedTo=FunctionSig.body#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:7 FunctionSig.body -> @FunctionSig.body
@@ -133,7 +296,7 @@ function markEntryMain(ctx: CheckContext, sig: FunctionSig): void -> @markEntryM
   escaping: sig
   calls: CheckContext.error TypeTable.typeName nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -21:5 CheckContext.error -> @CheckContext.error
   local -15:11 spelled: string (const)

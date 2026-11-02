@@ -137,10 +137,11 @@ process.env.XDG_CACHE_HOME = suiteCache
  * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
  * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes`,
  * `runtime-sandbox.c` the `--sandbox` confinement and `runtime-shm.c` the
- * shared-memory regions of `nish/sync/shm`, split apart so that each carries its own `.text*`
+ * shared-memory regions of `nish/sync/shm` and `runtime-region.c` the arenas a program
+ * makes and frees one at a time, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fourteen:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fifteen:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -165,6 +166,7 @@ const RUNTIME_C = [
   "runtime/runtime-bytes.c",
   "runtime/runtime-sandbox.c",
   "runtime/runtime-shm.c",
+  "runtime/runtime-region.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -2381,7 +2383,18 @@ if (dealtHere("termIo")) {
     // restored and the termios as it was. F6 changes the graphics setting and
     // keeps the terminal open; F4 closes it and opens it again with the new rate,
     // on whichever scene was showing.
-    const wallKeys = (...keys) => keys.map(([afterFrames, bytes]) => ({ afterFrames, bytes }))
+    // A third element is the least gap in milliseconds after the key before.
+    // The game steps 120 times a second whatever the frame rate, and the rate
+    // starts at the best tier and falls under load, so a count of frames is no
+    // measure of game time: the Space that starts play waits out the title's
+    // 1 s outro after Enter (OUTRO_STEPS), and two taps of one key are spaced
+    // past KeyState's 700 ms, inside which the second is a repeat the game
+    // ignores.
+    const wallKeys = (...keys) => keys.map(([afterFrames, bytes, afterMs]) => ({ afterFrames, bytes, afterMs }))
+    const OUTRO_GAP_MS = 1300
+    const TAP_GAP_MS = 1000
+    // Keys after a wait would otherwise go out together, into one step.
+    const STEP_GAP_MS = 250
     // The cells `out` leaves on the screen by its `n`th frame (`CSI 5 n`): plays
     // cursor moves, SGR and text, starts afresh at each `?1049h`, skips the rest.
     const wallCells = (out, n) => {
@@ -2422,7 +2435,15 @@ if (dealtHere("termIo")) {
       relay(NISH, "break", {
         dir: at("wall-play"),
         env: { XDG_CONFIG_HOME: configs[0] },
-        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [128, "\x1bOR"], [133, "p"], [138, "q"], [153, "q"]),
+        keys: wallKeys(
+          [2, " "],
+          [6, "\r"],
+          [123, " ", OUTRO_GAP_MS],
+          [128, "\x1bOR", STEP_GAP_MS],
+          [133, "p", STEP_GAP_MS],
+          [138, "q", STEP_GAP_MS],
+          [153, "q", TAP_GAP_MS]
+        ),
         timeoutMs: 30000,
       }),
       relay(NISH, "break", {
@@ -2434,7 +2455,16 @@ if (dealtHere("termIo")) {
       relay(NISH, "break", {
         dir: at("wall-stage"),
         env: { NISH_TERM_GRAPHICS: "ascii", XDG_CONFIG_HOME: configs[2] },
-        keys: wallKeys([2, " "], [6, "\r"], [123, " "], [133, "p"], [143, "\x1bOS"], [173, "q"], [183, "q"], [193, "q"]),
+        keys: wallKeys(
+          [2, " "],
+          [6, "\r"],
+          [123, " ", OUTRO_GAP_MS],
+          [133, "p", STEP_GAP_MS],
+          [143, "\x1bOS", STEP_GAP_MS],
+          [173, "q", TAP_GAP_MS],
+          [183, "q", TAP_GAP_MS],
+          [193, "q", TAP_GAP_MS]
+        ),
         timeoutMs: 30000,
       }),
     ]).finally(() => {
@@ -3974,6 +4004,18 @@ if (!only || "diagnostics".includes(only)) {
     "codes: scripts/gen-diagnostic-codes.mjs --check accepts the registry",
     codesGen.status === 0,
     codesGen.stdout + codesGen.stderr
+  )
+
+  // `tests/cases/union_scale.ts` is 7,891 generated lines, and the generator is
+  // its only author: `--check` fails when the file differs from what it writes.
+  const unionScaleGen = spawnSync("node", [path.join(root, "scripts", "gen-union-scale.mjs"), "--check"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "union_scale: scripts/gen-union-scale.mjs --check matches tests/cases/union_scale.ts",
+    unionScaleGen.status === 0,
+    unionScaleGen.stdout + unionScaleGen.stderr
   )
 
   // ---- the security records' scope ---------------------------------------
@@ -7436,10 +7478,10 @@ if (dealtHere("selfHosting")) {
       [
         "reject_fn_sweep_together",
         [
-          "16:22-16:38 NL2235",
+          "16:22-16:38 NL2192",
           "18:14-18:19 NL2096",
           "20:14-20:20 NL2254",
-          "22:23-22:33 NL2233",
+          "22:23-22:30 NL2605",
           "24:10-24:19 NL2096",
           "26:24-26:30 NL2254",
           "28:1-28:33 NL2084",
@@ -9104,7 +9146,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's fourteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's fifteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9165,6 +9207,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-bytes.c",
       "runtime-sandbox.c",
       "runtime-shm.c",
+      "runtime-region.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -9172,7 +9215,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fourteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fifteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9181,7 +9224,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the fourteen runtime units once",
+      "runtime cache: the miss compiled each of the fifteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -11751,7 +11794,7 @@ if (!only || "sandbox".includes(only)) {
         `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
       ) &&
       !scopedText.includes("@.sandbox.write") &&
-      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null)`) &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null)`) &&
       (as === null || as.status === 0),
     sc.status === 0
       ? `${scopedText
@@ -11785,6 +11828,190 @@ if (!only || "sandbox".includes(only)) {
       added.every((l) => l === "" || /sandbox|llvm\.used|^entry:$|^ {2}ret void$|^\}$/.test(l)),
     ph.status === 0 ? added.join("\n") : shown(ph)
   )
+}
+
+// WP40 §2a at run time: a dependency's grant with arguments, held by the WP37
+// sandbox where the compiler could not read the value. Each fixture's
+// dependency reaches what the program's first argument names, so the build
+// accepts it (tests/link/caps_dep_arg_*_too_narrow is the same reach written
+// as a literal, refused at build), and `--sandbox` stops the reach the grant
+// does not cover: Landlock scopes `fs.read=<dir>` to the directory and takes
+// EXECUTE everywhere but the programs `process.spawn=<program>` names. The
+// same binaries built without `--sandbox` are the control.
+if (!only || "sandbox dependency grants".includes(only)) {
+  const dir = path.join(buildDir, "sandbox-grants")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("sandbox dependency grants: --sandbox confines through Linux system calls, and this host is not Linux with clang")
+  } else {
+    const abiProbe = path.join(dir, "abi")
+    fs.writeFileSync(
+      `${abiProbe}.c`,
+      "#include <stdio.h>\n#include <unistd.h>\n#include <sys/syscall.h>\n" +
+        'int main(void) { long r = syscall(444, NULL, 0, 1); printf("%ld\\n", r < 0 ? 0 : r); return 0; }\n'
+    )
+    const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root })
+    if (a.status !== 0) check("sandbox dependency grants: the Landlock ABI probe compiles", false, shown(a))
+    const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
+    /** Builds tests/link/<fixture> with `flags` into its own directory: the binary, or null and a FAIL. */
+    const build = (fixture, flags) => {
+      const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
+      const exe = path.join(out, "app")
+      const r = spawnSync(
+        NISH,
+        [path.join(linkDir, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      if (r.status !== 0) check(`sandbox dependency grants: ${fixture} ${flags.join(" ")} builds`, false, shown(r))
+      return r.status === 0 ? exe : null
+    }
+    const run = (exe, args) =>
+      exe === null ? null : spawnSync(exe, args, { cwd: dir, encoding: "utf8", timeout: 60000 })
+    const said = (r) => (r === null ? "not built" : shown(r))
+    const ir = (fixture) => {
+      const f = path.join(dir, `${fixture}-sandbox`, "main.ll")
+      return fs.existsSync(f) ? fs.readFileSync(f, "utf8") : ""
+    }
+    if (abi < 1) {
+      skip(`sandbox dependency grants: this kernel has no Landlock (ABI ${abi}); the checks did not run`)
+    } else {
+      const reader = "sandbox_dep_fs_scoped"
+      const scoped = build(reader, ["--sandbox"])
+      const plain = build(reader, [])
+      const inside = path.join(linkDir, reader, "data", "in.txt")
+      const rIn = run(scoped, [inside])
+      const rOut = run(scoped, ["/etc/passwd"])
+      const rPlain = run(plain, ["/etc/passwd"])
+      check(
+        "sandbox dependency grants: a dependency granted fs.read=<dir> reads inside it and not /etc/passwd",
+        rIn !== null &&
+          rIn.status === 0 &&
+          rIn.stdout === "7\n" &&
+          rOut !== null &&
+          rOut.status !== 0 &&
+          rOut.stderr.includes("cannot read /etc/passwd") &&
+          rPlain !== null &&
+          rPlain.status === 0,
+        `${said(rIn)}\n--- outside\n${said(rOut)}\n--- without --sandbox\n${said(rPlain)}`
+      )
+      check(
+        "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.read scope",
+        ir(reader).includes(`c"${fs.realpathSync(path.join(linkDir, reader, "data"))}\\00\\00"`) &&
+          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null\)/.test(
+            ir(reader)
+          ),
+        ir(reader)
+      )
+      // A write scope under strict `--sandbox` needs TRUNCATE, which Landlock
+      // cannot grant beneath one directory below ABI 3: the program exits 126.
+      if (abi < 3) {
+        skip(`sandbox dependency grants: this kernel's Landlock is ABI ${abi} (<3); the fs.write=<dir> checks did not run`)
+      } else {
+        const writer = "sandbox_dep_fs_write_scoped"
+        const wScoped = build(writer, ["--sandbox"])
+        const wPlain = build(writer, [])
+        const wInside = path.join(linkDir, writer, "out", "mark.txt")
+        const wOutside = path.join(dir, "outside-mark.txt")
+        const wOutsidePlain = path.join(dir, "outside-mark-plain.txt")
+        const rwIn = run(wScoped, [wInside])
+        const wroteIn = fs.existsSync(wInside) && fs.readFileSync(wInside, "utf8") === "x"
+        fs.rmSync(wInside, { force: true })
+        const rwOut = run(wScoped, [wOutside])
+        const rwPlain = run(wPlain, [wOutsidePlain])
+        check(
+          "sandbox dependency grants: a dependency granted fs.write=<dir> writes inside it and not beside it",
+          rwIn !== null &&
+            rwIn.status === 0 &&
+            rwIn.stdout === "1\n" &&
+            wroteIn &&
+            rwOut !== null &&
+            rwOut.status !== 0 &&
+            rwOut.stderr.includes(`cannot write ${wOutside}`) &&
+            !fs.existsSync(wOutside) &&
+            rwPlain !== null &&
+            rwPlain.status === 0 &&
+            fs.existsSync(wOutsidePlain),
+          `${said(rwIn)}\n--- outside\n${said(rwOut)}\n--- without --sandbox\n${said(rwPlain)}`
+        )
+        check(
+          "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
+          ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
+            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
+              ir(writer)
+            ),
+          ir(writer)
+        )
+      }
+      const runner = "sandbox_dep_exec_allowlist"
+      const allow = build(runner, ["--sandbox"])
+      const open = build(runner, [])
+      const rTrue = run(allow, ["true"])
+      const rEcho = run(allow, ["echo"])
+      const rEchoPlain = run(open, ["echo"])
+      // The allowlist holds the real file Landlock is given, which is not
+      // always named `true`: some coreutils install it behind a symbolic link.
+      const realOnPath = (name) => {
+        const found = (process.env.PATH ?? "")
+          .split(path.delimiter)
+          .map((dir) => path.join(dir === "" ? "." : dir, name))
+          .find((file) => {
+            try {
+              fs.accessSync(file, fs.constants.X_OK)
+              return fs.statSync(file).isFile()
+            } catch {
+              return false
+            }
+          })
+        return found === undefined ? null : fs.realpathSync(found)
+      }
+      const trueReal = realOnPath("true")
+      check(
+        "sandbox dependency grants: a dependency granted process.spawn=true runs true and cannot exec echo",
+        rTrue !== null &&
+          rTrue.status === 0 &&
+          rTrue.stdout === "0\n" &&
+          rEcho !== null &&
+          rEcho.status === 0 &&
+          rEcho.stdout === "-1\n" &&
+          rEchoPlain !== null &&
+          rEchoPlain.stdout === "\n0\n",
+        `${said(rTrue)}\n--- echo\n${said(rEcho)}\n--- without --sandbox\n${said(rEchoPlain)}`
+      )
+      check(
+        "sandbox dependency grants: the exec allowlist names the granted program by its absolute path",
+        trueReal !== null && ir(runner).includes(`@.sandbox.exec = `) && ir(runner).includes(`c"${trueReal}\\00`),
+        `the first \`true\` on PATH resolves to ${trueReal}\n${ir(runner)}`
+      )
+      // SBX-1, recorded open in docs/security/sandbox.md: the allowlist grants
+      // EXECUTE on the granted program's ELF loader, and the loader runs any
+      // binary it is handed. This pins that it still does; closing SBX-1
+      // turns this check red, and it then pins the refusal instead.
+      const execList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(runner))
+      const loaders =
+        execList === null ? [] : execList[1].split("\\00").filter((p) => p !== "" && p !== trueReal)
+      // The program the loader is handed is one this check builds, not the
+      // machine's `echo`: a multicall coreutils (uutils, as on CI's runners)
+      // picks its utility from argv[0], which is the loader's path here, and
+      // refuses to run.
+      const ungranted = path.join(dir, "sbx-1-ungranted")
+      const ungrantedSrc = `${ungranted}.c`
+      fs.writeFileSync(ungrantedSrc, '#include <stdio.h>\nint main(void) { puts("sbx-1"); return 0; }\n')
+      const ungrantedCc = spawnSync("clang", ["-O2", ungrantedSrc, "-o", ungranted], { encoding: "utf8" })
+      if (loaders.length === 0 || ungrantedCc.status !== 0) {
+        skip(
+          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not pinned`
+        )
+      } else {
+        const rLoader = run(allow, [loaders[0], ungranted])
+        check(
+          "sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)",
+          rLoader !== null && rLoader.status === 0 && rLoader.stdout === "sbx-1\n0\n",
+          `${loaders[0]} ${ungranted}\n${said(rLoader)}`
+        )
+      }
+    }
+  }
 }
 
 // `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the
@@ -13481,6 +13708,74 @@ if (!only || "std_json_writer".includes(only)) {
   } else {
     skip("skipped: link/std_json_writer: no clang, so node.ts is not built natively")
   }
+}
+
+// The f64 seam: a native `JsonWriter.f64` writes its digits through
+// `nish_json_put_f64` (runtime/runtime.c) straight into the writer's buffer,
+// where the Nish body, `jsonPutF64Walk` in std/json.ts, builds `${v}` first.
+// `tests/link/std_json_writer/seam.ts` prints -0, 1e21, 5e-324 and the longest
+// spelling in an array, a write one byte short of fitting and an exact fit;
+// the native build and the Node prelude must print `seam.out`, and std/json's
+// IR must make the call. The recognition is the package's: `std/json.ts`
+// compiled as a root is an ordinary module and calls its walk.
+if (!only || "json_f64_seam".includes(only)) {
+  const dir = path.join(linkDir, "std_json_writer")
+  const want = fs.readFileSync(path.join(dir, "seam.out"), "utf8")
+  const node = runUnderPrelude(path.join(dir, "seam.ts"), [])
+  check(
+    "json_f64_seam: seam.ts under the Node prelude runs jsonPutF64Walk and prints seam.out",
+    node.status === 0 && node.stdout === want,
+    `--- seam.out\n${want}--- node\n${shown(node)}`
+  )
+  const outDir = path.join(buildDir, "link", "json_f64_seam")
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const exe = path.join(outDir, "app")
+  const link = HAS_CLANG ? ["--link", exe, ...linkProfile("std_json_writer")] : []
+  const built = spawnSync(NISH, [path.join(dir, "seam.ts"), "-o", `${outDir}${path.sep}`, ...link], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const jsonLl = path.join(outDir, "json.ll")
+  const ir = built.status === 0 ? fs.readFileSync(jsonLl, "utf8") : ""
+  const writer = ir.match(/^define [^\n]*@nish\.jsonWriterPutF64\([^]*?^}/m)?.[0] ?? ""
+  check(
+    "json_f64_seam: std/json's jsonWriterPutF64 calls nish_json_put_f64 on the buffer and builds no string",
+    built.status === 0 &&
+      writer.includes("call i32 @nish_json_put_f64(i8* ") &&
+      !writer.includes("jsonPutF64Walk") &&
+      !writer.includes("nish_str_from_f64") &&
+      ir.includes(
+        "declare i32 @nish_json_put_f64(i8* noundef nocapture writeonly, i32 noundef, i32 noundef, double noundef)"
+      ),
+    built.status === 0 ? writer || ir : built.stderr
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [jsonLl, "-o", "/dev/null"], { encoding: "utf8" })
+    check("json_f64_seam: std/json's IR passes llvm-as", built.status === 0 && as.status === 0, as.stderr)
+  } else {
+    skip("skipped: json_f64_seam: no llvm-as")
+  }
+  if (HAS_CLANG) {
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "json_f64_seam: seam.ts built natively writes through the kernel and prints seam.out",
+      native.status === 0 && native.stdout === want,
+      `--- seam.out\n${want}--- native\n${shown(native)}`
+    )
+  } else {
+    skip("skipped: json_f64_seam: no clang, so seam.ts is not built natively")
+  }
+  const rootDir = path.join(buildDir, "json_f64_seam_root")
+  fs.rmSync(rootDir, { recursive: true, force: true })
+  const asRoot = spawnSync(NISH, ["std/json.ts", "-o", `${rootDir}${path.sep}`], { cwd: root, encoding: "utf8" })
+  const rootIr = asRoot.status === 0 ? fs.readFileSync(path.join(rootDir, "json.ll"), "utf8") : ""
+  check(
+    "json_f64_seam: std/json.ts compiled as a root is an ordinary module, so JsonWriter.f64 calls its walk and not the kernel",
+    asRoot.status === 0 &&
+      rootIr.includes("call i32 @jsonPutF64Walk(") &&
+      !rootIr.includes("nish_json_put_f64"),
+    asRoot.status === 0 ? rootIr : asRoot.stderr
+  )
 }
 
 // Typed JSON (`nish/json-typed`) against Node's own parser and writer: each
@@ -18014,6 +18309,77 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
   }
 }
 
+// ---- Regions (WP46 stage 1): runtime-region.c from C ---------------------------------
+// tests/runtime/region-test.c, linked with the whole runtime in the default
+// build and with -DNISH_THREADS: with no argument it runs the positive checks
+// (chunk sizes, nesting, the root, a hundred thousand regions freed ten times
+// with the resident set flat); with a mode it misuses a handle, and each mode
+// must exit 1 with its panic. Then `scripts/build.sh --profile wasm` must refuse
+// IR that names a region function, pointing at `--profile wasi`.
+if (!only || "region".includes(only)) {
+  const regionBuild = (name, flags) => {
+    const exe = path.join(buildDir, name)
+    const cc = spawnSync(
+      "clang",
+      ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", ...flags, ...RUNTIME_C, "tests/runtime/region-test.c", "-lm", "-o", exe],
+      { cwd: root, encoding: "utf8" }
+    )
+    return { exe, ok: cc.status === 0, stderr: cc.stderr }
+  }
+  const zero = "nish: a zero region handle: no region was made for it"
+  const stale = "nish: a stale region handle: the region was freed"
+  const entered = "nish: enter of a region that is already entered"
+  const notLast = "nish: leave of a region that is not the one entered last"
+  const panics = [
+    ["zero-enter", zero],
+    ["zero-free", zero],
+    ["zero-leave", zero],
+    ["stale-enter", stale],
+    ["double-free", stale],
+    ["forged", stale],
+    ["free-entered", "nish: free of a region that is entered"],
+    ["reenter", entered],
+    ["reenter-nested", entered],
+    ["leave-outer", notLast],
+    ["leave-unentered", notLast],
+  ]
+  for (const [name, flags, extra] of [
+    ["region_test", [], []],
+    ["region_test_threads", ["-DNISH_THREADS=1", "-pthread"], [["thread", "nish: a region handle made on another thread"]]],
+  ]) {
+    const built = regionBuild(name, flags)
+    const label = flags.length > 0 ? "runtime-region.c -DNISH_THREADS" : "runtime-region.c"
+    const run = built.ok ? spawnSync(built.exe, [], { encoding: "utf8" }) : null
+    check(
+      `${label}: chunks start at the first allocation and double, regions nest, and 100,000 freed ten times leave the resident set flat`,
+      run !== null && run.status === 0,
+      built.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "")
+    )
+    for (const [mode, message] of [...panics, ...extra]) {
+      const bad = built.ok ? spawnSync(built.exe, [mode], { encoding: "utf8" }) : null
+      check(
+        `${label}: ${mode} panics with "${message}"`,
+        bad !== null && bad.status === 1 && bad.stderr === `${message}\n`,
+        built.stderr + (bad ? `exit ${bad.status} ${bad.signal ?? ""}\n${bad.stdout}${bad.stderr}` : "")
+      )
+    }
+  }
+  const ll = path.join(buildDir, "region_wasm.ll")
+  fs.writeFileSync(
+    ll,
+    "declare i64 @nish_region_new()\ndefine i32 @main() {\n  %r = call i64 @nish_region_new()\n  ret i32 0\n}\n"
+  )
+  const wasm = spawnSync("bash", ["scripts/build.sh", ll, "-o", path.join(buildDir, "region.wasm"), "--profile", "wasm"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "scripts/build.sh --profile wasm refuses IR that names @nish_region_ with exit 2, naming --profile wasi",
+    wasm.status === 2 && wasm.stderr.includes("uses regions") && wasm.stderr.includes("--profile wasi"),
+    `exit ${wasm.status}\n${wasm.stderr}`
+  )
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 // The two runtime unit tests below name the runtime's sources rather than the
 // prebuilt objects, deliberately: what they assert *is* that the two
@@ -18039,7 +18405,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c and runtime-shm.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -23073,8 +23439,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   // Every flag the driver accepts is listed, by one of its spellings, bar
   // --help itself, the test hooks `--range-reference` and `--no-elision`, the
-  // refused `--nsw`, `--wrapping` and `--unchecked-indexing`, and the default `--strict-exports`: a wrapper that reads
-  // --help to learn the surface must not be missing one.
+  // watch's own `--watch-build`, the refused `--nsw`, `--wrapping` and
+  // `--unchecked-indexing`, and the default `--strict-exports`: a wrapper that
+  // reads --help to learn the surface must not be missing one.
   const documented = [
     "--output",
     "-g",
@@ -23109,6 +23476,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--allow",
     "--deny",
     "run [flags] <file.ts> [args ...]",
+    "--watch",
   ]
   // Delimited, so `--deny` is not found inside `--deny-panics`.
   const listed = (f) =>
@@ -24144,8 +24512,8 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     rewritten.status === 0 && fs.readFileSync(path.join(updated, lockName), "utf8") === writtenLock,
     shown(rewritten)
   )
-  // A row is every capability the dependency reaches, not only the four the
-  // dependency policy gates: `fs.read` is written beside the granted `net`.
+  // A row is every capability the dependency reaches, not only the ones the
+  // dependency policy gates: `env` is written beside the granted `net`.
   const ungatedLock = lockCopy("caps_lock_ungated")
   const ungatedRun = lockBuild(ungatedLock, ["--update-capability-lock"])
   const ungatedWritten = fs.existsSync(path.join(ungatedLock, lockName))
@@ -24153,7 +24521,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     : ""
   check(
     "capability lock: --update-capability-lock records a capability the dependency policy does not gate",
-    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"fs\.read"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
+    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"env"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
     `${shown(ungatedRun)}\n--- written\n${ungatedWritten}`
   )
   check(
@@ -24625,9 +24993,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fourteen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fifteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 14 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 15 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -29603,6 +29971,293 @@ if (
       lonely.status === 2 && lonely.stderr.includes("--module-objects takes --runtime-from"),
       `${lonely.status}: ${lonely.stderr}`,
     )
+  }
+}
+
+// `nish run --watch` (src/watch.ts): the program runs, an edit to a file it
+// imports rebuilds and reruns it, a failed build prints its diagnostics and
+// keeps what runs, and Ctrl-C ends it all. A server is swapped under load:
+// the new build starts beside the old one on its SO_REUSEPORT port before the
+// old one is stopped, so every request is answered -- Linux only, where the
+// kernel spreads connections over both listeners.
+if (selects("watch", "nish-run")) {
+  if (!HAS_CLANG) {
+    skip("nish run --watch: clang not on PATH, so no program can be linked")
+  } else {
+    const watchDir = path.join(buildDir, "watch")
+    fs.rmSync(watchDir, { recursive: true, force: true })
+    fs.mkdirSync(watchDir, { recursive: true })
+    const cache = path.join(watchDir, "cache")
+    const startWatch = (args) => {
+      const child = spawn(NISH, ["run", "--watch", ...args], {
+        cwd: watchDir,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, XDG_CACHE_HOME: cache },
+      })
+      const seen = { out: "", err: "", status: null, signal: null, exited: false, waiters: [] }
+      const wake = () => {
+        for (const w of seen.waiters.splice(0)) w()
+      }
+      child.stdout.on("data", (d) => {
+        seen.out += d
+        wake()
+      })
+      child.stderr.on("data", (d) => {
+        seen.err += d
+        wake()
+      })
+      child.on("exit", (status, signal) => {
+        seen.status = status
+        seen.signal = signal
+        seen.exited = true
+        wake()
+      })
+      // Resolves once `ready(seen)` holds, or with false after `ms`.
+      seen.until = (ready, ms = 60000) =>
+        new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(false), ms)
+          const look = () => {
+            if (ready(seen)) {
+              clearTimeout(timer)
+              resolve(true)
+            } else if (seen.exited) {
+              clearTimeout(timer)
+              resolve(false)
+            } else {
+              seen.waiters.push(look)
+            }
+          }
+          look()
+        })
+      // Ctrl-C, as a terminal sends it to the whole process group.
+      seen.interrupt = () => {
+        process.kill(-child.pid, "SIGINT")
+        return seen.until(() => false, 20000)
+      }
+      seen.pgid = child.pid
+      return seen
+    }
+    // Whether every process of the watch's group exits within 10 s; one that
+    // does not is killed, so a failure leaves nothing running.
+    const groupGone = async (pgid) => {
+      for (let at = Date.now(); Date.now() - at < 10000; await pause(20)) {
+        try {
+          process.kill(-pgid, 0)
+        } catch {
+          return true
+        }
+      }
+      process.kill(-pgid, "SIGKILL")
+      return false
+    }
+    const leftovers = () =>
+      fs
+        .readdirSync(path.join(cache, "nish", "run"))
+        .filter((name) => name.startsWith("watch-"))
+        .flatMap((name) => fs.readdirSync(path.join(cache, "nish", "run", name)))
+        .filter((name) => name.startsWith("driver-"))
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    const count = (text, part) => text.split(part).length - 1
+
+    // A program, its library edited under the watch.
+    const lib = path.join(watchDir, "lib.ts")
+    const word = (w) => fs.writeFileSync(lib, `export const word = (): string => ${w}\n`)
+    word(`"one"`)
+    fs.writeFileSync(
+      path.join(watchDir, "app.ts"),
+      'import { word } from "./lib"\n' +
+        "export const main = (): i32 => {\n" +
+        '  const w = getenv("NISH_WATCH")\n' +
+        '  console.log(`${word()} ${w === null ? "unset" : w} ${process.argv.length}`)\n' +
+        "  return 0\n" +
+        "}\n",
+    )
+    const app = startWatch(["app.ts", "a", "b"])
+    const first = await app.until((s) => s.out.includes("one 1 3\n") && s.err.includes("the program exited with status 0"))
+    check(
+      "nish run --watch: the program is built and run with its arguments, NISH_WATCH=1 set, and its build time printed",
+      first && /^watch: built in \d+ ms$/m.test(app.err),
+      app.out + app.err,
+    )
+    word(`"two"`)
+    const second = await app.until((s) => s.out.includes("two 1 3\n"))
+    check(
+      "nish run --watch: an edit to an imported file rebuilds the program and runs it again",
+      second && /^watch: rebuilt in \d+ ms$/m.test(app.err),
+      app.out + app.err,
+    )
+    word("42")
+    const broken = await app.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    check(
+      "nish run --watch: a failed build prints its diagnostics and waits for the next change",
+      broken && app.err.includes("lib.ts:1:") && !app.out.includes("42"),
+      app.out + app.err,
+    )
+    word(`"three"`)
+    const third = await app.until((s) => s.out.includes("three 1 3\n"))
+    check("nish run --watch: the change that fixes the build runs the program again", third, app.out + app.err)
+    // A burst of writes, as an editor's save can be, waits out the debounce and builds once.
+    const rebuildsBefore = count(app.err, "watch: rebuilt in")
+    for (const w of ["four", "five", "six"]) word(`"${w}"`)
+    const burst = await app.until((s) => s.out.includes("six 1 3\n"))
+    await pause(600)
+    check(
+      "nish run --watch: a burst of edits is gathered into one rebuild of the newest files",
+      burst && count(app.err, "watch: rebuilt in") === rebuildsBefore + 1 && !app.out.includes("four 1 3"),
+      app.out + app.err,
+    )
+    await app.interrupt()
+    const appGone = await groupGone(app.pgid)
+    check(
+      "nish run --watch: Ctrl-C ends the watch as SIGINT ends a program, and leaves no process or state file behind",
+      app.signal === "SIGINT" && appGone && leftovers().length === 0,
+      `${app.status} ${app.signal} ${appGone} ${leftovers()}: ${app.err}`,
+    )
+
+    // A first build that fails in an imported module still watches that module.
+    const helper = path.join(watchDir, "helper.ts")
+    fs.writeFileSync(helper, 'export const greeting = (): string => 7\n')
+    fs.writeFileSync(
+      path.join(watchDir, "greet.ts"),
+      'import { greeting } from "./helper"\nexport const main = (): i32 => {\n  console.log(greeting())\n  return 0\n}\n',
+    )
+    const greet = startWatch(["greet.ts"])
+    const greetFailed = await greet.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    fs.writeFileSync(helper, 'export const greeting = (): string => "fixed"\n')
+    const greetFixed = await greet.until((s) => s.out.includes("fixed\n"))
+    await greet.interrupt()
+    await groupGone(greet.pgid)
+    check(
+      "nish run --watch: fixing the imported module a first build failed in rebuilds and runs the program",
+      greetFailed && greetFixed && greet.err.includes("helper.ts:1:"),
+      greet.out + greet.err,
+    )
+
+    // `--json` reaches each build, so a failed one prints its diagnostics as JSON lines.
+    fs.writeFileSync(path.join(watchDir, "bad.ts"), 'export const main = (): i32 => "x"\n')
+    const json = startWatch(["--json", "bad.ts"])
+    const jsonFailed = await json.until((s) => s.err.includes("watch: the build failed; waiting for a change"))
+    await json.interrupt()
+    await groupGone(json.pgid)
+    check(
+      "nish run --watch --json: a failed build's diagnostics are JSON lines",
+      jsonFailed && json.out.split("\n").some((line) => line.startsWith('{"file":"bad.ts"') && line.includes('"severity":"error"')),
+      json.out + json.err,
+    )
+    const misplaced = spawnSync(NISH, ["--watch", "bad.ts"], { cwd: watchDir, encoding: "utf8" })
+    check(
+      "nish --watch: outside `nish run` the flag is a usage error (exit 2) that names `nish run`",
+      misplaced.status === 2 && misplaced.stderr.includes("--watch is a flag of `nish run`"),
+      `${misplaced.status}: ${misplaced.stderr}`,
+    )
+
+    if (process.platform !== "linux") {
+      skip("nish run --watch: the server swap is checked on Linux, whose SO_REUSEPORT spreads connections over both listeners")
+    } else {
+      const freePort = await new Promise((resolve) => {
+        const s = net.createServer()
+        s.listen(0, "127.0.0.1", () => {
+          const { port } = s.address()
+          s.close(() => resolve(port))
+        })
+      })
+      // A server that answers each connection with its version, `v1` or `v2`,
+      // on a port it shares with SO_REUSEPORT; on SIGTERM it answers what is
+      // queued, then closes.
+      const serverFile = path.join(watchDir, "server.ts")
+      const serverSource = (digit) =>
+        'import { netClose, netWrite, pollAdd, pollCreate, pollWait, tcpAccept, tcpListenFlags } from "nish:net"\n' +
+        "\n" +
+        "const serve = (listener: i32, peer: u8[], reply: u8[]): void => {\n" +
+        "  let fd: i32 = tcpAccept(listener, peer)\n" +
+        "  while (fd >= 0) {\n" +
+        "    netWrite(fd, reply, 0, 3)\n" +
+        "    netClose(fd)\n" +
+        "    fd = tcpAccept(listener, peer)\n" +
+        "  }\n" +
+        "}\n" +
+        "\n" +
+        "export const main = (): number => {\n" +
+        "  const listener: i32 = tcpListenFlags(\"127.0.0.1\", parseInt(process.argv[1]), 128, 1)\n" +
+        "  if (listener < 0) {\n" +
+        "    console.error(`listen: ${listener}`)\n" +
+        "    return 1\n" +
+        "  }\n" +
+        "  const signals: i32 = signalFd()\n" +
+        "  const loop: i32 = pollCreate()\n" +
+        "  pollAdd(loop, listener, 1, 0)\n" +
+        "  pollAdd(loop, signals, 1, 1)\n" +
+        "  const ready: i32[] = new Array<i32>(4)\n" +
+        "  const peer: u8[] = new Array<u8>(18)\n" +
+        `  const reply: u8[] = [118, ${48 + digit}, 10]\n` +
+        "  let running = true\n" +
+        "  while (running) {\n" +
+        "    const n: i32 = pollWait(loop, ready, -1)\n" +
+        "    for (let i: i32 = 0; i < n; i++) {\n" +
+        "      if (ready[2 * i] === 1) {\n" +
+        "        readSignal(signals)\n" +
+        "        running = false\n" +
+        "      }\n" +
+        "    }\n" +
+        "    serve(listener, peer, reply)\n" +
+        "  }\n" +
+        "  return netClose(listener)\n" +
+        "}\n"
+      fs.writeFileSync(serverFile, serverSource(1))
+      const ask = () =>
+        new Promise((resolve) => {
+          const socket = net.connect(freePort, "127.0.0.1")
+          let got = ""
+          socket.setEncoding("utf8")
+          socket.on("data", (d) => (got += d))
+          socket.on("error", (e) => resolve(e.code))
+          socket.on("close", () => resolve(got.trim()))
+        })
+      const server = startWatch(["server.ts", `${freePort}`])
+      // The load starts once the first build answers, so a refusal before it is up is not counted.
+      const up = await server.until((s) => s.err.includes("watch: built in"))
+      for (let tries = 0; up && tries < 200 && (await ask()) !== "v1"; tries++) await pause(50)
+      const answers = []
+      let asking = up
+      const load = (async () => {
+        while (asking) {
+          answers.push(await ask())
+          await pause(2)
+        }
+      })()
+      const answered = (reply) => answers.includes(reply)
+      const waitFor = async (ready, ms = 60000) => {
+        for (let at = Date.now(); !ready() && Date.now() - at < ms && !server.exited; ) await pause(20)
+        return ready()
+      }
+      fs.writeFileSync(serverFile, serverSource(2))
+      const swapped = await waitFor(() => answered("v2"))
+      fs.writeFileSync(serverFile, serverSource(2).replace("return netClose(listener)", "return netClose(listener) + nope"))
+      const keeps = await server.until((s) => s.err.includes("watch: the build failed; the running program keeps running"))
+      const before = answers.length
+      await waitFor(() => answers.length > before + 20)
+      asking = false
+      await load
+      const lost = answers.filter((a) => a !== "v1" && a !== "v2")
+      check(
+        "nish run --watch: a rebuilt server starts beside the old one, so no request across the swap goes unanswered",
+        swapped && lost.length === 0 && answered("v1") && answers.at(-1) === "v2",
+        `${answers.length} answers, lost: ${lost.slice(0, 5).join(" ")}; ${server.err}`,
+      )
+      check(
+        "nish run --watch: a failed build leaves the running server answering",
+        keeps && answers.slice(before).every((a) => a === "v2") && answers.length > before + 20,
+        server.err,
+      )
+      await server.interrupt()
+      const serverGone = await groupGone(server.pgid)
+      check(
+        "nish run --watch: Ctrl-C stops the watch and the server it runs",
+        server.signal === "SIGINT" && serverGone && leftovers().length === 0 && count(server.err, "watch: built in") === 1,
+        `${server.status}: ${server.err}`,
+      )
+    }
   }
 }
 

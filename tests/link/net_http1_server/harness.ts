@@ -66,7 +66,7 @@ export const bigByte = (k: i32): i32 => (k * 7 + 3) & 255;
 
 /** Where one slot's exchange stands, for the program: kept per slot, made once. */
 class SlotState {
-  /** What the request asked for: 0 nothing more, 1 an echo, 2 `/big`, 3 a WebSocket echo, 4 a 204 once the body is in. */
+  /** What the request asked for: 0 nothing more, 1 an echo, 2 `/big`, 3 a WebSocket echo, 4 a 204 once the body is in, 5 an answer the test gives later. */
   mode: i32 = 0;
   /** A write the connection held back: `pendingLength` bytes of the event's window from `pendingStart`. */
   pendingStart: i32 = 0;
@@ -95,7 +95,8 @@ class SlotState {
  * HEAD the same head, no body); `/echo` streams the request body back chunked
  * as it arrives, after a 100 Continue when the request expects one; `/big`
  * streams 2 MiB chunked through the output's back-pressure; `/sink` reads the
- * body and answers 204 only once it has ended; `/ws` accepts a
+ * body and answers 204 only once it has ended; `/later` is left for the test
+ * to answer outside a serve call; `/ws` accepts a
  * WebSocket and echoes every message; anything else is a 404. Nothing here
  * allocates per request: the fields, the bodies and the slot states are made
  * once.
@@ -187,6 +188,8 @@ export class App {
       st.mode = 1;
     } else if (p.targetIs("/sink")) {
       st.mode = 4;
+    } else if (p.targetIs("/later")) {
+      st.mode = 5;
     } else if (p.targetIs("/big")) {
       conn.respond(toI32(200), this.names, this.values, HTTP1_CHUNKED);
       st.mode = 2;
@@ -268,6 +271,8 @@ export class H1Loop {
   growth: i64 = 0;
   /** How many times a plain slot's interest changed and was re-armed with `pollModify`. */
   rearmed: i32 = 0;
+  /** How many serve calls, `readable` or `writable` to `flush`, the plain server has had. */
+  served: i32 = 0;
   /** Serve mode, for a third-party client: randomness from the system and a line for every connection closed. */
   serving: boolean = false;
 
@@ -457,6 +462,7 @@ export class H1Loop {
       return;
     }
     const before: i64 = Arena.used();
+    this.served = this.served + 1;
     let wants: i32 = (events & 5) !== 0 ? this.plain.readable(slot) : this.plain.writable(slot);
     const conn: Http1Connection = this.plain.connection(slot);
     const st: SlotState = this.app.plainStates[slot];

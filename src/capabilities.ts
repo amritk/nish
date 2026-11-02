@@ -141,6 +141,17 @@ export const capabilityIndex = (name: string): i32 => {
   return -1
 }
 
+/**
+ * The capabilities a grant may carry an argument for (WP40 §2a): a directory
+ * for `fs.read` and `fs.write`, a program for `process.spawn` and a numeric
+ * host for `net`. Every other capability is granted whole or not at all.
+ */
+export const argumentCapabilities = (): i32 =>
+  (1 << capabilityIndex("fs.read")) |
+  (1 << capabilityIndex("fs.write")) |
+  (1 << capabilityIndex("net")) |
+  (1 << capabilityIndex("process.spawn"))
+
 /** Whether a set reaches none of the nondeterministic capabilities. */
 export const isDeterministic = (mask: i32): boolean => (mask & nondeterministic()) === 0
 

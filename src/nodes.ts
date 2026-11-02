@@ -422,6 +422,26 @@ export const FLAG_COMPUTED: i32 = 8388608
 export const FLAG_ATTRIBUTES: i32 = 16777216
 export const FLAG_DEFER: i32 = 33554432
 
+// `flags` on N_PARAM: bit 26 marks a parameter of a declaration whose
+// signature may give a parameter a default or end in a rest parameter — a
+// function, a function bound to a top-level `const`, a method that is not an
+// accessor, and a constructor. Anywhere else (an arrow expression, a function
+// type, an interface or object-literal method, a `declare function`) both
+// stay refused.
+export const FLAG_SIGNATURE: i32 = 67108864
+// `flags` on N_ARRAY: bit 26 marks the array literal the checker gathers a
+// rest parameter's arguments into (`gatherRest` in `src/declarations.ts`).
+// It has no brackets in the source, so a printer writes its elements where
+// the call wrote them.
+export const FLAG_GATHERED: i32 = 67108864
+
+/** The array literal a rest parameter's arguments were gathered into (`FLAG_GATHERED`). */
+export const isGatheredRest = (node: Node): boolean =>
+  node.kind === N_ARRAY && (node.flags & FLAG_GATHERED) !== 0
+// N_SPREAD: a call's argument, `f(...xs)`, which the checker refuses with
+// its own message rather than the array literal's.
+export const FLAG_SPREAD_ARGUMENT: i32 = 67108864
+
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
  * by the rest; which is which is the comment beside each kind above.

@@ -11,6 +11,7 @@ generation) and followed by the exit codes and a few examples.
 ```
 usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run [flags] <file.ts> [args ...]  build, cache and run it
+       nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
        nish -v, --version | -h, --help
 ```
 
@@ -74,6 +75,57 @@ argument 3: --help
 Flags that write a file the run would keep to itself — `-o`, `--link`,
 `--target`, the `--emit-*` sidecars and `--profile wasi` — are usage errors
 under `nish run`.
+
+### Rebuilding on each edit: `--watch`
+
+`nish run --watch` builds and runs the program as `nish run` does, then
+watches every file the program was built from. When one changes it builds
+again and puts the new program in place of the running one:
+
+```console
+$ nish run --watch server.ts 8080
+watch: built in 1830 ms
+listening on 8080
+watch: rebuilt in 412 ms
+listening on 8080
+```
+
+- **What is watched** is the entry file and every module it imports, as far
+  as the last build got to load them, so a build that fails in an imported
+  module rebuilds when you fix that module. The standard library is left out, since an installed `nish` does not change
+  under you; run from a checkout of the compiler, `std/` is watched too.
+- **A failed build changes nothing.** Its diagnostics are printed, as plain
+  `nish run` prints them (one JSON object per line under `--json`), followed
+  by `watch: the build failed; the running program keeps running`, and the
+  program you had keeps running until the next edit builds. When no program
+  is running yet, the line ends `waiting for a change` instead.
+- **Edits are gathered, and the newest wins.** A change waits a tenth of a
+  second for the editor's next write before it builds, and an edit during a
+  build stops that build and starts a new one, so the program that runs is
+  always built from the files as they are.
+- **A server is started before the old one stops.** A program that uses the
+  network is taken for a server: the new build starts while the old one still
+  runs, and once the new one has lasted a moment the old one is sent SIGTERM,
+  then SIGKILL if it has not exited after five seconds. Listen with
+  `SO_REUSEPORT` (`tcpListenFlags(host, port, backlog, 1)`) so both can hold
+  the port at once, and answer SIGTERM by finishing the connections you have
+  accepted — a server that does both loses no request across a rebuild. A
+  server that does not set `SO_REUSEPORT` cannot bind beside the old one: the
+  new build exits as it starts, that is reported, and the old one keeps
+  serving the old code. A network client is taken for a server too, so for a
+  moment after each rebuild the old and the new copy both run.
+- **Any other program is stopped, then started again**, with the same
+  SIGTERM and SIGKILL, because two copies would write the same terminal and
+  files. A program that exits on its own leaves the watch waiting for an edit.
+- **Each run sees `NISH_WATCH=1`** in its environment, so a program can tell
+  it is being watched, and each build prints how long it took.
+- **Ctrl-C stops the watch and the program** and leaves nothing running.
+  The exit status is the one an interrupted program has (130 in a shell).
+  If the `nish run --watch` process itself is killed, the watch stops the
+  program and exits as a hangup does (129).
+
+`--watch` is a flag of `nish run`; `nish --watch app.ts` is a usage error
+(exit 2).
 
 ## Compiling: IR and binaries
 

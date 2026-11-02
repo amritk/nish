@@ -94,20 +94,46 @@ class Transcript {
   }
 }
 
-/** The fields of the response last read, as `name=value; ...`. */
+/**
+ * The fields of the response last read, as `name=value; ...`, through the
+ * accessors, which answer in either mode. While the parser keeps strings,
+ * `names` and `values` must say the same, and a field where they do not is
+ * marked `MISMATCH`. `header(name)` must answer each field's name with the
+ * value of the first field of that name, or `header("name") MISMATCH` follows.
+ */
 const fieldsOf = (p: Http1ResponseParser): string => {
   const fields: string[] = [];
-  for (let i: i32 = 0; i < toI32(p.names.length) && i < toI32(p.values.length); i += 1) {
-    fields.push(`${p.names[i]}=${p.values[i]}`);
+  for (let i: i32 = 0; i < p.fields(); i += 1) {
+    const name: string = p.fieldName(i);
+    const value: string = p.fieldValue(i);
+    const same: boolean =
+      !p.keepStrings ||
+      (i < toI32(p.names.length) && i < toI32(p.values.length) && p.names[i] === name && p.values[i] === value);
+    fields.push(same ? `${name}=${value}` : `${name}=${value} MISMATCH`);
+    let first: i32 = 0;
+    while (p.fieldName(first) !== name) {
+      first += 1;
+    }
+    const found: string | null = p.header(name);
+    if (found === null || found !== p.fieldValue(first)) {
+      fields.push(`header("${name}") MISMATCH`);
+    }
+  }
+  if (p.keepStrings && toI32(p.names.length) !== p.fields()) {
+    fields.push("MISMATCH in the field count");
   }
   return fields.join("; ");
 };
 
-/** A final head as one line: everything the parser decided about the response. */
+/**
+ * A final head as one line: everything the parser decided about the
+ * response, its reason phrase (through `reasonText`, which answers in either
+ * mode) quoted after the status.
+ */
 const describeHead = (p: Http1ResponseParser): string => {
   const keep: string = p.keepAlive() ? "keep" : "close";
   const framing: string = p.chunked ? "chunked" : `length ${p.contentLength}`;
-  return `${p.status} 1.${p.minor} ${keep} ${framing} [${fieldsOf(p)}]`;
+  return `${p.status} "${p.reasonText()}" 1.${p.minor} ${keep} ${framing} [${fieldsOf(p)}]`;
 };
 
 /**
@@ -118,7 +144,7 @@ const drain = (p: Http1ResponseParser, t: Transcript, a: Ask): void => {
   let e: i32 = p.next();
   while (e === HTTP1_INFORMATIONAL || e === HTTP1_HEAD || e === HTTP1_BODY || e === HTTP1_END) {
     if (e === HTTP1_INFORMATIONAL) {
-      t.log.push(`1xx ${p.status} [${fieldsOf(p)}]`);
+      t.log.push(`1xx ${p.status} "${p.reasonText()}" [${fieldsOf(p)}]`);
     } else if (e === HTTP1_HEAD) {
       t.log.push(describeHead(p));
     } else if (e === HTTP1_BODY) {
@@ -210,6 +236,79 @@ const transcriptSplitAt = (data: u8[], cut: i32, a: Ask): string => {
   return ending(p, t);
 };
 
+/** How many ways `transcriptReset` leaves a parser before resetting it. */
+const RESET_SETUPS: i32 = 4;
+
+/**
+ * Leaves `p` as setup `setup` does before a reset: 0 read a response that
+ * asked for a tunnel and was cut by the close, 1 refused a status line, 2
+ * read an interim response, 3 stopped half way through a body.
+ */
+const leaveBehind = (p: Http1ResponseParser, setup: i32): void => {
+  const start: i32 = 0;
+  let before: u8[] = [];
+  if (setup === 0) {
+    before = bytesOf("HTTP/1.0 299 Old\r\nX-Old: 1\r\nTransfer-Encoding: x\r\nConnection: keep-alive\r\n\r\nleft over");
+    p.expect(true, true);
+    p.expectUpgrade();
+  } else if (setup === 1) {
+    before = bytesOf("HTTP/1.1 2x0 Bad\r\nX-Old: 1\r\n\r\n");
+    p.expect(false, false);
+  } else if (setup === 2) {
+    before = bytesOf("HTTP/1.1 103 Early Hints\r\nLink: </a>\r\n\r\n");
+    p.expect(false, false);
+  } else {
+    before = bytesOf("HTTP/1.1 200 OK\r\nX-Old: 1\r\nContent-Length: 40\r\n\r\nhalf");
+    p.expect(false, false);
+  }
+  p.feed(before, start, toI32(before.length));
+  p.next();
+  if (setup === 0) {
+    p.finish();
+  }
+  p.next();
+};
+
+/**
+ * The transcript of `data` read whole by a parser in spans mode that was
+ * left as `leaveBehind(setup)` leaves it and then reset: the same transcript
+ * as a new parser's, or the reset left something behind. A reset that keeps
+ * an error, a closed stream or what the last request asked answers "dirty".
+ */
+const transcriptReset = (data: u8[], a: Ask, setup: i32): string => {
+  const p: Http1ResponseParser = corpusParser();
+  p.fieldsAsSpans();
+  leaveBehind(p, setup);
+  p.reset();
+  if (p.error !== 0 || p.errorText !== "" || p.closed || p.wasHead || p.wasConnect || p.wasUpgrade) {
+    return `dirty after setup ${setup}`;
+  }
+  const t: Transcript = new Transcript();
+  const start: i32 = 0;
+  expectAs(p, a);
+  p.feed(data, start, toI32(data.length));
+  drain(p, t, a);
+  if (a.close) {
+    p.finish();
+    drain(p, t, a);
+  }
+  return ending(p, t);
+};
+
+/**
+ * `transcriptReset` after every setup: the first transcript that differs
+ * from `whole`, or `whole` when they all agree.
+ */
+const transcriptAfterEveryReset = (data: u8[], a: Ask, whole: string): string => {
+  for (let setup: i32 = 0; setup < RESET_SETUPS; setup += 1) {
+    const got: string = transcriptReset(data, a, setup);
+    if (got !== whole) {
+      return `after setup ${setup}:\n${got}`;
+    }
+  }
+  return whole;
+};
+
 /** The transcript of `data` fed one byte at a time. */
 const transcriptByteByByte = (data: u8[], a: Ask): string => {
   const p: Http1ResponseParser = corpusParser();
@@ -250,6 +349,50 @@ const corpusCase = (t: Suite, name: string, text: string, a: Ask, expected: stri
   const data: u8[] = bytesOf(text);
   t.eqStr(`${name}: transcript`, transcriptSplitAt(data, toI32(data.length), a), expected);
   t.eqI32(`${name}: the same cut at every byte and fed a byte at a time`, firstBadCut(text, a), none);
+  t.eqStr(
+    `${name}: the same in spans mode, on a parser reset after a tunnel, a refusal, a 1xx or half a body`,
+    transcriptAfterEveryReset(data, a, expected),
+    expected
+  );
+};
+
+/**
+ * Reads `count` kept-alive responses of `response` through `p`, which is
+ * left between responses; answers how many ended. Nothing here allocates,
+ * so whatever the arena gains is the parser's.
+ */
+const readMany = (p: Http1ResponseParser, response: u8[], count: i32): i32 => {
+  let ends: i32 = 0;
+  const start: i32 = 0;
+  for (let k: i32 = 0; k < count; k += 1) {
+    p.expect(false, false);
+    p.feed(response, start, toI32(response.length));
+    let e: i32 = p.next();
+    while (e !== HTTP1_NEED_MORE && e !== HTTP1_ERROR) {
+      if (e === HTTP1_END) {
+        ends += 1;
+      }
+      e = p.next();
+    }
+  }
+  return ends;
+};
+
+/**
+ * Whether 1,000 responses past 100 of warm-up move the arena in `p`'s mode:
+ * 1 if its bump address or the bytes in its chunk change, 0 if both stay, -1
+ * if not every response ended. `Arena.used()` counts the current chunk only,
+ * so a chunk change can make it fall; the mark catches that.
+ */
+const arenaMoves = (p: Http1ResponseParser, response: u8[]): i32 => {
+  readMany(p, response, 100);
+  const mark: i64 = Arena.mark();
+  const used: i64 = Arena.used();
+  const ends: i32 = readMany(p, response, 1000);
+  if (ends !== 1000) {
+    return -1;
+  }
+  return Arena.mark() === mark && Arena.used() === used ? 0 : 1;
 };
 
 /** What feeding `text` whole to `p` came to: the responses ended and the error code. */
@@ -458,9 +601,9 @@ export const http1ClientChecks = (): i32 => {
     "two kept-alive responses with Content-Length",
     "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Type: text/plain\r\n\r\nhelloHTTP/1.1 404 Not Found\r\ncontent-length:0\r\n\r\n",
     plain(),
-    "200 1.1 keep length 5 [content-length=5; content-type=text/plain]\n" +
+    "200 \"OK\" 1.1 keep length 5 [content-length=5; content-type=text/plain]\n" +
       'body "hello"\n' +
-      "404 1.1 keep length 0 [content-length=0]\n" +
+      "404 \"Not Found\" 1.1 keep length 0 [content-length=0]\n" +
       'body ""\n' +
       "needs more"
   );
@@ -469,9 +612,9 @@ export const http1ClientChecks = (): i32 => {
     "a chunked response with an extension and a trailer, then a 204",
     "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;name=value\r\nhello\r\n6 ; x\r\n world\r\n0\r\nExpires: never\r\n\r\nHTTP/1.1 204 No Content\r\nContent-Length: 7\r\n\r\n",
     plain(),
-    "200 1.1 keep chunked [transfer-encoding=chunked]\n" +
+    "200 \"OK\" 1.1 keep chunked [transfer-encoding=chunked]\n" +
       'body "hello world"\n' +
-      "204 1.1 keep length -1 [content-length=7]\n" +
+      "204 \"No Content\" 1.1 keep length -1 [content-length=7]\n" +
       'body ""\n' +
       "needs more"
   );
@@ -480,9 +623,9 @@ export const http1ClientChecks = (): i32 => {
     "two interim responses, each with its fields, then the final one",
     "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 103 Early Hints\r\nLink: </style.css>; rel=preload\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
     plain(),
-    "1xx 100 []\n" +
-      "1xx 103 [link=</style.css>; rel=preload]\n" +
-      "200 1.1 keep length 2 [content-length=2]\n" +
+    "1xx 100 \"Continue\" []\n" +
+      "1xx 103 \"Early Hints\" [link=</style.css>; rel=preload]\n" +
+      "200 \"OK\" 1.1 keep length 2 [content-length=2]\n" +
       'body "ok"\n' +
       "needs more"
   );
@@ -491,16 +634,16 @@ export const http1ClientChecks = (): i32 => {
     "a body read until the server closes",
     "HTTP/1.0 200 OK\r\nServer: old\r\n\r\nall of this is the body\r\n\r\nHTTP/1.1 200 OK\r\n",
     closing(),
-    "200 1.0 close length -1 [server=old]\n" + 'body "all of this is the body\r\n\r\nHTTP/1.1 200 OK\r\n"\n' + "closed"
+    "200 \"OK\" 1.0 close length -1 [server=old]\n" + 'body "all of this is the body\r\n\r\nHTTP/1.1 200 OK\r\n"\n' + "closed"
   );
   corpusCase(
     t,
     "an HTTP/1.0 response kept alive, then one that is not",
     "HTTP/1.0 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: 3\r\n\r\nabcHTTP/1.0 200 OK\r\nContent-Length: 1\r\n\r\nzHTTP/1.0 200 OK\r\n\r\n",
     plain(),
-    "200 1.0 keep length 3 [connection=Keep-Alive; content-length=3]\n" +
+    "200 \"OK\" 1.0 keep length 3 [connection=Keep-Alive; content-length=3]\n" +
       'body "abc"\n' +
-      "200 1.0 close length 1 [content-length=1]\n" +
+      "200 \"OK\" 1.0 close length 1 [content-length=1]\n" +
       'body "z"\n' +
       "closed"
   );
@@ -509,16 +652,16 @@ export const http1ClientChecks = (): i32 => {
     "Connection: close ends the connection, and what follows is not read",
     "HTTP/1.1 200 OK\r\nConnection: keep-alive, CLOSE\r\nContent-Length: 1\r\n\r\nxHTTP/1.1 999 not even a status\r\n\r\n",
     plain(),
-    "200 1.1 close length 1 [connection=keep-alive, CLOSE; content-length=1]\n" + 'body "x"\n' + "closed"
+    "200 \"OK\" 1.1 close length 1 [connection=keep-alive, CLOSE; content-length=1]\n" + 'body "x"\n' + "closed"
   );
   corpusCase(
     t,
     "a response to HEAD and a 304 have no body, whatever their fields say",
     "HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\nHTTP/1.1 304 Not Modified\r\nTransfer-Encoding: chunked\r\n\r\n",
     toHead(),
-    "200 1.1 keep length -1 [content-length=1000]\n" +
+    "200 \"OK\" 1.1 keep length -1 [content-length=1000]\n" +
       'body ""\n' +
-      "304 1.1 keep length -1 [transfer-encoding=chunked]\n" +
+      "304 \"Not Modified\" 1.1 keep length -1 [transfer-encoding=chunked]\n" +
       'body ""\n' +
       "needs more"
   );
@@ -527,9 +670,9 @@ export const http1ClientChecks = (): i32 => {
     "a 304 to GET with a Content-Length has no body",
     "HTTP/1.1 304 Not Modified\r\nContent-Length: 5\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
     plain(),
-    "304 1.1 keep length -1 [content-length=5]\n" +
+    "304 \"Not Modified\" 1.1 keep length -1 [content-length=5]\n" +
       'body ""\n' +
-      "200 1.1 keep length 2 [content-length=2]\n" +
+      "200 \"OK\" 1.1 keep length 2 [content-length=2]\n" +
       'body "ok"\n' +
       "needs more"
   );
@@ -538,9 +681,9 @@ export const http1ClientChecks = (): i32 => {
     "a 304 to GET that says chunked has no body",
     "HTTP/1.1 304 Not Modified\r\nTransfer-Encoding: chunked\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
     plain(),
-    "304 1.1 keep length -1 [transfer-encoding=chunked]\n" +
+    "304 \"Not Modified\" 1.1 keep length -1 [transfer-encoding=chunked]\n" +
       'body ""\n' +
-      "200 1.1 keep length 2 [content-length=2]\n" +
+      "200 \"OK\" 1.1 keep length 2 [content-length=2]\n" +
       'body "ok"\n' +
       "needs more"
   );
@@ -549,21 +692,21 @@ export const http1ClientChecks = (): i32 => {
     "a 2xx to CONNECT is a tunnel, and its framing fields are ignored",
     "HTTP/1.1 200 Connection Established\r\nContent-Length: 10\r\n\r\n\u0016\u0003\u0001 the tunnel's bytes",
     toConnect(),
-    "200 1.1 close length -1 [content-length=10]\n" + 'body ""\n' + "tunnel, then \"\u0016\u0003\u0001 the tunnel's bytes\""
+    "200 \"Connection Established\" 1.1 close length -1 [content-length=10]\n" + 'body ""\n' + "tunnel, then \"\u0016\u0003\u0001 the tunnel's bytes\""
   );
   corpusCase(
     t,
     "a 407 to CONNECT has a body like any other",
     "HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 4\r\n\r\nnope",
     toConnect(),
-    "407 1.1 keep length 4 [content-length=4]\n" + 'body "nope"\n' + "needs more"
+    "407 \"Proxy Authentication Required\" 1.1 keep length 4 [content-length=4]\n" + 'body "nope"\n' + "needs more"
   );
   corpusCase(
     t,
     "a body cut short by the close",
     "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhello",
     closing(),
-    "200 1.1 keep length 10 [content-length=10]\n" + 'partial body "hello"\n' + "error 10"
+    "200 \"OK\" 1.1 keep length 10 [content-length=10]\n" + 'partial body "hello"\n' + "error 10"
   );
   corpusCase(
     t,
@@ -612,7 +755,7 @@ export const http1ClientChecks = (): i32 => {
     "smuggling: chunk data longer than its size",
     "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nhello\r\n0\r\n\r\n",
     plain(),
-    "200 1.1 keep chunked [transfer-encoding=chunked]\n" + 'partial body "hel"\n' + "error 9"
+    "200 \"OK\" 1.1 keep chunked [transfer-encoding=chunked]\n" + 'partial body "hel"\n' + "error 9"
   );
   corpusCase(
     t,
@@ -626,21 +769,21 @@ export const http1ClientChecks = (): i32 => {
     "a 101 to a request that asked to switch protocols, frame bytes glued to its head",
     "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n\u0081\u0005hello",
     toUpgrade(),
-    "101 1.1 close length -1 [upgrade=websocket; connection=Upgrade]\n" + 'body ""\n' + 'tunnel, then "\u0081\u0005hello"'
+    "101 \"Switching Protocols\" 1.1 close length -1 [upgrade=websocket; connection=Upgrade]\n" + 'body ""\n' + 'tunnel, then "\u0081\u0005hello"'
   );
   corpusCase(
     t,
     "a 101 that asked to switch protocols ignores its framing fields",
     "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nContent-Length: 4\r\n\r\nabcd",
     toUpgrade(),
-    "101 1.1 close length -1 [upgrade=websocket; content-length=4]\n" + 'body ""\n' + 'tunnel, then "abcd"'
+    "101 \"Switching Protocols\" 1.1 close length -1 [upgrade=websocket; content-length=4]\n" + 'body ""\n' + 'tunnel, then "abcd"'
   );
   corpusCase(
     t,
     "a request that asked to switch protocols, answered 200, reads as any other",
     "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
     toUpgrade(),
-    "200 1.1 keep length 2 [content-length=2]\n" + 'body "ok"\n' + "needs more"
+    "200 \"OK\" 1.1 keep length 2 [content-length=2]\n" + 'body "ok"\n' + "needs more"
   );
   corpusCase(
     t,
@@ -657,8 +800,8 @@ export const http1ClientChecks = (): i32 => {
     "a second head across the first 1 KiB",
     `HTTP/1.1 200 OK\r\nContent-Length: 960\r\n\r\n${repeat("a", toI32(960))}HTTP/1.1 200 OK\r\nX-Long: ${repeat("b", toI32(60))}\r\nContent-Length: 3\r\n\r\nxyz`,
     longPieces,
-    `200 1.1 keep length 960 [content-length=960]\nbody "${repeat("a", toI32(960))}"\n` +
-      `200 1.1 keep length 3 [x-long=${repeat("b", toI32(60))}; content-length=3]\nbody "xyz"\nneeds more`
+    `200 "OK" 1.1 keep length 960 [content-length=960]\nbody "${repeat("a", toI32(960))}"\n` +
+      `200 "OK" 1.1 keep length 3 [x-long=${repeat("b", toI32(60))}; content-length=3]\nbody "xyz"\nneeds more`
   );
   const unevenPieces: i32[] = [13, 400, 1, 777, 250];
   piecesCase(
@@ -666,7 +809,7 @@ export const http1ClientChecks = (): i32 => {
     "a 1500-byte body fed in uneven pieces",
     `HTTP/1.1 200 OK\r\nContent-Length: 1500\r\n\r\n${repeat("0123456789", toI32(150))}`,
     unevenPieces,
-    `200 1.1 keep length 1500 [content-length=1500]\nbody "${repeat("0123456789", toI32(150))}"\nneeds more`
+    `200 "OK" 1.1 keep length 1500 [content-length=1500]\nbody "${repeat("0123456789", toI32(150))}"\nneeds more`
   );
   const pipelinedPieces: i32[] = [100, 900, 3];
   piecesCase(
@@ -674,8 +817,8 @@ export const http1ClientChecks = (): i32 => {
     "two pipelined responses over 1 KiB together",
     `HTTP/1.1 200 OK\r\nContent-Length: 600\r\n\r\n${repeat("x", toI32(600))}HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1f4\r\n${repeat("y", toI32(500))}\r\n0\r\n\r\n`,
     pipelinedPieces,
-    `200 1.1 keep length 600 [content-length=600]\nbody "${repeat("x", toI32(600))}"\n` +
-      `200 1.1 keep chunked [transfer-encoding=chunked]\nbody "${repeat("y", toI32(500))}"\nneeds more`
+    `200 "OK" 1.1 keep length 600 [content-length=600]\nbody "${repeat("x", toI32(600))}"\n` +
+      `200 "OK" 1.1 keep chunked [transfer-encoding=chunked]\nbody "${repeat("y", toI32(500))}"\nneeds more`
   );
   const growPieces: i32[] = [300, 2000];
   piecesCase(
@@ -683,13 +826,13 @@ export const http1ClientChecks = (): i32 => {
     "a head left part-read when a feed outgrows the buffer",
     `HTTP/1.1 200 OK\r\nX-Pad: ${repeat("p", toI32(300))}\r\nContent-Length: 3000\r\n\r\n${repeat("abc", toI32(1000))}`,
     growPieces,
-    `200 1.1 keep length 3000 [x-pad=${repeat("p", toI32(300))}; content-length=3000]\nbody "${repeat("abc", toI32(1000))}"\nneeds more`
+    `200 "OK" 1.1 keep length 3000 [x-pad=${repeat("p", toI32(300))}; content-length=3000]\nbody "${repeat("abc", toI32(1000))}"\nneeds more`
   );
 
   // --- The status line --------------------------------------------------------
   accepted(t, "a status code with no reason or space after it", "HTTP/1.1 204\r\n\r\n", plain());
   accepted(t, "an empty reason", "HTTP/1.1 204 \r\n\r\n", plain());
-  readAs(t, "an HTTP/1.9 response, read as 1.1", "HTTP/1.9 204 No Content\r\n\r\n", plain(), '204 1.1 keep length -1 []\nbody ""\nneeds more');
+  readAs(t, "an HTTP/1.9 response, read as 1.1", "HTTP/1.9 204 No Content\r\n\r\n", plain(), '204 "No Content" 1.1 keep length -1 []\nbody ""\nneeds more');
   refused(t, "a two-digit status", "HTTP/1.1 20 OK\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
   refused(t, "a status above 599", "HTTP/1.1 600 Nope\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
   refused(t, "a status below 100", "HTTP/1.1 099 Nope\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
@@ -752,9 +895,9 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "the empty line ended in a bare LF", "HTTP/1.1 204 No Content\r\nX-A: 1\r\n\n", plain(), HTTP1_E_BARE_LF);
 
   // --- Framing ---------------------------------------------------------------
-  readAs(t, "a Content-Length list of one value repeated", "HTTP/1.1 200 OK\r\nContent-Length: 2, 2\r\n\r\nok", plain(), '200 1.1 keep length 2 [content-length=2, 2]\nbody "ok"\nneeds more');
-  readAs(t, "two Content-Length fields that agree", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\nok", plain(), '200 1.1 keep length 2 [content-length=2; content-length=2]\nbody "ok"\nneeds more');
-  readAs(t, "a Content-Length with leading zeros", "HTTP/1.1 200 OK\r\nContent-Length: 0002\r\n\r\nok", plain(), '200 1.1 keep length 2 [content-length=0002]\nbody "ok"\nneeds more');
+  readAs(t, "a Content-Length list of one value repeated", "HTTP/1.1 200 OK\r\nContent-Length: 2, 2\r\n\r\nok", plain(), '200 "OK" 1.1 keep length 2 [content-length=2, 2]\nbody "ok"\nneeds more');
+  readAs(t, "two Content-Length fields that agree", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\nok", plain(), '200 "OK" 1.1 keep length 2 [content-length=2; content-length=2]\nbody "ok"\nneeds more');
+  readAs(t, "a Content-Length with leading zeros", "HTTP/1.1 200 OK\r\nContent-Length: 0002\r\n\r\nok", plain(), '200 "OK" 1.1 keep length 2 [content-length=0002]\nbody "ok"\nneeds more');
   accepted(t, "chunked in any case", "HTTP/1.1 200 OK\r\nTransfer-Encoding: CHUNKED\r\n\r\n0\r\n\r\n", plain());
   refused(t, "a Content-Length that is not digits", "HTTP/1.1 200 OK\r\nContent-Length: 0x5\r\n\r\n", plain(), HTTP1_E_LENGTH);
   refused(t, "a negative Content-Length", "HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n", plain(), HTTP1_E_LENGTH);
@@ -775,12 +918,12 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "gzip before chunked, in two fields", "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", plain(), HTTP1_E_CODING);
   refused(t, "chunked twice", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, chunked\r\n\r\n0\r\n\r\n", plain(), HTTP1_E_CODING);
   refused(t, "an empty Transfer-Encoding", "HTTP/1.1 200 OK\r\nTransfer-Encoding: \r\n\r\n", plain(), HTTP1_E_CODING);
-  readAs(t, "OWS around a Content-Length", "HTTP/1.1 200 OK\r\nContent-Length:\t5 \r\n\r\nhello", plain(), '200 1.1 keep length 5 [content-length=5]\nbody "hello"\nneeds more');
-  readAs(t, "OWS inside a Content-Length list", "HTTP/1.1 200 OK\r\nContent-Length: 5 ,\t5\r\n\r\nhello", plain(), '200 1.1 keep length 5 [content-length=5 ,\t5]\nbody "hello"\nneeds more');
-  readAs(t, "OWS after chunked", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked \t\r\n\r\n0\r\n\r\n", plain(), '200 1.1 keep chunked [transfer-encoding=chunked]\nbody ""\nneeds more');
-  readAs(t, "OWS inside a transfer coding list", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked , \r\n\r\n0\r\n\r\n", plain(), '200 1.1 keep chunked [transfer-encoding=chunked ,]\nbody ""\nneeds more');
-  readAs(t, "OWS after close", "HTTP/1.1 204 No Content\r\nConnection: close \r\n\r\n", plain(), '204 1.1 close length -1 [connection=close]\nbody ""\nclosed');
-  readAs(t, "OWS inside a Connection list", "HTTP/1.1 204 No Content\r\nConnection: keep-alive , close\r\n\r\n", plain(), '204 1.1 close length -1 [connection=keep-alive , close]\nbody ""\nclosed');
+  readAs(t, "OWS around a Content-Length", "HTTP/1.1 200 OK\r\nContent-Length:\t5 \r\n\r\nhello", plain(), '200 "OK" 1.1 keep length 5 [content-length=5]\nbody "hello"\nneeds more');
+  readAs(t, "OWS inside a Content-Length list", "HTTP/1.1 200 OK\r\nContent-Length: 5 ,\t5\r\n\r\nhello", plain(), '200 "OK" 1.1 keep length 5 [content-length=5 ,\t5]\nbody "hello"\nneeds more');
+  readAs(t, "OWS after chunked", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked \t\r\n\r\n0\r\n\r\n", plain(), '200 "OK" 1.1 keep chunked [transfer-encoding=chunked]\nbody ""\nneeds more');
+  readAs(t, "OWS inside a transfer coding list", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked , \r\n\r\n0\r\n\r\n", plain(), '200 "OK" 1.1 keep chunked [transfer-encoding=chunked ,]\nbody ""\nneeds more');
+  readAs(t, "OWS after close", "HTTP/1.1 204 No Content\r\nConnection: close \r\n\r\n", plain(), '204 "No Content" 1.1 close length -1 [connection=close]\nbody ""\nclosed');
+  readAs(t, "OWS inside a Connection list", "HTTP/1.1 204 No Content\r\nConnection: keep-alive , close\r\n\r\n", plain(), '204 "No Content" 1.1 close length -1 [connection=keep-alive , close]\nbody ""\nclosed');
   refused(t, "a bad coding on a response to HEAD too", "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\n", toHead(), HTTP1_E_CODING);
 
   // --- Chunks ----------------------------------------------------------------
@@ -789,7 +932,7 @@ export const http1ClientChecks = (): i32 => {
     "a chunk size in uppercase hex with leading zeros",
     "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n00A\r\n0123456789\r\n0\r\n\r\n",
     plain(),
-    '200 1.1 keep chunked [transfer-encoding=chunked]\nbody "0123456789"\nneeds more'
+    '200 "OK" 1.1 keep chunked [transfer-encoding=chunked]\nbody "0123456789"\nneeds more'
   );
   accepted(t, "a last chunk with an extension", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0;last\r\n\r\n", plain());
   refused(t, "a chunk size with no digits", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n;x\r\n", plain(), HTTP1_E_CHUNK);
@@ -899,13 +1042,13 @@ export const http1ClientChecks = (): i32 => {
   atCap(t, "a Content-Length body", toI32(3), toI32(5), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", plain(), HTTP1_E_BODY_LIMIT);
   atCap(t, "a chunked body", toI32(3), toI32(11), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n", plain(), HTTP1_E_BODY_LIMIT);
   atCap(t, "a body read until close", toI32(3), toI32(5), "HTTP/1.1 200 OK\r\n\r\nhello", closing(), HTTP1_E_BODY_LIMIT);
-  t.eqStr("the Content-Length body at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", plain()), '200 1.1 keep length 5 [content-length=5]\nbody "hello"\nneeds more');
+  t.eqStr("the Content-Length body at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", plain()), '200 "OK" 1.1 keep length 5 [content-length=5]\nbody "hello"\nneeds more');
   t.eqStr(
     "the chunked body at the limit, whole",
     transcriptWith(limitedParser(toI32(3), toI32(11)), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n", plain()),
-    '200 1.1 keep chunked [transfer-encoding=chunked]\nbody "hello world"\nneeds more'
+    '200 "OK" 1.1 keep chunked [transfer-encoding=chunked]\nbody "hello world"\nneeds more'
   );
-  t.eqStr("the body read until close at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\n\r\nhello", closing()), '200 1.1 close length -1 []\nbody "hello"\nclosed');
+  t.eqStr("the body read until close at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\n\r\nhello", closing()), '200 "OK" 1.1 close length -1 []\nbody "hello"\nclosed');
   const trailer1: string = "Expires: never\r\n\r\n";
   atCap(t, "the trailer section", toI32(4), toI32(trailer1.length), `HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n${trailer1}`, plain(), HTTP1_E_TRAILER_LIMIT);
   t.eqStr(
@@ -928,14 +1071,14 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr(
     "a negative maxBody is 0: a Content-Length of 0 is read",
     transcriptWith(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", plain()),
-    "200 1.1 keep length 0 [content-length=0]\nbody \"\"\nneeds more"
+    "200 \"OK\" 1.1 keep length 0 [content-length=0]\nbody \"\"\nneeds more"
   );
   t.eqStr(
     "an empty chunked body",
     transcriptWith(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", plain()),
-    "200 1.1 keep chunked [transfer-encoding=chunked]\nbody \"\"\nneeds more"
+    "200 \"OK\" 1.1 keep chunked [transfer-encoding=chunked]\nbody \"\"\nneeds more"
   );
-  t.eqStr("an empty body read until close", transcriptWith(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\n\r\n", closing()), "200 1.1 close length -1 []\nbody \"\"\nclosed");
+  t.eqStr("an empty body read until close", transcriptWith(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\n\r\n", closing()), "200 \"OK\" 1.1 close length -1 []\nbody \"\"\nclosed");
   t.eqStr("but a byte of body is over it", outcomeOf(limitedParser(toI32(3), minusFive), "HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nx", plain()), `ends 0, error ${HTTP1_E_BODY_LIMIT}`);
   t.eqStr(
     "a negative maxTrailerBytes is 0",
@@ -963,12 +1106,12 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr(
     "the largest limits read an ordinary response",
     transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nX-A: b\r\nContent-Length: 2\r\n\r\nok", plain()),
-    '200 1.1 keep length 2 [x-a=b; content-length=2]\nbody "ok"\nneeds more'
+    '200 "OK" 1.1 keep length 2 [x-a=b; content-length=2]\nbody "ok"\nneeds more'
   );
   t.eqStr(
     "a Content-Length of 2^53 is under a clamped maxBody",
     transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nContent-Length: 9007199254740992\r\n\r\n", plain()),
-    '200 1.1 keep length 9007199254740992 [content-length=9007199254740992]\nneeds more'
+    '200 "OK" 1.1 keep length 9007199254740992 [content-length=9007199254740992]\nneeds more'
   );
   t.eqStr(
     "one of 2^53 + 1 is over it",
@@ -978,7 +1121,7 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr(
     "the largest limits read a chunked body and its trailers",
     transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\nX-T: 1\r\n\r\n", plain()),
-    '200 1.1 keep chunked [transfer-encoding=chunked]\nbody "ok"\nneeds more'
+    '200 "OK" 1.1 keep chunked [transfer-encoding=chunked]\nbody "ok"\nneeds more'
   );
 
   const chunkLine: string = `1;${repeat("a", HTTP1_MAX_CHUNK_LINE - 2)}`;
@@ -1177,18 +1320,18 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr(
     "a response after a HEAD's, with no fresh expect, has its body",
     firstAsked(corpusParser(), "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc", toHead()),
-    '200 1.1 keep length -1 [content-length=3]\nbody ""\n200 1.1 keep length 3 [content-length=3]\nbody "abc"\nneeds more'
+    '200 "OK" 1.1 keep length -1 [content-length=3]\nbody ""\n200 "OK" 1.1 keep length 3 [content-length=3]\nbody "abc"\nneeds more'
   );
   t.eqStr(
     "a 2xx after a refused CONNECT's, with no fresh expect, is no tunnel",
     firstAsked(corpusParser(), "HTTP/1.1 407 No\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", toConnect()),
-    '407 1.1 keep length 0 [content-length=0]\nbody ""\n200 1.1 keep length 0 [content-length=0]\nbody ""\nneeds more'
+    '407 "No" 1.1 keep length 0 [content-length=0]\nbody ""\n200 "OK" 1.1 keep length 0 [content-length=0]\nbody ""\nneeds more'
   );
   // A 300 to CONNECT is a redirect, not a tunnel.
   t.eqStr(
     "a 300 to CONNECT is read as a response",
     transcriptWith(corpusParser(), "HTTP/1.1 300 Elsewhere\r\nContent-Length: 0\r\n\r\n", toConnect()),
-    '300 1.1 keep length 0 [content-length=0]\nbody ""\nneeds more'
+    '300 "Elsewhere" 1.1 keep length 0 [content-length=0]\nbody ""\nneeds more'
   );
 
   // Bytes fed after `finish()` are dropped, even before `next()` reads the close.
@@ -1202,7 +1345,7 @@ export const http1ClientChecks = (): i32 => {
   t.eqI32("bytes fed after finish() are dropped", toI32(afterFinish.buffered()), toI32(afterFinishHead.length));
   const afterFinishLog: Transcript = new Transcript();
   drain(afterFinish, afterFinishLog, plain());
-  t.eqStr("so the body is cut short", ending(afterFinish, afterFinishLog), `200 1.1 keep length 5 [content-length=5]\npartial body "hel"\nerror ${HTTP1_E_TRUNCATED}`);
+  t.eqStr("so the body is cut short", ending(afterFinish, afterFinishLog), `200 "OK" 1.1 keep length 5 [content-length=5]\npartial body "hel"\nerror ${HTTP1_E_TRUNCATED}`);
 
   // Each response's header section has its own byte and field budget, and so
   // does a final response after a 1xx.
@@ -1259,7 +1402,7 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr(
     "a status line split by a feed that moves the buffer",
     transcriptSplitAt(movedData, movedCut, plain()),
-    `200 1.1 keep length 974 [content-length=974]\nbody "${repeat("y", toI32(974))}"\n204 1.1 keep length -1 []\nbody ""\nneeds more`
+    `200 "OK" 1.1 keep length 974 [content-length=974]\nbody "${repeat("y", toI32(974))}"\n204 "None" 1.1 keep length -1 []\nbody ""\nneeds more`
   );
 
   // A bare LF where a line starts: the stream's first byte, and the CRLF
@@ -1285,13 +1428,13 @@ export const http1ClientChecks = (): i32 => {
   t.eqStr(
     "a Content-Length of 2^53 given twice, to a HEAD",
     transcriptWith(atMaxBody, "HTTP/1.1 200 OK\r\nContent-Length: 9007199254740992, 9007199254740992\r\n\r\n", toHead()),
-    '200 1.1 keep length -1 [content-length=9007199254740992, 9007199254740992]\nbody ""\nneeds more'
+    '200 "OK" 1.1 keep length -1 [content-length=9007199254740992, 9007199254740992]\nbody ""\nneeds more'
   );
-  t.eqStr("a close in another field keeps a 1.1 response alive", transcriptWith(corpusParser(), "HTTP/1.1 200 OK\r\nX-A: close\r\nContent-Length: 0\r\n\r\n", plain()), '200 1.1 keep length 0 [x-a=close; content-length=0]\nbody ""\nneeds more');
+  t.eqStr("a close in another field keeps a 1.1 response alive", transcriptWith(corpusParser(), "HTTP/1.1 200 OK\r\nX-A: close\r\nContent-Length: 0\r\n\r\n", plain()), '200 "OK" 1.1 keep length 0 [x-a=close; content-length=0]\nbody ""\nneeds more');
   t.eqStr(
     "a 1.0 response listing keep-alive and close closes",
     transcriptWith(corpusParser(), "HTTP/1.0 200 OK\r\nConnection: keep-alive, close\r\nContent-Length: 0\r\n\r\n", plain()),
-    '200 1.0 close length 0 [connection=keep-alive, close; content-length=0]\nbody ""\nclosed'
+    '200 "OK" 1.0 close length 0 [connection=keep-alive, close; content-length=0]\nbody ""\nclosed'
   );
 
   // The writer: a two-digit Content-Length, every scheme byte and the bytes
@@ -1318,5 +1461,39 @@ export const http1ClientChecks = (): i32 => {
   t.ok("a field whose value is upgrade is written when it is not Connection", requestWith("GET", "/", "X-A", "upgrade", none) !== "null");
 
   t.eqI32("HTTP1_E_NONE is 0, before anything goes wrong", smallParser().error, HTTP1_E_NONE);
+
+  // HC-1: a parser in spans mode keeps a response's fields in buffers it reuses.
+  const keptAlive: u8[] = bytesOf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nX-Request: 7\r\n\r\nok");
+  const arenaMoved: i32 = 1;
+  const arenaFlat: i32 = 0;
+  const spanFirst: i32 = 0;
+  const spanLast: i32 = 2;
+  const spanPast: i32 = 3;
+  const spanBefore: i32 = -1;
+  const strings: Http1ResponseParser = corpusParser();
+  t.ok("strings mode: 1,000 kept-alive responses move the arena, as HC-1 records", arenaMoves(strings, keptAlive) === arenaMoved);
+  const spans: Http1ResponseParser = corpusParser();
+  spans.fieldsAsSpans();
+  t.ok("spans mode: 1,000 kept-alive responses leave Arena.mark() and Arena.used() flat", arenaMoves(spans, keptAlive) === arenaFlat);
+  t.ok(
+    "spans mode: names, values and reason stay empty, and the accessors answer",
+    spans.names.length === 0 && spans.reason === "" && spans.fields() === spanPast && spans.fieldName(spanFirst) === "content-type" && spans.fieldValue(spanLast) === "7" && spans.reasonText() === "OK"
+  );
+  t.eqStr("spans mode: header() matches a name in any case", headerText(spans, "X-REQUEST"), "7");
+  t.ok("spans mode: past the last field, a name and a value are empty", spans.fieldName(spanPast) === "" && spans.fieldValue(spanBefore) === "");
+  // Strings mode, reset half way through a body: the next head reads as a new parser's, reason and reasonText() agreeing.
+  const reread: Http1ResponseParser = corpusParser();
+  const fieldCount: i32 = 3;
+  const keptStart: i32 = 0;
+  leaveBehind(reread, 3);
+  reread.reset();
+  reread.expect(false, false);
+  reread.feed(keptAlive, keptStart, toI32(keptAlive.length));
+  t.eqI32("strings mode: after reset() the next response's head reads", reread.next(), HTTP1_HEAD);
+  t.eqStr("strings mode: reason is what reasonText() answers", reread.reason, reread.reasonText());
+  t.ok(
+    "strings mode: reset() leaves no field of the response it cut behind",
+    reread.error === 0 && toI32(reread.names.length) === fieldCount && reread.reason === "OK" && headerText(reread, "x-old") === "null" && headerText(reread, "X-Request") === "7"
+  );
   return t.done();
 };

@@ -16,6 +16,7 @@ import CheckContext from "./context" -> struct CheckContext
 import Edit from "./diagnostics" -> struct Edit
 import checkSignatureBody from "./checker" -> function @checkSignatureBody
 import collectFunctionSignature from "./declarations" -> function @collectFunctionSignature
+import fitTemplateArguments from "./declarations" -> function @fitTemplateArguments
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import checkExpression from "./expressions" -> function @checkExpression
 import enterMember from "./expressions" -> function @enterMember
@@ -66,6 +67,7 @@ import collectStructMembers from "./structs" -> function @collectStructMembers
 import noteStructNames from "./structs" -> function @noteStructNames
 import referencedStructNames from "./structs" -> function @referencedStructNames
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
+import isGatheredRest from "./nodes" -> function @isGatheredRest
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BIGINT from "./nodes" -> const N_BIGINT
@@ -618,7 +620,7 @@ function useExternalInstance(ctx: CheckContext, sig: FunctionSig): void -> @useE
   escaping: sig
   calls: StringSet.add nish_array_grow
   pointer ctx: size=288 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=true captured=true
+  pointer sig: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:7 StringSet.add -> @StringSet.add
 function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args: i32[], at: Node): StructInfo | null -> @instantiateStruct [exported]
@@ -736,7 +738,7 @@ function adoptInstanceLayouts(ctx: CheckContext, home: CheckContext, sig: Functi
   calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size noteStructNames registerForeignLayouts
   pointer ctx: size=288 writesThrough=false captured=false passedTo=registerForeignLayouts#0
   pointer home: size=288 writesThrough=false captured=false passedTo=registerForeignLayouts#2
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 names: StringSet (const)
   callee +0:17 new StringSet -> @StringSet.constructor
@@ -815,27 +817,28 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: expr
-  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName checkExpression enterMember holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isParallelEntry isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry reduceElementMessage resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkExpression#0 unifyAnnotation#0 checkExpression#0 unifyAnnotation#0 resolveFunctionArgument#0 CheckContext.errorType#0 matchFunctionArguments#0 CheckContext.errorType#0 CheckContext.errorType#0 secretArgumentShapeMessage#0 CheckContext.errorType#0 instantiate#0 CheckContext.errorType#0 noteJsonRoute#0 recordRangeEntry#0 recordMemberEntry#0 enterMember#0 CheckContext.error#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 reduceElementMessage#5 CheckContext.errorType#1 CheckContext.errorType#1 instantiate#4 recordParallelCall#1 recordExposeCall#1
+  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry reduceElementMessage resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=fitTemplateArguments#0 checkExpression#0 unifyAnnotation#0 checkExpression#0 unifyAnnotation#0 resolveFunctionArgument#0 CheckContext.errorType#0 matchFunctionArguments#0 CheckContext.errorType#0 CheckContext.errorType#0 secretArgumentShapeMessage#0 CheckContext.errorType#0 instantiate#0 CheckContext.errorType#0 noteJsonRoute#0 recordRangeEntry#0 recordMemberEntry#0 enterMember#0 CheckContext.error#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=fitTemplateArguments#1 reduceElementMessage#5 CheckContext.errorType#1 CheckContext.errorType#1 instantiate#4 recordParallelCall#1 recordExposeCall#1
   pointer template: size=64 writesThrough=true captured=true passedTo=isSpawnTemplate#0 typeParamSet#0 resolveInTemplate#0 resolveFunctionArgument#1 matchFunctionArguments#1 reduceElementMessage#2 secretArgumentShapeMessage#1 instantiate#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2 resolveFunctionArgument#6
   stackSites=1 stackLocals=1
-  local -30:9 parameters: Node (const)
-  local -29:9 args: Node (const)
-  callee -27:12 CheckContext.errorType -> @CheckContext.errorType
-  local -19:9 functional: boolean (const)
-  callee -19:49 isSpawnTemplate -> @isSpawnTemplate
-  local -18:9 names: StringSet (const)
-  callee -18:17 typeParamSet -> @typeParamSet
-  local -17:9 bindings: StringMap (const)
-  callee -17:20 new StringMap -> @StringMap.constructor
-  local -16:7 argTypes: i32[] (let)
-  local -10:9 later: boolean[] (const)
-  local -9:7 i: i32 (let)
-  local -7:11 deferred: boolean (const)
-  callee -6:22 isFunctionParameter -> @isFunctionParameter
-  callee -6:70 isContextualLiteral -> @isContextualLiteral
+  local -31:9 parameters: Node (const)
+  local -30:9 args: Node (const)
+  callee -29:8 fitTemplateArguments -> @fitTemplateArguments
+  local -23:9 functional: boolean (const)
+  callee -23:49 isSpawnTemplate -> @isSpawnTemplate
+  local -22:9 names: StringSet (const)
+  callee -22:17 typeParamSet -> @typeParamSet
+  local -21:9 bindings: StringMap (const)
+  callee -21:20 new StringMap -> @StringMap.constructor
+  local -20:7 argTypes: i32[] (let)
+  local -14:9 later: boolean[] (const)
+  local -13:7 i: i32 (let)
+  local -9:11 deferred: boolean (const)
+  callee -8:22 isFunctionParameter -> @isFunctionParameter
+  callee -7:7 isContextualLiteral -> @isContextualLiteral
+  callee -6:7 isGatheredRest -> @isGatheredRest
   local -4:11 type: i32 (const)
   callee -4:38 checkExpression -> @checkExpression
   local -3:11 constant: boolean (const)
@@ -1003,7 +1006,7 @@ function exposeTo(home: CheckContext, fn: FunctionSig): void -> @exposeTo
   sharedWrite: +0:5
   calls: FunctionSig.definedIn FunctionSig.foreign useExternalInstance
   pointer home: size=288 writesThrough=false captured=false passedTo=useExternalInstance#0
-  pointer fn: size=144 writesThrough=true captured=true passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0 useExternalInstance#1
+  pointer fn: size=160 writesThrough=true captured=true passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0 useExternalInstance#1
   stackSites=0 stackLocals=0
   callee -5:7 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee -1:24 FunctionSig.foreign -> @FunctionSig.foreign
@@ -1025,7 +1028,7 @@ function noteJsonRoute(ctx: CheckContext, home: CheckContext, sig: FunctionSig):
   calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size exposeTo jsonRouteCallees noteStructNames registerForeignLayouts
   pointer ctx: size=288 writesThrough=false captured=false passedTo=exposeTo#0 registerForeignLayouts#0
   pointer home: size=288 writesThrough=false captured=false passedTo=registerForeignLayouts#2
-  pointer sig: size=144 writesThrough=false captured=false passedTo=jsonRouteCallees#2
+  pointer sig: size=160 writesThrough=false captured=false passedTo=jsonRouteCallees#2
   stackSites=1 stackLocals=1
   local +0:14 fn: FunctionSig (const)
   callee +0:20 jsonRouteCallees -> @jsonRouteCallees
@@ -1055,7 +1058,7 @@ function functionTypeText(table: TypeTable, names: string[], types: i32[], retur
 function writtenNames(fn: FunctionSig): string[] -> @writtenNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.writtenArity nish_array_grow
-  pointer fn: size=144 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
+  pointer fn: size=160 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
   local +1:7 i: i32 (let)
@@ -1065,7 +1068,7 @@ function mismatchMessage(table: TypeTable, template: TemplateInfo, index: i32, f
   calls: functionTypeText nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 writtenNames
   pointer table: size=96 writesThrough=false captured=false passedTo=functionTypeText#0
   pointer template: size=64 writesThrough=false captured=false
-  pointer fn: size=144 writesThrough=false captured=false passedTo=writtenNames#0
+  pointer fn: size=160 writesThrough=false captured=false passedTo=writtenNames#0
   pointer param: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:8 functionTypeText -> @functionTypeText
@@ -1105,9 +1108,9 @@ function resolveFunctionArgument(ctx: CheckContext, template: TemplateInfo, inde
   sharedWrite: +0:3
   escaping: arg index
   calls: CheckContext.arrowMode CheckContext.capturesOuter CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.constant FunctionBindings.get FunctionSig.writtenArity Scope.lookup liftArrowArgument mismatchMessage nish_panic_index nish_str_concat nish_str_from_i32 outerFunctionMessage refuseOnce unifyAnnotation unwrapTypeParens
-  pointer ctx: size=288 writesThrough=true captured=true passedTo=liftArrowArgument#0 refuseOnce#0 refuseOnce#0 CheckContext.capturesOuter#0 CheckContext.arrowMode#0 refuseOnce#0 refuseOnce#0 outerFunctionMessage#0 CheckContext.signature#0 CheckContext.template#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 unifyAnnotation#0 unifyAnnotation#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=liftArrowArgument#0 refuseOnce#0 refuseOnce#0 CheckContext.capturesOuter#0 CheckContext.arrowMode#0 refuseOnce#0 refuseOnce#0 outerFunctionMessage#0 CheckContext.signature#0 CheckContext.template#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 unifyAnnotation#0 unifyAnnotation#0
   pointer template: size=64 writesThrough=false captured=false passedTo=liftArrowArgument#1 mismatchMessage#1
-  pointer arg: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1
+  pointer arg: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1
   pointer names: size=8 writesThrough=false captured=false passedTo=liftArrowArgument#4 unifyAnnotation#3 unifyAnnotation#3
   pointer bindings: size=40 writesThrough=true captured=true passedTo=liftArrowArgument#5 unifyAnnotation#4 unifyAnnotation#4
   pointer scope: size=56 writesThrough=true captured=true passedTo=liftArrowArgument#6 Scope.lookup#0
@@ -1138,15 +1141,16 @@ function resolveFunctionArgument(ctx: CheckContext, template: TemplateInfo, inde
   callee +39:9 CheckedProgram.constant -> @CheckedProgram.constant
   callee +40:7 refuseOnce -> @refuseOnce
   callee +43:5 refuseOnce -> @refuseOnce
-  local +46:9 wanted: Node[] (const)
-  callee +47:7 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee +50:5 refuseOnce -> @refuseOnce
-  callee +50:26 mismatchMessage -> @mismatchMessage
-  callee +50:81 CheckContext.textOf -> @CheckContext.textOf
-  local +53:7 k: i32 (let)
-  callee +54:35 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee +55:5 unifyAnnotation -> @unifyAnnotation
-  callee +58:3 unifyAnnotation -> @unifyAnnotation
+  callee +49:5 refuseOnce -> @refuseOnce
+  local +56:9 wanted: Node[] (const)
+  callee +57:7 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee +60:5 refuseOnce -> @refuseOnce
+  callee +60:26 mismatchMessage -> @mismatchMessage
+  callee +60:81 CheckContext.textOf -> @CheckContext.textOf
+  local +63:7 k: i32 (let)
+  callee +64:35 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee +65:5 unifyAnnotation -> @unifyAnnotation
+  callee +68:3 unifyAnnotation -> @unifyAnnotation
 function liftArrowArgument(ctx: CheckContext, template: TemplateInfo, index: i32, arrow: Node, names: StringSet, bindings: StringMap, scope: Scope): FunctionSig | null -> @liftArrowArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseOnce
@@ -1207,7 +1211,7 @@ function captureMode(template: TemplateInfo): i32 -> @captureMode
   local +0:9 role: i32 (const)
   callee +0:16 parallelRole -> @parallelRole
   callee +7:31 isExposeTemplate -> @isExposeTemplate
-function isContextualLiteral(arg: Node): boolean -> @isContextualLiteral
+function isContextualLiteral(arg: Node): boolean -> @isContextualLiteral [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
   pointer arg: size=40 writesThrough=false captured=false
@@ -1351,7 +1355,7 @@ function refuseResolvedMismatch(ctx: CheckContext, arg: Node, template: Template
   pointer ctx: size=288 writesThrough=true captured=false passedTo=refuseOnce#0
   pointer arg: size=40 writesThrough=false captured=false passedTo=refuseOnce#1
   pointer template: size=64 writesThrough=false captured=false passedTo=mismatchMessage#1
-  pointer fn: size=144 writesThrough=false captured=false passedTo=mismatchMessage#3
+  pointer fn: size=160 writesThrough=false captured=false passedTo=mismatchMessage#3
   pointer param: size=40 writesThrough=false captured=false passedTo=mismatchMessage#4
   pointer names: size=0 writesThrough=false captured=false passedTo=functionTypeText#1
   pointer types: size=0 writesThrough=true captured=false passedTo=functionTypeText#2
@@ -1631,7 +1635,7 @@ function genericCallSpelling(ctx: CheckContext, call: Node, callee: FunctionSig,
   calls: annotationName collectTypeParamNames indexOfName nish_array_grow nish_panic_index peelSpelling spellAnnotation typedArraySpelling
   pointer ctx: size=288 writesThrough=false captured=false passedTo=typedArraySpelling#0 spellAnnotation#0
   pointer call: size=40 writesThrough=false captured=false
-  pointer callee: size=144 writesThrough=false captured=false
+  pointer callee: size=160 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=false captured=false passedTo=typedArraySpelling#2
   stackSites=3 stackLocals=2
   local +0:9 decl: Node (const)
@@ -1903,7 +1907,7 @@ function parameterOrigin(ctx: CheckContext, sig: FunctionSig, index: i32): TypeO
   escaping: index
   calls: StringMap.size TypeOrigin.constructor nish_alloc_struct nish_panic_index nish_panic_overflow
   pointer ctx: size=288 writesThrough=false captured=false
-  pointer sig: size=144 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 StringMap.size -> @StringMap.size
   local +3:9 list: Node (const)

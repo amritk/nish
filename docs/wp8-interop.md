@@ -45,6 +45,12 @@ runtime prototype and `NISH_SYMBOL`, and is C11- and C++-clean under
 | a by-value `Result` over scalars | a one-word struct (WP17) | `{ ok, value }` / `{ ok, error }` | the same union |
 | classes, `T \| null`, `string[]`, `boolean[]`, nested arrays, `Map` | `struct X *` / `nish_array *` in the header | not bridged | not exported |
 
+A default parameter and a rest parameter are a Nish call site's work
+(docs/LANGUAGE.md, "Default and rest parameters"), so a host does not see
+them: an exported function's prototype, `.d.ts` signature and N-API shim
+require every argument, and a rest parameter `...xs: f64[]` is the plain array
+`xs: f64[]`.
+
 `nish_str` is `{ uint64_t len; char data[]; }`: the UTF-8 byte length, then
 NUL-terminated bytes. `nish_array` is `{ uint64_t len; uint64_t cap; char *data; }`,
 so `len` is at offset 0, `cap` at 8 and `data` at 16

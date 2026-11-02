@@ -1,0 +1,13 @@
+{
+  "name": "sandbox-dep-fs-write-scoped",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_writer": [
+          "fs.write=./out"
+        ]
+      }
+    }
+  }
+}

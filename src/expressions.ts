@@ -69,6 +69,7 @@ import {
 } from "./members"
 import {
   FLAG_ACCESSOR,
+  FLAG_SPREAD_ARGUMENT,
   FLAG_ANGLE,
   FLAG_CONST,
   FLAG_OPTIONAL,
@@ -114,6 +115,7 @@ import {
   N_WHILE,
   Node,
 } from "./nodes"
+import { fitArguments } from "./declarations"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
@@ -162,7 +164,14 @@ export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
       }
       break
     case N_SPREAD:
-      ctx.error(node, "Spread in array literals is not supported")
+      if ((node.flags & FLAG_SPREAD_ARGUMENT) !== 0) {
+        ctx.error(
+          node,
+          "Spread arguments are not supported: pass the array itself to a parameter of array type, or write each argument"
+        )
+      } else {
+        ctx.error(node, "Spread in array literals is not supported")
+      }
       break
     case N_NEW:
       if (node.children[0].kind !== N_IDENT) {
@@ -572,7 +581,8 @@ export const memberSetName = (ctx: CheckContext, members: i32[]): string => {
 /**
  * The variants of `union` that `node` may be to TypeScript, which types a
  * value before it converts: `new Circle()` is a `Circle`, a ternary is its
- * arms, `??` both its operands, `null` none. Read after `node` was checked.
+ * arms, `??` both its operands, `null` none, and a value of the whole union
+ * `union` itself. Read after `node` was checked.
  */
 const variantsGiven = (ctx: CheckContext, node: Node, union: i32, out: i32[]): void => {
   if (node.kind === N_PAREN) {
@@ -591,13 +601,44 @@ const variantsGiven = (ctx: CheckContext, node: Node, union: i32, out: i32[]): v
   }
   const from = ctx.program.nodeCoercions[node.id]
   const type = ctx.table.stripNull(from >= 0 ? from : ctx.program.nodeTypes[node.id])
-  if (ctx.table.isUnion(type)) {
+  if (type === union) {
+    // The whole union, given as itself rather than as each of its variants:
+    // a store of one costs nothing per variant.
+    out.push(union)
+  } else if (ctx.table.isUnion(type)) {
     for (const variant of ctx.table.variantsOf(type)) {
       out.push(variant)
     }
   } else if (ctx.table.hasVariant(union, type)) {
     out.push(type)
   }
+}
+
+/**
+ * Where `variant` sits in `variants`, a union's ascending variants, or -1: a
+ * binary search, as `TypeTable.hasVariant` is.
+ */
+const variantPlace = (variants: i32[], variant: i32): i32 => {
+  let lo = 0
+  let hi = variants.length
+  while (lo < hi) {
+    const mid = lo + ((hi - lo) >> 1)
+    // Never taken, since `lo <= mid < hi <= variants.length`; it proves the
+    // read below in range for the bounds pass, as in `hasVariant`.
+    if (mid < 0 || mid >= variants.length) {
+      return -1
+    }
+    const at = variants[mid]
+    if (at === variant) {
+      return mid
+    }
+    if (at < variant) {
+      lo = mid + 1
+    } else {
+      hi = mid
+    }
+  }
+  return -1
 }
 
 /**
@@ -614,16 +655,23 @@ export const refuseNarrowingStore = (ctx: CheckContext, value: Node, slot: i32, 
   }
   const given: i32[] = []
   variantsGiven(ctx, value, union, given)
-  if (given.length === 0) {
+  if (given.length === 0 || given.indexOf(union) >= 0) {
     return false
   }
-  let missing = false
-  for (const variant of ctx.table.variantsOf(union)) {
-    if (given.indexOf(variant) < 0) {
-      missing = true
+  // Mark each variant given by its place in the union's ascending variants,
+  // so a store of the whole union costs a search per variant, not a scan.
+  const variants = ctx.table.variantsOf(union)
+  const covered: boolean[] = []
+  while (covered.length < variants.length) {
+    covered.push(false)
+  }
+  for (const each of given) {
+    const at = variantPlace(variants, each)
+    if (at >= 0 && at < covered.length) {
+      covered[at] = true
     }
   }
-  if (!missing) {
+  if (covered.indexOf(false) < 0) {
     return false
   }
   const named: string[] = []
@@ -723,7 +771,13 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * five and `Math.sqrt(2)` an `f64` two. Without a context it is `number`,
  * which is `i32` unless `--number-mode f64`.
  */
-const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 => {
+export const checkNumericLiteral = (
+  ctx: CheckContext,
+  expr: Node,
+  want: i32,
+  negated: boolean,
+  at: Node
+): i32 => {
   if (ctx.table.isRanged(want)) {
     return checkRangedLiteral(ctx, expr, want, negated, at)
   }
@@ -785,13 +839,7 @@ const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: 
  * literal first, so a fraction or a value past `i32` is refused in the words
  * those already have.
  */
-export const checkRangedLiteral = (
-  ctx: CheckContext,
-  expr: Node,
-  want: i32,
-  negated: boolean,
-  at: Node
-): i32 => {
+const checkRangedLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 => {
   const text = expr.text
   if (isFractional(text)) {
     return ctx.errorType(
@@ -1428,9 +1476,8 @@ const checkOperator = (
   if (left === T_ERROR || right === T_ERROR) {
     return T_ERROR
   }
-  const a = ctx.table.typeName(left)
-  const b = ctx.table.typeName(right)
-
+  // The operands' names are built only for a refusal: a union's name is as
+  // long as its variant list, and a `!== null` on one is checked per case.
   if (op === "+") {
     if (left === T_STRING && right === T_STRING) {
       return T_STRING
@@ -1442,7 +1489,7 @@ const checkOperator = (
           : ""
       return ctx.errorType(
         expr,
-        `Operator \`+\` requires two operands of the same numeric type or two strings, got ${a} and ${b}${hint}`
+        `Operator \`+\` requires two operands of the same numeric type or two strings, got ${ctx.table.typeName(left)} and ${ctx.table.typeName(right)}${hint}`
       )
     }
     return left
@@ -1452,10 +1499,13 @@ const checkOperator = (
   }
   if (op === "<" || op === "<=" || op === ">" || op === ">=") {
     if (left === right && ctx.table.isVector(left)) {
-      return ctx.errorType(expr, simdCompareMessage(op, a))
+      return ctx.errorType(expr, simdCompareMessage(op, ctx.table.typeName(left)))
     }
     if (left !== right || !isNumeric(left)) {
-      return ctx.errorType(expr, `Operator \`${op}\` requires two numeric operands, got ${a} and ${b}`)
+      return ctx.errorType(
+        expr,
+        `Operator \`${op}\` requires two numeric operands, got ${ctx.table.typeName(left)} and ${ctx.table.typeName(right)}`
+      )
     }
     return T_BOOL
   }
@@ -1466,7 +1516,7 @@ const checkOperator = (
     if (!isInteger(left) || left !== right) {
       return ctx.errorType(
         expr,
-        `Operator \`${op}\` requires two operands of the same integer type, got ${a} and ${b}${f64Hint(ctx, left, right)}`
+        `Operator \`${op}\` requires two operands of the same integer type, got ${ctx.table.typeName(left)} and ${ctx.table.typeName(right)}${f64Hint(ctx, left, right)}`
       )
     }
     return left
@@ -1475,7 +1525,7 @@ const checkOperator = (
     if (!isNumeric(left) || left !== right) {
       return ctx.errorType(
         expr,
-        `Operator \`${op}\` requires two operands of the same numeric type, got ${a} and ${b}`
+        `Operator \`${op}\` requires two operands of the same numeric type, got ${ctx.table.typeName(left)} and ${ctx.table.typeName(right)}`
       )
     }
     return left
@@ -1529,9 +1579,11 @@ const checkEquality = (
   if (secretLeft !== secretRight && leftNode.kind !== N_NULL && rightNode.kind !== N_NULL) {
     return ctx.errorType(expr, secretEqualityMessage())
   }
-  const a = ctx.table.typeName(left)
-  const b = ctx.table.typeName(right)
+  // Names are built only for a refusal: a union's name is as long as its
+  // variant list, and each `case` of a switch on one is compared here.
   if (left !== right || left === T_VOID) {
+    const a = ctx.table.typeName(left)
+    const b = ctx.table.typeName(right)
     if (ctx.table.isNullable(left) || ctx.table.isNullable(right)) {
       return ctx.errorType(
         expr,
@@ -1541,7 +1593,7 @@ const checkEquality = (
     return ctx.errorType(expr, `Operator \`${op}\` requires two operands of the same type, got ${a} and ${b}`)
   }
   if (ctx.table.isVector(left)) {
-    return ctx.errorType(expr, simdCompareMessage(op, a))
+    return ctx.errorType(expr, simdCompareMessage(op, ctx.table.typeName(left)))
   }
   const leftSet = memberSetOf(ctx, leftNode)
   const rightSet = memberSetOf(ctx, rightNode)
@@ -1556,7 +1608,7 @@ const checkEquality = (
   if (ctx.table.isNullable(left) && leftNode.kind !== N_NULL && rightNode.kind !== N_NULL) {
     return ctx.errorType(
       expr,
-      `Cannot compare two \`${a}\` values; compare each with \`null\` and then compare the narrowed values`
+      `Cannot compare two \`${ctx.table.typeName(left)}\` values; compare each with \`null\` and then compare the narrowed values`
     )
   }
   return T_BOOL
@@ -2436,17 +2488,24 @@ export const narrowToTags = (
   const tags = ctx.table.tagsOf(union)
   const keptVariants: i32[] = []
   const keptTags: i32[] = []
+  // What `local` may still be, walked beside `variants`: both ascending, so a
+  // case of a switch on a 1600-variant union costs one pass, not a search per variant.
+  const still: i32[] = ctx.table.isUnion(current) ? ctx.table.variantsOf(current) : [current]
   let possible = 0
   let i = 0
+  let at = 0
   while (i < variants.length && i < tags.length) {
     const variant = variants[i]
     const tag = tags[i]
-    const left = ctx.table.isUnion(current) ? ctx.table.hasVariant(current, variant) : current === variant
-    if (left) {
+    while (at < still.length && still[at] < variant) {
+      at = at + 1
+    }
+    if (at < still.length && still[at] === variant) {
       possible = possible + 1
+      const value = ctx.table.memberValue(tag)
       let named = false
       for (const member of members) {
-        if (ctx.table.memberValue(member) === ctx.table.memberValue(tag)) {
+        if (ctx.table.memberValue(member) === value) {
           named = true
         }
       }
@@ -3268,11 +3327,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     return T_ERROR
   }
   const args = expr.children[1]
-  if (args.children.length !== sig.paramTypes.length) {
-    return ctx.errorType(
-      expr,
-      `\`${sig.name}\` expects ${sig.paramTypes.length} argument(s), got ${args.children.length}`
-    )
+  if (!fitArguments(ctx, expr, args, sig, 0, sig.name)) {
+    return T_ERROR
   }
   let i = 0
   while (i < args.children.length) {

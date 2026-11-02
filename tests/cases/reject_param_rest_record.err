@@ -1,0 +1,1 @@
+A rest parameter copies each `Cell` record it gathers, so a write through the copy would not reach this one as it does in TypeScript; take a `Cell[]` parameter and pass `[...]`, which copies the same way and says so

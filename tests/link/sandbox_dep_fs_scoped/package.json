@@ -1,0 +1,13 @@
+{
+  "name": "sandbox-dep-fs-scoped",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_reader": [
+          "fs.read=./data"
+        ]
+      }
+    }
+  }
+}

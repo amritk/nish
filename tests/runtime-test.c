@@ -58,6 +58,7 @@ nish_str *nish_str_from_f64(double);
    of NISH_F64_MAX (runtime/nish.h) bytes. */
 #define NISH_F64_MAX 32
 int nish_f64_format(double, char[NISH_F64_MAX]);
+int32_t nish_json_put_f64(uint8_t *, int32_t, int32_t, double);
 int64_t nish_str_index_of(const nish_str *, const nish_str *);
 double nish_random(void);
 /* runtime-parallel.c. Declared here like every other symbol this file calls:
@@ -2127,6 +2128,35 @@ int main(void) {
         assert(0);
       }
     }
+  }
+
+  /* nish_json_put_f64: the formatter's bytes at `at`, all or none. Each row
+     checks the answer and that no byte outside the write moved: an exact fit,
+     one byte short, a negative `at`, `at == len`, -0 and the longest
+     spelling. */
+  {
+    uint8_t buf[40];
+    memset(buf, '#', sizeof buf);
+    assert(nish_json_put_f64(buf, 8, 3, 1.5) == 6);              /* "1.5" in [3, 6) */
+    assert(memcmp(buf, "###1.5##", 8) == 0);
+    memset(buf, '#', sizeof buf);
+    assert(nish_json_put_f64(buf, 6, 3, 1.5) == 6);              /* fits exactly */
+    assert(memcmp(buf, "###1.5#", 7) == 0);
+    memset(buf, '#', sizeof buf);
+    assert(nish_json_put_f64(buf, 5, 3, 1.5) == -1);             /* one byte short */
+    assert(nish_json_put_f64(buf, 8, -1, 1.5) == -1);            /* `at` negative */
+    assert(nish_json_put_f64(buf, 8, 8, 1.5) == -1);             /* `at == len` */
+    assert(nish_json_put_f64(buf, -3, 0, 1.5) == -1);            /* a wrapped length */
+    assert(nish_json_put_f64(NULL, 0, 0, 0.0) == -1);            /* an empty array */
+    assert(nish_json_put_f64(buf, 2147483647, 2147483646, 12.0) == -1);
+    for (size_t i = 0; i < sizeof buf; i++) assert(buf[i] == '#');
+    assert(nish_json_put_f64(buf, 1, 0, -0.0) == 1 && buf[0] == '0' && buf[1] == '#');
+    memset(buf, '#', sizeof buf);
+    assert(nish_json_put_f64(buf, 30, 5, -0.0000012345678901234567) == 30);
+    assert(memcmp(buf, "#####-0.0000012345678901234567##", 32) == 0);
+    memset(buf, '#', sizeof buf);
+    assert(nish_json_put_f64(buf, 29, 5, -0.0000012345678901234567) == -1);
+    for (size_t i = 0; i < sizeof buf; i++) assert(buf[i] == '#');
   }
 
   /* Math.random: doubles in [0, 1) that are not all equal. */
