@@ -1,0 +1,9 @@
+batch of 1: 1 requests, 0 waiting; 1 rows, 1 done, 0 missing, 0 failed, 0 wrong
+batch of 1024: 1024 requests, 0 waiting; 1024 rows, 683 done, 341 missing, 0 failed, 0 wrong
+batch of 1025: 1025 requests, 0 waiting; 1025 rows, 684 done, 341 missing, 0 failed, 0 wrong
+batch of 4096: 4096 requests, 0 waiting; 4096 rows, 2731 done, 1365 missing, 0 failed, 0 wrong
+batch of 65536: 65536 requests, 0 waiting; 65536 rows, 43691 done, 21845 missing, 0 failed, 0 wrong
+colliding batch of 4096: 4096 requests, 0 waiting; 4096 rows, 2731 done, 1365 missing, 0 failed, 0 wrong
+failed batch of 65536: 65536 requests, 0 waiting; 0 rows, 0 done, 0 missing, 65536 failed, 0 wrong
+empty batch of 65536: 65536 requests, 0 waiting; 0 rows, 0 done, 65536 missing, 0 failed, 0 wrong
+exit 0

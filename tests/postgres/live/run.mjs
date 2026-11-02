@@ -40,7 +40,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..", "..");
 const NISH = join(ROOT, "build", "nish");
 const BIN = process.env.PG_BIN ?? "/usr/lib/postgresql/18/bin";
-const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "intarrays", "binary", "conduit", "batch", "unix"];
+const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "intarrays", "binary", "conduit", "batch", "batchscale", "unix"];
 const CHECKS = [...SCENARIOS, "carrier", "refused", "reset"];
 const UPDATE = process.argv.includes("--update");
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith("--"));
