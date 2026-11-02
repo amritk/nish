@@ -41,14 +41,29 @@ export const kernel = (width, variant) => {
       // Byte 3 by mov + shr 24; bytes 2 and 1 each by a copy shifted down
       // (rorx, or mov + shr) and movzx of its low byte.
       o.push(`mov ecx, ${x}`, "shr ecx, 24", `mov ecx, ${s0}`)
-      o.push(...(rorx ? [`rorx eax, ${x}, 16`] : [`mov eax, ${x}`, "shr eax, 16"]), "movzx eax, al", `add ecx, ${s1}`)
-      o.push(...(rorx ? [`rorx eax, ${x}, 8`] : [`mov eax, ${x}`, "shr eax, 8"]), "movzx eax, al", `xor ecx, ${s2}`)
+      o.push(
+        ...(rorx ? [`rorx eax, ${x}, 16`] : [`mov eax, ${x}`, "shr eax, 16"]),
+        "movzx eax, al",
+        `add ecx, ${s1}`
+      )
+      o.push(
+        ...(rorx ? [`rorx eax, ${x}, 8`] : [`mov eax, ${x}`, "shr eax, 8"]),
+        "movzx eax, al",
+        `xor ecx, ${s2}`
+      )
     } else {
       // x >> 16 (rorx, or mov + shr) leaves byte 3 in ah and byte 2 in al;
       // byte 1 is then the ah of x itself (rorx-ah: rorx 8 and its al).
-      o.push(...(rorx ? [`rorx eax, ${x}, 16`] : [`mov eax, ${x}`, "shr eax, 16"]), "movzx ecx, ah", `mov ecx, ${s0}`)
+      o.push(
+        ...(rorx ? [`rorx eax, ${x}, 16`] : [`mov eax, ${x}`, "shr eax, 16"]),
+        "movzx ecx, ah",
+        `mov ecx, ${s0}`
+      )
       o.push("movzx eax, al", `add ecx, ${s1}`)
-      o.push(...(rorx ? [`rorx eax, ${x}, 8`, "movzx eax, al"] : [`mov eax, ${x}`, "movzx eax, ah"]), `xor ecx, ${s2}`)
+      o.push(
+        ...(rorx ? [`rorx eax, ${x}, 8`, "movzx eax, al"] : [`mov eax, ${x}`, "movzx eax, ah"]),
+        `xor ecx, ${s2}`
+      )
     }
     o.push(`movzx eax, ${xb}`, `add ecx, ${s3}`)
     // P[n] first, off the chain, as `bcryptBodyN` orders it.
@@ -75,7 +90,11 @@ export const kernel = (width, variant) => {
   o.push("mov rcx, [rsp]")
   for (const k of lanes) {
     const s = slot * k
-    o.push(`xor ${R[k]}, [rdi + ${s + 68}]`, `mov [rdi + rcx*4 + ${s}], ${R[k]}`, `mov [rdi + rcx*4 + ${s + 4}], ${L[k]}`)
+    o.push(
+      `xor ${R[k]}, [rdi + ${s + 68}]`,
+      `mov [rdi + rcx*4 + ${s}], ${R[k]}`,
+      `mov [rdi + rcx*4 + ${s + 4}], ${L[k]}`
+    )
     o.push(`mov eax, ${L[k]}`, `mov ${L[k]}, ${R[k]}`, `mov ${R[k]}, eax`)
   }
   o.push("add rcx, 2", "mov [rsp], rcx", "cmp rcx, 1042", "jb .Lblock")

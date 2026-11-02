@@ -65,14 +65,18 @@ const samples = timeRounds(programs, rounds, (p, stdout) => {
     console.error(`${p.name} at ${p.w} lanes printed ${lines.length} hashes, not one a lane`)
     process.exit(1)
   }
-  lines.forEach((line) => outputs.add(line))
+  for (const line of lines) {
+    outputs.add(line)
+  }
 })
 if (outputs.size !== 1) {
   console.error(`the programs disagree on the hash: ${[...outputs].join(", ")}`)
   process.exit(1)
 }
 
-console.log(`CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, median and spread of ${rounds} rounds)\n`)
+console.log(
+  `CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, median and spread of ${rounds} rounds)\n`
+)
 console.log("| Lanes | module | copy | unrolled | copy / module | unrolled / module |")
 console.log("| ---: | ---: | ---: | ---: | ---: | ---: |")
 for (const w of widths) {

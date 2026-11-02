@@ -36,7 +36,18 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { argValue, band, blocksPerHash, buildNish, intArg, median, nishLoopN, root, run, timeRounds } from "./common.mjs"
+import {
+  argValue,
+  band,
+  blocksPerHash,
+  buildNish,
+  intArg,
+  median,
+  nishLoopN,
+  root,
+  run,
+  timeRounds,
+} from "./common.mjs"
 
 const dir = path.join(root, "build", "bench", "bcrypt")
 
@@ -186,21 +197,28 @@ fs.mkdirSync(dir, { recursive: true })
 const programs = []
 
 if (cpuBoth && !/^flags\s*:.*\bbmi2\b.*\bavx2\b|^flags\s*:.*\bavx2\b.*\bbmi2\b/m.test(cpuinfo)) {
-  console.error("--cpu-both: this CPU has no AVX2 and BMI2 in /proc/cpuinfo, so an x86-64-v3 binary would not start")
+  console.error(
+    "--cpu-both: this CPU has no AVX2 and BMI2 in /proc/cpuinfo, so an x86-64-v3 binary would not start"
+  )
   process.exit(1)
 }
 const widths = [1, 2, 3, 4, 5, 6]
-const builds = cpuBoth ? [["", []], ["v3", ["--cpu", "x86-64-v3"]]] : [["", []]]
+const builds = cpuBoth
+  ? [
+      ["", []],
+      ["v3", ["--cpu", "x86-64-v3"]],
+    ]
+  : [["", []]]
 for (const [name, source, exe, per, flags] of [
   ["Nish (`nish/crypto/bcrypt`)", NISH_LOOP, "nish", 1, []],
   ["Nish `bcryptHash4`, four lanes", NISH_LOOP4, "nish4", 4, []],
-  ...builds.flatMap(([tag, flags]) =>
+  ...builds.flatMap(([tag, cpuFlags]) =>
     widths.map((w) => [
       `Nish \`bcryptHashN\`, ${w === 1 ? "one lane" : `${w} lanes`}${tag ? `, \`--cpu x86-64-${tag}\`` : ""}`,
       nishLoopN(w, hashes, cost),
       `nish${tag}n${w}`,
       w,
-      flags,
+      cpuFlags,
     ])
   ),
 ]) {
@@ -365,18 +383,26 @@ console.log(
 console.log(`hash: ${[...outputs][0]}\n`)
 console.log("| Implementation | ms per hash |")
 console.log("| --- | ---: |")
-programs.forEach((p, i) => console.log(`| ${p.name} | ${band(samples[i])} |`))
+for (const [i, p] of programs.entries()) {
+  console.log(`| ${p.name} | ${band(samples[i])} |`)
+}
 if (cpuBoth) {
   const row = (exe) => samples[programs.findIndex((p) => p.exe === path.join(dir, exe))]
   const ns = (xs) => ((median(xs) * 1e6) / blocks).toFixed(1)
   const objdump = run("objdump", ["--version"]).status === 0
   // BMI2's instructions anywhere in a binary: what `--cpu x86-64-v3` let the backend pick.
   const bmi2 = (exe) =>
-    (run("objdump", ["-d", "--no-show-raw-insn", path.join(dir, exe)], { maxBuffer: 1 << 28 }).stdout.match(
-      /\t(shrx|shlx|sarx|rorx|bextr|bzhi|andn|pdep|pext|mulx)\s/g
-    ) ?? []).length
-  console.log(`\nEach width under both builds: ms per hash, and ns per Blowfish block (the hash's ${blocks} blocks)`)
-  console.log(`\n| Lanes | default ms | default ns/block | v3 ms | v3 ns/block | v3 / default |${objdump ? " BMI2 insns, v3 |" : ""}`)
+    (
+      run("objdump", ["-d", "--no-show-raw-insn", path.join(dir, exe)], { maxBuffer: 1 << 28 }).stdout.match(
+        /\t(shrx|shlx|sarx|rorx|bextr|bzhi|andn|pdep|pext|mulx)\s/g
+      ) ?? []
+    ).length
+  console.log(
+    `\nEach width under both builds: ms per hash, and ns per Blowfish block (the hash's ${blocks} blocks)`
+  )
+  console.log(
+    `\n| Lanes | default ms | default ns/block | v3 ms | v3 ns/block | v3 / default |${objdump ? " BMI2 insns, v3 |" : ""}`
+  )
   console.log(`| ---: | ---: | ---: | ---: | ---: | ---: |${objdump ? " ---: |" : ""}`)
   for (const w of widths) {
     const [d, v] = [row(`nishn${w}`), row(`nishv3n${w}`)]

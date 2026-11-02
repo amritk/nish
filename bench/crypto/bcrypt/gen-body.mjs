@@ -51,7 +51,8 @@ const body = (W, unroll = false) => {
     }
     for (const k of lanes) {
       const o = S * k
-      const pn = typeof n === "number" ? `${o + n + plus}` : o ? `${o} + n${plus ? " + 1" : ""}` : `n${plus ? " + 1" : ""}`
+      const nIndex = `${o ? `${o} + ` : ""}n${plus ? " + 1" : ""}`
+      const pn = typeof n === "number" ? `${o + n + plus}` : nIndex
       p(
         `${pad}${y}${k} ^= st[${pn}] ^ (((st[${o + 18} + ${x}${k}a${tag}] + st[${o + 274} + ${x}${k}b${tag}]) ^ st[${o + 530} + ${x}${k}c${tag}]) + st[${o + 786} + ${x}${k}d${tag}])`
       )

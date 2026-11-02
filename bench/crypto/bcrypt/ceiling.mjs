@@ -55,7 +55,13 @@ const harness = path.join(import.meta.dirname, "kernel", "harness.c")
 const programs = []
 for (const w of widths) {
   const exe = buildNish(compiler, dir, `nishn${w}`, nishLoopN(w, hashes, cost))
-  programs.push({ name: `Nish \`bcryptHashN\`, ${w} lanes`, nish: true, w, argv: [exe], scale: 1000 / (hashes * w) })
+  programs.push({
+    name: `Nish \`bcryptHashN\`, ${w} lanes`,
+    nish: true,
+    w,
+    argv: [exe],
+    scale: 1000 / (hashes * w),
+  })
 }
 for (const w of widths) {
   for (const v of [...VARIANTS, "c"]) {
@@ -75,7 +81,9 @@ for (const w of widths) {
     }
     const checked = run(exe, ["check"])
     if (checked.status !== 0 || checked.stdout.trim() !== "ok") {
-      console.error(`kernel ${w} ${v} disagrees with the reference, so it is not timed:\n${checked.stdout}${checked.stderr}`)
+      console.error(
+        `kernel ${w} ${v} disagrees with the reference, so it is not timed:\n${checked.stdout}${checked.stderr}`
+      )
       process.exit(1)
     }
     const name = v === "c" ? `C interleave, \`${cc} -O2\`` : `hand \`${v}\``
@@ -103,7 +111,9 @@ const samples = timeRounds(programs, rounds, (p, stdout) => {
 })
 
 const best = Math.min(...programs.flatMap((p, i) => (p.nish ? [median(samples[i])] : [])))
-console.log(`${model}: CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, median and spread of ${rounds} rounds)`)
+console.log(
+  `${model}: CPU ms per cost-${cost} hash a lane (${hashes} hashes a round, median and spread of ${rounds} rounds)`
+)
 console.log("A kernel's row is its cost-loop bodies only; Nish's is whole hashes.\n")
 console.log("| Lanes | Body | ms per hash | Nish's best / this |")
 console.log("| ---: | --- | ---: | ---: |")

@@ -367,12 +367,6 @@ over 8w; every row prints the same hash):
 | --- | ---: |
 | Nish `bcryptHash` | 57.6 (56.4–59.0) |
 | Nish `bcryptHash4`, four lanes | 23.1 (22.0–26.4) |
-| Nish `bcryptHashN`, one lane | 57.4 (56.9–58.6) |
-| Nish `bcryptHashN`, 2 lanes | 34.3 (32.8–37.2) |
-| Nish `bcryptHashN`, 3 lanes | 27.1 (26.5–28.6) |
-| Nish `bcryptHashN`, 4 lanes | 22.2 (21.9–25.2) |
-| Nish `bcryptHashN`, 5 lanes | 22.4 (21.2–24.6) |
-| Nish `bcryptHashN`, 6 lanes | 24.5 (22.5–27.5) |
 | libxcrypt `crypt_r`, `$2b$` | 59.0 (58.0–60.1) |
 | OpenBSD `bcrypt.c`, `gcc -O2` | 61.8 (61.3–64.0) |
 | OpenBSD `bcrypt.c`, `clang -O2` | 69.6 (68.1–71.8) |
@@ -381,16 +375,21 @@ over 8w; every row prints the same hash):
 | tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 62.0 (61.6–68.1) |
 | tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 24.6 (23.0–27.0) |
 
+The `bcryptHashN` rows this table held, one to six lanes, no longer match
+the module: five and six lanes trailed four there, and lead now. The current figures, per width, are in
+[BMI2 and x86-64-v3](#bmi2-and-x86-64-v3-measured-not-built), where six lanes
+lead.
+
 **The targets.** The single path, with the half-round's order pinned
 ([below](#the-half-rounds-critical-path)), takes 0.98 times `crypt_r`'s time,
 inside the 1.2 aimed at and level with it inside the noise; it is 6% ahead of
 OpenBSD's gcc build and tigokraft's one-lane gcc build, outside their spreads,
-and 17% ahead of OpenBSD's clang build. The best width, four lanes, hashes
-2.66 times as fast per password as `crypt_r` on one core, past the 1.5 aimed
-at; five lanes are level with four, and six level inside the noise with a
-median 10% higher. `bcryptHash4` and `bcryptHashN` at four lanes run the same
-computation and overlap. Neither AMD nor AArch64 was measured: the best width
-there is what `bcryptCalibrate` answers, which is why it measures.
+and 17% ahead of OpenBSD's clang build. Four lanes, `bcryptHash4`, hash 2.55
+times as fast per password as `crypt_r` on one core, past the 1.5 aimed at; on
+machine D ([below](#bmi2-and-x86-64-v3-measured-not-built)) six lanes take
+15.7 ms, 0.28 of the one-lane time, and four 19.4. Neither AMD nor AArch64
+was measured: the best width there is what `bcryptCalibrate` answers, which
+is why it measures.
 
 **Cycles.** A cost-10 hash encrypts 2^10 × 1042 + 713 = 1,067,721 Blowfish
 blocks (each of the 1 + 2 × 1024 key expansions encrypts 521, the magic string
@@ -398,8 +397,8 @@ blocks (each of the 1 + 2 × 1024 key expansions encrypts 521, the magic string
 the single path at cpuinfo's 2.80 GHz; at the measured 3.2 GHz it is 173, 10.8
 cycles per half-round, against the 11-cycle chain one half-round waits on
 ([below](#the-half-rounds-critical-path)): the single path is latency-bound.
-Per lane, the widths take 103 (2), 81 (3), 67 (4), 67 (5) and 73 (6) cycles
-per block, and `crypt_r` 177.
+`crypt_r` takes 177. Per lane, on machine D at its measured 3.15 GHz, the
+widths take 94 (2), 71 (3), 57 (4), 50 (5) and 46 (6) cycles per block.
 
 **The four-lane kernel, read.** The loop of `bcryptBody4` after `opt -O3` and
 `llc`, from its `objdump`, is one round (two half-rounds) of all four lanes
@@ -464,19 +463,23 @@ instructions, with 20, 73, 45, 59 and 30 loads, for widths 2, 6, 4, 5 and 3.
 **The bounds.** Per lane half-round: the latency floor is the 11-cycle chain
 over the w lanes (about 2.8 cycles at four, 2.2 at five), the load-port bound
 is 5 loads over the core's 2 load ports (2.5 cycles, 2.8 with the reloads),
-and issue is 15.5 instructions at 4 a cycle (3.9 cycles). The measured 4.2
-(4 and 5 lanes) and 4.6 (6) cycles sit on the issue bound: from four lanes
-there are enough chains to hide the latency, and a wider kernel still issues
-the same instructions per lane, so five and six gain nothing on four.
+and issue is 15.5 instructions at 4 a cycle (3.9 cycles). On machine C, in
+the rows since replaced, the measured 4.2 (4 and 5 lanes) and 4.6 (6)
+cycles sat on the issue bound of a 4-wide core, and five and six gained
+nothing on four. Machine D's core issues 6 a cycle and has 3 load ports: its
+six lanes take 2.9 cycles per lane half-round, against an issue bound of 2.6
+(15.7 instructions) and a latency floor of 1.8, so there the wider kernels
+still gain.
 
 **Why the kernel is Nish and not C.** A C kernel was the alternative, and it
 would be C in `runtime/` holding the secret state outside the checker's
 `Secret` rules. The C to beat is the four-lane `bc_hash_n` of tigokraft:
-33.6 ms per hash built by gcc and 24.6 (23.0–27.0) by clang, against 22.2
-(21.9–25.2) for `bcryptHashN` at four lanes and 23.1 (22.0–26.4) for
-`bcryptHash4`. The Nish is ahead of gcc's build outside both spreads and of
-clang's by its median, inside the spreads; no C row beats it, so no C
-prototype was built.
+33.6 ms per hash built by gcc and 24.6 (23.0–27.0) by clang, against 23.1
+(22.0–26.4) for `bcryptHash4`. The Nish is ahead of gcc's build outside both
+spreads and of clang's by its median, inside the spreads; no C row beats it.
+The same interleave in C at five and six lanes was later built for the
+ceiling, and it does not beat Nish's best width either
+([below](#bmi2-and-x86-64-v3-measured-not-built)).
 
 **Machine B**, the run that pinned the half-round's order (`--rounds 9`, before
 the widths; a nominal 2.1 GHz), for comparison:
@@ -512,6 +515,122 @@ runs), so read them as their medians' order, not their ratios. The C rows of
 tigokraft are built with `-march=native`, as its build does, so they may use
 any instruction this CPU has. The Nish rows (no `--cpu x86-64-v3`) and the
 other C rows are built for baseline x86-64.
+
+### BMI2 and x86-64-v3: measured, not built
+
+The question was whether `bcryptHashN` leaves speed to a CPU's newer
+instructions: BMI2's `rorx`, `shrx` and `bextr` take a word's bytes out
+without the copy-and-shift baseline x86-64 needs, and one outside report had a
+BMI2 kernel halving the time. Four candidates were measured, each against the
+bar of the [Adler-32 verdict](../wp38-simd.md): a candidate ships only if it
+beats Nish's best width by at least 20%, in two runs, and by more than the
+noise band.
+The band is the module timed against a byte-identical copy of itself
+(`unroll.mjs`), which here moved by up to 18% (five lanes, once) and otherwise
+by 8.4% or less.
+
+- **`--cpu x86-64-v3`.** The same source built for v3, which lets LLVM use
+  BMI2 and AVX2.
+- **A hand kernel.** `bench/crypto/bcrypt/kernel/gen.mjs` writes the cost
+  loop's body in assembly at five and six lanes, with every lane's halves in
+  registers and nothing spilled, in four ways of taking the bytes:
+  `base-shr`, `base-ah` (baseline x86-64), `rorx-shr` and `rorx-ah` (BMI2).
+  This is the ceiling: what a runtime kernel in C or assembly could reach.
+- **The same interleave in C** under `cc -O2` (`kernel/harness.c`'s
+  `C_BODY`).
+- **An unrolled generator.** `gen-body.mjs --unroll` writes the eight round
+  pairs out with constant `P` offsets, as the hand kernel does.
+
+**Machines.** D is a quiet 4-core Xeon (Emerald Rapids) whose clock measures
+3.15 GHz. E is a shared 4-core Xeon of the same family, cpuinfo 2.10 GHz,
+measured 2.92 GHz, whose rows spread by up to 30%; its figures are two passes
+of `--rounds 9`. Both list `bmi2`, `avx2` and `avx512f`. No AMD and no AArch64
+core was measured.
+
+**Per width, default and v3** (`run.mjs --cpu-both`; ms per hash, then ns per
+Blowfish block, 1,067,721 blocks a cost-10 hash):
+
+| Lanes | D default | D v3 | E default, pass 1 / 2 | E v3, pass 1 / 2 | E v3 / default |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 56.9 (53.3 ns) | 57.5 (53.9) | 65.4 / 64.9 | 65.5 / 63.5 | 1.00 / 0.98 |
+| 2 | 31.8 (29.8) | 32.4 (30.3) | 36.9 / 36.1 | 35.8 / 35.7 | 0.97 / 0.99 |
+| 3 | 24.1 (22.6) | 23.5 (22.0) | 29.2 / 27.5 | 27.6 / 25.7 | 0.95 / 0.93 |
+| 4 | 19.4 (18.2) | 19.5 (18.3) | 25.6 / 23.5 | 23.1 / 20.8 | 0.90 / 0.88 |
+| 5 | 17.1 (16.0) | 17.7 (16.6) | 25.2 / 22.3 | 20.9 / 21.6 | 0.83 / 0.97 |
+| 6 | 15.7 (14.7) | 16.3 (15.3) | 23.7 / 24.5 | 20.2 / 21.2 | 0.85 / 0.86 |
+
+On the quiet machine v3 is level with the default at every width, within
+4% either way. On the noisy one it reads 3 to 17% faster from three lanes up,
+but the wide rows' spreads there are 16 to 31 ms on both builds and the
+ratios do not repeat (five lanes: 0.83, then 0.97). No width clears 20%.
+
+**The ceiling** (`ceiling.mjs`; ms per hash per lane, and Nish's best width's
+time over the row's, so above 1 is faster than Nish):
+
+| Body | D, 6 lanes | E pass 1, 5 / 6 lanes | E pass 2, 5 / 6 lanes |
+| --- | ---: | ---: | ---: |
+| Nish `bcryptHashN` | 16.5 | 24.4 / 22.4 | 18.3 / 19.6 |
+| hand `base-shr` | 16.5–16.8 | 20.8 (1.08) / 23.0 (0.97) | 18.6 (0.98) / 20.7 (0.88) |
+| hand `base-ah` | 16.5–16.8 | 20.4 (1.10) / 18.0 (1.24) | 17.7 (1.03) / 17.3 (1.05) |
+| hand `rorx-shr` | 15.1 (1.09) | 18.4 (1.22) / 19.0 (1.18) | 18.6 (0.98) / 18.5 (0.99) |
+| hand `rorx-ah` | 15.8 (1.04) | 18.9 (1.19) / 16.7 (1.34) | 19.1 (0.95) / 16.6 (1.10) |
+| C interleave, `cc -O2` | 16.0 (1.03) | 22.6 (0.99) / 23.3 (0.96) | 21.9 (0.83) / 21.3 (0.86) |
+
+On D the best hand kernel, BMI2's `rorx-shr` at six lanes, is 9% ahead of
+Nish's six lanes, under the bar. On E, `rorx-ah` at six lanes was 34% ahead
+in the first pass and 10% in the second: one run over 20%, not two. Its own
+median held at 16.6 to 16.7 ms in both; Nish's best moved from 22.4 to 18.3,
+and Nish's fastest rounds (15.8 to 16.9 ms) match the hand kernels'. The gap
+on E is the noise reaching Nish's rows, not a kernel Nish cannot reach. The
+unrolled bodies never beat the copy's band and were often slower (unrolled
+over module 0.95 to 1.15), so `gen-body.mjs --unroll` stays an option and
+`std/crypto/bcrypt.ts` is unchanged.
+
+**Why v3 does not help: the assembly.** In `bcryptBodyN` built with `-g`,
+the default and v3 round loops for widths 2, 6, 4, 5 and 3 are 58, 188, 123,
+154 and 90 instructions against 58, 188, 123, 150 and 88; both use 160
+`shr`/`movzx` pairs, and v3's loop holds no BMI2 instruction (the binary's two
+are an `andn` and a variable-count `shlx`, outside the body). LLVM 18 does not
+choose `shrx`, `rorx` or `bextr` for a shift by a constant on these Intel
+cores, where `shr` already costs one cycle; v3 only reschedules and saves a
+few spills (stack references at six lanes, 26 against 21). Nor is byte
+extraction the cost. Per lane half-round at six lanes, Nish issues about 15.7
+instructions, `base-shr` 15.3, `rorx-shr` and `base-ah` 13.3 and `rorx-ah`
+12.3: what the hand kernels save is the spills and reloads of 16 registers
+holding six lanes' halves, base and counter (Nish's six-lane round refers to
+the stack 26 times, the hand kernel's not at all), and `ah` saves as much as
+`rorx` does without BMI2.
+
+**AMD is open.** Zen cores run `shrx`, `rorx` and the `ah` registers at other
+costs, and LLVM's choices may differ under their `-mtune`. Nobody has run this there;
+`node bench/crypto/bcrypt/ceiling.mjs --rounds 9` on such a core answers it,
+and a hand kernel 20% ahead of Nish's best width in two runs reopens the
+question.
+
+**The outside claims do not reproduce.** "7.3 ms per hash on five lanes" at
+cost 10 is 6.8 ns per block, about 21 cycles per block at 3.15 GHz, 1.3
+cycles per lane half-round. A half-round reads five words; with 3 load ports
+that is 1.7 cycles at the least, so one core cannot do it at cost 10. The
+figure is another cost, several cores, or a different count. "BMI2 halved
+it": taking the bytes is 4 of about 15 instructions a half-round, and on D
+`rorx` gained 9% at most over Nish. A halving needs a slow starting point,
+not BMI2.
+
+**What a server checks first.** `bcryptHashN` runs only the lanes it is given
+as one computation, so a batch of six with two passwords in it runs two
+lanes, at 31.8 ms each on D rather than 15.7. A server that hashes logins as
+they arrive gets the six-lane speed only when six are waiting: the batch's
+fullness moves the time per password by up to 3.6 times, an instruction set
+by at most 9% here.
+
+Reproduce, on x86-64 with `cc` (`--cpu-both` refuses a CPU without `avx2` and
+`bmi2`; `ceiling.mjs` exits 0 and says why off x86-64 or without `bmi2`):
+
+```sh
+node bench/crypto/bcrypt/run.mjs --rounds 9 --cpu-both
+node bench/crypto/bcrypt/ceiling.mjs --rounds 9
+node bench/crypto/bcrypt/unroll.mjs --rounds 9 --widths 2,3,4,5,6
+```
 
 ### The half-round's critical path
 

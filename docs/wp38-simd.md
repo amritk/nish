@@ -998,6 +998,9 @@ against 27.0 GB/s at 64 KiB and 20.6 against 24.9 at 1 MiB, measured on this
 runner, is a 22% and a 17% gap, from one C-driver run: about twenty times the
 bench's band.
 
+(bcrypt's BMI2 and x86-64-v3 kernels were judged by the same bar:
+[measured, not built](security/crypto-bcrypt.md#bmi2-and-x86-64-v3-measured-not-built).)
+
 **Adler-32: measured, not built.** Whether `adler32Update` would gain from a
 vector kernel was measured before anything went near the runtime.
 `bench/adler32/kernel.c` holds two candidates beside a scalar C copy of the

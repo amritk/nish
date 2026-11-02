@@ -33,7 +33,12 @@ export const blocksPerHash = (cost) => 2 ** cost * 1042 + 713
  * `bcryptHashN` from `from` with lanes 0 to `width` - 1 given "U*U" under an
  * all-zero salt, `hashes` times, printing each given lane's last hash.
  */
-export const nishLoopN = (width, hashes, cost, from = "nish/crypto/bcrypt") => `import { bcryptHashN } from "${from}"
+export const nishLoopN = (
+  width,
+  hashes,
+  cost,
+  from = "nish/crypto/bcrypt"
+) => `import { bcryptHashN } from "${from}"
 import { Secret, secret, wipe } from "nish:secret"
 
 const given = (k: i32): Secret<u8[]> | null => {
