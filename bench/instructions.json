@@ -16,7 +16,7 @@
     "map-proto-ordered": { "n": 16384, "instructions": 253169464, "commit": "7b0a433", "valgrind": "valgrind-3.26.0" },
     "map-proto-ordered-fp": { "n": 16384, "instructions": 225848596 },
     "map-proto-ordered-fp32": { "n": 16384, "instructions": 238168375 },
-    "map-proto-unordered": { "n": 16384, "instructions": 209157905 },
+    "map-proto-unordered": { "n": 16384, "instructions": 209782412, "commit": "101f6331", "valgrind": "valgrind-3.22.0" },
     "map-wordcount": { "n": 16384, "instructions": 143348299, "commit": "85978edf", "valgrind": "valgrind-3.22.0" },
     "map-presize": { "n": 16384, "instructions": 70275137, "commit": "85978edf", "valgrind": "valgrind-3.22.0" },
     "map-vs-stringmap": { "n": 16384, "instructions": 390073478 },
