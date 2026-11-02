@@ -1,9 +1,11 @@
-# The TechEmpower json and plaintext entry
+# The TechEmpower entry
 
-A Nish entry for two of the TechEmpower Framework Benchmarks' (TFB) test
-types, `json` and `plaintext`, in the layout upstream keeps under
-`frameworks/<Language>/<name>/`: a benchmark config, and `nish.dockerfile` for
-the test named `default`. The config is `benchmark-config.json` here, because
+A Nish entry for every TechEmpower Framework Benchmarks (TFB) test type:
+`json` and `plaintext` (the test named `default`) and `db`, `query`,
+`update`, `cached-query` and `fortune` on Postgres (the test named
+`postgres`), in the layout upstream keeps under
+`frameworks/<Language>/<name>/`: a benchmark config, `nish.dockerfile` for
+the test named `default` and `nish-postgres.dockerfile` for `postgres`. The config is `benchmark-config.json` here, because
 the repository's file names are kebab-case (`npm run lint`); it becomes
 upstream's `benchmark_config.json` when it is copied into that layout (WP39
 D2). It is WP39's E5
@@ -11,9 +13,10 @@ D2). It is WP39's E5
 
 **It is not submitted.** Sending an entry to TechEmpower/FrameworkBenchmarks
 puts a public number on the project, so whether and when to do it is the
-owner's call (WP39 D1). The plan is after E8, once `fortune` passes the
-verifier too. Until then the entry is run and measured from this directory, and
-nothing here is sent upstream.
+owner's call (WP39 D1). The entry is run and measured from this directory,
+and nothing here is sent upstream: no pull request against
+TechEmpower/FrameworkBenchmarks, and no rank claimed from a run whose load
+generator shares the server's machine.
 
 ## What it answers
 
@@ -75,3 +78,97 @@ every built HTTP twin, under `wrk`: `/plaintext` 16-deep pipelined (with
 64, 128, 256 and 512. The server is pinned to CPU 0 and `wrk` to the others.
 Its header says the rest of the method. The recorded figures are in
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext).
+
+## The database entry
+
+`db-server.ts` is the handler and `db-main.ts` the program, run as one
+process a core by `nish/net/prefork`. Each worker builds its own
+`HttpHandler`, `PgPool` and `PgCarrier` (`nish/net/postgres-carrier`) on its
+own `SO_REUSEPORT` listener, so the workers share nothing and the kernel
+spreads connections across them.
+
+| Request | Answer |
+| --- | --- |
+| `GET /db` | one `{"id":n,"randomNumber":m}`, a random World row |
+| `GET /queries?queries=n` | an array of `n` random World rows |
+| `GET /updates?queries=n` | `n` random rows, each given a new `randomNumber` and written back |
+| `GET /cached-queries?count=n` | `n` random rows from an in-process copy of World |
+| `GET /fortunes` | the Fortune table plus "Additional fortune added at request time.", sorted by message, as an HTML table |
+
+The JSON answers are `application/json` and the fortunes page is
+`text/html; charset=utf-8`. Every answer carries `Server: nish` and `Date`.
+The count is read as TFB's rules read it. A count that is absent, empty, not a
+number, or below 1 is 1, and a count above 500 is 500. If the database fails a
+request, it is answered 503.
+
+- **Reads are batched across requests.** Every World id that an in-flight
+  `/db`, `/queries` or `/updates` asks for is keyed into one `PgBatcher`, so
+  one execution of `select ... where id = q.key` over an `unnest` of the keys
+  carries the ids of every request waiting in that turn. Each row is still a
+  read of its own id. TFB's rules forbid bulk-selecting a request's rows in
+  one `where id in (...)` query, and whether a cross-request batch counts as
+  such a query is the verifier's and the maintainers' call. That risk is open
+  until the entry is shown to them, which this stage does not do.
+- **An update is one statement.** A request's ids are sorted and made
+  distinct, which keeps concurrent updates from deadlocking. Rows sharing an id
+  share its new number. The update is
+  `update world ... from (select unnest($1::int8[]), unnest($2::int8[]))`.
+- **Cached queries are read from memory.** Each worker reads World once at
+  start-up into an array and answers from it. No response is cached.
+- **Fortunes are rendered into one reused buffer.** The rows are sorted by
+  their UTF-8 bytes, `& < > " '` are escaped as `&amp; &lt; &gt; &quot; &#39;`,
+  and every other byte, the Japanese row's included, is copied untouched.
+
+`tests/link/tfb_db` checks all of this over loopback against a stand-in
+Postgres: bodies, headers, clamping, batching across five clients, the update's
+ids, the exact fortunes page and the 503. `tests/postgres/live/run.mjs tfb`
+checks it against a real server with TFB's tables and two workers.
+
+```bash
+build/nish bench/techempower/db-main.ts --link build/tfb/db-entry --profile speed
+# db-main <pgPort> <user> <password> <database> [port] [host] [pgHost] [workers] [connections]
+build/tfb/db-entry 5432 benchmarkdbuser benchmarkdbpass hello_world 8080 127.0.0.1 127.0.0.1 0 4
+curl -i 'http://127.0.0.1:8080/queries?queries=5'
+```
+
+`pgHost` must be a numeric address or a Unix socket path, because the carrier
+resolves no names. The image resolves `tfb-database` with `getent` when it
+starts.
+
+### Not measured here
+
+`run.sh` times `json` and `plaintext` with `wrk`. No load generator has
+measured the database tests, and none can be trusted to. TFB runs its load
+generator, its server and its database on three machines. This project has one,
+and a client that shares the server's cores measures their contention, not the
+server. The database tests have been checked for correctness only. No figure
+for them is recorded in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md), and no
+rank is claimed.
+
+### Pinning workers to cores
+
+The workers are not pinned. The kernel picks a listener for each connection
+by hashing its address, and a worker runs on whichever core the scheduler
+gives it. Pinning each worker to its own core, and steering each connection to
+the worker on the core that took its interrupt, needs:
+
+1. **A builtin that sets CPU affinity**, for example
+   `setCpuAffinity(cpu: i32): i32` in `nish:process`, answering 0 or a negated
+   errno. Its C, `nish_set_cpu_affinity`, goes in `runtime/runtime-os.c` as a
+   `sched_setaffinity(0, ...)` on one CPU, and it needs a
+   `sched_getaffinity` read so that a cgroup's mask is respected.
+2. **Its classification in `src/c-symbols.ts`**, so that a program's own
+   function cannot take that symbol, and its checker signature.
+3. **Its security record.** It does not read the network, but a builtin
+   that changes the process's scheduling is in scope under `docs/security/`,
+   with an index row and a `scripts/security-scope.mjs` entry for the file.
+4. **`SO_INCOMING_CPU` and a classic BPF program on the reuseport group**: a
+   `tcpListenFlags` flag that sets `SO_INCOMING_CPU`, and a
+   `SO_ATTACH_REUSEPORT_CBPF` program that returns
+   `cpu % workers`, which needs a builtin taking the filter. Without that,
+   pinning the workers does not keep a connection on its interrupt's core.
+5. **`PreforkConfig.pin`**, which pins worker `k` to the `k`-th CPU of the
+   allowed mask once (1) lands, in `std/net/prefork.ts`.
+
+Items 1 to 4 are in `src/` and `runtime/`, outside this entry, and the
+rolling freeze means `std/` can call the builtin only after a release ships it.
