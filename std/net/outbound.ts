@@ -7,13 +7,13 @@
  * reaches services that trust the program's address.
  *
  *     import { OutboundPolicy } from "nish/net/outbound";
- *     import { HttpOptions } from "nish/net/http-client";
+ *     import { HttpOptions } from "nish/net/fetch";
  *
  *     const options = new HttpOptions();
  *     options.outbound = new OutboundPolicy();
  *
  * **The check is on the address, after the lookup.** A name is never judged
- * by its text: `nish/net/http-client` resolves it, drops every address
+ * by its text: `nish/net/fetch` resolves it, drops every address
  * `outboundAddressAllowed` refuses, and connects only to the bytes it kept,
  * with no second lookup, so a name whose answer changes between a check and
  * a connect (DNS rebinding) cannot move the connection. Every redirect hop is

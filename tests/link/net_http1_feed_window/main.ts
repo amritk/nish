@@ -2,7 +2,7 @@
 // "Http1Parser: the window is outside the buffer" on stderr) rather than
 // parsing a short read: a request read from the wrong bytes looks exactly like
 // one read from the right ones. Stdout stops at the line before the call.
-import { Http1Parser } from "nish/net/http1";
+import { Http1Parser } from "nish/net/http1-codec";
 
 export const main = (): i32 => {
   const p: Http1Parser = new Http1Parser(64, 512, 16, 1024);

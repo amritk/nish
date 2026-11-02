@@ -8,7 +8,7 @@
 // finds the first request's route, not a 404; a HEAD answered there gets no
 // body and an HTTP/1.0 client is not sent chunked; the next request reads
 // whole after.
-import { HTTP1_CHUNKED, HTTP1_END, HTTP1_HEAD, Http1Parser } from "nish/net/http1"
+import { HTTP1_CHUNKED, HTTP1_END, HTTP1_HEAD, Http1Parser } from "nish/net/http1-codec"
 import { HTTP_CODING_GZIP, HTTP_CODING_IDENTITY, HttpCompressor } from "nish/net/http-compress"
 import { DEFLATE_FAST } from "nish/compress/deflate"
 import { H1_END, H1_REQUEST, Http1Config, Http1Connection } from "nish/net/http1-server"

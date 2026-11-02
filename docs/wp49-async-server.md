@@ -172,7 +172,7 @@ between two `await`s, as in Node.
 Everything else is ordinary Nish in `std/`, written as `async` functions over
 those three and the sans-IO codecs that already exist:
 
-- `fetch` drives `nish/net/http1-client`'s request writer and response
+- `fetch` drives `nish/net/http1-client-codec`'s request writer and response
   parser;
 - the Postgres pool drives `nish/net/postgres`;
 - `serve` drives `nish/net/handler`'s machinery;

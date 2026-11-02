@@ -51,10 +51,10 @@ the decoder rebuild its tables for each (COMP-8).
 | `runtime/runtime-checksum.c` | `nish_crc32_hw`, `nish_crc32_update`, `nish_crc32_path`, `nish_crc32_cpu`, `nish_crc32_sysctl`, `nish_crc32_clmul`, `nish_crc32_fold`, `nish_crc32_bytes`, `nish_crc32_arm`, `nish_crc32_insn`: the CRC-32 kernels `Crc32.update` runs where the CPU has them |
 | `src/kernels.ts`, `src/emit.ts` | `isCrc32Seam`, `emitCrc32KernelArm`: the call that hands `crc32Walk`'s window to the kernel |
 | `std/net/http-compress.ts` | `httpAcceptEncoding`, `httpQValue`, `httpCodingIs`, `httpIdentityRefused`, `httpSegments`, `HttpCompressor` |
-| `std/net/http1-server.ts` | `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded`, `unrespond` (the rest of the file is `http1.md`'s) |
+| `std/net/http1-server.ts` | `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded`, `unrespond` (the rest of the file is `http1-codec.md`'s) |
 
 Out of scope: what a program does with decompressed bytes, and the carriers
-that hand it a body or a field value (`http1.md`, `http2.md`, `http3.md`).
+that hand it a body or a field value (`http1-codec.md`, `http2.md`, `http3.md`).
 
 ## Threat model
 

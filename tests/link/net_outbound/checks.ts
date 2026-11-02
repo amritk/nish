@@ -1,4 +1,4 @@
-// nish/net/outbound, alone and as nish/net/http-client's outbound policy.
+// nish/net/outbound, alone and as nish/net/fetch's outbound policy.
 //
 // The first half is pure: which addresses are public, what `permit` and
 // `allowHost` let through, and what `outboundFilter` keeps of a lookup's
@@ -11,7 +11,7 @@
 // and a child of the same binary fetches, since a blocking client and its
 // server cannot share a thread.
 
-import { HTTP_E_BLOCKED, HTTP_E_BODY_TOO_LARGE, HTTP_E_NONE, HTTP_E_REFUSED, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_TOTAL_TIMEOUT, HTTP_E_URL, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName, httpFetch } from "nish/net/http-client";
+import { HTTP_E_BLOCKED, HTTP_E_BODY_TOO_LARGE, HTTP_E_NONE, HTTP_E_REFUSED, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_TOTAL_TIMEOUT, HTTP_E_URL, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName, fetchSync } from "nish/net/fetch";
 import { OutboundPolicy, outboundAddressAllowed, outboundAddressPublic, outboundAddressText, outboundFilter, outboundHostAllowed } from "nish/net/outbound";
 import { dnsParseAddress } from "nish/net/dns-config";
 import { netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollRemove, pollWait, tcpAccept, tcpListen } from "nish:net";
@@ -360,13 +360,13 @@ const pureChecks = (t: Tally): void => {
 const policy = (): OutboundPolicy => new OutboundPolicy();
 
 /** A client, with `policy` as its outbound policy when it is not null, following redirects across origins. */
-const client = (outbound: OutboundPolicy | null): HttpClient => {
+const client = (outbound: OutboundPolicy | null): FetchSyncClient => {
   const options: HttpOptions = new HttpOptions();
   options.useEnvProxy = false;
   options.followRedirects = true;
   options.crossOriginRedirects = true;
   options.outbound = outbound;
-  return new HttpClient(options);
+  return new FetchSyncClient(options);
 };
 
 const bodyOf = (res: HttpResponse | null): string => {
@@ -390,11 +390,11 @@ const decimalOf = (s: string): i32 => {
 const acceptsOf = (base: string): i32 => {
   const options: HttpOptions = new HttpOptions();
   options.useEnvProxy = false;
-  return decimalOf(bodyOf(httpFetch(new HttpRequest("GET", `${base}/accepts`), options)));
+  return decimalOf(bodyOf(fetchSync(new HttpRequest("GET", `${base}/accepts`), options)));
 };
 
 /** Fetches `url` on `c`: "ok <body>", or the error's name and text. */
-const fetchText = (c: HttpClient, url: string): string => {
+const fetchText = (c: FetchSyncClient, url: string): string => {
   const res: HttpResponse | null = c.fetch(new HttpRequest("GET", url));
   if (res === null) {
     return c.errorText;
@@ -415,7 +415,7 @@ const beforeAfter = (t: Tally, base: string, url: string, before: string, after:
     console.log(`  got: ${open}`);
   }
   const was: i32 = acceptsOf(base);
-  const c: HttpClient = client(after);
+  const c: FetchSyncClient = client(after);
   const got: string = fetchText(c, url);
   const now: i32 = acceptsOf(base);
   t.check(c.error === HTTP_E_BLOCKED && got.indexOf(refusedAt) >= 0, `with one, ${text} is HTTP_E_BLOCKED, naming ${refusedAt}`);
@@ -460,7 +460,7 @@ const fetchChecks = (t: Tally, port: i32): void => {
   const v6only: OutboundPolicy = policy();
   v6only.permit("::1/128");
   const beforeMixed: i32 = acceptsOf(base);
-  const mixed: HttpClient = client(v6only);
+  const mixed: FetchSyncClient = client(v6only);
   const mixedGot: string = fetchText(mixed, `http://localhost:${port}/hello`);
   const afterMixed: i32 = acceptsOf(base);
   t.check(mixedGot !== "ok hello" && mixed.error !== HTTP_E_NONE && mixed.error !== HTTP_E_BLOCKED && afterMixed === beforeMixed + 1, "on a mixed answer only the addresses kept are dialled: ::1 permitted, 127.0.0.1 is never connected to");
@@ -474,9 +474,9 @@ const fetchChecks = (t: Tally, port: i32): void => {
   const spellings: string[] = ["2130706433", "0177.0.0.1", "0x7f.0.0.1", "0x7f.1", "127.1"];
   for (let i: i32 = 0; i < toI32(spellings.length); i++) {
     const was: i32 = acceptsOf(base);
-    const open: HttpClient = client(null);
+    const open: FetchSyncClient = client(null);
     fetchText(open, `http://${spellings[i]}:${port}/hello`);
-    const odd: HttpClient = client(policy());
+    const odd: FetchSyncClient = client(policy());
     fetchText(odd, `http://${spellings[i]}:${port}/hello`);
     const now: i32 = acceptsOf(base);
     t.check(open.error === HTTP_E_URL && odd.error === HTTP_E_URL && now === was + 1, `${spellings[i]} is HTTP_E_URL with a policy or without, and never connected to`);
@@ -484,37 +484,37 @@ const fetchChecks = (t: Tally, port: i32): void => {
 
   // From here the server's own address is permitted, and the redirects it
   // answers point elsewhere on the host.
-  const permitted: HttpClient = client(own());
+  const permitted: FetchSyncClient = client(own());
   t.check(fetchText(permitted, `${base}/to-hello`) === "ok hello" && permitted.error === HTTP_E_NONE, "a permitted address is reached, a redirect to it too");
   t.check(fetchText(client(own()), `${base}/to-localhost`) === "ok hello", "a redirect to a name is followed when an address it resolves to is permitted");
-  const second: HttpClient = client(own());
+  const second: FetchSyncClient = client(own());
   t.check(fetchText(second, `${base}/to-loopback-2`).indexOf("127.0.0.2") >= 0 && second.error === HTTP_E_BLOCKED, "a redirect to another loopback address is blocked at the hop");
-  const mapped: HttpClient = client(own());
+  const mapped: FetchSyncClient = client(own());
   t.check(fetchText(mapped, `${base}/to-mapped`).indexOf("127.0.0.2") >= 0 && mapped.error === HTTP_E_BLOCKED, "and so is one to it written as an IPv4-mapped IPv6 literal");
-  const v6: HttpClient = client(own());
+  const v6: FetchSyncClient = client(own());
   t.check(fetchText(v6, `${base}/to-v6-loopback`).indexOf("0:0:0:0:0:0:0:1") >= 0 && v6.error === HTTP_E_BLOCKED, "and one to [::1]");
-  const meta: HttpClient = client(own());
+  const meta: FetchSyncClient = client(own());
   t.check(fetchText(meta, `${base}/to-metadata`).indexOf("169.254.169.254") >= 0 && meta.error === HTTP_E_BLOCKED, "and one to the metadata address, before any connect is tried");
 
   // The host allowlist, checked on the URL and on every hop.
-  const listed: HttpClient = client(named());
+  const listed: FetchSyncClient = client(named());
   t.check(fetchText(listed, `${base}/hello`) === "ok hello", "an allowed host is fetched");
   beforeAfter(t, base, `${base}/to-localhost`, "ok hello", named(), "does not allow", 1, "a redirect to a host not on the allowlist");
-  const other: HttpClient = client(named());
+  const other: FetchSyncClient = client(named());
   t.check(fetchText(other, `http://localhost:${port}/hello`).indexOf("does not allow") >= 0 && other.error === HTTP_E_BLOCKED, "a URL naming a host not on it is blocked before the lookup");
   beforeAfter(t, base, `http://allowed.test@127.0.0.1:${port}/hello`, "ok hello", trick(), "does not allow", 0, "an allowed name in the userinfo");
 
   // A connection kept from before a policy was set never skips its address check.
-  const kept: HttpClient = client(null);
+  const kept: FetchSyncClient = client(null);
   t.check(fetchText(kept, `${base}/hello`) === "ok hello" && fetchText(kept, `${base}/hello`) === "ok hello" && kept.reused, "without a policy, a kept connection is reused");
   kept.options.outbound = policy();
   t.check(fetchText(kept, `${base}/hello`).indexOf("127.0.0.1 resolves to 127.0.0.1") >= 0 && kept.error === HTTP_E_BLOCKED, "once a policy is set, the connection kept from before it is not reused, and the fetch is HTTP_E_BLOCKED");
 
   // A proxy looks the name up itself, so under a policy none is used.
-  const viaProxy: HttpClient = client(null);
+  const viaProxy: FetchSyncClient = client(null);
   viaProxy.setProxies("http://127.0.0.1:1", "", "");
   t.check(viaProxy.fetch(new HttpRequest("GET", `${base}/hello`)) === null && viaProxy.error === HTTP_E_REFUSED, "without a policy, a fetch goes to the proxy (here one nothing listens on)");
-  const direct: HttpClient = client(own());
+  const direct: FetchSyncClient = client(own());
   direct.setProxies("http://127.0.0.1:1", "", "");
   t.check(fetchText(direct, `${base}/hello`) === "ok hello", "with one, the proxy is ignored and the fetch goes direct");
 
@@ -522,24 +522,24 @@ const fetchChecks = (t: Tally, port: i32): void => {
   const hops: OutboundPolicy = own();
   hops.maxRedirects = 2;
   t.check(fetchText(client(null), `${base}/hops-3`) === "ok landed", "without a policy, three redirects are followed");
-  const capped: HttpClient = client(hops);
+  const capped: FetchSyncClient = client(hops);
   t.check(fetchText(capped, `${base}/hops-2`) === "ok landed", "under a policy of two, two are");
   fetchText(capped, `${base}/hops-3`);
   t.check(capped.error === HTTP_E_TOO_MANY_REDIRECTS, "and three are HTTP_E_TOO_MANY_REDIRECTS");
   const small: OutboundPolicy = own();
   small.maxBodyBytes = toI64(10);
   t.check(fetchText(client(null), `${base}/big`) === "ok 0123456789012345678901234567890123456789", "without a policy, a 40-byte body is read");
-  const tight: HttpClient = client(small);
+  const tight: FetchSyncClient = client(small);
   fetchText(tight, `${base}/big`);
   t.check(tight.error === HTTP_E_BODY_TOO_LARGE, "under a policy capping bodies at 10 bytes, it is HTTP_E_BODY_TOO_LARGE");
   t.check(fetchText(client(null), `${base}/big-chunked`) === "ok 0123456789012345678901234567890123456789", "without a policy, the same body in chunks is read");
-  const tightChunked: HttpClient = client(small);
+  const tightChunked: FetchSyncClient = client(small);
   fetchText(tightChunked, `${base}/big-chunked`);
   t.check(tightChunked.error === HTTP_E_BODY_TOO_LARGE, "and under the 10-byte cap, chunks declaring no total length are HTTP_E_BODY_TOO_LARGE as they stream");
   const quick: OutboundPolicy = own();
   quick.totalTimeoutMs = 200;
   t.check(fetchText(client(null), `${base}/drip`).length === 43, "without a policy, a body dripped over most of a second is read");
-  const hurried: HttpClient = client(quick);
+  const hurried: FetchSyncClient = client(quick);
   fetchText(hurried, `${base}/drip`);
   t.check(hurried.error === HTTP_E_TOTAL_TIMEOUT && hurried.errorText.indexOf("200 ms") >= 0, "under a policy of 200 ms with no total timeout of the options', it is HTTP_E_TOTAL_TIMEOUT");
 };

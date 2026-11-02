@@ -2,7 +2,7 @@
  * `nish/net/upstream` — outbound HTTP/1.1 calls from a route handler that
  * never block its worker: a pool of keep-alive connections to one origin,
  * registered on the `HttpHandler`'s own poll loop and read through the
- * `nish/net/http1-client` codec.
+ * `nish/net/http1-client-codec` codec.
  *
  *     const h = new HttpHandler(new HandlerLimits(), listener, router)
  *     const users = new Upstream(h, "http://127.0.0.1:9000", new UpstreamLimits())
@@ -87,8 +87,8 @@ import {
   HTTP1_HEAD,
   HTTP1_NEED_MORE,
   HTTP1_NO_BODY,
-} from "nish/net/http1"
-import { HTTP1_INFORMATIONAL, Http1ResponseParser, http1WriteRequestHead } from "nish/net/http1-client"
+} from "nish/net/http1-codec"
+import { HTTP1_INFORMATIONAL, Http1ResponseParser, http1WriteRequestHead } from "nish/net/http1-client-codec"
 import { OutboundPolicy, outboundAddressText, outboundFilter, outboundHostAllowed } from "nish/net/outbound"
 import { Url, urlParse } from "nish/net/url"
 import {

@@ -14,7 +14,7 @@ import H1_WRITE from "nish/net/http1-server" -> const H1_WRITE
 import Http1Config from "nish/net/http1-server" -> struct Http1Config
 import Http1Connection from "nish/net/http1-server" -> struct Http1Connection
 import Http1Server from "nish/net/http1-server" -> struct Http1Server
-import Http1Parser from "nish/net/http1" -> struct Http1Parser
+import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
 import JsonWriter from "nish/json" -> struct JsonWriter
 const TFB_LISTENER: i32 = -1 [exported]
 const ZERO: i32 = 0

@@ -1,4 +1,4 @@
-// Fetches a JSON document over HTTP or HTTPS with `nish/net/http-client` and
+// Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and
 // prints the fields named on the command line, or the whole document when
 // none are named:
 //
@@ -12,7 +12,7 @@
 // and 2, with how to run it, without a URL.
 // smoke: exit 2
 import { jsonField } from "nish/json"
-import { HttpClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/http-client"
+import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch"
 import { getenv } from "nish:process"
 
 /** The most of a body this reads; a larger one is refused rather than held. */
@@ -38,7 +38,7 @@ export const main = (): i32 => {
     options.rootsPemPath = roots
   }
 
-  const client: HttpClient = new HttpClient(options)
+  const client: FetchSyncClient = new FetchSyncClient(options)
   const res: HttpResponse | null = client.fetch(req)
   if (res === null) {
     console.error(client.errorText)

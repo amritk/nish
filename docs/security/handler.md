@@ -13,7 +13,7 @@ commit to change it on the head that merges this record.
 
 **Result.** The handler adds no parser of its own: the request line, the
 fields, the body framing, the caps and the timeouts are the carrier's
-(`docs/security/http1.md`), and routing is the router's
+(`docs/security/http1-codec.md`), and routing is the router's
 (`docs/security/router.md`). What it adds is bookkeeping — copying a head out
 of the carrier, gathering a body, queueing whole requests and handing answers
 back — and each piece of it is bounded by a limit the program set: a body by
@@ -37,8 +37,8 @@ are recorded as accepted: how many taken requests it holds unanswered
 | --- | --- |
 | `std/net/handler.ts` | `HandlerLimits`; `HttpRequest` (`methodIs`, `pathIs`, `paramStart`, `paramEnd`, `paramIs`, `param`, `paramDecimal`, `checkParam`, `query`, `hasQuery`, `queryIndex`, `header`, `valueStart`, `valueEnd`, `headerIs`); `HttpHandler` (`watch`, `fired`, `wait`, `expireBodies`, `drain`, `acceptAll`, `drive`, `roomy`, `begin`, `route`, `gather`, `whole`, `enqueue`, `resume`, `pushPending`, `finish`, `obtain`, `release`, `releaseReading`, `closeSlot`, `forget`, `sweep`, `ready`, `take`, `live`, `pooled`, `connections`, `start`, `write`, `keep`, `end`, `send`, `sendFields`, `empty`, `json`, `sendJson`, `problem`, `writeProblem`, `writeProblemObject`, `refuse`, `allowFor`); the helpers `handlerAllowAppend`, `handlerGrown`, `handlerSpanIs`, `handlerDecimal`, `handlerFormByte`, `handlerFormIs`, `handlerFormDecode` |
 
-Out of scope: the carrier (`std/net/http1-server.ts`, `std/net/http1.ts`;
-`docs/security/http1.md`), which has refused a malformed or oversized head,
+Out of scope: the carrier (`std/net/http1-server.ts`, `std/net/http1-codec.ts`;
+`docs/security/http1-codec.md`), which has refused a malformed or oversized head,
 a bad body framing and a body past the cap before the handler sees a byte of
 it; the router (`docs/security/router.md`); and what a program does with a
 request once it has taken it. `examples/http-app` is an example, not a

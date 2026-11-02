@@ -69,7 +69,7 @@ export const ROUTER_BAD_ESCAPE: i32 = -10
 /** `routerDecode`: the decoded bytes do not fit `out`; nothing was written. */
 export const ROUTER_NO_ROOM: i32 = -11
 
-/** The longest method `add` takes, as `nish/net/http1`'s `HTTP1_MAX_METHOD`. */
+/** The longest method `add` takes, as `nish/net/http1-codec`'s `HTTP1_MAX_METHOD`. */
 const ROUTER_MAX_METHOD: i32 = 32
 /** No node or route: an `i32` spelled once, so that `--number-mode f64` does not read a bare `-1` as a double. */
 const ROUTER_NONE: i32 = -1

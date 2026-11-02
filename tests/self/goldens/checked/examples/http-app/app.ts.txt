@@ -4,7 +4,7 @@ import JsonWriter from "nish/json" -> struct JsonWriter
 import jsonField from "nish/json" -> function @nish.jsonField
 import HttpHandler from "nish/net/handler" -> struct HttpHandler
 import HttpRequest from "nish/net/handler" -> struct HttpRequest
-import http1Text from "nish/net/http1" -> function @nish.http1Text
+import http1Text from "nish/net/http1-codec" -> function @nish.http1Text
 import ROUTER_METHOD_NOT_ALLOWED from "nish/net/router" -> const ROUTER_METHOD_NOT_ALLOWED
 import Router from "nish/net/router" -> struct Router
 import RouterLimits from "nish/net/router" -> struct RouterLimits

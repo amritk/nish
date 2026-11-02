@@ -93,7 +93,7 @@ with `release`; releasing it twice panics.
   not `r.body.length`: the buffer is reused.
 - Otherwise `r.error` says why:
   - The response was malformed: one of the HTTP/1.1 codec's `HTTP1_E_` codes
-    from `nish/net/http1-client`. For example, `HTTP1_E_BODY_LIMIT` is a body
+    from `nish/net/http1-client-codec`. For example, `HTTP1_E_BODY_LIMIT` is a body
     past `maxBody` and `HTTP1_E_TRUNCATED` is a response cut short.
   - The call failed for another reason, with one of the codes below.
 

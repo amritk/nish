@@ -1,12 +1,12 @@
 /**
- * `nish/net/http1` — an incremental HTTP/1.1 request parser and a response
+ * `nish/net/http1-codec` — an incremental HTTP/1.1 request parser and a response
  * writer, sans-IO: bytes in, events and bytes out, and no socket anywhere.
  *
  * **The parser** is a push-pull machine. A caller `feed`s whatever slice the
  * socket gave it, of any length and cut anywhere, and then calls `next()`
  * until it answers `HTTP1_NEED_MORE`:
  *
- *     import { Http1Parser, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1";
+ *     import { Http1Parser, HTTP1_HEAD, HTTP1_BODY, HTTP1_END, HTTP1_ERROR } from "nish/net/http1-codec";
  *
  *     const p = new Http1Parser(maxTarget, maxHeaderBytes, maxHeaders, maxBody);
  *     p.feed(received, 0, n);
