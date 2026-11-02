@@ -82,6 +82,8 @@ export declare function readSignal(fd: i32): i32;
 /** These two have no reading under Node: each throws, naming itself. */
 export declare function setNice(n: i32): i32;
 export declare function setIdlePriority(): i32;
+/** -95: there is no affinity call under Node. */
+export declare function setCpuAffinity(cpu: i32): i32;
 /** What each `nish:net` function is under the core: a throw naming `name`. */
 export declare function noNetReading(name: string): never;
 /** What `readStdin`, `waitStdin`, `setRawMode` and `setTerminalRestore` are under the core: a throw naming `name`. */

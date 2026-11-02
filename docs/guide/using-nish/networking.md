@@ -291,12 +291,60 @@ or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
 the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
-The workers are not pinned to cores. Each one binds the port with
+By default the workers are not pinned to cores. Each one binds the port with
 `SO_REUSEPORT`, the kernel picks a worker for each new connection by hashing
-its address, and the scheduler runs each worker on any core it allows. No
-builtin sets CPU affinity yet, so a worker cannot be kept on one core, and a
-connection cannot be steered to the worker on the core that took its packets.
-`bench/techempower/README.md` lists what pinning needs.
+its address, and the scheduler runs each worker on any core it allows. To keep
+each worker on its own core and steer each connection to it, use a
+config-owned listener with `pin`, below.
+
+### One core per worker
+
+Set `listenPort` and the supervisor binds the listeners itself, one per
+worker, before any worker starts: worker `k` takes its own with
+`preforkListener(process.argv)` and accepts from it, and gets the same one
+back after a restart. `listenHost`, `listenBacklog` and `listenFlags` (`0`, or
+`2` for `TCP_NODELAY`) shape them; port `0` picks a free port for the whole
+group.
+
+Add `pin = true` and worker `k` also pins itself to CPU `k`
+(`setCpuAffinity`), and on Linux the listeners steer each connection to the
+worker on the CPU that received it, so a connection's packets and the worker
+that answers it share a core's caches:
+
+```ts nish:ok
+import { PREFORK_STOPPED, PreforkConfig, preforkListener, preforkWith } from "nish/net/prefork";
+
+export const main = (): i32 => {
+  const config = new PreforkConfig();
+  config.listenPort = 8080;
+  config.pin = true;
+  const worker = preforkWith(process.argv, config);
+  if (worker === PREFORK_STOPPED) {
+    return 0;
+  }
+  if (worker < 0) {
+    return 1;
+  }
+  const listener = preforkListener(process.argv);
+  // Accept and serve on `listener` here.
+  return listener >= 0 ? 0 : 1;
+};
+```
+
+Pinning is for a machine the server has to itself: each worker owns a core,
+so `workers` should be at most `availableParallelism()`, and on Linux **more pinned
+workers than CPUs stops the program with a panic** rather than doubling two
+workers up on one core. That count is `availableParallelism()`, which a
+container's CPU quota or `NISH_NUM_THREADS` lowers. A CPU outside the ones the
+program may run on (`taskset`, a container's cpuset) is never taken, and worker
+`k` asks for CPU *number* `k`, not the `k`-th CPU allowed: under
+`taskset -c 4-7` every pin fails, each worker says so on stderr and runs
+unpinned, and a connection received on CPU 4 or above, past the listeners,
+falls back to the kernel's hash. Run a pinned server on CPUs that start at 0.
+Off Linux the workers run
+unpinned and unsteered, and the supervisor says so on stderr. A `listenPort`
+outside `-1..65535`, a `listenBacklog` of 0 or less, or other `listenFlags`
+stop the program with a panic.
 
 ### Workers that are not restarted
 

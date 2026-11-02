@@ -577,6 +577,11 @@ int32_t nish_set_nice(int32_t n);
  * negative errno; -95 (Linux's EOPNOTSUPP) elsewhere, -ENOSYS under WASI. An
  * unprivileged process cannot leave the policy again. */
 int32_t nish_set_idle_priority(void);
+/* `setCpuAffinity(cpu)`: this process pinned to CPU `cpu` alone
+ * (`sched_setaffinity`, Linux), 0 or a negative errno. Narrow-only: a CPU not
+ * in the current mask, negative, or past `CPU_SETSIZE` is -22 (-EINVAL) with
+ * no system call. -95 (Linux's EOPNOTSUPP) elsewhere, -ENOSYS under WASI. */
+int32_t nish_set_cpu_affinity(int32_t cpu);
 
 /* ---- The environment (WP19 R1) ------------------------------------------
  * `getenv(name)`: the value of environment variable `name`, copied into the
@@ -679,7 +684,10 @@ bool nish_is_executable(const nish_str *path);
  * `nish_tcp_listen(host, port, backlog)`: `SO_REUSEADDR`, and `::` hears
  * both families, or IPv4 alone on a kernel without IPv6.
  * `nish_tcp_listen_flags(host, port, backlog, flags)`: the same listener,
- * with `SO_REUSEPORT` for flag 1 (any other bit is -22).
+ * with `SO_REUSEPORT` for flag 1, `TCP_NODELAY` on each accepted socket for
+ * flag 2, and, for flag 4 with flag 1, a reuseport program steering each new
+ * connection to the listener bound at the index of the CPU that received it
+ * (Linux; -95 elsewhere). Any other bit, or 4 without 1, is -22.
  * `nish_tcp_accept(fd, peer)`: a new descriptor and the peer's address.
  * `nish_net_read` / `nish_net_write(fd, buf, off, len)`: bytes `[off, off +
  * len)` of `buf`, which the compiled call has range-checked; a write to a

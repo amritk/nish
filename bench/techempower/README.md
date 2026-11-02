@@ -169,28 +169,22 @@ rank is claimed.
 
 ### Pinning workers to cores
 
-The workers are not pinned. The kernel picks a listener for each connection
-by hashing its address, and a worker runs on whichever core the scheduler
-gives it. Pinning each worker to its own core, and steering each connection to
-the worker on the core that took its interrupt, needs:
+With more than one worker, `db-main` hands the listeners to
+`nish/net/prefork`: the supervisor binds one `SO_REUSEPORT` listener a worker
+with `TCP_NODELAY`, and sets `PreforkConfig.pin`. On Linux, worker `k` pins
+itself to CPU `k`, and a classic BPF program on the reuseport group sends each
+connection to the listener whose index is the CPU that received it, so a
+connection is served on the core that took its interrupt. A worker that cannot
+be pinned says so on stderr and runs unpinned. One process (`workers` 1) binds
+its own listener and is not pinned.
 
-1. **A builtin that sets CPU affinity**, for example
-   `setCpuAffinity(cpu: i32): i32` in `nish:process`, answering 0 or a negated
-   errno. Its C, `nish_set_cpu_affinity`, goes in `runtime/runtime-os.c` as a
-   `sched_setaffinity(0, ...)` on one CPU, and it needs a
-   `sched_getaffinity` read so that a cgroup's mask is respected.
-2. **Its classification in `src/c-symbols.ts`**, so that a program's own
-   function cannot take that symbol, and its checker signature.
-3. **Its security record.** It does not read the network, but a builtin
-   that changes the process's scheduling is in scope under `docs/security/`,
-   with an index row and a `scripts/security-scope.mjs` entry for the file.
-4. **`SO_INCOMING_CPU` and a classic BPF program on the reuseport group**: a
-   `tcpListenFlags` flag that sets `SO_INCOMING_CPU`, and a
-   `SO_ATTACH_REUSEPORT_CBPF` program that returns
-   `cpu % workers`, which needs a builtin taking the filter. Without that,
-   pinning the workers does not keep a connection on its interrupt's core.
-5. **`PreforkConfig.pin`**, which pins worker `k` to the `k`-th CPU of the
-   allowed mask once (1) lands, in `std/net/prefork.ts`.
+Two limits follow from mapping worker `k` to CPU number `k`:
 
-Items 1 to 4 are in `src/` and `runtime/`, outside this entry, and the
-rolling freeze means `std/` can call the builtin only after a release ships it.
+- **The allowed CPUs should start at 0.** Worker `k` asks for CPU number `k`,
+  not the `k`-th CPU the process may run on. Under `taskset -c 4-7` every pin
+  fails and the workers run unpinned, and a connection received on CPU 4 or
+  above, past the group, falls back to the kernel's hash.
+- **More workers than allowed CPUs panic.** The count is
+  `availableParallelism()`, which a cgroup CPU quota or `NISH_NUM_THREADS`
+  lowers, so `NISH_WORKERS` above it stops the supervisor before a worker
+  starts. The container passes 0, one worker a core, which never exceeds it.
