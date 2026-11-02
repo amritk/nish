@@ -291,6 +291,12 @@ or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
 the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
+By default the workers are not pinned to cores. Each one binds the port with
+`SO_REUSEPORT`, the kernel picks a worker for each new connection by hashing
+its address, and the scheduler runs each worker on any core it allows. To keep
+each worker on its own core and steer each connection to it, use a
+config-owned listener with `pin`, below.
+
 ### One core per worker
 
 Set `listenPort` and the supervisor binds the listeners itself, one per
