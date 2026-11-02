@@ -1,0 +1,188 @@
+mov    DWORD PTR [rsp-0x24],edx
+mov    eax,r15d
+mov    DWORD PTR [rsp-0x18],r15d
+mov    edx,r14d
+mov    DWORD PTR [rsp-0x1c],r14d
+movzx  r14d,bpl
+mov    edi,ebp
+shr    edi,0x18
+mov    r15d,ebp
+mov    ecx,ebp
+mov    DWORD PTR [rsp-0x28],ebp
+shr    r15d,0xe
+and    r15d,0x3fc
+mov    ebp,DWORD PTR [rsi+r15*1+0x448]
+add    ebp,DWORD PTR [rsi+rdi*4+0x48]
+movzx  r15d,dl
+movzx  edi,ch
+xor    ebp,DWORD PTR [rsi+rdi*4+0x848]
+movzx  r13d,al
+add    ebp,DWORD PTR [rsi+r14*4+0xc48]
+mov    r12d,edx
+shr    r12d,0x18
+mov    r14d,edx
+shr    r14d,0xe
+and    r14d,0x3fc
+mov    r14d,DWORD PTR [rsi+r14*1+0x1490]
+add    r14d,DWORD PTR [rsi+r12*4+0x1090]
+movzx  edi,dh
+xor    r14d,DWORD PTR [rsi+rdi*4+0x1890]
+add    r14d,DWORD PTR [rsi+r15*4+0x1c90]
+mov    edi,eax
+shr    edi,0x18
+mov    r15d,eax
+shr    r15d,0xe
+and    r15d,0x3fc
+mov    r15d,DWORD PTR [rsi+r15*1+0x24d8]
+add    r15d,DWORD PTR [rsi+rdi*4+0x20d8]
+movzx  edi,ah
+xor    r15d,DWORD PTR [rsi+rdi*4+0x28d8]
+mov    eax,r10d
+movzx  r12d,al
+add    r15d,DWORD PTR [rsi+r13*4+0x2cd8]
+mov    edi,r10d
+shr    edi,0x18
+mov    DWORD PTR [rsp-0x20],r10d
+shr    r10d,0xe
+and    r10d,0x3fc
+mov    r10d,DWORD PTR [rsi+r10*1+0x3520]
+add    r10d,DWORD PTR [rsi+rdi*4+0x3120]
+movzx  edi,ah
+xor    r10d,DWORD PTR [rsi+rdi*4+0x3920]
+mov    eax,r11d
+mov    DWORD PTR [rsp-0x10],r11d
+movzx  edi,al
+mov    ecx,DWORD PTR [rsp-0x30]
+xor    ecx,DWORD PTR [rsi+r8*4+0x8]
+mov    ebx,DWORD PTR [rsp-0x38]
+xor    ebx,DWORD PTR [rsi+r8*4+0x1050]
+mov    r11d,DWORD PTR [rsp-0x3c]
+xor    r11d,DWORD PTR [rsi+r8*4+0x2098]
+mov    DWORD PTR [rsp-0x3c],r11d
+add    r10d,DWORD PTR [rsi+r12*4+0x3d20]
+xor    ecx,ebp
+mov    r13d,DWORD PTR [rsp-0x34]
+xor    r13d,DWORD PTR [rsi+r8*4+0x30e0]
+mov    r12d,eax
+shr    r12d,0x18
+mov    r11d,eax
+shr    r11d,0xe
+and    r11d,0x3fc
+mov    r11d,DWORD PTR [rsi+r11*1+0x4568]
+add    r11d,DWORD PTR [rsi+r12*4+0x4168]
+movzx  ebp,ah
+xor    r11d,DWORD PTR [rsi+rbp*4+0x4968]
+add    r11d,DWORD PTR [rsi+rdi*4+0x4d68]
+mov    edi,ecx
+shr    edi,0x18
+mov    r12d,ecx
+shr    r12d,0xe
+and    r12d,0x3fc
+mov    ebp,DWORD PTR [rsi+r12*1+0x448]
+add    ebp,DWORD PTR [rsi+rdi*4+0x48]
+movzx  edi,ch
+xor    ebp,DWORD PTR [rsi+rdi*4+0x848]
+mov    DWORD PTR [rsp-0x30],ecx
+movzx  edi,cl
+mov    edx,DWORD PTR [rsp-0x24]
+add    ebp,DWORD PTR [rsi+rdi*4+0xc48]
+xor    ebp,DWORD PTR [rsi+r8*4+0xc]
+xor    ebp,DWORD PTR [rsp-0x28]
+mov    eax,DWORD PTR [rsp-0x2c]
+xor    eax,DWORD PTR [rsi+r8*4+0x4128]
+mov    ecx,r9d
+mov    DWORD PTR [rsp-0x28],r9d
+mov    edi,r9d
+shr    edi,0x18
+shr    r9d,0xe
+and    r9d,0x3fc
+mov    r9d,DWORD PTR [rsi+r9*1+0x55b0]
+add    r9d,DWORD PTR [rsi+rdi*4+0x51b0]
+xor    ebx,r14d
+movzx  edi,ch
+xor    r9d,DWORD PTR [rsi+rdi*4+0x59b0]
+mov    edi,ebx
+shr    edi,0x18
+mov    r14d,ebx
+shr    r14d,0xe
+and    r14d,0x3fc
+mov    r14d,DWORD PTR [rsi+r14*1+0x1490]
+add    r14d,DWORD PTR [rsi+rdi*4+0x1090]
+mov    ecx,DWORD PTR [rsp-0x3c]
+xor    ecx,r15d
+movzx  edi,bh
+mov    r12d,ebx
+xor    r14d,DWORD PTR [rsi+rdi*4+0x1890]
+mov    edi,ecx
+shr    edi,0x18
+mov    r15d,ecx
+shr    r15d,0xe
+and    r15d,0x3fc
+mov    r15d,DWORD PTR [rsi+r15*1+0x24d8]
+add    r15d,DWORD PTR [rsi+rdi*4+0x20d8]
+mov    ebx,r13d
+xor    ebx,r10d
+movzx  edi,ch
+xor    r15d,DWORD PTR [rsi+rdi*4+0x28d8]
+mov    edi,ebx
+shr    edi,0x18
+mov    r10d,ebx
+shr    r10d,0xe
+and    r10d,0x3fc
+mov    r10d,DWORD PTR [rsi+r10*1+0x3520]
+add    r10d,DWORD PTR [rsi+rdi*4+0x3120]
+xor    eax,r11d
+movzx  edi,bh
+mov    r13d,ebx
+xor    r10d,DWORD PTR [rsi+rdi*4+0x3920]
+mov    edi,eax
+shr    edi,0x18
+mov    r11d,eax
+shr    r11d,0xe
+and    r11d,0x3fc
+mov    r11d,DWORD PTR [rsi+r11*1+0x4568]
+add    r11d,DWORD PTR [rsi+rdi*4+0x4168]
+movzx  edi,ah
+xor    r11d,DWORD PTR [rsi+rdi*4+0x4968]
+mov    DWORD PTR [rsp-0x38],r12d
+movzx  edi,r12b
+add    r14d,DWORD PTR [rsi+rdi*4+0x1c90]
+xor    r14d,DWORD PTR [rsi+r8*4+0x1054]
+xor    r14d,DWORD PTR [rsp-0x1c]
+mov    ebx,DWORD PTR [rsp-0x28]
+movzx  edi,bl
+add    r9d,DWORD PTR [rsi+rdi*4+0x5db0]
+xor    edx,DWORD PTR [rsi+r8*4+0x5170]
+xor    edx,r9d
+mov    DWORD PTR [rsp-0x3c],ecx
+movzx  edi,cl
+add    r15d,DWORD PTR [rsi+rdi*4+0x2cd8]
+mov    edi,edx
+shr    edi,0x18
+mov    r9d,edx
+shr    r9d,0xe
+and    r9d,0x3fc
+mov    r9d,DWORD PTR [rsi+r9*1+0x55b0]
+add    r9d,DWORD PTR [rsi+rdi*4+0x51b0]
+xor    r15d,DWORD PTR [rsi+r8*4+0x209c]
+xor    r15d,DWORD PTR [rsp-0x18]
+movzx  edi,dh
+xor    r9d,DWORD PTR [rsi+rdi*4+0x59b0]
+mov    ecx,r13d
+mov    DWORD PTR [rsp-0x34],r13d
+movzx  edi,cl
+add    r10d,DWORD PTR [rsi+rdi*4+0x3d20]
+mov    DWORD PTR [rsp-0x2c],eax
+movzx  edi,al
+add    r11d,DWORD PTR [rsi+rdi*4+0x4d68]
+xor    r10d,DWORD PTR [rsi+r8*4+0x30e4]
+xor    r10d,DWORD PTR [rsp-0x20]
+movzx  edi,dl
+add    r9d,DWORD PTR [rsi+rdi*4+0x5db0]
+xor    r11d,DWORD PTR [rsi+r8*4+0x412c]
+xor    r9d,DWORD PTR [rsi+r8*4+0x5174]
+xor    r11d,DWORD PTR [rsp-0x10]
+xor    r9d,ebx
+add    r8,0x2
+cmp    r8,0xf
+jb     62c0 <nish.bcryptBodyN+0x260>

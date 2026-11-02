@@ -1,0 +1,30 @@
+CPU ms per cost-10 hash (8 hashes or batches a round, median and spread of 5 rounds)
+hash: $2b$10$....................../69/0hFCo.JX/rExC31MSczGWcPlHPe
+
+| Implementation | ms per hash |
+| --- | ---: |
+| Nish (`nish/crypto/bcrypt`) | 60.4 (57.6–61.9) |
+| Nish `bcryptHash4`, four lanes | 18.8 (18.4–21.3) |
+| Nish `bcryptHashN`, one lane | 61.1 (59.0–62.3) |
+| Nish `bcryptHashN`, 2 lanes | 32.2 (32.0–34.5) |
+| Nish `bcryptHashN`, 3 lanes | 24.3 (22.8–26.1) |
+| Nish `bcryptHashN`, 4 lanes | 18.7 (18.4–22.3) |
+| Nish `bcryptHashN`, 5 lanes | 17.3 (16.2–20.3) |
+| Nish `bcryptHashN`, 6 lanes | 16.2 (15.6–17.1) |
+| libxcrypt `crypt_r`, `$2b$` | 60.1 (59.5–62.4) |
+| OpenBSD `bcrypt.c`, `gcc -O2` | 59.0 (57.5–61.9) |
+| OpenBSD `bcrypt.c`, `clang -O2` | 68.3 (62.9–72.9) |
+| tigokraft `bc_hash_n`, one lane, `gcc -O2 -march=native` | 63.3 (61.3–65.0) |
+| tigokraft `bc_hash_n`, four lanes, `gcc -O2 -march=native` | 28.6 (27.4–36.4) |
+| tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 63.5 (60.8–66.4) |
+| tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 19.7 (19.2–24.8) |
+
+The single path: 178 cycles per Blowfish block (3.15 GHz × 60.4 ms / 1067721 blocks)
+
+note: OpenBSD bcrypt.c: $OpenBSD: bcrypt.c,v 1.58 2020/07/06 13:33:05 pirofti Exp $
+
+note: OpenBSD blowfish.c: $OpenBSD: blowfish.c,v 1.21 2022/08/28 11:11:25 jsg Exp $
+
+note: OpenBSD blf.h: $OpenBSD: blf.h,v 1.8 2021/11/29 01:04:45 djm Exp $
+
+note: tigokraft: arjaythedev/multicore-server-challenge at c3012257f2ee3dd2ccc72ada2eeba2b0d1278e8e, MIT
