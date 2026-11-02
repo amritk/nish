@@ -291,6 +291,49 @@ or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
 the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
+### One core per worker
+
+Set `listenPort` and the supervisor binds the listeners itself, one per
+worker, before any worker starts: worker `k` takes its own with
+`preforkListener(process.argv)` and accepts from it, and gets the same one
+back after a restart. `listenHost`, `listenBacklog` and `listenFlags` (`0`, or
+`2` for `TCP_NODELAY`) shape them; port `0` picks a free port for the whole
+group.
+
+Add `pin = true` and worker `k` also pins itself to CPU `k`
+(`setCpuAffinity`), and on Linux the listeners steer each connection to the
+worker on the CPU that received it, so a connection's packets and the worker
+that answers it share a core's caches:
+
+```ts nish:ok
+import { PREFORK_STOPPED, PreforkConfig, preforkListener, preforkWith } from "nish/net/prefork";
+
+export const main = (): i32 => {
+  const config = new PreforkConfig();
+  config.listenPort = 8080;
+  config.pin = true;
+  const worker = preforkWith(process.argv, config);
+  if (worker === PREFORK_STOPPED) {
+    return 0;
+  }
+  if (worker < 0) {
+    return 1;
+  }
+  const listener = preforkListener(process.argv);
+  // Accept and serve on `listener` here.
+  return listener >= 0 ? 0 : 1;
+};
+```
+
+Pinning is for a machine the server has to itself: each worker owns a core,
+so `workers` should be at most `availableParallelism()`, and on Linux **more pinned
+workers than CPUs stops the program with a panic** rather than doubling two
+workers up on one core. A CPU outside the ones the program may run on
+(`taskset`, a container's limit) is never taken. Off Linux the workers run
+unpinned and unsteered, and the supervisor says so on stderr. A `listenPort`
+outside `-1..65535`, a `listenBacklog` of 0 or less, or other `listenFlags`
+stop the program with a panic.
+
 ### Workers that are not restarted
 
 Set `restart` to `false` when something else restarts the service, such as

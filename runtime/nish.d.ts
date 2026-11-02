@@ -378,6 +378,14 @@ declare function setNice(n: i32): i32;
  * normal-priority fallback for work that must finish. Throws under Node.
  */
 declare function setIdlePriority(): i32;
+/**
+ * Pin this process to CPU `cpu` alone (`sched_setaffinity`): 0, or a negative
+ * errno. Narrow-only: a CPU outside the mask the process already has (an
+ * operator's `taskset` or cpuset), a negative one, or one past the kernel's
+ * set size is -22 with no system call. -95 where the host has no affinity
+ * call (Darwin, and under Node).
+ */
+declare function setCpuAffinity(cpu: i32): i32;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
 declare function getenv(name: string): string | null;
 /**
@@ -422,7 +430,13 @@ declare function netAddress(out: u8[], host: string, port: i32): i32;
 declare function netLocalPort(fd: i32): i32;
 /** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */
 declare function tcpListen(host: string, port: i32, backlog: i32): i32;
-/** `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket for flag 2; any other bit is -22. */
+/**
+ * `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on
+ * each accepted socket for flag 2. Flag 4, with flag 1, steers by CPU: a new
+ * connection goes to the group's listener whose bind order is the index of the
+ * CPU that received it (Linux; -95 elsewhere). Any other bit, or 4 without 1,
+ * is -22.
+ */
 declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
 /** The next connection's descriptor, its address in `peer`; -11 when none waits. */
 declare function tcpAccept(fd: i32, peer: u8[]): i32;
@@ -667,6 +681,8 @@ declare module "nish:process" {
    * on a saturated machine, so a caller keeps a normal-priority fallback.
    */
   export function setIdlePriority(): i32;
+  /** Pin this process to CPU `cpu` alone: 0, -22 for a CPU outside the current mask (narrow-only), or -95 off Linux. */
+  export function setCpuAffinity(cpu: i32): i32;
   /**
    * A monotonic clock in nanoseconds. The origin is arbitrary, so only the
    * difference between two reads is meaningful.
@@ -693,7 +709,13 @@ declare module "nish:net" {
   export function netLocalPort(fd: i32): i32;
   /** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */
   export function tcpListen(host: string, port: i32, backlog: i32): i32;
-  /** `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket for flag 2; any other bit is -22. */
+  /**
+   * `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on
+   * each accepted socket for flag 2. Flag 4, with flag 1, steers by CPU: a new
+   * connection goes to the group's listener whose bind order is the index of the
+   * CPU that received it (Linux; -95 elsewhere). Any other bit, or 4 without 1,
+   * is -22.
+   */
   export function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
   /** The next connection's descriptor, its address in `peer`; -11 when none waits. */
   export function tcpAccept(fd: i32, peer: u8[]): i32;

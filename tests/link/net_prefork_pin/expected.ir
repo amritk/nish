@@ -1,0 +1,1 @@
+declare noundef i32 @nish_set_cpu_affinity(i32 noundef)

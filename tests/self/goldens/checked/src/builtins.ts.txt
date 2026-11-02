@@ -98,9 +98,9 @@ function isBuiltinFunction(name: string): boolean -> @isBuiltinFunction [exporte
   calls: conversionTarget isNetExport isTermExport isUnsafeExport nish_str_eq
   stackSites=0 stackLocals=0
   callee +0:7 conversionTarget -> @conversionTarget
-  callee +53:5 isTermExport -> @isTermExport
-  callee +54:5 isNetExport -> @isNetExport
-  callee +55:5 isUnsafeExport -> @isUnsafeExport
+  callee +54:5 isTermExport -> @isTermExport
+  callee +55:5 isNetExport -> @isNetExport
+  callee +56:5 isUnsafeExport -> @isUnsafeExport
 function isStringifiable(type: i32): boolean -> @isStringifiable
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

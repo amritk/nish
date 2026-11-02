@@ -121,6 +121,9 @@ for (const name of ["setNice", "setIdlePriority"]) {
     throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
   });
 }
+// `setCpuAffinity` answers -95, as on Darwin: Node has no affinity call, and
+// "not supported" is a value a caller already branches on.
+provide("setCpuAffinity", shim.setCpuAffinity);
 provide("getenv", shim.getenv);
 provide("statMtimeSync", shim.statMtimeSync);
 provide("signalFd", shim.signalFd);

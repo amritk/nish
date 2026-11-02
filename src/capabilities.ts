@@ -307,10 +307,11 @@ export const builtinCapability = (name: string): i32 => {
   if (name === "spawnPiped" || name === "spawnWithFds") {
     return CAP_PROCESS_SPAWN
   }
-  // Lowering this process's own priority reaches no other process, but it is
-  // the scheduling `spawn`'s children inherit and a change the program cannot
-  // always undo, so it is gated with the process calls rather than free.
-  if (name === "setNice" || name === "setIdlePriority") {
+  // Lowering this process's own priority, or narrowing its CPU mask, reaches
+  // no other process, but it is the scheduling `spawn`'s children inherit and
+  // a change the program cannot always undo, so it is gated with the process
+  // calls rather than free.
+  if (name === "setNice" || name === "setIdlePriority" || name === "setCpuAffinity") {
     return CAP_PROCESS_SPAWN
   }
   if (isNetExport(name)) {

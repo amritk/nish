@@ -435,7 +435,13 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * descriptor calls were added (4,096 to 4,608): under `-ffunction-sections`,
  * `nish_recv_fd` 318 (the control buffer for eight descriptors and the loop that keeps
  * the first and closes the rest), `nish_send_fd` 188, `nish_peer_credentials` 109 and
- * `nish_unix_only` 55, the family check the three share, leaving 97.
+ * `nish_unix_only` 55, the family check the three share, leaving 97, and **4,619
+ * bytes** on 2026-11-02 once `tcpListenFlags` flag 4 was added (4,608 to 4,864): the
+ * two-instruction classic BPF program that steers a connection to the listener bound
+ * in the place of the CPU that received it, its `SO_ATTACH_REUSEPORT_CBPF` call and
+ * the flag checks. It went into `nish_net_bound`, sharing its close on failure, with
+ * the program as static data; a separate attach function measured 4,684, and attaching
+ * before the bind or inside the stream clause saved nothing under 4,608.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -443,7 +449,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 4608
+const NET_TEXT_BUDGET = 4864
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`

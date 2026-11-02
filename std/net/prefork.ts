@@ -51,6 +51,26 @@
  * gone longer than that. With `restart` off nothing is signalled; a worker sees
  * its peer's exit as a hang-up.
  *
+ * **Listeners and pinning.** With `listenPort` set (0 or above), the
+ * supervisor binds one `SO_REUSEPORT` listener per worker itself, in index
+ * order, keeps them for its whole run and hands listener `k` to every start of
+ * worker `k` after the channel ends; `preforkListener(args)` answers it in the
+ * worker (`--nish-prefork-listener=`, before the channels flag), so a worker
+ * serves that descriptor instead of binding its own. Port 0 binds the first
+ * listener anywhere and the rest to its port. With `pin` on as well, each
+ * listener steers by CPU (`tcpListenFlags`' flag 4): the kernel hands a
+ * connection that arrived on CPU `k` to listener `k`, and a worker that is
+ * restarted takes the same listener, so the order holds across restarts,
+ * which it would not if each worker bound its own. `pin` alone makes each
+ * worker call `setCpuAffinity(k)` before `preforkWith` answers it, so worker
+ * `k` runs on CPU `k` only; a worker the kernel refuses (CPU `k` outside the
+ * process's mask) says so on stderr and runs unpinned. More workers than
+ * `availableParallelism()` is refused with a panic, since a worker past the
+ * last CPU would be pinned nowhere and, steered, handed nothing. Pinning and
+ * steering are Linux's: elsewhere the supervisor says once that the workers
+ * run unpinned, and the listeners are plain `SO_REUSEPORT` ones. Both are off
+ * by default.
+ *
  * **How many.** `NISH_WORKERS` when it is a positive whole number, else
  * `PreforkConfig.workers` when that is positive, else
  * `availableParallelism()` on Linux and 1 elsewhere: Darwin shares a
@@ -83,10 +103,12 @@ import {
   NET_UNIX_SEQPACKET,
   NET_UNIX_STREAM,
   netClose,
+  netLocalPort,
   netRead,
   pollAdd,
   pollCreate,
   pollWait,
+  tcpListenFlags,
   unixSocketPair,
 } from "nish:net"
 import {
@@ -96,6 +118,7 @@ import {
   monotonicNanos,
   platform,
   readSignal,
+  setCpuAffinity,
   signalFd,
   spawn,
   spawnWithFds,
@@ -111,6 +134,12 @@ export const PREFORK_WORKER_FLAG: string = "--nish-prefork-worker="
  * for none.
  */
 export const PREFORK_CHANNELS_FLAG: string = "--nish-prefork-channels="
+/**
+ * The argument before the channels flag, or before the worker flag when there
+ * is none, when the supervisor holds the listeners: the worker's listener's
+ * descriptor.
+ */
+export const PREFORK_LISTENER_FLAG: string = "--nish-prefork-listener="
 
 /** What `preforkWith` answers in the supervisor once its workers are gone. */
 export const PREFORK_STOPPED: i32 = -1
@@ -154,6 +183,23 @@ export class PreforkConfig {
    * default because it works on Darwin too.
    */
   channelKind: i32 = 1
+  /**
+   * Pin worker `k` to CPU `k` (`setCpuAffinity`), and with `listenPort`, steer
+   * each connection to the listener of the CPU that received it. Linux only;
+   * elsewhere the workers run unpinned.
+   */
+  pin: boolean = false
+  /**
+   * The port the supervisor binds one listener per worker on, 0 for any; -1,
+   * the default, leaves each worker to bind its own.
+   */
+  listenPort: i32 = -1
+  /** The address those listeners bind. */
+  listenHost: string = "0.0.0.0"
+  /** Their backlog. */
+  listenBacklog: i32 = 1024
+  /** Their `tcpListenFlags` beyond `SO_REUSEPORT`, which is always set: 0, or 2 for `TCP_NODELAY`. */
+  listenFlags: i32 = 0
 }
 
 /** True when `s` is one or more ASCII digits and nothing else. */
@@ -206,14 +252,17 @@ export const preforkIndex = (args: string[]): i32 => {
 }
 
 /**
- * `args` (`process.argv`) without the worker flag and the channels flag before
- * it, the same in every process.
+ * `args` (`process.argv`) without the worker flag and the channels and
+ * listener flags before it, the same in every process.
  */
 export const preforkArgs = (args: string[]): string[] => {
   let keep: i32 = toI32(args.length)
   if (preforkIndex(args) >= 0) {
     keep = keep - 1
     if (keep > 1 && args[keep - 1].startsWith(PREFORK_CHANNELS_FLAG)) {
+      keep = keep - 1
+    }
+    if (keep > 1 && args[keep - 1].startsWith(PREFORK_LISTENER_FLAG)) {
       keep = keep - 1
     }
   }
@@ -258,6 +307,21 @@ export const preforkServiceChannel = (args: string[]): i32 => preforkChannel(arg
 export const preforkServiceChannelOf = (args: string[], index: i32): i32 =>
   index < 0 || index > 2147483645 ? -1 : preforkChannel(args, 2 + index)
 
+/** In a worker, the listener the supervisor bound for it (`listenPort`); -1 when none. */
+export const preforkListener = (args: string[]): i32 => {
+  if (preforkIndex(args) < 0) {
+    return -1
+  }
+  for (let back: i32 = 2; back <= 3 && back < toI32(args.length); back++) {
+    const flag: string = args[args.length - back]
+    if (flag.startsWith(PREFORK_LISTENER_FLAG)) {
+      const digits: string = flag.substring(PREFORK_LISTENER_FLAG.length)
+      return preforkDigits(digits) ? parseInt(digits) : -1
+    }
+  }
+  return -1
+}
+
 /** Milliseconds on the monotonic clock. */
 const preforkNowMs = (): i64 => monotonicNanos() / 1000000
 
@@ -298,6 +362,8 @@ class PreforkSupervisor {
   service: i32
   /** The group is being stopped, to be started again once none of it is left. */
   cascading: boolean = false
+  /** Worker i's listener at i, held for the whole run; empty without `listenPort`. */
+  listeners: i32[]
 
   constructor(config: PreforkConfig, args: string[], count: i32, loop: i32) {
     this.config = config
@@ -305,6 +371,7 @@ class PreforkSupervisor {
     this.service = config.serviceWorker
     this.toService = []
     this.fromWorkers = []
+    this.listeners = []
     this.args = preforkArgs(args)
     const self: string | null = platform === "linux" ? realpathSync("/proc/self/exe") : null
     this.program = self !== null ? self : this.args[0]
@@ -359,7 +426,12 @@ class PreforkSupervisor {
     for (let i: i32 = 1; i < toI32(this.args.length); i++) {
       argv.push(this.args[i])
     }
-    if (fds.length > 0) {
+    const channels: boolean = fds.length > 0
+    if (this.listeners.length > 0) {
+      fds.push(this.listeners[index])
+      argv.push(`${PREFORK_LISTENER_FLAG}${2 + fds.length}`)
+    }
+    if (channels) {
       argv.push(`${PREFORK_CHANNELS_FLAG}${fields.join(",")}`)
     }
     argv.push(`${PREFORK_WORKER_FLAG}${index}`)
@@ -576,6 +648,37 @@ class PreforkSupervisor {
     return true
   }
 
+  /**
+   * One listener per worker, in index order, which is the order steering
+   * counts CPUs in; false, with the ones made closed, when one cannot bind.
+   */
+  listen(steer: boolean): boolean {
+    const config: PreforkConfig = this.config
+    const flags: i32 = config.listenFlags | 1 | (steer ? 4 : 0)
+    let port: i32 = config.listenPort
+    for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
+      const fd: i32 = tcpListenFlags(config.listenHost, port, config.listenBacklog, flags)
+      if (fd < 0) {
+        console.error(`nish/net/prefork: cannot listen on ${config.listenHost}:${port} (${fd})`)
+        this.closeListeners()
+        return false
+      }
+      this.listeners.push(fd)
+      if (port === 0) {
+        port = netLocalPort(fd)
+      }
+    }
+    return true
+  }
+
+  /** Close the listeners `listen` made. */
+  closeListeners(): void {
+    for (let i: i32 = 0; i < toI32(this.listeners.length); i++) {
+      netClose(this.listeners[i])
+    }
+    this.listeners = []
+  }
+
   /** Send `sig` to every running worker. */
   signal(sig: i32): void {
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
@@ -644,6 +747,15 @@ const preforkInvalid = (config: PreforkConfig): string => {
   if (config.serviceWorker < -1) {
     return "serviceWorker below -1"
   }
+  if (config.listenPort < -1 || config.listenPort > 65535) {
+    return "listenPort not -1 or 0..65535"
+  }
+  if (config.listenBacklog <= 0) {
+    return "listenBacklog not above 0"
+  }
+  if (config.listenFlags !== 0 && config.listenFlags !== 2) {
+    return "listenFlags not 0 or 2"
+  }
   return ""
 }
 
@@ -679,8 +791,11 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
  * supervisor closes it after a hang-up, when the worker is reaped and when it
  * stops, and a restarted worker comes with a new one. Panics, besides, when
  * `serviceWorker` is not below the worker count or the count is above 64 with
- * a service worker, the most `spawnWithFds` hands one child; and, through
- * `preforkInvalid`, on seqpacket channels off Linux.
+ * a service worker (63 with `listenPort`), the most `spawnWithFds` hands one
+ * child; when `pin`, on Linux, asks for more workers than
+ * `availableParallelism()`; and, through `preforkInvalid`, on seqpacket
+ * channels off Linux. A listener that cannot bind answers
+ * `PREFORK_SPAWN_FAILED` before any worker starts.
  */
 export const preforkSupervise = <S>(
   args: string[],
@@ -692,13 +807,26 @@ export const preforkSupervise = <S>(
   if (invalid !== "") {
     panic(`nish/net/prefork: ${invalid}`)
   }
+  const pin: boolean = config.pin && platform === "linux"
   const index: i32 = preforkIndex(args)
   if (index >= 0) {
+    const pinned: i32 = pin ? setCpuAffinity(index) : 0
+    if (pinned < 0) {
+      console.error(`nish/net/prefork: worker ${index} runs unpinned (${pinned})`)
+    }
     return index
   }
   const count: i32 = preforkWorkerCount(config.workers, getenv("NISH_WORKERS"))
-  if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > 64)) {
-    panic(`nish/net/prefork: serviceWorker not below ${count} workers, or above 64 workers`)
+  // A held listener is one more descriptor for every worker, the service one too.
+  const fdMax: i32 = config.listenPort >= 0 ? 63 : 64
+  if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > fdMax)) {
+    panic(`nish/net/prefork: serviceWorker not below ${count} workers, or above ${fdMax} workers`)
+  }
+  if (pin && count > availableParallelism()) {
+    panic(`nish/net/prefork: pin with ${count} workers on ${availableParallelism()} CPUs`)
+  }
+  if (config.pin && !pin) {
+    console.error("nish/net/prefork: pinning needs Linux; the workers run unpinned")
   }
   const signals: i32 = signalFd()
   const loop: i32 = pollCreate()
@@ -712,6 +840,10 @@ export const preforkSupervise = <S>(
     return PREFORK_SPAWN_FAILED
   }
   const supervisor = new PreforkSupervisor(config, args, count, loop)
+  if (config.listenPort >= 0 && !supervisor.listen(pin)) {
+    netClose(loop)
+    return PREFORK_SPAWN_FAILED
+  }
   // Token 0 is the signal pipe, token i + 1 worker i's channel.
   const ready: i32[] = new Array<i32>(2 * count + 2)
   let result: i32 = PREFORK_STOPPED
@@ -748,6 +880,7 @@ export const preforkSupervise = <S>(
     }
   }
   supervisor.stop(loop, signals, ready)
+  supervisor.closeListeners()
   netClose(loop)
   return result
 }

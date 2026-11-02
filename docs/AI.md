@@ -2222,6 +2222,13 @@ system call either way. `setIdlePriority()` moves the program to Linux's `SCHED_
 `main`, never in a task. An unprivileged process can never leave `SCHED_IDLE`
 and an idle one can starve on a saturated machine, so keep a normal-priority
 fallback. Neither exists on wasm; both throw under Node.
+`setCpuAffinity(cpu)` pins the process to one CPU, narrow-only: a CPU outside
+the mask it already has is `-22`; `-95` on Darwin and under Node, refused on
+wasm. `nish/net/prefork`'s `PreforkConfig` takes `pin = true` to pin worker
+`k` to CPU `k` (more workers than CPUs panics), and `listenPort` (with
+`listenHost`, `listenBacklog`, `listenFlags` 0 or 2) to have the supervisor
+bind one `SO_REUSEPORT` listener per worker, steered on Linux by the receiving
+CPU when pinned; a worker takes its own with `preforkListener(process.argv)`.
 
 **Sockets** (`nish:net`, or the same names as globals). `tcpListen(host, port,
 backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
