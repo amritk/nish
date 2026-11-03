@@ -7,16 +7,17 @@
 //
 // Builds bench/http1-conn/main.ts twice at `--profile speed` with `--compiler`
 // (default: build/nish, else the seed in build/seed): `old` beside
-// http1-server.ts as `--base` has it (default: the merge base with
-// origin/main), `new` beside the working tree's. It links a byte-identical
-// copy of `old` as `old′`: the baseline timed against itself in the same
-// interleaved rounds is the noise band. Each round runs every binary on both
+// http1-server.ts as `--base` has it (default: 96a38347484f, the commit
+// before the hot-field layout), `new` beside the working tree's. It links a
+// byte-identical copy of `old` as `old′`: the baseline timed against itself in
+// the same interleaved rounds is the noise band. Each round runs every binary on both
 // shapes, rotating which goes first: `hot`, `--requests` requests on one
-// connection (default 400000), and `cold`, as many spread round-robin over
+// connection (default 200000), and `cold`, as many spread round-robin over
 // `--connections` connections of one pool (default 50000). It reports the
 // median and the min–max of ns per request over `--rounds` rounds (default
-// 15) and the CPU it ran on. A checksum that differs between binaries fails
-// the run.
+// 15) and the CPU it ran on. Every run is pinned to core 1 with `taskset`
+// when there is one, and the header says whether it was. A checksum that
+// differs between binaries fails the run.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -49,7 +50,9 @@ const run = (cmd, args) => {
   return r.stdout
 }
 
-const base = flag("--base", "") || run("git", ["merge-base", "HEAD", "origin/main"]).trim()
+// The baseline is a fixed commit, not the merge base with origin/main: on main
+// that is HEAD, and the bench would time the module against itself.
+const base = flag("--base", "96a38347484f")
 const server = "std/net/http1-server.ts"
 const sources = {
   old: run("git", ["show", `${base}:${server}`]),
@@ -80,6 +83,8 @@ const shapes = [
   ["cold", [requests, connections, batches]],
 ]
 const pin = spawnSync("taskset", ["-c", "1", "true"]).status === 0
+/** Runs one bench binary, under `taskset -c 1` when it is there. */
+const bench = (exe, args) => (pin ? run("taskset", ["-c", "1", exe, ...args]) : run(exe, args))
 // label -> shape -> ns per request, one per round
 const times = new Map(binaries.map((b) => [b.label, new Map(shapes.map(([s]) => [s, []]))]))
 const sums = new Map()
@@ -87,7 +92,7 @@ for (let r = 0; r < rounds; r++) {
   for (const [shape, args] of shapes) {
     for (let k = 0; k < binaries.length; k++) {
       const { label, exe } = binaries[(r + k) % binaries.length]
-      const [, ns, count, sum] = run(exe, [shape, ...args])
+      const [, ns, count, sum] = bench(exe, [shape, ...args])
         .trim()
         .split(" ")
       if (sums.has(shape) && sums.get(shape) !== sum) {
@@ -116,7 +121,7 @@ console.log(
 console.log(`old: ${server} at ${base.slice(0, 12)}; new: the working tree`)
 console.log(
   `${rounds} rounds, each the fastest of ${batches} batches of ${requests} requests` +
-    `${pin ? " on one pinned core" : ""}; cold spreads them over ${connections} connections`
+    `${pin ? " pinned to core 1" : " unpinned (no taskset)"}; cold spreads them over ${connections} connections`
 )
 console.log("ns per request: median (min–max), ratio of medians to old\n")
 console.log(`| shape | ${binaries.map((b) => b.label).join(" | ")} |`)
