@@ -825,8 +825,8 @@ function TypeTable.typeName(this: TypeTable, type: i32): string -> @TypeTable.ty
   callee +19:16 TypeTable.unionName -> @TypeTable.unionName
   callee +21:19 TypeTable.scalarName -> @TypeTable.scalarName
   callee +21:55 TypeTable.laneCount -> @TypeTable.laneCount
-  callee +23:28 TypeTable.laneCount -> @TypeTable.laneCount
-  callee +23:56 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +23:29 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +23:58 TypeTable.laneCount -> @TypeTable.laneCount
   callee +25:26 TypeTable.typeName -> @TypeTable.typeName
   callee +27:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.scalarName(this: TypeTable, type: i32): string -> @TypeTable.scalarName [exported method]
