@@ -7,4 +7,5 @@
 `min` takes operands of one type, got i32x4 and u32x4; reinterpret the lanes with `asU8x16` and the rest
 `select` between two i32x4 takes the mask their compare answers, mask32x4, got mask64x2
 `add` expects exactly 2 arguments, got 1
-9 errors
+`eq` takes a `nish:simd` vector, got i32
+10 errors

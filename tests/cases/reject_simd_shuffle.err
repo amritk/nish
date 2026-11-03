@@ -1,6 +1,6 @@
 `shuffle` of two i32x4 takes 4 lane indices, one per lane of the answer, got 3
 `shuffle` lane index 8 is out of range for two i32x4, whose lanes are 0 to 7
 `shuffle` takes lane indices that are integer literals, from 0 to 7: the lanes of both i32x4 in order
-`shuffle` takes two vectors of one type and one lane index per lane, got 1 arguments
+`shuffle` takes two vectors of one type and one lane index per lane, got 1 argument(s)
 `shuffle` takes operands of one type, got i32x4 and u8x16; reinterpret the lanes with `asU8x16` and the rest
 5 errors

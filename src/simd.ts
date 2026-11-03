@@ -459,7 +459,7 @@ const checkShuffle = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
   const name = "shuffle"
   const args = call.children[1].children
   if (args.length < 2) {
-    return ctx.errorType(call, `\`${name}\` takes two vectors of one type and one lane index per lane, got ${args.length} arguments`)
+    return ctx.errorType(call, `\`${name}\` takes two vectors of one type and one lane index per lane, got ${args.length} argument(s)`)
   }
   const vector = firstOperand(ctx, args[0], scope, name, "any")
   sameOperand(ctx, args[1], scope, name, vector)
