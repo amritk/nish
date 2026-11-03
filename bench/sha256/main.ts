@@ -7,6 +7,11 @@
 //   sha256 <size>   the one-shot digest of a <size>-byte message drawn by
 //                   ../crypto/lib/gen, its first four bytes XORed with the
 //                   iteration (the hash family's sha256 kernel)
+//   hmac-sha256 <size>
+//                   HMAC-SHA256 of a <size>-byte message under a 32-byte
+//                   key, the message tweaked the same way (the hash
+//                   family's hmac-sha256 kernel); at 256 bytes, the size of
+//                   a JWT's signing input
 //   hs256 0         a JWT of RFC 7519 §3.1's shape signed (RFC 7515
 //                   §A.1's base64url header.payload under HMAC-SHA256) and
 //                   then verified, the claims' `iat` the iteration
@@ -56,6 +61,21 @@ const digestLoop = (a: Args): i32 => {
   return 0
 }
 
+/** `hmacSha256` over the message under a 32-byte key, `iterations` times. */
+const hmacLoop = (a: Args): i32 => {
+  const inp: Inputs = inputs(a.kernel, a.size, 32, 0, 0, a.size)
+  const msg: u8[] = inp.msg
+  const base: u8[] = baseOf(msg, 0)
+  let sum: u32 = foldStart()
+  const started: i64 = now()
+  for (let i: i32 = 0; i < a.iterations; i++) {
+    tweak(msg, 0, base, i)
+    sum = fold(sum, hmacSha256(inp.key, msg))
+  }
+  report(sum, started)
+  return 0
+}
+
 /**
  * HS256 under a 32-byte key: each iteration signs a token for its own claims
  * and then verifies it as a receiver would, splitting at the second `.`,
@@ -90,6 +110,9 @@ export const main = (): i32 => {
   }
   if (a.kernel === "sha256") {
     return digestLoop(a)
+  }
+  if (a.kernel === "hmac-sha256") {
+    return hmacLoop(a)
   }
   if (a.kernel === "hs256") {
     return hs256Loop(a)
