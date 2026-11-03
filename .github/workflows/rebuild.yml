@@ -126,9 +126,13 @@ jobs:
       # difference is the release's and not this workflow's.
       - name: Install LLVM 18 + lld (Ubuntu)
         if: runner.os == 'Linux'
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18
+
+      - name: Link the LLVM 18 tools by their plain names
+        if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
@@ -138,8 +142,13 @@ jobs:
 
       - name: Install LLVM 18 + lld (macOS)
         if: runner.os == 'macOS'
+        uses: ./.github/actions/brew-install
+        with:
+          formulae: llvm@18
+
+      - name: Put LLVM 18 on PATH (macOS)
+        if: runner.os == 'macOS'
         run: |
-          brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
@@ -225,9 +234,12 @@ jobs:
           node-version: 22
 
       - name: Install LLVM 18 + lld
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18
+
+      - name: Link the LLVM 18 tools by their plain names
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do

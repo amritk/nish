@@ -18,6 +18,9 @@ const HELD_DERIVE_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha|T
 /** The module that defines bcrypt. */
 const BCRYPT_MODULES = /^define [^\n]*@nish\.bcrypt/m
 
+/** The modules that define bcrypt and its login batcher. */
+const BCRYPT_BATCHER_MODULES = /^define [^\n]*@nish\.(bcrypt|BcryptBatch)/m
+
 /** The modules that define HMAC, SHA-2, JWT, P-256 or Ed25519. */
 const JWT_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Sha|sha|Jwt|jwt|P256|p256|Ed25519|ed25519)/m
 
@@ -280,6 +283,19 @@ export const wipeChecks = [
       ["nish.bcryptVerify4", 52],
       ["nish.bcryptCalibrateTime", 19],
     ],
+  },
+  // The login batcher (`nish/crypto/bcrypt-batch`) wipes its copy of each
+  // password it ran (docs/security/crypto-bcrypt.md, "The login batcher").
+  // `BcryptBatcher.run` 1: `BcryptBatchKey.wipe`, inlined into the loop over
+  // the requests taken, after the scope joins. The tasks' wipes are the
+  // batch's, counted above, and are not roots here. The copy itself
+  // (`bcryptBatchTake`) moves the bytes from one exposure into the other and
+  // makes no array to wipe.
+  {
+    name: "crypto: the wipes survive opt -O2 (the bcrypt login batcher's copy of each password, in BcryptBatcher.run)",
+    program: "tests/link/thread_bcrypt_batcher/main.ts",
+    modules: BCRYPT_BATCHER_MODULES,
+    roots: [["nish.BcryptBatcher.run", 1]],
   },
   // `HmacKey` in `nish/crypto/hmac` and the keys of `nish/crypto/jwt` (#1114).
   // `crypto_jwt` imports both. A hasher's wipe is 3 (its state, block and

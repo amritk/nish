@@ -51,6 +51,7 @@ net_tls_ticket  tests/wipes counts its wipes after -O2
 net_tls_wipes  tests/wipes counts its wipes after -O2
 net_tls_wipes_f64  the f64 twin of net_tls_wipes
 std_pbkdf2  tests/wipes counts its wipes after -O2
+thread_bcrypt_batcher  tests/wipes counts its wipes after -O2
 # SIMD kernels: runtime-simd.c's byte search and regex scan, runtime-aes.c's
 # AES rounds, and a parallel map whose element loop vectorises.
 crypto_aes  runtime-aes.c's kernels

@@ -1,0 +1,31 @@
+bcrypt: the batch width is outside 1 to 6
+bcrypt: the batch width is outside 1 to 6
+bcrypt: the hold is negative
+bcrypt: a batcher needs at least one core
+bcrypt: the cost is outside 4 to 31
+bcrypt: the cost is outside 4 to 31
+empty wait -1
+wait at 0: 1000, at 400: 600
+run at 400: 0
+run at 1000: 1
+  0: match
+wait with three: 0
+pending 8
+run at 2000: 6
+  5: match
+  1: match
+  2: no match
+  3: Err bcrypt: a hash is 60 characters
+  4: $2b$04$/uaF/uaF/uaF/uaF/uaF/ubQVo9xGVjE0e7D.cFX.0sCjNDJ6OmMW
+  6: $2b$04$......................ini1L2hXWkegMV822DC6vks..mWmZHK
+pending 2, wait 1000
+run at 2000 again: 0
+run at 3000: 2
+  7: no match
+  8: no match
+bad salt: pending 1, wait 0
+run at 4000: 1
+  9: Err bcrypt: the salt is not 16 bytes
+single damaged: bcrypt: a hash is 60 characters
+single hashes: $2b$04$/uaF/uaF/uaF/uaF/uaF/ubQVo9xGVjE0e7D.cFX.0sCjNDJ6OmMW $2b$04$......................ini1L2hXWkegMV822DC6vks..mWmZHK
+pending 0, wait -1
