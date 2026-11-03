@@ -1,11 +1,17 @@
-# Installs Ubuntu packages through the Actions cache, the way ci.yml's `test`
-# job and interop.yml install theirs. The mirrors are the unreliable part: the
-# Azure one has served libllvm18 at about 100 KB/s (#963), never idle long
-# enough for `APT_OPTS`'s thirty seconds, so the calling step's five-minute
-# limit fired before any test ran. The .debs are kept in the cache, keyed by
-# runner image, architecture and package list, so a job normally downloads
-# nothing. On a miss each download attempt is cut at a minute and retried
-# without the Azure mirror, since a retry against a stalled mirror stalls again.
+# Installs Ubuntu packages through the Actions cache. Every Ubuntu install in
+# CI goes through here, so every one gets the same three defences.
+#
+# - The mirror: .github/apt-mirror.sh points apt away from the Azure mirror,
+#   which has served libllvm18 at about 100 KB/s (#963), never idle long enough
+#   for `APT_OPTS`'s thirty seconds, so the calling step's limit fired before
+#   any test ran. apt fetches from a mirror list of our own instead and moves
+#   to the next entry when one fails.
+# - The cache: the .debs are kept in the Actions cache, keyed by runner image,
+#   architecture and package list, so a job normally downloads nothing. apt
+#   checks every cached .deb against the hash in the signed index before it
+#   installs it, so a stale or altered one is fetched again, never installed.
+# - The bound: on a miss each download attempt is cut at a minute and retried,
+#   since apt has no deadline of its own for a transfer that trickles.
 #
 # The save is a step of its own rather than actions/cache's post step, which
 # saves only when the whole job passes. Jobs that race to save one key lose
@@ -50,7 +56,7 @@ runs:
         # `_apt` cannot reach a directory under the runner's home, so apt would
         # download as root anyway, with a warning; say so up front.
         apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
-        grep -rlZ azure.archive.ubuntu.com /etc/apt | xargs -0r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
+        bash "$GITHUB_ACTION_PATH/../../apt-mirror.sh"
         sudo apt-get $APT_OPTS update
         for attempt in 1 2 3; do
           if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
@@ -61,13 +67,7 @@ runs:
             echo "::error::apt could not download the packages in three one-minute attempts"
             exit 1
           fi
-          echo "::warning::apt download attempt $attempt stalled or failed; retrying without the Azure mirror"
-          # The image's sources name `mirror+file:/etc/apt/apt-mirrors.txt`.
-          # apt reads the list on each run, so no second `update` is needed.
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
-            cat /etc/apt/apt-mirrors.txt
-          fi
+          echo "::warning::apt download attempt $attempt stalled or failed; retrying"
         done
         sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $PKGS
         # Drop .debs the mirror no longer offers (left over from an older

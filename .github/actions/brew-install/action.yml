@@ -1,0 +1,60 @@
+# Installs Homebrew formulae with their bottles restored from and saved to the
+# Actions cache, as .github/actions/apt-install does for Ubuntu's .debs.
+# llvm@18 and its dependencies are a few hundred megabytes from ghcr.io on
+# every macOS job; with the bottles cached, `brew install` finds each one in
+# its download cache, checks it against the formula's SHA-256 and pours it
+# without fetching it. The formula metadata still comes from Homebrew's API,
+# so the version installed is the one an uncached install would get, and a
+# bottle the cache does not hold is downloaded as before.
+#
+# The cache is keyed by formula list, runner image and architecture. Auto
+# update stays off so an install does not first refresh every tap, and the
+# post-install cleanup stays off so the bottles are still there to be saved.
+name: Install Homebrew formulae through the cache
+description: brew install with the bottles restored from and saved to the Actions cache
+
+inputs:
+  formulae:
+    description: Space-separated formula names for brew install
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Brew cache key
+      id: key
+      shell: bash
+      env:
+        FORMULAE: ${{ inputs.formulae }}
+      run: |
+        sum="$(printf '%s' "$FORMULAE" | shasum -a 256 | cut -c1-12)"
+        prefix="brew-$sum-$ImageOS-$RUNNER_ARCH-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=$prefix$ImageVersion" >> "$GITHUB_OUTPUT"
+        echo "path=$(brew --cache)/downloads" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Homebrew bottles
+      id: cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.key.outputs.path }}
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+
+    - name: Install
+      shell: bash
+      env:
+        FORMULAE: ${{ inputs.formulae }}
+        HOMEBREW_NO_AUTO_UPDATE: "1"
+        HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+      run: |
+        # shellcheck disable=SC2086 # one word per formula
+        brew install $FORMULAE
+
+    - name: Save Homebrew bottles
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.key.outputs.path }}
+        key: ${{ steps.key.outputs.key }}

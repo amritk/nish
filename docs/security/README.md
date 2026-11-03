@@ -74,7 +74,7 @@ the record that found it. The notes below the table name each such finding.
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
 | PostgreSQL client and its handler carrier | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts` | 0 / 0 / 5 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
-| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
+| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |

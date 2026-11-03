@@ -99,11 +99,12 @@ permissions:
 # seconds per connection and three retries turn that into a failure inside the
 # install step's own five-minute limit, which is the one that names it.
 #
-# Every Ubuntu install step first points apt from the Azure mirror at
-# archive.ubuntu.com: the Azure mirror served libllvm18 at about 100 KB/s
-# on #963 and timed the five-minute install out before any test ran. The
-# LLVM installs go through .github/actions/apt-install, which also keeps
-# the .debs in the Actions cache and cuts a stalled download at a minute.
+# Every Ubuntu install goes through .github/actions/apt-install, which points
+# apt away from the Azure mirror (.github/apt-mirror.sh): that mirror served
+# libllvm18 at about 100 KB/s on #963 and timed the five-minute install out
+# before any test ran. The action also keeps the .debs in the Actions cache and
+# cuts a stalled download at a minute. Every macOS install goes through
+# .github/actions/brew-install, which keeps Homebrew's bottles in the cache.
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
@@ -248,82 +249,37 @@ jobs:
 
       # The runner image ships clang-18, lld-18 and llvm-18, so what this job
       # downloads is the rest: valgrind with its libc6-dbg, wasi-libc and the
-      # wasm32 builtins, about 23 MB. The Azure mirror sometimes serves that at
+      # wasm32 builtins, about 23 MB. The Azure mirror sometimes served that at
       # a trickle -- never idle long enough for `APT_OPTS`'s thirty seconds to
       # fire, so the step's five-minute limit did, and in October 2026 that was
       # every red run on main (one `test` shard of four, a different one each
-      # time). The .debs are kept in the Actions cache, keyed by runner image,
-      # so a shard normally downloads nothing. On a miss (a new image), the
-      # download is cut at a minute per attempt and retried without the Azure
-      # mirror: the stall is that mirror's (libc6-dbg, on #821's first
-      # run, on all three attempts), so a retry against it stalls again.
-      - name: Apt cache key (Ubuntu)
-        id: apt-key
-        if: runner.os == 'Linux'
-        run: |
-          echo "prefix=apt-test-$ImageOS-" >> "$GITHUB_OUTPUT"
-          echo "key=apt-test-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
-
-      - name: Restore apt packages (Ubuntu)
-        id: apt-cache
-        if: runner.os == 'Linux'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ runner.temp }}/apt-archives
-          key: ${{ steps.apt-key.outputs.key }}
-          restore-keys: ${{ steps.apt-key.outputs.prefix }}
-
+      # time). .github/actions/apt-install fetches from mirrors other than
+      # Azure's, keeps the .debs in the Actions cache keyed by runner image, and
+      # cuts a stalled download at a minute per attempt.
+      #
+      # wasi-libc and compiler-rt's wasm32 builtins are the WASI sysroot the
+      # `wasi` profile links against (scripts/build.sh). Without them the
+      # suite's wasi checks -- argv_echo under Node's WASI, the compiler as one
+      # wasi module (web/), range_export's `--profile wasi` -- are counted
+      # skips, "no WASI sysroot", and nothing here would notice a runtime that
+      # stops building against wasi-libc, as runtime-os.c did when it called a
+      # `realpath` wasi-libc does not have (#396). libclang-rt-18-dev is the
+      # native sanitizer and libFuzzer runtimes the `runtime_sanitize` and
+      # `fuzz` sections link; without it they are counted skips.
       - name: Install LLVM 18 + lld (Ubuntu)
         if: runner.os == 'Linux'
         timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18 valgrind wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev
+
+      # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
+      # plain names through a private bin dir placed ahead of /usr/bin so the
+      # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `llvm-nm`,
+      # `opt`, `ld.lld` and `wasm-ld` regardless of what the runner image ships.
+      - name: Link the LLVM 18 tools by their plain names
+        if: runner.os == 'Linux'
         run: |
-          archives="$RUNNER_TEMP/apt-archives"
-          mkdir -p "$archives/partial"
-          # `_apt` cannot reach a directory under the runner's home, so apt would
-          # download as root anyway, with a warning; say so up front.
-          apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
-          grep -rlZ azure.archive.ubuntu.com /etc/apt | xargs -0r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
-          sudo apt-get $APT_OPTS update
-          # wasi-libc and compiler-rt's wasm32 builtins are the WASI sysroot the
-          # `wasi` profile links against (scripts/build.sh). Without them the
-          # suite's wasi checks -- argv_echo under Node's WASI, the compiler as
-          # one wasi module (web/), range_export's `--profile wasi` -- are
-          # counted skips, "no WASI sysroot", and nothing here would notice a
-          # runtime that stops building against wasi-libc, as runtime-os.c did
-          # when it called a `realpath` wasi-libc does not have (#396).
-          # libclang-rt-18-dev is the native sanitizer and libFuzzer runtimes
-          # the `runtime_sanitize` and `fuzz` sections link; without it they
-          # are counted skips.
-          pkgs="clang-18 lld-18 llvm-18 valgrind wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev"
-          for attempt in 1 2 3; do
-            if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
-              --download-only $pkgs; then
-              break
-            fi
-            if [ "$attempt" = 3 ]; then
-              echo "::error::apt could not download the packages in three one-minute attempts"
-              exit 1
-            fi
-            echo "::warning::apt download attempt $attempt stalled or failed; retrying without the Azure mirror"
-            # The image's sources name `mirror+file:/etc/apt/apt-mirrors.txt`,
-            # Azure first, then archive.ubuntu.com and security.ubuntu.com. apt
-            # reads the list on each run, so no second `update` is needed.
-            if [ -f /etc/apt/apt-mirrors.txt ]; then
-              sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
-              cat /etc/apt/apt-mirrors.txt
-            fi
-          done
-          sudo apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $pkgs
-          # Drop .debs the mirror no longer offers (left over from an older
-          # image's cache) and hand the directory back to the runner user, so
-          # the save step below can read apt's root-owned files.
-          sudo apt-get $apt_cache autoclean
-          sudo rm -rf "$archives/partial" "$archives/lock"
-          sudo chown -R "$(id -u):$(id -g)" "$archives"
-          # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
-          # plain names through a private bin dir placed ahead of /usr/bin so the
-          # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `llvm-nm`, `opt`,
-          # `ld.lld` and `wasm-ld` regardless of what the runner image ships.
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as llvm-link llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
@@ -331,22 +287,16 @@ jobs:
           done
           echo "$bin" >> "$GITHUB_PATH"
 
-      # Saved here rather than by actions/cache's post step, which saves only
-      # when the whole job passes: a red test would otherwise leave every later
-      # run downloading again. The four shards race to save one key; the losers
-      # log a warning and carry on.
-      - name: Save apt packages (Ubuntu)
-        if: runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ runner.temp }}/apt-archives
-          key: ${{ steps.apt-key.outputs.key }}
-
       - name: Install LLVM 18 + lld (macOS)
         if: runner.os == 'macOS'
         timeout-minutes: 10
+        uses: ./.github/actions/brew-install
+        with:
+          formulae: llvm@18
+
+      - name: Put LLVM 18 on PATH (macOS)
+        if: runner.os == 'macOS'
         run: |
-          brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
           # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
           # drops it, fall back to the standalone formula.
@@ -378,6 +328,18 @@ jobs:
         run: |
           bash scripts/fetch-seed.sh
           build/seed/bin/nish --version
+
+      # A server `nish run --watch` swaps closes its SO_REUSEPORT listener
+      # while the new one is up, and Linux resets the connections still queued
+      # on a closing listener unless this setting moves them to another
+      # listener of the group. tests/run.js checks that no request is lost
+      # across the swap only with it on, and skips that check otherwise;
+      # without it a request was lost at random (#1158's shard 1).
+      - name: Let a closing SO_REUSEPORT listener hand its queue on (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w net.ipv4.tcp_migrate_req=1
+          test "$(cat /proc/sys/net/ipv4/tcp_migrate_req)" = 1
 
       # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
       # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
@@ -783,8 +745,13 @@ jobs:
       - name: Install LLVM 18 + lld (macOS)
         if: runner.os == 'macOS'
         timeout-minutes: 10
+        uses: ./.github/actions/brew-install
+        with:
+          formulae: llvm@18
+
+      - name: Put LLVM 18 on PATH (macOS)
+        if: runner.os == 'macOS'
         run: |
-          brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
           if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
           echo "$prefix/bin" >> "$GITHUB_PATH"
@@ -1287,8 +1254,12 @@ jobs:
       # The `test` job's macOS install step, word for word.
       - name: Install LLVM 18 + lld (macOS)
         timeout-minutes: 10
+        uses: ./.github/actions/brew-install
+        with:
+          formulae: llvm@18
+
+      - name: Put LLVM 18 on PATH (macOS)
         run: |
-          brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
           # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
           # drops it, fall back to the standalone formula.
@@ -1390,8 +1361,12 @@ jobs:
       # The `test` job's macOS install step, word for word.
       - name: Install LLVM 18 + lld (macOS)
         timeout-minutes: 10
+        uses: ./.github/actions/brew-install
+        with:
+          formulae: llvm@18
+
+      - name: Put LLVM 18 on PATH (macOS)
         run: |
-          brew install llvm@18
           prefix="$(brew --prefix llvm@18)"
           # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
           # drops it, fall back to the standalone formula.

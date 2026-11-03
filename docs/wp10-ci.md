@@ -81,12 +81,16 @@ its own, so every `apt-get` is also handed `$APT_OPTS` (30 s per connection,
 three retries) from the workflow's `env`. That bounds an idle mirror, not a
 slow one: the Azure mirror serving `test`'s ~23 MB of valgrind, libc6-dbg and
 wasi packages at a trickle ran the install step into its five minutes on one
-shard of most main runs in October 2026. So `test` keeps those `.deb`s in the
-Actions cache, keyed by runner image (`apt-test-$ImageOS-$ImageVersion`), and a
-shard normally downloads nothing; on a miss each download attempt is cut at a
-minute and retried twice without the Azure mirror (dropped from
-`/etc/apt/apt-mirrors.txt`), since the stall is that mirror's and
-retrying it stalls again.
+shard of most main runs in October 2026. So every Ubuntu install goes through
+`.github/actions/apt-install`. It runs `.github/apt-mirror.sh` first, which
+points apt at a mirror list of our own (mirrors.edge.kernel.org, then
+archive.ubuntu.com, then security.ubuntu.com) in place of the Azure mirror,
+and apt moves down the list when a mirror fails. It keeps the `.deb`s in the
+Actions cache, keyed by package list, runner image and architecture, so a job
+normally downloads nothing, and on a miss it cuts each download attempt at a
+minute and retries twice. Every Homebrew install goes through
+`.github/actions/brew-install`, which keeps the bottles in the cache the same
+way.
 
 Three jobs took longer than 15 minutes unsplit, so each is split:
 

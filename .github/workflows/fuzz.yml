@@ -28,11 +28,11 @@ permissions:
 
 # ci.yml says why this cache is set for every job, and why it is outside the checkout.
 #
-# Every Ubuntu install step first points apt from the Azure mirror at
-# archive.ubuntu.com: the Azure mirror served libllvm18 at about 100 KB/s
-# on #963 and timed the five-minute install out before any test ran. The
-# LLVM installs go through .github/actions/apt-install, which also keeps
-# the .debs in the Actions cache and cuts a stalled download at a minute.
+# Every Ubuntu install goes through .github/actions/apt-install, which points
+# apt away from the Azure mirror (.github/apt-mirror.sh): that mirror served
+# libllvm18 at about 100 KB/s on #963 and timed the five-minute install out
+# before any test ran. The action also keeps the .debs in the Actions cache and
+# cuts a stalled download at a minute.
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
