@@ -6579,34 +6579,48 @@ if (dealtHere("selfHosting")) {
     // And the third party to that contract, added 2026-09-20: the release
     // tarball's presence gate. `std/` was not staged at all for four releases,
     // and the gate that exists to catch exactly that listed seven paths and
-    // none of them under `std/`. Naming the modules there fixes the case that
-    // happened; deriving the list from the same directory the two above read
-    // is what stops the NEXT module shipping in `src/`'s literal and not in
-    // the tarball -- three lists that agree until one is edited is the defect
-    // `.github/seed-targets.json` exists to prevent one level up.
-    const releaseYmlText = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
+    // none of them under `std/`. Each gate named every module by hand until
+    // the gates took them from `scripts/std-module-paths.mjs`, which reads the
+    // literal above in the commit being released -- three hand lists that agree
+    // until one is edited is the defect `.github/seed-targets.json` exists to
+    // prevent one level up, and a new module no longer edits a workflow.
     //
-    // All THREE presence gates, not the first one found. release.yml has one per
-    // artefact -- the release tarball, the per-platform npm package, and the main npm
-    // package -- and the first two ship a native compiler from the same staged
-    // directory while the third ships `dist/`. Picking one by a `.find` would test
-    // whichever happened to come first in the file and say nothing about the others,
-    // which is the shape of the defect rather than a check on it.
-    const gateLines = releaseYmlText.split("\n").filter((l) => /^\s*for f in \S+ /.test(l))
-    //
-    // Every module, a nested one (`std/crypto/sha256.ts`) included: a gate that
-    // named only the top level would let a subdirectory drop out of the staging
-    // unnoticed, which is the defect this check exists for.
-    const listedModules = actual.split(", ")
-    const holes = gateLines.flatMap((line) =>
-      listedModules.filter((m) => !line.includes(`std/${m}.ts`)).map((m) => `std/${m}.ts in: ${line.trim()}`)
-    )
+    // All THREE gates, not the first one found: release.yml has one per artefact
+    // -- the release tarball, the per-platform npm package, and the main npm
+    // package. Each must assign the script's answer on the line before its loop
+    // (an assignment fails the step under `bash -e`; `for f in $(...)` would
+    // not), loop over `$std`, and spell no std module itself, so the script is
+    // the one list. Its answer must be every module, a nested one
+    // (`std/crypto/sha256.ts`) included.
+    const releaseYmlLines = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8").split("\n")
+    const gateAt = releaseYmlLines.flatMap((l, i) => (/^\s*for f in \S+ /.test(l) ? [i] : []))
+    const scriptPaths = spawnSync("node", [path.join(root, "scripts", "std-module-paths.mjs")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const expectedPaths = stdModuleFiles().join("\n")
+    const printedPaths = scriptPaths.stdout.trim().split("\n").sort().join("\n")
+    const assign = 'std="$(node scripts/std-module-paths.mjs)"'
+    const faults = [
+      ...(scriptPaths.status === 0 && printedPaths === expectedPaths
+        ? []
+        : [
+            `scripts/std-module-paths.mjs exited ${scriptPaths.status} and printed:\n${scriptPaths.stdout}${scriptPaths.stderr}\nexpected:\n${expectedPaths}`,
+          ]),
+      ...(gateAt.length === 3 ? [] : [`expected 3 \`for f in ...\` gates in release.yml, found ${gateAt.length}`]),
+    ]
+    for (const i of gateAt) {
+      const line = releaseYmlLines[i].trim()
+      if (releaseYmlLines[i - 1].trim() !== assign) faults.push(`the line before it is not ${assign}: ${line}`)
+      if (!line.endsWith(" $std; do")) faults.push(`it does not loop over $std: ${line}`)
+      for (const t of line.split(/\s+/).filter((t) => /^std\/.*\.ts$/.test(t))) {
+        faults.push(`it spells ${t} by hand: ${line}`)
+      }
+    }
     check(
-      `release.yml's ${gateLines.length} presence gates each name every std module, nested ones included, so none can ship missing (${listedModules.join(", ")})`,
-      gateLines.length === 3 && holes.length === 0,
-      gateLines.length !== 3
-        ? `expected 3 \`for f in ...\` gates in release.yml, found ${gateLines.length}`
-        : `not named:\n${holes.join("\n")}`
+      `release.yml's ${gateAt.length} presence gates take every std module, nested ones included, from scripts/std-module-paths.mjs, whose answer is what std/ has`,
+      faults.length === 0,
+      faults.join("\n"),
     )
   }
 
@@ -18312,7 +18326,7 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
 // ---- Regions (WP46 stage 1): runtime-region.c from C ---------------------------------
 // tests/runtime/region-test.c, linked with the whole runtime in the default
 // build and with -DNISH_THREADS: with no argument it runs the positive checks
-// (chunk sizes, nesting, the root, a hundred thousand regions freed ten times
+// (chunk sizes and their 1 MiB ceiling, nesting, the root, a hundred thousand regions freed ten times
 // with the resident set flat); with a mode it misuses a handle, and each mode
 // must exit 1 with its panic. Then `scripts/build.sh --profile wasm` must refuse
 // IR that names a region function, pointing at `--profile wasi`.
@@ -18345,13 +18359,23 @@ if (!only || "region".includes(only)) {
   ]
   for (const [name, flags, extra] of [
     ["region_test", [], []],
-    ["region_test_threads", ["-DNISH_THREADS=1", "-pthread"], [["thread", "nish: a region handle made on another thread"]]],
+    [
+      "region_test_threads",
+      ["-DNISH_THREADS=1", "-pthread"],
+      [
+        ["thread", "nish: a region handle made on another thread"],
+        // RT-46: new's out-of-memory panic lets go of the lock, so an atexit
+        // free finishes and the exit is 1, not SIGALRM. Linux caps the
+        // address space; macOS does not enforce RLIMIT_AS.
+        ...(process.platform === "linux" ? [["oom-unlocks", "nish: out of memory"]] : []),
+      ],
+    ],
   ]) {
     const built = regionBuild(name, flags)
     const label = flags.length > 0 ? "runtime-region.c -DNISH_THREADS" : "runtime-region.c"
     const run = built.ok ? spawnSync(built.exe, [], { encoding: "utf8" }) : null
     check(
-      `${label}: chunks start at the first allocation and double, regions nest, and 100,000 freed ten times leave the resident set flat`,
+      `${label}: chunks start at the first allocation and double up to 1 MiB, regions nest, and 100,000 freed ten times leave the resident set flat`,
       run !== null && run.status === 0,
       built.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "")
     )
@@ -27352,13 +27376,15 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
     /\bcp -r std "\$stage\/std"/.test(releaseYml),
     "release.yml's binaries job does not stage std/ into the tarball"
   )
-  // The presence gate names a std module, so a narrower copy is caught where `runtime`
-  // already is. It is a presence check and shares `runtime`'s limit: an empty text.ts
-  // would pass here and fail in the smoke step below, which is why both exist.
+  // The presence gate checks the std modules, so a narrower copy is caught where
+  // `runtime` already is: it loops over `scripts/std-module-paths.mjs`'s answer
+  // (the self-hosting section holds that answer to std/ and all three gates to it). It is a
+  // presence check and shares `runtime`'s limit: an empty text.ts would pass here and
+  // fail in the smoke step below, which is why both exist.
   check(
-    "release tarball: the presence gate names a std module among the paths that must be there",
-    /for f in [^\n]*\bstd\/[a-z_]+\.ts\b/.test(releaseYml),
-    "release.yml's tarball gate lists no std/ path, so a staging that drops it passes"
+    "release tarball: the presence gate checks the std modules among the paths that must be there",
+    /std="\$\(node scripts\/std-module-paths\.mjs\)"\n\s*for f in [^\n]* \$std; do\n[^\n]*"\$RUNNER_TEMP\/files\.txt"/.test(releaseYml),
+    "release.yml's tarball gate does not loop over scripts/std-module-paths.mjs's answer, so a staging that drops std/ passes"
   )
   // And a program that USES the library, run rather than compiled. A list is a claim
   // about names; only running one of those modules says the library is whole. The
@@ -28360,9 +28386,13 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
   const ships = (file) =>
     pkgFiles.some((entry) => !entry.startsWith("!") && (file === entry || file.startsWith(`${entry}/`))) &&
     !pkgFiles.includes(`!${file}`)
+  // A gate's `$std` is every std module (the self-hosting section holds
+  // `scripts/std-module-paths.mjs` to that), so a module it checks that way
+  // counts as named.
   const gates = readRel(path.join(".github", "workflows", "release.yml"))
     .split("\n")
     .filter((line) => /^\s*for f in .*; do$/.test(line))
+    .map((line) => line.replace("$std", stdModuleFiles().join(" ")))
   const shippedRows = rows.filter((r) => ships(r.file))
   const unshippedTexts = shippedRows.flatMap(({ file, licenceText }) => [
     ...(ships(licenceText) ? [] : [`${file} ships, but package.json's files does not ship ${licenceText}`]),

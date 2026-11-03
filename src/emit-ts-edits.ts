@@ -121,7 +121,7 @@ const AMBIENT_NAMES: string =
   " write writeError panic readFileSync readFileSyncOrNull" +
   " readFileBytesSync writeFileSync appendFileSync mkdirSync" +
   " isDirectorySync readdirSync realpathSync getenv spawnSync spawnSyncTo" +
-  " spawn kill waitPid availableParallelism totalMemory setNice setIdlePriority" +
+  " spawn kill waitPid availableParallelism totalMemory setNice setIdlePriority setCpuAffinity" +
   " monotonicNanos wallClockNanos statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64" +
   " toF64 f64ToBits f32ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero" +
   " Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode" +
@@ -140,6 +140,13 @@ const WIDTH_TYPES: string =
 /** The message NL4011 carries; `src/codes.ts` keys the code on it. */
 export const SIGNAL_REFUSAL: string =
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)"
+
+/**
+ * The message NL4015 carries. A region is an allocator swap, and the runtime
+ * the output imports (`nish/runtime`) has no regions to swap to yet.
+ */
+export const REGION_REFUSAL: string =
+  "--emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native"
 
 /** The message NL4013 carries; `src/codes.ts` keys the code on it. */
 const INSTANCES_REFUSAL: string =

@@ -3393,7 +3393,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -4042,7 +4042,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -6611,7 +6611,8 @@ enclosing function
 
 The builtins backed by the C runtime can be imported instead of reached for as
 globals. `nish:` is the only bare specifier the language accepts; but for
-`nish:secret`, which has source behind it ([Secrets](#secrets-nishsecret)), it
+`nish:secret` and `nish:region`, which have source behind them
+([Secrets](#secrets-nishsecret), [Regions](#regions-nishregion)), it
 resolves to no file, and the import *renames a builtin rather than introducing one* —
 the call checks through the same rule and emits the same IR as the global
 spelling, which `tests/run.js` pins by compiling `tests/cases/io_nish_import`
@@ -6620,9 +6621,10 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
+| `nish:region` | `Region`, `region`, `regionWith`, `enter`, `enterWith`, `free` — source behind it too ([Regions](#regions-nishregion)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
@@ -7504,6 +7506,102 @@ integers, and is an intrinsic emitted into the program, so it needs no runtime
 function and works wherever the program's IR does. Key material belongs in a
 `Secret`, and `secureZero` is for bytes that never were one.
 
+### Regions: `nish:region`
+
+A region is memory a program frees when it says so: an arena of its own,
+reached through a handle. A long-running program — a cache, a server's
+per-connection state — keeps each thing that lives and dies together in one
+region and gives the whole of it back with one `free`, where the thread's arena
+would hold it until the program ends.
+
+```ts
+import { Region, enter, enterWith, free, region, regionWith } from "nish:region";
+
+class Session {
+  hits: i32 = 0;
+  payload: u8[];
+  constructor(size: i32) {
+    this.payload = new Array<u8>(size);
+  }
+}
+
+const open = (size: i32): Session => new Session(size);
+
+const serve = (s: Session, out: u8[]): i32 => {
+  s.hits = s.hits + 1;
+  for (let k: i32 = 0; k < s.payload.length && k < out.length; k++) {
+    out[k] = s.payload[k]; // a number is copied out
+  }
+  return s.payload.length;
+};
+
+const r: Region<Session> = regionWith(16, open);
+const n: i32 = enterWith(r, new Array<u8>(64), serve);
+free(r);
+```
+
+| Export | Meaning |
+| --- | --- |
+| `Region<T>` | a handle to a region whose root is a `T`: a 64-bit number, not a pointer |
+| `region(f)`, `regionWith(arg, f)` | a new region; `f()` (or `f(arg)`) runs with every allocation landing in it, and what `f` answers is the root |
+| `enter(r, f)`, `enterWith(r, arg, f)` | `f(root)` (or `f(root, arg)`) run the same way; answers what `f` answers |
+| `free(r)` | gives the region's memory back; `r` and every copy of it are dead |
+
+`f` is an arrow or a named function, and an arrow captures nothing (NL2335),
+so the ways into a region are its root, `arg` and module state. The checker
+follows each (`src/region-rules.ts`), with two kinds of value: *region memory*
+(the root, and whatever `f` allocates) and *outer memory* (`arg`, module state,
+what a callee answers from outside). A number, a `boolean`, an `enum` and a
+`Region` are copied, never pointed at, so they cross freely
+(`tests/cases/region_cache`).
+
+| Refused | Code |
+| --- | --- |
+| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`) |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
+| `enter`'s or `enterWith`'s `f` answering anything but a number, a `boolean`, an `enum` or a `Region`: an array, an object or a string | **NL2611** (`reject_region_enter_result`, `reject_region_enter_string`) |
+| `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | **NL2612** (`reject_region_threads`) |
+| a value whose type holds a `Region` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, a value sent on a channel | **NL2613** (`reject_region_task_arg_field`, `reject_region_task_answer`, `reject_region_channel_map`, `reject_region_parallel_capture`) |
+| `region`'s or `regionWith`'s `f` answering anything but memory it allocated: `region(() => moduleValue)`, `regionWith(g, (a) => a)` | **NL2614** (`reject_region_root_module`, `reject_region_root_arg`) |
+| outer storage growing inside `f`, directly or through a callee: `push` on an outer array (arrays have no `unshift` or `splice`; the rule names them so it holds if they come), `Map.set` or `Set.add` on an outer `Map` or `Set` | **NL2615** (`reject_region_grow_push`, `reject_region_grow_map`, `reject_region_grow_set`, each with a `_callee` twin, `reject_region_arrow_grow`) |
+| a call inside `f` the region rules have no facts for. No program reaches it today, since every function, instantiation, lifted arrow and `declare function` has whole-program facts; it stays so that such a callee is never let through unexamined (`tests/wordings/unreachable.txt`) | **NL2616** |
+| `Arena.mark` or `Arena.used` inside `f`, or a callee reaching one: inside a region they would read the region's own arena, not the thread's | **NL2617** (`reject_region_arena_mark` through `region`, `reject_region_arena_used_callee` through `enter` and a callee) |
+| `new Region<T>()` | **NL2618** (`reject_region_new`) |
+| `region`, `regionWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`) |
+| `using r = region(f)`, in any declarator: a block does not free a region | NL2387 (`reject_region_using_first`, `reject_region_using_second`) |
+
+- **`Arena.mark` and `Arena.used` are refused inside `f`** (NL2617). Inside a
+  region they read the region's arena, not the thread's, so a mark taken there
+  names nothing the thread's arena knows once `f` returns
+  (`docs/security/runtime.md`, RT-45).
+- **An arrow handed to a function runs inside `f`, and is judged as `f`'s
+  own code.** Its body is walked with what it captures, its parameters take
+  what the call is handed, what any arrow of the same call answers (the callee
+  may feed one arrow's answer to another, or to itself) or memory the callee
+  allocated, and what it answers is part of what the call answers, so
+  `pick(() => a.node)` stored in the root is NL2610 as `a.node` is
+  (`reject_region_arrow_keep`, `_grow`, `_link`, `_result`, `_generic`,
+  `_compose`, `_compose_temp`, `_twice`, `_twice_temp`). The walk runs to a fixpoint however long a chain of
+  assignments is, never a fixed number of rounds (`reject_region_fixpoint_chain`).
+- **The rules are on types for threads, on values inside `f`.** NL2613 follows
+  the type, so a handle hidden in a field of a task's argument is caught where
+  it crosses, whatever route brought it there. A handle stored in region
+  memory, or answered by `enter`, stays on its thread and is allowed.
+- `using a = arena()` inside `f` is allowed, and so is `enter` of a second
+  region: only numbers come out of it.
+- **Every call checks its handle at run time.** `enter`, `enterWith` and
+  `free` stop the program on a handle that is 0, freed already, or another
+  thread's; `enter` of a region already entered and `free` of an entered one
+  stop it too, so freeing twice is a panic and never a double free. Each call
+  is a `region` site under [`--deny-panics`](#panic-sites)
+  (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
+  regions `region` stops the program as well.
+- A program run under Node as it is written (`runtime/nish.mjs`) gets a
+  region as an entry in a table, `free` drops it, and the same handle checks
+  throw. `--emit-ts` output is different: the runtime it imports
+  (`nish/runtime`) has no regions yet, so it refuses the module (NL4015,
+  `reject_emit_ts_region`).
+
 ### `process`
 
 | Signature | Semantics | Effect | Test |
@@ -7841,10 +7939,10 @@ itself, on the event loop, so a synchronous wait has nothing to find, and the
 prelude's versions throw, naming themselves, rather than answer (the `os_`
 block of `tests/run.js`).
 
-### Scheduling: `setNice`, `setIdlePriority`
+### Scheduling: `setNice`, `setIdlePriority`, `setCpuAffinity`
 
-How much of the CPU the program asks for: a batch job or a background indexer
-steps aside for the interactive work on the machine. Both are C in
+How much of the CPU the program asks for, and where: a batch job or a background indexer
+steps aside for the interactive work on the machine, and a prefork worker keeps to one core. Each is C in
 `runtime/runtime-os.c`, and each is exported by `nish:process` as well as
 being a global.
 
@@ -7852,6 +7950,7 @@ being a global.
 | --- | --- | --- | --- |
 | `setNice(n: i32): i32` | set the **nice value** to `n` with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. `n` is **lower-only**, even as root: it takes 0..19, and any other value is `-22` (EINVAL) with no system call; a value below the current nice value is `-13` (EACCES) with no `setpriority` call, so the priority never rises. Children started afterwards inherit the value | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
 | `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)`, which runs it only when nothing else wants the CPU, and answer 0 or a negative errno. **Linux only**: Darwin has no such policy and the answer there is -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback (`setNice(19)`, or a deadline) for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
+| `setCpuAffinity(cpu: i32): i32` | pin the calling process to the one CPU `cpu` with `sched_setaffinity` and answer 0, or a negative errno. It is **narrow-only**: a `cpu` below 0, at or past `CPU_SETSIZE`, or outside the CPUs the process may already run on (`taskset`, a cgroup) is `-22` with no change, so it never moves a process onto a CPU it was kept off. `availableParallelism()` answers 1 afterwards, and children started afterwards inherit the mask. **Linux only**: Darwin has no affinity call and the answer there is -95, as it is under Node | write | `link/net_prefork_pin`; `reject_os_affinity_wasm`, `reject_os_affinity_task` |
 
 **Per thread.** Linux keeps both the nice value and the policy per thread: a
 call sets the calling thread's and every thread started after it. So both
@@ -7896,7 +7995,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (no `nish:net` call looks one up; [`nish/net/dns`](../std/net/dns.ts) resolves it first), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
-| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flags add: `3` is both. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
+| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flag `4`, with flag `1` and on Linux only, attaches a classic BPF program (`SO_ATTACH_REUSEPORT_CBPF`) that hands each connection to the listener at the index of the CPU that received it, in the order the group's listeners were bound; a CPU past the group's size falls back to the hash. Flag `4` without `1` is `-22`, and off Linux it is `-95`. Flags add: `3` is both, `5` and `7` steer. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
@@ -7918,7 +8017,7 @@ What `tcpListenFlags`'s flag `1` does on each platform:
 | Platform | Flag `1` |
 | --- | --- |
 | Linux | Listeners that share the port each get new connections, spread by a hash of the connection's 4-tuple; only listeners of the same user may share |
-| Darwin | Listeners share the port, but one of them takes the connections: the flag buys a restart without a gap rather than a spread |
+| Darwin | Listeners share the port, but one of them takes the connections: the flag buys a restart without a gap rather than a spread; flag `4` is `-95` |
 | `wasm32`, `--profile wasi` | Refused at compile time with NL2404, as every `nish:net` call is |
 
 **Errors are numbers.** Every call answers an `i32`: `>= 0` is success (a
@@ -8514,7 +8613,7 @@ bytes — natively and under WASI, and expect the same lines from both.
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
-| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2610); a second argument is refused too (`` `sort` takes one comparator ``, NL2609). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
+| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620); a second argument is refused too (`` `sort` takes one comparator ``, NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -9732,7 +9831,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority` (`caps_process_nice`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
@@ -11152,7 +11251,7 @@ by the caller.
   is the `: string` on an unannotated `const` bound to a string literal.
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Five kinds of module are refused, and then nothing is written** (exit 1):
+- **Six kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -11185,7 +11284,10 @@ by the caller.
   builtin call included (NL4014, `tests/emit-ts/refused/uncalled-zero.ts`,
   `uncalled-copy.ts`, `uncalled-ctor-zero.ts`, `uncalled-field-zero.ts`,
   `uncalled-wide-zero.ts`); in the standard library the same body is a stub,
-  without a warning, and the program is written.
+  without a warning, and the program is written. The sixth is a module that
+  imports `nish:region`, whose regions the runtime the output imports
+  (`nish/runtime`) does not answer yet, though a program run under Node as it
+  is written does (NL4015, `reject_emit_ts_region`); keep it native.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/
@@ -11228,6 +11330,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
 | `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
 | `ffi-length` | a call to a [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). |
+| `region` | a call to `nish:region`'s `region`, `regionWith`, `enter`, `enterWith` or `free`: a handle that is 0, freed, another thread's or entered already, a `free` of an entered region, or more live regions than the table holds | nothing: the handle is a number the checker does not follow, so every call checks it (`tests/cases/reject_deny_panics_region`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
 | `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |

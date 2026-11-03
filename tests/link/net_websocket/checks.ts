@@ -2,11 +2,11 @@
 // example frames encoded byte for byte and decoded, a stream of frames fed at
 // every split point, fragmentation with control frames between the fragments,
 // UTF-8 across fragment boundaries, every refusal with its close code, and the
-// opening handshake read through `nish/net/http1`, and the client's side of
+// opening handshake read through `nish/net/http1-codec`, and the client's side of
 // it: the key, the request bytes, and every check of the server's answer.
 import { Suite } from "nish/testing";
-import { HTTP1_END, HTTP1_HEAD, HTTP1_UPGRADE, Http1Parser } from "nish/net/http1";
-import { Http1ResponseParser } from "nish/net/http1-client";
+import { HTTP1_END, HTTP1_HEAD, HTTP1_UPGRADE, Http1Parser } from "nish/net/http1-codec";
+import { Http1ResponseParser } from "nish/net/http1-client-codec";
 import {
   WS_CLOSE,
   WS_CLOSE_INVALID_DATA,

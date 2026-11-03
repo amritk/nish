@@ -82,7 +82,7 @@ PASS  a body whose rest is already waiting is still cut off once totalTimeoutMs 
 PASS  a listener whose backlog is full is HTTP_E_CONNECT_TIMEOUT
 PASS  a port nothing listens on is HTTP_E_REFUSED
 PASS  a name that does not exist is HTTP_E_DNS
-PASS  httpFetch answers null on a failure
+PASS  fetchSync answers null on a failure
 PASS  and the response on a success
 PASS  a redirect is not followed by default
 PASS  followed, a 302 fetches its Location

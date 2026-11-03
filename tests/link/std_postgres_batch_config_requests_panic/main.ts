@@ -1,5 +1,5 @@
-// A PgBatchConfig maxRequests over 1024 panics: it bounds the slots one
-// take probes, maxRequests^2 / 2 at worst.
+// A PgBatchConfig maxRequests over 65536 panics: past it, one execution's
+// key array, which the server reads whole, would pass a few MiB.
 // docs/security/postgres.md, "Panic sites".
 import { PgBatchConfig, PgBatcher } from "nish/net/postgres";
 
@@ -12,9 +12,9 @@ const ints = (): PgBatchConfig => {
 
 export const main = (): i32 => {
   const c = ints();
-  c.maxRequests = 1024;
+  c.maxRequests = 65536;
   console.log(`the most requests ${new PgBatcher(c).waiting()}`);
-  c.maxRequests = 1025;
+  c.maxRequests = 65537;
   new PgBatcher(c);
   console.log("not reached");
   return 0;

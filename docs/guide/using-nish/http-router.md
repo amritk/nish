@@ -236,7 +236,7 @@ before you use it as a file name.
 `match` takes the method and the target as windows into arrays you already
 hold, so neither carrier copies anything to route.
 
-With `nish/net/http1`, the parser keeps the request line in `head`:
+With `nish/net/http1-codec`, the parser keeps the request line in `head`:
 
 ```ts
 const route: i32 = router.match(

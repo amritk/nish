@@ -4,7 +4,7 @@
 // request, per message or per byte (a WebSocket upgrade, which reads the
 // client's offered subprotocols into a list, aside). That is what lets a loopback check
 // measure a whole server wake — carrier and program — and expect nothing.
-import { HTTP1_CHUNKED } from "nish/net/http1";
+import { HTTP1_CHUNKED } from "nish/net/http1-codec";
 import {
   H1_AGAIN,
   H1_BODY,

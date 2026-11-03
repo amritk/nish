@@ -1,0 +1,1 @@
+This call to `region<Box, () => ...>` may panic: it reaches the `region` site

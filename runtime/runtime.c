@@ -180,8 +180,15 @@ static NISH_COLD void nish_oom(void) { nish_die("nish: out of memory\n"); }
    this file still links alone. */
 NISH_TLS uint64_t nish_region_chunk;
 
+/* The most a region's next chunk grows to: past it the chunks stop doubling,
+   so a region that keeps allocating never asks malloc for one block of
+   gigabytes when smaller ones would do (docs/security/runtime.md, RT-47). A
+   single allocation larger than this still gets a chunk of its own size. */
+#define NISH_REGION_CHUNK_MAX ((uint64_t)1 << 20)
+
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB, or a region's
-   next size), bump from it. A region's chunks double from its first. */
+   next size), bump from it. A region's chunks double from its first, up to
+   NISH_REGION_CHUNK_MAX. */
 void *nish_arena_grow(uint64_t size) {
 #ifdef NISH_ASAN
   /* An exact chunk leaves off == cap, so the inline bump never fits again and
@@ -191,7 +198,7 @@ void *nish_arena_grow(uint64_t size) {
   uint64_t next = nish_region_chunk;
   uint64_t floor = next ? next : 65536;
   uint64_t cap = size > floor ? size : floor;
-  if (next) nish_region_chunk = cap * 2;
+  if (next) nish_region_chunk = cap < NISH_REGION_CHUNK_MAX / 2 ? cap * 2 : NISH_REGION_CHUNK_MAX;
 #endif
   /* A 64-bit request cannot always be asked for: wasm32's `size_t` is 32 bits,
      and malloc would silently take the low half of a chunk nobody can address. */

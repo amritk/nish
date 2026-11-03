@@ -16,6 +16,9 @@
 //               pool; the slot is built again on its next request
 //   pipeline    an error in the middle of five pipelined groups
 //   arrays      text[], int8[] and int4[] parameters, unnested by the server
+//   intarrays   int4[] and int8[] parameters in text and in binary, read back
+//               alike; a refusal under maxOutput; an element OID the
+//               statement does not take fails its request only
 //   binary      one statement's rows in binary and in text, read alike; two
 //               batches of creation times, binary and text, read alike
 //   conduit     the Conduit article list, prepared once and run pipelined
@@ -23,6 +26,9 @@
 //               for (peer or trust): the user, `select 1`, and 100 rows
 //   batch       keyed reads through PgBatcher: users by id, articles by slug,
 //               tags by article; duplicate and missing keys, two takes
+//   batchscale  PgBatcher takes of 1, 1024, 1025, 4096 and 65536 requests,
+//               each one execution: duplicate, missing and multi-row keys;
+//               keys that collide in its table; a failed and an empty run
 //
 // The `conduit` statement is the multicore server challenge's SPEC.md
 // `ARTICLE_LIST_SELECT ORDER_PAGE`,
@@ -233,13 +239,21 @@ class Driver {
   }
 }
 
-/** A pool of `size` connections as the arguments say, `extra` appended to the password. */
-const makePool = (size: i32, queue: i32, extra: string): PgPool => {
+/** The connection settings the arguments name. */
+const liveConfig = (): PgConfig => {
   const config = new PgConfig()
   config.user = process.argv[3]
   config.database = process.argv[5]
   config.options = "-c search_path=nish_live"
   config.applicationName = "nish-live"
+  return config
+}
+
+/** A pool of `size` connections as the arguments say, `extra` appended to the password. */
+const makePool = (size: i32, queue: i32, extra: string): PgPool => poolOf(liveConfig(), size, queue, extra)
+
+/** A pool of `size` connections with `config`, `extra` appended to the password. */
+const poolOf = (config: PgConfig, size: i32, queue: i32, extra: string): PgPool => {
   const password = secret(bytesOf(process.argv[4] + extra))
   const pool = new PgPool(config, password, size, queue)
   wipe(password)
@@ -714,6 +728,197 @@ const arrays = (target: PgTarget): i32 => {
     }
   }
   d.close()
+  return 0
+}
+
+/** `intarrays`' cap on queued output: a 2,000-element array fits under it, a 10,000-element one does not. */
+const INT_OUTPUT: i32 = 65536
+
+/** One `intarrays` case: an `int4[]` or `int8[]` parameter, sent once in text and once in binary. */
+class IntCase {
+  readonly name: string
+  readonly int4: boolean
+  readonly values: i64[]
+  /** Built element by element, with a NULL where `nulls` holds true; otherwise from the `i64[]` window. */
+  readonly nulls: boolean[]
+
+  constructor(name: string, int4: boolean, values: i64[], nulls: boolean[]) {
+    this.name = name
+    this.int4 = int4
+    this.values = values
+    this.nulls = nulls
+  }
+}
+
+/** `count` values from `first`, `step` apart. */
+const intRun = (first: i64, step: i64, count: i32): i64[] => {
+  const out: i64[] = []
+  for (let i: i32 = 0; i < count; i++) {
+    out.push(first + step * toI64(i))
+  }
+  return out
+}
+
+const intCases = (): IntCase[] => {
+  const min8: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8)
+  const none: boolean[] = []
+  return [
+    new IntCase("int4 empty", true, [], none),
+    new IntCase("int4 one", true, [toI64(42)], none),
+    new IntCase("int4 nulls", true, [toI64(0), toI64(5), toI64(0)], [true, false, true]),
+    new IntCase("int4 edges", true, [toI64(-2147483648), toI64(2147483647)], none),
+    new IntCase("int4 2000", true, intRun(toI64(-1000000000), toI64(1000003), toI32(2000)), none),
+    new IntCase("int8 empty", false, [], none),
+    new IntCase("int8 one", false, [toI64(-1)], none),
+    new IntCase("int8 nulls", false, [min8, toI64(0), toI64(7)], [false, true, false]),
+    new IntCase("int8 edges", false, [min8, -(min8 + toI64(1))], none),
+    new IntCase("int8 2000", false, intRun(min8, toI64(4611686) * toI64(1000000000) + toI64(18427387), toI32(2000)), none),
+    new IntCase("int8 10000", false, intRun(min8, toI64(922337) * toI64(1000000000) + toI64(203685477), toI32(10000)), none),
+  ]
+}
+
+/** Binds `c`'s array in text or binary: from the window, or element by element when it has NULLs; false when refused for room. */
+const intArray = (conn: PgConnection, c: IntCase, binary: boolean): boolean => {
+  const n: i32 = toI32(c.values.length)
+  if (c.nulls.length === 0) {
+    if (!binary) {
+      return conn.paramIntArray(c.values, toI32(0), n)
+    }
+    return c.int4 ? conn.paramInt4Array(c.values, toI32(0), n) : conn.paramInt8Array(c.values, toI32(0), n)
+  }
+  if (binary ? !conn.binaryArrayStart(c.int4 ? toI32(23) : toI32(20)) : !conn.arrayStart()) {
+    return false
+  }
+  for (let i: i32 = 0; i < n; i++) {
+    const ok: boolean = c.nulls[i] ? (binary ? conn.binaryArrayNull() : conn.arrayNull()) : binary ? conn.binaryArrayInt(c.values[i]) : conn.arrayInt(c.values[i])
+    if (!ok) {
+      return false
+    }
+  }
+  conn.arrayEnd()
+  return true
+}
+
+/**
+ * What `intarrays` reads back of every array: its length, its non-NULL
+ * elements, their least, greatest and sum, each element weighted by its
+ * position (so an array sent out of order differs), and the elements of a
+ * short one.
+ */
+const INT_SUMMARY: string =
+  "count(*), count(x), min(x), max(x), sum(x), sum(x::numeric * ord), case when count(*) <= 4 then string_agg(coalesce(x::text, 'NULL'), ' ' order by ord) else '...' end"
+
+/** The request `t` of `intarrays` names: a case in text or binary, the mismatch, or the request after it. */
+const intLabel = (cases: IntCase[], t: i32): string => {
+  const paired: i32 = 2 * toI32(cases.length)
+  if (t < 0 || t > paired + 1) {
+    return `request ${t}`
+  }
+  if (t === paired) {
+    return "int4[] binary to int8[]"
+  }
+  if (t > paired) {
+    return "int8[] binary after it"
+  }
+  const k: i32 = t >> 1
+  return `${cases[k].name} ${(t & 1) === 1 ? "binary" : "text"}`
+}
+
+/**
+ * `intarrays`: `int4[]` and `int8[]` parameters in text and in binary, read
+ * back alike: empty, one element, NULLs, the type's extremes, arrays that grow
+ * the output buffer and one past `maxOutput`, refused in both formats and
+ * sent empty instead. Then a binary `int4[]` sent where the statement takes
+ * `int8[]`: the server's error fails that request only, and the next one on
+ * the connection succeeds.
+ */
+const intarrays = (target: PgTarget): i32 => {
+  const config = liveConfig()
+  config.maxOutput = INT_OUTPUT
+  const cases = intCases()
+  const paired: i32 = 2 * toI32(cases.length)
+  // Then the mismatch, and a request after it.
+  const requests: i32 = paired + 2
+  const pool = poolOf(config, toI32(1), requests, "")
+  pool.register("int4s", `select ${INT_SUMMARY} from unnest($1::int4[]) with ordinality as u(x, ord)`, noTypes())
+  pool.register("int8s", `select ${INT_SUMMARY} from unnest($1::int8[]) with ordinality as u(x, ord)`, noTypes())
+  const seen: string[] = []
+  for (let t: i32 = 0; t < requests; t++) {
+    pool.request()
+    seen.push("")
+  }
+  const d = new Driver(pool, target)
+  let done: i32 = 0
+  let sent: i32 = 0
+  while (done < requests) {
+    // One request in flight at a time, so a bind meets an empty output buffer
+    // and only the case past `maxOutput` is refused.
+    const slot: i32 = sent === done ? pool.dispatch() : toI32(-1)
+    if (slot >= 0) {
+      sent += 1
+      const t: i32 = pool.ticket
+      const conn = pool.connection(slot)
+      if (t < paired) {
+        const k: i32 = t >> 1
+        const c = cases[k]
+        const binary: boolean = (t & 1) === 1
+        conn.bindStart(c.int4 ? "int4s" : "int8s")
+        if (!intArray(conn, c, binary)) {
+          console.log(`${c.name} ${binary ? "binary" : "text"}: refused under maxOutput, sent empty`)
+          conn.bindCancel()
+          conn.bindStart(c.int4 ? "int4s" : "int8s")
+          conn.paramIntArray(c.values, toI32(0), toI32(0))
+        }
+      } else {
+        conn.bindStart("int8s")
+        const values: i64[] = [toI64(1), toI64(2)]
+        if (t === paired) {
+          conn.paramInt4Array(values, toI32(0), toI32(2))
+        } else {
+          conn.paramInt8Array(values, toI32(0), toI32(2))
+        }
+      }
+      conn.bindEnd()
+      pool.send()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      return 1
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      const t: i32 = pool.ticket
+      if (event === PG_ROW) {
+        const label: string = intLabel(cases, t)
+        const cols: string[] = []
+        for (let c: i32 = 0; c < 7; c++) {
+          cols.push(conn.isNull(c) ? "NULL" : conn.columnText(c))
+        }
+        const row: string = cols.join(" ")
+        seen[t] = row
+        console.log(`${label}: ${row}`)
+      } else if (event === PG_ERROR) {
+        console.log(`${intLabel(cases, t)}: ${codeOf(conn)}`)
+      } else if (event === PG_GROUP_DONE) {
+        done += 1
+      } else if (event === PG_LOST || event === PG_FAILED) {
+        console.log(`connection failed: ${conn.failure} ${errorOf(conn)}`)
+        return 1
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  let agree: i32 = 0
+  for (let k: i32 = 0; k < toI32(cases.length); k++) {
+    if (seen[2 * k] !== "" && seen[2 * k] === seen[2 * k + 1]) {
+      agree += 1
+    } else {
+      console.log(`${cases[k].name}: text and binary differ`)
+    }
+  }
+  console.log(`text and binary agree on ${agree} of ${cases.length} cases`)
   return 0
 }
 
@@ -1221,6 +1426,163 @@ const batch = (target: PgTarget): i32 => {
   return code
 }
 
+/** The rows `batchscale`'s statement gives key `k`: its low 31 bits mod 3, numbered from 1, so none when they divide by 3. */
+const rowsOf = (k: i64): i32 => toI32((k & toI64(2147483647)) % toI64(3))
+
+const LOW32: i64 = 4294967295
+const GOLDEN: i64 = 2654435769
+
+/** The int8 key `j * 2^32 + (j * 2654435769 mod 2^32)`: its low half is its high half times the multiplier the batcher's int hash xors in, so every such key hashes to the same slot. */
+const collidingKey = (j: i32): i64 => (toI64(j) << toI64(32)) + ((toI64(j) * GOLDEN) & LOW32)
+
+/**
+ * One `batchscale` case: a batcher taking at most `n` requests, `n` of them
+ * queued, request `t`'s key `keyOf(t)`, one take on one pooled connection.
+ * Checks every request was answered as `rowsOf` says, each row naming the
+ * request's own key, rows in order and `done` after them; or `failed`, when
+ * `fails`. Prints a line of counts.
+ */
+const scaleCase = (target: PgTarget, label: string, n: i32, select: string, fails: boolean, keyOf: (t: i32) => i64): i32 => {
+  const config = new PgBatchConfig()
+  config.name = "scale"
+  config.keyType = PG_BATCH_INT
+  config.select = select
+  config.maxRequests = n
+  config.maxBytes = toI32(4194304)
+  config.queueSize = n
+  const b = new PgBatcher(config)
+  const pgConfig = liveConfig()
+  pgConfig.maxOutput = toI32(8388608)
+  const pool = poolOf(pgConfig, toI32(1), toI32(1), "")
+  pool.register(b.name, b.sql, noTypes())
+  const keys: i64[] = new Array<i64>(n)
+  for (let t: i32 = 0; t < n; t++) {
+    keys[t] = keyOf(t)
+    if (!b.addInt(keys[t], t)) {
+      console.log(`${label}: request ${t} refused`)
+      return 1
+    }
+  }
+  // Per request: rows seen, and its outcome, 0 open, 1 done, 2 missing, 3 failed.
+  const seen: i32[] = new Array<i32>(n)
+  const outcome: i32[] = new Array<i32>(n)
+  let wrong: i32 = 0
+  let rows: i32 = 0
+  const d = new Driver(pool, target)
+  pool.request()
+  let r: i32 = -1
+  let over: boolean = false
+  let code: i32 = 0
+  while (!over) {
+    const slot: i32 = pool.dispatch()
+    if (slot >= 0) {
+      r = b.take(pool.connection(slot))
+      pool.send()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log(`${label}: timed out`)
+      return 1
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      if (r >= 0 && event === PG_COMPLETE) {
+        b.end(r)
+      } else if (r >= 0 && event === PG_ERROR) {
+        if (!fails) {
+          console.log(failed(pool.ticket, conn))
+          code = 1
+        } else {
+          // The run fails for the reason the statement gives, division by zero, and no other.
+          const error = conn.lastError
+          const sqlstate: string = error === null ? "no error" : error.code
+          if (sqlstate !== "22012") {
+            console.log(`${label}: failed with ${sqlstate}, not 22012`)
+            code = 1
+          }
+        }
+        b.fail(r)
+      } else if (r >= 0 && event === PG_ROW && !b.row(r, conn)) {
+        console.log(`${label}: a row refused`)
+        code = 1
+      } else if (event === PG_GROUP_DONE) {
+        over = true
+      } else if (event === PG_LOST || event === PG_FAILED) {
+        console.log(`${label}: connection failed: ${conn.failure} ${errorOf(conn)}`)
+        return 1
+      }
+      if (r >= 0 && (event === PG_ROW || event === PG_COMPLETE || event === PG_ERROR)) {
+        let e: i32 = b.next(r)
+        while (e !== PG_BATCH_NONE) {
+          const t: i32 = b.tag
+          if (t < 0 || t >= n || outcome[t] !== 0) {
+            wrong += 1
+          } else if (e === PG_BATCH_ROW) {
+            seen[t] += 1
+            rows += 1
+            if (conn.columnText(toI32(0)) !== `${keys[t]}` || parseInt(conn.columnText(toI32(1))) !== seen[t]) {
+              wrong += 1
+            }
+          } else if (e === PG_BATCH_DONE) {
+            outcome[t] = 1
+          } else if (e === PG_BATCH_MISSING) {
+            outcome[t] = 2
+          } else if (e === PG_BATCH_FAILED) {
+            outcome[t] = 3
+          }
+          e = b.next(r)
+        }
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  let done: i32 = 0
+  let missing: i32 = 0
+  let failures: i32 = 0
+  for (let t: i32 = 0; t < n; t++) {
+    const want: i32 = fails ? 0 : rowsOf(keys[t])
+    if (outcome[t] === 1) {
+      done += 1
+    } else if (outcome[t] === 2) {
+      missing += 1
+    } else if (outcome[t] === 3) {
+      failures += 1
+    }
+    const ok: boolean = fails ? outcome[t] === 3 : want === 0 ? outcome[t] === 2 && seen[t] === 0 : outcome[t] === 1 && seen[t] === want
+    if (!ok) {
+      wrong += 1
+    }
+  }
+  console.log(`${label}: ${n} requests, ${b.waiting()} waiting; ${rows} rows, ${done} done, ${missing} missing, ${failures} failed, ${wrong} wrong`)
+  return wrong === 0 ? code : 1
+}
+
+/**
+ * `batchscale`: one execution answers a whole take at each size up to the
+ * most, 65536. Keys repeat (a quarter of each batch asks again for an earlier
+ * key), a third have no row and the rest one or two, which come in order;
+ * and a batch of three requests, a key of two rows asked twice and a key
+ * with none. At 4096 every key collides in the batcher's table, so past its probe bound
+ * repeats go to the server as keys of their own and are answered the same.
+ * Then a run the server fails, and one with no row for any key, at 65536.
+ */
+const batchscale = (target: PgTarget): i32 => {
+  const select: string = "select q.key as k, g from generate_series(1, (q.key & 2147483647) % 3) as g"
+  let code: i32 = 0
+  const sizes: i32[] = [toI32(1), toI32(1024), toI32(1025), toI32(4096), toI32(65536)]
+  for (const n of sizes) {
+    const distinct: i32 = n - n / toI32(4)
+    code += scaleCase(target, `batch of ${n}`, n, select, false, (t: i32): i64 => toI64((t % distinct) + toI32(1)))
+  }
+  // Keys 2, 3 and 2: one key of two rows asked twice, and one with none.
+  code += scaleCase(target, "batch of 3", toI32(3), select, false, (t: i32): i64 => toI64(t === toI32(1) ? toI32(3) : toI32(2)))
+  code += scaleCase(target, "colliding batch of 4096", toI32(4096), select, false, (t: i32): i64 => collidingKey((t % toI32(3072)) + toI32(1)))
+  code += scaleCase(target, "failed batch of 65536", toI32(65536), "select 1 / (q.key - q.key) as g", true, (t: i32): i64 => toI64(t + toI32(1)))
+  code += scaleCase(target, "empty batch of 65536", toI32(65536), select, false, (t: i32): i64 => toI64((t + toI32(1)) * toI32(3)))
+  return code === 0 ? 0 : 1
+}
+
 /** The ticket's rows of `sql`, on a connection of its own: how many, and the sum of their first column; "" if it failed. */
 const rows = (target: PgTarget, sql: string): string => {
   const pool = makePool(toI32(1), toI32(1), "")
@@ -1300,12 +1662,16 @@ export const main = (): i32 => {
     return pipeline(target)
   } else if (scenario === "arrays") {
     return arrays(target)
+  } else if (scenario === "intarrays") {
+    return intarrays(target)
   } else if (scenario === "binary") {
     return binary(target)
   } else if (scenario === "conduit") {
     return conduit(target)
   } else if (scenario === "batch") {
     return batch(target)
+  } else if (scenario === "batchscale") {
+    return batchscale(target)
   } else if (scenario === "unix") {
     return unix(target)
   }

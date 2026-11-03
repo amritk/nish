@@ -1,0 +1,1 @@
+stores `room.name` into `names[0]`: region memory kept by memory outside the region

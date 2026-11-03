@@ -669,6 +669,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "scandirat" ||
   name === "scanf" ||
   name === "sched_getaffinity" ||
+  name === "sched_setaffinity" ||
   name === "sched_setscheduler" ||
   name === "sched_yield" ||
   name === "select" ||

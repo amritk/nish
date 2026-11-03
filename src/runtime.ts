@@ -234,6 +234,13 @@ export class RuntimeTable {
     )
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
     this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE))
+    // WP46: `nish:region`'s four calls (runtime/runtime-region.c), each written
+    // by the body of one of `std/region.ts`'s intrinsics (`src/emit-region.ts`).
+    // `enter` and `leave` swap the thread's arena, so every one is a write.
+    this.add(plain("nish_region_new", "declare noundef i64 @nish_region_new()", EFFECT_WRITE))
+    this.add(plain("nish_region_enter", "declare i8* @nish_region_enter(i64 noundef)", EFFECT_WRITE))
+    this.add(plain("nish_region_leave", "declare void @nish_region_leave(i64 noundef, i8*)", EFFECT_WRITE))
+    this.add(plain("nish_region_free", "declare void @nish_region_free(i64 noundef)", EFFECT_WRITE))
     // Reads the offset, and writes nothing, as `nish_arena_mark` does.
     this.addWrites(
       WRITES_NOTHING,
@@ -1316,12 +1323,16 @@ export class RuntimeTable {
       WRITES_NOTHING,
       plain("nish_total_memory", "declare noundef i64 @nish_total_memory()", EFFECT_WRITE)
     )
-    // `setNice` and `setIdlePriority`, runtime-os.c: each changes how the
-    // kernel schedules the calling thread, which Linux keeps per thread, so a
-    // call from a task would move one worker and not the program. A shared
-    // write, then, which a task is refused, and two calls never fold into one.
+    // `setNice`, `setIdlePriority` and `setCpuAffinity`, runtime-os.c: each
+    // changes how the kernel schedules the calling thread, which Linux keeps
+    // per thread, so a call from a task would move one worker and not the
+    // program. A shared write, then, which a task is refused, and two calls
+    // never fold into one.
     this.add(plain("nish_set_nice", "declare noundef i32 @nish_set_nice(i32 noundef)", EFFECT_WRITE))
     this.add(plain("nish_set_idle_priority", "declare noundef i32 @nish_set_idle_priority()", EFFECT_WRITE))
+    this.add(
+      plain("nish_set_cpu_affinity", "declare noundef i32 @nish_set_cpu_affinity(i32 noundef)", EFFECT_WRITE)
+    )
     // WP38 S5: AES-GCM on the CPU's AES instructions, runtime-aes.c
     // (`src/kernels.ts`). `nish_aes_hw` is `nish_str_index_of_any`'s resolver
     // on its own: the one store it makes is the first call's answer, into a

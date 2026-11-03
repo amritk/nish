@@ -1,4 +1,4 @@
-// `nish/net/http1` against RFC 9112. Four groups of checks:
+// `nish/net/http1-codec` against RFC 9112. Four groups of checks:
 //
 // - **The split corpus.** Each request stream below is fed whole, cut in two
 //   at every byte, and fed one byte at a time, and the transcript — every head,
@@ -36,7 +36,7 @@ import {
   http1WriteChunk,
   http1WriteLastChunk,
   http1WriteResponseHead,
-} from "nish/net/http1";
+} from "nish/net/http1-codec";
 
 /** The bytes of a string, which in the language is bytes already. */
 const bytesOf = (text: string): u8[] => {

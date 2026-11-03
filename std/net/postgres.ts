@@ -59,8 +59,9 @@
  * does not need: a program prepares a statement and executes it in the same
  * flight.
  *
- * **Text results, no copies.** Every parameter is in text format, and so is
- * every result column unless the bind asks otherwise. A row is read where it
+ * **Text results, no copies.** Every parameter is in text format unless it
+ * is one of the binary integer arrays below, and every result column is text
+ * unless the bind asks otherwise. A row is read where it
  * lies in the input buffer: `next()` frames each message once, validates its
  * layout, and records each column's start and length in two reused arrays, so
  * a row costs no allocation. `int`, `bool`, `isNull` and `PgText.timestamp`
@@ -71,6 +72,21 @@
  * `arrayNull` and `arrayEnd` build an array one element at a time into the
  * Bind, so a list needs no string built first. A program whose element was
  * refused for room can drop the whole bind, unsent, with `bindCancel`.
+ *
+ * **Binary integer arrays.** `paramInt4Array` and `paramInt8Array` send an
+ * `i64[]` window as an `int4[]` or `int8[]` in PostgreSQL's binary layout:
+ * four or eight bytes an element and no digits to write or parse, which the
+ * benchmark (`bench/postgres/arrays.mjs`) measured at about a tenth of the
+ * text encoder's client CPU, and at 1,000 elements a 51% cut in the server's
+ * on `unnest` for `int8[]`, 30% for `int4[]`.
+ * `binaryArrayStart(oid)`, `binaryArrayInt` and `binaryArrayNull` build one
+ * element at a time, NULLs included, and `arrayEnd` closes it. The Bind's
+ * format codes stay a single zero word while every parameter is text; the
+ * first binary one makes `bindEnd` write a code for each, so an all-text bind
+ * costs nothing more. An `int4` element outside `int4` panics rather than
+ * wrapping. The element type must match the statement's parameter: the server
+ * answers a mismatch with `ErrorResponse` (42804) for that execution, and the
+ * connection goes on.
  *
  * **Binary results.** A bind opened with `bindStartBinary` instead of
  * `bindStart` asks for every result column in binary format: an `int8` is
@@ -133,7 +149,8 @@
  * **Batching.** `PgBatcher` turns many reads of one row shape by key — a user
  * by id, an article by slug — into one execution of a statement over
  * `unnest($1) with ordinality`. `addInt` or `addText` queues a request's key
- * and tag; `take(conn)` binds the oldest waiting, each distinct key once, up
+ * and tag; `take(conn)` binds the oldest waiting, each distinct key once (past
+ * `PG_BATCH_PROBES` slots of its table probe, a key is bound again), up
  * to `maxRequests` and `maxBytes`, and answers a run's handle; `row`, `end`
  * and `fail` take that execution's events (a handle already answered makes
  * them a no-op counted in `stray`, so a server's late event cannot panic),
@@ -159,7 +176,7 @@
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
-import { copyBytes, getF64BE, getI32BE, getI64BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
+import { copyBytes, getF64BE, getI32BE, getI64BE, getU16BE, setI32BE, setI64BE, setU16BE } from "nish/bytes"
 import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url"
 import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
@@ -256,7 +273,8 @@ const PG_TAIL: i32 = 17
 const PG_BINARY_TAIL: i32 = 2
 // The result format code for binary.
 const PG_FORMAT_BINARY: i32 = 1
-// The element types `PgBinaryArray` reads, by OID: int8, int2 and int4.
+// The element types `PgBinaryArray` reads, and the binary array parameters
+// write (int4 and int8), by OID: int8, int2 and int4.
 const PG_OID_INT8: i32 = 20
 const PG_OID_INT2: i32 = 21
 const PG_OID_INT4: i32 = 23
@@ -434,6 +452,16 @@ const pgDecimalLength = (value: i64): i32 => {
     n += 1
   }
   return n
+}
+
+/** Whether `value` is an `int4`, -2^31..2^31-1. */
+const pgFitsInt4 = (value: i64): boolean => value >= toI64(-2147483648) && value <= toI64(2147483647)
+
+/** Panics unless `values[start, start + count)` is inside `values`. */
+const pgIntWindow = (values: i64[], start: i32, count: i32): void => {
+  if (start < 0 || count < 0 || count > toI32(values.length) - start) {
+    panic("nish/net/postgres: an int array parameter outside its array")
+  }
 }
 
 /** Whether `text` holds a NUL byte, which a protocol string cannot. */
@@ -1211,9 +1239,19 @@ export class PgConnection {
   private bindAt: i32 = -1
   private paramCountAt: i32 = 0
   private paramCount: i32 = 0
+  // What the open bind's end owes beyond `PG_TAIL`: its binary result format
+  // code, and once it holds a binary parameter, a format code per parameter.
+  private bindOwed: i32 = 0
+  // The open bind's binary parameters, by index; `bindEnd` back-patches their format codes.
+  private binaryParams: i32[]
+  private binaryParamCount: i32 = 0
   // The open array parameter's length word, -1 when none is open, and its elements so far.
   private arrayAt: i32 = -1
   private arrayCount: i32 = 0
+  // The open array's element OID when it is binary (`binaryArrayStart`), 0 when it is a text literal.
+  private arrayOid: i32 = 0
+  // Whether the open binary array holds a NULL element.
+  private arrayNulls: boolean = false
   private state: i32 = 0
   private clientNonce: string = ""
   private serverSignature: u8[]
@@ -1239,6 +1277,7 @@ export class PgConnection {
     this.colStarts = new Array<i32>(16)
     this.colLengths = new Array<i32>(16)
     this.colTypes = new Array<i32>(16)
+    this.binaryParams = []
     this.serverSignature = []
     const head: u8[] = []
     for (let i: i32 = 0; i < PG_NONCE_BYTES && i < toI32(nonce.length); i++) {
@@ -1915,14 +1954,13 @@ export class PgConnection {
 
   /**
    * Whether a builder call may queue `size` more bytes and still leave
-   * `PG_TAIL` under `maxOutput`. When they would not fit after the end of the
+   * `PG_TAIL`, and what the open bind's end owes, under `maxOutput`. When they would not fit after the end of the
    * buffer, the unsent bytes move to its start first: a builder call asks
    * before it takes any offset into the buffer, so nothing it holds moves.
    */
   private room(size: i32): boolean {
     const queued: i32 = this.outEnd - this.outStart
-    const tail: i32 = this.bindAt >= 0 && this.bindBinary ? PG_TAIL + PG_BINARY_TAIL : PG_TAIL
-    if (size < 0 || size > this.config.maxOutput - tail - queued) {
+    if (size < 0 || size > this.config.maxOutput - PG_TAIL - this.bindOwed - queued) {
       return false
     }
     if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
@@ -2116,6 +2154,8 @@ export class PgConnection {
     }
     this.bindOpened = opens
     this.bindBinary = binary
+    this.bindOwed = extra
+    this.binaryParamCount = 0
     this.bindAt = this.startMessage(PG_FE_BIND)
     this.putByte(PG_ZERO)
     this.putCString(name)
@@ -2133,9 +2173,37 @@ export class PgConnection {
    */
   private startParam(size: i32): i32 {
     this.noArrayOpen()
-    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size)) {
+    // Once the bind holds a binary parameter, every parameter owes its format code.
+    const owed: i32 = this.binaryParamCount > 0 ? 2 : 0
+    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
       return -1
     }
+    this.bindOwed += owed
+    this.paramCount += 1
+    const at: i32 = this.outEnd
+    this.putI32(PG_ZERO)
+    return at
+  }
+
+  /**
+   * `startParam` for a parameter in binary format: the first one in a bind
+   * owes a format code for every parameter before it as well as its own,
+   * which `bindEnd` writes once the count is known. A text-only bind owes none
+   * and writes the zero count it always has.
+   */
+  private startBinaryParam(size: i32): i32 {
+    this.noArrayOpen()
+    const owed: i32 = this.binaryParamCount > 0 ? toI32(2) : toI32(2) * (this.paramCount + toI32(1))
+    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size + owed)) {
+      return -1
+    }
+    if (this.binaryParamCount < toI32(this.binaryParams.length)) {
+      this.binaryParams[this.binaryParamCount] = this.paramCount
+    } else {
+      this.binaryParams.push(this.paramCount)
+    }
+    this.binaryParamCount += 1
+    this.bindOwed += owed
     this.paramCount += 1
     const at: i32 = this.outEnd
     this.putI32(PG_ZERO)
@@ -2248,7 +2316,7 @@ export class PgConnection {
     const end: i32 = start + count
     // Its exact size first, so that room is asked for once and a refusal writes nothing.
     let size: i64 = count > 0 ? toI64(count + 1) : toI64(2)
-    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       size += toI64(pgDecimalLength(values[i]))
     }
     const at: i32 = this.startParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
@@ -2256,7 +2324,7 @@ export class PgConnection {
       return false
     }
     this.putByte(PG_LBRACE)
-    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
       // Read before the comma's call, which could drop the length fact.
       const value: i64 = values[i]
       if (i > start) {
@@ -2310,6 +2378,80 @@ export class PgConnection {
     return true
   }
 
+  // Binary `int4[]` and `int8[]` parameters, in PostgreSQL's binary array
+  // layout (`array_send`'s): the Bind's only parameters not in text, and its
+  // format codes say so. Their elements are fixed-size big-endian integers,
+  // so there are no digits to write and none for the server to parse. The
+  // element type is explicit and must be the statement's: an `int4[]` sent
+  // where the server expects `int8[]`, or the reverse, is refused by the
+  // server as that execution's `PG_ERROR`, and the connection goes on. An
+  // `int4` element outside -2^31..2^31-1 panics as a program error: false
+  // would read as "no room", and a batching loop would retry it forever.
+
+  /**
+   * An `int4[]` parameter in binary from `values[start, start + count)`;
+   * false as the `param...` calls are. Panics, writing nothing, when the
+   * window is not inside `values` or an element is outside `int4`.
+   */
+  paramInt4Array(values: i64[], start: i32, count: i32): boolean {
+    pgIntWindow(values, start, count)
+    const end: i32 = start + count
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
+      if (!pgFitsInt4(values[i])) {
+        panic("nish/net/postgres: paramInt4Array() with an element outside int4")
+      }
+    }
+    return this.paramBinaryInts(values, start, count, PG_OID_INT4)
+  }
+
+  /**
+   * An `int8[]` parameter in binary from `values[start, start + count)`;
+   * false as the `param...` calls are. Panics when the window is not inside
+   * `values`.
+   */
+  paramInt8Array(values: i64[], start: i32, count: i32): boolean {
+    pgIntWindow(values, start, count)
+    return this.paramBinaryInts(values, start, count, PG_OID_INT8)
+  }
+
+  private paramBinaryInts(values: i64[], start: i32, count: i32, oid: i32): boolean {
+    const width: i32 = oid === PG_OID_INT4 ? 4 : 8
+    // The header, its one dimension when there are elements, then each element's length word and bytes.
+    const size: i64 =
+      count > 0
+        ? toI64(PG_ARRAY_HEADER + PG_ARRAY_DIM) + toI64(count) * toI64(4 + width)
+        : toI64(PG_ARRAY_HEADER)
+    const at: i32 = this.startBinaryParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
+    if (at < 0) {
+      return false
+    }
+    this.reserve(this.outEnd + toI32(size))
+    this.putArrayHeader(oid, count)
+    const end: i32 = start + count
+    for (let i: i32 = start; i >= 0 && i < end && i < toI32(values.length); i++) {
+      setI32BE(this.out, this.outEnd, width)
+      if (width === 4) {
+        setI32BE(this.out, this.outEnd + 4, toI32(values[i]))
+      } else {
+        setI64BE(this.out, this.outEnd + 4, values[i])
+      }
+      this.outEnd += 4 + width
+    }
+    this.endParam(at)
+    return true
+  }
+
+  /** A binary array's header with no NULLs: no dimension when it is empty, as `array_send` writes one, else one of `count` elements from 1. */
+  private putArrayHeader(oid: i32, count: i32): void {
+    this.putI32(count > 0 ? toI32(1) : PG_ZERO)
+    this.putI32(PG_ZERO)
+    this.putI32(oid)
+    if (count > 0) {
+      this.putI32(count)
+      this.putI32(toI32(1))
+    }
+  }
+
   // An array parameter built element by element: `arrayStart()`, then
   // `arrayElement`, `arrayInt` or `arrayNull` for each element, then `arrayEnd()`. An
   // element refused for room writes nothing and leaves the array open, so a
@@ -2338,6 +2480,9 @@ export class PgConnection {
   private arrayOpen(): void {
     if (this.arrayAt < 0) {
       panic("nish/net/postgres: an array element with no arrayStart()")
+    }
+    if (this.arrayOid !== 0) {
+      panic("nish/net/postgres: a text array element in a binary array")
     }
   }
 
@@ -2417,13 +2562,98 @@ export class PgConnection {
     return true
   }
 
-  /** Ends the open array parameter; never refused for room, which its elements kept. Panics when no array is open. */
+  // The binary twin: `binaryArrayStart(elementOid)` opens an `int4[]` (OID
+  // 23) or `int8[]` (OID 20) parameter in binary, `binaryArrayInt` and
+  // `binaryArrayNull` add its elements, and the same `arrayEnd()` closes it.
+  // The text builder's rules hold, and a text element in a binary array, or a
+  // binary element in a text one, panics.
+
+  /** Opens a binary array parameter of `elementOid`'s elements; false as the `param...` calls are. Panics on another OID, or while an array is open. */
+  binaryArrayStart(elementOid: i32): boolean {
+    if (this.arrayAt >= 0) {
+      panic("nish/net/postgres: binaryArrayStart() while an array is open")
+    }
+    if (elementOid !== PG_OID_INT4 && elementOid !== PG_OID_INT8) {
+      panic("nish/net/postgres: binaryArrayStart() with an element OID other than int4 (23) or int8 (20)")
+    }
+    // The header with its dimension; `arrayEnd()` fills in the length and the
+    // NULL flag, or drops the dimension when there are no elements.
+    const at: i32 = this.startBinaryParam(PG_ARRAY_HEADER + PG_ARRAY_DIM)
+    if (at < 0) {
+      return false
+    }
+    this.putArrayHeader(elementOid, toI32(1))
+    this.arrayAt = at
+    this.arrayCount = 0
+    this.arrayOid = elementOid
+    this.arrayNulls = false
+    return true
+  }
+
+  private binaryArrayOpen(): void {
+    if (this.arrayAt < 0 || this.arrayOid === 0) {
+      panic("nish/net/postgres: a binary array element with no binaryArrayStart()")
+    }
+  }
+
+  /**
+   * An integer element of the open binary array; false, and nothing written,
+   * when there is no room. Panics when no binary array is open, or when it is
+   * an `int4[]` and `value` is outside `int4`.
+   */
+  binaryArrayInt(value: i64): boolean {
+    this.binaryArrayOpen()
+    const width: i32 = this.arrayOid === PG_OID_INT4 ? 4 : 8
+    if (width === 4 && !pgFitsInt4(value)) {
+      panic("nish/net/postgres: binaryArrayInt() with an element outside int4")
+    }
+    if (!this.room(4 + width)) {
+      return false
+    }
+    this.putI32(width)
+    if (width === 4) {
+      this.putI32(toI32(value))
+    } else {
+      this.reserve(this.outEnd + 8)
+      setI64BE(this.out, this.outEnd, value)
+      this.outEnd += 8
+    }
+    this.arrayCount += 1
+    return true
+  }
+
+  /** A NULL element of the open binary array, length -1; false, and nothing written, when there is no room. Panics when no binary array is open. */
+  binaryArrayNull(): boolean {
+    this.binaryArrayOpen()
+    if (!this.room(toI32(4))) {
+      return false
+    }
+    this.putI32(toI32(-1))
+    this.arrayNulls = true
+    this.arrayCount += 1
+    return true
+  }
+
+  /** Ends the open array parameter, text or binary; never refused for room, which its elements kept. Panics when no array is open. */
   arrayEnd(): void {
     if (this.arrayAt < 0) {
       panic("nish/net/postgres: arrayEnd() with no arrayStart()")
     }
-    this.tailRoom(toI32(1))
-    this.putByte(PG_RBRACE)
+    if (this.arrayOid !== 0) {
+      // The header follows the parameter's length word: ndim, the NULL flag, the OID, then the dimension.
+      const header: i32 = this.arrayAt + 4
+      if (this.arrayCount === 0) {
+        setI32BE(this.out, header, PG_ZERO)
+        this.outEnd = header + PG_ARRAY_HEADER
+      } else {
+        setI32BE(this.out, header + 4, this.arrayNulls ? 1 : 0)
+        setI32BE(this.out, header + PG_ARRAY_HEADER, this.arrayCount)
+      }
+      this.arrayOid = 0
+    } else {
+      this.tailRoom(toI32(1))
+      this.putByte(PG_RBRACE)
+    }
     this.endParam(this.arrayAt)
     this.arrayAt = -1
   }
@@ -2442,8 +2672,11 @@ export class PgConnection {
       panic("nish/net/postgres: bindEnd() while an array is open")
     }
     const binary: boolean = this.bindBinary
-    this.tailRoom(binary ? PG_TAIL + PG_BINARY_TAIL : PG_TAIL)
+    this.tailRoom(PG_TAIL + this.bindOwed)
     const at: i32 = this.bindAt
+    if (this.binaryParamCount > 0) {
+      this.putFormatCodes()
+    }
     setU16BE(this.out, this.paramCountAt, toU16(this.paramCount))
     if (binary) {
       // One format code, which the server applies to every column.
@@ -2454,6 +2687,7 @@ export class PgConnection {
     }
     this.endMessage(at)
     this.bindAt = -1
+    this.bindOwed = 0
     const execute: i32 = this.startMessage(PG_FE_EXECUTE)
     this.putByte(PG_ZERO)
     this.putI32(PG_ZERO)
@@ -2482,7 +2716,30 @@ export class PgConnection {
   private dropBind(): void {
     this.outEnd = this.bindAt
     this.bindAt = -1
+    this.bindOwed = 0
     this.arrayAt = -1
+    this.arrayOid = 0
+  }
+
+  /**
+   * Writes the format codes a bind holding a binary parameter owes, in front
+   * of its parameter count: every parameter moves up by a code each, and
+   * every code is text's but the binary parameters'.
+   */
+  private putFormatCodes(): void {
+    const from: i32 = this.paramCountAt
+    const codes: i32 = 2 * this.paramCount
+    this.reserve(this.outEnd + codes)
+    copyBytes(this.out, from + codes, this.out, from, this.outEnd - from)
+    this.outEnd += codes
+    setU16BE(this.out, from - 2, toU16(this.paramCount))
+    for (let i: i32 = 0; i < this.paramCount; i++) {
+      setU16BE(this.out, from + 2 * i, toU16(0))
+    }
+    for (let k: i32 = 0; k < this.binaryParamCount && k < toI32(this.binaryParams.length); k++) {
+      setU16BE(this.out, from + 2 * this.binaryParams[k], toU16(PG_FORMAT_BINARY))
+    }
+    this.paramCountAt = from + codes
   }
 
   /** Sync: ends the open group, which the server answers with `PG_GROUP_DONE`. False when no group is open or a bind is; never for room. */
@@ -3005,16 +3262,50 @@ export const PG_BATCH_MISSING: i32 = 3
 /** `PgBatcher.next(run)`: the request `tag`'s execution failed, and its rows so far may be incomplete. */
 export const PG_BATCH_FAILED: i32 = 4
 
-// `take` probes at most maxRequests^2 / 2 slots, so the cap keeps that near 5 * 10^5;
-// a probe whose hash matches in full compares the key's bytes, so the bytes
-// compared are at most that times the longest key, which `maxBytes` bounds.
-const PG_BATCH_MAX_REQUESTS: i32 = 1024
+// The most requests one execution answers. The cost of a take does not grow
+// with it: each request probes at most `PG_BATCH_PROBES` slots, and the
+// arrays sized by it grow with the batches taken, not with the cap. It is
+// 65536 so that one full run's arrays stay at 512 KiB, and one execution's
+// int8 key array, which the server reads into memory whole, at about 1.4 MiB
+// (65536 keys of at most 20 digits and a comma); a text key array is bounded
+// by `maxBytes` instead.
+const PG_BATCH_MAX_REQUESTS: i32 = 65536
+// The most occupied slots one request's probe visits in `take` before its key
+// is bound again rather than found. A take of n requests holds at most n - 1
+// keys when it probes, so up to 1024 requests (the cap this replaced) no probe
+// stops; past that, keys chosen to collide cost each request this many probes
+// and key comparisons, not one per key before it.
+const PG_BATCH_PROBES: i32 = 1024
+// The fewest entries the arrays that grow with the batches taken start at.
+const PG_BATCH_MIN_GROWTH: i32 = 16
 const PG_BATCH_MAX_QUEUE: i32 = 1048576
 const PG_BATCH_MAX_RUNS: i32 = 1024
 // The takes a run's handles count before they wrap: handles stay under 2^30.
 const PG_BATCH_USES: i32 = 1048576
 // The array's `{}` and the longest int8 element, `-9223372036854775808`.
 const PG_BATCH_MIN_BYTES: i32 = 22
+
+// The low 32 bits of an int8 key.
+const PG_LOW32: i64 = 4294967295
+
+/**
+ * The batcher's table hash of an int8 key, 31 bits: the high half times an
+ * odd constant xored into the low half, then MurmurHash3's 32-bit finalizer,
+ * whose unsigned multiplies wrap by definition. Every step is a bijection on
+ * 32 bits, so keys of one high half never collide, and the finalizer spreads
+ * a dense run of ids over the whole table: runs that would land on one
+ * another's slots under a near-identity hash do not merge into one cluster
+ * longer than `PG_BATCH_PROBES`.
+ */
+const pgIntHash = (key: i64): i32 => {
+  const lo: u32 = toU32(key & PG_LOW32)
+  const hi: u32 = toU32((key >> toI64(32)) & PG_LOW32)
+  let h: u32 = lo ^ (hi * 2654435769)
+  h = (h ^ (h >> 16)) * 2246822507
+  h = (h ^ (h >> 13)) * 3266489909
+  h = h ^ (h >> 16)
+  return toI32(h >> 1)
+}
 
 /** What a `PgBatcher` sends: one statement shape, its key, and its caps. */
 export class PgBatchConfig {
@@ -3042,9 +3333,9 @@ export class PgBatchConfig {
 
 /** One execution's requests, grouped by key, and how far its rows have been routed. */
 class PgBatchRun {
-  /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added. */
-  readonly tags: i32[]
-  readonly first: i32[]
+  /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch. */
+  tags: i32[]
+  first: i32[]
   keys: i32 = 0
   /** The key rows are being read for, whether it has had one, and the next of its requests to answer. */
   cur: i32 = 0
@@ -3059,9 +3350,9 @@ class PgBatchRun {
   ended: boolean = false
   failed: boolean = false
 
-  constructor(maxRequests: i32) {
-    this.tags = new Array<i32>(maxRequests)
-    this.first = new Array<i32>(maxRequests + 1)
+  constructor() {
+    this.tags = []
+    this.first = []
   }
 
   /** Opens the run for `keys` keys, none of whose rows have been read. */
@@ -3082,7 +3373,9 @@ class PgBatchRun {
  * it reads no clock and makes no socket. Each request is a key and the
  * caller's `tag`, queued by `addInt` or `addText`. When a connection is free,
  * `take(conn)` binds up to `maxRequests` of them, and up to `maxBytes` of
- * keys, as one execution of `sql`, each distinct key once, and answers the
+ * keys, as one execution of `sql`, each distinct key once (a key whose
+ * probe of the batcher's table passes 1024 slots, which takes keys chosen to
+ * collide, is bound again and answered the same), and answers the
  * execution's run handle. Each `PG_ROW` of that execution goes to
  * `row(run, conn)`, its `PG_COMPLETE` to `end(run)`, and an error or a lost
  * connection to `fail(run)`; after each, `next(run)` answers events until
@@ -3122,12 +3415,13 @@ export class PgBatcher {
   private readonly qLengths: i32[]
   private readonly store: u8[]
   // `take`'s open-addressed table of the keys it has bound, each a key number
-  // plus one, 0 for an empty slot; and for each key, its slot and its first request.
-  private readonly table: i32[]
-  private readonly keySlots: i32[]
-  private readonly keyEntries: i32[]
-  private readonly keyCounts: i32[]
-  private readonly takenKeys: i32[]
+  // plus one, 0 for an empty slot; and for each key, its slot (-1 when its
+  // probe stopped) and its first request. Grown by `take` to the batch.
+  private table: i32[]
+  private keySlots: i32[]
+  private keyEntries: i32[]
+  private keyCounts: i32[]
+  private takenKeys: i32[]
   private readonly runs: PgBatchRun[]
   /** The request the last `next(run)` answered about; -1 for none. */
   tag: i32 = -1
@@ -3194,19 +3488,14 @@ export class PgBatcher {
     this.qStarts = new Array<i32>(textSize)
     this.qLengths = new Array<i32>(textSize)
     this.store = new Array<u8>(storeSize)
-    // At least twice the keys a take can hold, a power of two for the mask.
-    let tableSize: i32 = 2
-    while (tableSize < 2 * maxRequests) {
-      tableSize *= 2
-    }
-    this.table = new Array<i32>(tableSize)
-    this.keySlots = new Array<i32>(maxRequests)
-    this.keyEntries = new Array<i32>(maxRequests)
-    this.keyCounts = new Array<i32>(maxRequests)
-    this.takenKeys = new Array<i32>(maxRequests)
+    this.table = []
+    this.keySlots = []
+    this.keyEntries = []
+    this.keyCounts = []
+    this.takenKeys = []
     this.runs = []
     for (let r: i32 = 0; r < config.runs; r++) {
-      this.runs.push(new PgBatchRun(maxRequests))
+      this.runs.push(new PgBatchRun())
     }
   }
 
@@ -3242,10 +3531,8 @@ export class PgBatcher {
     if (q < 0) {
       return false
     }
-    // Both halves folded to 31 bits, so that no step can overflow.
-    const h: i32 = toI32(key & toI64(0x7fffffff)) ^ toI32((key >> toI64(31)) & toI64(0x7fffffff))
     this.qInts[q] = key
-    this.added(q, tag, h ^ (h >> 15), pgDecimalLength(key))
+    this.added(q, tag, pgIntHash(key), pgDecimalLength(key))
     return true
   }
 
@@ -3394,20 +3681,29 @@ export class PgBatcher {
       return -1
     }
     const ring: i32 = toI32(this.qTags.length)
+    this.grow(this.count < this.maxRequests ? this.count : this.maxRequests)
     const mask: i32 = toI32(this.table.length) - 1
     let keys: i32 = 0
     let taken: i32 = 0
     let bytes: i32 = 2
     while (taken < this.count && taken < this.maxRequests && taken < toI32(this.takenKeys.length)) {
       const q: i32 = (this.head + taken) % ring
-      // Probe for the key: a slot holding it, or the empty slot it would take.
+      // Probe for the key: a slot holding it, or the empty slot it would take;
+      // -1 after `PG_BATCH_PROBES` occupied ones, when the key is bound again,
+      // its own ordinal and rows, and left out of the table.
       let slot: i32 = this.qHashes[q] & mask
       let k: i32 = -1
+      let probes: i32 = 0
       while (this.table[slot] > 0) {
         const seen: i32 = this.table[slot] - 1
         const e: i32 = this.keyEntries[seen]
         if (this.qHashes[e] === this.qHashes[q] && this.sameKey(e, q)) {
           k = seen
+          break
+        }
+        probes += 1
+        if (probes === PG_BATCH_PROBES) {
+          slot = -1
           break
         }
         slot = (slot + 1) & mask
@@ -3420,7 +3716,9 @@ export class PgBatcher {
         bytes += cost
         k = keys
         keys += 1
-        this.table[slot] = keys
+        if (slot >= 0) {
+          this.table[slot] = keys
+        }
         this.keySlots[k] = slot
         this.keyEntries[k] = q
         this.keyCounts[k] = 0
@@ -3430,7 +3728,10 @@ export class PgBatcher {
       taken += 1
     }
     for (let k: i32 = 0; k < keys && k < toI32(this.keySlots.length); k++) {
-      this.table[this.keySlots[k]] = 0
+      const slot: i32 = this.keySlots[k]
+      if (slot >= 0) {
+        this.table[slot] = 0
+      }
     }
     if (taken === 0) {
       conn.bindCancel()
@@ -3440,6 +3741,11 @@ export class PgBatcher {
     conn.bindEnd()
     // The requests grouped by key, each key's in the order they were added.
     const run: PgBatchRun = this.runs[r]
+    if (toI32(run.tags.length) < taken) {
+      // Grown together: `first` holds one more than `tags`, which bounds the keys too.
+      run.tags = new Array<i32>(toI32(this.takenKeys.length))
+      run.first = new Array<i32>(toI32(this.takenKeys.length) + 1)
+    }
     run.first[0] = 0
     for (let k: i32 = 0; k < keys && k < toI32(this.keyCounts.length); k++) {
       run.first[k + 1] = run.first[k] + this.keyCounts[k]
@@ -3459,6 +3765,34 @@ export class PgBatcher {
       this.storeEnd = 0
     }
     return run.handle
+  }
+
+  /**
+   * Grows `take`'s arrays, when they are smaller, to hold `need` requests:
+   * to a power of two, at least `PG_BATCH_MIN_GROWTH` and at most
+   * `maxRequests`, and the table to twice that, so it is at most half full.
+   * A batcher whose batches stay small never holds arrays the size of its cap.
+   */
+  private grow(need: i32): void {
+    if (toI32(this.takenKeys.length) >= need) {
+      return
+    }
+    let size: i32 = PG_BATCH_MIN_GROWTH
+    while (size < need) {
+      size *= 2
+    }
+    if (size > this.maxRequests) {
+      size = this.maxRequests
+    }
+    let tableSize: i32 = 2
+    while (tableSize < 2 * size) {
+      tableSize *= 2
+    }
+    this.table = new Array<i32>(tableSize)
+    this.keySlots = new Array<i32>(size)
+    this.keyEntries = new Array<i32>(size)
+    this.keyCounts = new Array<i32>(size)
+    this.takenKeys = new Array<i32>(size)
   }
 
   /** Writes the queued request `q`'s key as the open array's next element; false when `conn` has no room. */

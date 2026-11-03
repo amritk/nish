@@ -48,14 +48,14 @@ the record that found it. The notes below the table name each such finding.
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 3 / 16 / 16 ⁴ | 0 / 0 / 1 / 3 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 3 / 16 / 17 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
-| HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 2 ⁷ |
-| HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
-| Blocking HTTP client | [http-client.md](http-client.md) | `std/net/http-client.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 2 |
+| HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 2 ⁷ |
+| HTTP/1.1 client | [http1-client-codec.md](http1-client-codec.md) | `std/net/http1-client-codec.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
+| Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 2 |
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
@@ -83,7 +83,7 @@ the record that found it. The notes below the table name each such finding.
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
-| **Total** ⁸ | | | **3 / 11 / 57 / 151** | **0 / 1 / 4 / 31** |
+| **Total** ⁸ | | | **3 / 11 / 57 / 152** | **0 / 1 / 3 / 30** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -137,9 +137,10 @@ the record that found it. The notes below the table name each such finding.
    handle's checks, the enter and leave order, the table's limits and the
    chunk sizes, were found and fixed by the stage that added regions to the
    runtime (WP46 stage 1) and are counted as fixed. RT-45 (Medium), a mark
-   carried across a region boundary, and RT-47 (Low), the unbounded chunk
-   doubling, are counted as open. RT-46, the lock a region panic holds, is a
-   decision and is not counted.
+   carried across a region boundary, RT-46 (Low), the lock a region panic
+   holds, and RT-47 (Low), the unbounded chunk doubling, were fixed by the
+   stage that gave regions to the language (WP46 stage 2) and are counted as
+   fixed.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
@@ -367,8 +368,8 @@ building the runtime for the harness, not by a target.
 | [regex.md](regex.md) | `regex` |
 | [tls.md](tls.md) | `tls-client-hello`, `tls-record`, `tls-server-flight` |
 | [quic.md](quic.md) | `quic-header`, `quic-frame` |
-| [http1.md](http1.md) | `http1`, `websocket`, `websocket-client` |
-| [http1-client.md](http1-client.md) | `http1-client` |
+| [http1-codec.md](http1-codec.md) | `http1`, `websocket`, `websocket-client` |
+| [http1-client-codec.md](http1-client-codec.md) | `http1-client` |
 | [http2.md](http2.md) | `hpack` |
 | [crypto-x509.md](crypto-x509.md) | `x509-der`, `x509-pem` |
 | [crypto-jwt.md](crypto-jwt.md) | `jwt` |
@@ -385,10 +386,10 @@ takes a file in deletes its row.
 
 | File | Why it is not in a record yet |
 | --- | --- |
-| `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1.md` names it but no Scope table does. |
+| `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1-codec.md` names it but no Scope table does. |
 | `std/crypto/x509-random.ts` | The private key and serial `x509MintSelfSigned` needs, drawn from the OS CSPRNG; `crypto-x509.md` (X509-6) and `secret.md` cover it in their bodies, not in a Scope table. |
 | `std/net/buffer-pool.ts` | Holds no parser: it lends fixed-size buffers and zeroes what a borrower used on give-back. No record has reviewed that zeroing yet. |
-| `std/net/prefork.ts` | A supervisor over `spawn`, `spawnWithFds` and signals that reads no network input. Its channels are `unixSocketPair`s it makes to its own workers before spawning them: it hands each worker exactly its ends through `spawnWithFds` (RT-40) and closes its copies of them, a supervisor channel's once its worker has started and the service pairs, made once per group, once the whole group has started, and reads its own ends only to hand them to the program's callback (`preforkSupervise`) or, through `preforkWith`, to drop what arrives. Its descriptor hygiene is RT-17 and RT-19 in `runtime.md`; `tests/link/net_prefork_channels` pins that each worker holds no descriptor but 0 to 2 and its own ends, and that a restart leaves the supervisor holding as many descriptors as before. A worker trusts the descriptor numbers in its `--nish-prefork-channels=` argument as given, the same boundary as `--nish-prefork-worker=`: whoever starts the program chooses its arguments. |
+| `std/net/prefork.ts` | A supervisor over `spawn`, `spawnWithFds` and signals that reads no network input. Its channels are `unixSocketPair`s it makes to its own workers before spawning them: it hands each worker exactly its ends through `spawnWithFds` (RT-40) and closes its copies of them, a supervisor channel's once its worker has started and the service pairs, made once per group, once the whole group has started, and reads its own ends only to hand them to the program's callback (`preforkSupervise`) or, through `preforkWith`, to drop what arrives. Its descriptor hygiene is RT-17 and RT-19 in `runtime.md`; `tests/link/net_prefork_channels` pins that each worker holds no descriptor but 0 to 2 and its own ends, and that a restart leaves the supervisor holding as many descriptors as before. A worker trusts the descriptor numbers in its `--nish-prefork-channels=` argument as given, the same boundary as `--nish-prefork-worker=`: whoever starts the program chooses its arguments, and the same holds for `--nish-prefork-listener=`. With `listenPort` the supervisor binds one listener per worker in CPU order before any worker starts, holds them for the run, and hands listener `k` only to worker `k` (RT-40); with `pin` each worker narrows itself to CPU `k` with `setCpuAffinity`, which never widens a mask, and more pinned workers than CPUs, or a listen field out of range, panic before anything starts. Those runtime properties are in `runtime.md` → "Properties verified"; the file itself stays unaudited. |
 | `std/net/qpack.ts` | HTTP/3's field decoder, which `http3.md` audits through its callers (the refusals of a field section) but does not list in its Scope table. |
 | `std/net/tls/ticket.ts` | The session-ticket seal, open and strike register; `tls.md`'s Resumption section and its ticket-seal stage record the design and tests, but its Scope table does not list the file. |
 
@@ -405,7 +406,7 @@ only.
 | PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
-| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `http-client.ts` and `websocket.ts` to spans mode |
+| HC-1 | Low | `std/net/http1-client-codec.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `fetch.ts` and `websocket.ts` to spans mode |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |

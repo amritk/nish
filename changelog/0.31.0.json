@@ -1,0 +1,223 @@
+{
+  "version": "0.31.0",
+  "date": "2026-11-02",
+  "tag": "v0.31.0",
+  "range": {
+    "from": "v0.30.0",
+    "to": "6c0ad9e9"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-30-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.30.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "effefc4"
+      ],
+      "pr": 1147,
+      "author": "github-actions[bot]",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "bcrypt-bmi2-kernel-measured-not-built-1151",
+      "type": "docs",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "bcrypt BMI2 kernel — measured, not built",
+      "body": "Measures whether bcryptHashN would gain from BMI2, --cpu x86-64-v3 or a hand-written runtime kernel, and records the verdict in the bcrypt security record's Speed section. Nothing is built, and std/crypto/bcrypt.ts is unchanged.\n\nBuilt for x86-64-v3, the round loop is unchanged from the default build: LLVM 18 keeps shr + movzx for constant shifts. Hand-written, spill-free x86-64 kernels at five and six lanes, with and without rorx, each checked word for word against a C Blowfish before timing, put the whole ceiling at about 4–9% over Nish's best width. That is the gap instruction selection and register allocation could close together on Intel Emerald Rapids, short of a 20% bar, so no LLVM upstream change is needed there. AMD is unmeasured.\n\nrun.mjs --cpu-both times widths 1–6 under both targets, ceiling.mjs times the hand kernels, and unroll.mjs tests fully unrolled bodies against a byte-identical copy of the module. All three print each row's fastest round beside its median, the robust estimator on a shared host. The user guide no longer quotes removed per-width figures.",
+      "metrics": [
+        "hand-kernel ceiling 1.09x on medians (machine D), 1.08x and 1.04x on fastest rounds (machine F); v3 against default within 4% at every width; unrolled bodies 0.97–1.07x on fastest rounds"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md#bmi2-and-x86-64-v3-measured-not-built"
+      ],
+      "tests": [],
+      "commits": [
+        "dcf7696"
+      ],
+      "pr": 1151,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "name-the-http-clients-fetchsync-and-the-codecs",
+      "type": "refactor",
+      "scope": "net",
+      "breaking": true,
+      "breakingNote": "`nish/net/http-client` is now `nish/net/fetch`. `httpFetch` is now `fetchSync`, and `HttpClient` is now `FetchSyncClient`. `nish/net/http1` is now `nish/net/http1-codec`, and `nish/net/http1-client` is now `nish/net/http1-client-codec`. There are no compatibility aliases.",
+      "title": "name the HTTP clients fetchSync and the codecs http1-codec",
+      "body": "The blocking HTTP client is now `nish/net/fetch`, with `fetchSync` and `FetchSyncClient`. The sans-IO codecs say what they are: `nish/net/http1-codec` and `nish/net/http1-client-codec`. This is a pure rename, and behaviour is unchanged. Every importer in std/, examples/, bench/ and tests/ moves with it, as do the module registration, the guide, docs/AI.md and the three security records, now fetch.md, http1-codec.md and http1-client-codec.md. Until the next release becomes the seed, tests/nish-cmp.js declares the programs that reach a renamed module.",
+      "metrics": [],
+      "refs": [
+        "docs/wp49-async-server.md#8"
+      ],
+      "tests": [
+        "tests/link/net_http_fetch",
+        "tests/link/net_http1",
+        "tests/link/net_http1_client"
+      ],
+      "commits": [
+        "c71ab8f"
+      ],
+      "pr": 1154,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "create-the-runtime-cache-s-scratch-names-exclusively",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "create the runtime cache's scratch names exclusively, so concurrent links never share one",
+      "body": "The runtime and IR caches named a scratch directory, and the cache probe a scratch file, `tmp-<clock>` and nothing else. So two links sharing one cache could read the same clock tick, end up in the same directory, and trip over each other's temporaries. That is the likely cause of the intermittent macOS \"unable to rename temporary\" in CI. Each name is now `tmp-<clock>-<attempt>`, taken with an exclusive create (`mkdirSyncMode`, `createFileExclusiveSync`). A process that loses the race moves to the next attempt. A stale directory left by a crashed run is no longer silently reused either. The cache's publication by rename is unchanged.\n\nThe process id was the first idea, but the last release gives the compiler no way to read it. The exclusive create removes the collision without one.",
+      "metrics": [],
+      "refs": [
+        "#1141"
+      ],
+      "tests": [],
+      "commits": [
+        "d71a144"
+      ],
+      "pr": 1155,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "read-release-yml-s-std-presence-lists-from",
+      "type": "build",
+      "scope": "ci",
+      "breaking": false,
+      "title": "read release.yml's std presence lists from src/std-modules.ts",
+      "body": "release.yml's three presence gates (the release tarball, the per-platform package and the main package) spelled every std module by hand, so each new std module edited a workflow in three places. Each gate now takes the std paths from scripts/std-module-paths.mjs. The script reads `stdModuleNames` in src/std-modules.ts at the tag being released, and fails the step if it cannot. Every other entry, std's licence files included, stays as it was. Expanded, the gates check the same 128, 127 and 127 paths as before. The tarball gate's count is now computed rather than written out. A self-hosting check holds the script's answer to std/ itself and refuses a hand-spelled std path in any gate.",
+      "metrics": [],
+      "refs": [
+        "#1141"
+      ],
+      "tests": [],
+      "commits": [
+        "feeec40"
+      ],
+      "pr": 1156,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "binary-int4-and-int8-parameters-for-nish-net",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "binary int4[] and int8[] parameters for nish/net/postgres",
+      "body": "nish/net/postgres sends integer array parameters in PostgreSQL's binary\narray layout. paramInt4Array and paramInt8Array take an i64[] window, and\nbinaryArrayStart(oid), binaryArrayInt and binaryArrayNull build one element\nat a time, closed by arrayEnd. The element type is named in the call, and\nan element type the statement does not expect is the server's error for\nthat execution alone: the connection keeps working.\n\nThe header follows array_send: ndim 1, or 0 with no dimension for an empty\narray, the has-nulls flag, the element OID, the length, and lower bound 1.\nA NULL element is length -1. An int4 element out of range, a window outside\nits array, a nested array, and mixed text and binary elements panic.\n\nThe Bind's per-parameter format codes are written into place at bindEnd. A\nbind with only text parameters writes the same bytes it did before. The\ntext APIs are unchanged.\n\nPgBatcher still sends its keys as text. The guide explains how a caller\nbuilds a binary Bind instead.\n\nMeasured: on PostgreSQL 18.6, length 1,000, median of 7 runs. Binary cuts\nthe unnest server CPU per Bind/Execute by 50.7% for int8 (357 to 176 us,\nranges disjoint) and by 30.5% for int4 (within spread). It cuts client\nencode CPU by 89-92% and array_agg decode CPU by 82-84%. id = any($1)\nagainst a primary key stays within the spread at every length.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/postgres.md"
+      ],
+      "tests": [
+        "tests/link/std_postgres",
+        "tests/link/std_postgres_binary_*_panic",
+        "tests/postgres/live intarrays",
+        "bench/postgres/arrays.mjs"
+      ],
+      "commits": [
+        "2dbd059"
+      ],
+      "pr": 1150,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "nish-region-regions-in-the-language-wp46-stage",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "nish:region, regions in the language (WP46 stage 2)",
+      "body": "A program can now allocate into a region of its own and free it, all at once. `import { Region, region, regionWith, enter, enterWith, free } from \"nish:region\"`:\n- `region(f)` and `regionWith(arg, f)` make a region whose root is what `f` answers;\n- `enter` and `enterWith` run a function in it again;\n- `free` gives all of its memory back.\nA `Region<T>` is a copied i64 handle, so a long-running server can bound its memory to the live set: one region per session, freed when the session ends (docs/wp46-long-running-memory.md).\n\nThe checker refuses every value that would outlive its region, NL2609 to NL2618:\n- region memory stored into outer memory, and outer memory stored into a region;\n- an `enter` that answers anything but a number, boolean, enum or handle;\n- a handle used on, or sent to, another thread;\n- a root that is not fresh;\n- outer storage grown inside a region;\n- `Arena.mark` or `Arena.used` reached from inside one;\n- `new Region`.\nThe rule follows every function an `f` reaches. That includes each arrow handed to a higher-order function, whose parameters receive everything the callee can see, the answers of the other arrows in the same call among them. It runs to a fixpoint. `--emit-ts` refuses a program that uses regions (NL4015). A program that does not import `nish:region` compiles to the same IR as before.\n\nThis also settles three runtime findings from stage 1:\n- RT-45: a mark taken in one region cannot be released in another;\n- RT-46: the region table's lock is released before a panic;\n- RT-47: a region's chunk doubling stops at 1 MiB.",
+      "metrics": [],
+      "refs": [
+        "docs/wp46-long-running-memory.md",
+        "docs/LANGUAGE.md#regions-nishregion"
+      ],
+      "tests": [
+        "tests/cases/region_cache",
+        "tests/cases/region_copied_churn",
+        "tests/cases/reject_region_*"
+      ],
+      "commits": [
+        "7ae8ec5"
+      ],
+      "pr": 1152,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "every-techempower-test-type-on-the-postgres-carrier",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "every TechEmpower test type on the Postgres carrier",
+      "body": "The TechEmpower entry now answers db, query, update, cached-query and fortune, as the test named `postgres`, beside json and plaintext, which are untouched. bench/techempower/db-server.ts serves them on one HttpHandler with a PgCarrier. db-main.ts runs one process per core under nish/net/prefork, each on its own SO_REUSEPORT listener.\n\nHow each test is served:\n- db and query: every World id a request in flight asks for is keyed into one PgBatcher, so one execution carries the reads of every waiting request. The README quotes the exact SQL. It also records that TFB's bulk-select rule may forbid a lone request's rows travelling in one statement; that is unresolved, and the owner decides before any submission.\n- update: sorts and dedupes its ids, then writes them with one `unnest` statement.\n- cached-query: reads a copy of World loaded at start-up.\n- fortune: sorted by UTF-8 bytes, with `& < > \" '` escaped and the Japanese row passed through, rendered into one reused buffer.\nCounts are clamped to 1..500. A failed batch answers 503, and a failed job leaves the wait list before its slot is freed.\n\ntests/link/tfb_db drives the real server against a replayed Postgres. It pins each rule, the statement text, and that the update writes new numbers. The live suite runs the same checks against a real server in CI. Pinning workers to cores follows in its own change. Nothing is submitted upstream.",
+      "metrics": [],
+      "refs": [
+        "docs/wp39-http-server.md#2-part-a-the-techempower-entry",
+        "#1141"
+      ],
+      "tests": [
+        "tests/link/tfb_db",
+        "tests/postgres/live/run.mjs"
+      ],
+      "commits": [
+        "1ec4e6d"
+      ],
+      "pr": 1157,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "pgbatchconfig-maxrequests-up-to-65536-1158",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "PgBatchConfig.maxRequests up to 65536",
+      "body": "PgBatcher can now take up to 65,536 requests in one execution; the limit\nwas 1,024. That limit was real: `take` deduplicated keys in an\nopen-addressed table whose worst case was maxRequests^2 / 2 probes. Each\nkey now probes at most 1,024 slots, and a key that hits that limit is\nbound again rather than deduplicated, so its answers stay correct. The\ntable and the per-run arrays grow on demand, so a batcher configured for\n65,536 allocates nothing extra while its batches are small.\n\nInteger keys are hashed with pgIntHash, a full 64-bit mix (fmix32 over\nboth halves). The old hash left dense id ranges almost unmixed, so two\nranges that overlapped under the table mask hit the probe limit and lost\ndeduplication at large sizes.\n\nConfigs with maxRequests of 1,024 or less behave as before: the hash only\npicks table slots, keys are bound in the order they were first added, and\nno probe reaches the limit. The SQL, the array order and the events are\nunchanged, and the existing batcher tests pass unmodified.\n\nMeasured: on PostgreSQL 18.6, 7 runs. Wall time per request at 65,536\nagainst 1,024: 1.34x for spread keys and 1.42x for dense ranges, inside\nnoise bands of 37% and 44%. Client CPU per request stays flat at about\n260-310 ns. Peak memory is 46-62 B per request, and constructing the\nbatcher adds 0 KiB.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/postgres.md",
+        "docs/security/postgres.md"
+      ],
+      "tests": [
+        "tests/link/std_postgres_batch_scale",
+        "tests/link/std_postgres_batch_config_requests_panic",
+        "tests/postgres/live batchscale",
+        "bench/postgres/batch-scale.mjs"
+      ],
+      "commits": [
+        "6101173"
+      ],
+      "pr": 1158,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "pin-prefork-workers-to-cores-and-steer-connections",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "pin prefork workers to cores and steer connections by incoming CPU",
+      "body": "* feat(runtime): pin prefork workers to cores and steer connections by incoming CPU\n\n`setCpuAffinity(cpu)` (nish:process) pins the calling process to one CPU\nof its current affinity mask: it only narrows, a CPU outside the mask is\n-22, other systems and the Node shim answer -95, and wasm builds and\n`scope()` tasks refuse it. `tcpListenFlags` flag 4 attaches a classic BPF\nprogram with SO_ATTACH_REUSEPORT_CBPF that hands each connection to the\nlistener bound in the place of the CPU that received it (Linux; -95\nelsewhere). `std/net/prefork` gains an opt-in `pin`: the supervisor binds\none steered listener per worker in CPU order and hands listener k to\nworker k, which pins itself to CPU k; more workers than CPUs is refused.\n\nMeasured: runtime-os.c .text 4,726 -> 4,858 (ceiling 4,864); runtime-net.c 4,581 -> 4,619 (ceiling raised 4,608 -> 4,864)\nRefs: docs/guide/using-nish/networking.md, docs/security/runtime.md\nTests: tests/link/net_prefork_pin, tests/link/net_prefork_pin_too_many, tests/link/net_prefork_bad_listen, tests/cases/reject_os_affinity_wasm, tests/cases/reject_os_affinity_task\n\n* fix(runtime): order PreforkConfig widest first and index argv as i32\n\nThe performance gate found eight bytes of padding in `PreforkConfig` once\n`pin` and the listen fields were added, and `preforkListener` subtracting\nan i32 from `args.length` did not compile under `--number-mode f64`.\n\nTests: node tests/run.js performance\n\n* refactor(runtime): read availableParallelism once in the prefork pin check\n\nThe pin check called availableParallelism() twice, once for the test and\nonce for the message, and also when pinning was off.\n\nTests: tests/link/net_prefork\n\n* docs(runtime): point the scheduling link at the renamed LANGUAGE.md heading\n\nThe Scheduling heading now names setCpuAffinity, so its anchor changed.\n\nRefs: docs/LANGUAGE.md#scheduling-setnice-setidlepriority-setcpuaffinity\n\n* feat(runtime): pin the TechEmpower database entry's prefork workers\n\nWith more than one worker, bench/techempower/db-main.ts hands its listeners\nto nish/net/prefork and sets `pin`: the supervisor binds one SO_REUSEPORT\nlistener a worker with TCP_NODELAY, worker k pins itself to CPU k, and each\nconnection is steered to the worker on the CPU that received it. One\nprocess still binds its own listener. The README's list of what pinning\nneeded is replaced by what the entry now does.\n\n`pin` maps worker k to CPU number k, not to the k-th CPU the process may\nrun on, and the steering program can only answer the raw CPU number. Under\na mask that does not start at 0 the pins fail and the workers run\nunpinned, and a connection received past the group falls back to the\nkernel's hash. The guide, the PreforkConfig.pin comment, the TechEmpower\nREADME and the security record now say so, and that a cgroup quota or\nNISH_NUM_THREADS lowers the count the too-many-workers panic uses.\n\nnet_prefork_pin now sends a client from the first CPU past the group and\nchecks a worker still answers it, which pins the hash fallback the record\nhad only argued.\n\nRefs: docs/guide/using-nish/networking.md, bench/techempower/README.md\nTests: tests/link/net_prefork_pin, tests/postgres/live (tfb)\n\n* docs(runtime): regenerate the IR cookbook for setCpuAffinity\n\nThe runtime prelude the cookbook carries now declares\nnish_set_cpu_affinity, so docs/IR_COOKBOOK.md is regenerated with\ndocs/cookbook/regen.sh; `--check` exits 0.\n\nTests: docs/cookbook/regen.sh --check",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6c0ad9e"
+      ],
+      "pr": 1159,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    }
+  ]
+}

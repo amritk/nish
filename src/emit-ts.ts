@@ -25,10 +25,10 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import { applyModuleEdits, emitModule, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
+import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
-import { isBuiltinSpecifier, SECRET_SPECIFIER } from "./nish-modules"
+import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
@@ -262,6 +262,10 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       }
       if (stmt.text === NET_SPECIFIER) {
         walk.refuse(stmt, SIGNAL_REFUSAL)
+        continue
+      }
+      if (stmt.text === REGION_SPECIFIER) {
+        walk.refuse(stmt, REGION_REFUSAL)
         continue
       }
       // A second import of one specifier: its rewrite is already listed, and

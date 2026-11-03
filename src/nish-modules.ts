@@ -159,7 +159,7 @@ export const isNishModule = (specifier: string): boolean =>
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${SIMD_SPECIFIER}, ${unsafeModule()}`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${BUILTIN_SCHEME}region, ${SIMD_SPECIFIER}, ${unsafeModule()}`
 
 /**
  * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
@@ -172,12 +172,21 @@ export const nishModuleNames = (): string =>
  */
 export const SECRET_SPECIFIER: string = "nish:secret"
 
-/** Whether a `nish:` specifier is the one with source behind it, resolved and bound as a module rather than renamed. */
-export const isNishSourceModule = (specifier: string): boolean => specifier === SECRET_SPECIFIER
+/**
+ * `nish:region`: memory a program frees when it says so (docs/LANGUAGE.md,
+ * "Regions"). Like `nish:secret` it has source behind it, `std/region.ts`,
+ * whose rules are keyed on that module (`src/region-check.ts`) and whose
+ * five functions the emitter writes (`src/emit-region.ts`).
+ */
+export const REGION_SPECIFIER: string = "nish:region"
+
+/** Whether a `nish:` specifier is one with source behind it, resolved and bound as a module rather than renamed. */
+export const isNishSourceModule = (specifier: string): boolean =>
+  specifier === SECRET_SPECIFIER || specifier === REGION_SPECIFIER
 
 /**
  * Whether an import names a builtin the checker renames, with no file behind
- * it: every `nish:` specifier but `nish:secret`, an unknown one included, so
+ * it: every `nish:` specifier but `nish:secret` and `nish:region`, an unknown one included, so
  * that it is still reported as a bad module rather than as a missing file.
  */
 export const isBuiltinSpecifier = (specifier: string): boolean =>
@@ -189,7 +198,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
@@ -455,6 +464,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "totalMemory" ||
       name === "setNice" ||
       name === "setIdlePriority" ||
+      name === "setCpuAffinity" ||
       name === "monotonicNanos" ||
       name === "wallClockNanos" ||
       name === "signalFd" ||

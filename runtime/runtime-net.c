@@ -73,6 +73,7 @@ typedef int nish_net_unused;
 #include <sys/un.h>
 #include <unistd.h>
 #if defined(__linux__)
+#include <linux/filter.h>
 #include <netinet/udp.h>
 #include <sys/epoll.h>
 /* glibc before 2.29 names neither; the numbers are the kernel's ABI. */
@@ -81,6 +82,10 @@ typedef int nish_net_unused;
 #endif
 #ifndef UDP_GRO
 #define UDP_GRO 104
+#endif
+/* Linux 4.5's; a header older than the kernel may not name it. */
+#ifndef SO_ATTACH_REUSEPORT_CBPF
+#define SO_ATTACH_REUSEPORT_CBPF 51
 #endif
 #else
 #include <sys/event.h>
@@ -243,7 +248,23 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
   }
   nish_sockaddr s;
   socklen_t n = nish_net_sockaddr(&s, a, port, v4);
-  if (bad != 0 || bind(fd, &s.sa, n) != 0 || (type == SOCK_STREAM && listen(fd, arg) != 0)) {
+#if defined(__linux__)
+  /* `tcpListenFlags` flag 4's program, two instructions, the kernel
+     selftest's: load the receiving CPU, return it. It is the reuseport
+     group's, so attaching it from every listener installs the same program
+     each time, and it goes on after `listen`, once the socket is in its
+     group. Only a stream listener's `opts` can hold 4. */
+  static struct sock_filter cpu[] = {
+      {BPF_LD | BPF_W | BPF_ABS, 0, 0, (uint32_t)(SKF_AD_OFF + SKF_AD_CPU)},
+      {BPF_RET | BPF_A, 0, 0, 0},
+  };
+  static const struct sock_fprog steer = {2, cpu};
+#endif
+  if (bad != 0 || bind(fd, &s.sa, n) != 0 || (type == SOCK_STREAM && listen(fd, arg) != 0)
+#if defined(__linux__)
+      || ((opts & 4) && setsockopt(fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, &steer, sizeof steer) != 0)
+#endif
+  ) {
     int e = errno;
     close(fd);
     return nish_net_err(e);
@@ -262,9 +283,17 @@ int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
    `SO_REUSEPORT` for flag 1, so several listeners of one uid share the port
    (Linux spreads new connections across them; Darwin hands them all to one),
    and `TCP_NODELAY` for flag 2, which the listener carries so that
-   `tcpAccept` sets it on each connection it takes. Any other bit is -22. */
+   `tcpAccept` sets it on each connection it takes. Flag 4, which needs flag
+   1, steers by CPU: a reuseport program (`SO_ATTACH_REUSEPORT_CBPF`) hands a
+   new connection to the group's listener whose index is the CPU that received
+   it, the index being the order the group's sockets were bound in, and the
+   kernel falls back to its hash when there is no such listener. Linux alone
+   has it; elsewhere flag 4 is -95. Any other bit, or 4 without 1, is -22. */
 int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags) {
-  if ((uint32_t)flags > 3) return -22;
+  if ((uint32_t)flags > 7 || (flags & 5) == 4) return -22;
+#if !defined(__linux__)
+  if (flags & 4) return -95;
+#endif
   return nish_net_bound(host, port, SOCK_STREAM, backlog, flags);
 }
 

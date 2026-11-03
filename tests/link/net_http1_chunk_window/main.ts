@@ -2,7 +2,7 @@
 // "http1Chunk: the window is outside the buffer" on stderr) rather than
 // writing a chunk whose size line promises bytes it does not hold. Stdout
 // stops at the line before the call.
-import { http1Chunk } from "nish/net/http1";
+import { http1Chunk } from "nish/net/http1-codec";
 
 export const main = (): i32 => {
   const data: u8[] = [104, 105];

@@ -202,6 +202,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "writeBytes" ||
     name === "setNice" ||
     name === "setIdlePriority" ||
+    name === "setCpuAffinity" ||
     isTermExport(name) ||
     isNetExport(name) ||
     isUnsafeExport(name)
@@ -1160,10 +1161,10 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     return name === "totalMemory" ? T_I64 : T_I32
   }
-  // This process's nice value and its move to `SCHED_IDLE`, each 0 or a
-  // negative errno. A wasm32 build schedules nothing of the host's, and
-  // runtime-os.c answers -ENOSYS there, so both are refused as `kill` is.
-  if (name === "setNice") {
+  // This process's nice value, its move to `SCHED_IDLE` and its CPU pin, each
+  // 0 or a negative errno. A wasm32 build schedules nothing of the host's, and
+  // runtime-os.c answers -ENOSYS there, so all three are refused as `kill` is.
+  if (name === "setNice" || name === "setCpuAffinity") {
     if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_I32)
     }

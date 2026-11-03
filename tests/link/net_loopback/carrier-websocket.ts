@@ -12,8 +12,8 @@
 // connection with the arena measured, and a close with 1000. Over plain TCP,
 // on a second connection with a key of its own: a message and a close.
 import { Suite } from "nish/testing";
-import { HTTP1_END, HTTP1_NEED_MORE, HTTP1_UPGRADE } from "nish/net/http1";
-import { Http1ResponseParser } from "nish/net/http1-client";
+import { HTTP1_END, HTTP1_NEED_MORE, HTTP1_UPGRADE } from "nish/net/http1-codec";
+import { Http1ResponseParser } from "nish/net/http1-client-codec";
 import {
   WS_CLOSE,
   WS_HS_OK,

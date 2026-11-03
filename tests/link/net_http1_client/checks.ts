@@ -1,4 +1,4 @@
-// `nish/net/http1-client` against RFC 9112. Four groups of checks:
+// `nish/net/http1-client-codec` against RFC 9112. Four groups of checks:
 //
 // - **The split corpus.** Each response stream below is fed whole, cut in two
 //   at every byte, and fed one byte at a time, and the transcript — every
@@ -27,7 +27,7 @@ import {
   HTTP1_REFUSED,
   HTTP1_UPGRADE,
   Http1Parser,
-} from "nish/net/http1";
+} from "nish/net/http1-codec";
 import {
   HTTP1_E_BARE_LF,
   HTTP1_E_BODY_LIMIT,
@@ -54,7 +54,7 @@ import {
   http1RequestHead,
   http1UpgradeRequestHead,
   http1WriteRequestHead,
-} from "nish/net/http1-client";
+} from "nish/net/http1-client-codec";
 
 /** The bytes of a string, which in the language is bytes already. */
 const bytesOf = (text: string): u8[] => {
@@ -1292,7 +1292,7 @@ export const http1ClientChecks = (): i32 => {
   // Each check below fails under a mechanical mutant of the parser or the
   // writer that every other check passes: an operand of `&&` or `||` deleted,
   // a comparison's boundary moved by one, or a reset or clamp dropped.
-  // `docs/security/http1-client.md` → "Every condition is observed" lists the
+  // `docs/security/http1-client-codec.md` → "Every condition is observed" lists the
   // mutants that change nothing a caller can see, and why.
 
   // The status line: 599 is the last status a response may carry.
