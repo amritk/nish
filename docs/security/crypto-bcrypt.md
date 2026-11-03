@@ -403,17 +403,19 @@ widths take 94 (2), 71 (3), 57 (4), 50 (5) and 46 (6) cycles per block.
 
 **The four-lane kernel, read.** The loop of `bcryptBody4` after `opt -O3` and
 `llc`, from its `objdump`, is one round (two half-rounds) of all four lanes
-in 123 instructions (124 before it was inlined into `bcryptBodyN`): 45 loads (each lane's 4 S-box words and `P` word per
-half-round, 40, and 5 reloads of spilled values), 5 stores, all spills to
+in 112 instructions: 44 loads (each lane's 4 S-box words and `P` word per
+half-round, 40, and 4 reloads of spilled values), 4 stores, all spills to
 the stack, and one compare and backward branch, the only branch; it runs 8
-times per block, not unrolled further. Checked against the suspects: no
+times per block, not unrolled further. Before the rotated copy of
+[Cascade Lake](#cascade-lake-the-ceiling-and-one-copy-for-two-bytes) it was
+123 instructions, 45 loads and 5 stores. Checked against the suspects: no
 bounds check (each S-box index is masked to 0–255 and the state's length is
 checked once, before the loop) and no overflow check (the arithmetic is
 `u32`, which wraps); no `Secret` or wipe work inside the loop, which calls
 nothing; the lanes interleave, each lane's loads issued between the others'.
 The state's slots are 1042 words, 4168 bytes, apart, not a multiple of 4096,
 so the lanes' S-box words at one index fall in different L1 sets, and the
-six-lane state, 25.5 KB, fits the 32 KB L1. The spills are five registers'
+six-lane state, 25.5 KB, fits the 32 KB L1. The spills are four registers'
 worth per round: 16 general-purpose registers do not hold four lanes' two
 halves, base, counter and temporaries.
 
@@ -458,8 +460,10 @@ objdump -d --no-show-raw-insn -M intel --disassemble=nish.bcryptBodyN build/benc
 
 It prints ten loops, a round loop with one branch and its block loop with
 two for each width. A width-w round loop's loads are its 10w S-box and `P`
-words plus its reloads. The round loops print 58, 188, 123, 154 and 90
-instructions, with 20, 73, 45, 59 and 30 loads, for widths 2, 6, 4, 5 and 3.
+words plus its reloads. The round loops print 58, 180, 112, 145 and 84
+instructions, with 20, 72, 44, 58 and 30 loads, for widths 2, 6, 4, 5 and 3
+(58, 188, 123, 154 and 90, with 20, 73, 45, 59 and 30, before the rotated
+copy).
 
 **The bounds.** Per lane half-round: the latency floor is the 11-cycle chain
 over the w lanes (about 2.8 cycles at four, 2.2 at five), the load-port bound
@@ -687,6 +691,150 @@ node bench/crypto/bcrypt/run.mjs --rounds 9 --cpu-both
 node bench/crypto/bcrypt/ceiling.mjs --rounds 9
 node bench/crypto/bcrypt/unroll.mjs --rounds 9 --widths 2,3,4,5,6
 ```
+
+### Cascade Lake: the ceiling, and one copy for two bytes
+
+The study above ran on Emerald Rapids, which renames 6 instructions a cycle
+and has 3 load ports. The question here was whether that verdict holds on an
+older, narrower Intel core, the kind a hosted benchmark runs on.
+
+**Machine G** is an 8-vCPU KVM guest on a Xeon Platinum 8260 (Cascade Lake,
+cpuinfo "@ 2.40GHz"; `bmi2`, `avx2` and `avx512f`), idle, with each program
+pinned to one vCPU. The core renames 4 instructions a cycle and has 2 load
+ports. The binaries were built with LLVM 18.1.3 (Ubuntu 24.04's `clang-18`)
+and timed as `run.mjs` times them: the child's user CPU time, in interleaved
+rounds after a warm-up, as median (spread). The rounds here spread by about
+2%. Ms per hash per lane, cost 10; a kernel's row is its cost-loop bodies.
+
+**The ceiling.** The four `kernel/gen.mjs` bodies and two more ways of taking
+the bytes, written in `kernel/gen-tight.mjs` from the ideas of the challenge's
+leading entries:
+
+- `shrx`, 11 instructions a lane half-round, BMI2. One `rorx x, 8` gives
+  bytes 2 and 1 as `ah` and `al`, and `shrx` by a count held in a register
+  gives byte 3 with no copy. This is the `shrx` style of
+  `submissions/zig-iouring-nick-potts` (`src/bcrypt/asm_gen.zig`), which
+  `rust-epoll-theCatWisel`'s `build.rs` also generates. It fits five lanes.
+- `dh`, 12 instructions, baseline x86-64. One copy into `edx` gives byte 1 as
+  `dh`, then `shr 16` gives byte 2 as `dl` and `shr 8` byte 3. This is the
+  `FF` macro of `submissions/asm-epoll-nickita-khylkouski` (`src/bcrypt.s`).
+  At six lanes the state is copied to the stack and read through `rsp`, as
+  that entry keeps its contexts, so twelve halves and three temporaries fill
+  the 16 registers.
+
+Both write the 8 round pairs out, so `P` is read at constant displacements,
+and nothing is spilled.
+
+| Body | 4 lanes | 5 lanes | 6 lanes |
+| --- | ---: | ---: | ---: |
+| Nish `bcryptHashN`, before the change below | 23.6 (23.2–25.4) | 22.9 (22.5–23.3) | 23.2 (23.0–23.6) |
+| hand `base-shr` | | 23.3 (23.0–23.5) | 23.5 (23.3–25.3) |
+| hand `base-ah` | | 21.0 (20.9–21.7) | 21.5 (21.2–22.9) |
+| hand `rorx-shr` | | 21.0 (20.8–21.3) | 22.0 (21.7–23.0) |
+| hand `rorx-ah` | | 20.2 (20.0–21.3) | 20.6 (20.4–23.0) |
+| hand `dh`, the state in place | 19.8 (19.4–20.4) | 20.4 (20.3–20.8) | |
+| hand `dh`, the state on the stack | | 20.0 (19.6–21.3) | 21.5 (21.2–22.8) |
+| hand `shrx` | 21.6 (21.3–22.2) | 19.4 (19.2–20.2) | |
+
+The best hand kernel, five-lane `shrx`, took 15% less time than Nish's best
+width, five lanes: 1.18 on medians, against 1.04 to 1.09 on Emerald Rapids.
+That is under the 20% bar, so the verdict that no runtime kernel is built
+stands. Padding each lane's state to 4224 bytes (64-byte aligned, as
+theCatWisel's entry lays its lanes out) moved the stack-based `dh` by under
+0.3%; 4K aliasing between the lanes is not what limits the kernel.
+
+**What limits each kernel.** The counts come from `perf stat` on G. They are
+multiplexed, so read them as approximate. Five-lane `shrx` issues 2.8 uops a
+cycle and keeps load ports 2 and 3 at about 1.8 loads a cycle of their 2. It
+is load-port bound: 5 loads a lane half-round over 2 ports is 2.5 cycles, and
+it runs about 3.2. Six-lane `dh` loses about a sixth of its issue slots to the
+front end (`idq_uops_not_delivered.core`), which points at its
+1,200-instruction body. Nish's five-lane loop, as
+it was, issued 3.3 uops a cycle (15.4 instructions a lane half-round with 1.8
+stack references) and ran about 4 cycles a lane half-round. On this core,
+then, the instruction count and the spills cost time, where on Emerald
+Rapids' wider front end they cost little.
+
+**Making LLVM's code tighter from Nish.** Each form below was tried on
+`bcryptBody2` to `bcryptBody6` (`gen-body.mjs`) and timed against the module
+in the same rounds: ms per hash at five lanes, default target.
+
+| Form | 5 lanes | Note |
+| --- | ---: | --- |
+| The module as it was | 22.5 to 22.6 | |
+| The 8 round pairs unrolled (`--unroll`) | 25.4 | +12%; 4 and 6 lanes also +8 to 12% |
+| `x >>> 16` behind the barrier, bytes 3 and 2 as its high and low byte | 23.4 | |
+| `x >>> 8` behind the barrier, every lane's bytes first | 24.4 | +8% |
+| `x >>> 8` behind the barrier, each lane's half-round whole | 21.1 | −6%, three runs |
+| `(x >>> 8) \| (x << 24)` behind the barrier, each lane whole | 21.3 | the same at five lanes; a `rorx` under v3 |
+| the module, linked with `-mllvm -misched=ilpmin` | 21.7 | a link-wide flag, see below |
+
+The barrier is `ctSelect(v, 0xffffffff, 0)`, which is `v` itself but
+opaque. Without it LLVM folds the two middle bytes back into two shifts of
+the word, and the word is copied twice. With it, and with each lane's
+half-round written whole before the next lane's, the four- to six-lane round
+loops fall from 15.4 to 15.7 instructions a lane half-round to 14.0 to 15.0,
+with fewer spills (16 stack references a round at five lanes, from 18). Under
+`--cpu x86-64-v3` the rotated copy is one `rorx`, and the loops are 12.6
+(four lanes) and 13.1 (five lanes). Written for every lane first, the same
+copy lengthens the values' lives and spills more. The unrolled loops are
+larger and spill more, 98 stack references a block at five lanes.
+
+**The change.** `bcryptBody3` to `bcryptBody6` now take the two middle bytes
+from one copy behind the barrier, each lane's half-round written whole. Three
+to five lanes rotate the copy. Six lanes shift it, because on the default
+target the rotated six-lane loop measured slower, 23.3 against 23.0 ms.
+`bcryptBody2` keeps its form: the copy measured 36.3 against 35.3 ms there.
+The barrier is an identity on a register. It adds no branch, no load and no
+store, so the round reads the same four S-box words (BCRYPT-6 unchanged), and
+the working values stay in registers and spill slots as before (BCRYPT-7
+unchanged). Every lane's hash is unchanged: `bcrypt differential` with its
+batches of two to six, `link/crypto_bcrypt_width`'s widths one to six, and
+three further seeds of 240 cases and 61 batches each, all agreeing with
+`crypt_r`.
+
+On G, the module before and after, 15 interleaved rounds, ms per hash:
+
+| Lanes | Before | After | | Before, v3 | After, v3 | |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | 28.2 (27.7–29.4) | 27.0 (26.7–28.5) | −4.4% | 28.4 (28.0–28.9) | 26.7 (26.5–27.2) | −6.0% |
+| 4 | 23.3 (23.0–23.8) | 23.5 (23.1–25.2) | +0.8% | 23.5 (23.3–24.4) | 22.2 (21.9–22.8) | −5.4% |
+| 5 | 22.7 (22.4–23.5) | 21.3 (21.0–21.8) | −6.5% | 22.2 (21.8–22.9) | 20.7 (20.3–21.6) | −6.7% |
+| 6 | 23.2 (22.9–23.8) | 22.3 (22.0–24.5) | −3.8% | 23.5 (23.1–24.2) | 22.8 (22.6–23.6) | −2.9% |
+
+The one-lane and two-lane paths are unchanged, inside the noise: 60.9 and
+35.2 ms against 60.9 and 35.3 in an earlier pass of the same comparison. In
+that pass five lanes measured 21.3 against 22.6 ms, −5.8%. At the best
+width, the one `bcryptCalibrate` picks here, a hash takes 6% less time on the
+default target and 9% less under `--cpu x86-64-v3` than the default target
+took before. The fastest rounds agree: 21.0 against 22.4 ms. A `perf record`
+of five-lane hashes puts 98.6% of the time in `bcryptBodyN` and 0.3% in the
+one-lane salted expansion and magic string, so nothing outside the round
+loop is worth specializing.
+
+**What is left.** Five-lane `shrx` took 19.3 ms in the same rounds: 9%
+less than Nish on the default target, 7% less under v3. The difference is
+the hand kernel's 11 instructions and no spills against Nish's 14.5 (13.1)
+and 1.6 stack references a lane half-round, and `P` at constant
+displacements against an index register. No Nish source form found closes
+it, and the compiler offers no lever that would:
+
+- `-misched=ilpmin` at the LTO link takes the old module to 21.7 ms at five
+  lanes and 22.0 at six, with almost no spills. With the shift copy written
+  lane by lane it gives 21.2 and 21.5. It is one flag for the whole program's code
+  generation, though, and LLVM has no per-function attribute for the machine
+  scheduler, so the driver could not give it to this module alone. It is not
+  adopted.
+- BMI2 is a whole-program `--cpu`. What would give every user's binary the
+  v3 loops, 2.6% more at five lanes, is per-function `target-features` with a
+  CPUID dispatch between two copies of the kernel. That is a new construct,
+  and it is not made.
+
+The leaders' kernels are 7 to 9% ahead on this core, under the 20% bar, so
+the record's answer to a runtime kernel in assembly or C stays no. Measured
+on Intel only: AMD is still open, and a Zen run of
+`node bench/crypto/bcrypt/ceiling.mjs --rounds 9`, now with `shrx` and `dh`
+rows, answers it.
 
 ### The half-round's critical path
 

@@ -1,0 +1,99 @@
+{
+  "version": "0.32.0",
+  "date": "2026-11-03",
+  "tag": "v0.32.0",
+  "range": {
+    "from": "v0.31.0",
+    "to": "56775dc4"
+  },
+  "entries": [
+    {
+      "id": "array-sort-with-a-comparator-1108",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "Array sort with a comparator",
+      "body": "`xs.sort(cmp)` sorts in place, stably, and answers the array, element for element in Node's order for any consistent comparator. The sort is `std/sort.ts`'s `sortWith`, a bottom-up merge sort over runs of 32 sorted by insertion, with one scratch allocation. It is instantiated once per comparator and calls the comparator directly. A comparator may read the caller's `const` locals and parameters. `xs.sort()` with no comparator (NL2620), a second argument (NL2619), a readonly array and `process.argv` are refused.",
+      "metrics": [
+        "100,000 elements x 20, median of 5 at --profile speed; 1.6x (i32 reversed) to 9.9x (f64 random) faster than Node's Array.prototype.sort, level with or ahead of a hand-written Nish merge sort except i32 random/ties (+3%/+8%, within noise)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/guide/language/arrays-and-strings.md",
+        "docs/cookbook/arr-sort.ts"
+      ],
+      "tests": [
+        "tests/cases/arr_sort_cmp",
+        "arr_sort_cmp_f64",
+        "arr_sort_cmp_record",
+        "arr_sort_edge",
+        "arr_sort_capture",
+        "arr_sort_overflow",
+        "reject_arr_sort_*"
+      ],
+      "commits": [
+        "e1ae4a8"
+      ],
+      "pr": 1108,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "fetch-apt-packages-from-mirrors-other-than-azure",
+      "type": "ci",
+      "breaking": false,
+      "title": "fetch apt packages from mirrors other than Azure's, and cache every install",
+      "body": "* ci: fetch apt packages from mirrors other than Azure's, and cache every install\n\nEvery Ubuntu install in CI now goes through .github/actions/apt-install,\nwhich first runs .github/apt-mirror.sh. The script points every apt\nsource that names the Azure host or the main Ubuntu archive at a mirror\nlist of our own: mirrors.edge.kernel.org, then archive.ubuntu.com, then\nsecurity.ubuntu.com. apt moves down that list when a mirror fails.\n\nThe inline rewrite it replaces piped `grep -rlZ azure... | xargs sed`\nunder `pipefail`. On a runner image that names no Azure host, grep exits\n1 and the install step failed in about 70 ms, before apt printed a line.\nThat failed the v0.31.0 release's bootstrap job and #1158's fuzz-smoke.\n\nThe installs that were still inline now use the cached action: the\n`test` shards, interop's tshark, ct-timing, rebuild and the release\nbinaries. Homebrew installs go through a new\n.github/actions/brew-install, which keeps the bottles in the Actions\ncache. The pinned h2spec tarball is cached by its SHA-256. A restored\n.deb, bottle or tarball is still checked against its hash before it is\nused.\n\nRefs: docs/wp10-ci.md\nTests: actionlint, shellcheck, apt-mirror.sh run against a real apt\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VR4EBXi4zmWLgUXnPNgcwi\n\n* test(cli): check the watch server swap loses nothing only where Linux can promise it\n\nWhen `nish run --watch` swaps a server, the old one closes its\nSO_REUSEPORT listener while the new one is up. Linux resets every\nconnection still queued on a closing listener unless\nnet.ipv4.tcp_migrate_req is 1 (Linux 5.14+), in which case the kernel\nmoves them to another listener in the group. So a connection queued\nbetween the old server's last accept and its close was reset whatever\nthe server did, and the check that no request is lost across the swap\nfailed at random (#1158's shard 1, ECONNRESET).\n\nCI's `test` job now turns the setting on. Without it the check is a\ncounted skip that names the setting, instead of a coin toss. The CLI\nguide no longer says that SO_REUSEPORT plus draining on SIGTERM is\nenough on Linux. It now names the setting as well.\n\nTests: node tests/run.js watch (26 passed, three runs, with the setting; 25 passed and 1 skipped without it)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01VR4EBXi4zmWLgUXnPNgcwi",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f0584a6"
+      ],
+      "pr": 1162,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-31-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.31.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "53451a0"
+      ],
+      "pr": 1163,
+      "author": "github-actions[bot]",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "bcrypt-batch-kernels-take-two-index-bytes-from",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "bcrypt batch kernels take two index bytes from one copy",
+      "body": "bcryptBody3 to bcryptBody6 now write each lane's half-round whole before the\nnext lane's, and take the two middle S-box index bytes from one copy of the\nword moved down by 8 behind the value barrier (`ctSelect(v, ~0, 0)`), so LLVM\ncopies the word once instead of twice and spills less. Three to five lanes\nrotate the copy, which a BMI2 build lowers to one `rorx`; six shift it.\nbcryptBody2 and the single path are unchanged. Every hash is byte for byte\nthe same.\n\nbench/crypto/bcrypt/kernel/gen-tight.mjs adds two hand kernels to\nceiling.mjs, after the extraction styles of the multicore-server-challenge's\nleading entries: `shrx` (zig-iouring-nick-potts, also rust-epoll-theCatWisel)\nand `dh` (asm-epoll-nickita-khylkouski). The record's new \"Cascade Lake\"\nsection has the ceiling on a Xeon Platinum 8260, 15% at the old best width\nand 7 to 9% now, under the 20% bar for a runtime kernel.",
+      "metrics": [
+        "Xeon Platinum 8260, cost 10, five lanes (the best width): 22.7 (22.4-23.5) -> 21.3 (21.0-21.8) ms a hash, -6.5%, and -5.8% in a second pass; --cpu x86-64-v3 22.2 -> 20.7 ms, -6.7%; 15 interleaved rounds, spreads about 2%"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md#cascade-lake-the-ceiling-and-one-copy-for-two-bytes"
+      ],
+      "tests": [
+        "bcrypt differential",
+        "link/crypto_bcrypt_width",
+        "link/crypto_bcrypt_batch"
+      ],
+      "commits": [
+        "56775dc"
+      ],
+      "pr": 1164,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-02"
+    }
+  ]
+}
