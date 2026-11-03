@@ -127,10 +127,23 @@ const accepted = new Set([
 ])
 
 // Every `nish:` export renames a builtin: itself when it is a plain one, and
-// the `process.` one of its name otherwise (`exit`, `argv`, ...).
-const exportLists = [
-  ...declaration(modules, "nishModuleExports", "nish-modules.ts").matchAll(/return "([^"]+)"/g),
-]
+// the `process.` one of its name otherwise (`exit`, `argv`, ...). The one
+// exception is `nish:async`: `spawn` and `awaitAll` are operators on a direct
+// async call, which `src/async-check.ts` holds, not builtins a value or the
+// capability walk could reach. What such a call does is its callee's, so they
+// carry no row; the check is that the list is exactly those two.
+const moduleExports = declaration(modules, "nishModuleExports", "nish-modules.ts")
+const asyncList = /ASYNC_SPECIFIER\) \{\s*return "([^"]+)"/.exec(moduleExports)
+if (asyncList === null) {
+  problems.push("nish-modules.ts: no `nish:async` export list to read in `nishModuleExports`")
+} else if (asyncList[1] !== "spawn, awaitAll") {
+  problems.push(
+    `nish-modules.ts: \`nish:async\` exports \`${asyncList[1]}\`, not the operators \`spawn, awaitAll\` this check knows`
+  )
+}
+const exportLists = [...moduleExports.matchAll(/return "([^"]+)"/g)].filter(
+  (list) => asyncList === null || list.index !== asyncList.index + asyncList[0].indexOf("return")
+)
 if (exportLists.length === 0) {
   problems.push("nish-modules.ts: no export list to read in `nishModuleExports`")
 }

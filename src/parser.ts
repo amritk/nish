@@ -410,6 +410,16 @@ export class Parser {
    */
   noIn: boolean
 
+  /**
+   * Whether the body being read is an `async` function's, where `await` is
+   * always the operator, `await (f(x))` included, as TypeScript reads it.
+   * Outside one, `await(x)` stays a call to a function named `await`.
+   * Declared beside `noIn`, where the two fill the padding before `nodeCount`.
+   */
+  asyncBody: boolean
+  /** Set by the `async` modifier for the function or arrow read next to take into its body. */
+  asyncNext: boolean
+
   /** How many nodes this parser has made; also the next id it will hand out. */
   nodeCount: i32
 
@@ -434,15 +444,6 @@ export class Parser {
    * rather than scanned again, and nested blocks cost one scan between them.
    */
   closingBraces: StringMap
-
-  /**
-   * Whether the body being read is an `async` function's, where `await` is
-   * always the operator, `await (f(x))` included, as TypeScript reads it.
-   * Outside one, `await(x)` stays a call to a function named `await`.
-   */
-  asyncBody: boolean
-  /** Set by the `async` modifier for the function or arrow read next to take into its body. */
-  asyncNext: boolean
 
   constructor(file: SourceFile) {
     this.file = file
