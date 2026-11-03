@@ -1236,6 +1236,16 @@ jobs:
           node bench/adler32.mjs --check --compiler build/nish-test
           node bench/adler32.mjs --runs 12 --compiler build/nish-test
 
+      # The figures, not a gate: WP38 S10's ChaCha20 paths (portable 128-bit
+      # and NEON) held to the scalar reference and RFC 8439's vector, then
+      # ChaCha20-Poly1305 seal and open timed on each against the Nish AEAD
+      # with a copy column for the noise band, and the verdict against both
+      # routes' bars (docs/wp38-simd.md §3.1).
+      - name: ChaCha20 throughput on AArch64
+        run: |
+          node bench/chacha20.mjs --check --compiler build/nish-test
+          node bench/chacha20.mjs --runs 10 --compiler build/nish-test
+
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on
   # Darwin -- and two socket setups (MSG_NOSIGNAL against SO_NOSIGPIPE), with
