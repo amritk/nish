@@ -71,7 +71,7 @@ NL7002  retired: the deprecation of an index unchecked only by --unchecked-index
 NL9014  retired: the note that --unchecked-indexing reaches only the entry package, removed with the flag; the CLI refuses it with exit 2
 NL9015  retired: the note that --wrapping reaches only the entry package, removed with the flag; the CLI refuses it with exit 2 and `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap
 NL1004  retired: ` (no event loop or promises)`, the tail of the Phase 0 refusals of `await` and `async` that WP49 stage 4 replaced; `await` outside an `async` function is NL2623 now (tests/cases/reject_await)
-NL1015  retired: `async` functions are forbidden, the Phase 0 refusal WP49 stage 4 replaced; an async function is checked now, and its rules are NL1063 and NL2619-NL2635 (tests/cases/async_*, tests/cases/reject_async_*)
+NL1015  retired: `async` functions are forbidden, the Phase 0 refusal WP49 stage 4 replaced; an async function is checked now, and its rules are NL1063 and NL2621-NL2637 (tests/cases/async_*, tests/cases/reject_async_*)
 NL2173  retired: `async functions are not supported`, stage0's refusal, shadowed by NL1015 until WP49 stage 4 allowed `async`
 NL2174  retired: `async methods are not supported`, stage0's refusal; a method is still refused, by NL1063
 
