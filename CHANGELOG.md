@@ -26,6 +26,21 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-03
+
+### Added
+
+- interop: Nish/crypto/bcrypt-batch, a login batcher across cores ([#1168](https://github.com/amritk/nish/pull/1168))
+
+### Documentation
+
+- Drop the self-hosted and GC badges from the README ([#1166](https://github.com/amritk/nish/pull/1166))
+
+### Build
+
+- Regenerate package-lock.json for v0.32.0 ([#1167](https://github.com/amritk/nish/pull/1167))
+
+
 ## [0.32.0] - 2026-11-03
 
 ### Added
@@ -1551,3 +1566,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.30.0]: https://github.com/amritk/nish/releases/tag/v0.30.0
 [0.31.0]: https://github.com/amritk/nish/releases/tag/v0.31.0
 [0.32.0]: https://github.com/amritk/nish/releases/tag/v0.32.0
+[0.33.0]: https://github.com/amritk/nish/releases/tag/v0.33.0
