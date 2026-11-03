@@ -19,7 +19,15 @@
 // Each prints the checksum of every output on stdout and the timed loop's
 // nanoseconds on stderr.
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
-import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtKey, JwtVerifier, jwtHmacKey, jwtSignString } from "nish/crypto/jwt"
+import {
+  JWT_ALG_HS256,
+  JWT_MAX_TOKEN,
+  JWT_OK,
+  JwtKey,
+  JwtVerifier,
+  jwtHmacKey,
+  jwtSignString,
+} from "nish/crypto/jwt"
 import { sha256 } from "nish/crypto/sha256"
 import { Secret, exposeWith, secret, wipe } from "nish:secret"
 import {
@@ -100,7 +108,10 @@ const hs256Loop = (a: Args): i32 => {
   let sum: u32 = foldStart()
   const started: i64 = now()
   for (let i: i32 = 0; i < a.iterations; i++) {
-    const token: string | null = jwtSignString(key, `{"sub":"1234567890","iat":${1516239022 + i},"exp":${1516242622 + i}}`)
+    const token: string | null = jwtSignString(
+      key,
+      `{"sub":"1234567890","iat":${1516239022 + i},"exp":${1516242622 + i}}`
+    )
     const status: i32 = token === null ? -100 : v.verifyString(key, token, toI64(1516239022 + i))
     if (token === null || status !== JWT_OK) {
       writeError(`sha256-block: an HS256 token failed to verify (${status})\n`)

@@ -75,6 +75,94 @@ rows cost more per block than the 16 KiB row, and the extra is per-message
 work outside the compression. With SHA-NI on a 64 B message, Nish takes 203 ns
 a block and OpenSSL takes 76.
 
+## Trying to close the gap
+
+The gap to OpenSSL's scalar body is 20% to 22%, which is over the 20% bar for
+a rewrite. Each variant below is `std/crypto/sha256.ts` with only
+`sha256Compress`'s body changed, built by `build/nish` (which reads the tree's
+`std/`; the seed reads its own copy). Every variant prints the known checksum
+`34b8b4e9`.
+
+| Variant | What changed |
+| --- | --- |
+| base | `main` at 96a38347 |
+| locals | the schedule in 16 rolling locals instead of `w[]` |
+| maj | Maj as `B ^ (ab & bc)`, carrying `a ^ b` into the next round |
+| nested | Σ0 and Σ1 as three nested rotates (`rotr(rotr(rotr(e, 14) ^ e, 5) ^ e, 6)`) |
+| snested | σ0 and σ1 the same way |
+| v3 | the base or a variant built with `--cpu x86-64-v3` (`rorx`) |
+
+`objdump -d` of `sha256Compress` in each build. Stores and loads count
+`rsp`-relative operands, and moves count register-to-register `mov`s.
+
+| Variant | Instructions | Stack stores | Stack loads | Register moves |
+| --- | --- | --- | --- | --- |
+| base | 3450 | 92 | 138 | 905 |
+| locals | 3357 | 93 | 122 | 895 |
+| maj | 3414 | 120 | 175 | 870 |
+| nested | 3189 | 86 | 130 | 656 |
+| locals + maj | 3278 | 111 | 136 | 848 |
+| locals + nested | 3093 | 89 | 109 | 644 |
+| locals + maj + nested | 3023 | 109 | 131 | 601 |
+| locals + nested + snested | 2972 | 82 | 91 | 548 |
+| locals + maj + nested + snested | 2884 | 92 | 106 | 497 |
+| v3 base | 2864 | 83 | 115 | 339 |
+| v3 locals + maj + nested | 2623 | 86 | 112 | 249 |
+
+The base body is fully unrolled, with K as immediates: 10.8 KB of code, 576
+`rol` (no `ror`, no `rorx` at the baseline), 96 `shr`, 15 `bswap`, 64 stores
+of the schedule to the heap and a 0xf8-byte frame. Its only bounds checks are
+the guard's six branches at entry; no round has one.
+
+Times are ns a block on the 16 KiB message, `NISH_SHA256=soft`, 1500
+iterations a run, 21 interleaved rounds, pinned to one core with `taskset -c 3`:
+
+| Variant | run 1 | run 2 | run 3 |
+| --- | --- | --- | --- |
+| base | 209.9 | 208.5 | 207.7 |
+| base, byte copy | 209.9 | 209.3 | 207.0 |
+| locals + nested | 199.0 | 194.3 | — |
+| locals + maj + nested | 190.1 | 191.7 | 190.8 |
+| locals + nested + snested | 197.7 | 194.8 | — |
+| locals + maj + nested + snested | 192.1 | 189.8 | — |
+| v3 base | — | — | 190.7 |
+| v3 locals + maj + nested | — | — | 195.1 |
+
+Spreads were 23% to 84%. The best variant is 8% to 9.5% faster on the median,
+under the 10% bar and inside the spread, and the build flag alone gives as
+much. So `sha256Compress` is unchanged.
+
+What would move it is a compiler change, not a source one: module-level
+constant arrays. With a `u32[]` K table, rounds 16 to 63 could be a loop and
+the body would shrink from 10.8 KB toward the size of the µop cache. Today
+`const K: u32[] = [...]` at module level is refused ("Module constant must be
+a number, boolean, or string, not u32[]"), and `w` cannot carry the table,
+because HMAC wipes the schedule.
+
+## The dispatch, counted
+
+`tests/run.js`'s "sha256 kernel" section builds a differential program with
+`nish_sha256_compress` wrapped by a counter (`-Wl,--wrap`). It runs each mode
+under both settings, and Node's crypto must print the same lines. The counts
+on this CPU:
+
+| Mode | What it runs | `NISH_SHA256` unset | `NISH_SHA256=soft` |
+| --- | --- | --- | --- |
+| sha | FIPS 180-4's five vectors, 200 seeded lengths 0..1000 | 17319 | 0 |
+| hmac | `hmacSha256`, 200 seeded keys 0..200 B, messages 0..1000 B | 2680 | 0 |
+| hs256 | 50 `jwtSignString` + `verifyString` under an HS256 key | 974 | 0 |
+| pbkdf2 | 10 `pbkdf2HmacSha256` runs (`hmacCopySha256` per U_j) | 8774 | 0 |
+
+## Multibuffer
+
+A 4- or 8-lane AVX2 body hashes one block of each of 4 or 8 messages at
+once. It pays only when that many messages are ready together. A server sees
+about 3 requests per epoll wake, so an 8-lane body would run at most 3 lanes
+full. On this CPU the default path is already the SHA-NI kernel at 47 ns a
+block, against OpenSSL's one-lane AVX2 body at 148. An 8-lane body would have
+to finish 8 blocks in 376 ns to match SHA-NI, with all 8 lanes full. It is
+not built. It is worth measuring only on a CPU without SHA-NI (target B).
+
 ## Rerunning on target B (Cascade Lake)
 
 ```bash

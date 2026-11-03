@@ -40,6 +40,8 @@ const root = path.resolve(here, "..", "..")
 const outDir = path.join(root, "build", "bench", "sha256-block")
 const nishc = compilerFrom(process.argv)
 
+/** The variable OpenSSL reads its capability mask from. */
+const IA32CAP = "OPENSSL_ia32cap"
 /** OPENSSL_ia32cap masks (OpenSSL 3's `~` clears bits of the CPUID words). */
 const MASK = {
   // Word 1 clears AVX (ECX 28) and SSSE3 (ECX 9); word 2 clears AVX2 (EBX 5),
@@ -69,6 +71,8 @@ const fail = (msg) => {
   process.exit(2)
 }
 
+/** The setting that times the Nish body rather than the SHA-NI kernel. */
+const soft = { NISH_SHA256: "soft" }
 let rounds = 11
 const binaries = []
 const argv = nishc.rest
@@ -82,7 +86,7 @@ for (let i = 2; i < argv.length; i++) {
     binaries.push({
       id: eq > 0 ? spec.slice(0, eq) : path.relative(root, file),
       bin: file,
-      env: { NISH_SHA256: "soft" },
+      env: soft,
       nish: true,
     })
   } else {
@@ -143,26 +147,23 @@ if (!(tscHz > 0)) {
  * The columns, each `{ id, bin, env, nish }`: the Nish body and its copy
  * first, then the SHA-NI default, the old builds, and OpenSSL's three bodies.
  */
-const soft = { NISH_SHA256: "soft" }
 const columns = [
   { id: "nish-soft", bin: exe, env: soft, nish: true },
   { id: "nish-soft-copy", bin: `${exe}-copy`, env: soft, nish: true },
   { id: "nish (sha-ni)", bin: exe, env: {}, nish: true },
   ...binaries,
-  { id: "openssl scalar", bin: ossl, env: { OPENSSL_ia32cap: MASK.scalar }, nish: false },
-  { id: "openssl avx2", bin: ossl, env: { OPENSSL_ia32cap: MASK.avx2 }, nish: false },
+  { id: "openssl scalar", bin: ossl, env: { [IA32CAP]: MASK.scalar }, nish: false },
+  { id: "openssl avx2", bin: ossl, env: { [IA32CAP]: MASK.avx2 }, nish: false },
   { id: "openssl (sha-ni)", bin: ossl, env: {}, nish: false },
 ]
 
 /** One run under bench/crypto/README.md's contract: `{ checksum, ns }`. */
 const runOnce = (column, c, iterations) => {
-  const env = { ...process.env, ...column.env }
-  if (!("NISH_SHA256" in column.env)) {
-    delete env.NISH_SHA256
-  }
-  if (!("OPENSSL_ia32cap" in column.env)) {
-    delete env.OPENSSL_ia32cap
-  }
+  // Neither variable leaks in from the caller: a column sets what it times.
+  const env = { ...process.env }
+  delete env.NISH_SHA256
+  delete env[IA32CAP]
+  Object.assign(env, column.env)
   const r = spawnSync(column.bin, [c.kernel, String(c.size), String(iterations)], {
     encoding: "utf8",
     env,

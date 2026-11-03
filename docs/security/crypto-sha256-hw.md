@@ -75,6 +75,15 @@ array in other code) is in the model, which is what a wipe is for.
    freestanding `--profile wasm`, and read the IR and the link for
    `nish_sha256_` references.
 5. Measured the unit's `.text*` at `-Oz` against its 512-byte budget.
+6. Built a differential program the same way, counted, and held it to Node's
+   OpenSSL-backed crypto under both settings: FIPS 180-4's vectors and 200
+   seeded messages of 0 to 1000 bytes, `hmacSha256` over 200 seeded keys of 0
+   to 200 bytes, 50 HS256 tokens signed and verified, and 10
+   `pbkdf2HmacSha256` runs, whose every U_j resumes a hasher with
+   `hmacCopySha256`. Unset, each path called the kernel on this x86-64 with
+   SHA-NI (17,319, 2,680, 974 and 8,774 calls); under `soft`, none did. The
+   timings are in `bench/sha256-block/README.md`, which also records why
+   `sha256Compress` was left as it is.
 
 ## Findings
 
@@ -145,5 +154,6 @@ never written. The resolver holds no secret.
 | Unset, the kernel runs where the CPU has it | `sha256 kernel: ${program} with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs` |
 | A program that never hashes links none of the unit; one that does keeps it | `simd: --profile ${profile} links hello with runtime-sha256.c to the same bytes as without it, and a program that calls the kernel runs it` |
 | A wasm32 build references no kernel and runs the Nish path | `sha256 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_sha256_ symbol, and it prints its expected.out`; `simd: --profile wasi links runtime-sha256.c, and nish_sha256_hw answers 0 there`; `sha256 kernel: the freestanding --profile wasm link of a SHA-256 module compiled for the host adds runtime-sha256.c once, and hashes as Node does` |
+| HMAC-SHA256, HS256 and `hmacCopySha256` (PBKDF2) take the kernel by default and the Nish body under `NISH_SHA256=soft`, and both match Node's crypto on seeded keys and lengths | `sha256 kernel: the ${mode} differential prints Node's lines with NISH_SHA256 ${setting}, calling the kernel ${...}` for `sha`, `hmac`, `hs256` and `pbkdf2` |
 | The unit stays small | `${label}: .text* at -Oz fits the ${budget} byte budget` with label `runtime-sha256.c` (495 of 512 bytes at #1055) |
 | The SHA-256 instructions keep their destination's taint, on aarch64 (CT-20) and x86-64 | `AUDIT_CORNERS` in `tests/ct-asm.js` |
