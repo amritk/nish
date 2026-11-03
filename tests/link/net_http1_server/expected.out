@@ -230,3 +230,16 @@ PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
 http1 server: 231 passed, 0 failed, 0 skipped
+PASS  a pooled connection reads a request holding no output buffer
+PASS  its response borrows one
+PASS  which it keeps while bytes wait to be sent
+PASS  and gives back once they are
+PASS  a release holding nothing gives nothing
+PASS  the request ends
+PASS  the next request is read
+PASS  and its response borrows the same buffer again, making none
+PASS  a connection with no pool keeps its own buffer across requests
+PASS  a request's room is bufferLimit less its unread bytes
+PASS  an upgraded slot's room is its message cap before its first frame
+PASS  and a frame's unread bytes count against it
+http1 connection: 12 passed, 0 failed, 0 skipped

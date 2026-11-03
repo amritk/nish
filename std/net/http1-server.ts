@@ -525,28 +525,19 @@ export class Http1OutputPool {
  * `output[outputStart .. outputEnd)` for its carrier to send.
  */
 export class Http1Connection {
-  // References, then 64-bit fields, then 32-bit ones, then flags: the order
-  // the layout packs without padding.
-  config: Http1Config
-  /**
-   * The `Date` every final response carries. The connection makes its own;
-   * `Http1Server` and `Http1TlsServer` put theirs here, so that every slot of a
-   * pool shares one and the pool formats at most once a second. A program may
-   * put another, to share it or to pin its clock.
-   */
-  date: HttpDate
+  // What a request reads and writes comes first, so that `inputRoom`, `feed`,
+  // `next`, `respond`, `write`, `end`, `consume`, `release` and `park` touch
+  // the front of the object: the parser, the output and its pool, the clocks,
+  // the state and the flags. What a WebSocket, an error or a configured cap
+  // needs follows. Within each part the layout packs as widest first does:
+  // the narrow fields of the front end on a 4-byte boundary and the cold
+  // 32-bit fields bring the references behind them to an 8-byte one.
   /**
    * The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is
    * the current request's from its `H1_REQUEST` until its response is done,
    * `H1_END` included, however much of a pipelined request is fed behind it.
    */
   parser: Http1Parser
-  /**
-   * The frame decoder: made when the slot first switches to WebSocket, so a
-   * slot that only ever speaks HTTP never holds its buffers, then kept for
-   * the slot's later peers.
-   */
-  ws: WsDecoder | null
   /**
    * Bytes to send are `output[outputStart .. outputEnd)`. Empty until the
    * connection first needs room to write: then its own buffer, made once, or
@@ -560,27 +551,17 @@ export class Http1Connection {
   /** Where the parser's input and head buffers go while the slot rests, with `Http1Config.idleInput`; null otherwise. */
   inputs: Http1OutputPool | null
   heads: Http1OutputPool | null
-  /** `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. */
-  data: u8[]
-  /** A ping's payload, kept until its pong fits: empty until the first ping. */
-  pong: u8[]
-  /** No fields, for the responses the connection writes itself: made once. */
-  noFields: u8[][]
+  /**
+   * The `Date` every final response carries. The connection makes its own;
+   * `Http1Server` and `Http1TlsServer` put theirs here, so that every slot of a
+   * pool shares one and the pool formats at most once a second. A program may
+   * put another, to share it or to pin its clock.
+   */
+  date: HttpDate
   /** When the carrier last moved a byte for the connection, in `monotonicNanos`. */
   lastActive: i64 = 0
   /** When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. */
   headSince: i64 = 0
-  outputStart: i32 = 0
-  outputEnd: i32 = 0
-  dataStart: i32 = 0
-  dataLength: i32 = 0
-  /** `H1_WS_MESSAGE`'s opcode: text or binary. */
-  opcode: i32 = 0
-  /** `H1_ERROR`'s HTTP status or WebSocket close code, or `H1_WS_CLOSE`'s close code. */
-  status: i32 = 0
-  /** The most input the connection buffers, unread: the cap `inputRoom` holds it to. */
-  bufferLimit: i32 = 0
-  pongLength: i32 = 0
   state: i32 = 0
   response: i32 = 0
   /**
@@ -590,12 +571,23 @@ export class Http1Connection {
   responseFraming: i32 = 0
   /** A response with a length: the bytes it still owes. */
   responseLeft: i32 = 0
-  /** The response carries no body (HEAD, 204, 304): what is written is dropped. */
-  responseEmpty: boolean = false
+  outputStart: i32 = 0
+  outputEnd: i32 = 0
+  /**
+   * `output.length`, kept beside the offsets so that `acquire` and `release`
+   * learn whether the connection holds a buffer without reading an array:
+   * the empty one is out of cache by the time a resting connection's next
+   * request comes. Only the connection assigns `output`, and with it this.
+   */
+  outputCap: i32 = 0
+  /** The most input the connection buffers, unread: the cap `inputRoom` holds it to. */
+  bufferLimit: i32 = 0
   /** A request's head has been read and its exchange is not over. */
   requestOpen: boolean = false
   /** The request's body has been read to its end. */
   requestEnded: boolean = false
+  /** The response carries no body (HEAD, 204, 304): what is written is dropped. */
+  responseEmpty: boolean = false
   /** The connection closes once this exchange is over. */
   closeAfter: boolean = false
   /** The program accepted the request's WebSocket handshake. */
@@ -607,6 +599,13 @@ export class Http1Connection {
   inputEnded: boolean = false
   /** A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. */
   headTimed: boolean = false
+  dataStart: i32 = 0
+  dataLength: i32 = 0
+  /** `H1_WS_MESSAGE`'s opcode: text or binary. */
+  opcode: i32 = 0
+  /** `H1_ERROR`'s HTTP status or WebSocket close code, or `H1_WS_CLOSE`'s close code. */
+  status: i32 = 0
+  pongLength: i32 = 0
   /**
    * The TCP maximum segment size the program sets for this connection, for
    * `respondEncoded` under `HttpCompressor.segmentMode`; 0, the default,
@@ -616,6 +615,19 @@ export class Http1Connection {
   mss: i32 = 0
   /** The MSS `Http1Server.accept` read from this connection's socket (`netMss`), or 0 when it reports none. */
   socketMss: i32 = 0
+  config: Http1Config
+  /**
+   * The frame decoder: made when the slot first switches to WebSocket, so a
+   * slot that only ever speaks HTTP never holds its buffers, then kept for
+   * the slot's later peers.
+   */
+  ws: WsDecoder | null
+  /** `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. */
+  data: u8[]
+  /** A ping's payload, kept until its pong fits: empty until the first ping. */
+  pong: u8[]
+  /** No fields, for the responses the connection writes itself: made once. */
+  noFields: u8[][]
 
   /** A connection under `config`. A cap outside what the connection can work with panics. */
   constructor(config: Http1Config) {
@@ -759,10 +771,15 @@ export class Http1Connection {
     if (this.writeHeld || this.inputEnded || this.state === H1_S_CLOSING || this.state === H1_S_FAILED) {
       return 0
     }
-    const ws: WsDecoder | null = this.ws
-    const held: i32 =
-      this.state === H1_S_WEBSOCKET && ws !== null ? ws.end - ws.start : this.parser.buffered()
-    const room: i32 = this.inputLimit() - held
+    let room: i32 = 0
+    if (this.state === H1_S_WEBSOCKET) {
+      // Only a WebSocket reads the decoder and the configured message cap,
+      // so a request's check stays on the connection's front fields.
+      const ws: WsDecoder | null = this.ws
+      room = this.inputLimit() - (ws !== null ? ws.end - ws.start : this.parser.buffered())
+    } else {
+      room = this.bufferLimit - this.parser.buffered()
+    }
     return room > 0 ? room : 0
   }
 
@@ -809,11 +826,13 @@ export class Http1Connection {
    * the pool has no free buffer, or for a connection's own, once.
    */
   acquire(): void {
-    if (toI32(this.output.length) > 0) {
+    if (this.outputCap > 0) {
       return
     }
     const pool: Http1OutputPool | null = this.pool
-    this.output = pool !== null ? pool.take() : new Array<u8>(this.config.outputSize)
+    const output: u8[] = pool !== null ? pool.take() : new Array<u8>(this.config.outputSize)
+    this.output = output
+    this.outputCap = toI32(output.length)
     this.outputStart = 0
     this.outputEnd = 0
   }
@@ -825,16 +844,12 @@ export class Http1Connection {
    */
   release(): void {
     const pool: Http1OutputPool | null = this.pool
-    if (
-      pool === null ||
-      toI32(this.output.length) === 0 ||
-      this.outputEnd > this.outputStart ||
-      this.writeHeld
-    ) {
+    if (pool === null || this.outputCap === 0 || this.outputEnd > this.outputStart || this.writeHeld) {
       return
     }
     pool.give(this.output)
     this.output = this.noOutput
+    this.outputCap = 0
     this.outputStart = 0
     this.outputEnd = 0
   }
