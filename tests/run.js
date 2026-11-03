@@ -8049,6 +8049,17 @@ if (irDelegated > 0) {
 // shard 1: it builds every twin of five families, four and a half minutes of
 // a CI shard, and reads nothing another section writes.
 if (dealtHere("cryptoBench")) {
+  // bench/run.mjs carries a section over only when its marker matches
+  // `<!-- ([a-z-]+):begin -->`, so a marker with a digit or a capital is
+  // silently dropped by the next full rewrite of docs/BENCHMARKS.md.
+  const markers = [
+    ...fs.readFileSync(path.join(root, "docs", "BENCHMARKS.md"), "utf8").matchAll(/<!-- (\S+):begin -->/g),
+  ].map((m) => m[1])
+  check(
+    "crypto-bench: every <!-- name:begin --> section of docs/BENCHMARKS.md has a name bench/run.mjs carries over ([a-z-]+)",
+    markers.every((m) => /^[a-z-]+$/.test(m)),
+    `markers: ${markers.join(", ")}`
+  )
   if (HAS_CLANG) {
     const families = fs
       .readdirSync(path.join(root, "bench", "crypto"))
@@ -20503,8 +20514,9 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
     }
 
     // The differential: a program hashes each path by argv[1] — sha
-    // (FIPS 180-4's five vectors, then 200 seeded messages of 0..1000 bytes), hmac
-    // (hmacSha256 over 200 seeded keys of 0..200 bytes and messages of 0..1000), hs256
+    // (FIPS 180-4's five vectors, the padding-edge lengths, then 200 seeded messages
+    // of 0..1000 bytes), hmac (hmacSha256 over the same edges and the key edges, then
+    // 200 seeded keys of 0..200 bytes and messages of 0..1000), hs256
     // (jwtSignString and verifyString under an HS256 key, the HmacKey path) and pbkdf2
     // (pbkdf2HmacSha256, whose every U_j resumes a hasher with hmacCopySha256) — and
     // Node's OpenSSL-backed crypto, fed the same xorshift32 stream, must print the same
@@ -20530,18 +20542,35 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
       "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
       "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
     ]
+    // The lengths either side of a padding boundary, forced before the random
+    // draws: 55 is the longest message with its padding in one block, 56 the
+    // shortest that needs a second, and so on a block along. HMAC's inner hash
+    // runs over the 64-byte padded key first, so the same message lengths are
+    // its boundaries too; its key lengths either side of 64 are the hashed key.
+    const edges = [55, 56, 63, 64, 65, 119, 120, 127, 128, 129]
+    const keyEdges = [63, 64, 65, 128]
     /** Node's lines for each mode, from a fresh stream. */
     const wants = {
       sha: (r) => [
         ...fips.map((t) => sha(Buffer.from(t))),
         sha(Buffer.alloc(1000000, 97)),
+        ...edges.map((n) => sha(r.bytes(n))),
         ...Array.from({ length: 200 }, () => sha(r.bytes(r.below(1001)))),
       ],
-      hmac: (r) =>
-        Array.from({ length: 200 }, () => {
+      hmac: (r) => [
+        ...edges.map((n) => {
+          const key = r.bytes(32)
+          return hmac(key, r.bytes(n)).toString("hex")
+        }),
+        ...keyEdges.map((n) => {
+          const key = r.bytes(n)
+          return hmac(key, r.bytes(3)).toString("hex")
+        }),
+        ...Array.from({ length: 200 }, () => {
           const key = r.bytes(r.below(201))
           return hmac(key, r.bytes(r.below(1001))).toString("hex")
         }),
+      ],
       hs256: (r) => {
         const key = r.bytes(32)
         return Array.from({ length: 50 }, () => {
@@ -20620,6 +20649,8 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
         "export const main = (): i32 => {",
         "  const mode: string = process.argv.length > 1 ? process.argv[1] : \"\"",
         "  const rng: Rng = new Rng()",
+        `  const edges: i32[] = [${edges.join(", ")}]`,
+        `  const keyEdges: i32[] = [${keyEdges.join(", ")}]`,
         "  if (mode === \"sha\") {",
         "    console.log(hexOf(sha256(ascii(\"\"))))",
         "    console.log(hexOf(sha256(ascii(\"abc\"))))",
@@ -20638,12 +20669,23 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
         "      million[i] = toU8(97)",
         "    }",
         "    console.log(hexOf(sha256(million)))",
+        "    for (const n of edges) {",
+        "      console.log(hexOf(sha256(rng.bytes(n))))",
+        "    }",
         "    for (let i: i32 = 0; i < 200; i += 1) {",
         "      console.log(hexOf(sha256(rng.bytes(rng.below(1001)))))",
         "    }",
         "    return 0",
         "  }",
         "  if (mode === \"hmac\") {",
+        "    for (const n of edges) {",
+        "      const key: u8[] = rng.bytes(32)",
+        "      console.log(hexOf(hmacSha256(key, rng.bytes(n))))",
+        "    }",
+        "    for (const n of keyEdges) {",
+        "      const key: u8[] = rng.bytes(n)",
+        "      console.log(hexOf(hmacSha256(key, rng.bytes(3))))",
+        "    }",
         "    for (let i: i32 = 0; i < 200; i += 1) {",
         "      const key: u8[] = rng.bytes(rng.below(201))",
         "      console.log(hexOf(hmacSha256(key, rng.bytes(rng.below(1001)))))",

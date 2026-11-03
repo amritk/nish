@@ -787,7 +787,7 @@ The three cases with the Unicode features. Main refuses `\p{…}` and folds no n
 Linked size of `bench/regex/size.ts`, which imports `nish/regex` and compiles `[0-9]+`: 92,824 bytes from main and 177,448 from this branch. The 84,624 bytes are mostly the Unicode tables, about 70 KB of packed strings, plus the code that reads them. `regexCompile`'s parser reaches them, so they are linked whether or not a pattern names a property.
 <!-- regex:end -->
 
-<!-- sha256-block:begin -->
+<!-- sha-block:begin -->
 ## SHA-256's block function
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sha256-block/run.mjs --compiler build/seed/bin/nish` times one compression in ns and TSC cycles: Nish's own body (`NISH_SHA256=soft`), the SHA-NI kernel the compiler puts in front of it, and OpenSSL 3.0.13's `sha256_block_data_order` with `OPENSSL_ia32cap` picking its scalar, AVX2 and SHA-NI bodies. [bench/sha256-block/README.md](../bench/sha256-block/README.md) has the masks, the short-message and HMAC/HS256/PBKDF2 rows, the variants tried and the target-B commands.
@@ -804,4 +804,4 @@ Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, TSC 2.100 GHz, `std/crypto/sha256
 | openssl (sha-ni) | 41.7 (39.3, 10.0%) | 88 | 42.0 (41.4, 5.5%) | 88 |
 
 The Nish body is 20% to 22% slower than OpenSSL's scalar body and 44% slower than its AVX2 body; the copy's band is 0.7% to 2.3%. The best rewrite of `sha256Compress` tried was 8% to 9.5% faster (190 ns against 208, 21 pinned rounds, three runs), under the 10% bar, and `--cpu x86-64-v3` alone gives as much, so the body is unchanged. Rounds 16 to 63 as a loop over a K table would need module-level constant arrays in the compiler. HMAC-SHA256, HS256 and PBKDF2 (`hmacCopySha256`) take the SHA-NI kernel by default and the Nish body under `NISH_SHA256=soft`, shown by their timings here and by a `-Wl,--wrap` call counter in `tests/run.js`'s "sha256 kernel" section.
-<!-- sha256-block:end -->
+<!-- sha-block:end -->
