@@ -419,7 +419,8 @@ const isCompare = (name: string): boolean =>
   name === "eq" || name === "ne" || name === "lt" || name === "le" || name === "gt" || name === "ge"
 
 /** Whether `name` shifts or rotates by a constant count. */
-const isLaneShift = (name: string): boolean => name === "shl" || name === "shr" || name === "rotl" || name === "rotr"
+const isLaneShift = (name: string): boolean =>
+  name === "shl" || name === "shr" || name === "rotl" || name === "rotr"
 
 /**
  * A shift or rotate count: an integer literal from 0 to one less than the lane
@@ -459,7 +460,10 @@ const checkShuffle = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
   const name = "shuffle"
   const args = call.children[1].children
   if (args.length < 2) {
-    return ctx.errorType(call, `\`${name}\` takes two vectors of one type and one lane index per lane, got ${args.length} argument(s)`)
+    return ctx.errorType(
+      call,
+      `\`${name}\` takes two vectors of one type and one lane index per lane, got ${args.length} argument(s)`
+    )
   }
   const vector = firstOperand(ctx, args[0], scope, name, "any")
   sameOperand(ctx, args[1], scope, name, vector)
@@ -648,21 +652,34 @@ const emitSimdOp = (emitter: Emitter, expr: Node, name: string): string => {
       const funnel = name === "rotl" ? "fshl" : "fshr"
       return callVectorIntrinsic(emitter, `llvm.${funnel}.${suffix}`, ty, `${ty} ${a}, ${ty} ${a}, ${amount}`)
     }
-    const op = name === "shl" ? "shl" : table.refOf(vector) === T_I32 ? "ashr" : "lshr"
+    let op = "shl"
+    if (name === "shr") {
+      op = table.refOf(vector) === T_I32 ? "ashr" : "lshr"
+    }
     return fn.emitValue(`${op} ${ty} ${a}, ${amount.substring(ty.length + 1)}`)
   }
   if (name === "neg") {
     return fn.emitValue(`fneg ${ty} ${a}`)
   }
   if (name === "abs" || name === "sqrt") {
-    return callVectorIntrinsic(emitter, `llvm.${name === "abs" ? "fabs" : "sqrt"}.${suffix}`, ty, `${ty} ${a}`)
+    return callVectorIntrinsic(
+      emitter,
+      `llvm.${name === "abs" ? "fabs" : "sqrt"}.${suffix}`,
+      ty,
+      `${ty} ${a}`
+    )
   }
   if (name === "not") {
     const ones = splatConstant(ty, laneType, count, laneType === "i1" ? "true" : "-1")
     return fn.emitValue(`xor ${ty} ${a}, ${ones.substring(ty.length + 1)}`)
   }
   if (name === "any" || name === "all") {
-    return callVectorIntrinsic(emitter, `llvm.vector.reduce.${name === "any" ? "or" : "and"}.${suffix}`, "i1", `${ty} ${a}`)
+    return callVectorIntrinsic(
+      emitter,
+      `llvm.vector.reduce.${name === "any" ? "or" : "and"}.${suffix}`,
+      "i1",
+      `${ty} ${a}`
+    )
   }
   if (name === "bitmask") {
     const bits = fn.emitValue(`bitcast ${ty} ${a} to i${count}`)
@@ -672,12 +689,22 @@ const emitSimdOp = (emitter: Emitter, expr: Node, name: string): string => {
     const lane = table.refOf(vector)
     if (lane === T_F32 || lane === T_F64) {
       // `-0.0` is the identity of `fadd`, so a sum of `-0.0` lanes stays `-0.0`.
-      return callVectorIntrinsic(emitter, `llvm.vector.reduce.fadd.${suffix}`, laneType, `${laneType} -0.000000e+00, ${ty} ${a}`)
+      return callVectorIntrinsic(
+        emitter,
+        `llvm.vector.reduce.fadd.${suffix}`,
+        laneType,
+        `${laneType} -0.000000e+00, ${ty} ${a}`
+      )
     }
     if (lane === T_U8 || lane === T_U16) {
       const wide = `<${count} x i32>`
       const widened = fn.emitValue(`zext ${ty} ${a} to ${wide}`)
-      return callVectorIntrinsic(emitter, `llvm.vector.reduce.add.${vectorSuffix(wide)}`, "i32", `${wide} ${widened}`)
+      return callVectorIntrinsic(
+        emitter,
+        `llvm.vector.reduce.add.${vectorSuffix(wide)}`,
+        "i32",
+        `${wide} ${widened}`
+      )
     }
     return callVectorIntrinsic(emitter, `llvm.vector.reduce.add.${suffix}`, "i32", `${ty} ${a}`)
   }

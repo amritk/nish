@@ -1204,7 +1204,7 @@ export class TypeTable {
       case K_VECTOR:
         return `${this.scalarName(this.refs[type])}x${this.laneCount(type)}`
       case K_MASK:
-        return `mask${16 / this.laneCount(type) * 8}x${this.laneCount(type)}`
+        return `mask${(16 / this.laneCount(type)) * 8}x${this.laneCount(type)}`
       case K_REGION:
         return `Region<${this.typeName(this.refs[type])}>`
       default:
