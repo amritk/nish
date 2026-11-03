@@ -1,6 +1,7 @@
 // `nish/net/http1-server` over loopback. With no arguments it runs the checks
 // in `checks.ts`, Nish clients against both carriers in one loop (also run
-// under `--number-mode f64` by `tests/link/net_http1_server_f64`). With
+// under `--number-mode f64` by `tests/link/net_http1_server_f64`), then those
+// of `conn.ts` on a connection alone. With
 // `serve <n>` it is the servers alone, for a third-party client — curl, the
 // Autobahn suite's server cases — with the caps of `checks.ts`'s
 // `testConfig` and its routes (`/hello`, `/echo`, `/big`, `/ws`): it prints
@@ -9,6 +10,7 @@
 import { H1_ALPN } from "nish/net/http1-server";
 import { tcpConfig } from "../net_tls_common/server";
 import { serverChecks, testConfig } from "./checks";
+import { connectionChecks } from "./conn";
 import { H1Loop } from "./harness";
 
 /** The decimal number `text` spells, or -1. */
@@ -49,5 +51,7 @@ export const main = (): i32 => {
     const tlsPort: i32 = argc === 5 ? decimal(process.argv[4]) : 0;
     return count > 0 && plainPort >= 0 && tlsPort >= 0 ? serve(count, plainPort, tlsPort) : 2;
   }
-  return serverChecks();
+  const server: i32 = serverChecks();
+  const connection: i32 = connectionChecks();
+  return server !== 0 ? server : connection;
 };

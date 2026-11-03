@@ -7219,43 +7219,44 @@ struct Http1OutputPool (class) size=16 align=8 exported
   method take -> @nish.Http1OutputPool.take
   method give -> @nish.Http1OutputPool.give
 struct Http1Connection (class) size=184 align=8 exported
-  field config: Http1Config index=0 offset=0
-  field date: HttpDate index=1 offset=8
-  field parser: Http1Parser index=2 offset=16
-  field ws: WsDecoder | null index=3 offset=24
-  field output: u8[] index=4 offset=32
-  field noOutput: u8[] index=5 offset=40
-  field pool: Http1OutputPool | null index=6 offset=48
-  field inputs: Http1OutputPool | null index=7 offset=56
-  field heads: Http1OutputPool | null index=8 offset=64
-  field data: u8[] index=9 offset=72
-  field pong: u8[] index=10 offset=80
-  field noFields: u8[][] index=11 offset=88
-  field lastActive: i64 index=12 offset=96 initialized
-  field headSince: i64 index=13 offset=104 initialized
-  field outputStart: i32 index=14 offset=112 initialized
-  field outputEnd: i32 index=15 offset=116 initialized
-  field dataStart: i32 index=16 offset=120 initialized
-  field dataLength: i32 index=17 offset=124 initialized
-  field opcode: i32 index=18 offset=128 initialized
-  field status: i32 index=19 offset=132 initialized
-  field bufferLimit: i32 index=20 offset=136 initialized
-  field pongLength: i32 index=21 offset=140 initialized
-  field state: i32 index=22 offset=144 initialized
-  field response: i32 index=23 offset=148 initialized
-  field responseFraming: i32 index=24 offset=152 initialized
-  field responseLeft: i32 index=25 offset=156 initialized
-  field responseEmpty: boolean index=26 offset=160 initialized
-  field requestOpen: boolean index=27 offset=161 initialized
-  field requestEnded: boolean index=28 offset=162 initialized
-  field closeAfter: boolean index=29 offset=163 initialized
-  field upgraded: boolean index=30 offset=164 initialized
-  field writeHeld: boolean index=31 offset=165 initialized
-  field pongPending: boolean index=32 offset=166 initialized
-  field inputEnded: boolean index=33 offset=167 initialized
-  field headTimed: boolean index=34 offset=168 initialized
-  field mss: i32 index=35 offset=172 initialized
-  field socketMss: i32 index=36 offset=176 initialized
+  field parser: Http1Parser index=0 offset=0
+  field output: u8[] index=1 offset=8
+  field noOutput: u8[] index=2 offset=16
+  field pool: Http1OutputPool | null index=3 offset=24
+  field inputs: Http1OutputPool | null index=4 offset=32
+  field heads: Http1OutputPool | null index=5 offset=40
+  field date: HttpDate index=6 offset=48
+  field lastActive: i64 index=7 offset=56 initialized
+  field headSince: i64 index=8 offset=64 initialized
+  field state: i32 index=9 offset=72 initialized
+  field response: i32 index=10 offset=76 initialized
+  field responseFraming: i32 index=11 offset=80 initialized
+  field responseLeft: i32 index=12 offset=84 initialized
+  field outputStart: i32 index=13 offset=88 initialized
+  field outputEnd: i32 index=14 offset=92 initialized
+  field outputCap: i32 index=15 offset=96 initialized
+  field bufferLimit: i32 index=16 offset=100 initialized
+  field requestOpen: boolean index=17 offset=104 initialized
+  field requestEnded: boolean index=18 offset=105 initialized
+  field responseEmpty: boolean index=19 offset=106 initialized
+  field closeAfter: boolean index=20 offset=107 initialized
+  field upgraded: boolean index=21 offset=108 initialized
+  field writeHeld: boolean index=22 offset=109 initialized
+  field pongPending: boolean index=23 offset=110 initialized
+  field inputEnded: boolean index=24 offset=111 initialized
+  field headTimed: boolean index=25 offset=112 initialized
+  field dataStart: i32 index=26 offset=116 initialized
+  field dataLength: i32 index=27 offset=120 initialized
+  field opcode: i32 index=28 offset=124 initialized
+  field status: i32 index=29 offset=128 initialized
+  field pongLength: i32 index=30 offset=132 initialized
+  field mss: i32 index=31 offset=136 initialized
+  field socketMss: i32 index=32 offset=140 initialized
+  field config: Http1Config index=33 offset=144
+  field ws: WsDecoder | null index=34 offset=152
+  field data: u8[] index=35 offset=160
+  field pong: u8[] index=36 offset=168
+  field noFields: u8[][] index=37 offset=176
   constructor -> @nish.Http1Connection.constructor
   method restart -> @nish.Http1Connection.restart
   method park -> @nish.Http1Connection.park
@@ -7540,11 +7541,11 @@ function Http1Connection.inputRoom(this: Http1Connection): i32 -> @nish.Http1Con
   calls: nish.Http1Connection.inputLimit nish.Http1Parser.buffered nish_panic_overflow
   pointer this: size=184 writesThrough=false captured=false passedTo=nish.Http1Connection.inputLimit#0
   stackSites=0 stackLocals=0
-  local +0:11 ws: WsDecoder | null (const)
-  local +1:11 held: i32 (const)
-  callee +2:74 Http1Parser.buffered -> @nish.Http1Parser.buffered
-  local +3:11 room: i32 (const)
-  callee +3:23 Http1Connection.inputLimit -> @nish.Http1Connection.inputLimit
+  local +0:9 room: i32 (let)
+  local +4:13 ws: WsDecoder | null (const)
+  callee +5:14 Http1Connection.inputLimit -> @nish.Http1Connection.inputLimit
+  callee +5:69 Http1Parser.buffered -> @nish.Http1Parser.buffered
+  callee +7:33 Http1Parser.buffered -> @nish.Http1Parser.buffered
 function Http1Connection.feed(this: Http1Connection, buf: u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.feed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WsDecoder.feed
@@ -7579,15 +7580,16 @@ function Http1Connection.acquire(this: Http1Connection): void -> @nish.Http1Conn
   calls: nish.Http1OutputPool.take nish_panic
   pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -1:11 pool: Http1OutputPool | null (const)
-  callee +0:35 Http1OutputPool.take -> @nish.Http1OutputPool.take
+  local -2:11 pool: Http1OutputPool | null (const)
+  local -1:11 output: u8[] (const)
+  callee -1:42 Http1OutputPool.take -> @nish.Http1OutputPool.take
 function Http1Connection.release(this: Http1Connection): void -> @nish.Http1Connection.release [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1OutputPool.give
   pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -10:11 pool: Http1OutputPool | null (const)
+  local -5:11 pool: Http1OutputPool | null (const)
   callee -1:5 Http1OutputPool.give -> @nish.Http1OutputPool.give
 function Http1Connection.consume(this: Http1Connection, n: i32): void -> @nish.Http1Connection.consume [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
