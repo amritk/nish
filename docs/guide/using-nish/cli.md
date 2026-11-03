@@ -108,8 +108,12 @@ listening on 8080
   runs, and once the new one has lasted a moment the old one is sent SIGTERM,
   then SIGKILL if it has not exited after five seconds. Listen with
   `SO_REUSEPORT` (`tcpListenFlags(host, port, backlog, 1)`) so both can hold
-  the port at once, and answer SIGTERM by finishing the connections you have
-  accepted — a server that does both loses no request across a rebuild. A
+  the port at once, and answer SIGTERM by accepting what is queued and
+  finishing the connections you have accepted. On Linux, also turn on
+  `sudo sysctl -w net.ipv4.tcp_migrate_req=1` (Linux 5.14 and later): without
+  it, closing the old listener resets any connection the kernel queued on it
+  after the server's last accept, so an occasional request across a rebuild
+  fails with a reset. A server that does all three loses no request. A
   server that does not set `SO_REUSEPORT` cannot bind beside the old one: the
   new build exits as it starts, that is reported, and the old one keeps
   serving the old code. A network client is taken for a server too, so for a
