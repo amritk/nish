@@ -39,11 +39,21 @@ lane, lanes of different costs) are set down in [The
 batch](#the-batch). `bcryptCalibrate`, which picks a width by timing
 throwaway passwords, handles no secret of the caller's (BCRYPT-10).
 
+The login batcher, `nish/crypto/bcrypt-batch` in `std/crypto/bcrypt-batch.ts`,
+queues verifies and hashes and runs them as those batches on one
+`std/threads` task per core. It keeps its own copy of each queued password in
+a holder whose one field is a `Secret`, and wipes the copy on the calling
+thread once the scope that read it has joined. Every answer is the one
+`bcryptVerify` or `bcryptHash` would give; a damaged stored hash answers its
+`Err` on its own row. What it leaves unwiped is a batcher dropped with
+requests still queued (BCRYPT-11). See [The login batcher](#the-login-batcher).
+
 ## Scope
 
 | File | Functions |
 | --- | --- |
 | `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptHashInto`, `bcryptHashExposed`, `bcryptVerifyExposed`, `bcryptSameWiped`, `bcryptVerifyOne`, `bcryptExposed`, `bcryptKeySchedule`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptEncodeInto`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`, `bcryptParseHash`; the batch: `bcryptHashN`, `bcryptVerifyN`, `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptLoadN`, `bcryptLoadSlot`, `bcryptHashNExposed`, `bcryptVerifyNExposed`, `bcryptMaskOf`, `bcryptSlotsOf`, `bcryptInitN`, `bcryptKeyWord`, `bcryptLoadLane` (and its six `bcryptLoadLane0`–`5`), `bcryptEksN`, `bcryptBodyN`, `bcryptBody2`–`bcryptBody6`, `bcryptEncryptAt`, `bcryptXorKeyN`, `bcryptXorSaltN`, `bcryptExpandAt`, `bcryptMagicAt`, `bcryptSaltOf`, `bcryptBatchSalt`, `bcryptJoin`, `bcryptLaneString`, `bcryptLaneOk`, `bcryptJoinedOk`, `bcryptBytesOf`; the calibration: `bcryptCalibrate`, `bcryptCalibrateTime`, `bcryptCalibrateKey` |
+| `std/crypto/bcrypt-batch.ts` | `bcryptBatcher`; `BcryptBatcher` (`verify`, `hash`, `enqueue`, `pending`, `waitNanos`, `run`, `orderOf`, `compact`); `BcryptBatchKey` (and its `wipe`), `bcryptBatchTake`, `bcryptBatchFill`, `bcryptBatchCopy`, `bcryptBatchLengthOf`; `BcryptBatchShare`, `bcryptBatchShareRun`, `bcryptBatchOfKind`, `bcryptBatchLane`, `bcryptBatchVerifyRun`, `bcryptBatchVerifyLanes`, `bcryptBatchVerifyAlone`, `bcryptBatchHashRun`, `bcryptBatchHashLanes`; `bcryptBatchCostOf`, `bcryptBatchLines`, `bcryptBatchAnswerOf`; `BcryptAnswer`, `BcryptBatchConfig` |
 
 Out of scope: `timingSafeEqual` (`std/crypto/ct.ts`, in
 [crypto-k1.md](crypto-k1.md)), the `Secret` rules the checker enforces
@@ -199,11 +209,62 @@ as in `bcryptVerify`; the lanes' answers do not depend on one another, and the
 time of the call follows only which lanes are given and the costs, all of
 which the caller chose.
 
+## The login batcher
+
+`std/crypto/bcrypt-batch.ts` fills the batch for a server whose logins arrive
+one at a time. `verify(password, hash, now)` and `hash(password, salt, now)`
+queue a request and answer its ticket; `run(now)`, when `width` requests are
+queued or the oldest has waited `holdNanos`, takes at most `width × cores` of
+them, oldest first, deals them in even contiguous shares to
+`min(cores, taken)` tasks of one `scope`, and answers a `BcryptAnswer` for
+each. The taken requests are ordered verifies first, by the cost their hash
+names, then hashes (`orderOf`), so a share's requests of one kind and cost sit
+together, and the share calls `bcryptVerifyN` or `bcryptHashN` for each run
+of up to `width` of them.
+
+**The copy.** A queued password must outlive the caller's `Secret`, which the
+checker makes the caller wipe, and a `Secret` cannot be an array element
+(NL2429). So `bcryptBatchTake` makes a `BcryptBatchKey`, a class whose one
+field is a `readonly Secret<u8[]>` of the password's length, and copies the
+password into it with one `exposeWith` inside another (`bcryptBatchFill`,
+`bcryptBatchCopy`): the bytes go from one exposure straight into the other
+and are never in an array outside a `Secret`. The queue is an array of these
+holders.
+
+**The wipe.** After the scope joins, `run` calls `wipe()` on every holder it
+took, on the calling thread. No task can be reading a holder then: a task's
+reads end before its scope's join returns. The tasks themselves wipe nothing
+of the batcher's; they call `bcryptVerifyN`, `bcryptHashN` and, for a single
+lane, `bcryptVerify` or `bcryptHash`, which wipe what they make, and a task
+may wipe its own scratch (BCRYPT-9). The holders of a run are wiped whatever
+it answered, a batch `Err` included.
+
+**What crosses the tasks.** A task answers one `string`, its requests'
+answers joined by `"\n"`: a hash string, `"1"` or `"0"`, or an error message.
+None is secret; a verify's answer is the bit the caller asked for, and a hash
+string is the public output. The passwords reach the tasks only as holders,
+read inside `exposeWith`.
+
+**A damaged stored hash** makes `bcryptVerifyN` an `Err` for its whole batch,
+before anything is hashed. The share then verifies each lane of that batch
+alone with `bcryptVerify`, so the damaged row answers the `Err` and every
+other row the answer it would have had. The batch's choice not to fold a
+malformed row into `false` (above) holds row by row. A hash request whose
+salt is not 16 bytes is answered with its `Err` by the next `run` and never
+queued, so no copy of its password is made.
+
+**Timing.** A verify's answer arrives with its batch's, so its time follows
+the batch: the other requests it was queued with, and their costs. Those are
+other users' logins, which say nothing about this password; within a batch
+the comparison is `bcryptVerifyN`'s, constant-time per lane. The hold adds at
+most `holdNanos` to any request, whatever its password.
+
 ## Findings
 
 Rows BCRYPT-1 to BCRYPT-5 are the decisions a reviewer might question, each
 following the reference; BCRYPT-6 and BCRYPT-7 are what a wipe and a
-constant-time compare cannot reach; BCRYPT-8 to BCRYPT-10 are the batch's.
+constant-time compare cannot reach; BCRYPT-8 to BCRYPT-10 are the batch's,
+and BCRYPT-11 the login batcher's.
 They are accepted, or a limitation of the language since lifted, not flaws,
 and none is counted as fixed or open in the index.
 
@@ -219,6 +280,7 @@ and none is counted as fixed or open in the index.
 | BCRYPT-8 | Low | `bcryptEksN`, `bcryptSlotsOf` | A null lane, or a lane of another cost in a verify group, ran through the four-lane kernel with π and no key, and its digest was computed and dropped. | **Superseded.** It was accepted, since nothing secret was in such a lane and its digest was wiped with the rest. Now the given lanes take consecutive slots (`bcryptSlotsOf`) and the kernel is as wide as they are, so no slot runs without a key: three lanes of a four-lane call run `bcryptBody3`. Pinned by `link/crypto_bcrypt_width`'s "hashN, width w, lanes m" lines, whose lane masks m leave gaps (lanes 33 is lanes 0 and 5, run in slots 0 and 1), each lane equal to `bcryptHash`. |
 | BCRYPT-9 | Low | `bcryptHash4`, `bcryptVerify4` | The batch could not run in a `std/threads` task: a task calling `bcryptHash4` was refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Closed: the language limitation is lifted.** A task may now wipe a `Secret` it made with `secret(...)` from a fresh value ([`secret.md`](secret.md), [`LANGUAGE.md`](../LANGUAGE.md) NL2471), and `bcryptVerify4` no longer counts as writing the caller's `hashes`: handing a `string` element to a call writes nothing, since a string has no slot a callee can store into. Before: `tests/link/thread_bcrypt_batch_refused`, refused. After: `tests/link/thread_bcrypt_batch` runs `bcryptHash4` and `bcryptVerify4` on two tasks under `NISH_NUM_THREADS` of 1, 2 and 8, and checks the hashes against `bcryptHash`. The analysis as it stood: the batch made its state with `secret(new Array…)` and wipes it; the task rule counts that wipe as a shared write: [`threads.md`](../guide/using-nish/threads.md) and [`LANGUAGE.md`](../LANGUAGE.md) (NL2471) say a `wipe` of a `Secret` made with `secret(...)` is a write to memory the caller can see, since the rule does not follow a fresh array through `secret(…)`. The way round it costs more than it buys: a plain `u32[]` state would hold every lane's key schedule and S-boxes outside a `Secret` and outside `expose`, where the checker no longer makes each use go through `exposeWith` nor makes the function wipe it, and a zeroing loop in place of the wipe is a store `opt -O2` may drop. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. That is the change made. |
 | BCRYPT-10 | Low | `bcryptCalibrate`, `bcryptCalibrateTime` | The width a program runs follows a clock, so it differs between machines, between runs and with the load at startup. | **Accepted.** The width changes only the speed: every width gives each lane the single path's hash byte for byte (BCRYPT-8's test, and the differential at widths 2 to 6), so a hash made at one width verifies at any other. The calibration hashes its own one-byte throwaway passwords (`bcryptCalibrateKey`), wiped like any other, and an all-zero salt; it reads no caller's secret, and its running time follows only the widths and the core. It reads the clock (`monotonicNanos`), the one function of the module that does. |
+| BCRYPT-11 | Low | `BcryptBatcher.run`, `bcryptBatchTake` | The batcher keeps a copy of each queued password until its request has run; a batcher dropped with requests still queued leaves those copies to the allocator unwiped. | **Accepted.** The copy is what lets the caller wipe its own `Secret` at once, as after `bcryptVerify`, and every copy is wiped by the `run` that takes it, after the scope joins (`tests/link/thread_bcrypt_batcher`). Nish has no destructor to wipe a dropped object's fields, so the module documents the rule instead: call `run` until `pending()` is 0 before dropping a batcher. A server that runs while it accepts logins never holds more than the requests of one hold window and one run. |
 
 ## Properties verified
 
@@ -337,12 +399,22 @@ volatile wipes reached from `bcryptKeyWord` (2), `bcryptEksN` (2),
 (52) and `bcryptCalibrateTime` (19); `tests/wipes/crypto.js` says where each
 comes from. Turning the digests' `wipe` into `fill(0)` drops each of those
 from `bcryptHashNExposed` on by one.
+The login batcher's copy of each password: ``crypto: the wipes survive opt
+-O2 (the bcrypt login batcher's copy of each password, in BcryptBatcher.run)``
+counts `BcryptBatcher.run`'s one volatile wipe, `BcryptBatchKey.wipe` inlined
+into the loop over the requests a run took.
 
 **Threads**: `link/thread_bcrypt_task: exits with 0 and stdout matches
 expected.out` hashes two passwords and verifies one on three tasks, natively
 and under `NISH_NUM_THREADS` of 1, 2 and 8; `link/thread_bcrypt_batch` runs
 the batch's hash and verify on two tasks at the same sizes, and its hashes
-match `bcryptHash`'s (BCRYPT-9).
+match `bcryptHash`'s (BCRYPT-9). `link/thread_bcrypt_batcher: exits with 0
+and stdout matches expected.out` drives the login batcher at cost 4 under
+`NISH_NUM_THREADS` of 1, 2 and 8: the hold window and a full batch's early
+run, `width × cores` per run, a damaged stored hash answering its `Err` on its
+own row while the rest of its batch answers as it would have, a salt of the
+wrong length answered without a batch, and every answer equal to the single
+`bcryptVerify` and `bcryptHash` (BCRYPT-11).
 
 **The half-round's shape**: ``bcrypt barrier: after opt -O3 all 16 of
 bcryptBody's half-rounds end in one XOR with the barrier's `and` (16)``
@@ -519,6 +591,142 @@ runs), so read them as their medians' order, not their ratios. The C rows of
 tigokraft are built with `-march=native`, as its build does, so they may use
 any instruction this CPU has. The Nish rows (no `--cpu x86-64-v3`) and the
 other C rows are built for baseline x86-64.
+
+### The login batcher, measured
+
+Logins a second and latency of a login server at cost 10, from light traffic
+to a burst (`node bench/crypto/bcrypt/batcher.mjs --rounds 5`). The machine is
+a 4-vCPU Xeon VM, `Intel(R) Xeon(R) Processor @ 2.80GHz`, with one thread per
+core as the VM shows it and 33 MiB of L3. It is the same model as machine C,
+whose clock measured 3.1 to 3.25 GHz; the clock was not measured again for
+this run. The program is `bench/crypto/bcrypt/login.ts`. Each run gets the
+same seeded Poisson schedule of logins of "U*U" against its cost-10 hash.
+A login's latency runs from its scheduled arrival to its answer, so a login
+that waits behind a busy server is charged for the wait. Logins a second is
+the count over the time from the first arrival to the last answer. Three
+servers are compared:
+
+- **(a)** one `bcryptVerify` per login, on one thread;
+- **(b)** one `bcryptVerify` per login, in one single-threaded process per
+  core, with the logins dealt round-robin as a prefork server deals them.
+  Each process waits on the clock for its next login, and a `std/threads`
+  task cannot read the clock (`monotonicNanos` counts as a write), so a task
+  per core could not run this schedule; the processes are that server's
+  equivalent. Round-robin dealing favours (b), since every process gets an
+  even share without a queue;
+- **(c)** the batcher, at `bcryptCalibrate()`'s width with `cores` set to
+  the core count, run whenever `waitNanos` is 0, with a hold of 0 and of
+  5 ms.
+
+On one core every process is pinned to CPU 0 with `taskset`, where (b) is
+(a). The modes run in five interleaved rounds after a warm-up. A cell is the
+median, the range over the rounds, and in brackets the fastest round: the
+most logins a second, the least latency.
+
+**The noise band** is the baseline timed against a byte-identical copy of its
+binary, (a′) on one core and (b′) on four, in the same rounds. Their medians
+differ by at most 1% in logins a second. In latency they differ by up to 11%
+at p50 (117.6 against 130.1 ms on one core at 15/s) and 10% at p99 (84.6
+against 93.5 ms on four cores at 30/s). Below, a difference inside those
+bands is called level.
+
+One core:
+
+| arrivals/s | logins | mode | logins/s | p50 ms | p99 ms |
+| ---: | ---: | --- | ---: | ---: | ---: |
+| 5 | 48 | (a) = (b) | 5.6 (5.6–5.6) [5.6] | 59.0 (58.2–60.6) [58.2] | 187.5 (184.4–201.4) [184.4] |
+| 5 | 48 | (a′) twin | 5.6 (5.6–5.6) [5.6] | 58.5 (57.8–59.9) [57.8] | 184.2 (183.3–205.3) [183.3] |
+| 5 | 48 | (c) hold 0 | 5.6 (5.6–5.6) [5.6] | 59.0 (58.2–60.3) [58.2] | 124.1 (123.5–130.1) [123.5] |
+| 5 | 48 | (c) hold 5 ms | 5.6 (5.6–5.6) [5.6] | 63.7 (63.5–64.8) [63.5] | 126.7 (123.9–163.2) [123.9] |
+| 10 | 60 | (a) = (b) | 8.8 (8.8–8.8) [8.8] | 59.6 (59.5–63.8) [59.5] | 233.0 (228.6–255.1) [228.6] |
+| 10 | 60 | (a′) twin | 8.8 (8.8–8.8) [8.8] | 60.0 (58.2–60.5) [58.2] | 232.3 (230.1–236.5) [230.1] |
+| 10 | 60 | (c) hold 0 | 8.8 (8.8–8.8) [8.8] | 59.4 (58.6–60.1) [58.6] | 138.5 (129.9–145.8) [129.9] |
+| 10 | 60 | (c) hold 5 ms | 8.8 (8.8–8.8) [8.8] | 64.7 (64.3–66.2) [64.3] | 142.4 (141.0–165.3) [141.0] |
+| 15 | 90 | (a) = (b) | 14.1 (14.1–14.1) [14.1] | 117.6 (114.9–126.2) [114.9] | 485.0 (480.1–495.7) [480.1] |
+| 15 | 90 | (a′) twin | 14.1 (14.1–14.1) [14.1] | 130.1 (113.5–135.1) [113.5] | 511.0 (482.1–519.7) [482.1] |
+| 15 | 90 | (c) hold 0 | 14.1 (14.0–14.1) [14.1] | 86.5 (83.7–88.6) [83.7] | 163.8 (136.7–202.1) [136.7] |
+| 15 | 90 | (c) hold 5 ms | 14.1 (14.1–14.1) [14.1] | 85.1 (82.3–86.0) [82.3] | 143.1 (140.9–177.7) [140.9] |
+| 30 | 180 | (a) = (b) | 16.9 (16.8–17.0) [17.0] | 2484.7 (2429.4–2519.3) [2429.4] | 5061.0 (4965.4–5094.1) [4965.4] |
+| 30 | 180 | (a′) twin | 16.8 (16.8–17.1) [17.1] | 2465.7 (2441.5–2536.1) [2441.5] | 5095.8 (4952.6–5133.2) [4952.6] |
+| 30 | 180 | (c) hold 0 | 31.7 (30.0–31.9) [31.9] | 122.5 (116.7–160.2) [116.7] | 248.0 (230.7–604.4) [230.7] |
+| 30 | 180 | (c) hold 5 ms | 31.8 (31.6–31.9) [31.9] | 129.0 (117.2–138.4) [117.2] | 263.6 (213.7–332.8) [213.7] |
+| burst | 96 | (a) = (b) | 16.9 (16.3–17.1) [17.1] | 2829.4 (2798.1–3055.3) [2798.1] | 5669.1 (5609.0–5899.5) [5609.0] |
+| burst | 96 | (a′) twin | 17.0 (16.8–17.2) [17.2] | 2831.8 (2826.1–2890.4) [2826.1] | 5660.7 (5593.6–5728.0) [5593.6] |
+| burst | 96 | (c) hold 0 | 46.0 (44.6–46.8) [46.8] | 1059.7 (1038.8–1137.7) [1038.8] | 2087.4 (2052.8–2154.3) [2052.8] |
+| burst | 96 | (c) hold 5 ms | 47.8 (43.5–49.3) [49.3] | 1031.1 (944.2–1111.8) [944.2] | 2006.3 (1946.1–2204.6) [1946.1] |
+
+Four cores:
+
+| arrivals/s | logins | mode | logins/s | p50 ms | p99 ms |
+| ---: | ---: | --- | ---: | ---: | ---: |
+| 10 | 60 | (a) | 8.8 (8.8–8.8) [8.8] | 60.4 (59.0–60.9) [59.0] | 233.5 (229.7–255.4) [229.7] |
+| 10 | 60 | (b) | 8.8 (8.8–8.8) [8.8] | 58.8 (57.9–59.3) [57.9] | 70.6 (68.3–100.1) [68.3] |
+| 10 | 60 | (b′) twin | 8.8 (8.8–8.8) [8.8] | 58.4 (58.2–58.8) [58.2] | 69.9 (67.0–73.1) [67.0] |
+| 10 | 60 | (c) hold 0 | 8.8 (8.8–8.8) [8.8] | 60.0 (58.8–61.5) [58.8] | 125.0 (114.1–137.8) [114.1] |
+| 10 | 60 | (c) hold 5 ms | 8.8 (8.8–8.8) [8.8] | 65.0 (63.9–65.2) [63.9] | 125.6 (119.7–132.3) [119.7] |
+| 30 | 180 | (a) | 16.9 (16.8–17.0) [17.0] | 2499.7 (2453.2–2520.6) [2453.2] | 5066.7 (4976.0–5081.7) [4976.0] |
+| 30 | 180 | (b) | 32.1 (32.1–32.1) [32.1] | 59.0 (58.3–60.2) [58.3] | 84.6 (80.7–89.7) [80.7] |
+| 30 | 180 | (b′) twin | 32.1 (32.1–32.1) [32.1] | 59.0 (58.3–59.4) [58.3] | 93.5 (79.3–102.8) [79.3] |
+| 30 | 180 | (c) hold 0 | 31.8 (31.7–32.0) [32.0] | 90.8 (84.4–93.2) [84.4] | 134.6 (130.1–199.1) [130.1] |
+| 30 | 180 | (c) hold 5 ms | 31.8 (31.8–32.0) [32.0] | 88.5 (88.0–94.5) [88.0] | 133.5 (127.4–151.5) [127.4] |
+| 60 | 240 | (a) | 16.9 (16.7–17.0) [17.0] | 5245.4 (5204.0–5380.9) [5204.0] | 10208.5 (10136.0–10412.0) [10136.0] |
+| 60 | 240 | (b) | 60.1 (60.0–60.1) [60.1] | 84.9 (79.3–93.2) [79.3] | 187.5 (174.3–209.8) [174.3] |
+| 60 | 240 | (b′) twin | 60.1 (59.7–60.2) [60.2] | 84.5 (80.8–84.8) [80.8] | 188.5 (177.7–210.0) [177.7] |
+| 60 | 240 | (c) hold 0 | 59.6 (59.5–59.9) [59.9] | 103.0 (96.6–109.9) [96.6] | 156.8 (144.1–166.8) [144.1] |
+| 60 | 240 | (c) hold 5 ms | 59.6 (59.5–59.9) [59.9] | 103.4 (101.4–109.7) [101.4] | 169.3 (141.1–202.2) [141.1] |
+| 120 | 240 | (a) | 17.0 (16.9–17.1) [17.1] | 6166.7 (6159.4–6329.7) [6159.4] | 12299.8 (12230.0–12385.8) [12230.0] |
+| 120 | 240 | (b) | 66.7 (61.7–67.5) [67.5] | 920.6 (899.2–1017.8) [899.2] | 1842.0 (1814.0–2115.7) [1814.0] |
+| 120 | 240 | (b′) twin | 66.0 (65.4–66.7) [66.7] | 928.3 (907.0–946.5) [907.0] | 1867.4 (1847.8–1895.8) [1847.8] |
+| 120 | 240 | (c) hold 0 | 129.3 (104.7–129.9) [129.9] | 168.8 (121.5–282.6) [121.5] | 288.7 (172.3–591.4) [172.3] |
+| 120 | 240 | (c) hold 5 ms | 129.2 (115.7–131.3) [131.3] | 172.1 (140.4–374.3) [140.4] | 297.9 (262.9–519.0) [262.9] |
+| 240 | 240 | (a) | 17.0 (16.7–17.2) [17.2] | 6496.7 (6415.6–6678.0) [6415.6] | 13033.1 (12901.6–13325.1) [12901.6] |
+| 240 | 240 | (b) | 66.8 (65.8–67.4) [67.4] | 1258.1 (1237.4–1268.7) [1237.4] | 2578.8 (2571.4–2651.0) [2571.4] |
+| 240 | 240 | (b′) twin | 66.8 (66.2–67.6) [67.6] | 1240.5 (1226.3–1275.0) [1226.3] | 2589.7 (2556.3–2643.4) [2556.3] |
+| 240 | 240 | (c) hold 0 | 143.2 (124.1–171.1) [171.1] | 381.2 (252.1–506.6) [252.1] | 765.6 (516.9–989.2) [516.9] |
+| 240 | 240 | (c) hold 5 ms | 153.1 (126.6–176.7) [176.7] | 334.6 (227.6–572.8) [227.6] | 625.4 (427.3–961.7) [427.3] |
+| burst | 96 | (a) | 17.1 (17.0–17.1) [17.1] | 2822.8 (2786.4–2833.6) [2786.4] | 5615.9 (5598.9–5654.8) [5598.9] |
+| burst | 96 | (b) | 66.7 (66.0–68.2) [68.2] | 715.9 (701.8–731.9) [701.8] | 1438.4 (1407.9–1453.8) [1407.9] |
+| burst | 96 | (b′) twin | 66.3 (65.5–66.9) [66.9] | 727.7 (711.2–752.0) [711.2] | 1448.8 (1434.0–1465.9) [1434.0] |
+| burst | 96 | (c) hold 0 | 154.6 (114.2–172.3) [172.3] | 385.9 (283.9–585.0) [283.9] | 620.9 (557.3–840.4) [557.3] |
+| burst | 96 | (c) hold 5 ms | 151.1 (133.0–170.6) [170.6] | 389.3 (346.5–427.6) [346.5] | 635.3 (562.6–722.0) [562.6] |
+
+**Where the batcher wins.** On one core it never loses. At 5 and 10
+arrivals a second its p50 is level with (a), and its p99 is two-thirds of
+(a)'s or less, because logins that queue behind a busy hash share the next
+batch. From 15/s, (a) falls behind and (c) keeps up. At 30/s, (a) answers
+16.9 logins a second and (c) 31.7. In a burst, (c) answers 46 to 48 a
+second, 2.7 to 2.8 times (a), with p99 at 2.1 s against 5.7 s. On four
+cores, at 120 arrivals a second and above, (b) saturates at 66.7 logins a
+second while (c) answers 129 at 120/s, 143 to 153 at 240/s and 151 to 155 in
+a burst: 1.9 to 2.3 times (b). Its p99 is a sixth of (b)'s at 120/s, a
+quarter to a third at 240/s, and under half in a burst.
+
+**Where it does not.** On four cores at light load, the batcher loses to
+(b) on latency:
+
+- at 10/s, p99 is 125 ms against (b)'s 70.6, with p50 level;
+- at 30/s, p50 is 90.8 ms against 59.0 and p99 134.6 against 84.6;
+- at 60/s, p50 is 103 ms against 84.9; its p99 is better, 157 against 188,
+  outside the band.
+
+Logins a second are level at all three rates, since each server keeps up
+with the arrivals. The cause is that `run` blocks its thread until every
+share of the run has finished. A login that arrives during a run waits for
+that run to end, about one hash, while (b)'s other processes are idle and
+take it at once. The batcher does not overlap one run with the next; that
+is where it could still gain at light load.
+
+**At saturation it scales less than (b).** From one core to four, (b) goes
+from 16.9 to 66.7 logins a second, 3.9 times. The batcher goes from 46 to
+about 150, 3.3 times, and its four-core rounds spread widely (114 to 177 a
+second). A run lasts as long as its slowest share, and the next run's
+requests wait for it.
+
+**The hold.** A 5 ms hold beat a hold of 0 nowhere outside the noise. At
+light load it adds the hold to p50: 63.7 against 59.0 ms on one core at 5/s,
+and 65.0 against 60.0 on four cores at 10/s. Under load the batches fill
+without it, from the logins that arrive during a run. A hold of 0 is the
+default to start from.
 
 ### BMI2 and x86-64-v3: measured, not built
 

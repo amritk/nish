@@ -210,10 +210,110 @@ export const main = (): i32 => {
 };
 ```
 
-Then give each batch up to `width` of the logins that arrive together.
-
 A task may call the batch too: the `Secret` it makes its state in comes from
 an array the call made, so its wipe is the task's own scratch
-([BCRYPT-9](../../security/crypto-bcrypt.md#findings)). On a server with
-spare cores, hash singly on tasks as above, or give each task a batch;
-on one core, batch the logins that arrive together.
+([BCRYPT-9](../../security/crypto-bcrypt.md#findings)).
+
+## A login batcher
+
+How full a batch is moves the time per password more than anything else: on
+one core a full six-lane batch at cost 10 takes about 16 ms a hash, and a lone
+hash 57 ms. A server whose logins arrive one at a time never fills a batch by
+itself. `nish/crypto/bcrypt-batch` holds them until it can:
+
+- `bcryptBatcher({ width, holdNanos, cores, cost })` makes a batcher, or an
+  `Err` for a width outside 1 to 6, a negative hold, no cores or a cost
+  outside 4 to 31. Give it `bcryptCalibrate()`'s width and
+  `availableParallelism()` cores.
+- `verify(password, hash, now)` and `hash(password, salt, now)` queue a
+  request that arrived at `now` (`monotonicNanos()`) and answer its ticket.
+  The batcher keeps its own copy of the password; wipe yours as you would
+  after `bcryptVerify`.
+- `waitNanos(now)` is how long the server may wait for more logins before a
+  run is due: 0 when one is, -1 when nothing is queued.
+- `run(now)` sends the work that is due, as `bcryptVerifyN` and `bcryptHashN`
+  batches on one task per core, and answers a `BcryptAnswer` for each request
+  it ran: its `ticket`, `ok`, the new `hash` for a hash request, and `error`
+  for one that was an `Err`. A run is due when `width` requests are queued or
+  the oldest has waited `holdNanos`.
+
+```ts nish:ok
+import { bcryptCalibrate, bcryptHash } from "nish/crypto/bcrypt";
+import { BcryptAnswer, BcryptBatchConfig, BcryptBatcher, bcryptBatcher } from "nish/crypto/bcrypt-batch";
+import { Secret, secret, wipe } from "nish:secret";
+import { availableParallelism, monotonicNanos } from "nish:process";
+
+const typed = (): Secret<u8[]> => {
+  const raw: u8[] = [104, 117, 110, 116, 101, 114, 50];
+  return secret(raw);
+};
+
+export const main = (): i32 => {
+  const pw: Secret<u8[]> = typed();
+  const stored: Result<string, string> = bcryptHash(pw, new Array<u8>(16), 10);
+  wipe(pw);
+  if (stored.isErr()) {
+    return 1;
+  }
+  // Once, at startup. A hold of 0 sends what is queued at once; see below.
+  const hold: i64 = 0;
+  const config: BcryptBatchConfig = {
+    width: bcryptCalibrate(),
+    holdNanos: hold,
+    cores: availableParallelism(),
+    cost: 10,
+  };
+  const made: Result<BcryptBatcher, string> = bcryptBatcher(config);
+  if (made.isErr()) {
+    console.log(made.error);
+    return 1;
+  }
+  const batcher: BcryptBatcher = made.value;
+
+  // Three logins arrive.
+  for (let i: i32 = 0; i < 3; i++) {
+    const attempt: Secret<u8[]> = typed();
+    batcher.verify(attempt, stored.value, monotonicNanos());
+    wipe(attempt);
+  }
+
+  // The server's loop: wait for more logins at most waitNanos, then run.
+  while (batcher.pending() > 0) {
+    const now: i64 = monotonicNanos();
+    if (batcher.waitNanos(now) === 0) {
+      const answers: BcryptAnswer[] = batcher.run(now);
+      for (const a of answers) {
+        console.log(`login ${a.ticket}: ${a.ok ? "welcome back" : "wrong password"}`);
+      }
+    }
+  }
+  return 0;
+};
+```
+
+`run` takes at most `width × cores` requests, the oldest first, and spreads
+them evenly over the cores rather than filling one batch, so a run takes about
+one batch's time. Under load the logins that arrive during a run fill the next
+one, so the batches fill by themselves; at light load each login runs alone
+on a core, as a task per login would.
+
+The hold lets a part batch wait up to `holdNanos` to fill before it goes. In
+[the measurements](../../security/crypto-bcrypt.md#the-login-batcher-measured)
+a 5 ms hold beat a hold of 0 nowhere and added its 5 ms to light-load
+latency, since under load the logins that arrive during one run fill the next.
+Start from 0.
+
+On that 4-core machine, at cost 10, the batcher answered 1.9 to 2.3 times as
+many logins a second as a process per core once logins arrived faster than
+those processes could answer (about 67 a second): up to about 150 a second.
+On one core it never lost. **At light load on several cores it is slower**:
+at 10 to 60 logins a second a process per core answered sooner, at p50 or
+p99, because a login that arrives during a run waits for that run to end
+while the other processes are idle. If your logins are few and latency
+matters more than capacity, verify each on its own worker; if they come in
+bursts or at your servers' limit, batch them.
+
+`run` blocks its thread until every task has finished, about one batch: run
+the batcher on a thread other than the event loop's. A request is wiped only
+once it has run, so call `run` until `pending()` is 0 before dropping a
+batcher ([BCRYPT-11](../../security/crypto-bcrypt.md#findings)).
