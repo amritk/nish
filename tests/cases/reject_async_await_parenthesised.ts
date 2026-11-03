@@ -1,11 +1,8 @@
-// `await(...)` is a call to a function named `await`: the operator is
-// written with no parentheses around its call (NL2633).
-async function load(x: i32): Promise<i32> {
-  return x
-}
-
-async function run(): Promise<void> {
-  await(load(1))
+// Outside an `async` function, `await(...)` is a call to a function named
+// `await`, as TypeScript reads it too (NL2633). Inside one it is the
+// operator, `await (f(x))` (`reject_async_not_lowered`).
+function run(): void {
+  await(1)
 }
 
 export const main = (): i32 => 0

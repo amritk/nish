@@ -24,7 +24,7 @@ const AWAIT_ALL_MIN: i32 = 2
 const AWAIT_ALL_MAX: i32 = 8
 const AWAIT_ALL_FORM: string = "`awaitAll` is awaited into one name per call: `const [a, b] = await awaitAll(f(x), g(y))`, from two to eight calls"
 const AWAIT_SITE_MESSAGE: string = "`await` stands at the top of a statement — an expression statement, a declaration's initializer, a `return` or the right side of `=` — and not inside another expression, which would hold a value across the wait"
-const AWAIT_CALL_MESSAGE: string = "`await` is written before its call with no parentheses around it, `await f(x)`: `await(...)` is a call to a function named `await`, and there is none" [exported]
+const AWAIT_CALL_MESSAGE: string = "`await(...)` outside an `async` function is a call to a function named `await`, and there is none: `await` is written inside an `async` function, before its call, `await f(x)`" [exported]
 struct AwaitCycle (class) size=24 align=8 exported
   field fn: FunctionSig index=0 offset=0
   field site: Node index=1 offset=8
@@ -245,11 +245,11 @@ function walkAwaits(fn: FunctionSig, path: FunctionSig[], found: AwaitCycle[]): 
   callee +6:56 cycleMessage -> @cycleMessage
   callee +8:7 walkAwaits -> @walkAwaits
 function cycleMessage(path: FunctionSig[], back: FunctionSig): string -> @cycleMessage
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_concat
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_concat
   pointer path: size=0 writesThrough=false captured=false
   pointer back: size=176 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:7 names: string (let)
+  stackSites=1 stackLocals=1
+  local +0:9 names: string[] (const)
   local +1:7 on: boolean (let)
   local +2:14 fn: FunctionSig (const)

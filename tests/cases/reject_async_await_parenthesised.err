@@ -1,1 +1,1 @@
-`await` is written before its call with no parentheses around it
+`await(...)` outside an `async` function is a call to a function named `await`

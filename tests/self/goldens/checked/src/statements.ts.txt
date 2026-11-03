@@ -335,7 +335,8 @@ function declareAwaitAll(ctx: CheckContext, decl: Node, scope: Scope): void -> @
   local +3:9 types: i32[] | null (const)
   callee +3:17 checkAwaitAllDeclaration -> @checkAwaitAllDeclaration
   local +4:9 names: Node[] (const)
-  local +5:7 i: i32 (let)
+  local +5:12 i: i32 (let)
+  local +6:11 name: Node (const)
   local +7:9 type: i32 (let)
   callee +9:7 CheckContext.error -> @CheckContext.error
   callee +12:5 declareLocal -> @declareLocal

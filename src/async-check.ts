@@ -209,12 +209,12 @@ export const promiseMethodMessage = (ctx: CheckContext, callee: Node, scope: Sco
 }
 
 /**
- * The refusal of `await(...)`, which this parser reads as a call to a
- * function named `await` (`tests/parser/names-operator-calls.ts`), when no
- * such function is declared.
+ * The refusal of `await(...)` outside an `async` body, which this parser
+ * reads there, as TypeScript does, as a call to a function named `await`
+ * (`tests/parser/names-operator-calls.ts`), when no such function is declared.
  */
 export const AWAIT_CALL_MESSAGE: string =
-  "`await` is written before its call with no parentheses around it, `await f(x)`: `await(...)` is a call to a function named `await`, and there is none"
+  "`await(...)` outside an `async` function is a call to a function named `await`, and there is none: `await` is written inside an `async` function, before its call, `await f(x)`"
 
 /** The `nish:async` builtin a call is to: `spawn`, `awaitAll`, or "" for another. */
 export const asyncBuiltinOf = (imported: BuiltinExport): string =>
@@ -372,13 +372,13 @@ const walkAwaits = (fn: FunctionSig, path: FunctionSig[], found: AwaitCycle[]): 
 
 /** `a -> b -> a`, from where the cycle starts on the path. */
 const cycleMessage = (path: FunctionSig[], back: FunctionSig): string => {
-  let names = ""
+  const names: string[] = []
   let on = false
   for (const fn of path) {
     on = on || fn === back
     if (on) {
-      names = names + `\`${fn.sourceName}\` -> `
+      names.push(`\`${fn.sourceName}\` -> `)
     }
   }
-  return `\`${back.sourceName}\` awaits itself (${names}\`${back.sourceName}\`): an awaited call's frame is nested in its caller's, so recursion through \`await\` has no size — write it as a loop`
+  return `\`${back.sourceName}\` awaits itself (${names.join("")}\`${back.sourceName}\`): an awaited call's frame is nested in its caller's, so recursion through \`await\` has no size — write it as a loop`
 }

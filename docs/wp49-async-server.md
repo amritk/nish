@@ -401,7 +401,7 @@ before. The lowering of §3 and the emitted TypeScript are part 2.
 | NL2630 | recursion through `await`, direct or mutual | `reject_async_await_self`, `_mutual` |
 | NL2631 | `Promise.all` and the other `Promise` statics | `reject_async_promise_all` |
 | NL2632 | `.then`, `.catch`, `.finally` | `reject_async_then` |
-| NL2633 | `await(f(x))`, a call to a function named `await` | `reject_async_await_parenthesised` |
+| NL2633 | `await(f(x))` outside an `async` function, a call to a function named `await` | `reject_async_await_parenthesised` |
 | NL2634 | `async` in a wasm build, `--target wasm32` or `--profile wasi` | `reject_async_wasm`, `reject_async_wasi_profile` |
 | NL2635 | an `async` function in a program that passes every rule: not yet lowered | `reject_async_not_lowered` |
 
@@ -419,8 +419,9 @@ Decisions taken in part 1:
 - **`awaitAll` is itself awaited**, `const [a, b] = await awaitAll(...)`, so
   every wait in a function is spelled `await` and the frame's resume points
   are exactly its `await`s.
-- **`await(f(x))` is refused** (NL2633) rather than read as `await f(x)`:
-  TypeScript parses it as a call to a function named `await`.
+- **`await (f(x))` follows TypeScript**: inside an `async` function it is the
+  operator, `await f(x)`; outside one TypeScript parses it as a call to a
+  function named `await`, which is refused (NL2633) when none is declared.
 - **A method is never `async`** (NL1063, a parse-time code beside the other
   declaration-form refusals), since a task keeps no `this`.
 - **The cycle check runs over the whole program** once every module is

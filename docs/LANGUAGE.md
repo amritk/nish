@@ -3230,8 +3230,9 @@ async function run(): Promise<void> {
   (`` `await` is only written inside an `async` function ``, NL2623,
   `reject_await`, `reject_await_constant`), **on a direct call to one**: `await x` on a value is NL2625
   (`reject_async_await_value`), `await` on a plain function's call NL2626
-  (`reject_async_await_plain_call`), and `await(f(x))` is a call to a function
-  named `await`, NL2633 (`reject_async_await_parenthesised`).
+  (`reject_async_await_plain_call`). Inside an `async` function `await (f(x))`
+  is the operator, as TypeScript reads it; outside one `await(f(x))` is a call
+  to a function named `await`, NL2633 (`reject_async_await_parenthesised`).
 - **`await` stands at the top of a statement**: an expression statement, a
   declaration's initializer, a `return` or the right side of a plain `=`.
   Inside another expression — an argument, a condition, an operand, a

@@ -15,6 +15,7 @@ async function run(): Promise<void> {
   let b: i32 = 0
   b = await double(a)
   await log(b)
+  await (log(a))
   const [c, d] = await awaitAll(double(1), double(2))
   spawn(log(c + d))
 }

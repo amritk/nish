@@ -497,15 +497,14 @@ const declareAwaitAll = (ctx: CheckContext, decl: Node, scope: Scope): void => {
   }
   const types = checkAwaitAllDeclaration(ctx, decl, scope)
   const names = decl.children[0].children
-  let i = 0
-  while (i < names.length) {
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i]
     let type = types !== null && i < types.length ? types[i] : T_ERROR
     if (type === T_VOID) {
-      ctx.error(names[i], "Cannot declare a variable of type void")
+      ctx.error(name, "Cannot declare a variable of type void")
       type = T_ERROR
     }
-    declareLocal(ctx, scope, names[i], names[i], names[i].text, type, false, null)
-    i = i + 1
+    declareLocal(ctx, scope, name, name, name.text, type, false, null)
   }
 }
 
