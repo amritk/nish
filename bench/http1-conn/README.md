@@ -8,13 +8,14 @@ pinned so the `Date` header never reformats. What is timed is the
 connection and the codec under it, per request.
 
 ```bash
-node bench/http1-conn/run.mjs                  # 15 rounds, old against the working tree
-node bench/http1-conn/run.mjs --rounds 5 --base origin/main
+node bench/http1-conn/run.mjs                  # 15 rounds, 96a38347 against the working tree
+node bench/http1-conn/run.mjs --rounds 5 --base origin/main   # on a branch: main against the branch
 ```
 
 `run.mjs` builds `main.ts` twice at `--profile speed`, once beside
-`std/net/http1-server.ts` as `--base` has it (default: the merge base with
-`origin/main`) and once beside the working tree's, and links a byte-identical
+`std/net/http1-server.ts` as `--base` has it (default: `96a38347484f`, the
+commit before the hot-field layout, so the default compares against something
+on `main` too) and once beside the working tree's, and links a byte-identical
 copy of the first. Every round runs the three binaries on two shapes, rotating
 which goes first:
 
@@ -23,9 +24,9 @@ which goes first:
   connections of one pool (default 50,000), so each request finds its
   connection out of cache, as a busy server does.
 
-Each run is pinned to one core with `taskset` when there is one and reports
-the fastest of `--batches` batches (default 5) of `--requests` requests
-(default 200,000). The table gives the median and the min–max over the
+Each run executes under `taskset -c 1` when `taskset` is there (the header
+says whether it was) and reports the fastest of `--batches` batches (default
+5) of `--requests` requests (default 200,000). The table gives the median and the min–max over the
 rounds, and the ratio of medians to `old`; `old′` against `old` is the noise
 band. A checksum that differs between the binaries fails the run.
 
