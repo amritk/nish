@@ -687,11 +687,12 @@ function maybeLocalIndex(emitter: Emitter, local: Local): i32 -> @maybeLocalInde
 function zeroOf(emitter: Emitter, type: i32): string -> @zeroOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.isPointer TypeTable.isResult TypeTable.isVector TypeTable.stripNull isFloat
+  calls: TypeTable.isMask TypeTable.isPointer TypeTable.isResult TypeTable.isVector TypeTable.stripNull isFloat
   pointer emitter: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 isFloat -> @isFloat
   callee +6:7 TypeTable.isVector -> @TypeTable.isVector
+  callee +6:39 TypeTable.isMask -> @TypeTable.isMask
   local +10:9 stripped: i32 (const)
   callee +10:20 TypeTable.stripNull -> @TypeTable.stripNull
   callee +11:10 TypeTable.isPointer -> @TypeTable.isPointer

@@ -82,14 +82,16 @@ function bitsOf(type: i32): i32 -> @bitsOf
 function bitsOfIn(table: TypeTable, type: i32): i32 -> @bitsOfIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.enumBase TypeTable.isRanged TypeTable.isRegion TypeTable.isVector bitsOf
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isVector#0 TypeTable.isRegion#0 TypeTable.enumBase#0 TypeTable.isRanged#0
+  calls: TypeTable.enumBase TypeTable.isMask TypeTable.isRanged TypeTable.isRegion TypeTable.isVector TypeTable.laneCount bitsOf
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isVector#0 TypeTable.isMask#0 TypeTable.laneCount#0 TypeTable.isRegion#0 TypeTable.enumBase#0 TypeTable.isRanged#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isVector -> @TypeTable.isVector
-  callee +3:7 TypeTable.isRegion -> @TypeTable.isRegion
-  callee +6:10 TypeTable.enumBase -> @TypeTable.enumBase
-  callee +6:39 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +6:67 bitsOf -> @bitsOf
+  callee +4:7 TypeTable.isMask -> @TypeTable.isMask
+  callee +5:12 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +7:7 TypeTable.isRegion -> @TypeTable.isRegion
+  callee +10:10 TypeTable.enumBase -> @TypeTable.enumBase
+  callee +10:39 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +10:67 bitsOf -> @bitsOf
 function quote(text: string): string -> @quote
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText
@@ -148,8 +150,8 @@ function DebugInfo.typeRef(this: DebugInfo, type: i32): string -> @DebugInfo.typ
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DebugInfo.typeRef
   escaping: type
-  calls: CheckedProgram.enumNamed CheckedProgram.struct DebugInfo.arrayHeader DebugInfo.composite DebugInfo.enumeration DebugInfo.foreignPointer DebugInfo.pointerTo DebugInfo.resultComposite DebugInfo.setTypeRef DebugInfo.typeRef DebugInfo.unionComposite IRModule.addMetadata StringMap.get TypeTable.isArray TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isNullable TypeTable.isRanged TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.laneCount TypeTable.mangle TypeTable.nameOf TypeTable.refOf TypeTable.typeName basicType internalErrorFor nish_exit nish_panic_index nish_str_concat nish_str_from_i32 quote resultLayout
-  pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.foreignPointer#0 DebugInfo.pointerTo#0 DebugInfo.pointerTo#0 DebugInfo.arrayHeader#0 DebugInfo.pointerTo#0 DebugInfo.composite#0 DebugInfo.enumeration#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.pointerTo#0 DebugInfo.resultComposite#0 DebugInfo.pointerTo#0 DebugInfo.unionComposite#0 DebugInfo.typeRef#0 DebugInfo.setTypeRef#0
+  calls: CheckedProgram.enumNamed CheckedProgram.struct DebugInfo.arrayHeader DebugInfo.composite DebugInfo.enumeration DebugInfo.foreignPointer DebugInfo.pointerTo DebugInfo.resultComposite DebugInfo.setTypeRef DebugInfo.typeRef DebugInfo.unionComposite IRModule.addMetadata StringMap.get TypeTable.isArray TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isMask TypeTable.isNullable TypeTable.isRanged TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.laneCount TypeTable.mangle TypeTable.nameOf TypeTable.refOf TypeTable.typeName basicType internalErrorFor nish_exit nish_panic_index nish_str_concat nish_str_from_i32 quote resultLayout
+  pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.foreignPointer#0 DebugInfo.pointerTo#0 DebugInfo.pointerTo#0 DebugInfo.arrayHeader#0 DebugInfo.pointerTo#0 DebugInfo.composite#0 DebugInfo.enumeration#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.pointerTo#0 DebugInfo.resultComposite#0 DebugInfo.pointerTo#0 DebugInfo.unionComposite#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.setTypeRef#0
   stackSites=0 stackLocals=0
   callee +0:9 TypeTable.isNullable -> @TypeTable.isNullable
   callee +1:14 DebugInfo.typeRef -> @DebugInfo.typeRef
@@ -214,9 +216,18 @@ function DebugInfo.typeRef(this: DebugInfo, type: i32): string -> @DebugInfo.typ
   callee +74:13 IRModule.addMetadata -> @IRModule.addMetadata
   callee +75:63 DebugInfo.typeRef -> @DebugInfo.typeRef
   callee +75:76 TypeTable.refOf -> @TypeTable.refOf
-  callee +78:13 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +78:37 basicType -> @basicType
-  callee +80:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
+  callee +77:16 TypeTable.isMask -> @TypeTable.isMask
+  local +79:13 lanes: i32 (const)
+  callee +79:21 TypeTable.laneCount -> @TypeTable.laneCount
+  local +80:13 range: string (const)
+  callee +80:21 IRModule.addMetadata -> @IRModule.addMetadata
+  local +81:13 elements: string (const)
+  callee +81:24 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +82:13 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +83:63 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee +86:13 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +86:37 basicType -> @basicType
+  callee +88:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
 function DebugInfo.setTypeRef(this: DebugInfo, key: string, ref: string): void -> @DebugInfo.setTypeRef [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
