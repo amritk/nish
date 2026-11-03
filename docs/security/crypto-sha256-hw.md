@@ -75,6 +75,57 @@ array in other code) is in the model, which is what a wipe is for.
    freestanding `--profile wasm`, and read the IR and the link for
    `nish_sha256_` references.
 5. Measured the unit's `.text*` at `-Oz` against its 512-byte budget.
+6. Built a differential program the same way, counted, and held it to Node's
+   OpenSSL-backed crypto under both settings: FIPS 180-4's vectors, the
+   lengths either side of each padding boundary (55, 56, 63, 64, 65, 119, 120,
+   127, 128 and 129 bytes) and 200 seeded messages of 0 to 1000 bytes;
+   `hmacSha256` over the same lengths, keys of 63, 64, 65 and 128 bytes, and
+   200 seeded keys of 0 to 200 bytes, 50 HS256 tokens signed and verified, and 10
+   `pbkdf2HmacSha256` runs, whose every U_j resumes a hasher with
+   `hmacCopySha256`. Unset, each path called the kernel on this x86-64 with
+   SHA-NI (17319, 2732, 974 and 8774 calls); under `soft`, none did. The
+   measurements are below; `bench/sha256-block/README.md` has them in full and
+   records why `sha256Compress` was left as it is.
+
+## Measured
+
+On the review container: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores,
+`sha_ni avx2 avx512`, TSC 2.100 GHz, OpenSSL 3.0.13, `std/crypto/sha256.ts`
+at 96a38347. `node bench/sha256-block/run.mjs` on a 16 KiB message (257
+blocks), over three runs (12, 12 and 26 interleaved rounds). Each ns cell is
+the median a block, with the run's minimum and spread ((max - min) / median)
+in parentheses; the cycle cells are medians:
+
+| Body | ns a block: median (min, spread) | TSC cycles a block |
+| --- | --- | --- |
+| Nish (`NISH_SHA256=soft`) | 212.4 (185.7, 20.7%) / 218.2 (197.7, 39.6%) / 208.3 (198.6, 20.7%) | 446 / 458 / 437 |
+| SHA-NI kernel (the default) | 46.9 (40.2, 62.5%) / 49.1 (43.7, 45.0%) / 49.1 (45.7, 33.3%) | 98 / 103 / 103 |
+| OpenSSL scalar (`OPENSSL_ia32cap=~0x1000020000000000:~0x20000120`) | 174.0 (145.3, 25.3%) / 182.1 (164.3, 24.7%) / 182.9 (175.0, 32.2%) | 365 / 382 / 384 |
+| OpenSSL AVX2 (`OPENSSL_ia32cap=~0x0:~0x20000000`) | 147.8 (139.1, 17.1%) / 151.2 (139.8, 18.3%) / 149.3 (141.9, 21.3%) | 310 / 317 / 314 |
+| OpenSSL SHA-NI (unset) | 41.7 (39.3, 10.0%) / 42.0 (41.4, 5.5%) / 41.5 (38.9, 24.3%) | 88 / 88 / 87 |
+
+`openssl speed -evp sha256 -bytes 8192` under the same masks gives 182.0,
+151.8 and 43.1 ns a block, within about 2% of the table; at 64 B it is 10% to
+13% higher, the EVP setup of each call. The dispatch, counted as in step 6: with
+`NISH_SHA256` unset the kernel ran 17319 times for `sha`, 2732 for `hmac`,
+974 for `hs256` and 8774 for `pbkdf2`, and every mode printed Node's lines;
+under `NISH_SHA256=soft` it ran 0 times in each, with the same lines.
+
+On a CPU without SHA-NI (target B, Cascade Lake), with clang, GNU `objdump`
+2.32 or later, `taskset`, the libcrypto headers, the `openssl` CLI and a seed of 0.33.0 or later:
+
+```bash
+set -o pipefail
+git checkout main && npm ci && bash scripts/fetch-seed.sh --force
+taskset -c 3 node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --rounds 15 \
+  --variant locals --variant maj --variant nested --variant locals+maj+nested \
+  --variant locals+maj+nested+snested --variant v3 --variant v3+locals+maj+nested \
+  | tee build/sha256-block-B.txt
+node tests/run.js "sha256 kernel"
+```
+
+There the default column runs the Nish body, and the "sha256 kernel" checks
+expect no kernel call under either setting.
 
 ## Findings
 
@@ -145,5 +196,6 @@ never written. The resolver holds no secret.
 | Unset, the kernel runs where the CPU has it | `sha256 kernel: ${program} with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs` |
 | A program that never hashes links none of the unit; one that does keeps it | `simd: --profile ${profile} links hello with runtime-sha256.c to the same bytes as without it, and a program that calls the kernel runs it` |
 | A wasm32 build references no kernel and runs the Nish path | `sha256 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_sha256_ symbol, and it prints its expected.out`; `simd: --profile wasi links runtime-sha256.c, and nish_sha256_hw answers 0 there`; `sha256 kernel: the freestanding --profile wasm link of a SHA-256 module compiled for the host adds runtime-sha256.c once, and hashes as Node does` |
+| HMAC-SHA256, HS256 and `hmacCopySha256` (PBKDF2) take the kernel by default and the Nish body under `NISH_SHA256=soft`, and both match Node's crypto on seeded keys and lengths | `sha256 kernel: the ${mode} differential prints Node's lines with NISH_SHA256 ${setting}, calling the kernel ${kernel ? "at least once" : "never"}` for `sha`, `hmac`, `hs256` and `pbkdf2` |
 | The unit stays small | `${label}: .text* at -Oz fits the ${budget} byte budget` with label `runtime-sha256.c` (495 of 512 bytes at #1055) |
 | The SHA-256 instructions keep their destination's taint, on aarch64 (CT-20) and x86-64 | `AUDIT_CORNERS` in `tests/ct-asm.js` |
