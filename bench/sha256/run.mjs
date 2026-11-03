@@ -4,8 +4,9 @@
 // (bench/sha256/main.ts says what each times). It builds main.ts, then times
 // every case in bench/crypto/run.mjs's interleaved rounds with a
 // byte-identical copy as a column, whose distance from the build is the noise
-// band, and scalar.c, a scalar C SHA-256, as the `c-scalar` column of the
-// cases it has.
+// band. With `--c`, scalar.c, a scalar C SHA-256, is two more columns of the
+// cases it has: `c-native`, for this CPU, and `c-x86-64`, for the baseline
+// x86-64 a build without `--cpu` targets.
 //
 //   npm run build && node bench/sha256/run.mjs [options] [--compiler <nish>]
 //     --rounds N         timed rounds a case runs at least (default 11); the
@@ -19,13 +20,16 @@
 //       (cd ../base && npm ci && npm run build &&
 //        build/nish bench/sha256/main.ts -o build/b/ --link build/b/sha256 --profile speed)
 //       node bench/sha256/run.mjs --binary main=../base/build/b/sha256
-//     --no-c             leave the C twin out
+//     --c                add the C twin's columns
 //
-// Every column runs with NISH_SHA256=soft unless the environment sets it, so
-// a CPU with SHA-NI or the Armv8 SHA-2 instructions still times the Nish code
-// rather than runtime/runtime-sha256.c. The C twin is built by `$CC`
-// (default clang) with `-O2 -march=native -mno-sha`: the host's scalar
-// instructions, BMI2's `rorx` among them, and not its SHA extensions.
+// The columns inherit NISH_SHA256: on a CPU with SHA-NI or the Armv8 SHA-2
+// instructions, run under NISH_SHA256=soft to time the Nish code rather than
+// runtime/runtime-sha256.c, and so to compare it with the C twin. The twin is
+// built by `$CC` (default clang) with `-O2 -mno-sha`, once with
+// `-march=native`: that one
+// has the host's scalar instructions, BMI2's `rorx` among them, and neither
+// has its SHA extensions. The Nish build is baseline x86-64 like `c-x86-64`;
+// pass a `--cpu x86-64-v3` build as `--binary` to set it beside `c-native`.
 //
 // The build is main.ts by the compiler with `--profile speed`, into
 // build/bench/sha256/. Each case calibrates one iteration count on the build
@@ -63,9 +67,27 @@ const blocksOf = (n) => Math.ceil((n + 9) / 64)
  * message and its outer one over the key block and the inner digest).
  */
 const CASES = [
-  { label: "sha256 64 B", kernel: "sha256", size: 64, known: "af88af1d", blocks: blocksOf(64) },
-  { label: "sha256 1 KiB", kernel: "sha256", size: 1024, known: "dcc0d434", blocks: blocksOf(1024) },
-  { label: "sha256 1 MiB", kernel: "sha256", size: 1048576, known: "e71d7281", blocks: blocksOf(1048576) },
+  {
+    label: "sha256 64 B",
+    kernel: "sha256",
+    size: 64,
+    known: "af88af1d",
+    blocks: blocksOf(64),
+  },
+  {
+    label: "sha256 1 KiB",
+    kernel: "sha256",
+    size: 1024,
+    known: "dcc0d434",
+    blocks: blocksOf(1024),
+  },
+  {
+    label: "sha256 1 MiB",
+    kernel: "sha256",
+    size: 1048576,
+    known: "e71d7281",
+    blocks: blocksOf(1048576),
+  },
   {
     label: "hmac-sha256 256 B",
     kernel: "hmac-sha256",
@@ -73,7 +95,13 @@ const CASES = [
     known: "1434f311",
     blocks: blocksOf(64 + 256) + blocksOf(64 + 32),
   },
-  { label: "hs256 sign+verify", kernel: "hs256", size: 0, known: "0737e026", blocks: null },
+  {
+    label: "hs256 sign+verify",
+    kernel: "hs256",
+    size: 0,
+    known: "0737e026",
+    blocks: null,
+  },
 ]
 /** The kernels scalar.c has. */
 const C_KERNELS = new Set(["sha256", "hmac-sha256"])
@@ -86,19 +114,22 @@ const fail = (msg) => {
 }
 
 let rounds = 11
-let withC = true
+let withC = false
 const binaries = []
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--rounds") {
     rounds = Number(argv[++i])
-  } else if (argv[i] === "--no-c") {
-    withC = false
+  } else if (argv[i] === "--c") {
+    withC = true
   } else if (argv[i] === "--binary") {
     const spec = argv[++i] ?? ""
     const eq = spec.indexOf("=")
     const file = path.resolve(eq > 0 ? spec.slice(eq + 1) : spec)
-    binaries.push({ id: eq > 0 ? spec.slice(0, eq) : path.relative(root, file), bin: file })
+    binaries.push({
+      id: eq > 0 ? spec.slice(0, eq) : path.relative(root, file),
+      bin: file,
+    })
   } else {
     fail(`unknown option ${argv[i]}`)
   }
@@ -142,33 +173,35 @@ fs.copyFileSync(exe, `${exe}-copy`)
  * set as `kernels`: the build first and its copy second.
  */
 const columns = [{ id: "nish", bin: exe }, { id: "nish-copy", bin: `${exe}-copy` }, ...binaries]
-if (withC) {
-  const twin = path.join(outDir, "scalar")
-  const cc = process.env.CC ?? "clang"
+const cc = process.env.CC ?? "clang"
+for (const [id, flags] of withC
+  ? [
+      ["c-native", ["-march=native"]],
+      ["c-x86-64", []],
+    ]
+  : []) {
+  const twin = path.join(outDir, id)
   const r = spawnSync(
     cc,
-    ["-O2", "-march=native", "-mno-sha", "-I", "bench/crypto/lib", "bench/sha256/scalar.c", "-o", rel(twin)],
+    ["-O2", ...flags, "-mno-sha", "-I", "bench/crypto/lib", "bench/sha256/scalar.c", "-o", rel(twin)],
     { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   )
   if (r.error !== undefined) {
-    console.log(`note: no c-scalar column: ${cc}: ${r.error.message}`)
+    console.log(`note: no ${id} column: ${cc}: ${r.error.message}`)
   } else if (r.status !== 0) {
-    console.error(`building bench/sha256/scalar.c failed (exit ${r.status})\n${r.stdout}${r.stderr}`)
+    console.error(`building bench/sha256/scalar.c as ${id} failed (exit ${r.status})\n${r.stdout}${r.stderr}`)
     process.exit(1)
   } else {
-    columns.push({ id: "c-scalar", bin: twin, kernels: C_KERNELS })
+    columns.push({ id, bin: twin, kernels: C_KERNELS })
   }
 }
 /** The columns that run case `c`. */
 const columnsOf = (c) => columns.filter((col) => col.kernels === undefined || col.kernels.has(c.kernel))
-/** The environment every column runs in: the portable path, unless the caller pins another. */
-const env = { ...process.env, NISH_SHA256: process.env.NISH_SHA256 ?? "soft" }
 
 /** One run under bench/crypto/README.md's contract: `{ checksum, ns }`. */
 const runOnce = (column, c, iterations) => {
   const r = spawnSync(column.bin, [c.kernel, String(c.size), String(iterations)], {
     encoding: "utf8",
-    env,
     stdio: ["ignore", "pipe", "pipe"],
   })
   const ns = /^ns (\d+)$/m.exec(r.stderr ?? "")
@@ -257,5 +290,5 @@ for (const c of CASES) {
 console.log(
   `\nUp to ${roundsRun} rounds a case, each running every column the case has once. ns/op is a run's ns over` +
     ` its iterations, ns/block that over the case's compressions; the band is nish-copy's median against nish's,` +
-    ` the same bytes, and a change inside it is noise.`
+    " the same bytes, and a change inside it is noise."
 )
