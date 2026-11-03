@@ -245,11 +245,17 @@ const codeOf = (irDir, flags) => {
     .map((l) => /^\s+[0-9a-f]+:\s+(\S+)\s*(.*)$/.exec(l))
     .filter((m) => m !== null)
     .map((m) => ({ op: m[1], args: m[2] }))
-  const rsp = /\(%rsp\)/
+  if (insns.length === 0) {
+    fail(`objdump printed no nish.sha256Compress in ${rel(obj)}; it needs GNU binutils 2.32 or later`)
+  }
+  // AT&T operands, split on the commas outside parentheses, so that
+  // `(%rsp,%rax,4)` stays one operand; a stack operand is memory based on %rsp.
+  const operands = (args) => args.split(/,(?![^(]*\))/)
+  const onStack = (operand) => /\(%rsp[,)]/.test(operand)
   return {
     insns: insns.length,
-    stores: insns.filter((i) => rsp.test(i.args) && rsp.test(i.args.split(",").at(-1))).length,
-    loads: insns.filter((i) => rsp.test(i.args) && !rsp.test(i.args.split(",").at(-1))).length,
+    stores: insns.filter((i) => onStack(operands(i.args).at(-1))).length,
+    loads: insns.filter((i) => operands(i.args).slice(0, -1).some(onStack)).length,
     moves: insns.filter((i) => /^mov[lq]?$/.test(i.op) && /^%\w+,%\w+$/.test(i.args)).length,
   }
 }

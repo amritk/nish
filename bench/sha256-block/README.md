@@ -18,6 +18,10 @@ node bench/sha256-block/run.mjs --binary old=<path to an older build of main.ts>
 node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --variant locals+maj+nested --variant v3
 ```
 
+The `old=` comparator is `main.ts` built the way `run.mjs` builds it, by a
+compiler whose `std/` has the old body (a release from before the change):
+`<old>/bin/nish bench/sha256-block/main.ts -o build/sha256-block-old/ --link build/sha256-block-old/sha256-block --profile speed`.
+
 The compiler reads the `std/` beside its own binary, so `--compiler
 build/seed/bin/nish` times the seed's bundled `std/crypto/sha256.ts`, not the
 tree's. They are the same file until a release changes it.
@@ -61,14 +65,16 @@ are median ns a block (min, spread), and cyc is median TSC cycles a block. The
 | openssl (sha-ni) | 41.7 (39.3, 10.0%) | 88 | 42.0 (41.4, 5.5%) | 88 | 41.5 (38.9, 24.3%) | 87 |
 
 The byte-for-byte copy's median lands 2.3%, 0.7% and 0.4% from the soft
-column's, which is the noise band. The Nish body is 22.1%, 19.8% and 13.9%
-slower than OpenSSL's scalar body (212.4 / 174.0, 218.2 / 182.1 and
+column's, which is the noise band. The Nish body is 13.9% to 22.1% (22.1%,
+19.8% and 13.9%) slower than OpenSSL's scalar body (212.4 / 174.0, 218.2 / 182.1 and
 208.3 / 182.9): the 20% bar for a rewrite was met on one run of three. It is
 40% to 44% slower than OpenSSL's AVX2 body. The SHA-NI kernel is 12% to 18%
 behind OpenSSL's SHA-NI body.
 
 `openssl speed -evp sha256`, which `run.mjs` runs under the same masks, agrees
-with the bench's OpenSSL columns. In run 3, ns a block (one 1 s run each;
+with the bench's OpenSSL columns within about 2% at 8 KiB. At 64 B its cells
+are 10% to 13% above the bench's, because each `openssl speed` call pays the
+EVP setup that the bench's loop does once. In run 3, ns a block (one 1 s run each;
 a 64 B message is two blocks, 8 KiB is 129):
 
 | Mask | 64 B | 8 KiB | bench, 64 B | bench, 16 KiB |
@@ -122,8 +128,10 @@ clang -O3 [-march=x86-64-v3] -c build/bench/sha256-block/variant-<spec>/ir/sha25
 objdump -d --no-show-raw-insn --disassemble=nish.sha256Compress sha256.o
 ```
 
-Instructions are the disassembled lines. A stack store has `(%rsp)` in its
-last operand and a stack load has it in another. A register move is a `mov`,
+Instructions are the disassembled lines. A stack store has an `%rsp`-based
+memory operand (`0x8(%rsp)`, `(%rsp,%rax,4)`) as its last operand and a stack
+load has one elsewhere; operands are split on the commas outside parentheses. No
+build below has an indexed stack operand, so the counts are the same either way. A register move is a `mov`,
 `movl` or `movq` from one register to another.
 
 | Variant | Instructions | Stack stores | Stack loads | Register moves |
@@ -156,7 +164,7 @@ whole output is reproduced by the commands under "Rerunning on target B":
 | maj | — | — | 207.3 | -0.5% |
 | nested | — | — | 196.2 | -5.8% |
 | locals + maj + nested | 190.1 | 191.7 | 189.2 | -9.2% |
-| locals + maj + nested + snested | 192.1 | 189.8 | 193.8 | -6.9% |
+| locals + maj + nested + snested | 192.1 | 189.8 | 193.8 | -7.0% |
 | v3 | — | 190.7 | 191.2 | -8.2% |
 | v3 + locals + maj + nested | — | 195.1 | 196.2 | -5.8% |
 
@@ -198,8 +206,9 @@ not built. It is worth measuring only on a CPU without SHA-NI (target B).
 
 ## Rerunning on target B (Cascade Lake)
 
-Prerequisites: clang, the libcrypto headers (`libssl-dev`), the `openssl`
-CLI, and a seed whose compiler has the SHA-NI kernel and reads
+Prerequisites: clang, GNU binutils' `objdump` (2.32 or later, for
+`--disassemble=SYM`), `taskset` (util-linux), the libcrypto headers
+(`libssl-dev`), the `openssl` CLI, and a seed whose compiler has the SHA-NI kernel and reads
 `NISH_SHA256` (0.33.0 or later; `fetch-seed.sh` takes the last release).
 
 ```bash
@@ -207,9 +216,10 @@ set -o pipefail
 git checkout main && npm ci
 bash scripts/fetch-seed.sh --force
 grep -o 'sha_ni\|avx2\|bmi2' /proc/cpuinfo | sort -u   # Cascade Lake has no sha_ni
-node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --rounds 15 \
-  --variant locals+maj+nested --variant locals+maj+nested+snested --variant v3 \
-  | tee sha256-block-B.txt
+taskset -c 3 node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --rounds 15 \
+  --variant locals --variant maj --variant nested --variant locals+maj+nested \
+  --variant locals+maj+nested+snested --variant v3 --variant v3+locals+maj+nested \
+  | tee build/sha256-block-B.txt
 ```
 
 `--compiler build/seed/bin/nish` times the seed's bundled `std/`, so a

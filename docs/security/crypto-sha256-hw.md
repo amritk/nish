@@ -92,30 +92,35 @@ array in other code) is in the model, which is what a wipe is for.
 On the review container: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores,
 `sha_ni avx2 avx512`, TSC 2.100 GHz, OpenSSL 3.0.13, `std/crypto/sha256.ts`
 at 96a38347. `node bench/sha256-block/run.mjs` on a 16 KiB message (257
-blocks), median a block over three runs (12, 12 and 26 interleaved rounds):
+blocks), over three runs (12, 12 and 26 interleaved rounds). Each ns cell is
+the median a block, with the run's minimum and spread ((max - min) / median)
+in parentheses; the cycle cells are medians:
 
-| Body | ns a block | TSC cycles a block |
+| Body | ns a block: median (min, spread) | TSC cycles a block |
 | --- | --- | --- |
-| Nish (`NISH_SHA256=soft`) | 212.4 / 218.2 / 208.3 | 446 / 458 / 437 |
-| SHA-NI kernel (the default) | 46.9 / 49.1 / 49.1 | 98 / 103 / 103 |
-| OpenSSL scalar (`OPENSSL_ia32cap=~0x1000020000000000:~0x20000120`) | 174.0 / 182.1 / 182.9 | 365 / 382 / 384 |
-| OpenSSL AVX2 (`OPENSSL_ia32cap=~0x0:~0x20000000`) | 147.8 / 151.2 / 149.3 | 310 / 317 / 314 |
-| OpenSSL SHA-NI (unset) | 41.7 / 42.0 / 41.5 | 88 / 88 / 87 |
+| Nish (`NISH_SHA256=soft`) | 212.4 (185.7, 20.7%) / 218.2 (197.7, 39.6%) / 208.3 (198.6, 20.7%) | 446 / 458 / 437 |
+| SHA-NI kernel (the default) | 46.9 (40.2, 62.5%) / 49.1 (43.7, 45.0%) / 49.1 (45.7, 33.3%) | 98 / 103 / 103 |
+| OpenSSL scalar (`OPENSSL_ia32cap=~0x1000020000000000:~0x20000120`) | 174.0 (145.3, 25.3%) / 182.1 (164.3, 24.7%) / 182.9 (175.0, 32.2%) | 365 / 382 / 384 |
+| OpenSSL AVX2 (`OPENSSL_ia32cap=~0x0:~0x20000000`) | 147.8 (139.1, 17.1%) / 151.2 (139.8, 18.3%) / 149.3 (141.9, 21.3%) | 310 / 317 / 314 |
+| OpenSSL SHA-NI (unset) | 41.7 (39.3, 10.0%) / 42.0 (41.4, 5.5%) / 41.5 (38.9, 24.3%) | 88 / 88 / 87 |
 
 `openssl speed -evp sha256 -bytes 8192` under the same masks gives 182.0,
-151.8 and 43.1 ns a block. The dispatch, counted as in step 6: with
+151.8 and 43.1 ns a block, within about 2% of the table; at 64 B it is 10% to
+13% higher, the EVP setup of each call. The dispatch, counted as in step 6: with
 `NISH_SHA256` unset the kernel ran 17319 times for `sha`, 2732 for `hmac`,
 974 for `hs256` and 8774 for `pbkdf2`, and every mode printed Node's lines;
 under `NISH_SHA256=soft` it ran 0 times in each, with the same lines.
 
-On a CPU without SHA-NI (target B, Cascade Lake), with clang, the libcrypto
-headers, the `openssl` CLI and a seed of 0.33.0 or later:
+On a CPU without SHA-NI (target B, Cascade Lake), with clang, GNU `objdump`
+2.32 or later, `taskset`, the libcrypto headers, the `openssl` CLI and a seed of 0.33.0 or later:
 
 ```bash
 set -o pipefail
 git checkout main && npm ci && bash scripts/fetch-seed.sh --force
-node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --rounds 15 \
-  --variant locals+maj+nested --variant v3 | tee sha256-block-B.txt
+taskset -c 3 node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --rounds 15 \
+  --variant locals --variant maj --variant nested --variant locals+maj+nested \
+  --variant locals+maj+nested+snested --variant v3 --variant v3+locals+maj+nested \
+  | tee build/sha256-block-B.txt
 node tests/run.js "sha256 kernel"
 ```
 
