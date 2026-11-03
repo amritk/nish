@@ -11,8 +11,6 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-static%20subset-3178c6?style=flat-square&logo=typescript&logoColor=white)
 ![LLVM](https://img.shields.io/badge/LLVM-18-4b5563?style=flat-square&logo=llvm&logoColor=white)
 ![WebAssembly](https://img.shields.io/badge/wasm-wasm32%20%C2%B7%20wasi-654ff0?style=flat-square&logo=webassembly&logoColor=white)
-![self-hosted](https://img.shields.io/badge/self--hosted-stage2%20fixpoint-0ea5e9?style=flat-square)
-![GC](https://img.shields.io/badge/GC-none-f97316?style=flat-square)
 ![vibe coded](https://img.shields.io/badge/vibe-coded-a855f7?style=flat-square)
 
 </div>
