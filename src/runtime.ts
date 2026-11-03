@@ -1408,6 +1408,25 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP38 S10: ChaCha20's keystream on AVX2 or NEON, runtime-chacha20.c
+    // (`src/kernels.ts`): `nish_sha256_hw`'s kind of resolver, and a kernel
+    // that writes `state`'s counter and `dst`'s window and reads `src`'s.
+    this.add(
+      new RuntimeFunction(
+        "nish_chacha20_hw",
+        "declare i32 @nish_chacha20_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_chacha20_xor",
+        `declare noundef i32 @nish_chacha20_xor(${AES_ARRAY}, ${AES_ARRAY}, i32 noundef, i32 noundef, ${AES_ARRAY}, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_WRITE
+      )
+    )
     // WP38 CRC: CRC-32 on PCLMULQDQ or the ARMv8 CRC32 instructions,
     // runtime-checksum.c (`src/kernels.ts`). `nish_crc32_hw` is
     // `nish_aes_hw`'s kind of resolver, and the kernel only reads the one
