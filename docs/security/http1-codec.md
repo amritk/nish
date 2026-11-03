@@ -127,8 +127,9 @@ program is echoing) sends no second response and ends the connection.
 (`net_http1`, `_f64`): the scan for a line's end reads sixteen bytes at a time,
 stops at the first control byte or DEL of a block (the lowest set bit of its
 SWAR mask, exact because a borrow only carries upward from a true match), then
-reads the rest a byte at a time, and it is also the check of the value: a control byte other than HTAB, or DEL, on a field line
-is a 400, with no second pass over the value. NUL, 0x01, 0x1f, DEL and a bare
+reads the rest a byte at a time, and it is also the check of the value: a
+control byte other than HTAB, or DEL, on a field line is a 400, with no second
+pass over the value. NUL, 0x01, 0x1f, DEL and a bare
 CR placed at each of the forty bytes of a long value are each refused, and
 HTAB and an obs-text byte at each of them are read. At the block boundaries
 the stream is also cut at every byte, so a CR that ends what has arrived so

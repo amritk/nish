@@ -6,16 +6,17 @@
 // windows and the bytes past an upgrade). docs/security/http1-codec.md cites
 // this as the proof that a change to the parser's speed changed nothing else.
 //
-// The inputs are the fuzz corpus (tests/fuzz/corpus/http1, read with its own
-// settings and then cut every way below), requests a seeded grammar makes
-// (methods, targets, versions, the framing fields, OWS, obs-fold, bare CR and
-// LF, control and high-bit bytes, bodies, pipelining), every byte 0 to 255 at
-// every position of three requests, nine bytes inserted at every position,
-// each limit at -1, 0 and +1, every two-feed split point, byte-at-a-time
-// feeding and pipelined pairs.
+// The inputs are the fuzz corpus and regressions (tests/fuzz/corpus/http1 and
+// tests/fuzz/regressions/http1, read with their own settings and then cut
+// every way below), requests a seeded grammar makes (methods, targets,
+// versions, the framing fields, OWS, obs-fold, bare CR and LF, control and
+// high-bit bytes, bodies, pipelining), every byte 0 to 255 at every position
+// of three requests, nine bytes inserted at every position, each limit at -1,
+// 0 and +1, every two-feed split point, byte-at-a-time feeding and pipelined
+// pairs.
 //
 // HTTP1_DIFF_SEED and HTTP1_DIFF_CASES set the grammar's seed and how many
-// requests it makes, for a soak; the defaults make the run's 10^5 cases and
+// requests it makes, for a soak; the defaults make 10^5 grammar requests and
 // the summary expected.out holds. A disagreement prints the case and its
 // bytes on stderr and exits 1.
 import {
@@ -548,7 +549,6 @@ class Out {
 
 const bytesOf = (t: string): u8[] => new Out().text(t).xs
 
-/** One of the `|`-separated words of `list`. */
 /** The `|`-separated words of `list`. */
 const wordsOf = (list: string): string[] => {
   const out: string[] = []
@@ -787,15 +787,14 @@ const setupDrawn = (r: Rng): Setup => {
   return s
 }
 
-/** The fuzz corpus, each file run as the fuzz target reads it and then under every cut. */
-const corpusCases = (tally: Tally): void => {
-  tally.label = "corpus"
-  const dir: string = "tests/fuzz/corpus/http1"
+/**
+ * The fuzz target's inputs in `dir`, each file run as the target reads it and
+ * then under every cut; how many were read, or -1 when `dir` cannot be read.
+ */
+const inputCases = (tally: Tally, dir: string): i32 => {
   const files: string[] | null = readdirSync(dir)
   if (files === null) {
-    writeError(`net_http1_parse_diff: cannot read ${dir}\n`)
-    tally.failed = true
-    return
+    return -1
   }
   // readdirSync's order is the file system's: sort, so the fingerprint is the same everywhere.
   const sorted: string[] = []
@@ -826,10 +825,21 @@ const corpusCases = (tally: Tally): void => {
       runCut(tally, setupOf(config), stream, config % 8 === 0)
     }
   }
+  return read
+}
+
+/** The fuzz corpus, then the regressions the fuzz target once failed on (none yet). */
+const corpusCases = (tally: Tally): void => {
+  tally.label = "corpus"
+  const dir: string = "tests/fuzz/corpus/http1"
+  const read: i32 = inputCases(tally, dir)
   if (read < 10) {
     writeError(`net_http1_parse_diff: only ${read} corpus files read from ${dir}\n`)
     tally.failed = true
+    return
   }
+  // regressions/http1 does not exist until a fuzz failure lands one there.
+  inputCases(tally, "tests/fuzz/regressions/http1")
 }
 
 /** Three requests to mutate: a short GET, a POST with a body and a field-heavy GET. */
@@ -901,12 +911,14 @@ const limitCases = (tally: Tally): void => {
       const target: string = `/${repeat("t", size - 1 + d)}`
       runCut(tally, s, bytesOf(`GET ${target} HTTP/1.1\r\n\r\n`), true)
       runCut(tally, s, bytesOf(`${repeat("M", HTTP1_MAX_METHOD)} ${target} HTTP/1.10\r\n\r\n`), false)
-      // The header section: one field whose line makes it size + d bytes.
+      // The header section: its field lines and the empty line that ends it
+      // come to maxHeaderBytes + d, with one field or with `A: b` before it.
       const t = new Setup()
       t.maxHeaderBytes = size + 8
-      const line: string = `X: ${repeat("v", size + 8 + d - 5)}\r\n`
+      const line: string = `X: ${repeat("v", size + 8 + d - 7)}\r\n`
       runCut(tally, t, bytesOf(`GET / HTTP/1.1\r\n${line}\r\n`), size < 300)
-      runCut(tally, t, bytesOf(`GET / HTTP/1.1\r\nA: b\r\n${line}\r\n`), false)
+      const after: string = `X: ${repeat("v", size + 8 + d - 13)}\r\n`
+      runCut(tally, t, bytesOf(`GET / HTTP/1.1\r\nA: b\r\n${after}\r\n`), false)
       // The field count.
       const u = new Setup()
       u.maxHeaders = size / 8
@@ -923,7 +935,6 @@ const limitCases = (tally: Tally): void => {
   }
 }
 
-/** The grammar's requests, one to three to a stream, under random setups. */
 /** One drawn grammar case and what runs it: a region's root, freed when the case ends. */
 class Drawn {
   t: Tally
@@ -973,6 +984,7 @@ const drawnOut = (d: Drawn, to: Tally): boolean => {
   return to.failed
 }
 
+/** The grammar's requests, one to three to a stream, under random setups. */
 const grammarCases = (tally: Tally, seed: u32, count: i32): void => {
   tally.label = "grammar"
   let x: u32 = seed === 0 ? 2463534242 : seed
@@ -992,18 +1004,36 @@ const grammarCases = (tally: Tally, seed: u32, count: i32): void => {
   }
 }
 
-/** The number in the environment variable `name`, or `fallback` when it is unset. */
+/**
+ * The number in the environment variable `name`, or `fallback` when it is
+ * unset; -1 when it is set to anything but decimal digits, so a mistyped soak
+ * does not run no cases and still report agreement.
+ */
 const envNumber = (name: string, fallback: i32): i32 => {
   const text: string | null = getenv(name)
   if (text === null || toI32(text.length) === 0) {
     return fallback
+  }
+  if (toI32(text.length) > 9) {
+    writeError(`net_http1_parse_diff: ${name} is ${text}, not a count under 10^9\n`)
+    return -1
+  }
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    const c: i32 = text.charCodeAt(i)
+    if (c < 48 || c > 57) {
+      writeError(`net_http1_parse_diff: ${name} is ${text}, not a decimal number\n`)
+      return -1
+    }
   }
   return parseInt(text)
 }
 
 export const main = (): i32 => {
   const seed: i32 = envNumber("HTTP1_DIFF_SEED", 1175)
-  const count: i32 = envNumber("HTTP1_DIFF_CASES", 30000)
+  const count: i32 = envNumber("HTTP1_DIFF_CASES", 100000)
+  if (seed < 0 || count < 0) {
+    return 2
+  }
   const tally = new Tally()
   corpusCases(tally)
   const afterCorpus: i32 = tally.cases

@@ -10,7 +10,7 @@
 //   <head>    0         loadgen GET: six lines, a 180-byte Authorization token
 //             1         loadgen POST: the same with Content-Type, Content-Length
 //                       and a 60-byte JSON body
-//             2         browser GET: eighteen fields of a browser's lengths
+//             2         browser GET: sixteen fields of a browser's lengths
 //
 // Each iteration feeds one request to one kept-alive parser in the mode
 // nish/net/http1-server runs it in (`keepText` off), and calls `next()` until

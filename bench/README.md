@@ -993,7 +993,7 @@ head, with no socket: one kept-alive parser in the server's mode (`keepText`
 off) is fed one request and asked for events until its `HTTP1_END`. Three
 heads: a loadgen GET (337 bytes: six lines and a 180-byte `Authorization`
 token), the same as a POST with a 60-byte JSON body (447 bytes), and a
-browser's GET (1,028 bytes, eighteen fields of a browser's lengths). Each is
+browser's GET (1,028 bytes, sixteen fields of a browser's lengths). Each is
 parsed by three builds in one binary: `new`, the live parser; `old`, main's
 parser frozen beside it by `freeze.mjs`; and `old-copy`, the same frozen code
 again, whose distance from `old` is the noise band. Every column must print
@@ -1036,11 +1036,11 @@ done; done
 
 2026-11-03, the container (Xeon @ 2.80GHz, 24 rounds), against main's parser:
 
-| head | old ns | old-copy ns (band) | new ns | new against old | instructions a head, old → new |
+| head | old ns | old-copy ns (band) | new ns | new against old / old-copy | instructions a head, old → new |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| loadgen GET, 337 bytes | 406.9 | 420.3 (±3.3%) | 344.9 (316.1–477.2) | −15.2% | 5,617 → 4,769 (−15%) |
-| loadgen POST, 447 bytes | 655.0 | 591.8 (±9.6%) | 483.8 (439.3–688.6) | −26.1% | 7,761 → 6,483 (−16%) |
-| browser GET, 1,028 bytes | 1,299.7 | 1,373.5 (±5.7%) | 1,024.4 (936.9–1,531.5) | −21.2% | 16,335 → 13,667 (−16%) |
+| loadgen GET, 337 bytes | 406.9 | 420.3 (±3.3%) | 344.9 (316.1–477.2) | −15.2% / −17.9% | 5,617 → 4,769 (−15%) |
+| loadgen POST, 447 bytes | 655.0 | 591.8 (±9.6%) | 483.8 (439.3–688.6) | −26.1% / −18.2% | 7,761 → 6,483 (−16%) |
+| browser GET, 1,028 bytes | 1,299.7 | 1,373.5 (±5.7%) | 1,024.4 (936.9–1,531.5) | −21.2% / −25.4% | 16,335 → 13,667 (−16%) |
 
 With `--cpu x86-64-v3` the three heads are −18.6%, −17.1% and −24.1% (bands
 ±2.6%, ±0.4%, ±6.4%). What changed and what was tried and left is in
