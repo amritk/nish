@@ -216,7 +216,7 @@ const built = variants.map((spec) => {
   const irDir = path.join(dir, "ir")
   const out = path.join(dir, "sha256-block")
   buildMain(path.join(dir, "pkg", bin), [], irDir, out, v.flags, `building main.ts against variant ${spec}`)
-  return { name: spec, exe: out, irDir }
+  return { name: spec, exe: out, irDir, flags: v.flags }
 })
 
 /**
@@ -226,12 +226,14 @@ const built = variants.map((spec) => {
  * `rsp`-relative operand as destination and as source; moves are
  * register-to-register `mov`s.
  */
-const codeOf = (irDir) => {
+const codeOf = (irDir, flags) => {
   const obj = path.join(irDir, "sha256.o")
+  // The IR names no CPU, so a `--cpu` build's level is passed to clang again.
+  const cpu = flags.includes("--cpu") ? [`-march=${flags[flags.indexOf("--cpu") + 1]}`] : []
   run(
     "clang",
-    ["-O3", "-c", path.join(irDir, "sha256.ll"), "-o", obj],
-    `clang -O3 -c ${rel(irDir)}/sha256.ll`
+    ["-O3", ...cpu, "-c", path.join(irDir, "sha256.ll"), "-o", obj],
+    `clang -O3 ${cpu.join(" ")} -c ${rel(irDir)}/sha256.ll`
   )
   const dis = run(
     "objdump",
@@ -255,8 +257,8 @@ console.log("sha256Compress, clang -O3 -c of each build's sha256.ll:")
 console.log(
   `${"build".padEnd(28)} ${"insns".padStart(6)} ${"st rsp".padStart(6)} ${"ld rsp".padStart(6)} ${"reg mov".padStart(7)}`
 )
-for (const b of [{ name: "base", irDir: outDir }, ...built]) {
-  const c = codeOf(b.irDir)
+for (const b of [{ name: "base", irDir: outDir, flags: [] }, ...built]) {
+  const c = codeOf(b.irDir, b.flags)
   console.log(
     `${b.name.padEnd(28)} ${String(c.insns).padStart(6)} ${String(c.stores).padStart(6)} ${String(c.loads).padStart(6)} ${String(c.moves).padStart(7)}`
   )
@@ -378,7 +380,7 @@ for (const [id, mask] of [
 }
 console.log("")
 
-const WIDTHS = [18, 28, 10, 10, 8, 10, 10, 10]
+const WIDTHS = [18, 36, 10, 10, 8, 10, 10, 10]
 const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
 console.log(line(["case", "column", "min ns", "median ns", "spread", "min cyc", "median cyc", "vs soft"]))
 

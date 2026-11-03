@@ -792,16 +792,16 @@ Linked size of `bench/regex/size.ts`, which imports `nish/regex` and compiles `[
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sha256-block/run.mjs --compiler build/seed/bin/nish` times one compression in ns and TSC cycles: Nish's own body (`NISH_SHA256=soft`), the SHA-NI kernel the compiler puts in front of it, and OpenSSL 3.0.13's `sha256_block_data_order` with `OPENSSL_ia32cap` picking its scalar, AVX2 and SHA-NI bodies. [bench/sha256-block/README.md](../bench/sha256-block/README.md) has the masks, the short-message and HMAC/HS256/PBKDF2 rows, the variants tried and the target-B commands.
 
-Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, TSC 2.100 GHz, `std/crypto/sha256.ts` at 96a38347. The 16 KiB message (257 blocks), 12 interleaved rounds a run, median ns a block (min, spread) and median TSC cycles:
+Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, TSC 2.100 GHz, `std/crypto/sha256.ts` at 96a38347. The 16 KiB message (257 blocks), median ns a block (min, spread) and median TSC cycles; runs 1 and 2 are 12 interleaved rounds, run 3 is 26, pinned to one core:
 
-| Column | run 1 ns | run 1 cyc | run 2 ns | run 2 cyc |
-| --- | --- | --- | --- | --- |
-| nish soft | 212.4 (185.7, 20.7%) | 446 | 218.2 (197.7, 39.6%) | 458 |
-| nish soft, byte copy | 207.5 (189.2, 13.7%) | 436 | 216.7 (196.2, 27.1%) | 455 |
-| nish (sha-ni) | 46.9 (40.2, 62.5%) | 98 | 49.1 (43.7, 45.0%) | 103 |
-| openssl scalar | 174.0 (145.3, 25.3%) | 365 | 182.1 (164.3, 24.7%) | 382 |
-| openssl avx2 | 147.8 (139.1, 17.1%) | 310 | 151.2 (139.8, 18.3%) | 317 |
-| openssl (sha-ni) | 41.7 (39.3, 10.0%) | 88 | 42.0 (41.4, 5.5%) | 88 |
+| Column | run 1 ns | run 1 cyc | run 2 ns | run 2 cyc | run 3 ns | run 3 cyc |
+| --- | --- | --- | --- | --- | --- | --- |
+| nish soft | 212.4 (185.7, 20.7%) | 446 | 218.2 (197.7, 39.6%) | 458 | 208.3 (198.6, 20.7%) | 437 |
+| nish soft, byte copy | 207.5 (189.2, 13.7%) | 436 | 216.7 (196.2, 27.1%) | 455 | 209.2 (202.7, 24.0%) | 439 |
+| nish (sha-ni) | 46.9 (40.2, 62.5%) | 98 | 49.1 (43.7, 45.0%) | 103 | 49.1 (45.7, 33.3%) | 103 |
+| openssl scalar | 174.0 (145.3, 25.3%) | 365 | 182.1 (164.3, 24.7%) | 382 | 182.9 (175.0, 32.2%) | 384 |
+| openssl avx2 | 147.8 (139.1, 17.1%) | 310 | 151.2 (139.8, 18.3%) | 317 | 149.3 (141.9, 21.3%) | 314 |
+| openssl (sha-ni) | 41.7 (39.3, 10.0%) | 88 | 42.0 (41.4, 5.5%) | 88 | 41.5 (38.9, 24.3%) | 87 |
 
-The Nish body is 20% to 22% slower than OpenSSL's scalar body and 44% slower than its AVX2 body; the copy's band is 0.7% to 2.3%. The best rewrite of `sha256Compress` tried was 8% to 9.5% faster (190 ns against 208, 21 pinned rounds, three runs), under the 10% bar, and `--cpu x86-64-v3` alone gives as much, so the body is unchanged. Rounds 16 to 63 as a loop over a K table would need module-level constant arrays in the compiler. HMAC-SHA256, HS256 and PBKDF2 (`hmacCopySha256`) take the SHA-NI kernel by default and the Nish body under `NISH_SHA256=soft`, shown by their timings here and by a `-Wl,--wrap` call counter in `tests/run.js`'s "sha256 kernel" section.
+The Nish body is 22.1%, 19.8% and 13.9% slower than OpenSSL's scalar body, so the 20% bar for a rewrite was met on one run of three, and 40% to 44% slower than its AVX2 body; the copy's band is 0.4% to 2.3%. `openssl speed -evp sha256` gives 182.0 ns a block (scalar), 151.8 (AVX2) and 43.1 (SHA-NI) at 8 KiB, beside the bench's 182.9, 149.3 and 41.5. The best rewrite of `sha256Compress` tried (`run.mjs --variant locals+maj+nested`) was 8% to 9.5% faster (189 to 192 ns against 208, three pinned runs), under the 10% bar, and `--cpu x86-64-v3` alone gives as much, so the body is unchanged. Rounds 16 to 63 as a loop over a K table would need module-level constant arrays in the compiler. HMAC-SHA256, HS256 and PBKDF2 (`hmacCopySha256`) take the SHA-NI kernel by default and the Nish body under `NISH_SHA256=soft`, shown by their timings here and by a `-Wl,--wrap` call counter in `tests/run.js`'s "sha256 kernel" section.
 <!-- sha-block:end -->
