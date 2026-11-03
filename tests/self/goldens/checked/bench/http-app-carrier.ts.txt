@@ -4921,7 +4921,7 @@ function http1StartRequest(p: Http1Parser): void -> @nish.http1StartRequest
   sharedWrite: +0:3
   pointer p: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function http1WordHasControl(x: u64): boolean -> @nish.http1WordHasControl
+function http1ControlBits(x: u64): u64 -> @nish.http1ControlBits
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 ones32: u64 (const)
@@ -4932,6 +4932,13 @@ function http1WordHasControl(x: u64): boolean -> @nish.http1WordHasControl
   local +5:9 below: u64 (const)
   local +6:9 y: u64 (const)
   local +7:9 del: u64 (const)
+function http1FirstByte(bits: u64): i32 -> @nish.http1FirstByte
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 mask32: u64 (const)
+  local +1:9 lo: u32 (const)
+  local +5:9 hi: u32 (const)
 function http1Lanes(v: u8x16, at: i32): u64 -> @nish.http1Lanes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -4939,26 +4946,33 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: overStatus
-  calls: nish.http1Fail nish.http1Lanes nish.http1WordHasControl nish_panic_index nish_panic_overflow
+  calls: nish.http1ControlBits nish.http1Fail nish.http1FirstByte nish.http1Lanes nish_panic_index nish_panic_overflow
   pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0
   stackSites=0 stackLocals=0
   local -6:9 buf: u8[] (const)
   local -5:9 end: i32 (const)
   local -4:7 i: i32 (let)
   local +2:9 stop: i32 (const)
-  local +11:13 v: u8x16 (const)
-  callee +12:11 http1WordHasControl -> @nish.http1WordHasControl
-  callee +12:31 http1Lanes -> @nish.http1Lanes
-  callee +12:52 http1WordHasControl -> @nish.http1WordHasControl
-  callee +12:72 http1Lanes -> @nish.http1Lanes
-  local +23:11 c: i32 (const)
-  callee +26:16 http1Fail -> @nish.http1Fail
-  callee +29:16 http1Fail -> @nish.http1Fail
-  callee +49:12 http1Fail -> @nish.http1Fail
+  local +10:9 found: boolean (let)
+  local +12:13 v: u8x16 (const)
+  local +13:13 low: u64 (const)
+  callee +13:24 http1ControlBits -> @nish.http1ControlBits
+  callee +13:41 http1Lanes -> @nish.http1Lanes
+  callee +15:14 http1FirstByte -> @nish.http1FirstByte
+  local +18:15 high: u64 (const)
+  callee +18:27 http1ControlBits -> @nish.http1ControlBits
+  callee +18:44 http1Lanes -> @nish.http1Lanes
+  callee +20:20 http1FirstByte -> @nish.http1FirstByte
+  local +33:9 c: i32 (let)
+  callee +42:16 http1Fail -> @nish.http1Fail
+  callee +45:16 http1Fail -> @nish.http1Fail
+  callee +65:12 http1Fail -> @nish.http1Fail
 function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local +0:7 mask: i32 (let)
+  local +0:9 low: u64 (const)
+  local +1:9 high: u64 (const)
+  local +2:9 word: u64 (const)
 function http1IsValueByte(c: i32): boolean -> @nish.http1IsValueByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -5103,34 +5117,37 @@ function http1RequestLine(p: Http1Parser): i32 -> @nish.http1RequestLine
   callee +8:16 http1Text -> @nish.http1Text
 function http1FieldLine(p: Http1Parser, keep: boolean): i32 -> @nish.http1FieldLine
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
+  sharedWrite: +0:7
   calls: nish.http1Fail nish.http1HeadAppend nish.http1IsOws nish.http1IsTokenByte nish.http1SpanSet nish.http1Text nish_array_grow nish_panic_index nish_panic_overflow
-  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1HeadAppend#0 nish.http1SpanSet#0
+  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1HeadAppend#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1SpanSet#0
   stackSites=0 stackLocals=0
-  local -20:9 buf: u8[] (const)
-  local -19:9 n: i32 (const)
-  local -18:9 a: i32 (const)
-  local -17:9 b: i32 (const)
-  callee -15:12 http1Fail -> @nish.http1Fail
-  local -13:7 i: i32 (let)
-  callee -12:54 http1IsTokenByte -> @nish.http1IsTokenByte
-  callee -8:12 http1Fail -> @nish.http1Fail
-  local -6:9 nameEnd: i32 (const)
-  callee -2:12 http1Fail -> @nish.http1Fail
-  callee +2:12 http1Fail -> @nish.http1Fail
-  local +6:9 valueStart: i32 (let)
-  local +7:9 valueEnd: i32 (let)
-  callee +8:74 http1IsOws -> @nish.http1IsOws
-  callee +11:58 http1IsOws -> @nish.http1IsOws
-  local +14:11 at: i32 (const)
-  callee +14:21 http1HeadAppend -> @nish.http1HeadAppend
-  local +15:11 head: u8[] (const)
-  local +16:14 k: i32 (let)
-  local +21:11 base: i32 (const)
-  callee +22:5 http1SpanSet -> @nish.http1SpanSet
-  local +24:11 spans: i32[] (const)
-  callee +32:20 http1Text -> @nish.http1Text
-  callee +33:21 http1Text -> @nish.http1Text
+  local -23:9 buf: u8[] (const)
+  local -22:9 n: i32 (const)
+  local -21:9 a: i32 (const)
+  local -20:9 b: i32 (const)
+  callee -18:12 http1Fail -> @nish.http1Fail
+  local -12:7 at: i32 (let)
+  local -11:7 i: i32 (let)
+  callee -9:10 http1HeadAppend -> @nish.http1HeadAppend
+  local -8:11 head: u8[] (const)
+  local -7:9 k: i32 (let)
+  local -6:11 stop: i32 (const)
+  local -4:13 c: i32 (const)
+  callee -3:12 http1IsTokenByte -> @nish.http1IsTokenByte
+  callee +5:56 http1IsTokenByte -> @nish.http1IsTokenByte
+  callee +10:12 http1Fail -> @nish.http1Fail
+  local +12:9 nameEnd: i32 (const)
+  callee +16:12 http1Fail -> @nish.http1Fail
+  callee +20:12 http1Fail -> @nish.http1Fail
+  local +24:9 valueStart: i32 (let)
+  local +25:9 valueEnd: i32 (let)
+  callee +26:74 http1IsOws -> @nish.http1IsOws
+  callee +29:58 http1IsOws -> @nish.http1IsOws
+  local +32:11 base: i32 (const)
+  callee +33:5 http1SpanSet -> @nish.http1SpanSet
+  local +35:11 spans: i32[] (const)
+  callee +43:20 http1Text -> @nish.http1Text
+  callee +44:21 http1Text -> @nish.http1Text
 function http1EndOfHead(p: Http1Parser): i32 -> @nish.http1EndOfHead
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
