@@ -15,13 +15,13 @@
 // context is one argument that is already being threaded.
 
 import { containerMessage as secretContainerMessage } from "./secret"
-import { simdImportMessage, simdLaneType } from "./simd"
+import { rejectStoredMask, simdImportMessage, simdLaneType, simdMaskLane } from "./simd"
 import { LANGUAGE } from "./branding"
 import { CheckContext, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo, STRUCT_CLASS, StructInfo } from "./program"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
-import { REGION_SPECIFIER, SIMD_SPECIFIER } from "./nish-modules"
+import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
 import {
   FLAG_DEFAULT,
   FLAG_READONLY,
@@ -138,6 +138,9 @@ const scalarNamed = (name: string, numberMode: i32): i32 => {
 const elementType = (node: Node, ctx: CheckContext): i32 => {
   const elem = resolveType(node, ctx)
   if (rejectForeignPointer(ctx, elem, "an array element", node)) {
+    return T_ERROR
+  }
+  if (rejectStoredMask(ctx, elem, "an array element", node)) {
     return T_ERROR
   }
   // `nish:secret`: an element outlives the function that made the secret.
@@ -420,6 +423,12 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     if (lane !== T_ERROR) {
       return ctx.table.vectorOf(lane)
     }
+    // A mask, which a compare answers: its lanes are as wide as an unsigned
+    // integer of the width its name spells, which is all `laneCount` reads.
+    const width = simdMaskWidth(vectorImport.importedName)
+    if (width > 0) {
+      return ctx.table.maskOf(simdMaskLane(width))
+    }
   }
 
   // A class or interface: one this module declares or imports. A name that is
@@ -434,7 +443,7 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     return ctx.table.structOf(name)
   }
 
-  if (simdLaneType(name) !== T_ERROR) {
+  if (simdLaneType(name) !== T_ERROR || simdMaskWidth(name) > 0) {
     return ctx.errorType(node, simdImportMessage(name))
   }
 
@@ -561,6 +570,12 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     return T_ERROR
   }
   if (rejectForeignPointer(ctx, err, "a `Result` arm", args.children[1])) {
+    return T_ERROR
+  }
+  if (rejectStoredMask(ctx, ok, "a `Result` arm", args.children[0])) {
+    return T_ERROR
+  }
+  if (rejectStoredMask(ctx, err, "a `Result` arm", args.children[1])) {
     return T_ERROR
   }
   if (ctx.table.holdsSecret(ok) || ctx.table.holdsSecret(err)) {

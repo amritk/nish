@@ -1,0 +1,10 @@
+`add` is float lane arithmetic and takes an `f32x4` or an `f64x2`, got i32x4: an integer lane can overflow, so its form is `addWrapping`
+`mul` is float lane arithmetic and takes an `f32x4` or an `f64x2`, got u8x16: an integer lane can overflow, so its form is `mulWrapping`
+`sqrt` takes an `f32x4` or an `f64x2`, got i32x4
+`addWrapping` takes an integer vector, a `u8x16`, `u16x8`, `i32x4` or `u32x4`, got f32x4
+`and` takes an integer vector, a `u8x16`, `u16x8`, `i32x4` or `u32x4`, or a mask, got f32x4
+`any` takes a `nish:simd` mask, which a lane-wise compare answers, got i32x4
+`min` takes operands of one type, got i32x4 and u32x4; reinterpret the lanes with `asU8x16` and the rest
+`select` between two i32x4 takes the mask their compare answers, mask32x4, got mask64x2
+`add` expects exactly 2 arguments, got 1
+9 errors

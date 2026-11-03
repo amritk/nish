@@ -15,6 +15,7 @@ import { Lexer } from "./lexer"
 import { isNishSpecifier, nishModuleNames } from "./nish-modules"
 import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
+import { rejectStoredMask } from "./simd"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import { functionTypeHereMessage, isContextualLiteral, isFunctionParameter } from "./generics"
@@ -128,6 +129,11 @@ export const collectParams = (
     }
     if (!foreign) {
       rejectForeignPointer(ctx, type, "a parameter of a function this program defines", param.children[1])
+    }
+    // A mask has no layout a header, a `.d.ts` or a class describes (`simd.ts`).
+    if (sig.exported || owner >= 0) {
+      const where = sig.exported ? "a parameter of an exported function" : "a parameter of a method"
+      rejectStoredMask(ctx, type, where, param.children[1])
     }
     sig.paramNames.push(name)
     sig.paramTypes.push(type)
@@ -445,6 +451,9 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
       "the return type of a function this program defines",
       returnAnnotation
     )
+    if (sig.exported) {
+      rejectStoredMask(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
+    }
   }
   return sig
 }
