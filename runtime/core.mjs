@@ -149,8 +149,9 @@ export const div = (a, b) => simdLanes(a, (x, j) => x / b[j]);
 export const neg = (a) => simdLanes(a, (x) => -x);
 export const abs = (a) => simdLanes(a, (x) => Math.abs(x));
 export const sqrt = (a) => simdLanes(a, (x) => Math.sqrt(x));
-export const addWrapping = add;
-export const subWrapping = sub;
+// A typed array wraps on store, so the integer forms share the float bodies.
+export const addWrapping = (a, b) => simdLanes(a, (x, j) => x + b[j]);
+export const subWrapping = (a, b) => simdLanes(a, (x, j) => x - b[j]);
 // A 32-bit product loses its low bits as a double; `Math.imul` keeps them.
 export const mulWrapping = (a, b) => simdLanes(a, (x, j) => (simdBits(a) === 32 ? Math.imul(x, b[j]) : x * b[j]));
 export const min = (a, b) => simdLanes(a, (x, j) => Math.min(x, b[j]));
