@@ -1,0 +1,5 @@
+seed 1175, 120288 cases agree
+  corpus 15214, mutation 72821, limit 2253, grammar 30000
+  events 911745: head 36549, body 52549, end 35583, upgrade 3211, closed 2800, error 93182
+  refusals: 400 84580, 413 140, 414 1643, 431 2283, 501 8, 505 4528, other 0
+  fingerprint df00b97f
