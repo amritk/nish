@@ -912,13 +912,13 @@ const limitCases = (tally: Tally): void => {
       runCut(tally, s, bytesOf(`GET ${target} HTTP/1.1\r\n\r\n`), true)
       runCut(tally, s, bytesOf(`${repeat("M", HTTP1_MAX_METHOD)} ${target} HTTP/1.10\r\n\r\n`), false)
       // The header section: its field lines and the empty line that ends it
-      // come to maxHeaderBytes + d, with one field or with `A: b` before it.
+      // come to maxHeaderBytes + d, as one Host field or as `Host: h` and X.
       const t = new Setup()
       t.maxHeaderBytes = size + 8
-      const line: string = `X: ${repeat("v", size + 8 + d - 7)}\r\n`
+      const line: string = `Host: ${repeat("v", size + 8 + d - 10)}\r\n`
       runCut(tally, t, bytesOf(`GET / HTTP/1.1\r\n${line}\r\n`), size < 300)
-      const after: string = `X: ${repeat("v", size + 8 + d - 13)}\r\n`
-      runCut(tally, t, bytesOf(`GET / HTTP/1.1\r\nA: b\r\n${after}\r\n`), false)
+      const after: string = `X: ${repeat("v", size + 8 + d - 16)}\r\n`
+      runCut(tally, t, bytesOf(`GET / HTTP/1.1\r\nHost: h\r\n${after}\r\n`), false)
       // The field count.
       const u = new Setup()
       u.maxHeaders = size / 8
