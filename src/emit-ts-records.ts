@@ -39,6 +39,7 @@
 // in one and by reference in another, or two zeros) is refused with NL4013 by
 // the composer, which this row tells by setting `walk.instanceChoice`.
 
+import { isSortInstance } from "./arrays"
 import { Operands, Walk } from "./emit-ts-edits"
 import {
   FLAG_GATHERED,
@@ -507,7 +508,9 @@ const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
       // A vector is a typed array: each slot gets one of its own.
       return `${walk.helperName("newArray")}<${element}>(${operands.at(2)}, ${vector}).map(() => ${vector})`
     }
-    zero = fillZero(walk, typeArgs[0])
+    // `sortWith`'s scratch has every slot written before one is read, so one
+    // zero serves each instance's `T`.
+    zero = isSortInstance(walk.program.activeInstance) ? "undefined" : fillZero(walk, typeArgs[0])
   } else if (typeArgs.length === 0) {
     zero = typedArrayZero(callee.text)
     element = typedArrayWidth(callee.text)

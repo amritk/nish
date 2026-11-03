@@ -585,7 +585,9 @@ select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord)
 `<select>` is the query for one key, which it reads as `q.key`:
 `select a.title from articles a where a.slug = q.key`. Each distinct key is
 bound once however many requests ask for it, and each row goes back to every
-one of them.
+one of them. The one exception is keys chosen to collide in the batcher's
+table: past 1024 slots of probing a key is bound again rather than found,
+and each copy is answered the same.
 
 `PG_BATCH_INT` keys are bound as a text `int8[]`, one `arrayInt` each. The
 statement's `$1::int8[]` would take the [binary builder](#binary-integer-array-parameters)
@@ -645,11 +647,18 @@ execution failed (the rows it had may be incomplete). Call it until it answers
 next event: a row's columns are read from the connection, where they last only
 until then.
 
-- **Caps.** `maxRequests` (32, at most 1024) bounds the requests one execution answers;
+- **Caps.** `maxRequests` (32, at most 65536) bounds the requests one execution answers;
   `maxBytes` (32 KiB) the key array's text; `queueSize` (1024) the requests
   waiting, and `queueBytes` (64 KiB) their text keys; `runs` (16) the
   executions in flight at once. A cap out of range, an empty `name` or
   `select`, or a NUL in them or in `orderBy` panics in the constructor.
+- **Large batches.** A take's cost per request stays flat as `maxRequests`
+  grows: memory grows with the largest take so far, not with the cap, and
+  finding a key's duplicate stops after 1024 probes, past which the key is
+  simply bound again. For a take of thousands of requests, raise the other
+  caps with it: `queueSize` to at least `maxRequests`, `maxBytes` to fit
+  every key's text (about 20 bytes an int8 key), the connection's `maxOutput`
+  above `maxBytes`, and `maxMessage` if a single row is large.
 - **Taking fewer.** `take` binds the oldest requests first and stops at the
   first whose key would pass `maxBytes`, or that the connection refuses for
   room under `maxOutput`; the rest stay queued for the next take. It answers

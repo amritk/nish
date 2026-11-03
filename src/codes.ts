@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 782
+export const RULE_COUNT: i32 = 784
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -201,6 +201,8 @@ const diagnosticRules = (): string[] => [
   "NL2352",
   ": a presence field is a `boolean` that is not `readonly` and records whether one other field's key was given; it is off the wire, so no option renames it, makes it optional or records it",
   "NL2592",
+  "`sort` takes one comparator: write `xs.sort((a, b) => a - b)`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)",
+  "NL2619",
   "` is a `Secret` parameter, which its caller owns and wipes: wiped here, the caller would go on reading zeros and wipe it again. Leave the wipe to the caller, which knows when it is done",
   "NL2548",
   " and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`",
@@ -211,6 +213,8 @@ const diagnosticRules = (): string[] => [
   "NL2554",
   "`, which belongs to the function it is written in: a task reads a captured value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument",
   "NL2508",
+  "`sort` needs a comparator: write `xs.sort((a, b) => a - b)`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)",
+  "NL2620",
   " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it",
   "NL2364",
   ": a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`",
@@ -286,7 +290,7 @@ const diagnosticRules = (): string[] => [
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
   "`Promise<T>` is only an `async` function's return type: a promise is never a value, so it cannot be held, passed or stored — `await` the call where it is made",
-  "NL2619",
+  "NL2636",
   ", and that scope is declared outside the block: the task runs, and its answer is stored, when the scope joins, after the block has released what it allocated",
   "NL2427",
   "` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as `readonly kind: Kind.Circle = Kind.Circle`",
@@ -484,7 +488,7 @@ const diagnosticRules = (): string[] => [
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
   "NL2055",
   "An `async` function's return type is `Promise<T>`: write the answer `T` inside it, `Promise<void>` for none",
-  "NL2620",
+  "NL2637",
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
   "NL2288",
   ".capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names",

@@ -628,6 +628,10 @@ What the rows say, read against that band:
 - The benchmarked build is `5ee6e7c`. The head adds only the listener's pause when an accept runs out of descriptors, which this run never reached: with `ulimit -n` at 20000, no accept failed for want of one.
 <!-- techempower:end -->
 
+## TechEmpower database tests
+
+The `postgres` test of [bench/techempower/](../bench/techempower/README.md#the-database-entry) answers `db`, `query`, `update`, `cached-query` and `fortune`. It is not measured. TFB puts its load generator, its server and its database on three machines, and this project has one 4-core machine with no `wrk` in its cloud sessions. A client that shares the server's cores would record their contention, not the server's throughput, so no figure is recorded and no rank is claimed. The database entry is checked for correctness only, by `tests/link/tfb_db` against a stand-in Postgres and by `tests/postgres/live/run.mjs tfb` against a real one. `json` and `plaintext`, above, are unchanged by it: `server.ts` and `main.ts` are untouched.
+
 <!-- syscall-cost:begin -->
 ## Syscall cost
 

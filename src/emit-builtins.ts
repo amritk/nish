@@ -1006,6 +1006,10 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     const n = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_nice")}(i32 ${n})`)
   }
+  if (name === "setCpuAffinity") {
+    const cpu = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_cpu_affinity")}(i32 ${cpu})`)
+  }
   if (name === "setIdlePriority") {
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_idle_priority")}()`)
   }
@@ -1312,6 +1316,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "setNice") {
     out.push("nish_set_nice")
+    return out
+  }
+  if (name === "setCpuAffinity") {
+    out.push("nish_set_cpu_affinity")
     return out
   }
   if (name === "setIdlePriority") {

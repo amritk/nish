@@ -1,5 +1,5 @@
 // An interface member typed `Promise<T>`: an object never holds a promise
-// (NL2619).
+// (NL2636).
 interface Job {
   done: Promise<i32>
 }

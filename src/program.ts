@@ -30,6 +30,7 @@ import {
   isJsonTypedModule,
   isMapExtrasModule,
   isMathModule,
+  isSortModule,
   isSecretModule,
 } from "./std-modules"
 import { Local } from "./symbols"
@@ -1788,7 +1789,9 @@ export class CheckedProgram {
     this.jsonTypedLibrary = isJsonTypedModule(packageName, source.path)
     this.secretLibrary = isSecretModule(packageName, source.path)
     this.regionLibrary = isRegionModule(packageName, source.path)
-    this.mathLibrary = isMathModule(packageName, source.path)
+    // `std/sort.ts` is copied the same way: its only code is `sortWith`'s
+    // instantiations, one per comparator, which belong in the module that sorts.
+    this.mathLibrary = isMathModule(packageName, source.path) || isSortModule(packageName, source.path)
     this.usesArgv = false
     this.f64Mode = false
     this.unsafeImports = []
@@ -1850,8 +1853,8 @@ export class CheckedProgram {
   }
 
   /**
-   * Whether this module writes no `.ll` of its own: `std/collections.ts`, `std/math.ts` and
-   * `std/secret.ts`, whose code is copied into each module that uses it, and
+   * Whether this module writes no `.ll` of its own: `std/collections.ts`, `std/math.ts`,
+   * `std/sort.ts` and `std/secret.ts`, whose code is copied into each module that uses it, and
    * `std/map.ts`, whose every call is lowered in place at the call
    * (docs/wp32-map.md §4.1, §9.2).
    */
@@ -1875,7 +1878,7 @@ export class CheckedProgram {
     return this.regionLibrary
   }
 
-  /** Whether this module is `std/math.ts`, `nish/math`, copied like `std/collections.ts`. */
+  /** Whether this module is `std/math.ts` (`nish/math`) or `std/sort.ts`, copied like `std/collections.ts`. */
   isMathLibrary(): boolean {
     return this.mathLibrary
   }

@@ -336,6 +336,15 @@ export function setIdlePriority() {
 }
 
 /**
+ * `setCpuAffinity(cpu)` answers -95, the native build's answer on a host with
+ * no affinity call: unlike the two above it has a defined "not supported"
+ * value, so a program that pins where it can runs unpinned here.
+ */
+export function setCpuAffinity() {
+  return -95;
+}
+
+/**
  * `signalFd()` and `readSignal(fd)` have no faithful reading under Node, and
  * these say so rather than answer something else. Node delivers a signal to
  * its event loop (`process.on("SIGTERM")`), and a blocking read keeps the loop

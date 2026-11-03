@@ -3219,11 +3219,11 @@ async function run(): Promise<void> {
   `reject_async_method`), because a task never keeps a `this`.
 - **`Promise<T>` is only an `async` function's return type.** An `async`
   function without it is
-  `` An `async` function's return type is `Promise<T>` `` (NL2620,
+  `` An `async` function's return type is `Promise<T>` `` (NL2637,
   `reject_async_function`, `reject_async_arrow_declaration`,
   `reject_async_return_missing`); `T` is written inside it, `Promise<void>` for none. Anywhere else — a parameter, a field,
   a local, a type alias, an interface member — `Promise<T>` is
-  `` `Promise<T>` is only an `async` function's return type `` (NL2619,
+  `` `Promise<T>` is only an `async` function's return type `` (NL2636,
   `reject_async_promise_parameter`, `_field`, `_local`, `_alias`,
   `_interface_member`).
 - **`await` is written inside an `async` function**
@@ -6727,7 +6727,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:region` | `Region`, `region`, `regionWith`, `enter`, `enterWith`, `free` — source behind it too ([Regions](#regions-nishregion)) |
@@ -7861,8 +7861,8 @@ so an entry that is its own target or another's is never overwritten first
 
 `readdirSync` sorts, which neither `readdir(3)` nor Node's `fs.readdirSync`
 does, and that is a decision about this language rather than a convenience:
-there is no `sort` to reach for, so every caller of an unsorted listing would
-have to write one, and a run whose order is the file system's is a run that
+every caller of an unsorted listing would have to sort it before reading it,
+and a run whose order is the file system's is a run that
 differs between two machines. The sort is by **bytes**, like every other string
 comparison here, so it agrees with Node's `.sort()` for ASCII names and can
 differ for names that are not (`docs/wp13-differential.md`).
@@ -8046,10 +8046,10 @@ itself, on the event loop, so a synchronous wait has nothing to find, and the
 prelude's versions throw, naming themselves, rather than answer (the `os_`
 block of `tests/run.js`).
 
-### Scheduling: `setNice`, `setIdlePriority`
+### Scheduling: `setNice`, `setIdlePriority`, `setCpuAffinity`
 
-How much of the CPU the program asks for: a batch job or a background indexer
-steps aside for the interactive work on the machine. Both are C in
+How much of the CPU the program asks for, and where: a batch job or a background indexer
+steps aside for the interactive work on the machine, and a prefork worker keeps to one core. Each is C in
 `runtime/runtime-os.c`, and each is exported by `nish:process` as well as
 being a global.
 
@@ -8057,6 +8057,7 @@ being a global.
 | --- | --- | --- | --- |
 | `setNice(n: i32): i32` | set the **nice value** to `n` with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. `n` is **lower-only**, even as root: it takes 0..19, and any other value is `-22` (EINVAL) with no system call; a value below the current nice value is `-13` (EACCES) with no `setpriority` call, so the priority never rises. Children started afterwards inherit the value | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
 | `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)`, which runs it only when nothing else wants the CPU, and answer 0 or a negative errno. **Linux only**: Darwin has no such policy and the answer there is -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback (`setNice(19)`, or a deadline) for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
+| `setCpuAffinity(cpu: i32): i32` | pin the calling process to the one CPU `cpu` with `sched_setaffinity` and answer 0, or a negative errno. It is **narrow-only**: a `cpu` below 0, at or past `CPU_SETSIZE`, or outside the CPUs the process may already run on (`taskset`, a cgroup) is `-22` with no change, so it never moves a process onto a CPU it was kept off. `availableParallelism()` answers 1 afterwards, and children started afterwards inherit the mask. **Linux only**: Darwin has no affinity call and the answer there is -95, as it is under Node | write | `link/net_prefork_pin`; `reject_os_affinity_wasm`, `reject_os_affinity_task` |
 
 **Per thread.** Linux keeps both the nice value and the policy per thread: a
 call sets the calling thread's and every thread started after it. So both
@@ -8101,7 +8102,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (no `nish:net` call looks one up; [`nish/net/dns`](../std/net/dns.ts) resolves it first), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
-| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flags add: `3` is both. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
+| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flag `4`, with flag `1` and on Linux only, attaches a classic BPF program (`SO_ATTACH_REUSEPORT_CBPF`) that hands each connection to the listener at the index of the CPU that received it, in the order the group's listeners were bound; a CPU past the group's size falls back to the hash. Flag `4` without `1` is `-22`, and off Linux it is `-95`. Flags add: `3` is both, `5` and `7` steer. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
@@ -8123,7 +8124,7 @@ What `tcpListenFlags`'s flag `1` does on each platform:
 | Platform | Flag `1` |
 | --- | --- |
 | Linux | Listeners that share the port each get new connections, spread by a hash of the connection's 4-tuple; only listeners of the same user may share |
-| Darwin | Listeners share the port, but one of them takes the connections: the flag buys a restart without a gap rather than a spread |
+| Darwin | Listeners share the port, but one of them takes the connections: the flag buys a restart without a gap rather than a spread; flag `4` is `-95` |
 | `wasm32`, `--profile wasi` | Refused at compile time with NL2404, as every `nish:net` call is |
 
 **Errors are numbers.** Every call answers an `i32`: `>= 0` is success (a
@@ -8719,6 +8720,7 @@ bytes — natively and under WASI, and expect the same lines from both.
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
+| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620); a second argument is refused too (`` `sort` takes one comparator ``, NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -8739,6 +8741,55 @@ valid string (docs/wp13-differential.md notes what Node then does with them).
 A numeric literal argument to `push`, `indexOf` or `fill` takes the element
 type, so `wide.push(3)` on an `i64[]` is an `i64` three
 ([Numeric literals](#numeric-literals)).
+
+#### Sorting with a comparator
+
+`xs.sort(cmp)` is the one array method that takes a function. The checker
+rewrites the call to `sortWith(xs, cmp)` from `std/sort.ts`, which the program
+does not import: a `.sort(` call is what loads it. Because `cmp` is a
+compile-time function parameter, each comparator gets its own instantiation
+whose inner loop calls it directly, with no function pointer and no boxing of
+its answer. The sort is stable, so for a comparator that is a consistent
+total preorder there is exactly one answer and it is Node's; under Node and
+`--emit-ts` the call is the platform's own `Array.prototype.sort`. A 10,000
+element array of records with many ties (`arr_sort_cmp_f64`) prints the same
+checksum natively and under Node.
+
+The sort costs one scratch array of `n` elements, allocated once at full size
+(`new Array<T>(n)` for any `T`, which `sortWith` alone may write: the copy
+after it fills every slot before one is read) from the function's arena and
+released before `sortWith` returns, so a sort leaves `Arena.used()` where it was
+and a loop that sorts keeps its per-pass scope (`arr_sort_edge`). The scratch is
+not on the stack: its length is the array's, known only at run time. Insertion sorts
+runs of 32 from the scratch into the array, then bottom-up passes merge pairs
+of runs back and forth between the two. A pair already in order (the last of
+the left run not after the first of the right) is copied without a comparison
+per element, so a merge pass over sorted input costs one comparison per pair.
+Every move is a whole slot: an array of `interface` records, which is stored
+inline, moves a record as one copy of its bytes (`arr_sort_cmp_record`), and
+the sort never holds an element across a write, which would read a record half
+overwritten. Every index inside the sort is proven in range by a guard beside
+it, so the sort keeps no bounds check, and at `-O2` the comparator is inlined
+into the loops that call it.
+
+Where JavaScript leaves the order to the implementation, so does Nish: an
+array holding `NaN` under `(a, b) => a - b`, or a comparator that is not a
+consistent order (one answering `1` for both `(a, b)` and `(b, a)`), comes
+out a permutation of its elements, but not necessarily Node's permutation. A
+program meant to agree with Node gives NaN a place of its own in the
+comparator.
+
+The idiom `(a, b) => a - b` is checked arithmetic on `i32`: two elements more
+than `2^31 - 1` apart, as in `[2147483647, -1]`, panic with
+`attempt to subtract with overflow`. On values that may span the whole range,
+compare instead of subtracting: `(a, b) => (a > b ? 1 : a < b ? -1 : 0)`.
+
+What differs from JavaScript is refused rather than reinterpreted: no
+comparator (JavaScript would compare the elements' strings), a readonly
+receiver or `process.argv`, and a comparator that reads a `let` of the
+function it is written in (`reject_arr_sort_capture_let`). A comparator is an
+arrow argument like any other, so it may read that function's `const` locals
+and parameters (`arr_sort_capture`), under the rule in [Function parameters](#function-parameters).
 
 ### Bulk writes: `set` and `fill`
 
@@ -9887,7 +9938,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority` (`caps_process_nice`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |

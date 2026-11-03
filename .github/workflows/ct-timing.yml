@@ -75,9 +75,12 @@ jobs:
 
       # ci.yml's install, less valgrind, which nothing here runs.
       - name: Install LLVM 18 + lld (Ubuntu)
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18
+
+      - name: Link the LLVM 18 tools by their plain names
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do

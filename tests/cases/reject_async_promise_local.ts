@@ -1,5 +1,5 @@
 // A local annotated `Promise<T>`: a promise is never held to be awaited
-// later (NL2619).
+// later (NL2636).
 async function load(x: i32): Promise<i32> {
   return x
 }

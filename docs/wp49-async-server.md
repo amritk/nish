@@ -387,8 +387,8 @@ before. The lowering of §3 and the emitted TypeScript are part 2.
 | Code | Refuses | Test |
 | --- | --- | --- |
 | NL1063 | `async` on a method, field or constructor | `reject_async_method` |
-| NL2619 | `Promise<T>` anywhere but an `async` function's return type | `reject_async_promise_parameter`, `_field`, `_local`, `_alias`, `_interface_member` |
-| NL2620 | an `async` function whose return type is not `Promise<T>` | `reject_async_function`, `reject_async_arrow_declaration`, `reject_async_return_missing` |
+| NL2636 | `Promise<T>` anywhere but an `async` function's return type | `reject_async_promise_parameter`, `_field`, `_local`, `_alias`, `_interface_member` |
+| NL2637 | an `async` function whose return type is not `Promise<T>` | `reject_async_function`, `reject_async_arrow_declaration`, `reject_async_return_missing` |
 | NL2621 | an `async` arrow where the function type answers a plain `T` | `reject_async_arrow` |
 | NL2622 | a plain function where the function type answers `Promise<T>` | `reject_async_plain_to_promise_parameter` |
 | NL2623 | `await` outside an `async` function, a module constant included | `reject_await`, `reject_await_constant` |

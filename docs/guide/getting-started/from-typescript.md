@@ -329,7 +329,7 @@ These come up often enough to know before you meet them:
 | `a == b` | `NL1047`: loose equality | `a === b` |
 | `xs.map(f)`, `.filter`, `.forEach` | `NL2249`: unknown method | a `for...of` loop |
 | `String(n)`, `n.toString()` | `NL2247`: unknown function, `NL2249`: unknown method | `` `${n}` `` |
-| `promise.then(f)`, `Promise.all`, a promise in a variable | `NL2632`, `NL2631`, `NL2619`: a promise is never a value | `await` each call where it is made, or `awaitAll` ([Async functions](../language/async.md)) |
+| `promise.then(f)`, `Promise.all`, a promise in a variable | `NL2632`, `NL2631`, `NL2636`: a promise is never a value | `await` each call where it is made, or `awaitAll` ([Async functions](../language/async.md)) |
 
 `nish --fix` rewrites `if (xs.length)`, `==` and `String(n)` / `n.toString()`
 for you, as

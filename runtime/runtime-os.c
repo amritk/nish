@@ -26,7 +26,8 @@
  * from drifting from the contract it is published under.
  */
 #if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE /* `sched_getaffinity` and `CPU_COUNT`, for `nish_cpu_online` */
+#define _GNU_SOURCE /* `sched_getaffinity`, `sched_setaffinity` and `CPU_COUNT`, for
+                       `nish_cpu_online` and `nish_set_cpu_affinity` */
 #endif
 #define _POSIX_C_SOURCE 200809L
 /* `realpath` is XSI rather than POSIX base, so _POSIX_C_SOURCE alone does not
@@ -856,6 +857,37 @@ int32_t nish_set_idle_priority(void) {
 #elif defined(__wasi__)
   return -ENOSYS;
 #else
+  return -95;
+#endif
+}
+
+/* `setCpuAffinity(cpu)`: this process pinned to CPU `cpu` alone, 0 or a
+   negative errno. Narrow-only: `cpu` must be in the mask the process already
+   has (`sched_getaffinity`), so a pin never escapes an operator's `taskset` or
+   cpuset; a CPU outside it, a negative one, or one past `CPU_SETSIZE` is
+   -EINVAL with no `sched_setaffinity` call. Linux alone has the call; Darwin
+   answers -95 as `setIdlePriority` does, WASI -ENOSYS. Like the nice value,
+   the mask is the calling thread's and every thread started after it. */
+int32_t nish_set_cpu_affinity(int32_t cpu) {
+#if defined(__linux__)
+  /* The mask as words: the set to pin is the word holding `cpu` with only its
+     bit, the words below it zero, and the kernel zero-fills a shorter mask.
+     `sched_getaffinity` fails only on a bad pid or size, neither of which
+     this call can pass, so its failure shares the range check's answer. */
+  unsigned long m[CPU_SETSIZE / (8 * sizeof(unsigned long))];
+  uint32_t w = (uint32_t)cpu / (8 * sizeof m[0]);
+  unsigned long bit = 1UL << ((uint32_t)cpu % (8 * sizeof m[0]));
+  if ((uint32_t)cpu >= CPU_SETSIZE || sched_getaffinity(0, sizeof m, (cpu_set_t *)m) != 0 ||
+      !(m[w] & bit))
+    return -EINVAL;
+  for (uint32_t i = 0; i < w; i++) m[i] = 0;
+  m[w] = bit;
+  return sched_setaffinity(0, (w + 1) * sizeof m[0], (cpu_set_t *)m) == 0 ? 0 : -errno;
+#elif defined(__wasi__)
+  (void)cpu;
+  return -ENOSYS;
+#else
+  (void)cpu;
   return -95;
 #endif
 }

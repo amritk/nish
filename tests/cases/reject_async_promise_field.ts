@@ -1,5 +1,5 @@
 // A `Promise<T>` field: a class cannot hold a promise any more than a local
-// can (NL2619).
+// can (NL2636).
 async function load(x: i32): Promise<i32> {
   return x
 }

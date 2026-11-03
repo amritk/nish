@@ -18106,6 +18106,29 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
   }
 }
 
+// ---- A sort comparator's overflow ---------------------------------------------
+// `xs.sort(cmp)` calls the comparator directly, so its `a - b` is checked like any
+// other: [2147483647, -2] panics before the second line prints, and the
+// overflow-free comparator the docs give sorts the full range first.
+if (!only || "sort".includes(only) || "arr_sort_overflow".includes(only)) {
+  const name = "arr_sort_overflow"
+  const ll = path.join(buildDir, `${name}.ll`)
+  if (fs.existsSync(ll)) {
+    const exe = path.join(buildDir, name)
+    const cc = linkNative(exe, ll, { libm: true })
+    const run = cc.status === 0 ? spawnSync(exe) : null
+    const needle = "attempt to subtract with overflow"
+    check(
+      `${name}: the overflow-free comparator sorts, then \`a - b\` exits 1 with "${needle}"`,
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes(needle) &&
+        String(run.stdout).trim() === "-2147483648,-1,0,2147483647",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    )
+  }
+}
+
 // ---- Checked signed arithmetic ---------------------------------------------------
 // A signed `+ - *`, negation or step that leaves its type panics (exit 1) with Rust's
 // words instead of wrapping or being undefined. ovf_matrix pushes one operation over
@@ -30247,11 +30270,31 @@ if (selects("watch", "nish-run")) {
       asking = false
       await load
       const lost = answers.filter((a) => a !== "v1" && a !== "v2")
-      check(
-        "nish run --watch: a rebuilt server starts beside the old one, so no request across the swap goes unanswered",
-        swapped && lost.length === 0 && answered("v1") && answers.at(-1) === "v2",
-        `${answers.length} answers, lost: ${lost.slice(0, 5).join(" ")}; ${server.err}`,
-      )
+      // When the old server closes its listener, Linux resets every connection
+      // still waiting in that listener's accept queue unless
+      // net.ipv4.tcp_migrate_req is 1 (Linux 5.14+), which moves them to the
+      // new server's listener. Without it a connection the kernel queues on
+      // the old listener between its last accept and its close is lost,
+      // whatever the server does, and the check failed at random (#1158).
+      // CI's `test` job turns the setting on; elsewhere the check is a skip
+      // naming it rather than a coin toss.
+      const migrates = (() => {
+        try {
+          return fs.readFileSync("/proc/sys/net/ipv4/tcp_migrate_req", "utf8").trim() === "1"
+        } catch {
+          return false
+        }
+      })()
+      const swapName = "nish run --watch: a rebuilt server starts beside the old one, so no request across the swap goes unanswered"
+      if (migrates) {
+        check(
+          swapName,
+          swapped && lost.length === 0 && answered("v1") && answers.at(-1) === "v2",
+          `${answers.length} answers, lost: ${lost.slice(0, 5).join(" ")}; ${server.err}`,
+        )
+      } else {
+        skip(`${swapName}: needs net.ipv4.tcp_migrate_req=1 (sudo sysctl -w net.ipv4.tcp_migrate_req=1)`)
+      }
       check(
         "nish run --watch: a failed build leaves the running server answering",
         keeps && answers.slice(before).every((a) => a === "v2") && answers.length > before + 20,

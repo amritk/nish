@@ -49,7 +49,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -159,7 +159,7 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
+| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
@@ -852,7 +852,8 @@ export const main = (): i32 => {
   (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
   read `this` (bind `const self = this`), or read a function parameter of its
   function. An arrow inside another arrow, or given to a method, a
-  constructor, `expose` or `exposeWith`, captures nothing.
+  constructor, `expose` or `exposeWith`, captures nothing; `xs.sort(cmp)`'s
+  comparator is the exception, and captures as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -880,8 +881,8 @@ without it is untouched. Write it to these rules now and it compiles once the
 lowering ships:
 
 - `async` goes on a top-level `function` or an arrow, never a method
-  (`NL1063`). Its return type is `Promise<T>` (`NL2620`), and `Promise<T>`
-  appears nowhere else — not on a parameter, field, local or alias (`NL2619`).
+  (`NL1063`). Its return type is `Promise<T>` (`NL2637`), and `Promise<T>`
+  appears nowhere else — not on a parameter, field, local or alias (`NL2636`).
 - **`await` takes a direct call to an `async` function** (`NL2625` for a value,
   `NL2626` for a plain function's call), **at the top of a statement**: alone,
   as a `const`/`let` initializer, after `return`, or right of a plain `=`.
@@ -2177,7 +2178,12 @@ there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` i
 `string[]` only** — and, on an array of numbers only, `dst.set(src[, offset])`
 (one `memmove`; a range past the end panics) and `a.fill(v[, start[, end]])`
 (ends clamped and counted back from the end when negative, as in JavaScript;
-never panics). Both are statements. That is every array method there is. A
+never panics). Both are statements. `a.sort(cmp)` sorts in place, stably, and
+answers `a` — the same order Node gives; the comparator is required (`a.sort()`
+is refused, since JavaScript would compare strings), a readonly array and
+`process.argv` are refused, `a - b` panics on `i32` values a full range apart
+(compare with `a > b ? 1 : a < b ? -1 : 0` there), and the comparator may read the caller's `const` locals and parameters but not
+a `let`, as any arrow argument may. That is every array method there is. A
 window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),
@@ -2261,6 +2267,13 @@ system call either way. `setIdlePriority()` moves the program to Linux's `SCHED_
 `main`, never in a task. An unprivileged process can never leave `SCHED_IDLE`
 and an idle one can starve on a saturated machine, so keep a normal-priority
 fallback. Neither exists on wasm; both throw under Node.
+`setCpuAffinity(cpu)` pins the process to one CPU, narrow-only: a CPU outside
+the mask it already has is `-22`; `-95` on Darwin and under Node, refused on
+wasm. `nish/net/prefork`'s `PreforkConfig` takes `pin = true` to pin worker
+`k` to CPU `k` (more workers than CPUs panics), and `listenPort` (with
+`listenHost`, `listenBacklog`, `listenFlags` 0 or 2) to have the supervisor
+bind one `SO_REUSEPORT` listener per worker, steered on Linux by the receiving
+CPU when pinned; a worker takes its own with `preforkListener(process.argv)`.
 
 **Sockets** (`nish:net`, or the same names as globals). `tcpListen(host, port,
 backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
