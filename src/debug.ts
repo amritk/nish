@@ -416,17 +416,17 @@ export class DebugInfo {
     const members: string[] = []
     for (const f of info.fields) {
       const line = this.lineOf(info.origin, f.decl)
-      if (f.boxed) {
-        // An array's `len` and `data` stored in the object (`FieldInfo.boxed`).
-        const slice = this.arraySlice(this.table.refOf(f.type), this.table.typeName(f.type))
-        members.push(this.member(f.name, ref, slice, 128, f.offset * 8, file, line))
-        continue
-      }
-      if (f.inline()) {
-        // An array stored in the object (`src/inline-arrays.ts`): the member
-        // is the header itself, whose `data` points at the slots after it.
-        const header = this.arrayHeader(this.table.refOf(f.type), this.table.typeName(f.type))
-        members.push(this.member(f.name, ref, header, 192, f.offset * 8, file, line))
+      if (f.boxed || f.inline()) {
+        const elem = this.table.refOf(f.type)
+        const name = this.table.typeName(f.type)
+        if (f.boxed) {
+          // An array's `len` and `data` stored in the object (`FieldInfo.boxed`).
+          members.push(this.member(f.name, ref, this.arraySlice(elem, name), 128, f.offset * 8, file, line))
+        } else {
+          // An array stored in the object (`src/inline-arrays.ts`): the member
+          // is the header itself, whose `data` points at the slots after it.
+          members.push(this.member(f.name, ref, this.arrayHeader(elem, name), 192, f.offset * 8, file, line))
+        }
         continue
       }
       const base = this.typeRef(f.type)
