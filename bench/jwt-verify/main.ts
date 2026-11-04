@@ -46,13 +46,18 @@ const NOW: i64 = 1700000100
 /** One byte into FNV-1a 32, as ../crypto/lib/gen folds. */
 const jvStep = (h: u32, b: i32): u32 => (h ^ toU32(b & 255)) * 16777619
 
-/** `bytes[0 .. len)` folded into `sum`. */
+/**
+ * `bytes[0 .. len)` folded into `sum`: their position-weighted sum, then that
+ * sum's four bytes by FNV-1a. A byte-at-a-time FNV chain costs a multiply's
+ * latency a byte, as much as decoding it, and would hide the decoder; the
+ * weighted sum vectorizes and still tells a byte out of place.
+ */
 const jvFoldTo = (sum: u32, bytes: u8[], len: i32): u32 => {
-  let h: u32 = sum
+  let w: u32 = 0
   for (let i: i32 = 0; i < len && i < toI32(bytes.length); i++) {
-    h = jvStep(h, toI32(bytes[i]))
+    w = w + toU32(bytes[i]) * toU32(i + 1)
   }
-  return h
+  return jvStep(jvStep(jvStep(jvStep(sum, toI32(w)), toI32(w >> 8)), toI32(w >> 16)), toI32(w >> 24))
 }
 
 /** The claims of token `t` in `shape`. */

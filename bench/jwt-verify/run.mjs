@@ -53,16 +53,16 @@ const nishc = compilerFrom(process.argv)
  * `known`, the checksum one iteration prints, and whether it hashes.
  */
 const CASES = [
-  { label: "verify 148 B", kernel: "verify", shape: 0, known: "4e0d2bb5", sha: true },
-  { label: "verify 507 B", kernel: "verify", shape: 1, known: "9384f3ab", sha: true },
-  { label: "midstate 104 B", kernel: "midstate", shape: 0, known: "ce44b42c", sha: true },
-  { label: "midstate 463 B", kernel: "midstate", shape: 1, known: "cfa106c3", sha: true },
-  { label: "decode-server 148 B", kernel: "decode-server", shape: 0, known: "53ec404d", sha: false },
-  { label: "decode-std 148 B", kernel: "decode-std", shape: 0, known: "53ec404d", sha: false },
-  { label: "decode-old 148 B", kernel: "decode-old", shape: 0, known: "53ec404d", sha: false },
-  { label: "decode-server 507 B", kernel: "decode-server", shape: 1, known: "a3dde3ed", sha: false },
-  { label: "decode-std 507 B", kernel: "decode-std", shape: 1, known: "a3dde3ed", sha: false },
-  { label: "decode-old 507 B", kernel: "decode-old", shape: 1, known: "a3dde3ed", sha: false },
+  { label: "verify 148 B", kernel: "verify", shape: 0, known: "11532f9f", sha: true },
+  { label: "verify 507 B", kernel: "verify", shape: 1, known: "75794536", sha: true },
+  { label: "midstate 104 B", kernel: "midstate", shape: 0, known: "dc6bc4b9", sha: true },
+  { label: "midstate 463 B", kernel: "midstate", shape: 1, known: "533aedea", sha: true },
+  { label: "decode-server 148 B", kernel: "decode-server", shape: 0, known: "d8178c1f", sha: false },
+  { label: "decode-std 148 B", kernel: "decode-std", shape: 0, known: "d8178c1f", sha: false },
+  { label: "decode-old 148 B", kernel: "decode-old", shape: 0, known: "d8178c1f", sha: false },
+  { label: "decode-server 507 B", kernel: "decode-server", shape: 1, known: "4b9b2110", sha: false },
+  { label: "decode-std 507 B", kernel: "decode-std", shape: 1, known: "4b9b2110", sha: false },
+  { label: "decode-old 507 B", kernel: "decode-old", shape: 1, known: "4b9b2110", sha: false },
 ]
 /** The nanoseconds a calibrated run aims at. */
 const TARGET_NS = 200e6
