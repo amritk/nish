@@ -52,9 +52,10 @@ stamps the CPU model, its flags and the build flags.
 ## Result: the `putDecimal` cut
 
 `putDecimal` (so `paramInt`, `paramIntArray` and `arrayInt`) now writes each
-integer once, right to left, two digits a step from a 200-byte table, into the
-`pgDecimalLength(value)` bytes it reserved. The old writer wrote a digit a step
-and then reversed them. The helper, `pgPutDecimal`, checks its window once:
+integer once, right to left, into the `pgDecimalLength(value)` bytes it
+reserved. Each step takes two digits from the magnitude as a `u64`, by an
+unchecked `% 100` and `/ 100`, with no table. The old writer wrote a digit a
+step, with a checked signed `%` and `/`, and then reversed them. The helper, `pgPutDecimal`, checks its window once:
 `at + n` must fit the buffer, or it panics with "a decimal outside its room".
 Its one caller reserves the room first, so no input reaches that panic. The
 bytes written are the same for every `i64`. `tests/link/std_postgres_decimal`
