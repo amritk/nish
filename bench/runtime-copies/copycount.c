@@ -3,7 +3,7 @@
 // and its size, and the table is written to stderr at exit. README.md,
 // "Attribution", uses it for the size distributions callgrind does not give.
 //
-//   cc -O2 -shared -fPIC -o build/copycount.so bench/runtime-copies/copycount.c -ldl
+//   cc -O2 -fno-builtin -shared -fPIC -o build/copycount.so bench/runtime-copies/copycount.c -ldl
 //   node bench/runtime-copies/server.mjs --copycount build/copycount.so <h1 build> <scenario>
 //
 // server.mjs sets LD_PRELOAD, reads the table and names each caller with
@@ -14,6 +14,13 @@
 // at most (1, 2, 4, ... 4096, and `big` past it). Calls the executable's own
 // code inlines, and copies of a constant length LLVM turns into stores, never
 // reach the shim: it sees what reaches libc.
+//
+// Two limits. The table is not locked, so the counts are right only for a
+// single-threaded program (bench/http1-server.ts without BENCH_CORES is one).
+// And a caller is a return address: a function that ends in a tail call to
+// `memcpy` has no frame left, so its copies count against its own caller.
+// `-fno-builtin` keeps the compiler from turning `bytes` below back into a
+// call to `memcpy`, which would reach this shim again.
 
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -68,8 +75,9 @@ static void count(uintptr_t caller, unsigned kind, size_t n) {
 
 /** A byte loop for the calls dlsym makes before the real functions are known. */
 static void *bytes(void *d, const void *s, size_t n) {
-  unsigned char *dp = d;
-  const unsigned char *sp = s;
+  // Volatile as well as -fno-builtin: no loop here may become a `memcpy` call.
+  volatile unsigned char *dp = d;
+  const volatile unsigned char *sp = s;
   if (dp < sp) {
     for (size_t i = 0; i < n; i++) {
       dp[i] = sp[i];

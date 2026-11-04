@@ -15,7 +15,10 @@
 //                        --cache-sim=no, NISH_SIMD=base and glibc's string
 //                        functions pinned: a run of 2N iterations less a run
 //                        of N, over N, so start-up cancels. The figure
-//                        README.md's tables rest on
+//                        README.md's tables rest on. bench/run.mjs also
+//                        preloads fixed-key.so, for the `Map` and `Set`
+//                        hash key; main.ts hashes no string, so it has no
+//                        key to pin
 //     --rounds N         timed rounds a case runs at least (default 11); the
 //                        median is reported with the min–max spread
 //     --cpu <cpu>        x86-64, the baseline and the default, or x86-64-v3,
@@ -217,15 +220,33 @@ const PINNED_SIMD = "base"
 /** The instruction counter, named once (knip reads a literal in a spawn as an unlisted binary). */
 const VALGRIND = "valgrind"
 
+/**
+ * `tool` as an absolute path from this process's PATH, or null: a count's
+ * environment is the pinned variables alone, PATH dropped, so the child is
+ * named by its path, as bench/run.mjs names it.
+ */
+const which = (tool) => {
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+    const p = path.join(dir, tool)
+    try {
+      fs.accessSync(p, fs.constants.X_OK)
+      return p
+    } catch {
+      // Not there, or not executable: try the next directory.
+    }
+  }
+  return null
+}
+
 /** The iterations the shorter of a count's two runs takes; the longer takes twice. */
 const COUNT_ITERATIONS = 500
 
 /** The instructions `main <case> <iterations>` executes under cachegrind, the whole process. */
-const countRun = (column, c, iterations) => {
+const countRun = (valgrind, column, c, iterations) => {
   const dir = path.dirname(column.bin)
   const file = path.join(dir, `${path.basename(column.bin)}-${c.name}-${iterations}.cachegrind`)
   const r = spawnSync(
-    VALGRIND,
+    valgrind,
     [
       "--tool=cachegrind",
       "--cache-sim=no",
@@ -254,7 +275,8 @@ const countRun = (column, c, iterations) => {
 }
 
 if (instructions) {
-  if (spawnSync(VALGRIND, ["--version"]).status !== 0) {
+  const valgrind = which(VALGRIND)
+  if (valgrind === null || spawnSync(valgrind, ["--version"]).status !== 0) {
     fail("--instructions needs valgrind on PATH")
   }
   const counted = columns.filter((col) => !col.id.endsWith("-copy"))
@@ -270,7 +292,8 @@ if (instructions) {
     let nish = 0
     for (const col of counted) {
       const per =
-        (countRun(col, c, 2 * COUNT_ITERATIONS) - countRun(col, c, COUNT_ITERATIONS)) / COUNT_ITERATIONS
+        (countRun(valgrind, col, c, 2 * COUNT_ITERATIONS) - countRun(valgrind, col, c, COUNT_ITERATIONS)) /
+        COUNT_ITERATIONS
       if (col.id === "nish") {
         nish = per
       }

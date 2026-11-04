@@ -2396,10 +2396,12 @@ as the noise band. The figures for Zmij against Ryu are in
 
 ## Stdlib microbenchmarks
 
-Each of these programs times one stdlib path on its own, under callgrind for
+Each of these programs times one stdlib path on its own, under valgrind for
 `Ir` and in interleaved rounds against a byte-identical copy for wall time.
-Each README holds the measurements and what is left to cut. The four marked
-with a pull request land with it.
+Each README holds the measurements and what is left to cut, and says which
+valgrind tool counted them: `runtime-copies` counts with cachegrind
+(`--cache-sim=no`) and attributes with callgrind. The pull request each landed
+in is in parentheses.
 
 - [`sha256-block/`](sha256-block/README.md): SHA-256 compression, HMAC and
   HS256, against OpenSSL. Its section
@@ -2413,7 +2415,7 @@ with a pull request land with it.
   parameters, a pooled query and a row set (#1191).
 - [`runtime-copies/`](runtime-copies/README.md): the copies and bounds checks
   the four above spend their time on, attributed by caller and size, each
-  shape alone in a loop, and the ranked list of what is left to cut.
+  shape alone in a loop, and the ranked list of what is left to cut (#1192).
 
 ## Other files
 

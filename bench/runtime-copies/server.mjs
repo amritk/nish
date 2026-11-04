@@ -50,6 +50,16 @@ const SCENARIOS = {
   "deep-route": { path: "/v1/orgs/acme/projects/api/builds/97/artifacts" },
 }
 
+/** The server, once spawned: killed on every way out, so no run leaves one listening. */
+let child = null
+process.on("exit", () => {
+  if (child !== null && child.exitCode === null && child.signalCode === null) {
+    child.kill("SIGKILL")
+  }
+})
+process.on("SIGINT", () => process.exit(130))
+process.on("SIGTERM", () => process.exit(143))
+
 const fail = (msg) => {
   console.error(`bench/runtime-copies/server.mjs: ${msg}`)
   process.exit(2)
@@ -88,7 +98,11 @@ const request = (at) => {
 }
 
 const port = 20000 + (process.pid % 20000)
+// One core and no tuning, as bench/http.mjs runs a server without --cores: an
+// exported BENCH_CORES or BENCH_QUICKACK is dropped.
 const env = { ...process.env }
+delete env.BENCH_CORES
+delete env.BENCH_QUICKACK
 let cmd = exe
 let args = [String(port), "64", String(requests)]
 if (callgrind !== null) {
@@ -99,7 +113,7 @@ if (callgrind !== null) {
 if (copycount !== null) {
   env.LD_PRELOAD = copycount
 }
-const child = spawn(cmd, args, { env, stdio: ["ignore", "pipe", "pipe"] })
+child = spawn(cmd, args, { env, stdio: ["ignore", "pipe", "pipe"] })
 let stderr = ""
 child.stderr.on("data", (d) => {
   stderr += d
@@ -120,7 +134,8 @@ await new Promise((resolve) => {
 })
 
 const socket = net.connect(port, "127.0.0.1")
-await new Promise((resolve, reject) => socket.once("connect", resolve).once("error", reject))
+socket.on("error", (e) => fail(`the connection: ${e.message}`))
+await new Promise((resolve) => socket.once("connect", resolve))
 const wire = request(port)
 let pending = Buffer.alloc(0)
 let answered = 0
@@ -163,24 +178,28 @@ if (copycount !== null) {
   const sites = [
     ...stderr.matchAll(/^copycount (\w+) caller ([0-9a-f]+) calls (\d+) bytes (\d+) sizes (.*)$/gm),
   ]
-  const addrs = sites.map((m) => `0x${(Number.parseInt(m[2], 16) - 1).toString(16)}`)
+  // Caller 0 is outside the executable, so it is not symbolized.
+  const inside = sites.filter((m) => m[2] !== "0")
+  const addrs = inside.map((m) => `0x${(Number.parseInt(m[2], 16) - 1).toString(16)}`)
   // `-a -f -i`: each address, then its inline chain innermost first, each a
   // name and a line; the outermost name is the function the call sits in (a
   // fortified `memcpy` inline from string.h would otherwise name itself).
-  const symbolized = spawnSync(ADDR2LINE, ["-a", "-f", "-i", "-C", "-e", exe, ...addrs], {
-    encoding: "utf8",
-  }).stdout
-  const names = symbolized
+  const symbolized =
+    addrs.length === 0
+      ? ""
+      : spawnSync(ADDR2LINE, ["-a", "-f", "-i", "-C", "-e", exe, ...addrs], { encoding: "utf8" }).stdout
+  const chains = symbolized
     .split(/^0x[0-9a-f]+\n/m)
     .slice(1)
     .map((chain) => {
       const lines = chain.trimEnd().split("\n")
       return lines[lines.length - 2] ?? "??"
     })
+  const nameOf = new Map(inside.map((m, i) => [m, chains[i] ?? "??"]))
   const byCaller = new Map()
-  sites.forEach((m, i) => {
-    const outside = m[2] === "0" || names[i] === "??"
-    const key = `${m[1]} from ${outside ? "outside the executable (libc, the loader)" : names[i]}`
+  for (const m of sites) {
+    const caller = nameOf.get(m) ?? "??"
+    const key = `${m[1]} from ${caller === "??" ? "outside the executable (libc, the loader)" : caller}`
     const s = byCaller.get(key) ?? { calls: 0, bytes: 0, sizes: new Map() }
     s.calls += Number(m[3])
     s.bytes += Number(m[4])
@@ -189,7 +208,7 @@ if (copycount !== null) {
       s.sizes.set(k, (s.sizes.get(k) ?? 0) + Number(v))
     }
     byCaller.set(key, s)
-  })
+  }
   const rows = [...byCaller].sort((a, b) => b[1].calls - a[1].calls)
   for (const [key, s] of rows) {
     const sizes = [...s.sizes].map(([k, v]) => `<=${k}:${v}`).join(" ")

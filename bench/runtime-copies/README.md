@@ -90,6 +90,16 @@ how to run it); sizes do not depend on the pinning.
 Before the cut, `hs256`'s libc share was 5.35% (not pinned), most of it
 `base64urlEncode`'s `join("")`: one call per one-byte part.
 
+`nish_main` in the `http1-request` rows is not the bench's own code. It is two
+library copies inlined into the bench's loop, so callgrind names the loop
+(addr2line on a `-g` build gives the chain). One is `Http1Connection.feed`
+copying the read into the parser's input, through `Http1Parser.feed` and
+`copyBytes`: 756 bytes an iteration of `browser`, one call. The other is
+`Http1Connection.write` copying the response body, through
+`http1ServerCopy`: 20 bytes, one call. The feed stands in for the socket
+read a server makes, so it is real work, and it is already at libc's bulk
+rate; the body write is one small copy. No candidate below covers either.
+
 ### `http1-server`
 
 `bench/http1-server.ts` is the server `bench/http.mjs` drives with `wrk`.
@@ -102,7 +112,7 @@ of 2000, over 2000, so start-up (about 1.24M `Ir`) cancels.
 build/nish bench/http1-server.ts -o build/h1/ --link build/h1/h1 --profile speed -g
 node bench/runtime-copies/server.mjs --callgrind cg.2000 build/h1/h1 plaintext 2000
 node bench/runtime-copies/server.mjs --callgrind cg.4000 build/h1/h1 plaintext 4000
-cc -O2 -shared -fPIC -o build/copycount.so bench/runtime-copies/copycount.c -ldl
+cc -O2 -fno-builtin -shared -fPIC -o build/copycount.so bench/runtime-copies/copycount.c -ldl
 node bench/runtime-copies/server.mjs --copycount build/copycount.so build/h1/h1 plaintext 2000
 ```
 
@@ -182,8 +192,10 @@ strings, and it moves by that much between runs of the same build.
 
 ### Wall time
 
-Four runs, 16 interleaved rounds of four columns each. Medians, ns per
-iteration of `chars`, with the min–max spread.
+16 interleaved rounds of four columns a run. Medians, ns per iteration of
+`chars`, with the min–max spread. Run 3 times the `main.ts` this README ships;
+runs 1 and 2 predate its checksum change, which folds the whole joined string
+where they folded part of it, so their figures are not on the same work.
 
 CPU: Intel Xeon Processor @ 2.10GHz, 4 cores, with avx2, bmi2, avx512f and
 sha_ni. Ubuntu clang 18, `--profile speed`.
@@ -194,17 +206,12 @@ sha_ni. Ubuntu clang 18, `--profile speed`.
 | 2 | `x86-64` | 279.8 (237.3–368.4) | 380.4 (307.4–453.8) | +35.9% | ±2.2% |
 | 1 | `x86-64-v3` | 283.1 (265.6–336.3) | 393.3 (335.3–497.6) | +38.9% | ±5.1% |
 | 2 | `x86-64-v3` | 285.9 (216.3–398.3) | 394.3 (319.8–457.0) | +37.9% | ±0.6% |
+| 3 | `x86-64` | 288.0 (212.6–359.1) | 416.6 (359.3–514.1) | +44.6% | ±8.9% |
 
-The base build is 27–39% slower in every run, on both CPUs, and always
-outside the band. The other four cases do not use `join`, and their pinned
-instruction counts are identical in both builds. Their wall times sometimes
-strayed past a band, in either direction: `small-copies` −11.1% (run 2,
-`x86-64-v3`, bands ±4.7% and ±4.2%), `checked` −6.0% (run 2, `x86-64`, bands
-±1.4% and ±1.3%), `grow` +5.8% (run 2, `x86-64-v3`, base band ±5.6%) and
-`json-strings` +13.3% (run 2, `x86-64-v3`, base band ±13.0%). With the same
-instructions, that is code placement and machine noise, not a gain or a loss.
-These wall times predate the checksum change in `main.ts`; the work timed is
-the same apart from `json-strings`' longer values.
+The base build is 27–45% slower in every run, on both CPUs, and always
+outside the band (run 3's widest band is nish's ±8.9%; base's is ±1.1%). The
+other four cases do not use `join`, and their pinned instruction counts are
+identical in both builds, so their wall times are not compared here.
 
 ## What is left, ranked
 
@@ -214,8 +221,8 @@ would remove; the derivation is in the row. None of them was built here.
 
 | # | Candidate | Where the fix lives | Estimate |
 | --- | --- | --- | --- |
-| 1 | `base64urlEncode` writing a `u8[]` and ending in one `String.fromBytes`, instead of a `string` per character and a `join`. The function is still 21.1% of `hs256` `Ir` inclusive after the cut (16.4% in itself, the rest its runtime helpers), mostly allocating, pushing and joining the one-byte strings | `std/crypto/base64url.ts` (the crypto stage; read-only here). It must keep the encoder's constant-time rule: the character byte is stored, never used as an address | about −10 to −13% of `hs256`: the 21.1% less the 6-bit arithmetic and one store a byte that stay, taken as 40–50% of it. The encode half of `jwt-verify` gains the same per byte |
-| 2 | `nish_plain_base` fused scan and copy: the JSON writer scans a string run for bytes to escape, then copies it. One pass would do both | `runtime/runtime-bytes.c` and `std/json.ts` | about −1 to −1.5% of `http1-request json4k` (2.48% today, at about 118 Ir a call) |
+| 1 | `base64urlEncode` writing a `u8[]` and ending in one `String.fromBytes`, instead of a `string` per character and a `join`. The function is still 21.1% of `hs256` `Ir` inclusive after the cut (16.4% in itself, the rest its runtime helpers), mostly allocating, pushing and joining the one-byte strings | `std/crypto/base64url.ts` (the crypto stage; read-only here). It must keep the encoder's constant-time rule: the character byte is stored, never used as an address | about −10.5 to −12.7% of `hs256`: half to 60% of the 21.1% goes. The 6-bit arithmetic and one store a byte stay, taken as the other 40–50%. The encode half of `jwt-verify` gains the same per byte |
+| 2 | `nish_plain_base` fused scan and copy: the JSON writer scans a string run for bytes to escape, then copies it. One pass would do both | `runtime/runtime-bytes.c` and `std/json.ts` | about −1 to −1.5% of `http1-request json4k`: 40–60% of `nish_plain_base`'s 2.51% (about 118 Ir a call) goes. The scan stays; the separate copy pass, which reads the run again, goes |
 | 3 | `nish_array_grow` from a known final size: `hs256` grows arrays whose length is fixed by the input | the std modules that build them (`std/crypto`, `std/bytes.ts`), or a reserve hint in the emitter | at most −2.2% of `hs256`, its whole inclusive share (1.21% in itself, 0.98% in the copies it makes); one allocation stays, so less in practice. `pg-decode rows` grows almost nothing (under 0.01%) |
 | 4 | `http1HeadAppend` building the head in place rather than `memmove`-ing it (73 bytes average) | `std/net/http1-codec.ts` (the net stage) | about −1% of `http1-request browser` and −0.7% of `api`: its `memmove` is 2.10% and 1.33%, and the bytes must still be written once, taken as half |
 | 5 | `join`'s separator copy of one byte (`join(",")`): the same test as the cut, on the separator | `src/emit-arrays.ts` | about 16 Ir a part, only where the separator is one byte and not constant. No measured program has one hot |
