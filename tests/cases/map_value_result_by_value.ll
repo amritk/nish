@@ -805,18 +805,30 @@ join.part:
   %403 = bitcast i8* %402 to i64*
   %404 = load i64, i64* %403, align 8
   %405 = getelementptr inbounds i8, i8* %402, i64 8
+  %406 = icmp eq i64 %404, 1
+  br i1 %406, label %join.byte, label %join.bulk
+
+join.byte:
+  %407 = load i8, i8* %405, align 1
+  store i8 %407, i8* %397, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %397, i8* %405, i64 %404, i1 false)
-  %406 = getelementptr inbounds i8, i8* %397, i64 %404
-  store i8* %406, i8** %join.p, align 8
-  %407 = add i64 %391, 1
-  store i64 %407, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %408 = getelementptr inbounds i8, i8* %397, i64 %404
+  store i8* %408, i8** %join.p, align 8
+  %409 = add i64 %391, 1
+  store i64 %409, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %408 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %408, align 1
-  %409 = call i8* @nish_str_concat(i8* %362, i8* %388)
-  call void @nish_print(i8* %409)
+  %410 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %410, align 1
+  %411 = call i8* @nish_str_concat(i8* %362, i8* %388)
+  call void @nish_print(i8* %411)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
