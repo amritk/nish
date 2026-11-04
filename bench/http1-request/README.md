@@ -50,20 +50,20 @@ same with `--cpu x86-64-v3`. `base` is `main` with the head-writer cut
 
 | Case | x86-64 nish | x86-64 base | base vs nish | x86-64-v3 nish | x86-64-v3 base | base vs nish |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `browser` | 11,471 | 12,236 | +6.7% | 12,728 | 13,720 | +7.8% |
-| `api` | 9,062 | 9,584 | +5.8% | 9,568 | 10,248 | +7.1% |
-| `short` | 3,872 | 3,859 | −0.3% | 3,862 | 3,876 | +0.4% |
-| `pipelined` | 10,025 | 10,670 | +6.4% | 10,904 | 11,741 | +7.7% |
-| `split` | 11,811 | 12,574 | +6.5% | 13,075 | 14,065 | +7.6% |
-| `json1k` | 21,723 | 21,710 | −0.1% | 21,590 | 21,604 | +0.1% |
-| `json4k` | 74,530 | 74,517 | −0.0% | 73,990 | 74,004 | +0.0% |
-| `json16k` | 294,531 | 294,518 | −0.0% | 292,278 | 292,292 | +0.0% |
-| `json40k` | 734,879 | 734,866 | −0.0% | 729,194 | 729,208 | +0.0% |
+| `browser` | 11,455 | 12,236 | +6.8% | 12,692 | 13,720 | +8.1% |
+| `api` | 9,039 | 9,584 | +6.0% | 9,536 | 10,248 | +7.5% |
+| `short` | 3,872 | 3,859 | −0.3% | 3,858 | 3,876 | +0.5% |
+| `pipelined` | 10,006 | 10,670 | +6.6% | 10,871 | 11,741 | +8.0% |
+| `split` | 11,794 | 12,574 | +6.6% | 13,037 | 14,065 | +7.9% |
+| `json1k` | 21,723 | 21,710 | −0.1% | 21,586 | 21,604 | +0.1% |
+| `json4k` | 74,530 | 74,517 | −0.0% | 73,986 | 74,004 | +0.0% |
+| `json16k` | 294,531 | 294,518 | −0.0% | 292,274 | 292,292 | +0.0% |
+| `json40k` | 734,879 | 734,866 | −0.0% | 729,190 | 729,208 | +0.0% |
 
-The cut scales with the field names: 765 fewer a `browser` request (nine
-names) at x86-64 and 992 at x86-64-v3, 522 and 680 on `api`. `short` and
+The cut scales with the field names: 781 fewer a `browser` request (nine
+names) at x86-64 and 1,028 at x86-64-v3, 545 and 712 on `api`. `short` and
 the `json*` cases have one name, `Host`, one vector whose set-up costs about
-what four bytes of the byte loop did: 13 more at x86-64, 14 fewer at
+what four bytes of the byte loop did: 13 more at x86-64, 18 fewer at
 x86-64-v3.
 With `NISH_SIMD=base` and `GLIBC_TUNABLES` pinned, as `bench/run.mjs` pins
 them, these counts are deterministic; they rank the change.
