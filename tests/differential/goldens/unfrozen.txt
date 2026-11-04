@@ -508,6 +508,7 @@ cases/str_from_bytes_lifetime added after R6: no rewriter to freeze it with
 cases/str_from_bytes_ways added after R6: no rewriter to freeze it with
 cases/str_index_of_from added after R6: no rewriter to freeze it with
 cases/str_index_of_from_port added after R6: no rewriter to freeze it with
+cases/str_join_byte_parts added after R6: no rewriter to freeze it with
 cases/str_surrogate_lone added after R6: no rewriter to freeze it with
 cases/str_surrogate_map_key added after R6: no rewriter to freeze it with
 cases/str_surrogate_pair added after R6: no rewriter to freeze it with
