@@ -12,7 +12,7 @@ was checked, how, what was found, and which test pins each answer. Base is
 | `src/attributes.ts` | the whole-program fixpoint (`collectFacts`, `propagate`, `propagateCallee`), every attribute it emits (`readnone`/`readonly`, `willreturn`, `nounwind`, `nocapture`, `dereferenceable`, `align`), and the array facts (`collectArrayFacts`) |
 | `src/escape.ts` | allocation sites (`visitCall`, `isAllocatingBuiltin`), flows (`flowTarget`, `assignedLocal`, `useOutcome`), the function arena scope, and the per-pass loop scope (`PassWalk.isOld`) |
 | `src/parallel.ts` | the `parallelMapInto` / `parallelReduce` rules (`sharedWriteMessage`, `reachesDstMessage`, `resultMessage`, `arenaMessage`, `escapeMessage`, `reduceMessage`) and the `scope()` region rules (`collectUses`, `walkRegion`, `regionCallMessage`, `checkDestinations`) |
-| `src/emit-arrays.ts` | `emitNewArray`, `emitArrayLength`, `emitBoundsCheck`, `emitElementAssignment`, `push` and `join` |
+| `src/emit-arrays.ts` | `emitNewArray` and its boxed-field twin `emitBoxedArrayAssignment` (same `emitNewArrayLength` check; `tests/link/cg_sec_boxed_new_array`), `emitArrayLength`, `emitBoundsCheck`, `emitElementAssignment`, `push` and `join` |
 | `runtime/runtime.c` | `nish_alloc_struct`, `nish_arena_grow`, `nish_alloc_array`, `nish_array_grow` |
 
 Read beside them, without owning them: `src/emit-ops.ts` (`nsw`), the

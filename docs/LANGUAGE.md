@@ -6572,10 +6572,11 @@ program:
   than a few dozen times per assignment is therefore slower inline; the
   measurement is in the header of `src/inline-arrays.ts`.
 
-**A field that passes every condition but the last two is boxed.** When some
-assignment's length is unknown (`new Array<T>(n)` with a parameter `n`, a
-fresh-returning call passed a non-literal) or `K` elements would pass 256
-bytes, the object holds only the array's length and data pointer, 16 bytes as
+**A field that fails only on its lengths is boxed.** When every condition
+holds except that some assignment's fresh array has a length the compiler does
+not know (`new Array<T>(n)` with a parameter `n`, a fresh-returning call
+passed a non-literal), or except that `K` elements would pass 256 bytes, the
+object holds only the array's length and data pointer, 16 bytes as
 `{ i64, i8* }`, and the elements are one block of their own
 (`tests/cases/cls_boxed_array`). Against the pointer layout this drops the
 separate 24-byte header and its allocation: an object with a boxed field is 8

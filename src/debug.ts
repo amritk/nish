@@ -459,8 +459,11 @@ export class DebugInfo {
     )
   }
 
-  /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
-  /** A boxed array field's `{ len, data }` (`FieldInfo.boxed`), 128 bits. */
+  /**
+   * A boxed array field's `{ len, data }` (`FieldInfo.boxed`), 128 bits,
+   * named `<T[]> slice` so that no debugger takes it for the header of the
+   * same element type.
+   */
   arraySlice(elem: i32, name: string): string {
     const ref = this.module.reserveMetadata()
     const members: string[] = []
@@ -469,11 +472,12 @@ export class DebugInfo {
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
-      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(name)}, file: ${this.file}, size: 128, align: 64, elements: ${elements})`
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(`${name} slice`)}, file: ${this.file}, size: 128, align: 64, elements: ${elements})`
     )
     return ref
   }
 
+  /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
   arrayHeader(elem: i32, name: string): string {
     const ref = this.module.reserveMetadata()
     const long = this.typeRef(T_I64)

@@ -4,7 +4,16 @@
 // fresh right-hand sides reach it: a literal, `new Array<T>(n)` with a
 // length known only at run time, and a call proven to return a fresh array
 // whose length is its parameter. `.length` and indexing read the slice in
-// the object directly.
+// the object directly. `Big` is boxed for the other reason: its length is a
+// literal, but 65 `i32` slots would pass the 256 bytes an inline field may take.
+class Big {
+  slots: i32[];
+
+  constructor() {
+    this.slots = new Array<i32>(65);
+  }
+}
+
 class Window {
   samples: i32[];
   count: i32 = 0;
@@ -47,5 +56,8 @@ export const main = (): number => {
   w.resize(5);
   w.samples[0] += 10;
   console.log(`${w.samples.length} ${w.sum()}`);
+  const b = new Big();
+  b.slots[64] = 7;
+  console.log(`${b.slots.length} ${b.slots[64]}`);
   return 0;
 };
