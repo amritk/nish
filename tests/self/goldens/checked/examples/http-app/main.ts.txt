@@ -2500,20 +2500,20 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   local -5:9 end: i32 (const)
   local -4:7 i: i32 (let)
   local +2:9 stop: i32 (const)
-  local +10:9 found: boolean (let)
-  local +12:13 v: u8x16 (const)
-  local +13:13 low: u64 (const)
-  callee +13:24 http1ControlBits -> @nish.http1ControlBits
-  callee +13:41 http1Lanes -> @nish.http1Lanes
-  callee +15:14 http1FirstByte -> @nish.http1FirstByte
-  local +18:15 high: u64 (const)
-  callee +18:27 http1ControlBits -> @nish.http1ControlBits
-  callee +18:44 http1Lanes -> @nish.http1Lanes
-  callee +20:20 http1FirstByte -> @nish.http1FirstByte
-  local +33:9 c: i32 (let)
-  callee +42:16 http1Fail -> @nish.http1Fail
-  callee +45:16 http1Fail -> @nish.http1Fail
-  callee +65:12 http1Fail -> @nish.http1Fail
+  local +11:9 found: boolean (let)
+  local +13:13 v: u8x16 (const)
+  local +14:13 low: u64 (const)
+  callee +14:24 http1ControlBits -> @nish.http1ControlBits
+  callee +14:41 http1Lanes -> @nish.http1Lanes
+  callee +16:14 http1FirstByte -> @nish.http1FirstByte
+  local +19:15 high: u64 (const)
+  callee +19:27 http1ControlBits -> @nish.http1ControlBits
+  callee +19:44 http1Lanes -> @nish.http1Lanes
+  callee +21:20 http1FirstByte -> @nish.http1FirstByte
+  local +34:9 c: i32 (let)
+  callee +43:16 http1Fail -> @nish.http1Fail
+  callee +46:16 http1Fail -> @nish.http1Fail
+  callee +66:12 http1Fail -> @nish.http1Fail
 function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
