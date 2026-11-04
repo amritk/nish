@@ -76,20 +76,20 @@ function free<i32[]>(_r: Region<i32[]>): void -> @nish.free$arr.i32 [exported in
   sharedWrite: foreign
   stackSites=0 stackLocals=0
 function reopen<Session>(r: Region<Session>): Session -> @nish.reopen$$Session [instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=24
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: foreign
   stackSites=0 stackLocals=0
   callee +0:40 reopen<Session> -> @nish.reopen$$Session
 function leave<Session>(r: Region<Session>, root: Session): void -> @nish.leave$$Session [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
-  pointer root: size=24 writesThrough=false captured=true
+  pointer root: size=32 writesThrough=false captured=true
   stackSites=0 stackLocals=0
   callee +0:51 leave<Session> -> @nish.leave$$Session
 function close<Session>(h: i64, root: Session): Region<Session> -> @nish.close$$Session [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
-  pointer root: size=24 writesThrough=false captured=true
+  pointer root: size=32 writesThrough=false captured=true
   stackSites=0 stackLocals=0
   callee +0:50 close<Session> -> @nish.close$$Session
 function close<i32[]>(h: i64, root: i32[]): Region<i32[]> -> @nish.close$arr.i32 [instance]
@@ -417,17 +417,17 @@ import free from "nish:region" -> generic function free
 import region from "nish:region" -> generic function region
 import regionWith from "nish:region" -> generic function regionWith
 import Map from "nish/collections" -> generic class Map
-struct Session (class) size=24 align=8
+struct Session (class) size=32 align=8
   field id: i64 index=0 offset=0
   field hits: i32 index=1 offset=8 initialized
-  field payload: u8[] index=2 offset=16
+  field payload: u8[] index=2 offset=16 boxed
   constructor -> @Session.constructor
-struct Cache (class) size=32 align=8
+struct Cache (class) size=40 align=8
   field regions: Map<i64, Region<Session>> index=0 offset=0
-  field order: i64[] index=1 offset=8
-  field head: i32 index=2 offset=16 initialized
-  field held: i32 index=3 offset=20 initialized
-  field reused: i32 index=4 offset=24 initialized
+  field order: i64[] index=1 offset=8 boxed
+  field head: i32 index=2 offset=24 initialized
+  field held: i32 index=3 offset=28 initialized
+  field reused: i32 index=4 offset=32 initialized
   constructor -> @Cache.constructor
   method get -> @Cache.get
   method hits -> @Cache.hits
@@ -435,7 +435,7 @@ function Session.constructor(this: Session, id: i64, size: i32): void -> @Sessio
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: id size
   calls: nish_panic nish_panic_index
-  pointer this: size=24 writesThrough=true captured=false
+  pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:14 k: i32 (let)
 function payloadSize(id: i64): i32 -> @payloadSize
@@ -443,7 +443,7 @@ function payloadSize(id: i64): i32 -> @payloadSize
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function open(id: i64): Session -> @open$
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
   escaping: id
   calls: Session.constructor nish_alloc_struct payloadSize
   stackSites=0 stackLocals=0
@@ -453,19 +453,19 @@ function serve(s: Session, out: u8[]): i32 -> @serve$
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: nish_panic_overflow
-  pointer s: size=24 writesThrough=true captured=false
+  pointer s: size=32 writesThrough=true captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +1:12 k: i32 (let)
 function hitsOf(s: Session): i32 -> @hitsOf$
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer s: size=24 writesThrough=false captured=false
+  pointer s: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Cache.constructor(this: Cache, live: i32): void -> @Cache.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: live
   calls: nish.Map$i64$rgn.$Session.constructor nish_alloc_struct nish_panic
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:20 new Map<i64, Region<Session>> -> @nish.Map$i64$rgn.$Session.constructor
 function Cache.get(this: Cache, id: i64, out: u8[]): i32 -> @Cache.get [method]
@@ -473,7 +473,7 @@ function Cache.get(this: Cache, id: i64, out: u8[]): i32 -> @Cache.get [method]
   sharedWrite: +0:7
   escaping: id
   calls: nish.Map$i64$rgn.$Session.delete nish.Map$i64$rgn.$Session.probe nish.Map$i64$rgn.$Session.set nish.Map$i64$rgn.$Session.valueAt nish.enterWith$$Session$arr.u8$i32$fn.5.serve nish.free$$Session nish.regionWith$i64$$Session$fn.4.open nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=40 writesThrough=true captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.enterWith$$Session$arr.u8$i32$fn.5.serve#1 nish.enterWith$$Session$arr.u8$i32$fn.5.serve#1
   stackSites=0 stackLocals=0
   local -2:11 hit: Region<Session> | undefined (const)
@@ -493,7 +493,7 @@ function Cache.hits(this: Cache, id: i64): i32 -> @Cache.hits [method]
   sharedWrite: via nish.enter$$Session$i32$fn.6.hitsOf
   escaping: id
   calls: nish.Map$i64$rgn.$Session.probe nish.Map$i64$rgn.$Session.valueAt nish.enter$$Session$i32$fn.6.hitsOf
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 r: Region<Session> | undefined (const)
   callee +0:15 Map<i64, Region<Session>>.probe -> @nish.Map$i64$rgn.$Session.probe

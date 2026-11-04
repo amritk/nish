@@ -6542,7 +6542,8 @@ program:
   calling any method on it — `push` and `pop` included — keeps today's layout
   (`cls_inline_array_local`, `cls_inline_array_push`, `cls_inline_array_passed`).
 - **Every assignment's length is a literal.** A length the compiler does not
-  know keeps today's layout (`cls_inline_array_dynamic`).
+  know cannot size a slot, and the field is boxed instead (below,
+  `cls_inline_array_dynamic`).
 - **No element access can reassign the field under itself.** `x.f[i]`
   evaluates `x.f` before `i`, and `x.f[i] = v` before `v`; when the index or
   the value calls something that can assign `f` (directly or through its own
@@ -6570,6 +6571,22 @@ program:
   the same at 8 slots as at 64. A field reassigned from a call and read fewer
   than a few dozen times per assignment is therefore slower inline; the
   measurement is in the header of `src/inline-arrays.ts`.
+
+**A field that fails only on its lengths is boxed.** When every condition
+holds except that some assignment's fresh array has a length the compiler does
+not know (`new Array<T>(n)` with a parameter `n`, a fresh-returning call
+passed a non-literal), or except that `K` elements would pass 256 bytes, the
+object holds only the array's length and data pointer, 16 bytes as
+`{ i64, i8* }`, and the elements are one block of their own
+(`tests/cases/cls_boxed_array`). Against the pointer layout this drops the
+separate 24-byte header and its allocation: an object with a boxed field is 8
+bytes larger and its array 24 bytes smaller, and `this.f[i]` loads `data` from
+`this` directly instead of first loading the header's address. A literal or
+`new Array` allocates the data block alone; an assignment from a call takes the
+`len` and `data` of the array the call made. Reference semantics are unchanged
+for the same reason as inline: no one else ever holds the array. A field taken
+as a value anywhere, `push` included, keeps the pointer layout
+(`cls_boxed_array_push`).
 
 Why reference semantics are unchanged: the object is still a pointer, so a
 class holding an inline field can be stored in arrays and passed around as

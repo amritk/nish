@@ -94,12 +94,18 @@ export const roundUpTo = (value: i32, align: i32): i32 => {
 /** Bytes of the `struct nish_array` header an inline array field starts with (`len`, `cap`, `data`). */
 const INLINE_HEADER_BYTES: i32 = 24
 
+/** Bytes of a boxed array field (`FieldInfo.boxed`): `len` and `data`. */
+const SLICE_BYTES: i32 = 16
+
 /**
  * The alignment one field needs: its value's, or for an inline array field
  * the larger of the header's 8 and its slots' own, as the LLVM literal struct
  * `{ %struct.nish_array, [K x T] }` is aligned. A vector slot asks sixteen.
  */
 const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
+  if (field.boxed) {
+    return 8
+  }
   if (!field.inline()) {
     return table.alignOf(field.type)
   }
@@ -116,6 +122,9 @@ const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
  * element type.
  */
 const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
+  if (field.boxed) {
+    return SLICE_BYTES
+  }
   if (!field.inline()) {
     return table.alignOf(field.type)
   }

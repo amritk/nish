@@ -66,7 +66,7 @@ import { simdSuffix, simdTypeLane } from "./nish-modules"
 import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructInfo } from "./program"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
-import { elementTbaa, headerTbaa } from "./tbaa"
+import { elementTbaa, headerTbaa, sliceTbaa } from "./tbaa"
 import {
   accessAlign,
   ARRAY_STRUCT,
@@ -83,6 +83,8 @@ import {
 const HEADER: string = ARRAY_STRUCT
 const HEADER_PTR: string = "%struct.nish_array*"
 const HEADER_BYTES: i32 = 24
+/** A boxed array field's member (`FieldInfo.boxed`): `len`, then `data`. */
+export const SLICE_TYPE: string = "{ i64, i8* }"
 const MEMSET: string = "llvm.memset.p0i8.i64"
 const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64"
 const MEMMOVE: string = "llvm.memmove.p0i8.p0i8.i64"
@@ -219,10 +221,16 @@ class ArrayBase {
   owner: StructInfo | null
   receiver: string
   field: FieldInfo | null
+  /**
+   * Whether `arr` is a boxed field's `{ i64, i8* }` inside its object rather
+   * than a header (`FieldInfo.boxed`): `len` is member 0 and `data` member 1.
+   */
+  slice: boolean
 
   constructor(arr: string, header: HoistedHeader | null) {
     this.arr = arr
     this.header = header
+    this.slice = false
     this.owner = null
     this.receiver = ""
     this.field = null
@@ -355,7 +363,7 @@ const inlineField = (emitter: Emitter, expr: Node): FieldInfo | null => {
     return null
   }
   const field = info.field(e.text)
-  return field !== null && field.inline() ? field : null
+  return field !== null && (field.inline() || field.boxed) ? field : null
 }
 
 /** The `%struct.<Name>` a struct-typed expression points at. */
@@ -417,7 +425,11 @@ const inlineFieldBase = (emitter: Emitter, expr: Node): ArrayBase | null => {
   const e = unwrapParens(expr)
   const info = inlineOwnerOf(emitter, e.children[0])
   const receiver = emitter.emitExpression(e.children[0])
-  const base = new ArrayBase(inlineHeaderPointer(emitter, info, receiver, field), null)
+  const arr = field.boxed
+    ? slicePointer(emitter, info, receiver, field)
+    : inlineHeaderPointer(emitter, info, receiver, field)
+  const base = new ArrayBase(arr, null)
+  base.slice = field.boxed
   base.owner = info
   base.receiver = receiver
   base.field = field
@@ -431,6 +443,11 @@ const inlineFieldBase = (emitter: Emitter, expr: Node): ArrayBase | null => {
  */
 export const initInlineArrays = (emitter: Emitter, info: StructInfo, receiver: string): void => {
   for (const field of info.fields) {
+    if (field.boxed) {
+      const slice = slicePointer(emitter, info, receiver, field)
+      storeSliceField(emitter, slice, 0, "0", "i64")
+      storeSliceField(emitter, slice, 1, "null", "i8*")
+    }
     if (field.inline()) {
       const header = inlineHeaderPointer(emitter, info, receiver, field)
       storeHeaderField(emitter, header, 0, "0", "i64")
@@ -507,11 +524,107 @@ export const emitInlineArrayAssignment = (emitter: Emitter, expr: Node, field: F
   return header
 }
 
+// ---- Boxed array fields ---------------------------------------------------------------
+
+/**
+ * A boxed field's `{ i64, i8* }` inside the object at `receiver`
+ * (`FieldInfo.boxed`): the `len` and `data` a header would hold, without the
+ * header, whose `cap` nobody can ask for since nothing ever grows the field.
+ */
+const slicePointer = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
+  const ty = `%struct.${info.name}`
+  return emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${receiver}, i32 0, i32 ${field.index}`)
+}
+
+/** `, !alias.scope ..., !noalias ..., !tbaa ...` for slice member `index`: header traffic, not element data. */
+const sliceAccess = (emitter: Emitter, index: i32): string => {
+  if (!emitter.opts.optimizeAttributes) {
+    return ""
+  }
+  return `${scopePair(emitter, true)}${sliceTbaa(emitter, index)}`
+}
+
+const sliceFieldPointer = (emitter: Emitter, slice: string, index: i32): string =>
+  emitter.fn.emitValue(`getelementptr inbounds ${SLICE_TYPE}, ${SLICE_TYPE}* ${slice}, i32 0, i32 ${index}`)
+
+const loadSliceField = (emitter: Emitter, slice: string, index: i32, type: string): string => {
+  const ptr = sliceFieldPointer(emitter, slice, index)
+  return emitter.fn.emitValue(
+    `load ${type}, ${type}* ${ptr}${emitter.align8()}${sliceAccess(emitter, index)}`
+  )
+}
+
+const storeSliceField = (emitter: Emitter, slice: string, index: i32, value: string, type: string): void => {
+  const ptr = sliceFieldPointer(emitter, slice, index)
+  emitter.fn.emit(`store ${type} ${value}, ${type}* ${ptr}${emitter.align8()}${sliceAccess(emitter, index)}`)
+}
+
+/**
+ * `x.f = e;` for a boxed field: the fresh array's `len` and `data` go into
+ * the object, and no header is made for it.
+ *
+ *   - a literal allocates its block and stores its elements there;
+ *   - `new Array<T>(n)` checks `n` as it always does, then allocates and
+ *     zeroes the block;
+ *   - a call makes its array as always, and the slice takes that header's
+ *     `len` and `data`. The array is fresh, so nobody else holds the header.
+ *
+ * The receiver is evaluated first and the right-hand side second, as for any
+ * field store.
+ */
+export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: FieldInfo): string => {
+  const target = unwrapParens(expr.children[0])
+  const info = inlineOwnerOf(emitter, target.children[0])
+  const elem = emitter.table.refOf(field.type)
+  const size = elementSize(emitter, elem)
+  const ty = slotType(emitter, elem)
+  const receiver = emitter.emitExpression(target.children[0])
+  const rhs = unwrapParens(expr.children[1])
+  let len = ""
+  let data = ""
+  if (rhs.kind === N_ARRAY) {
+    const values: string[] = []
+    for (const element of rhs.children) {
+      values.push(emitter.emitExpression(element))
+    }
+    const n = values.length
+    len = `${n}`
+    data = n === 0 ? "null" : emitData(emitter, rhs, elem, -1, `${n * size}`)
+    if (n > 0) {
+      const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`)
+      let i = 0
+      for (const value of values) {
+        const slot = emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${i}`)
+        storeElement(emitter, slot, elem, value)
+        i = i + 1
+      }
+    }
+  } else if (rhs.kind === N_NEW) {
+    len = emitNewArrayLength(emitter, rhs.children[2].children[0], size)
+    const bytes = size === 1 ? len : emitter.fn.emitValue(`mul i64 ${len}, ${size}`)
+    data = emitData(emitter, rhs, elem, -1, bytes)
+    emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
+    const dataArg = emitter.opts.optimizeAttributes ? `i8* align 8 ${data}` : `i8* ${data}`
+    emitter.fn.emit(`call void @${MEMSET}(${dataArg}, i8 0, i64 ${bytes}, i1 false)${elementAccess(emitter)}`)
+  } else {
+    const source = emitter.emitExpression(rhs)
+    len = loadHeaderField(emitter, source, 0, "i64")
+    data = loadHeaderField(emitter, source, 2, "i8*")
+  }
+  const slice = slicePointer(emitter, info, receiver, field)
+  storeSliceField(emitter, slice, 0, len, "i64")
+  storeSliceField(emitter, slice, 1, data, "i8*")
+  return slice
+}
+
 /** The array's `len`: the preheader's value inside a hoisted loop, a fresh load outside one. */
 const baseLength = (emitter: Emitter, base: ArrayBase): string => {
   const header = base.header
   if (header !== null) {
     return header.len
+  }
+  if (base.slice) {
+    return loadSliceField(emitter, base.arr, 0, "i64")
   }
   return loadHeaderField(emitter, base.arr, 0, "i64")
 }
@@ -521,6 +634,9 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
   const header = base.header
   if (header !== null) {
     return header.data
+  }
+  if (base.slice) {
+    return loadSliceField(emitter, base.arr, 1, "i8*")
   }
   const owner = base.owner
   const field = base.field
@@ -821,7 +937,7 @@ export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
     // `data` load it never asks for.
     let len = ""
     if (use.len) {
-      len = loadHeaderField(emitter, arr, 0, "i64")
+      len = inline !== null ? baseLength(emitter, inline) : loadHeaderField(emitter, arr, 0, "i64")
     }
     let data = ""
     if (use.data) {

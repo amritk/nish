@@ -66,6 +66,7 @@ import handleHeaderMessage from "./handles" -> function @handleHeaderMessage
 import handleJsonMessage from "./handles" -> function @handleJsonMessage
 import isHandleFieldAnnotation from "./handles" -> function @isHandleFieldAnnotation
 const INLINE_HEADER_BYTES: i32 = 24
+const SLICE_BYTES: i32 = 16
 function sizeOfField(ctx: CheckContext, type: i32): i32 -> @sizeOfField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

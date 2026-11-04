@@ -16099,7 +16099,7 @@ class Perm {
 ```
 
 ```llvm
-%struct.Perm = type { %struct.nish_array* }
+%struct.Perm = type { { i64, i8* } }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -16135,7 +16135,7 @@ slow:
   ret i8* %grown
 }
 
-define internal void @Perm.constructor(%struct.Perm* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %n) #0 {
+define internal void @Perm.constructor(%struct.Perm* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %n) #0 {
 entry:
   %0 = sext i32 %n to i64
   %1 = icmp ule i64 %0, 2147483647
@@ -16146,79 +16146,70 @@ len.fail:
   unreachable
 
 len.ok:
-  %2 = call i8* @nish_alloc_struct(i64 24)
-  %3 = bitcast i8* %2 to %struct.nish_array*
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
-  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
-  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %6 = mul i64 %0, 4
-  %7 = call i8* @nish_alloc_struct(i64 %6)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
-  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %9 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  store %struct.nish_array* %3, %struct.nish_array** %9, align 8, !tbaa !15
+  %2 = mul i64 %0, 4
+  %3 = call i8* @nish_alloc_struct(i64 %2)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %3, i8 0, i64 %2, i1 false), !alias.scope !4, !noalias !3
+  %4 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %5 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 0
+  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 1
+  store i8* %3, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   ret void
 }
 
-define internal void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i, i32 noundef %j) #0 {
+define internal void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this, i32 noundef %i, i32 noundef %j) #0 {
 entry:
   %tmp.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
-  %2 = sext i32 %i to i64
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
-  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %5 = icmp ult i64 %2, %4
-  br i1 %5, label %bounds.ok, label %bounds.fail
+  %1 = sext i32 %i to i64
+  %2 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %0, i32 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = icmp ult i64 %1, %3
+  br i1 %4, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %2, i64 %4)
+  call void @nish_panic_index(i64 %1, i64 %3)
   unreachable
 
 bounds.ok:
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %8 = bitcast i8* %7 to i32*
-  %9 = getelementptr inbounds i32, i32* %8, i64 %2
-  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !17
-  store i32 %10, i32* %tmp.addr, align 4
-  %11 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !15
-  %13 = sext i32 %i to i64
-  %14 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %15 = load %struct.nish_array*, %struct.nish_array** %14, align 8, !tbaa !15
-  %16 = sext i32 %j to i64
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
-  %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %19 = icmp ult i64 %16, %18
-  br i1 %19, label %bounds.ok.1, label %bounds.fail.1
+  %5 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %0, i32 0, i32 1
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 %1
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %9, i32* %tmp.addr, align 4
+  %10 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %11 = sext i32 %i to i64
+  %12 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %13 = sext i32 %j to i64
+  %14 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %12, i32 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %16 = icmp ult i64 %13, %15
+  br i1 %16, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 %16, i64 %18)
+  call void @nish_panic_index(i64 %13, i64 %15)
   unreachable
 
 bounds.ok.1:
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %22 = bitcast i8* %21 to i32*
-  %23 = getelementptr inbounds i32, i32* %22, i64 %16
-  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !17
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
-  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %27 = bitcast i8* %26 to i32*
-  %28 = getelementptr inbounds i32, i32* %27, i64 %13
-  store i32 %24, i32* %28, align 4, !alias.scope !4, !noalias !3, !tbaa !17
-  %29 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %30 = load %struct.nish_array*, %struct.nish_array** %29, align 8, !tbaa !15
-  %31 = sext i32 %j to i64
-  %32 = load i32, i32* %tmp.addr, align 4
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
-  %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %35 = bitcast i8* %34 to i32*
-  %36 = getelementptr inbounds i32, i32* %35, i64 %31
-  store i32 %32, i32* %36, align 4, !alias.scope !4, !noalias !3, !tbaa !17
+  %17 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %12, i32 0, i32 1
+  %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %19 = bitcast i8* %18 to i32*
+  %20 = getelementptr inbounds i32, i32* %19, i64 %13
+  %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %22 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %10, i32 0, i32 1
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %24 = bitcast i8* %23 to i32*
+  %25 = getelementptr inbounds i32, i32* %24, i64 %11
+  store i32 %21, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %26 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %27 = sext i32 %j to i64
+  %28 = load i32, i32* %tmp.addr, align 4
+  %29 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %26, i32 0, i32 1
+  %30 = load i8*, i8** %29, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %31 = bitcast i8* %30 to i32*
+  %32 = getelementptr inbounds i32, i32* %31, i64 %27
+  store i32 %28, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   ret void
 }
 
@@ -16227,7 +16218,7 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="
 attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!18, !19, !20, !21, !22}
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16237,20 +16228,16 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !6 = !{!"omnipotent char", !5, i64 0}
 !7 = !{!"header i64", !6, i64 0}
 !8 = !{!"header ptr", !6, i64 0}
-!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!9 = !{!"array slice", !7, i64 0, !8, i64 8}
 !10 = !{!9, !7, i64 0}
-!11 = !{!9, !7, i64 8}
-!12 = !{!9, !8, i64 16}
-!13 = !{!"ptr", !6, i64 0}
-!14 = !{!"Perm", !13, i64 0}
-!15 = !{!14, !13, i64 0}
-!16 = !{!"element i32", !6, i64 0}
-!17 = !{!16, !16, i64 0}
-!18 = !{i32 8, !"cf-protection-branch", i32 1}
-!19 = !{i32 8, !"cf-protection-return", i32 1}
-!20 = !{i32 8, !"branch-target-enforcement", i32 1}
-!21 = !{i32 8, !"sign-return-address", i32 1}
-!22 = !{i32 4, !"probe-stack", !"inline-asm"}
+!11 = !{!9, !8, i64 8}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-repeat-check -->
 
