@@ -50,7 +50,7 @@ const structNode = (emitter: Emitter, info: StructInfo): string => {
     // An inline array field is not a member of the path: its bytes are the
     // array's header and slots, read and written only through `headerTbaa`
     // and `elementTbaa` tags, never through a field access of this class.
-    if (!field.inline()) {
+    if (!field.inline() && !field.boxed) {
       // Interned in stage0's order, so the two compilers number the nodes alike.
       members = `${members}, ${scalarNode(emitter, field.type)}, i64 ${field.offset}`
     }
@@ -142,4 +142,28 @@ export const headerTbaa = (emitter: Emitter, index: i32): string => {
   const header = emitter.metadata(`!{!"array header", ${word}, i64 0, ${word}, i64 8, ${ptr}, i64 16}`)
   const access = index === 2 ? ptr : word
   return `, !tbaa ${emitter.metadata(`!{${header}, ${access}, i64 ${index * 8}}`)}`
+}
+
+/**
+ * `, !tbaa !N` for a load or store of a boxed array field's `len` (0) or
+ * `data` (1), the `{ i64, i8* }` inside its object (`FieldInfo.boxed`), or
+ * `""` under `--no-optimize-attributes`.
+ *
+ * The node is `array slice`, built from the header's own scalars, and no
+ * class names it, so the access is NoAlias with every tagged class field and
+ * element access, as a header's is (`headerTbaa`). It is sound for the same
+ * reasons: `structNode` leaves the member out of its class's path, only
+ * `src/emit-arrays.ts` reads or writes it, always with this tag, and no C
+ * function is ever handed the object's slice.
+ */
+export const sliceTbaa = (emitter: Emitter, index: i32): string => {
+  if (!emitter.opts.optimizeAttributes) {
+    return ""
+  }
+  const omni = charNode(emitter)
+  const word = emitter.metadata(`!{!"header i64", ${omni}, i64 0}`)
+  const ptr = emitter.metadata(`!{!"header ptr", ${omni}, i64 0}`)
+  const slice = emitter.metadata(`!{!"array slice", ${word}, i64 0, ${ptr}, i64 8}`)
+  const access = index === 1 ? ptr : word
+  return `, !tbaa ${emitter.metadata(`!{${slice}, ${access}, i64 ${index * 8}}`)}`
 }

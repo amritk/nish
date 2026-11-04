@@ -416,6 +416,12 @@ export class DebugInfo {
     const members: string[] = []
     for (const f of info.fields) {
       const line = this.lineOf(info.origin, f.decl)
+      if (f.boxed) {
+        // An array's `len` and `data` stored in the object (`FieldInfo.boxed`).
+        const slice = this.arraySlice(this.table.refOf(f.type), this.table.typeName(f.type))
+        members.push(this.member(f.name, ref, slice, 128, f.offset * 8, file, line))
+        continue
+      }
       if (f.inline()) {
         // An array stored in the object (`src/inline-arrays.ts`): the member
         // is the header itself, whose `data` points at the slots after it.
@@ -454,6 +460,20 @@ export class DebugInfo {
   }
 
   /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
+  /** A boxed array field's `{ len, data }` (`FieldInfo.boxed`), 128 bits. */
+  arraySlice(elem: i32, name: string): string {
+    const ref = this.module.reserveMetadata()
+    const members: string[] = []
+    members.push(this.member("len", ref, this.typeRef(T_I64), 64, 0, "", 0))
+    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 64, "", 0))
+    const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
+    this.module.setMetadata(
+      ref,
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(name)}, file: ${this.file}, size: 128, align: 64, elements: ${elements})`
+    )
+    return ref
+  }
+
   arrayHeader(elem: i32, name: string): string {
     const ref = this.module.reserveMetadata()
     const long = this.typeRef(T_I64)

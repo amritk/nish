@@ -256,7 +256,7 @@ const jsonFieldsOf = (emitter: Emitter, info: StructInfo): JsonField[] => {
       continue
     }
     const f = jsonFieldOf(emitter.program, emitter.table, field)
-    if (f === null || field.inline()) {
+    if (f === null || field.inline() || field.boxed) {
       jsonFail(emitter, `\`${info.name}.${field.name}\` is not a field the route can handle`)
     } else {
       out.push(f)

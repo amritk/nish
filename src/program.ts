@@ -858,6 +858,14 @@ export class FieldInfo {
    */
   inlineCapacity: i32
   /**
+   * Whether the array this field holds is a slice inside the object: its
+   * `len` and `data`, one LLVM member `{ i64, i8* }`, with the elements in a
+   * block of their own and no header (`src/inline-arrays.ts`). For a field
+   * the inline rule admits whose lengths are not all known, or too long for
+   * `inlineCapacity` slots.
+   */
+  boxed: boolean
+  /**
    * The integer of an enum member initializer, `kind: Kind = Kind.Array`,
    * folded when the field is collected. Here rather than in `nodeEnumValues`
    * because the emitter that stores it may be another module's
@@ -886,6 +894,7 @@ export class FieldInfo {
     this.initializerValue = 0
     this.decl = decl
     this.inlineCapacity = -1
+    this.boxed = false
     this.spelling = ""
     this.wireName = name
     this.jsonOptional = false
