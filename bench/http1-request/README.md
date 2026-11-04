@@ -20,7 +20,7 @@ node bench/http1-request/run.mjs --instructions --base 1d92417e   # cachegrind c
 | Case | What is fed | Answer |
 | --- | --- | --- |
 | `browser` | a 756-byte browser GET: Accept, Accept-Language, User-Agent, Cookie, and a 251-byte HS256 JWT as a Bearer token | 2 JSON fields |
-| `api` | a POST with a 254-byte head (a 64-character opaque Bearer token) and a 61-byte JSON body | 2 JSON fields |
+| `api` | a POST with a 338-byte head, a 148-byte HS256 JWT (`sub`, `iat`, `exp`) as a Bearer token, and a 61-byte JSON body | 2 JSON fields |
 | `short` | `GET / HTTP/1.1` and `Host`, 37 bytes | 2 JSON fields |
 | `pipelined` | the `api` POST and the `browser` GET in one read | both |
 | `split` | the `browser` GET in two reads, cut inside its Cookie line | 2 JSON fields |
@@ -36,8 +36,9 @@ the spread between it and `nish` is the noise band. A time gain counts only
 when it repeats outside the band on two separate runs.
 
 `--instructions` counts with `valgrind --tool=cachegrind --cache-sim=no`, with
-glibc's string functions pinned to one variant (`GLIBC_TUNABLES`, as
-`bench/run.mjs` pins them). An iteration is a run of 1,000 iterations less a
+glibc's string functions pinned to one variant (`GLIBC_TUNABLES`) and
+`NISH_SIMD=base`, as `bench/run.mjs` pins them: the `json*` cases reach a scan
+that picks its width from `cpuid`. An iteration is a run of 1,000 iterations less a
 run of 500, over 500, so start-up cancels; a request is that over the case's
 requests (two for `pipelined`).
 
@@ -59,8 +60,9 @@ same with `--cpu x86-64-v3`:
 | `json40k` | 734,866 | 735,789 | +0.1% | 729,208 | 730,204 | +0.1% |
 
 The cut saves the same count on every case, 923 a request at x86-64 and 996
-at x86-64-v3, since every response head is the same shape. These counts are
-deterministic; they rank the change.
+at x86-64-v3, since every response head is the same shape. With
+`NISH_SIMD=base` and `GLIBC_TUNABLES` pinned, as `bench/run.mjs` pins them,
+these counts are deterministic; they rank the change.
 
 ## Where a request's instructions go
 
@@ -208,6 +210,20 @@ cost, not all of it. The next cut takes the first.
 | 5 | Record the method once as a code when the request line is read, so `methodIs` is one compare | not split out | inside candidate 2's `http1HeadIs` lines; grows with the router's calls |
 | 6 | The remaining head-writer stores: CRLF as one 2-byte store, `http1PutBytes` and `http1PutDecimal` | 217 | the function table |
 | — | `JsonWriter.i32` and `jsonWriterPutString` | 388 | the function table; `std/json.ts`, outside this bench's files, for the copies-checks stage |
+
+The per-line counts behind those estimates: exclusive instructions a
+`browser` request, from `callgrind_annotate --auto=yes` on the after build,
+lines of `std/net/http1-codec.ts`.
+
+| Lines | Counts | Sum | Candidate |
+| --- | --- | ---: | --- |
+| 1031, 1032, 1033, 1034, 1037, 1038, 1040 | 63, 226, 95, 95, 516, 86, 45 | 1,126 | 1 |
+| 697, 698 | 345, 387 | 732 | 1 |
+| 745, 748, 749, 750, 751, 754, 757 | 292, 320, 26, 171, 52, 92, 104 | 1,057 | 2 |
+| 336–337, 887–888, 1102–1104 | 93 + 64, 92 + 63, 88 + 27 + 27 | 454 | 2 |
+| 1029 | 805 | 805 | 3 |
+| 1063, 1066 | 162, 171 | 333 | 4 |
+| 964, 965 | 269, 43 | 312 | 4 |
 
 ## Tried and dropped
 
