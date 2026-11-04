@@ -817,7 +817,7 @@ Neither IR calls an `llvm.x86.*` or `llvm.aarch64.*` intrinsic. The script
 refuses to time a vector form, C or `nish:simd`, whose source or IR does.
 
 The run was `node bench/simd-s3a.mjs --self --runs 15`: 18 rotating rounds of
-six columns after one warm-up, at `3424609a`, on an Intel Xeon Processor @
+six columns after one warm-up, at `199f5436` (rebased from `3424609a`; `bench/simd-s3a/` and its script are unchanged), on an Intel Xeon Processor @
 2.30 GHz (x64, 4 vCPUs), Ubuntu clang 18.1.3. All times are in ms.
 
 | kernel | 1 C vector | 3 Nish checked | 5 Nish simd | 3's copy | **5 over 3 (the bar)** | 1 over 5 | met |
