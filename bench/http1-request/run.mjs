@@ -250,12 +250,15 @@ const PINNED_LIBC = [
 /** The iterations the shorter of an instruction count's two runs takes; the longer takes twice. */
 const COUNT_ITERATIONS = 500
 
+/** The counting tool, looked up on PATH; an optional tool, so not one of the package's binaries. */
+const VALGRIND = "valgrind"
+
 /** The instructions `main <case> <iterations>` executes under cachegrind, the whole process. */
 const countRun = (column, c, iterations) => {
   const dir = path.dirname(column.bin)
   const file = path.join(dir, `${path.basename(column.bin)}-${c.name}-${iterations}.cachegrind`)
   const r = spawnSync(
-    "valgrind",
+    VALGRIND,
     [
       "--tool=cachegrind",
       "--cache-sim=no",
@@ -267,7 +270,9 @@ const countRun = (column, c, iterations) => {
     { cwd: dir, env: { GLIBC_TUNABLES: PINNED_LIBC }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   )
   if (r.error !== undefined || r.status !== 0) {
-    fail(`cachegrind ${column.id} ${c.name} ${iterations}: ${r.error?.message ?? `exit ${r.status}`}\n${r.stderr}`)
+    fail(
+      `cachegrind ${column.id} ${c.name} ${iterations}: ${r.error?.message ?? `exit ${r.status}`}\n${r.stderr}`
+    )
   }
   const m = /^summary: (\d+)$/m.exec(fs.readFileSync(file, "utf8"))
   fs.rmSync(file)
@@ -278,7 +283,7 @@ const countRun = (column, c, iterations) => {
 }
 
 if (instructions) {
-  if (spawnSync("valgrind", ["--version"]).status !== 0) {
+  if (spawnSync(VALGRIND, ["--version"]).status !== 0) {
     fail("--instructions needs valgrind on PATH")
   }
   const counted = columns.filter((col) => !col.id.endsWith("-copy"))
@@ -293,11 +298,13 @@ if (instructions) {
   for (const c of cases) {
     let nish = 0
     for (const col of counted) {
-      const per = (countRun(col, c, 2 * COUNT_ITERATIONS) - countRun(col, c, COUNT_ITERATIONS)) / COUNT_ITERATIONS
+      const per =
+        (countRun(col, c, 2 * COUNT_ITERATIONS) - countRun(col, c, COUNT_ITERATIONS)) / COUNT_ITERATIONS
       if (col.id === "nish") {
         nish = per
       }
-      const vs = col.id === "nish" ? "" : `${per >= nish ? "+" : ""}${((100 * (per - nish)) / nish).toFixed(1)}%`
+      const vs =
+        col.id === "nish" ? "" : `${per >= nish ? "+" : ""}${((100 * (per - nish)) / nish).toFixed(1)}%`
       console.log(row([c.name, col.id, per.toFixed(0), (per / c.requests).toFixed(0), vs]))
     }
   }

@@ -34822,9 +34822,9 @@ function browserHead(): string -> @browserHead
   callee +1:28 jwt -> @jwt
 function apiRequest(): string -> @apiRequest
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: jwt nish_str_concat nish_str_from_i32
+  calls: b64 nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-  callee +0:28 jwt -> @jwt
+  callee +0:28 b64 -> @b64
 function Case.constructor(this: Case, reads: u8[][], requests: i32, jsonBytes: i32): void -> @Case.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: jsonBytes reads requests
@@ -34927,51 +34927,52 @@ function Bench.answer(this: Bench, n: i32): i32 -> @Bench.answer [method]
   callee +35:12 JsonWriter.written -> @nish.JsonWriter.written
 function Bench.run(this: Bench, n: i32): void -> @Bench.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:5
   escaping: n
   calls: Bench.answer Bench.small mix nish.Http1Connection.consume nish.Http1Connection.end nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Connection.isDone nish.Http1Connection.next nish.Http1Connection.park nish.Http1Connection.release nish.Http1Connection.respond nish.Http1Connection.wantsWrite nish.Http1Connection.write nish.Http1Parser.headerIndex nish.Http1Parser.methodIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=72 writesThrough=true captured=false passedTo=Bench.answer#0 Bench.small#0
   stackSites=0 stackLocals=0
-  local -8:11 conn: Http1Connection (const)
-  local -7:9 served: i32 (let)
-  local -6:16 read: u8[] (const)
-  local -4:13 len: i32 (const)
-  callee -3:11 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
-  callee -3:37 Http1Connection.feed -> @nish.Http1Connection.feed
-  callee +2:7 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
-  local +4:11 event: i32 (let)
-  callee +4:24 Http1Connection.next -> @nish.Http1Connection.next
-  local +7:17 p: Http1Parser (const)
-  local +8:15 method: u32 (let)
-  callee +9:15 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  callee +11:22 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  callee +13:22 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  callee +15:22 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  local +18:17 auth: i32 (const)
-  callee +18:29 Http1Parser.headerIndex -> @nish.Http1Parser.headerIndex
-  callee +19:22 mix -> @mix
-  callee +20:22 mix -> @mix
-  callee +21:22 mix -> @mix
-  local +23:20 i: i32 (let)
-  callee +24:24 mix -> @mix
-  local +27:17 body: i32 (const)
-  callee +27:52 Bench.answer -> @Bench.answer
-  local +28:17 len2: i32 (const)
-  callee +28:47 Bench.small -> @Bench.small
-  callee +30:13 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee +31:13 Http1Connection.write -> @nish.Http1Connection.write
-  callee +35:11 Http1Connection.end -> @nish.Http1Connection.end
-  callee +40:17 Http1Connection.next -> @nish.Http1Connection.next
-  local +47:11 pending: i32 (const)
-  callee +48:16 mix -> @mix
-  local +50:16 i: i32 (let)
-  callee +51:20 mix -> @mix
-  callee +55:5 Http1Connection.consume -> @nish.Http1Connection.consume
-  callee +56:5 Http1Connection.release -> @nish.Http1Connection.release
-  callee +57:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
-  callee +60:5 Http1Connection.park -> @nish.Http1Connection.park
-  callee +61:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
-  callee +61:34 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  local -2:11 conn: Http1Connection (const)
+  local -1:9 served: i32 (let)
+  callee +0:16 mix -> @mix
+  local +1:16 read: u8[] (const)
+  local +3:13 len: i32 (const)
+  callee +4:11 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
+  callee +4:37 Http1Connection.feed -> @nish.Http1Connection.feed
+  callee +9:7 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
+  local +11:11 event: i32 (let)
+  callee +11:24 Http1Connection.next -> @nish.Http1Connection.next
+  local +14:17 p: Http1Parser (const)
+  local +15:15 method: u32 (let)
+  callee +16:15 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee +18:22 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee +20:22 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee +22:22 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  local +25:17 auth: i32 (const)
+  callee +25:29 Http1Parser.headerIndex -> @nish.Http1Parser.headerIndex
+  callee +26:22 mix -> @mix
+  callee +27:22 mix -> @mix
+  callee +28:22 mix -> @mix
+  local +30:20 i: i32 (let)
+  callee +31:24 mix -> @mix
+  local +34:17 body: i32 (const)
+  callee +34:52 Bench.answer -> @Bench.answer
+  local +35:17 len2: i32 (const)
+  callee +35:47 Bench.small -> @Bench.small
+  callee +37:13 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee +38:13 Http1Connection.write -> @nish.Http1Connection.write
+  callee +42:11 Http1Connection.end -> @nish.Http1Connection.end
+  callee +47:17 Http1Connection.next -> @nish.Http1Connection.next
+  local +54:11 pending: i32 (const)
+  callee +55:16 mix -> @mix
+  local +57:16 i: i32 (let)
+  callee +58:20 mix -> @mix
+  callee +62:5 Http1Connection.consume -> @nish.Http1Connection.consume
+  callee +63:5 Http1Connection.release -> @nish.Http1Connection.release
+  callee +64:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
+  callee +67:5 Http1Connection.park -> @nish.Http1Connection.park
+  callee +68:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
+  callee +68:34 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
 function Bench.small(this: Bench, n: i32): i32 -> @Bench.small [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.reset
