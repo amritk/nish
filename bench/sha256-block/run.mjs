@@ -8,6 +8,13 @@
 //
 //   node bench/sha256-block/run.mjs [options] [--compiler <nish>]
 //     --rounds N         timed rounds a case runs at least (default 11)
+//     --cpu <name>       builds main.ts and every variant with `--cpu <name>`,
+//                        as `x86-64-v3`
+//     --avx2             adds the `nish (avx2)` column, under NISH_SHA256=avx2:
+//                        the AVX2 kernel avx2.patch adds to the runtime, which
+//                        the compiler must be built with (README.md)
+//     --validate         builds, runs every column once on every case and
+//                        holds it to the case's checksum, and times nothing
 //     --binary [name=]<path>
 //                        another build of main.ts as a column (repeatable),
 //                        run under NISH_SHA256=soft: the old Nish body, such
@@ -91,6 +98,9 @@ const fail = (msg) => {
 /** The setting that times the Nish body rather than the SHA-NI kernel. */
 const soft = { NISH_SHA256: "soft" }
 let rounds = 11
+let validate = false
+let avx2 = false
+const cpuFlags = []
 const binaries = []
 const variants = []
 const argv = nishc.rest
@@ -107,6 +117,16 @@ for (let i = 2; i < argv.length; i++) {
       env: soft,
       nish: true,
     })
+  } else if (argv[i] === "--cpu") {
+    const name = argv[++i] ?? ""
+    if (name === "" || name.startsWith("--")) {
+      fail("--cpu needs a CPU name, as x86-64-v3")
+    }
+    cpuFlags.push("--cpu", name)
+  } else if (argv[i] === "--avx2") {
+    avx2 = true
+  } else if (argv[i] === "--validate") {
+    validate = true
   } else if (argv[i] === "--variant") {
     variants.push(argv[++i] ?? "")
   } else {
@@ -150,7 +170,7 @@ const buildMain = (cmd, prefix, irDir, out, flags, what) =>
     what
   )
 const exe = path.join(outDir, "sha256-block")
-buildMain(nishc.cmd, nishc.prefix, outDir, exe, [], "building bench/sha256-block/main.ts")
+buildMain(nishc.cmd, nishc.prefix, outDir, exe, cpuFlags, "building bench/sha256-block/main.ts")
 
 /**
  * Makes `dst` a copy of the tree at `src` in which every entry is a link to
@@ -190,6 +210,28 @@ const realCompiler = (file) => {
   return shim === null ? file : fs.realpathSync(shim[1])
 }
 
+const cpuinfo = fs.readFileSync("/proc/cpuinfo", "utf8")
+const cpuHas = new Set((/^flags\s*:\s*(.*)$/m.exec(cpuinfo)?.[1] ?? "").split(/\s+/))
+
+// Stock runtime-sha256.c reads only NISH_SHA256=soft, and a patched one gives
+// the Nish body on a CPU without AVX2 and BMI: either way the column would
+// time another body under the avx2 label, with the same checksums. The build
+// is stripped, so the patch is found in the runtime the compiler links.
+if (avx2) {
+  if (nishc.prefix.length > 0) {
+    fail("--avx2 needs a native compiler, which links the runtime beside its binary")
+  }
+  const pkg = path.resolve(path.dirname(realCompiler(fs.realpathSync(nishc.cmd))), "..")
+  const source = path.join(pkg, "runtime", "runtime-sha256.c")
+  if (!(fs.existsSync(source) && fs.readFileSync(source, "utf8").includes("nish_sha256_block_avx2"))) {
+    fail(`--avx2: ${source} has no AVX2 kernel; apply bench/sha256-block/avx2.patch and rebuild (README.md)`)
+  }
+  const missing = ["avx2", "bmi1", "bmi2"].filter((f) => !cpuHas.has(f))
+  if (missing.length > 0) {
+    fail(`--avx2: this CPU lacks ${missing.join(", ")}, so NISH_SHA256=avx2 would run the Nish body`)
+  }
+}
+
 /** Each variant as `{ name, exe, irDir }`, built against its own sha256.ts. */
 const built = variants.map((spec) => {
   if (nishc.prefix.length > 0) {
@@ -215,8 +257,15 @@ const built = variants.map((spec) => {
   )
   const irDir = path.join(dir, "ir")
   const out = path.join(dir, "sha256-block")
-  buildMain(path.join(dir, "pkg", bin), [], irDir, out, v.flags, `building main.ts against variant ${spec}`)
-  return { name: spec, exe: out, irDir, flags: v.flags }
+  buildMain(
+    path.join(dir, "pkg", bin),
+    [],
+    irDir,
+    out,
+    [...v.flags, ...cpuFlags],
+    `building main.ts against variant ${spec}`
+  )
+  return { name: spec, exe: out, irDir, flags: [...v.flags, ...cpuFlags] }
 })
 
 /**
@@ -263,7 +312,7 @@ console.log("sha256Compress, clang -O3 -c of each build's sha256.ll:")
 console.log(
   `${"build".padEnd(28)} ${"insns".padStart(6)} ${"st rsp".padStart(6)} ${"ld rsp".padStart(6)} ${"reg mov".padStart(7)}`
 )
-for (const b of [{ name: "base", irDir: outDir, flags: [] }, ...built]) {
+for (const b of [{ name: "base", irDir: outDir, flags: cpuFlags }, ...built]) {
   const c = codeOf(b.irDir, b.flags)
   console.log(
     `${b.name.padEnd(28)} ${String(c.insns).padStart(6)} ${String(c.stores).padStart(6)} ${String(c.loads).padStart(6)} ${String(c.moves).padStart(7)}`
@@ -287,11 +336,12 @@ if (!(tscHz > 0)) {
 
 /**
  * The columns, each `{ id, bin, env, nish }`: the Nish body and its copy
- * first, then the SHA-NI default, the old builds, and OpenSSL's three bodies.
+ * first, then avx2.patch's kernel when asked for, the SHA-NI default, the old builds, and OpenSSL's three bodies.
  */
 const columns = [
   { id: "nish-soft", bin: exe, env: soft, nish: true },
   { id: "nish-soft-copy", bin: `${exe}-copy`, env: soft, nish: true },
+  ...(avx2 ? [{ id: "nish (avx2)", bin: exe, env: { NISH_SHA256: "avx2" }, nish: true }] : []),
   { id: "nish (sha-ni)", bin: exe, env: {}, nish: true },
   ...binaries,
   ...built.map((b) => ({ id: `variant ${b.name}`, bin: b.exe, env: soft, nish: true })),
@@ -343,10 +393,12 @@ const median = (xs) => {
 /** `to` against `from` as a percentage of `from`: + is slower. */
 const pct = (from, to) => `${to >= from ? "+" : ""}${((100 * (to - from)) / from).toFixed(1)}%`
 
-const cpu =
-  /^model name\s*:\s*(.*)$/m.exec(fs.readFileSync("/proc/cpuinfo", "utf8"))?.[1] ?? os.cpus()[0]?.model
+const cpu = /^model name\s*:\s*(.*)$/m.exec(cpuinfo)?.[1] ?? os.cpus()[0]?.model
+const stamp = ["avx2", "bmi2", "sha_ni", "avx512f"]
+  .map((f) => `${f} ${cpuHas.has(f) ? "yes" : "no"}`)
+  .join(", ")
 console.log(
-  `CPU: ${cpu}; TSC ${(tscHz / 1e9).toFixed(3)} GHz; ${os.cpus().length} cores; ${run("openssl", ["version"], "openssl version").trim()}`
+  `CPU: ${cpu} (${stamp}); build ${cpuFlags.length > 0 ? cpuFlags.join(" ") : "--cpu default"}; TSC ${(tscHz / 1e9).toFixed(3)} GHz; ${os.cpus().length} cores; ${run("openssl", ["version"], "openssl version").trim()}`
 )
 
 /**
@@ -354,41 +406,39 @@ console.log(
  * ns a block: the run's seconds over its count, over size / 64 + 1 blocks.
  * Each operation is a whole EVP digest, so short messages carry its setup.
  */
-console.log("\nopenssl speed -evp sha256, ns a block (one 1 s run each):")
-console.log(`${"mask".padEnd(18)} ${"64 B".padStart(10)} ${"8 KiB".padStart(10)}`)
-for (const [id, mask] of [
-  ["openssl scalar", MASK.scalar],
-  ["openssl avx2", MASK.avx2],
-  ["openssl (sha-ni)", null],
-]) {
-  const cells = [64, 8192].map((size) => {
-    const env = { ...process.env }
-    delete env[IA32CAP]
-    if (mask !== null) {
-      env[IA32CAP] = mask
-    }
-    const r = spawnSync(
-      "openssl",
-      ["speed", "-evp", "sha256", "-bytes", String(size), "-seconds", "1", "-mr"],
-      {
-        encoding: "utf8",
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
+if (!validate) {
+  console.log("\nopenssl speed -evp sha256, ns a block (one 1 s run each):")
+  console.log(`${"mask".padEnd(18)} ${"64 B".padStart(10)} ${"8 KiB".padStart(10)}`)
+  for (const [id, mask] of [
+    ["openssl scalar", MASK.scalar],
+    ["openssl avx2", MASK.avx2],
+    ["openssl (sha-ni)", null],
+  ]) {
+    const cells = [64, 8192].map((size) => {
+      const env = { ...process.env }
+      delete env[IA32CAP]
+      if (mask !== null) {
+        env[IA32CAP] = mask
       }
-    )
-    const m = /^\+R:(\d+):sha256:([\d.]+)$/m.exec(`${r.stdout}${r.stderr}`)
-    if (r.status !== 0 || m === null) {
-      fail(`openssl speed under ${id}: exit ${r.status}\n${r.stdout}${r.stderr}`)
-    }
-    return ((Number(m[2]) * 1e9) / Number(m[1]) / (size / 64 + 1)).toFixed(1)
-  })
-  console.log(`${id.padEnd(18)} ${cells[0].padStart(10)} ${cells[1].padStart(10)}`)
+      const r = spawnSync(
+        "openssl",
+        ["speed", "-evp", "sha256", "-bytes", String(size), "-seconds", "1", "-mr"],
+        {
+          encoding: "utf8",
+          env,
+          stdio: ["ignore", "pipe", "pipe"],
+        }
+      )
+      const m = /^\+R:(\d+):sha256:([\d.]+)$/m.exec(`${r.stdout}${r.stderr}`)
+      if (r.status !== 0 || m === null) {
+        fail(`openssl speed under ${id}: exit ${r.status}\n${r.stdout}${r.stderr}`)
+      }
+      return ((Number(m[2]) * 1e9) / Number(m[1]) / (size / 64 + 1)).toFixed(1)
+    })
+    console.log(`${id.padEnd(18)} ${cells[0].padStart(10)} ${cells[1].padStart(10)}`)
+  }
+  console.log("")
 }
-console.log("")
-
-const WIDTHS = [18, 36, 10, 10, 8, 10, 10, 10]
-const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
-console.log(line(["case", "column", "min ns", "median ns", "spread", "min cyc", "median cyc", "vs soft"]))
 
 const columnsOf = (c) => columns.filter((col) => col.nish || c.openssl)
 for (const c of CASES) {
@@ -399,6 +449,14 @@ for (const c of CASES) {
     }
   }
 }
+if (validate) {
+  console.log(`validated: ${CASES.length} cases, every column printed its known checksum`)
+  process.exit(0)
+}
+
+const WIDTHS = [18, 36, 10, 10, 8, 10, 10, 10]
+const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
+console.log(line(["case", "column", "min ns", "median ns", "spread", "min cyc", "median cyc", "vs soft"]))
 
 for (const c of CASES) {
   const cols = columnsOf(c)
