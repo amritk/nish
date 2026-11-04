@@ -183,6 +183,17 @@ const K_VECTOR: i32 = 22
  * dangling.
  */
 const K_REGION: i32 = 23
+/**
+ * A lane mask from `nish:simd` (WP38 S3): what a lane-wise compare answers,
+ * one truth per lane of the vectors it compared. `refs[type]` is the unsigned
+ * integer as wide as one lane (`u8`, `u16`, `u32` or `u64`), so `laneCount`
+ * reads it as it reads a vector, and the four masks are four ids. It lowers to
+ * `<N x i1>`, which has no layout a C compiler, the arena or Node agree on, so
+ * a mask is a value only: a local, a parameter or a return of a function this
+ * module keeps, and never a field, an element, a type argument or an export
+ * (`rejectStoredMask` in `src/simd.ts`).
+ */
+const K_MASK: i32 = 24
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -644,6 +655,46 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_VECTOR
   }
 
+  /** The mask whose lanes are as wide as `lane`, one of `u8`, `u16`, `u32` and `u64`. */
+  maskOf(lane: i32): i32 {
+    return this.intern(K_MASK, lane, "")
+  }
+
+  /** Whether `type` is a `nish:simd` mask; -1, a node with no recorded type, is not. */
+  isMask(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_MASK
+  }
+
+  /** The mask a lane-wise compare of two `vector`s answers: one lane per lane, of the same width. */
+  maskFor(vector: i32): i32 {
+    const width = this.alignOf(this.refs[vector])
+    if (width === 1) {
+      return this.maskOf(T_U8)
+    }
+    if (width === 2) {
+      return this.maskOf(T_U16)
+    }
+    return this.maskOf(width === 4 ? T_U32 : T_U64)
+  }
+
+  /** A mask anywhere in `type`: itself, an element, a nullable's value or a `Result` arm. */
+  holdsMask(type: i32): boolean {
+    if (type < 0) {
+      return false
+    }
+    const kind = this.kinds[type]
+    if (kind === K_MASK) {
+      return true
+    }
+    if (kind === K_ARRAY || kind === K_NULLABLE || kind === K_MAYBE) {
+      return this.holdsMask(this.refs[type])
+    }
+    if (kind === K_RESULT) {
+      return this.holdsMask(this.refs[type]) || this.holdsMask(this.errs[type])
+    }
+    return false
+  }
+
   // ---- `nish:region` (WP46) -------------------------------------------------
 
   /** The handle of a region whose root is a `root`. */
@@ -656,7 +707,7 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_REGION
   }
 
-  /** A vector's lane count: sixteen bytes over its lane's width. */
+  /** A vector's or a mask's lane count: sixteen bytes over its lane's width. */
   laneCount(type: i32): i32 {
     return 16 / this.alignOf(this.refs[type])
   }
@@ -827,6 +878,8 @@ export class TypeTable {
         return this.unionMangle(type)
       case K_VECTOR:
         return `vec.${this.scalarName(this.refs[type])}`
+      case K_MASK:
+        return `msk.${this.scalarName(this.refs[type])}`
       case K_REGION:
         return `rgn.${this.mangle(this.refs[type])}`
       default:
@@ -1080,6 +1133,8 @@ export class TypeTable {
         return UNION_TYPE
       case K_VECTOR:
         return `<${this.laneCount(type)} x ${this.llvmType(this.refs[type])}>`
+      case K_MASK:
+        return `<${this.laneCount(type)} x i1>`
       case K_REGION:
         return "i64"
       default:
@@ -1148,6 +1203,8 @@ export class TypeTable {
         return this.unionName(type)
       case K_VECTOR:
         return `${this.scalarName(this.refs[type])}x${this.laneCount(type)}`
+      case K_MASK:
+        return `mask${(16 / this.laneCount(type)) * 8}x${this.laneCount(type)}`
       case K_REGION:
         return `Region<${this.typeName(this.refs[type])}>`
       default:

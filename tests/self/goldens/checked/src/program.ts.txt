@@ -197,13 +197,14 @@ struct FieldInfo (class) size=72 align=8 exported
   field readonly: boolean index=4 offset=20
   field jsonOptional: boolean index=5 offset=21
   field jsonOffWire: boolean index=6 offset=22
-  field initializer: Node | null index=7 offset=24
-  field decl: Node index=8 offset=32
-  field jsonPresence: FieldInfo | null index=9 offset=40
-  field inlineCapacity: i32 index=10 offset=48
-  field initializerValue: i32 index=11 offset=52
-  field spelling: string index=12 offset=56
-  field wireName: string index=13 offset=64
+  field boxed: boolean index=7 offset=23
+  field initializer: Node | null index=8 offset=24
+  field decl: Node index=9 offset=32
+  field jsonPresence: FieldInfo | null index=10 offset=40
+  field inlineCapacity: i32 index=11 offset=48
+  field initializerValue: i32 index=12 offset=52
+  field spelling: string index=13 offset=56
+  field wireName: string index=14 offset=64
   constructor -> @FieldInfo.constructor
   method inline -> @FieldInfo.inline
 struct StructInfo (class) size=168 align=8 exported

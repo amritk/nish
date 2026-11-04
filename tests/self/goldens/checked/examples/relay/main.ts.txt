@@ -949,7 +949,7 @@ struct QuicConnReassembly (class) size=32 align=8
   method insert -> @nish.QuicConnReassembly.insert
   method run -> @nish.QuicConnReassembly.run
   method consume -> @nish.QuicConnReassembly.consume
-struct QuicConnSpace (class) size=208 align=8
+struct QuicConnSpace (class) size=296 align=8
   field readKeys: QuicKeys | null index=0 offset=0 initialized
   field writeKeys: QuicKeys | null index=1 offset=8 initialized
   field nextPn: i64 index=2 offset=16 initialized
@@ -962,25 +962,25 @@ struct QuicConnSpace (class) size=208 align=8
   field cryptoInDelivered: i64 index=9 offset=64 initialized
   field cryptoResendLow: i64 index=10 offset=72 initialized
   field cryptoResendHigh: i64 index=11 offset=80 initialized
-  field sentCryptoOffset: i64[] index=12 offset=88
-  field sentCryptoLength: i32[] index=13 offset=96
-  field sentFlags: u8[] index=14 offset=104
-  field sentStreamCount: i32[] index=15 offset=112
-  field sentStreamId: i64[] index=16 offset=120
-  field sentStreamOffset: i64[] index=17 offset=128
-  field sentStreamLength: i32[] index=18 offset=136
-  field sentStreamFin: u8[] index=19 offset=144
-  field sentControlCount: i32[] index=20 offset=152
-  field sentControlKind: u8[] index=21 offset=160
-  field sentControlValue: i64[] index=22 offset=168
-  field keySlots: QuicKeysSlot[] index=23 offset=176
-  field level: i32 index=24 offset=184 initialized
-  field cryptoOutHead: i32 index=25 offset=188 initialized
-  field builtStart: i32 index=26 offset=192 initialized
-  field builtEnd: i32 index=27 offset=196 initialized
-  field staging: i32 index=28 offset=200 initialized
-  field discarded: boolean index=29 offset=204 initialized
-  field stagedEliciting: boolean index=30 offset=205 initialized
+  field sentCryptoOffset: i64[] index=12 offset=88 boxed
+  field sentCryptoLength: i32[] index=13 offset=104 boxed
+  field sentFlags: u8[] index=14 offset=120 boxed
+  field sentStreamCount: i32[] index=15 offset=136 boxed
+  field sentStreamId: i64[] index=16 offset=152 boxed
+  field sentStreamOffset: i64[] index=17 offset=168 boxed
+  field sentStreamLength: i32[] index=18 offset=184 boxed
+  field sentStreamFin: u8[] index=19 offset=200 boxed
+  field sentControlCount: i32[] index=20 offset=216 boxed
+  field sentControlKind: u8[] index=21 offset=232 boxed
+  field sentControlValue: i64[] index=22 offset=248 boxed
+  field keySlots: QuicKeysSlot[] index=23 offset=264
+  field level: i32 index=24 offset=272 initialized
+  field cryptoOutHead: i32 index=25 offset=276 initialized
+  field builtStart: i32 index=26 offset=280 initialized
+  field builtEnd: i32 index=27 offset=284 initialized
+  field staging: i32 index=28 offset=288 initialized
+  field discarded: boolean index=29 offset=292 initialized
+  field stagedEliciting: boolean index=30 offset=293 initialized
   constructor -> @nish.QuicConnSpace.constructor
   method reset -> @nish.QuicConnSpace.reset
   method appendCrypto -> @nish.QuicConnSpace.appendCrypto
@@ -1259,7 +1259,7 @@ function QuicConnSpace.constructor(this: QuicConnSpace, level: i32): void -> @ni
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: level
   calls: nish.QuicAckRanges.constructor nish.QuicKeysSlot.constructor nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:21 new QuicAckRanges -> @nish.QuicAckRanges.constructor
   local +3:11 slots: i32 (const)
@@ -1272,7 +1272,7 @@ function QuicConnSpace.reset(this: QuicConnSpace): void -> @nish.QuicConnSpace.r
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicAckRanges.clear nish.QuicConnSpace.clearStaged
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.clearStaged#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.clearStaged#0
   stackSites=0 stackLocals=0
   callee +4:5 QuicAckRanges.clear -> @nish.QuicAckRanges.clear
   callee +13:5 QuicConnSpace.clearStaged -> @nish.QuicConnSpace.clearStaged
@@ -1280,7 +1280,7 @@ function QuicConnSpace.appendCrypto(this: QuicConnSpace, bytes: u8[], length: i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish_array_grow nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -3:14 k: i32 (let)
@@ -1289,47 +1289,47 @@ function QuicConnSpace.keySlot(this: QuicConnSpace, k: i32): QuicKeysSlot -> @ni
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=72
   escaping: k
   calls: nish_panic_index
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
 function QuicConnSpace.wipeKeySlots(this: QuicConnSpace): void -> @nish.QuicConnSpace.wipeKeySlots [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicKeysSlot.wipe
   calls: nish.QuicKeysSlot.wipe
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 slot: QuicKeysSlot (const)
   callee +1:7 QuicKeysSlot.wipe -> @nish.QuicKeysSlot.wipe
 function QuicConnSpace.streamCount(this: QuicConnSpace, row: i32): i32 -> @nish.QuicConnSpace.streamCount [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: row
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.controlCount(this: QuicConnSpace, row: i32): i32 -> @nish.QuicConnSpace.controlCount [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: row
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.cryptoLength(this: QuicConnSpace, row: i32): i32 -> @nish.QuicConnSpace.cryptoLength [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: row
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.cryptoOffset(this: QuicConnSpace, row: i32): i64 -> @nish.QuicConnSpace.cryptoOffset [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: row
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.flags(this: QuicConnSpace, row: i32): i32 -> @nish.QuicConnSpace.flags [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: row
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.clearStaged(this: QuicConnSpace): void -> @nish.QuicConnSpace.clearStaged [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicConnSpace.setCounts nish.QuicConnSpace.setCrypto nish.QuicConnSpace.setFlags
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.setCrypto#0 nish.QuicConnSpace.setFlags#0 nish.QuicConnSpace.setCounts#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.setCrypto#0 nish.QuicConnSpace.setFlags#0 nish.QuicConnSpace.setCounts#0
   stackSites=0 stackLocals=0
   callee +1:5 QuicConnSpace.setCrypto -> @nish.QuicConnSpace.setCrypto
   callee +2:5 QuicConnSpace.setFlags -> @nish.QuicConnSpace.setFlags
@@ -1338,26 +1338,26 @@ function QuicConnSpace.setCrypto(this: QuicConnSpace, row: i32, offset: i64, len
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: length offset row
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.setFlags(this: QuicConnSpace, row: i32, flags: i32): void -> @nish.QuicConnSpace.setFlags [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: row
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.setCounts(this: QuicConnSpace, row: i32, streams: i32, control: i32): void -> @nish.QuicConnSpace.setCounts [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: control row streams
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnSpace.setChunk(this: QuicConnSpace, row: i32, j: i32, id: i64, offset: i64, length: i32, fin: boolean): void -> @nish.QuicConnSpace.setChunk [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: id length offset
   calls: nish_panic_overflow
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -8:11 at: i32 (const)
 function QuicConnSpace.setControl(this: QuicConnSpace, row: i32, j: i32, kind: i32, value: i64): void -> @nish.QuicConnSpace.setControl [method]
@@ -1365,7 +1365,7 @@ function QuicConnSpace.setControl(this: QuicConnSpace, row: i32, j: i32, kind: i
   sharedWrite: +0:7
   escaping: value
   calls: nish_panic_overflow
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:11 at: i32 (const)
 function QuicConnSpace.stageCrypto(this: QuicConnSpace, offset: i64, length: i32): void -> @nish.QuicConnSpace.stageCrypto [method]
@@ -1373,7 +1373,7 @@ function QuicConnSpace.stageCrypto(this: QuicConnSpace, offset: i64, length: i32
   sharedWrite: +0:5
   escaping: length offset
   calls: nish.QuicConnSpace.setCrypto
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.setCrypto#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.setCrypto#0
   stackSites=0 stackLocals=0
   callee -1:5 QuicConnSpace.setCrypto -> @nish.QuicConnSpace.setCrypto
 function QuicConnSpace.stageChunk(this: QuicConnSpace, id: i64, offset: i64, length: i32, fin: boolean): void -> @nish.QuicConnSpace.stageChunk [method]
@@ -1381,7 +1381,7 @@ function QuicConnSpace.stageChunk(this: QuicConnSpace, id: i64, offset: i64, len
   sharedWrite: +0:5
   escaping: fin id length offset
   calls: nish.QuicConnSpace.controlCount nish.QuicConnSpace.setChunk nish.QuicConnSpace.setCounts nish.QuicConnSpace.streamCount nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.setChunk#0 nish.QuicConnSpace.setCounts#0 nish.QuicConnSpace.controlCount#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.setChunk#0 nish.QuicConnSpace.setCounts#0 nish.QuicConnSpace.controlCount#0
   stackSites=0 stackLocals=0
   local -3:11 streams: i32 (const)
   callee -3:26 QuicConnSpace.streamCount -> @nish.QuicConnSpace.streamCount
@@ -1393,7 +1393,7 @@ function QuicConnSpace.stageControl(this: QuicConnSpace, kind: i32, value: i64):
   sharedWrite: +0:5
   escaping: kind value
   calls: nish.QuicConnSpace.controlCount nish.QuicConnSpace.setControl nish.QuicConnSpace.setCounts nish.QuicConnSpace.streamCount nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.setControl#0 nish.QuicConnSpace.setCounts#0 nish.QuicConnSpace.streamCount#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.setControl#0 nish.QuicConnSpace.setCounts#0 nish.QuicConnSpace.streamCount#0
   stackSites=0 stackLocals=0
   local -3:11 control: i32 (const)
   callee -3:26 QuicConnSpace.controlCount -> @nish.QuicConnSpace.controlCount
@@ -1405,7 +1405,7 @@ function QuicConnSpace.commitStaged(this: QuicConnSpace, row: i32): void -> @nis
   sharedWrite: via nish.QuicConnSpace.setCrypto
   escaping: row
   calls: nish.QuicConnSpace.controlCount nish.QuicConnSpace.cryptoLength nish.QuicConnSpace.cryptoOffset nish.QuicConnSpace.flags nish.QuicConnSpace.setChunk nish.QuicConnSpace.setControl nish.QuicConnSpace.setCounts nish.QuicConnSpace.setCrypto nish.QuicConnSpace.setFlags nish.QuicConnSpace.streamCount nish_panic_overflow
-  pointer this: size=208 writesThrough=false captured=false passedTo=nish.QuicConnSpace.setCrypto#0 nish.QuicConnSpace.cryptoOffset#0 nish.QuicConnSpace.cryptoLength#0 nish.QuicConnSpace.setFlags#0 nish.QuicConnSpace.flags#0 nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.setCounts#0 nish.QuicConnSpace.setChunk#0 nish.QuicConnSpace.setControl#0
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.QuicConnSpace.setCrypto#0 nish.QuicConnSpace.cryptoOffset#0 nish.QuicConnSpace.cryptoLength#0 nish.QuicConnSpace.setFlags#0 nish.QuicConnSpace.flags#0 nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.setCounts#0 nish.QuicConnSpace.setChunk#0 nish.QuicConnSpace.setControl#0
   stackSites=0 stackLocals=0
   local +0:11 from: i32 (const)
   callee +1:5 QuicConnSpace.setCrypto -> @nish.QuicConnSpace.setCrypto
@@ -1429,13 +1429,13 @@ function QuicConnSpace.resendCrypto(this: QuicConnSpace, offset: i64, length: i3
   sharedWrite: +0:7
   escaping: offset
   calls: nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 end: i64 (const)
 function QuicConnSpace.cryptoUnsent(this: QuicConnSpace): i32 -> @nish.QuicConnSpace.cryptoUnsent [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function quicConnSlice(bytes: u8[], from: i32, length: i32): u8[] -> @nish.quicConnSlice
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -1652,7 +1652,7 @@ function QuicConnection.spaceOf(this: QuicConnection, type: i32): QuicConnSpace 
   pointer this: size=592 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnection.spaceAt(this: QuicConnection, level: i32): QuicConnSpace -> @nish.QuicConnection.spaceAt [exported method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=208
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=296
   pointer this: size=592 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnection.ownsConnectionId(this: QuicConnection, dcid: u8[]): boolean -> @nish.QuicConnection.ownsConnectionId [exported method]
@@ -1805,7 +1805,7 @@ function QuicConnection.openScoped(this: QuicConnection, buf: u8[], header: Quic
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.drop#0 nish.QuicConnection.drop#0 nish.QuicConnection.fail#0 nish.QuicConnection.fail#0 nish.QuicConnection.drop#0 nish.QuicConnection.notePhase#0 nish.QuicConnection.receiveFrames#0 nish.QuicConnection.closed#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.quicUnprotectHeader#1 nish.quicDecryptPayload#1 nish.QuicConnection.receiveFrames#4
   pointer header: size=88 writesThrough=false captured=false passedTo=nish.quicUnprotectHeader#2 nish.quicDecryptPayload#2 nish.QuicConnection.receiveFrames#5
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveFrames#1
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveFrames#1
   pointer keys: size=48 writesThrough=true captured=true passedTo=nish.quicUnprotectHeader#0
   stackSites=0 stackLocals=0
   local -18:11 packet: QuicPacket (const)
@@ -1927,7 +1927,7 @@ function QuicConnection.receiveFrames(this: QuicConnection, space: QuicConnSpace
   escaping: packetType
   calls: nish.QuicConnection.closed nish.QuicConnection.fail nish.QuicConnection.receiveFrame nish.quicFrameAckEliciting nish.quicFrameAllowed nish.quicParseFrame
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.fail#0 nish.QuicConnection.fail#0 nish.QuicConnection.fail#0 nish.QuicConnection.receiveFrame#0 nish.QuicConnection.closed#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveFrame#1
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveFrame#1
   pointer payload: size=0 writesThrough=false captured=false passedTo=nish.quicParseFrame#1 nish.QuicConnection.receiveFrame#3
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.QuicConnection.receiveFrame#5
   pointer header: size=88 writesThrough=false captured=false passedTo=nish.QuicConnection.receiveFrame#6
@@ -1959,7 +1959,7 @@ function QuicConnection.receiveFrame(this: QuicConnection, space: QuicConnSpace,
   escaping: frameStart
   calls: nish.QuicCidTable.addPeerAt nish.QuicCidTable.retireLocal nish.QuicConnection.drain nish.QuicConnection.fail nish.QuicConnection.failOn nish.QuicConnection.receiveAck nish.QuicConnection.receiveCrypto nish.QuicConnection.receiveDatagram nish.QuicConnection.receivePathChallenge nish.QuicStreams.onMaxData nish.QuicStreams.onMaxStreamData nish.QuicStreams.onMaxStreams nish.QuicStreams.onReset nish.QuicStreams.onStopSending nish.QuicStreams.onStream nish.QuicStreams.onStreamDataBlocked
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveAck#0 nish.QuicConnection.receiveCrypto#0 nish.QuicConnection.failOn#0 nish.QuicConnection.failOn#0 nish.QuicConnection.failOn#0 nish.QuicConnection.failOn#0 nish.QuicConnection.failOn#0 nish.QuicConnection.receiveDatagram#0 nish.QuicConnection.failOn#0 nish.QuicConnection.failOn#0 nish.QuicConnection.receivePathChallenge#0 nish.QuicConnection.fail#0 nish.QuicConnection.drain#0 nish.QuicConnection.drain#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveAck#1 nish.QuicConnection.receiveCrypto#1
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnection.receiveAck#1 nish.QuicConnection.receiveCrypto#1
   pointer frame: size=144 writesThrough=false captured=false passedTo=nish.QuicConnection.receiveAck#2 nish.QuicConnection.receiveCrypto#2 nish.QuicConnection.receiveDatagram#1 nish.QuicConnection.receivePathChallenge#1
   pointer payload: size=0 writesThrough=false captured=false passedTo=nish.QuicConnection.receiveCrypto#3 nish.QuicStreams.onStream#3 nish.QuicConnection.receiveDatagram#2 nish.QuicCidTable.addPeerAt#3 nish.QuicCidTable.addPeerAt#6 nish.QuicConnection.receivePathChallenge#2
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.QuicCidTable.retireLocal#2
@@ -2006,7 +2006,7 @@ function QuicConnection.receiveAck(this: QuicConnection, space: QuicConnSpace, f
   sharedWrite: +0:7
   calls: nish.QuicConnection.ackDelayOf nish.QuicConnection.acksSkipped nish.QuicConnection.fail nish.QuicConnection.packetsLost nish.QuicConnection.untrack nish.QuicRecovery.onAckEcn nish.QuicRecovery.space nish.QuicSentPackets.ackedSlot
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.acksSkipped#0 nish.QuicConnection.fail#0 nish.QuicConnection.ackDelayOf#0 nish.QuicConnection.untrack#0 nish.QuicConnection.packetsLost#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnection.untrack#1 nish.QuicConnection.packetsLost#1
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnection.untrack#1 nish.QuicConnection.packetsLost#1
   pointer frame: size=144 writesThrough=false captured=false passedTo=nish.QuicConnection.acksSkipped#1
   stackSites=0 stackLocals=0
   callee -5:84 QuicConnection.acksSkipped -> @nish.QuicConnection.acksSkipped
@@ -2048,7 +2048,7 @@ function QuicConnection.packetsLost(this: QuicConnection, space: QuicConnSpace, 
   sharedWrite: via nish.QuicConnection.requeue
   calls: nish.QuicConnection.requeue nish.QuicSentPackets.lostSlot
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.requeue#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnection.requeue#1
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnection.requeue#1
   pointer sent: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.lostSlot#0
   stackSites=0 stackLocals=0
   local +0:14 k: i32 (let)
@@ -2060,7 +2060,7 @@ function QuicConnection.requeue(this: QuicConnection, space: QuicConnSpace, row:
   escaping: row
   calls: nish.QuicConnSpace.controlCount nish.QuicConnSpace.cryptoLength nish.QuicConnSpace.cryptoOffset nish.QuicConnSpace.flags nish.QuicConnSpace.resendCrypto nish.QuicConnSpace.streamCount nish.QuicConnection.requeueControl nish.QuicStreams.chunkLost nish_panic_overflow
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.requeueControl#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.resendCrypto#0 nish.QuicConnSpace.cryptoOffset#0 nish.QuicConnSpace.cryptoLength#0 nish.QuicConnSpace.flags#0 nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.controlCount#0
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.resendCrypto#0 nish.QuicConnSpace.cryptoOffset#0 nish.QuicConnSpace.cryptoLength#0 nish.QuicConnSpace.flags#0 nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.controlCount#0
   stackSites=0 stackLocals=0
   callee -2:5 QuicConnSpace.resendCrypto -> @nish.QuicConnSpace.resendCrypto
   callee -2:24 QuicConnSpace.cryptoOffset -> @nish.QuicConnSpace.cryptoOffset
@@ -2129,7 +2129,7 @@ function QuicConnection.receiveCrypto(this: QuicConnection, space: QuicConnSpace
   sharedWrite: +0:7
   calls: nish.QuicConnReassembly.insert nish.QuicConnReassembly.reset nish.QuicConnection.fail nish.QuicConnection.spaceAt nish_panic_overflow
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.fail#0 nish.QuicConnection.spaceAt#0 nish.QuicConnection.fail#0
-  pointer space: size=208 writesThrough=false captured=false
+  pointer space: size=296 writesThrough=false captured=false
   pointer frame: size=144 writesThrough=false captured=false
   pointer payload: size=0 writesThrough=false captured=false passedTo=nish.QuicConnReassembly.insert#2
   stackSites=0 stackLocals=0
@@ -2243,7 +2243,7 @@ function QuicConnection.discard(this: QuicConnection, space: QuicConnSpace): voi
   sharedWrite: +0:5
   calls: nish.QuicConnSpace.wipeKeySlots nish.QuicRecovery.discardSpace nish.quicConnWipeKeys
   pointer this: size=592 writesThrough=false captured=false
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.wipeKeySlots#0
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.wipeKeySlots#0
   stackSites=0 stackLocals=0
   callee +2:5 QuicRecovery.discardSpace -> @nish.QuicRecovery.discardSpace
   callee +6:5 quicConnWipeKeys -> @nish.quicConnWipeKeys
@@ -2589,7 +2589,7 @@ function QuicConnection.overhead(this: QuicConnection, space: QuicConnSpace): i3
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicCidTable.currentPeerEntry nish.quicPacketNumberLength nish_panic_overflow
   pointer this: size=592 writesThrough=false captured=false
-  pointer space: size=208 writesThrough=false captured=false
+  pointer space: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 pnLength: i32 (const)
   callee +0:27 quicPacketNumberLength -> @nish.quicPacketNumberLength
@@ -2603,7 +2603,7 @@ function QuicConnection.buildPayloadInto(this: QuicConnection, space: QuicConnSp
   escaping: end start
   calls: nish.QuicAckRanges.putAck nish.QuicConnSpace.clearStaged nish.QuicConnection.buildApplication nish.QuicConnection.buildCrypto nish.quicPutTypeOnly
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.buildCrypto#0 nish.QuicConnection.buildApplication#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.clearStaged#0 nish.QuicConnection.buildCrypto#1 nish.QuicConnection.buildApplication#1
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.clearStaged#0 nish.QuicConnection.buildCrypto#1 nish.QuicConnection.buildApplication#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.QuicAckRanges.putAck#1 nish.QuicConnection.buildCrypto#2 nish.QuicConnection.buildApplication#2 nish.quicPutTypeOnly#0
   stackSites=0 stackLocals=0
   local -18:9 at: i32 (let)
@@ -2619,7 +2619,7 @@ function QuicConnection.buildCrypto(this: QuicConnection, space: QuicConnSpace, 
   escaping: at end
   calls: nish.QuicConnSpace.cryptoUnsent nish.QuicConnSpace.stageCrypto nish.quicCryptoOverhead nish.quicPutCrypto nish_panic_overflow
   pointer this: size=592 writesThrough=false captured=false
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.stageCrypto#0 nish.QuicConnSpace.cryptoUnsent#0 nish.QuicConnSpace.stageCrypto#0
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.stageCrypto#0 nish.QuicConnSpace.cryptoUnsent#0 nish.QuicConnSpace.stageCrypto#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.quicPutCrypto#0 nish.quicPutCrypto#0
   stackSites=0 stackLocals=0
   local -12:13 low: i64 (const)
@@ -2644,7 +2644,7 @@ function QuicConnection.buildApplication(this: QuicConnection, space: QuicConnSp
   escaping: end start
   calls: nish.QuicCidTable.nextUnannounced nish.QuicCidTable.takeRetire nish.QuicConnSpace.controlCount nish.QuicConnSpace.setFlags nish.QuicConnSpace.stageChunk nish.QuicConnSpace.stageControl nish.QuicConnSpace.streamCount nish.QuicDatagramQueue.putFrame nish.QuicStreams.beginPacket nish.QuicStreams.putNextChunk nish.QuicStreams.putNextControl nish.quicPutNewConnectionId nish.quicPutPathData nish.quicPutTypeOnly nish.quicPutValue nish_panic_overflow
   pointer this: size=592 writesThrough=true captured=false
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.setFlags#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.stageChunk#0
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.setFlags#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.stageChunk#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.quicPutTypeOnly#0 nish.quicPutValue#0 nish.quicPutNewConnectionId#0 nish.quicPutPathData#0 nish.QuicStreams.putNextControl#1 nish.QuicDatagramQueue.putFrame#1 nish.QuicDatagramQueue.putFrame#1 nish.QuicStreams.putNextChunk#1
   stackSites=0 stackLocals=0
   local -3:9 at: i32 (let)
@@ -2683,7 +2683,7 @@ function QuicConnection.sealAt(this: QuicConnection, space: QuicConnSpace, out: 
   escaping: start
   calls: nish.QuicCidTable.currentPeerEntry nish.QuicConnection.fail nish.QuicConnection.overhead nish.QuicConnection.recordSent nish.QuicRecovery.onEctSent nish.quicPacketNumberLength nish.quicPutLongHeader nish.quicPutShortHeader nish.quicSealInPlace nish_panic_overflow
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.fail#0 nish.QuicConnection.overhead#0 nish.QuicConnection.recordSent#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnection.overhead#1 nish.QuicConnection.recordSent#1
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnection.overhead#1 nish.QuicConnection.recordSent#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.quicPutShortHeader#0 nish.quicPutLongHeader#0 nish.quicSealInPlace#1
   stackSites=0 stackLocals=0
   callee -41:7 QuicConnection.fail -> @nish.QuicConnection.fail
@@ -2710,7 +2710,7 @@ function QuicConnection.recordSent(this: QuicConnection, space: QuicConnSpace, p
   escaping: pn size
   calls: nish.QuicConnSpace.clearStaged nish.QuicConnSpace.commitStaged nish.QuicConnection.requeue nish.QuicRecovery.onPacketSent nish_panic_overflow
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.requeue#0 nish.QuicConnection.requeue#0
-  pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnSpace.commitStaged#0 nish.QuicConnection.requeue#1 nish.QuicConnection.requeue#1 nish.QuicConnSpace.clearStaged#0
+  pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.commitStaged#0 nish.QuicConnection.requeue#1 nish.QuicConnection.requeue#1 nish.QuicConnSpace.clearStaged#0
   stackSites=0 stackLocals=0
   local -4:11 slot: i32 (const)
   callee -4:23 QuicRecovery.onPacketSent -> @nish.QuicRecovery.onPacketSent
@@ -2724,7 +2724,7 @@ function QuicConnection.untrack(this: QuicConnection, space: QuicConnSpace, row:
   escaping: row
   calls: nish.QuicConnSpace.controlCount nish.QuicConnSpace.streamCount nish.QuicStreams.chunkAcked nish.QuicStreams.controlAcked nish_panic_overflow
   pointer this: size=592 writesThrough=false captured=false
-  pointer space: size=208 writesThrough=false captured=false passedTo=nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.controlCount#0
+  pointer space: size=296 writesThrough=false captured=false passedTo=nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.controlCount#0
   stackSites=0 stackLocals=0
   local +0:11 streams: i32 (const)
   callee +0:26 QuicConnSpace.streamCount -> @nish.QuicConnSpace.streamCount
@@ -20331,20 +20331,33 @@ function base64urlEncode(data: u8[]): string -> @nish.base64urlEncode [exported]
   callee +12:38 base64urlCharOf -> @nish.base64urlCharOf
   callee +18:36 base64urlCharOf -> @nish.base64urlCharOf
 function base64urlDecode(text: string): u8[] | null -> @nish.base64urlDecode [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64urlSextetOf nish_panic nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64urlSextetOf nish_panic nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 tail: i32 (const)
   local +9:9 out: u8[] (const)
   local +10:9 outLen: i32 (const)
   local +14:7 bad: i32 (let)
-  local +15:7 acc: i32 (let)
-  local +16:7 bits: i32 (let)
   local +17:7 j: i32 (let)
   local +18:12 k: i32 (let)
-  local +19:11 v: i32 (const)
-  callee +19:20 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +19:11 s0: i32 (const)
+  callee +19:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +20:11 s1: i32 (const)
+  callee +20:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +21:11 s2: i32 (const)
+  callee +21:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +22:11 s3: i32 (const)
+  callee +22:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +24:11 word: i32 (const)
+  local +38:11 k: i32 (const)
+  local +39:11 s0: i32 (const)
+  callee +39:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +40:11 s1: i32 (const)
+  callee +40:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +43:11 s2: i32 (const)
+  callee +43:34 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +45:11 word: i32 (const)
 function base64StdPadCharOf(v: i32): i32 -> @nish.base64StdPadCharOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: v
@@ -22312,8 +22325,22 @@ function sha1(data: u8[]): u8[] -> @nish.sha1 [exported]
   local +32:11 word: u32 (const)
 module std/net/http1-codec.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
+import and from "nish:simd" -> builtin and
+import any from "nish:simd" -> builtin any
+import bitmask from "nish:simd" -> builtin bitmask
+import eq from "nish:simd" -> builtin eq
 import extract from "nish:simd" -> builtin extract
+import gt from "nish:simd" -> builtin gt
 import loadU8x16 from "nish:simd" -> builtin loadU8x16
+import lt from "nish:simd" -> builtin lt
+import mask8x16 from "nish:simd" -> builtin mask8x16
+import ne from "nish:simd" -> builtin ne
+import or from "nish:simd" -> builtin or
+import replace from "nish:simd" -> builtin replace
+import select from "nish:simd" -> builtin select
+import splatU8x16 from "nish:simd" -> builtin splatU8x16
+import store from "nish:simd" -> builtin store
+import subWrapping from "nish:simd" -> builtin subWrapping
 import u8x16 from "nish:simd" -> builtin u8x16
 const HTTP1_NEED_MORE: i32 = 0 [exported]
 const HTTP1_HEAD: i32 = 1 [exported]
@@ -22558,7 +22585,7 @@ function http1StartRequest(p: Http1Parser): void -> @nish.http1StartRequest
   sharedWrite: +0:3
   pointer p: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function http1WordHasControl(x: u64): boolean -> @nish.http1WordHasControl
+function http1ControlBits(x: u64): u64 -> @nish.http1ControlBits
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 ones32: u64 (const)
@@ -22569,6 +22596,13 @@ function http1WordHasControl(x: u64): boolean -> @nish.http1WordHasControl
   local +5:9 below: u64 (const)
   local +6:9 y: u64 (const)
   local +7:9 del: u64 (const)
+function http1FirstByte(bits: u64): i32 -> @nish.http1FirstByte
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 mask32: u64 (const)
+  local +1:9 lo: u32 (const)
+  local +5:9 hi: u32 (const)
 function http1Lanes(v: u8x16, at: i32): u64 -> @nish.http1Lanes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -22576,26 +22610,58 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: overStatus
-  calls: nish.http1Fail nish.http1Lanes nish.http1WordHasControl nish_panic_index nish_panic_overflow
+  calls: nish.http1ControlBits nish.http1Fail nish.http1FirstByte nish.http1Lanes nish_panic_index nish_panic_overflow
   pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0
   stackSites=0 stackLocals=0
   local -6:9 buf: u8[] (const)
   local -5:9 end: i32 (const)
   local -4:7 i: i32 (let)
   local +2:9 stop: i32 (const)
-  local +11:13 v: u8x16 (const)
-  callee +12:11 http1WordHasControl -> @nish.http1WordHasControl
-  callee +12:31 http1Lanes -> @nish.http1Lanes
-  callee +12:52 http1WordHasControl -> @nish.http1WordHasControl
-  callee +12:72 http1Lanes -> @nish.http1Lanes
-  local +23:11 c: i32 (const)
-  callee +26:16 http1Fail -> @nish.http1Fail
-  callee +29:16 http1Fail -> @nish.http1Fail
-  callee +49:12 http1Fail -> @nish.http1Fail
+  local +11:9 found: boolean (let)
+  local +13:13 v: u8x16 (const)
+  local +14:13 low: u64 (const)
+  callee +14:24 http1ControlBits -> @nish.http1ControlBits
+  callee +14:41 http1Lanes -> @nish.http1Lanes
+  callee +16:14 http1FirstByte -> @nish.http1FirstByte
+  local +19:15 high: u64 (const)
+  callee +19:27 http1ControlBits -> @nish.http1ControlBits
+  callee +19:44 http1Lanes -> @nish.http1Lanes
+  callee +21:20 http1FirstByte -> @nish.http1FirstByte
+  local +34:9 c: i32 (let)
+  callee +43:16 http1Fail -> @nish.http1Fail
+  callee +46:16 http1Fail -> @nish.http1Fail
+  callee +66:12 http1Fail -> @nish.http1Fail
 function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local +0:7 mask: i32 (let)
+  local +0:9 low: u64 (const)
+  local +1:9 high: u64 (const)
+  local +2:9 word: u64 (const)
+function http1NonTokenLanes(v: u8x16): i32 -> @nish.http1NonTokenLanes
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 outside: mask8x16 (const)
+  local +1:9 quote: mask8x16 (const)
+  local +2:9 comma: mask8x16 (const)
+  local +3:9 colon: mask8x16 (const)
+  local +4:9 bracket: mask8x16 (const)
+  local +5:9 brace: mask8x16 (const)
+function http1LowerName(head: u8[], k0: i32, stop: i32): i32 -> @nish.http1LowerName
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: k0
+  calls: llvm.ctlz.i32 nish.http1IsTokenByte nish.http1NonTokenLanes nish_panic_index nish_panic_overflow
+  pointer head: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -16:9 lanes: u8x16 (const)
+  local -15:7 k: i32 (let)
+  local -13:11 v: u8x16 (const)
+  local -12:11 bad: i32 (const)
+  callee -12:22 http1NonTokenLanes -> @nish.http1NonTokenLanes
+  local -11:9 run: i32 (let)
+  local -4:11 upper: mask8x16 (const)
+  local +7:11 c: i32 (const)
+  callee +8:10 http1IsTokenByte -> @nish.http1IsTokenByte
 function http1IsValueByte(c: i32): boolean -> @nish.http1IsValueByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -22741,33 +22807,32 @@ function http1RequestLine(p: Http1Parser): i32 -> @nish.http1RequestLine
 function http1FieldLine(p: Http1Parser, keep: boolean): i32 -> @nish.http1FieldLine
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.http1Fail nish.http1HeadAppend nish.http1IsOws nish.http1IsTokenByte nish.http1SpanSet nish.http1Text nish_array_grow nish_panic_index nish_panic_overflow
-  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1HeadAppend#0 nish.http1SpanSet#0
+  calls: nish.http1Fail nish.http1HeadAppend nish.http1IsOws nish.http1IsTokenByte nish.http1LowerName nish.http1SpanSet nish.http1Text nish_array_grow nish_panic_index nish_panic_overflow
+  pointer p: size=200 writesThrough=true captured=false passedTo=nish.http1Fail#0 nish.http1HeadAppend#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1Fail#0 nish.http1SpanSet#0
   stackSites=0 stackLocals=0
-  local -20:9 buf: u8[] (const)
-  local -19:9 n: i32 (const)
-  local -18:9 a: i32 (const)
-  local -17:9 b: i32 (const)
-  callee -15:12 http1Fail -> @nish.http1Fail
-  local -13:7 i: i32 (let)
-  callee -12:54 http1IsTokenByte -> @nish.http1IsTokenByte
+  local -30:9 buf: u8[] (const)
+  local -29:9 n: i32 (const)
+  local -28:9 a: i32 (const)
+  local -27:9 b: i32 (const)
+  callee -25:12 http1Fail -> @nish.http1Fail
+  local -19:7 at: i32 (let)
+  local -18:7 i: i32 (let)
+  callee -16:10 http1HeadAppend -> @nish.http1HeadAppend
+  callee -15:14 http1LowerName -> @nish.http1LowerName
+  callee -13:56 http1IsTokenByte -> @nish.http1IsTokenByte
   callee -8:12 http1Fail -> @nish.http1Fail
   local -6:9 nameEnd: i32 (const)
   callee -2:12 http1Fail -> @nish.http1Fail
   callee +2:12 http1Fail -> @nish.http1Fail
   local +6:9 valueStart: i32 (let)
   local +7:9 valueEnd: i32 (let)
-  callee +8:74 http1IsOws -> @nish.http1IsOws
-  callee +11:58 http1IsOws -> @nish.http1IsOws
-  local +14:11 at: i32 (const)
-  callee +14:21 http1HeadAppend -> @nish.http1HeadAppend
-  local +15:11 head: u8[] (const)
-  local +16:14 k: i32 (let)
-  local +21:11 base: i32 (const)
-  callee +22:5 http1SpanSet -> @nish.http1SpanSet
-  local +24:11 spans: i32[] (const)
-  callee +32:20 http1Text -> @nish.http1Text
-  callee +33:21 http1Text -> @nish.http1Text
+  callee +12:7 http1IsOws -> @nish.http1IsOws
+  callee +16:58 http1IsOws -> @nish.http1IsOws
+  local +19:11 base: i32 (const)
+  callee +20:5 http1SpanSet -> @nish.http1SpanSet
+  local +22:11 spans: i32[] (const)
+  callee +30:20 http1Text -> @nish.http1Text
+  callee +31:21 http1Text -> @nish.http1Text
 function http1EndOfHead(p: Http1Parser): i32 -> @nish.http1EndOfHead
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -22974,13 +23039,21 @@ function http1BytesAreToken(bytes: u8[]): boolean -> @nish.http1BytesAreToken
   stackSites=0 stackLocals=0
   local +0:14 b: u8 (const)
   callee +1:10 http1IsTokenByte -> @nish.http1IsTokenByte
+function http1LanesAreFieldText(v: u8x16): boolean -> @nish.http1LanesAreFieldText
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 control: mask8x16 (const)
 function http1BytesAreFieldText(bytes: u8[]): boolean -> @nish.http1BytesAreFieldText
-  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.http1IsValueByte
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.http1IsValueByte nish.http1LanesAreFieldText nish_panic_index nish_panic_overflow
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:14 b: u8 (const)
-  callee +1:10 http1IsValueByte -> @nish.http1IsValueByte
+  local +0:9 n: i32 (const)
+  local +2:14 k: i32 (let)
+  callee +3:12 http1IsValueByte -> @nish.http1IsValueByte
+  local +9:7 k: i32 (let)
+  callee +11:10 http1LanesAreFieldText -> @nish.http1LanesAreFieldText
+  callee +16:21 http1LanesAreFieldText -> @nish.http1LanesAreFieldText
 function http1BytesAre(bytes: u8[], word: string): boolean -> @nish.http1BytesAre [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: word
@@ -23000,8 +23073,9 @@ function http1PutText(out: u8[], at: i32, text: string): i32 -> @nish.http1PutTe
   calls: nish_panic_index nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -3:9 n: i32 (const)
-  local -2:12 k: i32 (let)
+  local -5:9 n: i32 (const)
+  local -1:14 k: i32 (let)
+  local +4:12 k: i32 (let)
 function http1PutCrlf(out: u8[], at: i32): i32 -> @nish.http1PutCrlf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -23027,6 +23101,27 @@ function http1PutBytes(out: u8[], at: i32, bytes: u8[]): i32 -> @nish.http1PutBy
   local -7:9 n: i32 (const)
   callee -5:5 copyBytes -> @nish.copyBytes
   local -2:12 k: i32 (let)
+function http1PutFixed(out: u8[], at: i32, limit: i32, v: u8x16, text: string): i32 -> @nish.http1PutFixed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at text
+  calls: nish.http1PutText nish_panic_index nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.http1PutText#0
+  stackSites=0 stackLocals=0
+  callee +3:10 http1PutText -> @nish.http1PutText
+function http1PutStatusLine(out: u8[], at: i32, limit: i32, status: i32): i32 -> @nish.http1PutStatusLine
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at
+  calls: nish.http1PutText nish_panic_index nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.http1PutText#0
+  stackSites=0 stackLocals=0
+  local -6:9 hundreds: i32 (const)
+  local -5:9 tens: i32 (const)
+  local -4:9 ones: i32 (const)
+  local -1:11 line: u8x16 (const)
+  local +7:9 end: i32 (const)
+  callee +7:20 http1PutText -> @nish.http1PutText
 function http1PutDecimal(out: u8[], at: i32, n: i32): i32 -> @nish.http1PutDecimal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -23041,54 +23136,51 @@ function http1PutDecimal(out: u8[], at: i32, n: i32): i32 -> @nish.http1PutDecim
   local -1:11 digit: i32 (const)
 function http1WriteResponseHead(out: u8[], at: i32, status: i32, reason: string, names: u8[][], values: u8[][], bodyLength: i32, connection: string, date: u8[]): i32 -> @nish.http1WriteResponseHead [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  escaping: at bodyLength connection reason
-  calls: nish.http1BytesAre nish.http1BytesAreFieldText nish.http1BytesAreToken nish.http1DecimalDigits nish.http1IsFieldText nish.http1PutBytes nish.http1PutColonSpace nish.http1PutCrlf nish.http1PutDecimal nish.http1PutText nish_panic_index nish_panic_overflow
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.http1PutText#0 nish.http1PutText#0 nish.http1PutCrlf#0 nish.http1PutBytes#0 nish.http1PutColonSpace#0 nish.http1PutBytes#0 nish.http1PutCrlf#0 nish.http1PutText#0 nish.http1PutBytes#0 nish.http1PutCrlf#0 nish.http1PutText#0 nish.http1PutDecimal#0 nish.http1PutCrlf#0 nish.http1PutText#0 nish.http1PutText#0 nish.http1PutText#0 nish.http1PutCrlf#0 nish.http1PutCrlf#0
+  sharedWrite: via nish.http1PutStatusLine
+  escaping: at bodyLength connection reason status
+  calls: nish.http1BytesAre nish.http1BytesAreFieldText nish.http1BytesAreToken nish.http1DecimalDigits nish.http1IsFieldText nish.http1PutBytes nish.http1PutColonSpace nish.http1PutCrlf nish.http1PutDecimal nish.http1PutFixed nish.http1PutStatusLine nish.http1PutText nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.http1PutStatusLine#0 nish.http1PutText#0 nish.http1PutCrlf#0 nish.http1PutBytes#0 nish.http1PutColonSpace#0 nish.http1PutBytes#0 nish.http1PutCrlf#0 nish.http1PutFixed#0 nish.http1PutBytes#0 nish.http1PutCrlf#0 nish.http1PutFixed#0 nish.http1PutDecimal#0 nish.http1PutCrlf#0 nish.http1PutText#0 nish.http1PutFixed#0 nish.http1PutText#0 nish.http1PutCrlf#0 nish.http1PutCrlf#0
   pointer names: size=0 writesThrough=true captured=false
   pointer values: size=0 writesThrough=true captured=false
   pointer date: size=0 writesThrough=false captured=false passedTo=nish.http1BytesAreFieldText#0 nish.http1PutBytes#2
   stackSites=0 stackLocals=0
-  callee -57:40 http1IsFieldText -> @nish.http1IsFieldText
-  callee -57:69 http1IsFieldText -> @nish.http1IsFieldText
-  callee -54:25 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
-  local -48:9 count: i32 (const)
-  local -41:7 need: i64 (let)
-  local -40:7 sendDate: boolean (let)
-  local -39:12 i: i32 (let)
-  local -38:11 name: u8[] (const)
-  local -37:11 value: u8[] (const)
-  callee -36:10 http1BytesAreToken -> @nish.http1BytesAreToken
-  callee -36:39 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
-  callee -33:9 http1BytesAre -> @nish.http1BytesAre
-  callee -33:50 http1BytesAre -> @nish.http1BytesAre
-  callee -30:41 http1BytesAre -> @nish.http1BytesAre
-  callee -27:9 http1BytesAre -> @nish.http1BytesAre
-  callee -17:30 http1DecimalDigits -> @nish.http1DecimalDigits
-  local -7:7 end: i32 (let)
-  callee -7:18 http1PutText -> @nish.http1PutText
-  local -4:11 hundreds: i32 (const)
-  local -3:11 tens: i32 (const)
-  local -2:11 tensDigit: i32 (const)
-  local -1:11 ones: i32 (const)
-  callee +6:9 http1PutText -> @nish.http1PutText
-  callee +7:9 http1PutCrlf -> @nish.http1PutCrlf
-  local +8:12 i: i32 (let)
-  callee +9:11 http1PutBytes -> @nish.http1PutBytes
-  callee +10:11 http1PutColonSpace -> @nish.http1PutColonSpace
-  callee +11:11 http1PutBytes -> @nish.http1PutBytes
-  callee +12:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +15:11 http1PutText -> @nish.http1PutText
-  callee +16:11 http1PutBytes -> @nish.http1PutBytes
-  callee +17:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +20:11 http1PutText -> @nish.http1PutText
-  callee +21:11 http1PutDecimal -> @nish.http1PutDecimal
-  callee +22:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +24:11 http1PutText -> @nish.http1PutText
-  callee +27:11 http1PutText -> @nish.http1PutText
-  callee +28:11 http1PutText -> @nish.http1PutText
-  callee +29:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +31:10 http1PutCrlf -> @nish.http1PutCrlf
+  callee +0:40 http1IsFieldText -> @nish.http1IsFieldText
+  callee +0:69 http1IsFieldText -> @nish.http1IsFieldText
+  callee +3:25 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
+  local +9:9 count: i32 (const)
+  local +16:7 need: i64 (let)
+  local +17:7 sendDate: boolean (let)
+  local +18:12 i: i32 (let)
+  local +19:11 name: u8[] (const)
+  local +20:11 value: u8[] (const)
+  callee +21:10 http1BytesAreToken -> @nish.http1BytesAreToken
+  callee +21:39 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
+  callee +24:9 http1BytesAre -> @nish.http1BytesAre
+  callee +24:50 http1BytesAre -> @nish.http1BytesAre
+  callee +27:41 http1BytesAre -> @nish.http1BytesAre
+  callee +30:9 http1BytesAre -> @nish.http1BytesAre
+  callee +40:30 http1DecimalDigits -> @nish.http1DecimalDigits
+  local +51:9 limit: i32 (const)
+  local +52:7 end: i32 (let)
+  callee +52:18 http1PutStatusLine -> @nish.http1PutStatusLine
+  callee +53:9 http1PutText -> @nish.http1PutText
+  callee +54:9 http1PutCrlf -> @nish.http1PutCrlf
+  local +55:12 i: i32 (let)
+  callee +56:11 http1PutBytes -> @nish.http1PutBytes
+  callee +57:11 http1PutColonSpace -> @nish.http1PutColonSpace
+  callee +58:11 http1PutBytes -> @nish.http1PutBytes
+  callee +59:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +62:11 http1PutFixed -> @nish.http1PutFixed
+  callee +69:11 http1PutBytes -> @nish.http1PutBytes
+  callee +70:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +73:11 http1PutFixed -> @nish.http1PutFixed
+  callee +80:11 http1PutDecimal -> @nish.http1PutDecimal
+  callee +81:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +83:11 http1PutText -> @nish.http1PutText
+  callee +86:11 http1PutFixed -> @nish.http1PutFixed
+  callee +93:11 http1PutText -> @nish.http1PutText
+  callee +94:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +96:10 http1PutCrlf -> @nish.http1PutCrlf
 module std/bytes.ts [package nish]
 const BYTES_SPACE: i32 = 32
 const BYTES_TAB: i32 = 9
@@ -23131,13 +23223,20 @@ function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
   stackSites=0 stackLocals=0
   local +0:7 v: u64 (let)
   local +1:12 i: i32 (let)
-function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+function getU64BEByByte(b: u8[], off: i32): u64 -> @nish.getU64BEByByte
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 v: u64 (let)
   local +1:12 i: i32 (let)
+function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BEByByte
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BEByByte#0
+  stackSites=0 stackLocals=0
+  callee +0:10 getU64BEByByte -> @nish.getU64BEByByte
 function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
@@ -27326,43 +27425,44 @@ struct Http1OutputPool (class) size=16 align=8 exported
   method take -> @nish.Http1OutputPool.take
   method give -> @nish.Http1OutputPool.give
 struct Http1Connection (class) size=184 align=8 exported
-  field config: Http1Config index=0 offset=0
-  field date: HttpDate index=1 offset=8
-  field parser: Http1Parser index=2 offset=16
-  field ws: WsDecoder | null index=3 offset=24
-  field output: u8[] index=4 offset=32
-  field noOutput: u8[] index=5 offset=40
-  field pool: Http1OutputPool | null index=6 offset=48
-  field inputs: Http1OutputPool | null index=7 offset=56
-  field heads: Http1OutputPool | null index=8 offset=64
-  field data: u8[] index=9 offset=72
-  field pong: u8[] index=10 offset=80
-  field noFields: u8[][] index=11 offset=88
-  field lastActive: i64 index=12 offset=96 initialized
-  field headSince: i64 index=13 offset=104 initialized
-  field outputStart: i32 index=14 offset=112 initialized
-  field outputEnd: i32 index=15 offset=116 initialized
-  field dataStart: i32 index=16 offset=120 initialized
-  field dataLength: i32 index=17 offset=124 initialized
-  field opcode: i32 index=18 offset=128 initialized
-  field status: i32 index=19 offset=132 initialized
-  field bufferLimit: i32 index=20 offset=136 initialized
-  field pongLength: i32 index=21 offset=140 initialized
-  field state: i32 index=22 offset=144 initialized
-  field response: i32 index=23 offset=148 initialized
-  field responseFraming: i32 index=24 offset=152 initialized
-  field responseLeft: i32 index=25 offset=156 initialized
-  field responseEmpty: boolean index=26 offset=160 initialized
-  field requestOpen: boolean index=27 offset=161 initialized
-  field requestEnded: boolean index=28 offset=162 initialized
-  field closeAfter: boolean index=29 offset=163 initialized
-  field upgraded: boolean index=30 offset=164 initialized
-  field writeHeld: boolean index=31 offset=165 initialized
-  field pongPending: boolean index=32 offset=166 initialized
-  field inputEnded: boolean index=33 offset=167 initialized
-  field headTimed: boolean index=34 offset=168 initialized
-  field mss: i32 index=35 offset=172 initialized
-  field socketMss: i32 index=36 offset=176 initialized
+  field parser: Http1Parser index=0 offset=0
+  field output: u8[] index=1 offset=8
+  field noOutput: u8[] index=2 offset=16
+  field pool: Http1OutputPool | null index=3 offset=24
+  field inputs: Http1OutputPool | null index=4 offset=32
+  field heads: Http1OutputPool | null index=5 offset=40
+  field date: HttpDate index=6 offset=48
+  field lastActive: i64 index=7 offset=56 initialized
+  field headSince: i64 index=8 offset=64 initialized
+  field state: i32 index=9 offset=72 initialized
+  field response: i32 index=10 offset=76 initialized
+  field responseFraming: i32 index=11 offset=80 initialized
+  field responseLeft: i32 index=12 offset=84 initialized
+  field outputStart: i32 index=13 offset=88 initialized
+  field outputEnd: i32 index=14 offset=92 initialized
+  field outputCap: i32 index=15 offset=96 initialized
+  field bufferLimit: i32 index=16 offset=100 initialized
+  field requestOpen: boolean index=17 offset=104 initialized
+  field requestEnded: boolean index=18 offset=105 initialized
+  field responseEmpty: boolean index=19 offset=106 initialized
+  field closeAfter: boolean index=20 offset=107 initialized
+  field upgraded: boolean index=21 offset=108 initialized
+  field writeHeld: boolean index=22 offset=109 initialized
+  field pongPending: boolean index=23 offset=110 initialized
+  field inputEnded: boolean index=24 offset=111 initialized
+  field headTimed: boolean index=25 offset=112 initialized
+  field dataStart: i32 index=26 offset=116 initialized
+  field dataLength: i32 index=27 offset=120 initialized
+  field opcode: i32 index=28 offset=124 initialized
+  field status: i32 index=29 offset=128 initialized
+  field pongLength: i32 index=30 offset=132 initialized
+  field mss: i32 index=31 offset=136 initialized
+  field socketMss: i32 index=32 offset=140 initialized
+  field config: Http1Config index=33 offset=144
+  field ws: WsDecoder | null index=34 offset=152
+  field data: u8[] index=35 offset=160
+  field pong: u8[] index=36 offset=168
+  field noFields: u8[][] index=37 offset=176
   constructor -> @nish.Http1Connection.constructor
   method restart -> @nish.Http1Connection.restart
   method park -> @nish.Http1Connection.park
@@ -27647,11 +27747,11 @@ function Http1Connection.inputRoom(this: Http1Connection): i32 -> @nish.Http1Con
   calls: nish.Http1Connection.inputLimit nish.Http1Parser.buffered nish_panic_overflow
   pointer this: size=184 writesThrough=false captured=false passedTo=nish.Http1Connection.inputLimit#0
   stackSites=0 stackLocals=0
-  local +0:11 ws: WsDecoder | null (const)
-  local +1:11 held: i32 (const)
-  callee +2:74 Http1Parser.buffered -> @nish.Http1Parser.buffered
-  local +3:11 room: i32 (const)
-  callee +3:23 Http1Connection.inputLimit -> @nish.Http1Connection.inputLimit
+  local +0:9 room: i32 (let)
+  local +4:13 ws: WsDecoder | null (const)
+  callee +5:14 Http1Connection.inputLimit -> @nish.Http1Connection.inputLimit
+  callee +5:69 Http1Parser.buffered -> @nish.Http1Parser.buffered
+  callee +7:33 Http1Parser.buffered -> @nish.Http1Parser.buffered
 function Http1Connection.feed(this: Http1Connection, buf: u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.feed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WsDecoder.feed
@@ -27686,15 +27786,16 @@ function Http1Connection.acquire(this: Http1Connection): void -> @nish.Http1Conn
   calls: nish.Http1OutputPool.take nish_panic
   pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -1:11 pool: Http1OutputPool | null (const)
-  callee +0:35 Http1OutputPool.take -> @nish.Http1OutputPool.take
+  local -2:11 pool: Http1OutputPool | null (const)
+  local -1:11 output: u8[] (const)
+  callee -1:42 Http1OutputPool.take -> @nish.Http1OutputPool.take
 function Http1Connection.release(this: Http1Connection): void -> @nish.Http1Connection.release [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1OutputPool.give
   pointer this: size=184 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -10:11 pool: Http1OutputPool | null (const)
+  local -5:11 pool: Http1OutputPool | null (const)
   callee -1:5 Http1OutputPool.give -> @nish.Http1OutputPool.give
 function Http1Connection.consume(this: Http1Connection, n: i32): void -> @nish.Http1Connection.consume [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true

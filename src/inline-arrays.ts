@@ -42,6 +42,14 @@
 // header, a `.d.ts`, an N-API shim, wasm, a declared C function
 // (`BuildMode.layoutsShared`) — inlines nothing.
 //
+// **Boxed when it cannot be sized.** A field that passes all of that but has
+// an assignment of unknown length, or whose `K` slots would pass 256 bytes,
+// is boxed (`FieldInfo.boxed`): the object keeps only `len` and `data` as
+// `{ i64, i8* }`, and the elements are a block of their own. The argument
+// above is the whole of why that is safe too; what it saves against the
+// pointer layout is the 24-byte header and its allocation, and one load per
+// access (`docs/LANGUAGE.md`, `docs/ARCHITECTURE.md`).
+//
 // **What the pass does not try.** A generic class, a class that `implements`
 // an interface (its prefix is another struct's layout), a record element type
 // (an inline record would hand out interior pointers into the object), and a
@@ -108,6 +116,12 @@ import { BuildMode, hostVisible } from "./visibility"
  * dozen times per assignment, as AWFY Queens' are.
  */
 const INLINE_SLOT_BYTES: i32 = 256
+
+/**
+ * The length an assignment records when its array is fresh but no constant
+ * gives its length: the field cannot be inline, and is boxed instead.
+ */
+const UNSIZED: i32 = -2
 
 /** One array field that may be stored inline, and what the walk has found about it. */
 class Candidate {
@@ -324,7 +338,7 @@ const allocationOf = (
     return new FreshReturn(param, 0)
   }
   const n = constantLength(program, args[0])
-  return n < 0 ? null : new FreshReturn(-1, n)
+  return new FreshReturn(-1, n < 0 ? UNSIZED : n)
 }
 
 /** The declaration of `local` inside `node`, or `null`. */
@@ -500,7 +514,13 @@ const freshReturnOf = (walk: InlineWalk, sig: FunctionSig): FreshReturn | null =
   return found
 }
 
-/** The length the fresh array `expr` has, or -1 when it is not one this pass can size. */
+/** The length a constant `n` gives, or `UNSIZED` for any other. */
+const sized = (n: i32): i32 => (n < 0 ? UNSIZED : n)
+
+/**
+ * The length the fresh array `expr` has, `UNSIZED` when it is fresh but its
+ * length is not a constant, or -1 when it is not fresh at all.
+ */
 const inlineAssignedLength = (walk: InlineWalk, program: CheckedProgram, expr: Node): i32 => {
   const e = unwrap(expr)
   if (e.kind === N_ARRAY) {
@@ -511,7 +531,7 @@ const inlineAssignedLength = (walk: InlineWalk, program: CheckedProgram, expr: N
       return -1
     }
     const args = e.children[2].children
-    return args.length === 1 ? constantLength(program, args[0]) : -1
+    return args.length === 1 ? sized(constantLength(program, args[0])) : -1
   }
   if (e.kind !== N_CALL) {
     return -1
@@ -528,7 +548,7 @@ const inlineAssignedLength = (walk: InlineWalk, program: CheckedProgram, expr: N
     return fresh.length
   }
   const args = e.children[1].children
-  return fresh.param < args.length ? constantLength(program, args[fresh.param]) : -1
+  return fresh.param < args.length ? sized(constantLength(program, args[fresh.param])) : -1
 }
 
 /** Judge one `x.f` of candidate `c` by what it is written inside. */
@@ -567,7 +587,7 @@ const judgeUse = (
   const statement = grand !== null && grand.kind === N_EXPR_STMT
   if (parent.kind === N_BINARY && parent.text === "=" && parent.children[0] === node && statement) {
     const n = inlineAssignedLength(walk, program, parent.children[1])
-    if (n < 0) {
+    if (n === -1) {
       c.ok = false
       return
     }
@@ -830,8 +850,22 @@ export const layoutInlineArrays = (contexts: CheckContext[], mode: BuildMode): v
   }
   const changed: StructInfo[] = []
   for (const c of walk.candidates) {
+    if (!c.ok || c.sites.length === 0) {
+      continue
+    }
     const stride = walk.table.alignOf(walk.table.refOf(c.field.type))
-    if (!c.ok || c.sites.length === 0 || c.capacity < 1 || c.capacity * stride > INLINE_SLOT_BYTES) {
+    const unsized = c.lengths.indexOf(UNSIZED) >= 0
+    if (unsized || c.capacity * stride > INLINE_SLOT_BYTES) {
+      // The slots cannot be sized, or would be too many: the field keeps
+      // only its `len` and `data` in the object, a slice of a block of its
+      // own, which the same rule makes as safe as the slots.
+      c.field.boxed = true
+      if (changed.indexOf(c.info) < 0) {
+        changed.push(c.info)
+      }
+      continue
+    }
+    if (c.capacity < 1) {
       continue
     }
     c.field.inlineCapacity = c.capacity

@@ -2398,6 +2398,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`, `bcryptHashN`/`bcryptVerifyN` for up to six at once at a width `bcryptCalibrate` picks, and `bcryptHash4`/`bcryptVerify4` for up to four: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
+| `nish/crypto/bcrypt-batch` | `bcryptBatcher(config)`: a login batcher that queues `verify` and `hash` requests, sends them at the calibrated width or after a hold, and runs the batches on `nish/threads` tasks across cores; see [A login batcher](password-hashing.md#a-login-batcher) |
 | `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded; `base64StdPadEncode` and a strict `base64StdPadDecode`, padded, in the standard alphabet, constant-time (`nish/base64` encodes the same alphabet for pixels, without the constant-time guarantee) |
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
 | `nish/crypto/aes` | `aesKey` for AES-128 and AES-256, `aesGcmSeal` and `aesGcmOpen` |
@@ -2436,14 +2437,17 @@ $ nish run digest.ts
 ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0
 ```
 
-A native program uses the CPU's own instructions for two of these where the
-CPU has them, and gives the same bytes either way: `nish/crypto/sha256`
+A native program uses the CPU's own instructions for three of these where
+the CPU has them, and gives the same bytes either way: `nish/crypto/sha256`
 compresses each block with SHA-NI on x86-64 or the ARMv8 SHA-256
-instructions on AArch64, and `nish/crypto/aes` runs AES-NI or the ARMv8 AES
-instructions. The program checks the CPU once, when it first hashes or
-encrypts. Setting `NISH_SHA256=soft` or `NISH_AES=soft` in the environment the
-program starts in keeps that primitive on its portable Nish code, which is
-how to compare the two paths or rule one out; any other value is ignored. A
+instructions on AArch64, `nish/crypto/aes` runs AES-NI or the ARMv8 AES
+instructions, and `nish/crypto/chacha20poly1305` makes ChaCha20's keystream
+eight blocks at a time with AVX2 on x86-64, or four with NEON on AArch64 (a
+message of 256 bytes or more; a shorter one stays on the Nish code). The program checks the CPU once, when
+it first hashes or encrypts. Setting `NISH_SHA256=soft`, `NISH_AES=soft` or
+`NISH_CHACHA20=soft` in the environment the program starts in keeps that
+primitive on its portable Nish code, which is how to compare the two paths or
+rule one out; any other value is ignored. A
 WebAssembly build always takes the portable code.
 
 A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and

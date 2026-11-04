@@ -1,0 +1,69 @@
+{
+  "version": "0.33.0",
+  "date": "2026-11-03",
+  "tag": "v0.33.0",
+  "range": {
+    "from": "v0.32.0",
+    "to": "fabc8587"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-32-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.32.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ba37a22"
+      ],
+      "pr": 1167,
+      "author": "github-actions[bot]",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "drop-the-self-hosted-and-gc-badges-from",
+      "type": "docs",
+      "breaking": false,
+      "title": "drop the self-hosted and GC badges from the README",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "bdc36b5"
+      ],
+      "pr": 1166,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "nish-crypto-bcrypt-batch-a-login-batcher-across",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "nish/crypto/bcrypt-batch, a login batcher across cores",
+      "body": "bcryptBatcher(config) queues verify and hash requests and sends a batch\nat bcryptCalibrate()'s width, or once the oldest request has waited a\nconfigurable hold (0 sends at once). run() splits the queue into one\nshare per core, runs each share on a std/threads task with\nbcryptVerifyN/bcryptHashN, and answers by ticket. A one-core full batch\ncosts 15.7 ms a hash against 56.9 for a lone one, which is what filling\nbatches buys.\n\nEach queued password is a copy held as a Secret and wiped in run() once\nthe scope joins; what crosses the tasks is the answer text, nothing\nsecret. A damaged hash in a batch falls back to lone verifies so one bad\nrow answers alone; a bad salt is refused at hash() and never queued. A\nbatcher dropped with requests still queued leaves those copies unwiped\n(BCRYPT-11, Low, accepted; call run() until pending() is 0).\n\nOn four cores the batcher answers 1.9 to 2.3 times the logins a second\nof one bcryptVerify per login per core from 120 arrivals a second up.\nAt 10 to 60 arrivals a second it loses to that server on latency,\nbecause run() blocks the dispatcher until every share is done; the\nrecord and the guide say so.",
+      "metrics": [
+        "cost 10, 4-vCPU Xeon @ 2.80GHz, 5 rounds, noise band <=1% logins/s, <=11% p50, <=10% p99 (byte-identical twin)",
+        "1 core, burst: 46.0 logins/s vs 16.9 one-per-login; 30/s: 31.7 vs 16.9",
+        "4 cores, 120/s: 129.3 vs 66.7 per-core verify; 240/s: 143-153 vs 66.8; burst: 151-155 vs 66.7",
+        "4 cores, loses on latency: 10/s p99 125.0 vs 70.6 ms; 30/s p50 90.8 vs 59.0, p99 134.6 vs 84.6; 60/s p50 103.0 vs 84.9"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md#the-login-batcher-measured"
+      ],
+      "tests": [
+        "tests/link/thread_bcrypt_batcher"
+      ],
+      "commits": [
+        "fabc858"
+      ],
+      "pr": 1168,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    }
+  ]
+}

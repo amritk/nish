@@ -1,0 +1,4 @@
+`sum` of i32x4 can overflow its lane type, so its total is `sumWrapping`, which wraps as the lanes do
+`sumWrapping` takes an `i32x4` or a `u32x4`, got u8x16: `sum` adds narrower lanes in an `i32` and float lanes in lane order, and neither wraps
+`sumWrapping` takes an `i32x4` or a `u32x4`, got f32x4: `sum` adds narrower lanes in an `i32` and float lanes in lane order, and neither wraps
+3 errors

@@ -1,0 +1,6 @@
+`shl` takes a count that is an integer literal below the lane width, from 0 to 31: a lane of u32x4 is 32 bits
+`rotl` count 32 is not below the lane width of u32x4, 32 bits: a shift by the width or more moves every bit out, and a rotate by it is a rotate by 0
+`shr` count 8 is not below the lane width of u8x16, 8 bits: a shift by the width or more moves every bit out, and a rotate by it is a rotate by 0
+`rotr` takes a count that is an integer literal below the lane width, from 0 to 31: a lane of i32x4 is 32 bits
+`shl` takes an integer vector, a `u8x16`, `u16x8`, `i32x4` or `u32x4`, got f32x4
+5 errors

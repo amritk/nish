@@ -1,6 +1,6 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: accepted; S0, S1's kernel and surface, S2, S3a, S5, S6a, S6b and S7 landed; S3 decided and being built (tracking issue #1064); S1's `bench/json` bar missed; S1b superseded by S6c; S4 declined; S6c and S6d measured not reachable.** The owner took the
+**Status: accepted; S0, S1's kernel and surface, S2, S3a, S5, S6a, S6b and S7 landed; S3 built and its bar met (tracking issue #1064; §2.3, S3); S1's `bench/json` bar missed; S1b superseded by S6c; S4 declined; S6c and S6d measured not reachable.** The owner took the
 first four decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
@@ -663,7 +663,7 @@ that question before any surface exists. It writes each kernel in C's portable
 `vector_size(16)` vectors, which lower to the same LLVM vector IR `nish:simd`
 would emit, and times that against scalar Nish.
 [`bench/simd-s3a.mjs`](../bench/simd-s3a.mjs) builds and times four forms of each
-kernel from [`bench/simd-s3a/`](../bench/simd-s3a/):
+kernel from [`bench/simd-s3a/`](../bench/simd-s3a/) (S3 added a fifth, `nish:simd`; see S3 below):
 
 1. **C vector**, the stand-in for `nish:simd`: `clang -O3 -ffp-contract=off`,
    no `-march`, so x86-64's baseline SSE2.
@@ -788,6 +788,60 @@ form 3 as written, so the verdict stands. The depth kernels clear 1.5x
 against form 2 too. By the order decided in §7 (2026-10-16), **S3's design is
 written next**. It is written: Q10 decided on 2026-10-30 to build `nish:simd` (§3.2),
 and S6c's classifier, which might have covered the byte half, was found not reachable. The figures are x86-64's only.
+
+#### S3: the bar kernels in `nish:simd`, the bar met
+
+S3's last stage writes S3a's two kernels with `nish:simd` and times them as
+form 5 in `bench/simd-s3a.mjs`, against the same bar: at least 1.5x over form
+3, scalar Nish with checked indexing. The two files are
+`bench/simd-s3a/mat-vec-simd.ts` and `bench/simd-s3a/depth-simd.ts`.
+
+- **mat-vec** is form 1's kernel written in Nish:
+  - two `f64x2` accumulators over an `i32x4` of indices, which wraps as the
+    scalar forms' `wrappingAdd` does;
+  - the halving is `shr(…, 1)` rather than a division, which is exact
+    because `ij * (ij + 1)` is not negative below N = 2000;
+  - each pair of lanes reaches `f64` through `extract` and `toF64`, because
+    the surface has no lane conversion;
+  - `sum` adds the last pair in lane order, so every form prints checksum
+    901781.
+- **depth** loads sixteen bytes with `loadU8x16`. It ORs four `eq` masks
+  (quote, backslash, and the brackets after folding `[`/`]` into `{`/`}`).
+  A block whose `any` is false is skipped. The others walk `bitmask`'s set
+  bits, lowest first, with `31 - Math.clz32(bits & (0 - bits))`. The state
+  machine stays in locals: in a first draft a heap object carried it, and
+  that draft reached only about 1.4x on log. A byte-wise loop finishes the last partial block.
+  The checksums are form 3's, 680640 and 176206.
+
+Neither IR calls an `llvm.x86.*` or `llvm.aarch64.*` intrinsic. The script
+refuses to time a vector form, C or `nish:simd`, whose source or IR does.
+
+The run was `node bench/simd-s3a.mjs --self --runs 15`: 18 rotating rounds of
+six columns after one warm-up, at `199f5436` (rebased from `3424609a`; `bench/simd-s3a/` and its script are unchanged), on an Intel Xeon Processor @
+2.30 GHz (x64, 4 vCPUs), Ubuntu clang 18.1.3. All times are in ms.
+
+| kernel | 1 C vector | 3 Nish checked | 5 Nish simd | 3's copy | **5 over 3 (the bar)** | 1 over 5 | met |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| mat-vec | 360.0 / 369.7 | 615.0 / 625.0 | 345.6 / 351.1 | 613.9 / 624.0 | **1.78x / 1.78x** | 0.96x / 0.95x | yes |
+| depth s0 | 405.8 / 418.8 | 637.3 / 657.6 | 391.9 / 406.8 | 640.3 / 661.9 | **1.63x / 1.62x** | 0.97x / 0.97x | yes |
+| depth log | 129.6 / 131.6 | 527.6 / 543.7 | 140.6 / 142.9 | 528.7 / 561.4 | **3.75x / 3.81x** | 1.08x / 1.09x | yes |
+
+Each cell is min / median. Form 3 over its copy, the noise band, is 1.00x /
+1.00x on mat-vec, 1.00x / 1.01x on s0 and 1.00x / 1.03x on log.
+
+**The reading.** All three rows meet the bar, at the minimum and at the
+median, by more than the noise band.
+
+- On mat-vec and s0, form 5 is at or a little under form 1's time.
+- On log, the sparse document, it is 8 to 9% behind form 1. There most blocks
+  are skipped, and the cost left is the per-block `any` test and the
+  bit-walk's loop. C's form walks the same mask.
+- C vector over Nish checked is 1.69x, 1.57x and 4.13x at the median on this
+  machine, against S3a's 1.65x, 1.81x and 3.51x on a Xeon @ 2.80 GHz. The
+  ratios move with the machine, and so the bar is read within one run, as
+  here. The figures are x86-64's only.
+
+Since the bar is met, no IR comparison is recorded.
 
 ### 2.4 `JsonTokenizer` after json-parity: the gap S6 is aimed at
 
@@ -1062,6 +1116,95 @@ reference, a `NISH_ADLER32=soft` run of `std_compress`, link tests, a runtime
 budget, a COMP entry in [compress.md](security/compress.md), and a line in the
 compression guide page.
 
+#### S10: ChaCha20 on vectors
+
+ChaCha20 is 32-bit adds, XORs and rotates with no table, so it was the
+strongest vector candidate left in `std/crypto` after AES-GCM (S5), SHA-256
+(S9) and CRC-32. Both routes were measured first, nothing shipped:
+`bench/chacha20.mjs` (the [bench README](../bench/README.md#chacha20-on-vectors)
+says how) times ChaCha20-Poly1305 seal and open at 64 B, 1 KiB, 16 KiB and
+1 MiB, and each half alone on 16 KiB, with the std AEAD's Nish keystream
+(`nish`), a byte-identical copy of that binary (the band), and a copy of the
+std file whose keystream loop hands a buffer of four blocks or more to C:
+a scalar C copy of the Nish loop, four blocks in portable `vector_size(16)` C
+(`vec128`, the IR `nish:simd` would lower to, so §3.2's 1.5x bar is read on
+it) and eight in AVX2 behind a CPUID check (the widest path, so §3.1's 20%
+bar is read on it). NEON is the fourth path on AArch64. Every path agreed
+with the scalar reference on 8,712 cases and RFC 8439 §2.4.2's vector before
+any timing.
+
+Two runs of ten interleaved rounds at `e1ae4a85`, on an Intel Xeon at
+2.10 GHz (4 vCPU), `--profile speed`, gains over `nish` at the minimum:
+
+| Size | `vec128` run 1 / run 2 | AVX2 run 1 / run 2 | Band run 1 / run 2 |
+| --- | ---: | ---: | ---: |
+| seal 64 B | 1.06x / 1.00x | 8.2% / 2.5% | 1.9% / 3.3% |
+| seal 1 KiB | 1.06x / 1.17x | 48.1% / 44.3% | 3.5% / 3.7% |
+| seal 16 KiB | 1.20x / 1.20x | 56.0% / 49.8% | 1.5% / 4.0% |
+| seal 1 MiB | 1.11x / 1.20x | 51.0% / 57.8% | 3.8% / 0.7% |
+| open 64 B | 1.07x / 0.95x | 2.7% / -3.8% | 7.1% / 2.3% |
+| open 1 KiB | 1.24x / 1.15x | 52.8% / 39.2% | 4.9% / 5.5% |
+| open 16 KiB | 1.25x / 1.23x | 59.7% / 55.5% | 4.3% / 3.8% |
+| open 1 MiB | 1.26x / 1.17x | 55.4% / 41.9% | 4.3% / 4.6% |
+| ChaCha20 16 KiB | 1.32x / 1.33x | 96.4% / 96.8% | 3.4% / 0.8% |
+| Poly1305 16 KiB | 0.98x / 0.99x | -0.1% / -0.9% | 2.9% / 4.1% |
+
+(The two runs' last line misread its own rows as missing everywhere; the
+verdict is now computed from the rows it prints.)
+
+**Verdicts.** The runtime kernel's bar, at least 20% over `nish` beyond the
+band in two runs, is met by AVX2 at every AEAD size from 1 KiB, by 39.2% to
+59.7% against a band of 0.7% to 5.5%. 64 B is under the kernel's four
+blocks, so its row runs the Nish loop in every column and shows no change.
+`nish:simd`'s bar, 1.5x over scalar Nish, is missed: four 128-bit lanes reach
+1.33x on the keystream alone and 1.26x at most on the AEAD, since ChaCha20's
+rows need a shuffle between the column and diagonal rounds and Poly1305's
+share is untouched. So a `nish:simd` ChaCha20 is not built, whenever #1064's
+rotates land. **Poly1305 is declined**: a C copy of the Nish code is within
+the band of it (−2.5% to +3.9%), so the Nish 26-bit limbs are not what a
+kernel would beat, and a vector Poly1305 would be a different algorithm with
+its own constant-time record, for at most the half of the AEAD that is left.
+
+**Shipped.** `runtime/runtime-chacha20.c` takes `chacha20XorInto`'s
+keystream for a window of 256 bytes or more: eight blocks a step in AVX2
+(compiled with `target("avx2")` alone, so the binary stays baseline) then
+four in 128-bit lanes, or four in NEON on AArch64, with any tail and anything shorter
+left on the Nish block. `nish_chacha20_hw` checks CPUID leaf 7's AVX2 bit and
+the OS's YMM state once per process; `NISH_CHACHA20=soft` pins the Nish loop;
+wasm32 and big-endian targets get a stub that answers 0. The compiler's
+`isChacha20Seam` (`src/kernels.ts`) matches only std's function and branches
+on the resolver at each call (`emitKernelArm`), so the Nish loop stays the
+fallback and the Node reading. The kernel refuses a window past
+`INT32_MAX - 64` (CHACHAHW-1) so the Nish code panics where it would have,
+and wipes its keystream, state and lanes before it returns; the constant-time
+argument and what a wipe cannot reach are
+[crypto-chacha20-hw.md](security/crypto-chacha20-hw.md)'s. The shipped
+column, one run of twelve interleaved rounds at `98921dcb` on the same
+machine, MB/s at the minimum time; the gain over `nish` and the band are of the medians, so at 64 B the two can differ in sign:
+
+| Size | `nish` (soft) | `nish` copy | `vec128` | AVX2 (bench) | Shipped | Shipped over `nish` | Band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| seal 64 B | 128 | 126 | 133 | 132 | 128 | −1.8% | 5.7% |
+| seal 1 KiB | 257 | 257 | 293 | 361 | 545 | 2.09x | 0.2% |
+| seal 16 KiB | 277 | 279 | 322 | 416 | 655 | 2.22x | 1.0% |
+| seal 1 MiB | 278 | 274 | 326 | 407 | 635 | 2.30x | 3.9% |
+| open 64 B | 132 | 130 | 134 | 132 | 130 | +4.3% | 9.0% |
+| open 1 KiB | 259 | 257 | 300 | 365 | 542 | 2.14x | 4.0% |
+| open 16 KiB | 281 | 279 | 330 | 406 | 646 | 2.29x | 8.0% |
+| open 1 MiB | 272 | 269 | 321 | 404 | 615 | 2.27x | 2.4% |
+| ChaCha20 16 KiB | 391 | 394 | 507 | 755 | 1,957 | 5.05x | 0.9% |
+| Poly1305 16 KiB | 988 | 992 | 995 | 991 | 993 | −0.2% | 1.0% |
+
+The shipped kernel runs the same AVX2 rounds as the bench's, and in a C
+harness the two run within 20% of each other, 1.4 to 2.0 GB/s on 16 KiB; the
+bench's AVX2 column is slower inside the AEAD for its prototype seam (a
+`declare function` in a copy of the std file, the state copied to bytes and
+back each call), not its vectors. So the bar was judged on the slower path,
+and the shipped one clears it by more. On AArch64, CI's `simd-arm64` job
+prints the same table for the NEON path; `NISH_CHACHA20_ARM_ON` in the
+runtime file is that verdict, and turns NEON off there if it does not clear
+the bar.
+
 ### 3.2 (b) `nish:simd`, fixed-width portable vectors
 
 **What.** A builtin module, decided on 2026-10-30 (§8, Q10) and being built
@@ -1093,6 +1236,7 @@ The type follows from the arguments, except where none carries it.
 | lanes | `extract(v, k)`, `replace(v, k, x)`, `k` a constant in `0..N-1` | `extractelement`, `insertelement` |
 | float arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `abs`, `sqrt` on `f32x4`, `f64x2` | `fadd` … `llvm.fabs`, `llvm.sqrt`, with no `fast` flags and no contraction |
 | integer arithmetic | `addWrapping`, `subWrapping`, `mulWrapping` | `add`, `sub`, `mul` without `nsw` or `nuw` |
+| shifts, rotates | `shl(v, n)`, `shr(v, n)`, `rotl(v, n)`, `rotr(v, n)` on `u8x16`, `u16x8`, `i32x4` and `u32x4`, `n` an integer literal below the lane width (anything else refused, `reject_simd_shift_count`); `shr` is logical on `u*` and arithmetic on `i32x4` | `shl`, `lshr`, `ashr` by a splat constant; `llvm.fshl`, `llvm.fshr` with the vector as both halves |
 | bitwise | `and`, `or`, `xor`, `not` on integer vectors and masks | `and`, `or`, `xor`, `xor` with all-ones |
 | min, max | `min`, `max` on every lane type | `llvm.umin`, `smin`, `umax`, `smax`; floats `llvm.minimum`, `llvm.maximum` (NaN-propagating, -0 below +0, as `Math.min`) |
 | compare | `eq`, `ne`, `lt`, `le`, `gt`, `ge`, into the lane width's mask | `icmp` (unsigned for `u*`), `fcmp` ordered (`une` for `ne`) |
@@ -1108,8 +1252,11 @@ such as `llvm.vector.reduce.add`. None lowers to `llvm.x86.*` or
 `llvm.aarch64.*`; the `simd` section of `tests/run.js` greps every golden for
 both.
 
+**Shifts and rotates by a constant were added to this table** with the ops
+stage: ChaCha20, SHA-256 and other add-rotate-xor code is built from them, and
+a constant count keeps each one a single instruction with no variable shift.
 **Left out, as later work:** conversions between lane types (`sitofp` and the
-like), shifts, saturating arithmetic, widening multiplies, 256-bit vectors (Q4)
+like), shifts by a variable count, saturating arithmetic, widening multiplies, 256-bit vectors (Q4)
 and `Secret<vector>` (§6). The earlier text listed `extract` and `shuffle`
 together; `extract` now has `replace` beside it, and the bitwise operations,
 `not`, `abs`, `sqrt` and the bitcasts are named where the text had only
@@ -1498,6 +1645,7 @@ a printed checksum.
 | **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Met by #561** (Q9): at `5403a55` the guarded kernel compiles to the same `--profile speed` binary as its `uncheckedGet` form, with the `<4 x float>` accumulator; #561's own entry measured it 3.1x faster than before, against a 2.4% band (§3.2.1, and below). |
 | **S8** | Measurement, then (a) if it clears: `adler32Update` on an SSSE3 or NEON kernel, on CRC-32's seam (§3.1) | The kernel is **at least 20% faster** than `adler32Update` at 64 KiB and at 1 MiB, by more than the band of a byte-identical copy, from `bench/adler32.mjs`. **Measured, not built** (§3.1): SSSE3 and NEON each clear it by 601–654% (a 7.0–7.5× speed-up), against a band of at most 13.7% on x86-64 and 0.2% on AArch64 |
 | **S9** | (a): SHA-256's block function as a runtime kernel. `std/crypto/sha256.ts`'s private `sha256Compress` goes to SHA-NI (with SSSE3 and SSE4.1) or the ARMv8 SHA-256 instructions, chosen once per process, with `NISH_SHA256=soft` pinning the Nish code, which stays the fallback and the wasm path ([crypto-sha256-hw.md](security/crypto-sha256-hw.md)). An SSSE3 or AVX2 message schedule for CPUs without the instructions ships as `NISH_SHA256=simd` only if it is **≥20%** faster than scalar at both 1 KiB and 1 MiB | **Shipped, at `6234e07`**, measured on an Intel Xeon at 2.10 GHz with SHA-NI, nine interleaved rounds of the base (`384371b`), a byte-identical copy of it, the kernel and `NISH_SHA256=soft`, `--profile speed`, minimum and median: SHA-256 at 64 B 79.5 to 188.4 MB/s (2.37x), at 1 KiB 215.9 to 1,234.7 MB/s (5.72x), at 1 MiB 228.5 to 1,442.8 MB/s (6.31x); an HS256 sign and verify of a 132-byte signing input 4,520 to 1,915 ns (2.36x). The soft path is the base's within the copy's band (4.7%, 2.4%, 0.2% and 1.0% at the minimum). **`simd` not built**: in C on the same machine, a one-block SSSE3 schedule was -0.2% to +6.6% over scalar C over four runs, under the bar; only a schedule of two blocks at once in AVX2's two halves came near it, +19.4% to +26.0% at 1 KiB and +21.6% to +26.2% at 1 MiB, which misses it in one run of four and needs a two-block seam `sha256Compress`'s one-block one does not give. |
+| **S10** | Measurement, then (a) if it clears: ChaCha20's keystream (`chacha20XorInto` in `std/crypto/chacha20poly1305.ts`) on AVX2 or NEON as a runtime kernel, chosen once per process, with `NISH_CHACHA20=soft` pinning the Nish code, which stays the fallback and the wasm path ([crypto-chacha20-hw.md](security/crypto-chacha20-hw.md)); and (b) measured in `vector_size(16)` C as what `nish:simd` would give. Poly1305 only if a C copy is worth it | The kernel is **at least 20% faster** than the Nish AEAD at 1 KiB, 16 KiB and 1 MiB, beyond the band of a byte-identical copy, in two runs; `nish:simd`'s is **≥1.5x**. **(a) Shipped; (b) and Poly1305 not built** (§3.1, *S10*): on an Intel Xeon at 2.10 GHz, two runs of ten rounds at `e1ae4a85`, AVX2 cleared 20% by 39.2% to 59.7% at every AEAD size from 1 KiB against a band of 0.7% to 5.5%, and `vec128` reached 1.26x at most; a C Poly1305 was within the band of the Nish one. The shipped kernel, at `98921dcb`: seal 257 to 545 MB/s at 1 KiB (2.09x), 277 to 655 at 16 KiB (2.22x), 278 to 635 at 1 MiB (2.30x); 64 B unchanged. |
 
 **S1b: what the classifier could buy. Superseded by S6c, never built.** S6c
 re-aimed this classifier at `JsonTokenizer`, where `bench/json-compare` gives
@@ -1677,7 +1825,8 @@ with load, store, splat and lanes; the masks, arithmetic, comparisons, sums,
 shuffle and bitcasts; and last S3a's two kernels written with `nish:simd` and
 timed against this row's bar. A miss on the bar is recorded with the optimised
 IR beside the C vector form's, and the surface stays; whether to change it is
-the owner's call. `src/` implements the module and does not use it, under the
+the owner's call. The bar is met: 1.78x on mat-vec, 1.62x and 3.81x on the two depth
+documents at the median (§2.3, S3). `src/` implements the module and does not use it, under the
 rolling freeze (§4).
 
 **#662, the S7 and S2 acceptance pass.** Of eight criteria, six were met. The

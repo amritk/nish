@@ -8,25 +8,32 @@ import requireStatementPosition from "./builtins" -> function @requireStatementP
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
 import CheckContext from "./context" -> struct CheckContext
 import Emitter from "./emit" -> struct Emitter
+import vectorSuffix from "./runtime" -> function @vectorSuffix
 import emitVectorAccess from "./emit-arrays" -> function @emitVectorAccess
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import checkExpression from "./expressions" -> function @checkExpression
 import checkIndexArgument from "./members" -> function @checkIndexArgument
 import SIMD_SPECIFIER from "./nish-modules" -> const SIMD_SPECIFIER
+import isSimdOp from "./nish-modules" -> function @isSimdOp
+import simdMaskWidth from "./nish-modules" -> function @simdMaskWidth
 import simdSuffix from "./nish-modules" -> function @simdSuffix
 import simdTypeLane from "./nish-modules" -> function @simdTypeLane
 import N_NUMBER from "./nodes" -> const N_NUMBER
 import Node from "./nodes" -> struct Node
 import Scope from "./symbols" -> struct Scope
+import T_BOOL from "./types" -> const T_BOOL
 import T_ERROR from "./types" -> const T_ERROR
 import T_F32 from "./types" -> const T_F32
 import T_F64 from "./types" -> const T_F64
 import T_I32 from "./types" -> const T_I32
 import T_U16 from "./types" -> const T_U16
 import T_U32 from "./types" -> const T_U32
+import T_U64 from "./types" -> const T_U64
 import T_U8 from "./types" -> const T_U8
 import T_VOID from "./types" -> const T_VOID
 import TypeTable from "./types" -> struct TypeTable
+const FLOAT_VECTORS: string = "an `f32x4` or an `f64x2`"
+const INTEGER_VECTORS: string = "an integer vector, a `u8x16`, `u16x8`, `i32x4` or `u32x4`"
 function simdLaneType(name: string): i32 -> @simdLaneType [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -112,46 +119,53 @@ function checkLaneIndex(ctx: CheckContext, arg: Node, scope: Scope, name: string
   callee +17:69 TypeTable.typeName -> @TypeTable.typeName
 function checkSimdCall(ctx: CheckContext, call: Node, scope: Scope, name: string): i32 -> @checkSimdCall [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via madeVector
+  sharedWrite: via checkSimdOp
   escaping: name
-  calls: TypeTable.laneCount TypeTable.refOf checkArgumentType checkBuiltinArity checkExpression checkIndexArgument checkLaneArray checkLaneIndex checkVectorArgument isSimdAccess madeVector nish_panic_index nish_str_eq requireStatementPosition simdLaneType
-  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkLaneArray#0 checkIndexArgument#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkVectorArgument#0 checkExpression#0 checkLaneArray#0 checkIndexArgument#0 requireStatementPosition#0 checkBuiltinArity#0 checkVectorArgument#0 checkLaneIndex#0 checkExpression#0 checkArgumentType#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkLaneArray#2 checkIndexArgument#2 checkArgumentType#2 checkVectorArgument#2 checkExpression#2 checkLaneArray#2 checkIndexArgument#2 checkVectorArgument#2 checkLaneIndex#2 checkExpression#2 checkArgumentType#2
+  calls: CheckContext.errorType TypeTable.laneCount TypeTable.refOf checkArgumentType checkBuiltinArity checkExpression checkIndexArgument checkLaneArray checkLaneIndex checkSimdOp checkVectorArgument isSimdAccess isSimdOp madeVector nish_panic_index nish_str_eq requireStatementPosition simdLaneType simdMaskConstructorMessage simdMaskWidth
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkSimdOp#0 checkExpression#0 CheckContext.errorType#0 checkBuiltinArity#0 checkLaneArray#0 checkIndexArgument#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkVectorArgument#0 checkExpression#0 checkLaneArray#0 checkIndexArgument#0 requireStatementPosition#0 checkBuiltinArity#0 checkVectorArgument#0 checkLaneIndex#0 checkExpression#0 checkArgumentType#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=checkSimdOp#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkSimdOp#2 checkExpression#2 checkLaneArray#2 checkIndexArgument#2 checkArgumentType#2 checkVectorArgument#2 checkExpression#2 checkLaneArray#2 checkIndexArgument#2 checkVectorArgument#2 checkLaneIndex#2 checkExpression#2 checkArgumentType#2
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
   local +1:9 table: TypeTable (const)
-  local +2:9 made: i32 (const)
-  callee +2:16 madeVector -> @madeVector
-  local +4:11 lane: i32 (const)
-  callee +4:18 TypeTable.refOf -> @TypeTable.refOf
-  local +5:11 count: i32 (const)
-  callee +5:19 simdLaneType -> @simdLaneType
-  callee +5:56 TypeTable.laneCount -> @TypeTable.laneCount
-  callee +6:9 isSimdAccess -> @isSimdAccess
-  callee +7:11 checkBuiltinArity -> @checkBuiltinArity
-  callee +8:9 checkLaneArray -> @checkLaneArray
-  callee +9:9 checkIndexArgument -> @checkIndexArgument
-  callee +13:9 checkBuiltinArity -> @checkBuiltinArity
-  local +14:18 arg: Node (const)
-  callee +15:9 checkArgumentType -> @checkArgumentType
-  callee +21:9 checkBuiltinArity -> @checkBuiltinArity
-  local +22:13 vector: i32 (const)
-  callee +22:22 checkVectorArgument -> @checkVectorArgument
-  callee +24:9 checkExpression -> @checkExpression
-  callee +26:9 checkLaneArray -> @checkLaneArray
-  callee +26:60 TypeTable.refOf -> @TypeTable.refOf
-  callee +28:7 checkIndexArgument -> @checkIndexArgument
-  callee +30:5 requireStatementPosition -> @requireStatementPosition
-  local +33:9 replace: boolean (const)
-  callee +34:8 checkBuiltinArity -> @checkBuiltinArity
-  local +37:9 vector: i32 (const)
-  callee +37:18 checkVectorArgument -> @checkVectorArgument
-  callee +38:3 checkLaneIndex -> @checkLaneIndex
-  callee +40:43 TypeTable.refOf -> @TypeTable.refOf
-  callee +43:5 checkExpression -> @checkExpression
-  callee +45:5 checkArgumentType -> @checkArgumentType
-  callee +45:59 TypeTable.refOf -> @TypeTable.refOf
+  callee +2:7 isSimdOp -> @isSimdOp
+  callee +3:12 checkSimdOp -> @checkSimdOp
+  callee +5:7 simdMaskWidth -> @simdMaskWidth
+  local +6:16 arg: Node (const)
+  callee +7:7 checkExpression -> @checkExpression
+  callee +9:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +9:44 simdMaskConstructorMessage -> @simdMaskConstructorMessage
+  local +11:9 made: i32 (const)
+  callee +11:16 madeVector -> @madeVector
+  local +13:11 lane: i32 (const)
+  callee +13:18 TypeTable.refOf -> @TypeTable.refOf
+  local +14:11 count: i32 (const)
+  callee +14:19 simdLaneType -> @simdLaneType
+  callee +14:56 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +15:9 isSimdAccess -> @isSimdAccess
+  callee +16:11 checkBuiltinArity -> @checkBuiltinArity
+  callee +17:9 checkLaneArray -> @checkLaneArray
+  callee +18:9 checkIndexArgument -> @checkIndexArgument
+  callee +22:9 checkBuiltinArity -> @checkBuiltinArity
+  local +23:18 arg: Node (const)
+  callee +24:9 checkArgumentType -> @checkArgumentType
+  callee +30:9 checkBuiltinArity -> @checkBuiltinArity
+  local +31:13 vector: i32 (const)
+  callee +31:22 checkVectorArgument -> @checkVectorArgument
+  callee +33:9 checkExpression -> @checkExpression
+  callee +35:9 checkLaneArray -> @checkLaneArray
+  callee +35:60 TypeTable.refOf -> @TypeTable.refOf
+  callee +37:7 checkIndexArgument -> @checkIndexArgument
+  callee +39:5 requireStatementPosition -> @requireStatementPosition
+  local +42:9 replace: boolean (const)
+  callee +43:8 checkBuiltinArity -> @checkBuiltinArity
+  local +46:9 vector: i32 (const)
+  callee +46:18 checkVectorArgument -> @checkVectorArgument
+  callee +47:3 checkLaneIndex -> @checkLaneIndex
+  callee +49:43 TypeTable.refOf -> @TypeTable.refOf
+  callee +52:5 checkExpression -> @checkExpression
+  callee +54:5 checkArgumentType -> @checkArgumentType
+  callee +54:59 TypeTable.refOf -> @TypeTable.refOf
 function laneIndex(arg: Node): string -> @laneIndex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_from_i64 parseIntegerLiteral unwrapParens
@@ -161,49 +175,51 @@ function laneIndex(arg: Node): string -> @laneIndex
   callee +0:65 unwrapParens -> @unwrapParens
 function emitSimdCall(emitter: Emitter, expr: Node, name: string): string -> @emitSimdCall [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via emitVectorAccess
+  sharedWrite: via emitSimdOp
   escaping: name
-  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue TypeTable.laneCount TypeTable.refOf emitVectorAccess isSimdAccess laneIndex nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 simdLaneType
-  pointer emitter: size=296 writesThrough=true captured=false passedTo=emitVectorAccess#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitVectorAccess#1 Emitter.typeOf#1
+  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue TypeTable.laneCount TypeTable.refOf emitSimdOp emitVectorAccess isSimdAccess isSimdOp laneIndex nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 simdLaneType
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=emitSimdOp#0 emitVectorAccess#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitSimdOp#1 emitVectorAccess#1 Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
-  callee +1:7 isSimdAccess -> @isSimdAccess
-  callee +2:12 emitVectorAccess -> @emitVectorAccess
-  local +4:9 fn: IRFunction (const)
-  local +5:9 result: i32 (const)
-  callee +5:18 Emitter.typeOf -> @Emitter.typeOf
-  local +7:11 v: Node (const)
-  local +8:11 value: string (const)
-  callee +8:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +9:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +10:25 Emitter.llvm -> @Emitter.llvm
-  callee +10:38 Emitter.typeOf -> @Emitter.typeOf
-  callee +10:74 laneIndex -> @laneIndex
-  local +13:9 ty: string (const)
-  callee +13:14 Emitter.llvm -> @Emitter.llvm
-  local +14:9 lane: string (const)
-  callee +14:16 Emitter.llvm -> @Emitter.llvm
-  callee +14:29 TypeTable.refOf -> @TypeTable.refOf
-  local +16:11 value: string (const)
-  callee +16:19 Emitter.emitExpression -> @Emitter.emitExpression
-  local +17:11 x: string (const)
-  callee +17:15 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +18:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +18:76 laneIndex -> @laneIndex
-  callee +20:7 simdLaneType -> @simdLaneType
-  local +21:11 x: string (const)
-  callee +21:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local +22:11 one: string (const)
-  callee +22:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +23:11 count: i32 (const)
-  callee +23:19 TypeTable.laneCount -> @TypeTable.laneCount
-  callee +24:12 IRFunction.emitValue -> @IRFunction.emitValue
-  local +26:7 acc: string (let)
-  local +27:12 i: i32 (let)
-  local +28:11 x: string (const)
-  callee +28:15 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +29:11 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +1:7 isSimdOp -> @isSimdOp
+  callee +2:12 emitSimdOp -> @emitSimdOp
+  callee +4:7 isSimdAccess -> @isSimdAccess
+  callee +5:12 emitVectorAccess -> @emitVectorAccess
+  local +7:9 fn: IRFunction (const)
+  local +8:9 result: i32 (const)
+  callee +8:18 Emitter.typeOf -> @Emitter.typeOf
+  local +10:11 v: Node (const)
+  local +11:11 value: string (const)
+  callee +11:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +12:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:25 Emitter.llvm -> @Emitter.llvm
+  callee +13:38 Emitter.typeOf -> @Emitter.typeOf
+  callee +13:74 laneIndex -> @laneIndex
+  local +16:9 ty: string (const)
+  callee +16:14 Emitter.llvm -> @Emitter.llvm
+  local +17:9 lane: string (const)
+  callee +17:16 Emitter.llvm -> @Emitter.llvm
+  callee +17:29 TypeTable.refOf -> @TypeTable.refOf
+  local +19:11 value: string (const)
+  callee +19:19 Emitter.emitExpression -> @Emitter.emitExpression
+  local +20:11 x: string (const)
+  callee +20:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +21:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +21:76 laneIndex -> @laneIndex
+  callee +23:7 simdLaneType -> @simdLaneType
+  local +24:11 x: string (const)
+  callee +24:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +25:11 one: string (const)
+  callee +25:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +26:11 count: i32 (const)
+  callee +26:19 TypeTable.laneCount -> @TypeTable.laneCount
+  callee +27:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +29:7 acc: string (let)
+  local +30:12 i: i32 (let)
+  local +31:11 x: string (const)
+  callee +31:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +32:11 IRFunction.emitValue -> @IRFunction.emitValue
 function isSimdLoad(name: string): boolean -> @isSimdLoad [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: name
@@ -217,3 +233,333 @@ function isSimdAccess(name: string): boolean -> @isSimdAccess [exported]
   calls: isSimdLoad nish_str_eq
   stackSites=0 stackLocals=0
   callee +0:76 isSimdLoad -> @isSimdLoad
+function simdMaskLane(bits: i32): i32 -> @simdMaskLane [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function simdMaskConstructorMessage(name: string): string -> @simdMaskConstructorMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function rejectStoredMask(ctx: CheckContext, type: i32, position: string, node: Node): boolean -> @rejectStoredMask [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: type
+  calls: CheckContext.error TypeTable.holdsMask TypeTable.typeName nish_str_concat
+  pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  callee +0:8 TypeTable.holdsMask -> @TypeTable.holdsMask
+  callee +3:3 CheckContext.error -> @CheckContext.error
+  callee +5:10 TypeTable.typeName -> @TypeTable.typeName
+function floatLanes(table: TypeTable, vector: i32): boolean -> @floatLanes
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: vector
+  calls: TypeTable.refOf
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.refOf#0
+  stackSites=0 stackLocals=0
+  local +0:9 lane: i32 (const)
+  callee +0:16 TypeTable.refOf -> @TypeTable.refOf
+function operand(ctx: CheckContext, arg: Node, scope: Scope, want: i32): i32 -> @operand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkExpression
+  escaping: want
+  calls: checkExpression
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkExpression#0
+  pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  stackSites=0 stackLocals=0
+  callee +0:3 checkExpression -> @checkExpression
+function refuseOperand(ctx: CheckContext, arg: Node, name: string, allowed: string, type: i32): i32 -> @refuseOperand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.errorType
+  escaping: type
+  calls: CheckContext.errorType TypeTable.typeName nish_str_concat
+  pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.errorType#0
+  pointer arg: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
+  stackSites=0 stackLocals=0
+  callee +0:3 CheckContext.errorType -> @CheckContext.errorType
+  callee +0:59 TypeTable.typeName -> @TypeTable.typeName
+function firstOperand(ctx: CheckContext, arg: Node, scope: Scope, name: string, family: string): i32 -> @firstOperand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via operand
+  escaping: name
+  calls: CheckContext.errorType TypeTable.isMask TypeTable.isVector TypeTable.typeName floatLanes nish_str_concat nish_str_eq operand refuseOperand
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=operand#0 refuseOperand#0 refuseOperand#0 refuseOperand#0 CheckContext.errorType#0 refuseOperand#0
+  pointer arg: size=40 writesThrough=true captured=true passedTo=operand#1 refuseOperand#1 refuseOperand#1 refuseOperand#1 CheckContext.errorType#1 refuseOperand#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=operand#2
+  stackSites=0 stackLocals=0
+  local +0:9 table: TypeTable (const)
+  local +1:9 type: i32 (const)
+  callee +1:16 operand -> @operand
+  local +5:9 vector: boolean (const)
+  callee +5:18 TypeTable.isVector -> @TypeTable.isVector
+  local +6:9 mask: boolean (const)
+  callee +6:16 TypeTable.isMask -> @TypeTable.isMask
+  callee +10:9 refuseOperand -> @refuseOperand
+  callee +13:32 floatLanes -> @floatLanes
+  callee +15:9 refuseOperand -> @refuseOperand
+  callee +18:12 refuseOperand -> @refuseOperand
+  callee +20:30 floatLanes -> @floatLanes
+  local +22:11 wraps: boolean (const)
+  callee +23:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +26:83 TypeTable.typeName -> @TypeTable.typeName
+  callee +27:54 TypeTable.typeName -> @TypeTable.typeName
+  callee +30:27 floatLanes -> @floatLanes
+  callee +31:12 refuseOperand -> @refuseOperand
+function sameOperand(ctx: CheckContext, arg: Node, scope: Scope, name: string, first: i32): void -> @sameOperand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via operand
+  escaping: first
+  calls: CheckContext.error TypeTable.typeName nish_str_concat operand
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=operand#0 CheckContext.error#0
+  pointer arg: size=40 writesThrough=true captured=true passedTo=operand#1 CheckContext.error#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=operand#2
+  stackSites=0 stackLocals=0
+  local +0:9 type: i32 (const)
+  callee +0:16 operand -> @operand
+  callee +4:3 CheckContext.error -> @CheckContext.error
+  callee +6:52 TypeTable.typeName -> @TypeTable.typeName
+  callee +6:85 TypeTable.typeName -> @TypeTable.typeName
+function opShape(name: string): string -> @opShape
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at nish_str_eq
+  stackSites=0 stackLocals=0
+function isCompare(name: string): boolean -> @isCompare
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function isLaneShift(name: string): boolean -> @isLaneShift
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function checkLaneShiftCount(ctx: CheckContext, arg: Node, scope: Scope, name: string, vector: i32): void -> @checkLaneShiftCount
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkExpression
+  escaping: vector
+  calls: CheckContext.error TypeTable.alignOf TypeTable.refOf TypeTable.typeName checkExpression nish_panic_div nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 nish_str_index_of nish_str_index_of_from parseIntegerLiteral unwrapParens
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0
+  pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 unwrapParens#0 CheckContext.error#1 CheckContext.error#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  stackSites=0 stackLocals=0
+  callee +0:3 checkExpression -> @checkExpression
+  local +4:9 bits: i32 (const)
+  callee +4:16 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +4:34 TypeTable.refOf -> @TypeTable.refOf
+  local +5:9 literal: Node (const)
+  callee +5:19 unwrapParens -> @unwrapParens
+  callee +7:5 CheckContext.error -> @CheckContext.error
+  callee +9:118 TypeTable.typeName -> @TypeTable.typeName
+  local +13:9 count: i64 (const)
+  callee +13:17 parseIntegerLiteral -> @parseIntegerLiteral
+  callee +15:5 CheckContext.error -> @CheckContext.error
+  callee +17:75 TypeTable.typeName -> @TypeTable.typeName
+function checkShuffle(ctx: CheckContext, call: Node, scope: Scope): i32 -> @checkShuffle
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.errorType
+  calls: CheckContext.error CheckContext.errorType TypeTable.laneCount TypeTable.typeName checkExpression firstOperand nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from parseIntegerLiteral sameOperand unwrapParens
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=CheckContext.errorType#0 firstOperand#0 sameOperand#0 checkExpression#0 CheckContext.errorType#0 CheckContext.error#0 CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=firstOperand#2 sameOperand#2 checkExpression#2
+  stackSites=0 stackLocals=0
+  local +0:9 name: string (const)
+  local +1:9 args: Node[] (const)
+  callee +3:12 CheckContext.errorType -> @CheckContext.errorType
+  local +8:9 vector: i32 (const)
+  callee +8:18 firstOperand -> @firstOperand
+  callee +9:3 sameOperand -> @sameOperand
+  local +10:12 i: i32 (let)
+  callee +11:5 checkExpression -> @checkExpression
+  local +16:9 count: i32 (const)
+  callee +16:17 TypeTable.laneCount -> @TypeTable.laneCount
+  local +17:9 shown: string (const)
+  callee +17:17 TypeTable.typeName -> @TypeTable.typeName
+  callee +19:12 CheckContext.errorType -> @CheckContext.errorType
+  local +24:12 i: i32 (let)
+  local +25:11 arg: Node (const)
+  local +26:11 literal: Node (const)
+  callee +26:21 unwrapParens -> @unwrapParens
+  callee +28:7 CheckContext.error -> @CheckContext.error
+  local +34:11 index: i64 (const)
+  callee +34:19 parseIntegerLiteral -> @parseIntegerLiteral
+  callee +36:7 CheckContext.error -> @CheckContext.error
+function castTarget(table: TypeTable, name: string): i32 -> @castTarget
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via TypeTable.vectorOf
+  escaping: name
+  calls: TypeTable.vectorOf simdLaneType simdSuffix
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.vectorOf#0
+  stackSites=0 stackLocals=0
+  local +0:9 lane: i32 (const)
+  callee +0:16 simdLaneType -> @simdLaneType
+  callee +0:29 simdSuffix -> @simdSuffix
+  callee +1:39 TypeTable.vectorOf -> @TypeTable.vectorOf
+function checkSum(ctx: CheckContext, arg: Node, name: string, vector: i32): i32 -> @checkSum
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.errorType
+  escaping: vector
+  calls: CheckContext.errorType TypeTable.refOf TypeTable.typeName nish_str_concat nish_str_eq
+  pointer ctx: size=296 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0
+  pointer arg: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1
+  stackSites=0 stackLocals=0
+  local +0:9 lane: i32 (const)
+  callee +0:16 TypeTable.refOf -> @TypeTable.refOf
+  local +1:9 wide: boolean (const)
+  callee +6:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +8:65 TypeTable.typeName -> @TypeTable.typeName
+  callee +12:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +14:21 TypeTable.typeName -> @TypeTable.typeName
+function checkSimdOp(ctx: CheckContext, call: Node, scope: Scope, name: string): i32 -> @checkSimdOp
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkShuffle
+  escaping: name
+  calls: CheckContext.error TypeTable.maskFor TypeTable.typeName castTarget checkBuiltinArity checkLaneShiftCount checkShuffle checkSum firstOperand isCompare isLaneShift nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new opShape sameOperand
+  pointer ctx: size=296 writesThrough=true captured=true passedTo=checkShuffle#0 checkBuiltinArity#0 firstOperand#0 firstOperand#0 sameOperand#0 CheckContext.error#0 checkBuiltinArity#0 firstOperand#0 checkLaneShiftCount#0 sameOperand#0 checkSum#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=checkShuffle#1 checkBuiltinArity#1 checkBuiltinArity#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkShuffle#2 firstOperand#2 firstOperand#2 sameOperand#2 firstOperand#2 checkLaneShiftCount#2 sameOperand#2
+  stackSites=0 stackLocals=0
+  local +0:9 table: TypeTable (const)
+  local +1:9 args: Node (const)
+  callee +3:12 checkShuffle -> @checkShuffle
+  callee +6:10 checkBuiltinArity -> @checkBuiltinArity
+  local +9:11 mask: i32 (const)
+  callee +9:18 firstOperand -> @firstOperand
+  local +10:11 vector: i32 (const)
+  callee +10:20 firstOperand -> @firstOperand
+  callee +11:5 sameOperand -> @sameOperand
+  callee +15:9 TypeTable.maskFor -> @TypeTable.maskFor
+  callee +16:7 CheckContext.error -> @CheckContext.error
+  callee +18:35 TypeTable.typeName -> @TypeTable.typeName
+  callee +18:99 TypeTable.typeName -> @TypeTable.typeName
+  callee +18:114 TypeTable.maskFor -> @TypeTable.maskFor
+  callee +18:145 TypeTable.typeName -> @TypeTable.typeName
+  local +23:9 shape: string (const)
+  callee +23:17 opShape -> @opShape
+  local +24:9 slash: i32 (const)
+  local +25:9 family: string (const)
+  local +26:9 arity: i32 (const)
+  callee +27:8 checkBuiltinArity -> @checkBuiltinArity
+  local +30:9 first: i32 (const)
+  callee +30:17 firstOperand -> @firstOperand
+  callee +31:7 isLaneShift -> @isLaneShift
+  callee +32:5 checkLaneShiftCount -> @checkLaneShiftCount
+  callee +36:5 sameOperand -> @sameOperand
+  callee +41:7 isCompare -> @isCompare
+  callee +42:12 TypeTable.maskFor -> @TypeTable.maskFor
+  callee +51:12 checkSum -> @checkSum
+  callee +54:12 castTarget -> @castTarget
+function splatConstant(vectorType: string, lane: string, count: i32, x: string): string -> @splatConstant
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_concat
+  stackSites=1 stackLocals=1
+  local +0:9 lanes: string[] (const)
+  local +1:12 i: i32 (let)
+function comparePredicate(table: TypeTable, name: string, vector: i32): string -> @comparePredicate
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: vector
+  calls: TypeTable.refOf nish_str_concat nish_str_eq
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.refOf#0
+  stackSites=0 stackLocals=0
+  local +0:9 lane: i32 (const)
+  callee +0:16 TypeTable.refOf -> @TypeTable.refOf
+function callVectorIntrinsic(emitter: Emitter, name: string, ret: string, args: string): string -> @callVectorIntrinsic
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  escaping: name
+  calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
+  pointer emitter: size=296 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  stackSites=0 stackLocals=0
+  callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +0:39 Emitter.useRuntime -> @Emitter.useRuntime
+function emitSimdOp(emitter: Emitter, expr: Node, name: string): string -> @emitSimdOp
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.typeOf
+  escaping: name
+  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue TypeTable.isMask TypeTable.laneCount TypeTable.refOf binaryInstruction callVectorIntrinsic comparePredicate isCompare isLaneShift nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_new parseIntegerLiteral splatConstant unwrapParens vectorSuffix
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 callVectorIntrinsic#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 callVectorIntrinsic#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
+  stackSites=1 stackLocals=1
+  local +0:9 args: Node[] (const)
+  local +1:9 table: TypeTable (const)
+  local +2:9 fn: IRFunction (const)
+  local +3:9 lead: Node (const)
+  local +4:9 vector: i32 (const)
+  callee +4:18 Emitter.typeOf -> @Emitter.typeOf
+  local +5:9 ty: string (const)
+  callee +5:14 Emitter.llvm -> @Emitter.llvm
+  local +6:9 count: i32 (const)
+  callee +6:17 TypeTable.laneCount -> @TypeTable.laneCount
+  local +7:9 laneType: string (const)
+  callee +7:20 TypeTable.isMask -> @TypeTable.isMask
+  callee +7:50 Emitter.llvm -> @Emitter.llvm
+  callee +7:63 TypeTable.refOf -> @TypeTable.refOf
+  local +8:9 suffix: string (const)
+  callee +8:18 vectorSuffix -> @vectorSuffix
+  local +10:11 mask: string (const)
+  callee +10:18 Emitter.emitExpression -> @Emitter.emitExpression
+  local +11:11 a: string (const)
+  callee +11:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +12:11 b: string (const)
+  callee +12:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +13:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:35 Emitter.llvm -> @Emitter.llvm
+  callee +13:48 Emitter.typeOf -> @Emitter.typeOf
+  local +16:11 a: string (const)
+  callee +16:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +17:11 b: string (const)
+  callee +17:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +18:11 indices: string[] (const)
+  local +19:14 i: i32 (let)
+  callee +20:27 parseIntegerLiteral -> @parseIntegerLiteral
+  callee +20:47 unwrapParens -> @unwrapParens
+  callee +22:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +24:9 a: string (const)
+  callee +24:13 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +25:7 isLaneShift -> @isLaneShift
+  local +26:11 k: string (const)
+  callee +26:18 parseIntegerLiteral -> @parseIntegerLiteral
+  callee +26:38 unwrapParens -> @unwrapParens
+  local +27:11 amount: string (const)
+  callee +27:20 splatConstant -> @splatConstant
+  local +29:13 funnel: string (const)
+  callee +30:14 callVectorIntrinsic -> @callVectorIntrinsic
+  local +32:9 op: string (let)
+  callee +34:12 TypeTable.refOf -> @TypeTable.refOf
+  callee +36:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +39:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +42:12 callVectorIntrinsic -> @callVectorIntrinsic
+  local +50:11 ones: string (const)
+  callee +50:18 splatConstant -> @splatConstant
+  callee +51:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +54:12 callVectorIntrinsic -> @callVectorIntrinsic
+  local +62:11 bits: string (const)
+  callee +62:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +63:34 IRFunction.emitValue -> @IRFunction.emitValue
+  local +66:11 lane: i32 (const)
+  callee +66:18 TypeTable.refOf -> @TypeTable.refOf
+  callee +69:14 callVectorIntrinsic -> @callVectorIntrinsic
+  local +77:13 wide: string (const)
+  local +78:13 widened: string (const)
+  callee +78:23 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +79:14 callVectorIntrinsic -> @callVectorIntrinsic
+  callee +81:35 vectorSuffix -> @vectorSuffix
+  callee +86:12 callVectorIntrinsic -> @callVectorIntrinsic
+  callee +89:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +89:50 Emitter.llvm -> @Emitter.llvm
+  callee +89:63 Emitter.typeOf -> @Emitter.typeOf
+  local +91:9 b: string (const)
+  callee +91:13 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +92:7 isCompare -> @isCompare
+  callee +93:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +93:28 comparePredicate -> @comparePredicate
+  local +95:9 isFloat: boolean (const)
+  local +97:9 family: string (let)
+  local +99:13 signed: string (const)
+  callee +99:22 TypeTable.refOf -> @TypeTable.refOf
+  callee +102:12 callVectorIntrinsic -> @callVectorIntrinsic
+  callee +104:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +104:26 binaryInstruction -> @binaryInstruction
+function binaryInstruction(name: string): string -> @binaryInstruction
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: nish_str_concat nish_str_eq
+  stackSites=0 stackLocals=0

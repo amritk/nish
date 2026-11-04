@@ -10,10 +10,12 @@ import resultTypeDecl from "./emit-result" -> function @resultTypeDecl
 import fieldTbaa from "./tbaa" -> function @fieldTbaa
 import emitArrayLength from "./emit-arrays" -> function @emitArrayLength
 import emitArrayMethodCall from "./emit-arrays" -> function @emitArrayMethodCall
+import emitBoxedArrayAssignment from "./emit-arrays" -> function @emitBoxedArrayAssignment
 import emitInlineArrayAssignment from "./emit-arrays" -> function @emitInlineArrayAssignment
 import emitNewArray from "./emit-arrays" -> function @emitNewArray
 import initInlineArrays from "./emit-arrays" -> function @initInlineArrays
 import inlineHeaderPointer from "./emit-arrays" -> function @inlineHeaderPointer
+import SLICE_TYPE from "./emit-arrays" -> const SLICE_TYPE
 import compoundFloatOpcode from "./emit-ops" -> function @compoundFloatOpcode
 import compoundIntegerOpcode from "./emit-ops" -> function @compoundIntegerOpcode
 import emitBitwiseCombine from "./emit-ops" -> function @emitBitwiseCombine
@@ -271,9 +273,10 @@ function emitPropertyAccess(emitter: Emitter, expr: Node): string -> @emitProper
   callee +19:25 FieldInfo.inline -> @FieldInfo.inline
   callee +22:12 inlineHeaderPointer -> @inlineHeaderPointer
   callee +22:47 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +25:12 loadField -> @loadField
-  callee +25:37 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +28:5 internalErrorFor -> @internalErrorFor
+  callee +26:7 internalErrorFor -> @internalErrorFor
+  callee +30:12 loadField -> @loadField
+  callee +30:37 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +33:5 internalErrorFor -> @internalErrorFor
 function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args: Node[], site: Node): string -> @emitCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
@@ -333,9 +336,9 @@ function emitMethodCall(emitter: Emitter, expr: Node): string -> @emitMethodCall
 function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitFieldAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structInfoOf
-  calls: Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.typeOf FieldInfo.inline IRFunction.emit IRFunction.emitValue StructInfo.field TypeTable.stripNull compoundFloatOpcode compoundIntegerOpcode emitBitwiseCombine emitInlineArrayAssignment emitIntBinary emitRangedStore guardKeep internalErrorFor isBitwiseAssignment isFloat isGuardedAccess loadField nish_exit nish_panic_index nish_str_concat nish_str_eq storeField structFieldPointer structInfoOf
-  pointer emitter: size=296 writesThrough=true captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 emitInlineArrayAssignment#0 Emitter.emitExpression#0 Emitter.emitExpression#0 loadField#0 storeField#0 guardKeep#0 storeField#0 structFieldPointer#0 Emitter.llvm#0 Emitter.alignSuffix#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitIntBinary#0 emitRangedStore#0 Emitter.alignSuffix#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitInlineArrayAssignment#1 emitIntBinary#5 emitRangedStore#1
+  calls: Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.typeOf FieldInfo.inline IRFunction.emit IRFunction.emitValue StructInfo.field TypeTable.stripNull compoundFloatOpcode compoundIntegerOpcode emitBitwiseCombine emitBoxedArrayAssignment emitInlineArrayAssignment emitIntBinary emitRangedStore guardKeep internalErrorFor isBitwiseAssignment isFloat isGuardedAccess loadField nish_exit nish_panic_index nish_str_concat nish_str_eq storeField structFieldPointer structInfoOf
+  pointer emitter: size=296 writesThrough=true captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 emitInlineArrayAssignment#0 emitBoxedArrayAssignment#0 Emitter.emitExpression#0 Emitter.emitExpression#0 loadField#0 storeField#0 guardKeep#0 storeField#0 structFieldPointer#0 Emitter.llvm#0 Emitter.alignSuffix#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitIntBinary#0 emitRangedStore#0 Emitter.alignSuffix#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitInlineArrayAssignment#1 emitBoxedArrayAssignment#1 emitIntBinary#5 emitRangedStore#1
   stackSites=0 stackLocals=0
   local +0:9 target: Node (const)
   local +1:9 info: StructInfo (const)
@@ -346,37 +349,38 @@ function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitField
   callee +5:7 internalErrorFor -> @internalErrorFor
   callee +8:7 FieldInfo.inline -> @FieldInfo.inline
   callee +9:12 emitInlineArrayAssignment -> @emitInlineArrayAssignment
-  local +11:9 receiver: string (const)
-  callee +11:20 Emitter.emitExpression -> @Emitter.emitExpression
-  local +13:11 value: string (const)
-  callee +13:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +15:7 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +16:7 isGuardedAccess -> @isGuardedAccess
-  local +18:13 old: string (const)
-  callee +18:19 loadField -> @loadField
-  callee +19:7 storeField -> @storeField
-  callee +19:50 guardKeep -> @guardKeep
-  callee +22:5 storeField -> @storeField
-  local +27:9 ptr: string (const)
-  callee +27:15 structFieldPointer -> @structFieldPointer
-  local +28:9 ty: string (const)
-  callee +28:14 Emitter.llvm -> @Emitter.llvm
-  local +29:9 old: string (const)
-  callee +29:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +29:64 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +30:7 value: string (let)
-  callee +31:7 isBitwiseAssignment -> @isBitwiseAssignment
-  callee +32:13 emitBitwiseCombine -> @emitBitwiseCombine
-  local +34:11 rhs: string (const)
-  callee +34:17 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +35:13 isFloat -> @isFloat
-  callee +36:9 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +36:33 compoundFloatOpcode -> @compoundFloatOpcode
-  callee +37:9 emitIntBinary -> @emitIntBinary
-  callee +39:11 compoundIntegerOpcode -> @compoundIntegerOpcode
-  callee +46:3 emitRangedStore -> @emitRangedStore
-  callee +47:3 IRFunction.emit -> @IRFunction.emit
-  callee +47:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee +12:12 emitBoxedArrayAssignment -> @emitBoxedArrayAssignment
+  local +14:9 receiver: string (const)
+  callee +14:20 Emitter.emitExpression -> @Emitter.emitExpression
+  local +16:11 value: string (const)
+  callee +16:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +18:7 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +19:7 isGuardedAccess -> @isGuardedAccess
+  local +21:13 old: string (const)
+  callee +21:19 loadField -> @loadField
+  callee +22:7 storeField -> @storeField
+  callee +22:50 guardKeep -> @guardKeep
+  callee +25:5 storeField -> @storeField
+  local +30:9 ptr: string (const)
+  callee +30:15 structFieldPointer -> @structFieldPointer
+  local +31:9 ty: string (const)
+  callee +31:14 Emitter.llvm -> @Emitter.llvm
+  local +32:9 old: string (const)
+  callee +32:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +32:64 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +33:7 value: string (let)
+  callee +34:7 isBitwiseAssignment -> @isBitwiseAssignment
+  callee +35:13 emitBitwiseCombine -> @emitBitwiseCombine
+  local +37:11 rhs: string (const)
+  callee +37:17 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +38:13 isFloat -> @isFloat
+  callee +39:9 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +39:33 compoundFloatOpcode -> @compoundFloatOpcode
+  callee +40:9 emitIntBinary -> @emitIntBinary
+  callee +42:11 compoundIntegerOpcode -> @compoundIntegerOpcode
+  callee +49:3 emitRangedStore -> @emitRangedStore
+  callee +50:3 IRFunction.emit -> @IRFunction.emit
+  callee +50:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function structTypeDeclarations(emitter: Emitter): string[] -> @structTypeDeclarations [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fieldLLVMType

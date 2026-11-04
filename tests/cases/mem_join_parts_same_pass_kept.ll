@@ -213,16 +213,28 @@ join.part:
   %83 = bitcast i8* %82 to i64*
   %84 = load i64, i64* %83, align 8
   %85 = getelementptr inbounds i8, i8* %82, i64 8
+  %86 = icmp eq i64 %84, 1
+  br i1 %86, label %join.byte, label %join.bulk
+
+join.byte:
+  %87 = load i8, i8* %85, align 1
+  store i8 %87, i8* %77, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %77, i8* %85, i64 %84, i1 false)
-  %86 = getelementptr inbounds i8, i8* %77, i64 %84
-  store i8* %86, i8** %join.p, align 8
-  %87 = add i64 %71, 1
-  store i64 %87, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %88 = getelementptr inbounds i8, i8* %77, i64 %84
+  store i8* %88, i8** %join.p, align 8
+  %89 = add i64 %71, 1
+  store i64 %89, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %88 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %88, align 1
+  %90 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %90, align 1
   ret i8* %68
 }
 

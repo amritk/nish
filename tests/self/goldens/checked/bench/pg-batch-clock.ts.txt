@@ -336,15 +336,15 @@ struct PgConnection (class) size=216 align=8 exported
   method binaryFloat -> @nish.PgConnection.binaryFloat
   method tagIs -> @nish.PgConnection.tagIs
   method tagRows -> @nish.PgConnection.tagRows
-struct PgPoolSlot (class) size=48 align=8
+struct PgPoolSlot (class) size=64 align=8
   field state: i32 index=0 offset=0 initialized
   field conn: PgConnection | null index=1 offset=8 initialized
   field queued: i32 index=2 offset=16 initialized
   field described: i32 index=3 offset=20 initialized
-  field tickets: i32[] index=4 offset=24 readonly
-  field leads: i32[] index=5 offset=32 readonly
-  field head: i32 index=6 offset=40 initialized
-  field count: i32 index=7 offset=44 initialized
+  field tickets: i32[] index=4 offset=24 readonly boxed
+  field leads: i32[] index=5 offset=40 readonly boxed
+  field head: i32 index=6 offset=56 initialized
+  field count: i32 index=7 offset=60 initialized
   constructor -> @nish.PgPoolSlot.constructor
   method push -> @nish.PgPoolSlot.push
   method pop -> @nish.PgPoolSlot.pop
@@ -388,19 +388,19 @@ struct PgBatchConfig (class) size=56 align=8 exported
   field queueBytes: i32 index=7 offset=40 initialized
   field runs: i32 index=8 offset=44 initialized
   field binary: boolean index=9 offset=48 initialized
-struct PgBatchRun (class) size=48 align=8
-  field tags: i32[] index=0 offset=0
-  field first: i32[] index=1 offset=8
-  field keys: i32 index=2 offset=16 initialized
-  field cur: i32 index=3 offset=20 initialized
-  field curRows: boolean index=4 offset=24 initialized
-  field at: i32 index=5 offset=28 initialized
-  field target: i32 index=6 offset=32 initialized
-  field handle: i32 index=7 offset=36 initialized
-  field uses: i32 index=8 offset=40 initialized
-  field open: boolean index=9 offset=44 initialized
-  field ended: boolean index=10 offset=45 initialized
-  field failed: boolean index=11 offset=46 initialized
+struct PgBatchRun (class) size=64 align=8
+  field tags: i32[] index=0 offset=0 boxed
+  field first: i32[] index=1 offset=16 boxed
+  field keys: i32 index=2 offset=32 initialized
+  field cur: i32 index=3 offset=36 initialized
+  field curRows: boolean index=4 offset=40 initialized
+  field at: i32 index=5 offset=44 initialized
+  field target: i32 index=6 offset=48 initialized
+  field handle: i32 index=7 offset=52 initialized
+  field uses: i32 index=8 offset=56 initialized
+  field open: boolean index=9 offset=60 initialized
+  field ended: boolean index=10 offset=61 initialized
+  field failed: boolean index=11 offset=62 initialized
   constructor -> @nish.PgBatchRun.constructor
   method reset -> @nish.PgBatchRun.reset
 struct PgBatcher (class) size=160 align=8 exported
@@ -568,6 +568,21 @@ function pgDecimalLength(value: i64): i32 -> @nish.pgDecimalLength
   stackSites=0 stackLocals=0
   local +0:7 n: i32 (let)
   local +1:7 v: i64 (let)
+function pgPutDecimal(out: u8[], at: i32, value: i64, n: i32): i32 -> @nish.pgPutDecimal
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at
+  calls: nish_panic
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -7:9 first: i32 (const)
+  local -6:7 m: u64 (let)
+  local -4:7 j: i32 (let)
+  local -2:11 pair: u32 (const)
+  local -1:11 tens: u32 (const)
+  local +6:9 pair: u32 (const)
+  local +8:11 tens: u32 (const)
+  local +12:11 last: i32 (const)
 function pgFitsInt4(value: i64): boolean -> @nish.pgFitsInt4
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -1547,18 +1562,16 @@ function PgConnection.paramInt(this: PgConnection, value: i64): boolean -> @nish
   callee +4:5 PgConnection.putDecimal -> @nish.PgConnection.putDecimal
   callee +5:5 PgConnection.endParam -> @nish.PgConnection.endParam
 function PgConnection.putDecimal(this: PgConnection, value: i64): void -> @nish.PgConnection.putDecimal [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
   escaping: value
-  calls: nish.PgConnection.reserve nish_panic_index nish_panic_overflow
+  calls: nish.PgConnection.reserve nish.pgDecimalLength nish.pgPutDecimal nish_panic_overflow
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.reserve#0
   stackSites=0 stackLocals=0
-  callee -5:5 PgConnection.reserve -> @nish.PgConnection.reserve
-  local -2:9 v: i64 (let)
-  local +3:11 first: i32 (const)
-  local +12:9 lo: i32 (let)
-  local +13:9 hi: i32 (let)
-  local +15:13 t: u8 (const)
+  local -2:11 n: i32 (const)
+  callee -2:20 pgDecimalLength -> @nish.pgDecimalLength
+  callee -1:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  callee +0:19 pgPutDecimal -> @nish.pgPutDecimal
 function PgConnection.paramIntArray(this: PgConnection, values: i64[], start: i32, count: i32): boolean -> @nish.PgConnection.paramIntArray [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.startParam
@@ -1952,21 +1965,21 @@ function PgPoolSlot.constructor(this: PgPoolSlot, ring: i32): void -> @nish.PgPo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: ring
   calls: nish_panic
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgPoolSlot.push(this: PgPoolSlot, ticket: i32, leads: i32): void -> @nish.PgPoolSlot.push [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: leads ticket
   calls: nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 at: i32 (const)
 function PgPoolSlot.pop(this: PgPoolSlot): void -> @nish.PgPoolSlot.pop [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_div nish_panic_overflow
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgPool.constructor(this: PgPool, config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32): void -> @nish.PgPool.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -2113,13 +2126,13 @@ function pgIntHash(key: i64): i32 -> @nish.pgIntHash
   local +2:7 h: u32 (let)
 function PgBatchRun.constructor(this: PgBatchRun): void -> @nish.PgBatchRun.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatchRun.reset(this: PgBatchRun, keys: i32): void -> @nish.PgBatchRun.reset [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: keys
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatcher.constructor(this: PgBatcher, config: PgBatchConfig): void -> @nish.PgBatcher.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -2338,7 +2351,7 @@ function PgBatcher.emit(this: PgBatcher, run: PgBatchRun): boolean -> @nish.PgBa
   sharedWrite: +0:5
   calls: nish_panic_index nish_panic_overflow
   pointer this: size=160 writesThrough=true captured=false
-  pointer run: size=48 writesThrough=true captured=false
+  pointer run: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 at: i32 (const)
 function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [exported method]
@@ -2623,13 +2636,20 @@ function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
   stackSites=0 stackLocals=0
   local +0:7 v: u64 (let)
   local +1:12 i: i32 (let)
-function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+function getU64BEByByte(b: u8[], off: i32): u64 -> @nish.getU64BEByByte
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 v: u64 (let)
   local +1:12 i: i32 (let)
+function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BEByByte
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BEByByte#0
+  stackSites=0 stackLocals=0
+  callee +0:10 getU64BEByByte -> @nish.getU64BEByByte
 function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
@@ -2915,20 +2935,33 @@ function base64urlEncode(data: u8[]): string -> @nish.base64urlEncode [exported]
   callee +12:38 base64urlCharOf -> @nish.base64urlCharOf
   callee +18:36 base64urlCharOf -> @nish.base64urlCharOf
 function base64urlDecode(text: string): u8[] | null -> @nish.base64urlDecode [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64urlSextetOf nish_panic nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64urlSextetOf nish_panic nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 tail: i32 (const)
   local +9:9 out: u8[] (const)
   local +10:9 outLen: i32 (const)
   local +14:7 bad: i32 (let)
-  local +15:7 acc: i32 (let)
-  local +16:7 bits: i32 (let)
   local +17:7 j: i32 (let)
   local +18:12 k: i32 (let)
-  local +19:11 v: i32 (const)
-  callee +19:20 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +19:11 s0: i32 (const)
+  callee +19:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +20:11 s1: i32 (const)
+  callee +20:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +21:11 s2: i32 (const)
+  callee +21:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +22:11 s3: i32 (const)
+  callee +22:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +24:11 word: i32 (const)
+  local +38:11 k: i32 (const)
+  local +39:11 s0: i32 (const)
+  callee +39:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +40:11 s1: i32 (const)
+  callee +40:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +43:11 s2: i32 (const)
+  callee +43:34 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +45:11 word: i32 (const)
 function base64StdPadCharOf(v: i32): i32 -> @nish.base64StdPadCharOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: v

@@ -10,15 +10,16 @@
  * clock, `nish_platform` / `nish_arch` — and runtime-parallel.c, runtime-host.c,
  * runtime-net.c, runtime-simd.c (the byte searches that read a vector at a
  * time), runtime-aes.c (AES-GCM on the CPU's AES instructions),
- * runtime-sha256.c (SHA-256 on the CPU's SHA instructions), runtime-checksum.c
+ * runtime-sha256.c (SHA-256 on the CPU's SHA instructions), runtime-chacha20.c
+ * (ChaCha20's keystream on AVX2 or NEON vectors), runtime-checksum.c
  * (CRC-32 on its carry-less multiply or CRC instructions) and runtime-term.c
  * (stdin and the terminal, `nish:term`) split off
  * the same way since. They are separate so that each carries its own measured
  * code-size ceiling (docs/wp7-runtime.md, "Runtime additions and budget"); a
  * host links all of them, which `scripts/build.sh` does for you when handed
- * runtime.c, runtime-aes.c, runtime-sha256.c and runtime-checksum.c included: the
- * compiler calls their kernels from std/crypto/aes.ts, std/crypto/sha256.ts and
- * std/compress/checksum.ts, so `scripts/build.sh` pairs each of them with
+ * runtime.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c and runtime-checksum.c
+ * included: the compiler calls their kernels from std/crypto/aes.ts,
+ * std/crypto/sha256.ts, std/crypto/chacha20poly1305.ts and std/compress/checksum.ts, so `scripts/build.sh` pairs each of them with
  * runtime.c and `src/run-cache.ts` caches them like the others. `tests/run.js` checks that every runtime function
  * declared in runtime.ts has a prototype in this file.
  *
@@ -400,6 +401,28 @@ int32_t nish_sha256_hw(void);
    guard, so the caller's fallback panics as the Nish function does. `w` (u32[],
    the message schedule the Nish code fills) is neither read nor written. */
 int32_t nish_sha256_compress(nish_array *h, const nish_array *w, const nish_array *src, int32_t at);
+/* ---- ChaCha20 on vectors ----------------------------------------------------
+ * runtime/runtime-chacha20.c: eight blocks at once on AVX2 and four in 128-bit
+ * vectors on x86-64, four in NEON on AArch64. The compiler calls the kernel in
+ * place of std/crypto/chacha20poly1305.ts's private `chacha20XorInto`, behind
+ * `nish_chacha20_hw`, and calls the Nish function itself when either answers 0.
+ * Constant time in the key, the nonce and the data. */
+/* 1 when this process runs the kernel, 0 when it runs the Nish code. Resolved
+   on the first call and fixed from then on: `NISH_CHACHA20=soft` pins 0; unset,
+   `hw` or any other value is the best this machine has: CPUID's AVX2 with the
+   OS saving the YMM registers (XGETBV) on x86-64, NEON on AArch64. Always 0 on
+   other targets, wasm32 among them. */
+int32_t nish_chacha20_hw(void);
+/* RFC 8439 §2.4's encryption of src[srcAt..srcAt + len) (u8[]) into
+   dst[dstAt..dstAt + len) (u8[]) under the ChaCha20 state state[0..16) (u32[]),
+   whose block counter state[12] advances one per 64-byte block, as
+   `chacha20XorInto` does; 1 when it ran. Answers 0 and writes nothing when
+   state.len < 16, len < 256, an offset is negative, a window is outside its
+   array, or the windows overlap without being the same bytes, so the Nish
+   function runs as it would have. The keystream it makes is wiped before it
+   returns; the state is the caller's. */
+int32_t nish_chacha20_xor(nish_array *state, const nish_array *src, int32_t src_at, int32_t len, nish_array *dst,
+                          int32_t dst_at);
 /* ---- CRC-32 on the CPU's carry-less multiply or CRC instructions ---------
  * runtime/runtime-checksum.c: PCLMULQDQ folding on x86-64, the ARMv8 CRC32
  * instructions on AArch64. The compiler calls the kernel in

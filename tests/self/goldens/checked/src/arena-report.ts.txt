@@ -42,16 +42,16 @@ struct ArenaSite (class) size=40 align=8
   field callee: string index=3 offset=24
   field accumulates: boolean index=4 offset=32
   constructor -> @ArenaSite.constructor
-struct ArenaWalk (class) size=72 align=8
+struct ArenaWalk (class) size=96 align=8
   field program: CheckedProgram index=0 offset=0
   field facts: FactsTable index=1 offset=8
   field sig: FunctionSig index=2 offset=16
   field f: FunctionFacts index=3 offset=24
-  field arenaFlow: i32[] index=4 offset=32
-  field escapes: boolean[] index=5 offset=40
-  field calls: CallSite | null[] index=6 offset=48
-  field reclaimed: boolean index=7 offset=56
-  field sites: ArenaSite[] index=8 offset=64
+  field arenaFlow: i32[] index=4 offset=32 boxed
+  field escapes: boolean[] index=5 offset=48 boxed
+  field calls: CallSite | null[] index=6 offset=64 boxed
+  field reclaimed: boolean index=7 offset=80
+  field sites: ArenaSite[] index=8 offset=88
   constructor -> @ArenaWalk.constructor
 function ArenaSite.constructor(this: ArenaSite, node: Node, kind: string, placement: string, callee: string, accumulates: boolean): void -> @ArenaSite.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -63,7 +63,7 @@ function ArenaWalk.constructor(this: ArenaWalk, program: CheckedProgram, facts: 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: f facts program sig
   calls: nish_panic nish_panic_index reclaimsReturnedString
-  pointer this: size=72 writesThrough=true captured=false
+  pointer this: size=96 writesThrough=true captured=false
   pointer program: size=672 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true passedTo=reclaimsReturnedString#1
   pointer sig: size=176 writesThrough=true captured=true passedTo=reclaimsReturnedString#0
@@ -77,13 +77,13 @@ function ArenaWalk.constructor(this: ArenaWalk, program: CheckedProgram, facts: 
   callee +20:22 reclaimsReturnedString -> @reclaimsReturnedString
 function framePlacement(walk: ArenaWalk, flow: i32, escapes: boolean): string -> @framePlacement
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer walk: size=72 writesThrough=false captured=false
+  pointer walk: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function placementAt(walk: ArenaWalk, scope: i32, flow: i32, escapes: boolean): string -> @placementAt
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: escapes flow
   calls: framePlacement
-  pointer walk: size=72 writesThrough=false captured=false passedTo=framePlacement#0
+  pointer walk: size=96 writesThrough=false captured=false passedTo=framePlacement#0
   stackSites=0 stackLocals=0
   callee +0:10 framePlacement -> @framePlacement
 function siteKind(node: Node): string -> @siteKind
@@ -108,7 +108,7 @@ function visitSite(walk: ArenaWalk, node: Node, scope: i32, growing: boolean): v
   sharedWrite: +0:5
   escaping: scope
   calls: ArenaSite.constructor FactsTable.get builtinName isGarbage nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq placementAt siteKind
-  pointer walk: size=72 writesThrough=false captured=false passedTo=placementAt#0 placementAt#0
+  pointer walk: size=96 writesThrough=false captured=false passedTo=placementAt#0 placementAt#0
   pointer node: size=40 writesThrough=true captured=true passedTo=ArenaSite.constructor#1 siteKind#0 ArenaSite.constructor#1 siteKind#0 builtinName#1 ArenaSite.constructor#1
   stackSites=0 stackLocals=0
   callee +0:21 new ArenaSite -> @ArenaSite.constructor
@@ -143,7 +143,7 @@ function walkNode(walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
   sharedWrite: via visitSite
   escaping: growing scope
   calls: isArenaUsing isLoopNode loopScopeOf visitSite walkNode
-  pointer walk: size=72 writesThrough=false captured=false passedTo=visitSite#0 walkNode#0 walkNode#0 walkNode#0
+  pointer walk: size=96 writesThrough=false captured=false passedTo=visitSite#0 walkNode#0 walkNode#0 walkNode#0
   pointer program: size=672 writesThrough=false captured=false passedTo=isArenaUsing#0 walkNode#1 walkNode#1 walkNode#1
   pointer node: size=40 writesThrough=true captured=true passedTo=visitSite#1 isLoopNode#0 loopScopeOf#1
   stackSites=0 stackLocals=0

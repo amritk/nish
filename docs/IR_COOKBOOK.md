@@ -16099,7 +16099,7 @@ class Perm {
 ```
 
 ```llvm
-%struct.Perm = type { %struct.nish_array* }
+%struct.Perm = type { { i64, i8* } }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -16135,7 +16135,7 @@ slow:
   ret i8* %grown
 }
 
-define internal void @Perm.constructor(%struct.Perm* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %n) #0 {
+define internal void @Perm.constructor(%struct.Perm* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %n) #0 {
 entry:
   %0 = sext i32 %n to i64
   %1 = icmp ule i64 %0, 2147483647
@@ -16146,79 +16146,70 @@ len.fail:
   unreachable
 
 len.ok:
-  %2 = call i8* @nish_alloc_struct(i64 24)
-  %3 = bitcast i8* %2 to %struct.nish_array*
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
-  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
-  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %6 = mul i64 %0, 4
-  %7 = call i8* @nish_alloc_struct(i64 %6)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
-  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %9 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  store %struct.nish_array* %3, %struct.nish_array** %9, align 8, !tbaa !15
+  %2 = mul i64 %0, 4
+  %3 = call i8* @nish_alloc_struct(i64 %2)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %3, i8 0, i64 %2, i1 false), !alias.scope !4, !noalias !3
+  %4 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %5 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 0
+  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 1
+  store i8* %3, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   ret void
 }
 
-define internal void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i, i32 noundef %j) #0 {
+define internal void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this, i32 noundef %i, i32 noundef %j) #0 {
 entry:
   %tmp.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
-  %2 = sext i32 %i to i64
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
-  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %5 = icmp ult i64 %2, %4
-  br i1 %5, label %bounds.ok, label %bounds.fail
+  %1 = sext i32 %i to i64
+  %2 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %0, i32 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = icmp ult i64 %1, %3
+  br i1 %4, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %2, i64 %4)
+  call void @nish_panic_index(i64 %1, i64 %3)
   unreachable
 
 bounds.ok:
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %8 = bitcast i8* %7 to i32*
-  %9 = getelementptr inbounds i32, i32* %8, i64 %2
-  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !17
-  store i32 %10, i32* %tmp.addr, align 4
-  %11 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !15
-  %13 = sext i32 %i to i64
-  %14 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %15 = load %struct.nish_array*, %struct.nish_array** %14, align 8, !tbaa !15
-  %16 = sext i32 %j to i64
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
-  %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %19 = icmp ult i64 %16, %18
-  br i1 %19, label %bounds.ok.1, label %bounds.fail.1
+  %5 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %0, i32 0, i32 1
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 %1
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %9, i32* %tmp.addr, align 4
+  %10 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %11 = sext i32 %i to i64
+  %12 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %13 = sext i32 %j to i64
+  %14 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %12, i32 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %16 = icmp ult i64 %13, %15
+  br i1 %16, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 %16, i64 %18)
+  call void @nish_panic_index(i64 %13, i64 %15)
   unreachable
 
 bounds.ok.1:
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %22 = bitcast i8* %21 to i32*
-  %23 = getelementptr inbounds i32, i32* %22, i64 %16
-  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !17
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
-  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %27 = bitcast i8* %26 to i32*
-  %28 = getelementptr inbounds i32, i32* %27, i64 %13
-  store i32 %24, i32* %28, align 4, !alias.scope !4, !noalias !3, !tbaa !17
-  %29 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  %30 = load %struct.nish_array*, %struct.nish_array** %29, align 8, !tbaa !15
-  %31 = sext i32 %j to i64
-  %32 = load i32, i32* %tmp.addr, align 4
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
-  %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %35 = bitcast i8* %34 to i32*
-  %36 = getelementptr inbounds i32, i32* %35, i64 %31
-  store i32 %32, i32* %36, align 4, !alias.scope !4, !noalias !3, !tbaa !17
+  %17 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %12, i32 0, i32 1
+  %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %19 = bitcast i8* %18 to i32*
+  %20 = getelementptr inbounds i32, i32* %19, i64 %13
+  %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %22 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %10, i32 0, i32 1
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %24 = bitcast i8* %23 to i32*
+  %25 = getelementptr inbounds i32, i32* %24, i64 %11
+  store i32 %21, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %26 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  %27 = sext i32 %j to i64
+  %28 = load i32, i32* %tmp.addr, align 4
+  %29 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %26, i32 0, i32 1
+  %30 = load i8*, i8** %29, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %31 = bitcast i8* %30 to i32*
+  %32 = getelementptr inbounds i32, i32* %31, i64 %27
+  store i32 %28, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   ret void
 }
 
@@ -16227,7 +16218,7 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="
 attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!18, !19, !20, !21, !22}
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16237,20 +16228,16 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !6 = !{!"omnipotent char", !5, i64 0}
 !7 = !{!"header i64", !6, i64 0}
 !8 = !{!"header ptr", !6, i64 0}
-!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!9 = !{!"array slice", !7, i64 0, !8, i64 8}
 !10 = !{!9, !7, i64 0}
-!11 = !{!9, !7, i64 8}
-!12 = !{!9, !8, i64 16}
-!13 = !{!"ptr", !6, i64 0}
-!14 = !{!"Perm", !13, i64 0}
-!15 = !{!14, !13, i64 0}
-!16 = !{!"element i32", !6, i64 0}
-!17 = !{!16, !16, i64 0}
-!18 = !{i32 8, !"cf-protection-branch", i32 1}
-!19 = !{i32 8, !"cf-protection-return", i32 1}
-!20 = !{i32 8, !"branch-target-enforcement", i32 1}
-!21 = !{i32 8, !"sign-return-address", i32 1}
-!22 = !{i32 4, !"probe-stack", !"inline-asm"}
+!11 = !{!9, !8, i64 8}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-repeat-check -->
 
@@ -17854,16 +17841,28 @@ join.part:
   %39 = bitcast i8* %38 to i64*
   %40 = load i64, i64* %39, align 8
   %41 = getelementptr inbounds i8, i8* %38, i64 8
+  %42 = icmp eq i64 %40, 1
+  br i1 %42, label %join.byte, label %join.bulk
+
+join.byte:
+  %43 = load i8, i8* %41, align 1
+  store i8 %43, i8* %33, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %33, i8* %41, i64 %40, i1 false)
-  %42 = getelementptr inbounds i8, i8* %33, i64 %40
-  store i8* %42, i8** %join.p, align 8
-  %43 = add i64 %27, 1
-  store i64 %43, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %44 = getelementptr inbounds i8, i8* %33, i64 %40
+  store i8* %44, i8** %join.p, align 8
+  %45 = add i64 %27, 1
+  store i64 %45, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %44 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %44, align 1
+  %46 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %46, align 1
   ret i8* %24
 }
 
@@ -21173,16 +21172,28 @@ join.part:
   %63 = bitcast i8* %62 to i64*
   %64 = load i64, i64* %63, align 8
   %65 = getelementptr inbounds i8, i8* %62, i64 8
+  %66 = icmp eq i64 %64, 1
+  br i1 %66, label %join.byte, label %join.bulk
+
+join.byte:
+  %67 = load i8, i8* %65, align 1
+  store i8 %67, i8* %57, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %57, i8* %65, i64 %64, i1 false)
-  %66 = getelementptr inbounds i8, i8* %57, i64 %64
-  store i8* %66, i8** %join.p, align 8
-  %67 = add i64 %51, 1
-  store i64 %67, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %68 = getelementptr inbounds i8, i8* %57, i64 %64
+  store i8* %68, i8** %join.p, align 8
+  %69 = add i64 %51, 1
+  store i64 %69, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %68 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %68, align 1
+  %70 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %70, align 1
   ret i8* %48
 }
 
@@ -26753,6 +26764,115 @@ attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end simd-load-store -->
 
+Every lane operation is one LLVM instruction or one target-independent
+`llvm.*` intrinsic over the vector: float arithmetic is `fadd` and the rest
+with no fast-math flags, a compare is `icmp` or `fcmp` into `<N x i1>`, the
+mask a `nish:simd` program holds as a value, `any` is
+`llvm.vector.reduce.or` on it and `bitmask` its bitcast to `iN`
+(`docs/LANGUAGE.md` -> `nish:simd`: lane operations and masks).
+
+<!-- cookbook:begin simd-ops -->
+```ts
+import { f32x4, u8x16, splatU8x16, mul, add, eq, any, bitmask } from "nish:simd"
+
+export const axpy = (a: f32x4, x: f32x4, y: f32x4): f32x4 => add(mul(a, x), y)
+
+export const spaces = (block: u8x16): i32 => {
+  const m = eq(block, splatU8x16(32))
+  return any(m) ? bitmask(m) : -1
+}
+```
+
+```llvm
+declare i1 @llvm.vector.reduce.or.v16i1(<16 x i1>) #0
+
+define noundef <4 x float> @axpy(<4 x float> noundef %a, <4 x float> noundef %x, <4 x float> noundef %y) #0 {
+entry:
+  %0 = fmul <4 x float> %a, %x
+  %1 = fadd <4 x float> %0, %y
+  ret <4 x float> %1
+}
+
+define noundef i32 @spaces(<16 x i8> noundef %block) #0 {
+entry:
+  %m.addr = alloca <16 x i1>, align 8
+  %0 = insertelement <16 x i8> undef, i8 32, i32 0
+  %1 = shufflevector <16 x i8> %0, <16 x i8> undef, <16 x i32> zeroinitializer
+  %2 = icmp eq <16 x i8> %block, %1
+  store <16 x i1> %2, <16 x i1>* %m.addr, align 8
+  %3 = load <16 x i1>, <16 x i1>* %m.addr, align 8
+  %4 = call i1 @llvm.vector.reduce.or.v16i1(<16 x i1> %3)
+  br i1 %4, label %cond.true, label %cond.false
+
+cond.true:
+  %5 = load <16 x i1>, <16 x i1>* %m.addr, align 8
+  %6 = bitcast <16 x i1> %5 to i16
+  %7 = zext i16 %6 to i32
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %8 = phi i32 [ %7, %cond.true ], [ -1, %cond.false ]
+  ret i32 %8
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end simd-ops -->
+
+A shift by a constant is `shl`, `lshr` (unsigned lanes) or `ashr` (`i32x4`) by
+a splat constant, and a rotate is `llvm.fshl` or `llvm.fshr` with the vector
+as both halves, which `llc` lowers to the target's rotate or to two shifts and
+an `or`. The checker holds the count below the lane width, so no shift is by
+the width, which LLVM leaves as poison. Integer lane arithmetic carries no
+`nsw` or `nuw`: it wraps.
+
+<!-- cookbook:begin simd-shift-rotate -->
+```ts
+import { u32x4, i32x4, addWrapping, xor, rotl, shr } from "nish:simd"
+
+export const quarterStep = (a: u32x4, b: u32x4, d: u32x4): u32x4 => rotl(xor(d, addWrapping(a, b)), 16)
+
+export const halve = (v: i32x4): i32x4 => shr(v, 1)
+```
+
+```llvm
+declare <4 x i32> @llvm.fshl.v4i32(<4 x i32>, <4 x i32>, <4 x i32>) #0
+
+define noundef <4 x i32> @quarterStep(<4 x i32> noundef %a, <4 x i32> noundef %b, <4 x i32> noundef %d) #0 {
+entry:
+  %0 = add <4 x i32> %a, %b
+  %1 = xor <4 x i32> %d, %0
+  %2 = call <4 x i32> @llvm.fshl.v4i32(<4 x i32> %1, <4 x i32> %1, <4 x i32> <i32 16, i32 16, i32 16, i32 16>)
+  ret <4 x i32> %2
+}
+
+define noundef <4 x i32> @halve(<4 x i32> noundef %v) #0 {
+entry:
+  %0 = ashr <4 x i32> %v, <i32 1, i32 1, i32 1, i32 1>
+  ret <4 x i32> %0
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end simd-shift-rotate -->
+
 ## Optimisation flags
 
 ### Integer overflow: checked by default, `nsw` where proven
@@ -27136,6 +27256,8 @@ declare void @nish_aes_ctr(%struct.nish_array* noundef nonnull align 8 nocapture
 declare void @nish_aes_ghash(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 declare i32 @nish_sha256_hw() #9
 declare noundef i32 @nish_sha256_compress(%struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
+declare i32 @nish_chacha20_hw() #9
+declare noundef i32 @nish_chacha20_xor(%struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 declare i32 @nish_crc32_hw() #9
 declare i32 @nish_crc32_update(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #2
 

@@ -120,3 +120,93 @@ export function replace(v, k, x) {
   out[k] = x;
   return out;
 }
+
+// ---- `nish:simd` lane operations ---------------------------------------------
+// Each answers a fresh vector of its operands' type, and the typed array does
+// the wrapping: a `u8` sum stored into a `Uint8Array` keeps its low byte, as
+// `add <16 x i8>` does. A mask is an array of booleans, one a lane. `f32`
+// arithmetic rounds once, through the array, which for `+ - * /` and `sqrt` is
+// the single rounding the native lane does: the double result of two floats
+// rounds to the same float. `Math.min` and `Math.max` are `llvm.minimum` and
+// `llvm.maximum`: a NaN lane answers NaN and -0 orders below +0.
+
+const simdLanes = (a, f) => {
+  const out = new a.constructor(a.length);
+  for (let j = 0; j < a.length; j++) out[j] = f(a[j], j);
+  return out;
+};
+const simdMask = (a, f) => {
+  const out = new Array(a.length);
+  for (let j = 0; j < a.length; j++) out[j] = f(a[j], j);
+  return out;
+};
+const simdBits = (a) => a.BYTES_PER_ELEMENT * 8;
+
+export const add = (a, b) => simdLanes(a, (x, j) => x + b[j]);
+export const sub = (a, b) => simdLanes(a, (x, j) => x - b[j]);
+export const mul = (a, b) => simdLanes(a, (x, j) => x * b[j]);
+export const div = (a, b) => simdLanes(a, (x, j) => x / b[j]);
+export const neg = (a) => simdLanes(a, (x) => -x);
+export const abs = (a) => simdLanes(a, (x) => Math.abs(x));
+export const sqrt = (a) => simdLanes(a, (x) => Math.sqrt(x));
+// A typed array wraps on store, so the integer forms share the float bodies.
+export const addWrapping = (a, b) => simdLanes(a, (x, j) => x + b[j]);
+export const subWrapping = (a, b) => simdLanes(a, (x, j) => x - b[j]);
+// A 32-bit product loses its low bits as a double; `Math.imul` keeps them.
+export const mulWrapping = (a, b) => simdLanes(a, (x, j) => (simdBits(a) === 32 ? Math.imul(x, b[j]) : x * b[j]));
+export const min = (a, b) => simdLanes(a, (x, j) => Math.min(x, b[j]));
+export const max = (a, b) => simdLanes(a, (x, j) => Math.max(x, b[j]));
+
+/** `and`, `or`, `xor` and `not` take an integer vector or a mask. */
+export const and = (a, b) => (Array.isArray(a) ? simdMask(a, (x, j) => x && b[j]) : simdLanes(a, (x, j) => x & b[j]));
+export const or = (a, b) => (Array.isArray(a) ? simdMask(a, (x, j) => x || b[j]) : simdLanes(a, (x, j) => x | b[j]));
+export const xor = (a, b) => (Array.isArray(a) ? simdMask(a, (x, j) => x !== b[j]) : simdLanes(a, (x, j) => x ^ b[j]));
+export const not = (a) => (Array.isArray(a) ? simdMask(a, (x) => !x) : simdLanes(a, (x) => ~x));
+
+// `ne` is the unordered compare: a NaN lane is unequal to everything.
+export const eq = (a, b) => simdMask(a, (x, j) => x === b[j]);
+export const ne = (a, b) => simdMask(a, (x, j) => x !== b[j]);
+export const lt = (a, b) => simdMask(a, (x, j) => x < b[j]);
+export const le = (a, b) => simdMask(a, (x, j) => x <= b[j]);
+export const gt = (a, b) => simdMask(a, (x, j) => x > b[j]);
+export const ge = (a, b) => simdMask(a, (x, j) => x >= b[j]);
+
+export const select = (m, a, b) => simdLanes(a, (x, j) => (m[j] ? x : b[j]));
+export const any = (m) => m.some((x) => x);
+export const all = (m) => m.every((x) => x);
+export const bitmask = (m) => m.reduce((bits, x, j) => (x ? bits | (1 << j) : bits), 0);
+
+/**
+ * `sum`: a float vector's lanes added first to last from -0, rounding each
+ * step as `llvm.vector.reduce.fadd` does; a `u8` or `u16` vector's, which
+ * cannot overflow an `i32`.
+ */
+export const sum = (a) => {
+  let acc = -0;
+  for (const x of a) acc = a instanceof Float32Array ? Math.fround(acc + x) : acc + x;
+  return acc;
+};
+/** `sumWrapping`: a 32-bit vector's lanes added modulo 2^32. */
+export const sumWrapping = (a) => {
+  let acc = 0;
+  for (const x of a) acc = (acc + x) | 0;
+  return a instanceof Uint32Array ? acc >>> 0 : acc;
+};
+
+/** `shuffle(a, b, ...lanes)`: lane `k` of the 2N lanes `a` then `b`. */
+export const shuffle = (a, b, ...lanes) => simdLanes(a, (_, j) => (lanes[j] < a.length ? a[lanes[j]] : b[lanes[j] - a.length]));
+
+// A count is a constant below the lane width, so `x >>> (w - k)` is a real
+// shift; at k = 0 and w = 32 JavaScript's count wraps to 0, and the `|` keeps x.
+export const shl = (a, k) => simdLanes(a, (x) => x << k);
+export const shr = (a, k) => simdLanes(a, (x) => (a instanceof Int32Array ? x >> k : x >>> k));
+export const rotl = (a, k) => simdLanes(a, (x) => (x << k) | (x >>> (simdBits(a) - k)));
+export const rotr = (a, k) => simdLanes(a, (x) => (x >>> k) | (x << (simdBits(a) - k)));
+
+const simdAs = (Lanes) => (v) => new Lanes(v.buffer.slice(v.byteOffset, v.byteOffset + 16));
+export const asU8x16 = simdAs(Uint8Array);
+export const asU16x8 = simdAs(Uint16Array);
+export const asI32x4 = simdAs(Int32Array);
+export const asU32x4 = simdAs(Uint32Array);
+export const asF32x4 = simdAs(Float32Array);
+export const asF64x2 = simdAs(Float64Array);

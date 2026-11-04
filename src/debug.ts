@@ -147,6 +147,10 @@ const bitsOfIn = (table: TypeTable, type: i32): i32 => {
   if (table.isVector(type)) {
     return 128
   }
+  // A mask's `<N x i1>` packs one bit a lane.
+  if (table.isMask(type)) {
+    return table.laneCount(type)
+  }
   if (table.isRegion(type)) {
     return 64
   }
@@ -339,6 +343,14 @@ export class DebugInfo {
       ref = this.module.addMetadata(
         `!DICompositeType(tag: DW_TAG_array_type, baseType: ${this.typeRef(this.table.refOf(type))}, size: 128, flags: DIFlagVector, elements: ${elements})`
       )
+    } else if (this.table.isMask(type)) {
+      // A mask is a vector of booleans packed a bit a lane, as LLVM stores `<N x i1>`.
+      const lanes = this.table.laneCount(type)
+      const range = this.module.addMetadata(`!DISubrange(count: ${lanes})`)
+      const elements = this.module.addMetadata(`!{${range}}`)
+      ref = this.module.addMetadata(
+        `!DICompositeType(tag: DW_TAG_array_type, baseType: ${this.typeRef(T_BOOL)}, size: ${lanes}, flags: DIFlagVector, elements: ${elements})`
+      )
     } else {
       ref = this.module.addMetadata(basicType(type, this.table.json))
     }
@@ -404,11 +416,17 @@ export class DebugInfo {
     const members: string[] = []
     for (const f of info.fields) {
       const line = this.lineOf(info.origin, f.decl)
-      if (f.inline()) {
-        // An array stored in the object (`src/inline-arrays.ts`): the member
-        // is the header itself, whose `data` points at the slots after it.
-        const header = this.arrayHeader(this.table.refOf(f.type), this.table.typeName(f.type))
-        members.push(this.member(f.name, ref, header, 192, f.offset * 8, file, line))
+      if (f.boxed || f.inline()) {
+        const elem = this.table.refOf(f.type)
+        const name = this.table.typeName(f.type)
+        if (f.boxed) {
+          // An array's `len` and `data` stored in the object (`FieldInfo.boxed`).
+          members.push(this.member(f.name, ref, this.arraySlice(elem, name), 128, f.offset * 8, file, line))
+        } else {
+          // An array stored in the object (`src/inline-arrays.ts`): the member
+          // is the header itself, whose `data` points at the slots after it.
+          members.push(this.member(f.name, ref, this.arrayHeader(elem, name), 192, f.offset * 8, file, line))
+        }
         continue
       }
       const base = this.typeRef(f.type)
@@ -439,6 +457,24 @@ export class DebugInfo {
     return this.module.addMetadata(
       `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef(T_I32)})`
     )
+  }
+
+  /**
+   * A boxed array field's `{ len, data }` (`FieldInfo.boxed`), 128 bits,
+   * named `<T[]> slice` so that no debugger takes it for the header of the
+   * same element type.
+   */
+  arraySlice(elem: i32, name: string): string {
+    const ref = this.module.reserveMetadata()
+    const members: string[] = []
+    members.push(this.member("len", ref, this.typeRef(T_I64), 64, 0, "", 0))
+    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 64, "", 0))
+    const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
+    this.module.setMetadata(
+      ref,
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(`${name} slice`)}, file: ${this.file}, size: 128, align: 64, elements: ${elements})`
+    )
+    return ref
   }
 
   /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */

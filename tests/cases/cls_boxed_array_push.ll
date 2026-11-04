@@ -1,0 +1,177 @@
+%struct.Log = type { %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Log.constructor(%struct.Log* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %n) #0 {
+entry:
+  %0 = sext i32 %n to i64
+  %1 = icmp ule i64 %0, 2147483647
+  br i1 %1, label %len.ok, label %len.fail
+
+len.fail:
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*))
+  unreachable
+
+len.ok:
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = mul i64 %0, 4
+  %7 = call i8* @nish_alloc_struct(i64 %6)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %9 = getelementptr inbounds %struct.Log, %struct.Log* %this, i32 0, i32 0
+  store %struct.nish_array* %3, %struct.nish_array** %9, align 8, !tbaa !15
+  ret void
+}
+
+define internal void @Log.add(%struct.Log* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %v) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Log, %struct.Log* %this, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = icmp eq i64 %3, %5
+  br i1 %6, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %1, i64 4)
+  br label %push.store
+
+push.store:
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %3
+  store i32 %v, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !17
+  %11 = add i64 %3, 1
+  store i64 %11, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = trunc i64 %11 to i32
+  ret void
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %l.addr = alloca %struct.Log*, align 8
+  %Log.obj = alloca %struct.Log, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  call void @Log.constructor(%struct.Log* %Log.obj, i32 2)
+  store %struct.Log* %Log.obj, %struct.Log** %l.addr, align 8
+  %0 = load %struct.Log*, %struct.Log** %l.addr, align 8
+  call void @Log.add(%struct.Log* %0, i32 7)
+  %1 = load %struct.Log*, %struct.Log** %l.addr, align 8
+  %2 = getelementptr inbounds %struct.Log, %struct.Log* %1, i32 0, i32 0
+  %3 = load %struct.nish_array*, %struct.nish_array** %2, align 8, !tbaa !15
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = trunc i64 %5 to i32
+  %7 = call i8* @nish_str_from_i32(i32 %6)
+  %8 = call i8* @nish_str_concat(i8* %7, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %9 = load %struct.Log*, %struct.Log** %l.addr, align 8
+  %10 = getelementptr inbounds %struct.Log, %struct.Log* %9, i32 0, i32 0
+  %11 = load %struct.nish_array*, %struct.nish_array** %10, align 8, !tbaa !15
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
+  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %14 = icmp ult i64 2, %13
+  br i1 %14, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 2, i64 %13)
+  unreachable
+
+bounds.ok:
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
+  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %17 = bitcast i8* %16 to i32*
+  %18 = getelementptr inbounds i32, i32* %17, i64 2
+  %19 = load i32, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !17
+  %20 = call i8* @nish_str_from_i32(i32 %19)
+  %21 = call i8* @nish_str_concat(i8* %8, i8* %20)
+  call void @nish_print(i8* %21)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!18, !19, !20, !21, !22}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"ptr", !6, i64 0}
+!14 = !{!"Log", !13, i64 0}
+!15 = !{!14, !13, i64 0}
+!16 = !{!"element i32", !6, i64 0}
+!17 = !{!16, !16, i64 0}
+!18 = !{i32 8, !"cf-protection-branch", i32 1}
+!19 = !{i32 8, !"cf-protection-return", i32 1}
+!20 = !{i32 8, !"branch-target-enforcement", i32 1}
+!21 = !{i32 8, !"sign-return-address", i32 1}
+!22 = !{i32 4, !"probe-stack", !"inline-asm"}

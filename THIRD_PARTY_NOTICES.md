@@ -482,6 +482,7 @@ Derived from the Unicode Character Database 16.0.0 (https://www.unicode.org/Publ
 | `bench/simd-s3a/mat-vec-scalar.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-checked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/simd-s3a/mat-vec-simd.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `s_tan.c` `tan`, `e_rem_pio2.c`'s Cody-Waite reduction (its refinement thresholds widened to 2^-15 and 2^-48 of the argument), `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot` and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `tanLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |

@@ -89,9 +89,24 @@ export const SIMD_SPECIFIER: string = "nish:simd"
 /** The six vector type names, which are also their constructors, in table order. */
 const SIMD_TYPE_NAMES: string = "u8x16, u16x8, i32x4, u32x4, f32x4, f64x2"
 
+/** The four mask type names, narrowest lane first; a mask is a type and not a function. */
+const SIMD_MASK_NAMES: string = "mask8x16, mask16x8, mask32x4, mask64x2"
+
+/**
+ * The lane operations (WP38 S3 "s3-ops", docs/wp38-simd.md §3.2), in the
+ * order the module's export list spells them. Each takes its vectors whole
+ * and is chosen by its first argument's type, so one name serves every
+ * vector it applies to.
+ */
+const SIMD_OP_NAMES: string =
+  "add, sub, mul, div, neg, abs, sqrt, addWrapping, subWrapping, mulWrapping, and, or, xor, not, min, max, " +
+  "eq, ne, lt, le, gt, ge, select, any, all, bitmask, sum, sumWrapping, shuffle, shl, shr, rotl, rotr, " +
+  "asU8x16, asU16x8, asI32x4, asU32x4, asF32x4, asF64x2"
+
 /**
  * Whether `nish:simd` exports `name`: a type (which is also its constructor),
- * its `splat` and its `load`, or one of the functions every vector shares.
+ * its `splat` and its `load`, a mask type, or one of the functions every
+ * vector shares.
  */
 export const isSimdExport = (name: string): boolean =>
   simdTypeLane(name).length > 0 ||
@@ -99,7 +114,32 @@ export const isSimdExport = (name: string): boolean =>
   simdTypeLane(simdSuffix(name, "load")).length > 0 ||
   name === "store" ||
   name === "extract" ||
-  name === "replace"
+  name === "replace" ||
+  simdMaskWidth(name) > 0 ||
+  isSimdOp(name)
+
+/** Whether `name` is one of the lane operations in `SIMD_OP_NAMES`. */
+export const isSimdOp = (name: string): boolean => {
+  if (name.length === 0 || name.indexOf(",") >= 0 || name.indexOf(" ") >= 0) {
+    return false
+  }
+  const list = `, ${SIMD_OP_NAMES}, `
+  return list.indexOf(`, ${name}, `) >= 0
+}
+
+/** The lane width in bits a mask type's name spells (`32` for `mask32x4`), or 0 for anything else. */
+export const simdMaskWidth = (name: string): i32 => {
+  if (name === "mask8x16") {
+    return 8
+  }
+  if (name === "mask16x8") {
+    return 16
+  }
+  if (name === "mask32x4") {
+    return 32
+  }
+  return name === "mask64x2" ? 64 : 0
+}
 
 /**
  * The lane name of a vector type name: `u8` for `u8x16`, and "" for anything
@@ -218,7 +258,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
   }
   if (specifier === SIMD_SPECIFIER) {
-    return `${SIMD_TYPE_NAMES}, splatU8x16, splatU16x8, splatI32x4, splatU32x4, splatF32x4, splatF64x2, loadU8x16, loadU16x8, loadI32x4, loadU32x4, loadF32x4, loadF64x2, store, extract, replace`
+    return `${SIMD_TYPE_NAMES}, splatU8x16, splatU16x8, splatI32x4, splatU32x4, splatF32x4, splatF64x2, loadU8x16, loadU16x8, loadI32x4, loadU32x4, loadF32x4, loadF64x2, store, extract, replace, ${SIMD_MASK_NAMES}, ${SIMD_OP_NAMES}`
   }
   if (specifier === ASYNC_SPECIFIER) {
     return "spawn, awaitAll"

@@ -124,15 +124,36 @@ first. A refusal once a response has started (a bad chunk size in a body the
 program is echoing) sends no second response and ends the connection.
 
 **A control byte in a field value is refused wherever it falls**
-(`net_http1`, `_f64`): the scan for a line's end reads sixteen bytes at a time
-while a whole block is field text, then a byte at a time, and it is also the
-check of the value: a control byte other than HTAB, or DEL, on a field line
-is a 400, with no second pass over the value. NUL, 0x01, 0x1f, DEL and a bare
+(`net_http1`, `_f64`): the scan for a line's end reads sixteen bytes at a time,
+stops at the first control byte or DEL of a block (the lowest set bit of its
+SWAR mask, exact because a borrow only carries upward from a true match), then
+reads the rest a byte at a time, and it is also the check of the value: a
+control byte other than HTAB, or DEL, on a field line is a 400, with no second
+pass over the value. NUL, 0x01, 0x1f, DEL and a bare
 CR placed at each of the forty bytes of a long value are each refused, and
 HTAB and an obs-text byte at each of them are read. At the block boundaries
 the stream is also cut at every byte, so a CR that ends what has arrived so
 far is read again with the byte after it, never taken as a line end or a
 refusal on its own.
+
+**A faster parser gives the same answers** (`tests/link/net_http1_parse_diff`,
+2026-11-03). The parser's speed work (the line scan that jumps to its control
+byte, CRLF taken in one step, the branch-free token check, a field name
+lowercased while it is scanned in `head`) is checked against main's parser
+frozen beside it in `old.ts`: both are fed the same bytes in the same pieces,
+and after every event they must agree on the event, the status and reason,
+and everything a caller can read. The default run, seed 1175, is 190,276 cases
+(the fuzz corpus and its regressions cut every way, every byte at every
+position of three requests, nine inserted bytes at every position, each limit
+at -1, 0 and +1, and 100,000 grammar requests) and 2,176,872 events, among
+them 161,448 refusals, in about 8 s; it must print the summary in
+`expected.out`. A header section of maxHeaderBytes - 1 or maxHeaderBytes
+bytes, empty line included, as one field or two, reads a head, and one more
+byte is a 431. A soak of seeds 1 to 4 at 250,000 grammar requests each
+(1,361,104 cases) agreed. Shifting the
+byte a block's upper half reports by one makes the default run fail at case
+6,719 (a 400 for a control byte where main gives 431), so the test sees an
+off-by-one in the scan. No limit, status or reason string changed.
 
 **One exchange at a time, in order** (`net_http1_server`): pipelined requests
 are answered in the order they came, because the next head is not read until
@@ -194,6 +215,67 @@ clock step, with `Arena.used()` flat; a pool's slots share one. Tests:
 `link/net_http1_server_f64: exits with 0 and stdout matches expected.out` —
 each the template `link/${name}: exits with ${wantCode} and stdout matches
 expected.out` in `tests/run.js`.
+
+**A faster head writer writes the same bytes** (`net_http1`, `_f64`,
+2026-11-04, written against `main` at `1d92417e`). `http1WriteResponseHead`
+checks each field value and the date sixteen bytes at a time (`http1BytesAreFieldText`, `http1LanesAreFieldText`): a lane
+below 32 that is not HTAB, or DEL, refuses, exactly `http1IsValueByte`, and
+the last vector ends at the last byte, overlapping the one before it; under
+sixteen bytes it is checked a byte at a time. It writes the status line and
+the `Date: `, `Content-Length: ` and `Connection: ` names as one sixteen-byte
+store each (`http1PutStatusLine`, `http1PutFixed`), only where
+`at + 16` stays inside the head it has already counted (`need`), whose every
+byte from there on is written after, so the lanes past the text are
+overwritten and no byte past the head is touched; anywhere else they are
+written a byte at a time, as before. `http1PutText`, which the head writer,
+`http1WriteLastChunk` and other callers share, tests once that the whole text
+fits (`0 <= at <= out.length - text.length`) and then copies it with no check
+in the loop; a text that does not fit takes the old loop, which writes the
+bytes that land inside `out` and none outside, and both answer `at +
+text.length`. Nothing it accepts or refuses changes.
+Tests: `the smallest head is 17 bytes`, `and the bytes after it are
+untouched`, `it fits a buffer of 17`, `and not one of 16`, `a head with every
+fixed field, at an offset, leaves the bytes either side of it alone`, `and fits
+a buffer exactly its size`, `and not one a byte shorter`, `each status digit
+and a long length land in place`, and, for values of 1, 15, 16, 17, 31, 32 and
+33 bytes, `a <n>-byte value of text, HTAB and obs-text is written` and
+`refused: byte <b> at <k> of a <n>-byte value` for NUL, LF, CR, 0x1f and DEL at
+the first byte, bytes 14, 15, 16, 17, 20, 25 and 29 (the bytes the last
+vector shares with the one before, in a 31- or 33-byte value) and the last two,
+each place once, and `refused: an LF at <k> of a 29-byte date` at bytes 16, 20
+and 28, and `a text past the end still answers at + length`, `and writes only
+the bytes inside the buffer` and their before-the-start twins for `http1PutText`, in `tests/link/net_http1`
+and `_f64` (`link/net_http1: exits with 0 and stdout matches expected.out`).
+
+**A field name read sixteen bytes at a time is read the same**
+(`net_http1`, `_f64`, `net_http1_parse_diff`, 2026-11-04, written against
+`main` at `4dc09dcc`). A kept field line is copied into the held head as
+before, and `http1LowerName` then reads the copy's name a vector at a time:
+`http1NonTokenLanes` marks each lane outside 33 to 126 or among the
+seventeen delimiters, exactly the bytes `http1IsTokenByte` refuses, and the
+name ends at the lowest marked lane or at the line's end, whichever is first.
+Only the upper-case letters below that point are lowered; the vector is
+stored back with every other lane as it was read, so the colon, the value and
+the held head's bytes past the line (stale bytes of an earlier request
+included) are unchanged. Loads and stores stay inside `head`: the vector
+runs only where `k <= head.length - 16`, and the last bytes before the
+buffer's end are read a byte at a time by the old loop. The method and a
+trailer's names keep the byte test. Nothing accepted or refused changes, and
+no limit, status or reason string moved.
+Tests: `a <n>-byte name is lowered and its value kept`, `'@' at each of a
+<n>-byte name's places is a 400` and `a <n>-byte name that ends its line is a
+400` for names of 15, 16, 17, 31, 32 and 33 bytes, and `a name byte of 128 is
+a 400`, in `tests/link/net_http1` and `_f64`; in `net_http1_parse_diff`,
+46,867 name cases against main's parser: every length 1 to 40 in lower, upper
+and mixed case, whole and a byte at a time (the edge lengths also at every
+two-feed split); 25 bytes that end or refuse a name
+(all seventeen RFC 9110 delimiters, NUL, HTAB, LF, CR, SP, DEL, 0x80 and
+0xff) at every place of every
+length; names of 15, 16, 17, 31, 32 and 33 bytes after an `X:` line of
+170 to 240 bytes, which puts the name's end on, before and after the held
+head's last byte; and a short name read over a head
+an earlier request's upper-case lines filled. The default run is now 237,143
+cases (`expected.out`).
 
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless

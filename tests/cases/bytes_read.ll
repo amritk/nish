@@ -198,23 +198,35 @@ join.part:
   %79 = bitcast i8* %78 to i64*
   %80 = load i64, i64* %79, align 8
   %81 = getelementptr inbounds i8, i8* %78, i64 8
+  %82 = icmp eq i64 %80, 1
+  br i1 %82, label %join.byte, label %join.bulk
+
+join.byte:
+  %83 = load i8, i8* %81, align 1
+  store i8 %83, i8* %73, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %73, i8* %81, i64 %80, i1 false)
-  %82 = getelementptr inbounds i8, i8* %73, i64 %80
-  store i8* %82, i8** %join.p, align 8
-  %83 = add i64 %67, 1
-  store i64 %83, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %84 = getelementptr inbounds i8, i8* %73, i64 %80
+  store i8* %84, i8** %join.p, align 8
+  %85 = add i64 %67, 1
+  store i64 %85, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %84 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %84, align 1
-  %85 = call i8* @nish_str_concat(i8* %38, i8* %64)
-  call void @nish_print(i8* %85)
-  %86 = call %struct.nish_array* @nish_read_file_bytes(i8* bitcast ({ i64, [31 x i8] }* @.str.4 to i8*))
-  store %struct.nish_array* %86, %struct.nish_array** %gone.addr, align 8
-  %87 = load %struct.nish_array*, %struct.nish_array** %gone.addr, align 8
-  %88 = icmp eq %struct.nish_array* %87, null
-  br i1 %88, label %cond.true, label %cond.false
+  %86 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %86, align 1
+  %87 = call i8* @nish_str_concat(i8* %38, i8* %64)
+  call void @nish_print(i8* %87)
+  %88 = call %struct.nish_array* @nish_read_file_bytes(i8* bitcast ({ i64, [31 x i8] }* @.str.4 to i8*))
+  store %struct.nish_array* %88, %struct.nish_array** %gone.addr, align 8
+  %89 = load %struct.nish_array*, %struct.nish_array** %gone.addr, align 8
+  %90 = icmp eq %struct.nish_array* %89, null
+  br i1 %90, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -223,13 +235,13 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %89 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), %cond.true ], [ bitcast ({ i64, [6 x i8] }* @.str.6 to i8*), %cond.false ]
-  call void @nish_print(i8* %89)
-  %90 = call %struct.nish_array* @nish_read_file_bytes(i8* bitcast ({ i64, [12 x i8] }* @.str.7 to i8*))
-  store %struct.nish_array* %90, %struct.nish_array** %dir.addr, align 8
-  %91 = load %struct.nish_array*, %struct.nish_array** %dir.addr, align 8
-  %92 = icmp eq %struct.nish_array* %91, null
-  br i1 %92, label %cond.true.1, label %cond.false.1
+  %91 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), %cond.true ], [ bitcast ({ i64, [6 x i8] }* @.str.6 to i8*), %cond.false ]
+  call void @nish_print(i8* %91)
+  %92 = call %struct.nish_array* @nish_read_file_bytes(i8* bitcast ({ i64, [12 x i8] }* @.str.7 to i8*))
+  store %struct.nish_array* %92, %struct.nish_array** %dir.addr, align 8
+  %93 = load %struct.nish_array*, %struct.nish_array** %dir.addr, align 8
+  %94 = icmp eq %struct.nish_array* %93, null
+  br i1 %94, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
   br label %cond.end.1
@@ -238,8 +250,8 @@ cond.false.1:
   br label %cond.end.1
 
 cond.end.1:
-  %93 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), %cond.true.1 ], [ bitcast ({ i64, [6 x i8] }* @.str.6 to i8*), %cond.false.1 ]
-  call void @nish_print(i8* %93)
+  %95 = phi i8* [ bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), %cond.true.1 ], [ bitcast ({ i64, [6 x i8] }* @.str.6 to i8*), %cond.false.1 ]
+  call void @nish_print(i8* %95)
   ret i32 0
 }
 

@@ -1,7 +1,8 @@
 // `nish/cli-args` on one tree of three levels: every flag form with its value
 // and source, a global flag at every depth, every error with its wording, help
 // and version, the help pages as plain text, and a tree of 500 commands parsed
-// ten thousand times. Nothing here exits; `std_cli_args_exit` runs `finish`.
+// in timed batches against a tree of one. Nothing here exits;
+// `std_cli_args_exit` runs `finish`.
 import {
   Cli,
   PARSE_ERROR,
@@ -465,25 +466,30 @@ const helpPages = (t: Suite, api: Api): void => {
   ])
 }
 
-// A tree of 20 groups of 25 commands, each with 8 flags of its own.
-class Wide {
+// The last `groups` of 20 groups, each holding the last `commands` of 25
+// commands with 8 flags of their own: `new Tree(20, 25)` is the wide tree of
+// 500 commands, and `new Tree(1, 1)` the narrow one, which holds only the
+// wide tree's last leaf, under the same names, with the same id and flags. The
+// same argv reaches the same leaf in both, so a parse that costs more on the
+// wide one costs more for the tree's size alone.
+class Tree {
   cli: Cli
   lastLeaf: i32
   lastFlags: i32[]
 
-  constructor() {
+  constructor(groups: i32, commands: i32) {
     const cli = new Cli("wide", "0.0.1", "five hundred commands")
     this.cli = cli
     this.lastLeaf = -1
     this.lastFlags = new Array<i32>(0)
-    for (let g: i32 = 0; g < 20; g++) {
-      this.addGroup(g)
+    for (let g: i32 = 20 - groups; g < 20; g++) {
+      this.addGroup(g, commands)
     }
   }
 
-  addGroup(g: i32): void {
+  addGroup(g: i32, commands: i32): void {
     const group = this.cli.group(ROOT, `group${g}`, `group ${g}`)
-    for (let c: i32 = 0; c < 25; c++) {
+    for (let c: i32 = 25 - commands; c < 25; c++) {
       this.addLeaf(group, g * 25 + c, c)
     }
   }
@@ -498,27 +504,68 @@ class Wide {
   }
 }
 
+// Times batches of parses of one argv, counting the parses that reach leaf 499.
+class Batches {
+  argv: string[]
+  runs: i32
+  found: i32
+
+  constructor(argv: string[], runs: i32) {
+    this.argv = argv
+    this.runs = runs
+    this.found = 0
+  }
+
+  /** The nanoseconds a parse took over one batch of `runs` parses of `tree`. */
+  perParse(tree: Tree): f64 {
+    let ok: i32 = 0
+    const start = monotonicNanos()
+    for (let i: i32 = 0; i < this.runs; i++) {
+      ok = ok + (tree.cli.parse(this.argv, 1).id === 499 ? 1 : 0)
+    }
+    const nanos = toF64(monotonicNanos() - start)
+    this.found = this.found + ok
+    return nanos / toF64(this.runs)
+  }
+}
+
 const wideTree = (t: Suite): void => {
-  const wide = new Wide()
+  const wide = new Tree(20, 25)
+  const narrow = new Tree(1, 1)
   const argv: string[] = ["wide", "group19", "cmd24", "--opt0", "a", "--opt7=b", "--opt3", "c"]
   const r = wide.cli.parse(argv, 1)
   t.eqI32("wide: the last leaf's id", r.id, 499)
   t.eqStr("wide: its first flag", r.value(wide.lastFlags[0]) ?? "-", "a")
   t.eqStr("wide: a middle flag", r.value(wide.lastFlags[3]) ?? "-", "c")
   t.eqStr("wide: its last flag", r.value(wide.lastFlags[7]) ?? "-", "b")
-  const runs: i32 = 10000
-  let ok: i32 = 0
-  const start = monotonicNanos()
-  for (let i: i32 = 0; i < runs; i++) {
-    ok = ok + (wide.cli.parse(argv, 1).id === 499 ? 1 : 0)
+  t.eqI32("narrow: the same leaf's id", narrow.cli.parse(argv, 1).id, 499)
+  // Alternating batches, each side's fastest kept: a batch the scheduler
+  // preempted only ever reads slower, so the minimum is the batch nearest the
+  // parse's own cost, and a machine that is slow throughout slows both sides.
+  const rounds: i32 = 10
+  const batches = new Batches(argv, 1000)
+  let wideBest: f64 = -1.0
+  let narrowBest: f64 = -1.0
+  for (let round: i32 = 0; round < rounds; round++) {
+    const w = batches.perParse(wide)
+    const n = batches.perParse(narrow)
+    wideBest = wideBest < 0.0 || w < wideBest ? w : wideBest
+    narrowBest = narrowBest < 0.0 || n < narrowBest ? n : narrowBest
   }
-  const nanos = toF64(monotonicNanos() - start)
-  t.eqI32("wide: every parse finds it", ok, runs)
-  // Measured at 0.93 to 1.07 µs a parse under the debug profile the harness
-  // links with, on a 4-core cloud session; the bound is ten times that, so
-  // only a change in kind (a walk over the tree per token) fails it.
-  const perParse = nanos / toF64(runs)
-  t.ok("wide: a parse is under 10 µs", perParse < 10000.0)
+  t.eqI32("wide and narrow: every parse finds it", batches.found, 2 * rounds * batches.runs)
+  // The ratio, not a time: a bound in microseconds failed on a loaded CI
+  // runner (#1195). Under the debug profile the harness links with, on a
+  // 4-core cloud session, it measured 1.00 to 1.19, idle and with 32 busy
+  // loops sharing the core; a parse that compared each token with every
+  // command's name read 11.3 to 12.2 (the 500-command walk against a 1-command
+  // one) and passed the old 10 µs bound at 9.1 µs. The bound sits between.
+  const ratio = wideBest / narrowBest
+  const name = "wide: a parse costs under 3 times one on a tree of 1 command"
+  if (ratio < 3.0) {
+    t.pass(name)
+  } else {
+    t.fail(name, `ratio ${ratio}: ${wideBest} ns a parse on 500 commands, ${narrowBest} ns on 1`)
+  }
 }
 
 export const main = (): i32 => {

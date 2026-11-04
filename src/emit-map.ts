@@ -731,7 +731,7 @@ const zeroOf = (emitter: Emitter, type: i32): string => {
   if (type === T_BOOL) {
     return "false"
   }
-  if (emitter.table.isVector(type)) {
+  if (emitter.table.isVector(type) || emitter.table.isMask(type)) {
     return "zeroinitializer"
   }
   // A `Result` is a pointer to its tagged box (#233).

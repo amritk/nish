@@ -25,6 +25,7 @@ import {
 } from "./parallel"
 import { CheckContext } from "./context"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
+import { rejectStoredMask } from "./simd"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import {
@@ -93,12 +94,18 @@ export const roundUpTo = (value: i32, align: i32): i32 => {
 /** Bytes of the `struct nish_array` header an inline array field starts with (`len`, `cap`, `data`). */
 const INLINE_HEADER_BYTES: i32 = 24
 
+/** Bytes of a boxed array field (`FieldInfo.boxed`): `len` and `data`. */
+const SLICE_BYTES: i32 = 16
+
 /**
  * The alignment one field needs: its value's, or for an inline array field
  * the larger of the header's 8 and its slots' own, as the LLVM literal struct
  * `{ %struct.nish_array, [K x T] }` is aligned. A vector slot asks sixteen.
  */
 const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
+  if (field.boxed) {
+    return 8
+  }
   if (!field.inline()) {
     return table.alignOf(field.type)
   }
@@ -115,6 +122,9 @@ const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
  * element type.
  */
 const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
+  if (field.boxed) {
+    return SLICE_BYTES
+  }
   if (!field.inline()) {
     return table.alignOf(field.type)
   }
@@ -644,6 +654,8 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     }
   } else if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return
+  } else if (rejectStoredMask(ctx, type, "a field", decl.children[1])) {
+    return
   }
   // `nish:secret`: a field outlives the function that made the secret, unless
   // it is a holder's `readonly` field, which its `wipe()` ends (`secret.ts`).
@@ -807,6 +819,7 @@ export const collectMethodSignature = (
       "the return type of a function this program defines",
       returnAnnotation
     )
+    rejectStoredMask(ctx, sig.returnType, "the return type of a method", returnAnnotation)
   }
   return sig
 }

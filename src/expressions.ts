@@ -63,7 +63,7 @@ import {
   dateRefusal,
   isBuiltinFunction,
 } from "./builtins"
-import { BuiltinExport, isSimdExport, netOption } from "./nish-modules"
+import { BuiltinExport, isSimdExport, isSimdOp, netOption } from "./nish-modules"
 import { checkResultConstructor, isResultConstructor, narrowResultTest } from "./result"
 import {
   checkMember,
@@ -1509,7 +1509,7 @@ const checkOperator = (
     return checkEquality(ctx, expr, op, left, right, leftNode, rightNode)
   }
   if (op === "<" || op === "<=" || op === ">" || op === ">=") {
-    if (left === right && ctx.table.isVector(left)) {
+    if (left === right && (ctx.table.isVector(left) || ctx.table.isMask(left))) {
       return ctx.errorType(expr, simdCompareMessage(op, ctx.table.typeName(left)))
     }
     if (left !== right || !isNumeric(left)) {
@@ -1603,7 +1603,7 @@ const checkEquality = (
     }
     return ctx.errorType(expr, `Operator \`${op}\` requires two operands of the same type, got ${a} and ${b}`)
   }
-  if (ctx.table.isVector(left)) {
+  if (ctx.table.isVector(left) || ctx.table.isMask(left)) {
     return ctx.errorType(expr, simdCompareMessage(op, ctx.table.typeName(left)))
   }
   const leftSet = memberSetOf(ctx, leftNode)
@@ -3337,7 +3337,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     if (callee.text === "Date" && local === null) {
       return ctx.errorType(expr, dateRefusal("Date()"))
     }
-    if (local === null && isSimdExport(callee.text)) {
+    // A lane operation's name (`add`, `min`, `sum`, ...) is an ordinary word,
+    // so only the names no program would mean otherwise point at the import.
+    if (local === null && isSimdExport(callee.text) && !isSimdOp(callee.text)) {
       return ctx.errorType(callee, simdImportMessage(callee.text))
     }
     ctx.errorFix(

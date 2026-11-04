@@ -1,6 +1,6 @@
-`===` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
-`!==` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
-`<` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
-`>=` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
-`indexOf` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract`
+`===` does not compare `nish:simd` vectors or masks (got i32x4): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any`
+`!==` does not compare `nish:simd` vectors or masks (got i32x4): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any`
+`<` does not compare `nish:simd` vectors or masks (got i32x4): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any`
+`>=` does not compare `nish:simd` vectors or masks (got i32x4): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any`
+`indexOf` does not compare `nish:simd` vectors or masks (got i32x4): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any`
 5 errors

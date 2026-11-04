@@ -45,7 +45,7 @@ npm install                 # install (npm ci in CI)
 bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the full suite; CI runs it in four shards
+npm test                    # the full suite; CI runs it in eight shards
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
 npm run lint                # file names + biome, formatting included; any finding fails CI
@@ -170,10 +170,10 @@ find. A run that skipped anything has not proved what it looks like it proved.
 `.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
 this does not happen silently.
 
-**CI's four `test (…, shard N/4)` rows are the full-suite run a pull request
+**CI's eight `test (…, shard N/8)` rows are the full-suite run a pull request
 is judged by** ([definition of done](./CLAUDE.md#definition-of-done)). Read
 each shard's summary as you would a local one — no `DEGRADED:` banner, no skip
-outside the environmental ones below — because four green rows with skips in
+outside the environmental ones below — because eight green rows with skips in
 them have proved no more than one degraded local run. A shard's summary also
 ends `…, K delegated.`: the checks dealt to the other shards, and the
 bootstrap's fixed point, which the job hands to the `bootstrap (x86_64-linux)`
@@ -331,13 +331,14 @@ what is blocking and what you need — and keep watching.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/attributes.ts` beside the code.
 - **A struct layout change touches `src/runtime.ts` and `runtime.c` in the same
-  commit** and extends a layout test. The C runtime is fifteen translation units
+  commit** and extends a layout test. The C runtime is sixteen translation units
   with a budget each — `runtime.c` for the core, `runtime-os.c` for the
   syscall wrappers, `runtime-parallel.c` for threads, `runtime-cross.c` for
   the copies between their arenas, `runtime-host.c` for the clock, entropy,
   file times and signals, `runtime-net.c` for the sockets of `nish:net`,
   `runtime-simd.c` for the vector text search, `runtime-aes.c` for
   AES-GCM, `runtime-sha256.c` for SHA-256's block on SHA-NI and ARMv8,
+  `runtime-chacha20.c` for ChaCha20's keystream on AVX2 and NEON,
   `runtime-term.c` for stdin and the terminal, `runtime-bytes.c` for
   the byte-class runs of `nish/bytes`, `runtime-checksum.c` for the CRC-32
   kernels, `runtime-sandbox.c` for `--sandbox` and `runtime-shm.c` for the

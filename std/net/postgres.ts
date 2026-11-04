@@ -445,13 +445,56 @@ const pgBytesOf = (text: string): u8[] => {
 
 /** How many bytes `value` takes in decimal, its sign included. */
 const pgDecimalLength = (value: i64): i32 => {
+  // Counted on the negative side, where the most negative i64 fits, two digits a step.
   let n: i32 = value < 0 ? 2 : 1
   let v: i64 = value < 0 ? value : -value
-  while (v <= -10) {
-    v = v / 10
-    n += 1
+  while (v <= -100) {
+    v = v / 100
+    n += 2
   }
-  return n
+  return v <= -10 ? n + 1 : n
+}
+
+/**
+ * Writes `value` in decimal into `out[at, at + n)`, where `n` is
+ * `pgDecimalLength(value)`, and answers `at + n`. The digits go once, into
+ * their places, from the last, two a step from the magnitude as a `u64`
+ * (which holds the most negative i64's, and whose `/` and `%` are never
+ * checked). Panics unless the window is inside `out`; each step's guard
+ * restates it in the shape that proves its two stores.
+ */
+const pgPutDecimal = (out: u8[], at: i32, value: i64, n: i32): i32 => {
+  if (!(at >= 0 && at < 2147483620 && n >= 1 && n <= 20 && at + n <= toI32(out.length))) {
+    panic("nish/net/postgres: a decimal outside its room")
+  }
+  const first: i32 = value < 0 ? at + 1 : at
+  let m: u64 = value < 0 ? toU64(0) - toU64(value) : toU64(value)
+  // Where the last two digits start.
+  let j: i32 = at + n - 2
+  while (m >= 100 && j >= first && j >= 0 && j < 2147483640 && j + 2 <= toI32(out.length)) {
+    const pair: u32 = toU32(m % 100)
+    const tens: u32 = pair / 10
+    out[j] = toU8(48 + tens)
+    out[j + 1] = toU8(48 + pair - tens * 10)
+    m = m / 100
+    j -= 2
+  }
+  // One or two digits are left, ending at `j + 2`.
+  const pair: u32 = toU32(m)
+  if (pair >= 10 && j >= first && j >= 0 && j < 2147483640 && j + 2 <= toI32(out.length)) {
+    const tens: u32 = pair / 10
+    out[j] = toU8(48 + tens)
+    out[j + 1] = toU8(48 + pair - tens * 10)
+  } else {
+    const last: i32 = j + 1
+    if (last >= first && last >= 0 && last < toI32(out.length)) {
+      out[last] = toU8(48 + pair)
+    }
+  }
+  if (value < 0 && at < toI32(out.length)) {
+    out[at] = toU8(45)
+  }
+  return at + n
 }
 
 /** Whether `value` is an `int4`, -2^31..2^31-1. */
@@ -2274,32 +2317,9 @@ export class PgConnection {
 
   /** `value` in decimal, `pgDecimalLength(value)` bytes. */
   private putDecimal(value: i64): void {
-    this.reserve(this.outEnd + 20)
-    // The digits are written from the least significant, then reversed; the
-    // value is made negative first so that the most negative i64 has its digits.
-    let v: i64 = value < 0 ? value : -value
-    if (value < 0) {
-      this.out[this.outEnd] = toU8(45)
-      this.outEnd += 1
-    }
-    const first: i32 = this.outEnd
-    while (true) {
-      this.out[this.outEnd] = toU8(48 - toI32(v % 10))
-      this.outEnd += 1
-      v = v / 10
-      if (v === 0) {
-        break
-      }
-    }
-    let lo: i32 = first
-    let hi: i32 = this.outEnd - 1
-    while (lo < hi) {
-      const t: u8 = this.out[lo]
-      this.out[lo] = this.out[hi]
-      this.out[hi] = t
-      lo++
-      hi--
-    }
+    const n: i32 = pgDecimalLength(value)
+    this.reserve(this.outEnd + n)
+    this.outEnd = pgPutDecimal(this.out, this.outEnd, value, n)
   }
 
   /**

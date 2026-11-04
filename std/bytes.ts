@@ -26,7 +26,10 @@
  * inside a call, and after `getU32LE` inlines, LLVM keeps the checks on
  * `off + 1` to `off + 3`, because the guard compares the length truncated to
  * `i32` and the checks compare it unsigned at 64 bits. A loop that needs them
- * gone indexes the bytes itself.
+ * gone indexes the bytes itself. `getU64BE`, and with it `getI64BE` and
+ * `getF64BE`, is the exception: it checks the whole range once and reads the
+ * eight bytes unchecked, which lowers to one load and a byte swap. An offset
+ * outside the range still goes byte by byte, so it panics as the others do.
  *
  * The in-range answers are byte for byte those of the copies `std/` keeps for
  * itself: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
@@ -91,13 +94,33 @@ export const getU64LE = (b: u8[], off: i32): u64 => {
   return v
 }
 
-/** The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`. */
-export const getU64BE = (b: u8[], off: i32): u64 => {
+/** `getU64BE` a byte at a time, each index checked: the path for an offset whose eight bytes are not all in the array. */
+const getU64BEByByte = (b: u8[], off: i32): u64 => {
   let v = toU64(0)
   for (let i: i32 = 0; i < 8; i++) {
     v = (v << toU64(8)) | toU64(b[off + i])
   }
   return v
+}
+
+/**
+ * The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`.
+ * The fast path's ors are grouped in pairs, which LLVM folds into one load and
+ * a `bswap`; a flat chain of eight `or`s stayed byte by byte. The byte loop is
+ * its own function so its last load is not merged with the fast path's.
+ */
+export const getU64BE = (b: u8[], off: i32): u64 => {
+  if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
+    return (
+      (toU64(b[off]) << toU64(56)) |
+      (toU64(b[off + 1]) << toU64(48)) |
+      ((toU64(b[off + 2]) << toU64(40)) | (toU64(b[off + 3]) << toU64(32))) |
+      ((toU64(b[off + 4]) << toU64(24)) |
+        (toU64(b[off + 5]) << toU64(16)) |
+        ((toU64(b[off + 6]) << toU64(8)) | toU64(b[off + 7])))
+    )
+  }
+  return getU64BEByByte(b, off)
 }
 
 /** `getU32LE`'s bits as a two's-complement `i32`. */

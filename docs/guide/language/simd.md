@@ -5,7 +5,8 @@ A vector holds sixteen bytes of numbers side by side: sixteen `u8`s, eight
 a whole vector in one instruction, so a loop that loads, stores and shuffles
 vectors does in one step what would otherwise take four or sixteen. The six
 types and their functions come from the built-in module `nish:simd`. The rules
-are in the reference under [`nish:simd`](../../LANGUAGE.md#nishsimd-sixteen-byte-vectors).
+are in the reference under [`nish:simd`](../../LANGUAGE.md#nishsimd-sixteen-byte-vectors)
+and [its lane operations](../../LANGUAGE.md#nishsimd-lane-operations-and-masks).
 
 ## Making a vector
 
@@ -87,9 +88,9 @@ export const main = (): i32 => {
 ## What a vector can do
 
 A vector is a value, like a number. You can keep one in a variable, a class
-field or an array, pass it to a function and return it. It has no operators
-in this version: `+`, `===`, `<` and the others are refused, and so is
-printing one directly — read the lanes with `extract`. A vector cannot be a
+field or an array, pass it to a function and return it. It has no operators:
+`+`, `===`, `<` and the others are refused, and so is printing one directly —
+use the functions below, and read the lanes with `extract`. A vector cannot be a
 `Map` key, cannot be `null`, and cannot appear in the signature of a function
 that C or JavaScript calls: `--emit-header`, `--emit-napi` and `--emit-dts`
 leave out a function whose parameter or result holds a vector anywhere — a
@@ -101,3 +102,88 @@ as an opaque `struct Name *`.
 The same program prints the same thing natively, under `--profile wasi` and
 under Node, where each vector is a typed array that is never changed after it
 is made.
+
+## Working on every lane at once
+
+Each operation is a function that works lane by lane: lane 0 of the answer
+comes from lane 0 of each operand, and so on. Float vectors use `add`, `sub`,
+`mul`, `div`, `neg`, `abs` and `sqrt`. Integer vectors use `addWrapping`,
+`subWrapping` and `mulWrapping`, which wrap around when a lane overflows
+instead of stopping the program, and the name says so. `min` and `max` take
+any vector, and `and`, `or`, `xor` and `not` take integer vectors. `sum` adds
+the lanes of a `u8x16`, `u16x8` or float vector; `sumWrapping` adds the lanes
+of an `i32x4` or `u32x4`, wrapping.
+
+```ts nish:ok
+import { f32x4, i32x4, splatF32x4, mul, add, addWrapping, sum, sumWrapping } from "nish:simd";
+
+export const main = (): i32 => {
+  const v = add(mul(f32x4(1, 2, 3, 4), splatF32x4(2)), splatF32x4(0.5));
+  console.log(sum(v));
+  console.log(sumWrapping(addWrapping(i32x4(1, 2, 3, 4), i32x4(10, 20, 30, 40))));
+  return 0;
+};
+```
+
+That prints `22` and `110`. Both operands of an operation are the same type:
+an `i32x4` and a `u32x4` are refused together, and `asU32x4` and the other
+`as…` functions read the same sixteen bytes as different lanes.
+
+## Shifting and rotating
+
+`shl(v, n)` shifts every lane left by `n` bits and `shr(v, n)` shifts it right;
+`rotl` and `rotr` rotate, so the bits shifted out at one end come back in at
+the other. They take a `u8x16`, `u16x8`, `i32x4` or `u32x4`. `shr` fills with
+zeros on the unsigned types and with copies of the sign bit on `i32x4`. The
+count is a number written in the code and smaller than the lane's width in
+bits (8, 16 or 32), so each is a single instruction. Rotates are what
+ChaCha20, SHA-256 and similar code are made of:
+
+```ts nish:ok
+import { u32x4, addWrapping, xor, rotl, extract } from "nish:simd";
+
+export const main = (): i32 => {
+  // Four ChaCha20 states at once: lane k belongs to block k.
+  const a = addWrapping(u32x4(1, 2, 3, 4), u32x4(0x10000, 0x20000, 0x30000, 0x40000));
+  const d = rotl(xor(u32x4(0, 0, 0, 0), a), 16);
+  console.log(extract(d, 0));
+  return 0;
+};
+```
+
+That prints `65537`. A count of 32 or more on a 32-bit lane, or a count held
+in a variable, is refused:
+
+```ts nish:err NL2631
+import { u32x4, rotl, extract } from "nish:simd";
+
+export const main = (): i32 => {
+  console.log(extract(rotl(u32x4(1, 2, 3, 4), 32), 0));
+  return 0;
+};
+```
+
+## Comparing lanes
+
+`eq`, `ne`, `lt`, `le`, `gt` and `ge` compare two vectors lane by lane and
+answer a mask: `mask32x4` for four 32-bit lanes, `mask8x16` for sixteen bytes,
+and so on. `any(m)` and `all(m)` ask whether some or every lane passed,
+`bitmask(m)` gives an `i32` whose bit `k` is lane `k`, and `select(m, a, b)`
+takes each lane from `a` where the mask is set and from `b` where it is not.
+
+```ts nish:ok
+import { u8x16, splatU8x16, eq, any, bitmask } from "nish:simd";
+
+export const main = (): i32 => {
+  const block = u8x16(104, 105, 32, 116, 104, 101, 114, 101, 32, 33, 0, 0, 0, 0, 0, 0);
+  const spaces = eq(block, splatU8x16(32));
+  if (any(spaces)) {
+    console.log(bitmask(spaces));
+  }
+  return 0;
+};
+```
+
+That prints `260`: bits 2 and 8, where the spaces are. A mask is only ever a
+variable, a parameter or what a function returns. It cannot be stored in a
+field or an array; store its `bitmask`, or the vectors it selects, instead.

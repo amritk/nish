@@ -1,13 +1,13 @@
 /**
  * The constant-time check of the runtime's kernels (WP38 S5): does each
- * function of runtime/runtime-aes.c and runtime/runtime-sha256.c stay constant
- * time after `clang -O2`?
+ * function of runtime/runtime-aes.c, runtime/runtime-sha256.c and
+ * runtime/runtime-chacha20.c stay constant time after `clang -O2`?
  *
  * tests/ct-asm.js reads straight-line Nish functions and refuses every
  * conditional branch. A kernel that encrypts `length` bytes has to loop, so
  * this reads `clang -O2 -S` of the C file for x86-64 and aarch64 and refuses,
- * in every kernel function (`RUNTIME_UNITS`; each unit's resolver, `nish_aes_hw`
- * and `nish_sha256_hw`, is the one exception, docs/security/ct-verification.md):
+ * in every kernel function (`RUNTIME_UNITS`; each unit's resolver, `nish_aes_hw`,
+ * `nish_sha256_hw` and `nish_chacha20_hw`, is the one exception, docs/security/ct-verification.md):
  *
  *   - **a conditional branch on a secret**: one whose flags, or whose register
  *     for `cbz` / `tbz`, a key, data, H or the GHASH state reaches. What is
@@ -50,8 +50,9 @@
  * time on every processor that has them, by Intel's and Arm's statements), and
  * anything below the instruction set.
  *
- *   node tests/ct-asm-runtime.js   checks runtime/runtime-aes.c, runtime-sha256.c
- *                                  and the leaky variants in tests/simd/aes-leaky.c, prints
+ *   node tests/ct-asm-runtime.js   checks runtime/runtime-aes.c, runtime-sha256.c,
+ *                                  runtime-chacha20.c and the leaky variants in
+ *                                  tests/simd/aes-leaky.c, prints
  *                                  one line per check, and exits 1 on a failure
  */
 
@@ -63,7 +64,8 @@ import { CT_TARGETS, functionBody, parseInstruction, Taint } from "./ct-asm.js"
  * The runtime's kernel units, each with its resolver and its kernels, and what
  * is secret in each kernel by argument position beside the elements of every
  * array (`contents`): for GHASH, H's two words. SHA-256's chaining state, schedule
- * and message are arrays, and its offset `at` is public.
+ * and message are arrays, and its offset `at` is public. ChaCha20's state, source
+ * and destination are arrays; its offsets and length are public.
  */
 const RUNTIME_UNITS = [
   {
@@ -80,6 +82,11 @@ const RUNTIME_UNITS = [
     file: "runtime-sha256.c",
     resolver: "nish_sha256_hw",
     kernels: [{ name: "nish_sha256_compress", secretArgs: [] }],
+  },
+  {
+    file: "runtime-chacha20.c",
+    resolver: "nish_chacha20_hw",
+    kernels: [{ name: "nish_chacha20_xor", secretArgs: [] }],
   },
 ]
 
@@ -130,9 +137,9 @@ const control = (target, mnemonic, operands) => {
 }
 
 /** Whether the condition a branch reads is secret in `t`. */
-const conditionSecret = (t, on) => {
+const conditionSecret = (t, on, mnemonic) => {
   if (on === "flags") {
-    return t.secret.has("flags")
+    return t.flagsSecret(mnemonic)
   }
   // `cbz w8` and `tbz x8, #3` test one general register, `w8` and `x8` both `r8`.
   const m = on.match(/^[wx](\d+)$/)
@@ -194,7 +201,7 @@ const runtimeViolations = (body, secretArgs, target) => {
       }
       if (flow.conditional) {
         branches++
-        if (flow.to === null || conditionSecret(t, flow.on)) {
+        if (flow.to === null || conditionSecret(t, flow.on, mnemonic)) {
           found.push({ kind: "branch", line })
         }
       }

@@ -209,6 +209,29 @@ export const isSha256Seam = (program: CheckedProgram, sig: FunctionSig): boolean
   program.packageName === CLI &&
   program.source.path === stdModuleName("nish/crypto/sha256")
 
+/** The runtime's answer to whether this process runs the ChaCha20 keystream kernel. */
+export const CHACHA20_HW: string = "nish_chacha20_hw"
+
+/**
+ * The runtime kernel `chacha20XorInto`'s call becomes on the hardware arm,
+ * which answers whether it ran: it refuses fewer than four blocks and
+ * windows that overlap without being the same bytes, and the walker runs.
+ */
+export const CHACHA20_KERNEL: string = "nish_chacha20_xor"
+
+/**
+ * Whether a call in `program` to `sig` is `nish/crypto/chacha20poly1305`'s
+ * keystream loop, `chacha20XorInto(state, src, srcAt, len, dst, dstAt)`,
+ * tested as `isSha256Seam` tests its block function.
+ */
+export const isChacha20Seam = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.returnType === T_VOID &&
+  sig.sourceName === "chacha20XorInto" &&
+  program.packageName === CLI &&
+  program.source.path === stdModuleName("nish/crypto/chacha20poly1305")
+
 /** The runtime's answer to whether this process runs the CRC-32 kernel. */
 export const CRC32_HW: string = "nish_crc32_hw"
 

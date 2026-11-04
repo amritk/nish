@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// WP38 S3a: S3's bar kernels measured without a surface (docs/wp38-simd.md
-// §2.3, §3.2.1). Nothing here is built into the compiler: it asks whether a
-// portable 128-bit vector kernel beats a fair scalar Nish kernel by the 1.5x
-// S3's bar names, on a numeric kernel and on a byte scan, before any nish:simd
-// surface is designed.
+// WP38 S3a and S3's bar: S3's bar kernels, first measured without a surface
+// (docs/wp38-simd.md §2.3, §3.2.1) and now with one. It asks whether a portable
+// 128-bit vector kernel beats a fair scalar Nish kernel by the 1.5x S3's bar
+// names, on a numeric kernel and on a byte scan: S3a answered with C's vectors,
+// and form 5 answers with the same kernel written in nish:simd (§7).
 //
 //   npm run build && node bench/simd-s3a.mjs [--runs N] [--only a,b] [--self] [--compiler <nish>]
 //     --runs N    timed rounds per row after one warm-up (default 7, the note's minimum),
@@ -11,7 +11,7 @@
 //     --only a,b  rows to run: mat-vec, depth (default: both)
 //     --self      time a byte-identical copy of the Nish checked binary as a fifth column
 //
-// Each kernel is written four ways in bench/simd-s3a/:
+// Each kernel is written five ways in bench/simd-s3a/:
 //
 //   1 C vector     *-vector.c: C's generic vectors (vector_size(16)), which lower
 //                  to the LLVM vector IR a nish:simd kernel would; the file is
@@ -22,6 +22,9 @@
 //   2 C scalar     *-scalar.c: the same work one element at a time
 //   3 Nish checked *-checked.ts: §3.2.1's fair comparator, checked indexing
 //   4 Nish unchecked *-unchecked.ts: the same through uncheckedGet
+//   5 Nish simd    *-simd.ts: form 1's kernel in nish:simd, S3's bar being
+//                  form 5 over form 3; refused untimed, as form 1 is, if its
+//                  IR calls an llvm.x86 or llvm.aarch64 intrinsic
 //
 // The C forms are built with `clang -O3 -ffp-contract=off` and no -march, so
 // they target the default CPU as `nish --link` does and no form contracts a
@@ -57,12 +60,13 @@ const fail = (msg) => {
 const KERNELS = ["mat-vec", "depth"]
 /** The arguments each kernel's rows run with: one row per entry. */
 const ROWS = { "mat-vec": [[]], depth: [["s0"], ["log"]] }
-const FORMS = ["vector", "scalar", "checked", "unchecked"]
+const FORMS = ["vector", "scalar", "checked", "unchecked", "simd"]
 const LABEL = {
   vector: "1 C vector",
   scalar: "2 C scalar",
   checked: "3 Nish checked",
   unchecked: "4 Nish unchecked",
+  simd: "5 Nish simd",
 }
 const CC = process.env.CC || "clang"
 const CFLAGS = ["-O3", "-ffp-contract=off"]
@@ -167,8 +171,23 @@ for (const kernel of KERNELS.filter((k) => only.has(k))) {
     fail(`${rel(file)} is not portable, refusing to time it: its IR has\n  ${hit.trim()}`)
   }
 }
+for (const kernel of KERNELS.filter((k) => only.has(k))) {
+  const ll = path.join(outDir, `${kernel}-simd.ll`)
+  run(
+    nishc.cmd,
+    [...nishc.prefix, rel(path.join(srcDir, `${kernel}-simd.ts`)), "-o", rel(ll)],
+    `${kernel} simd IR`
+  )
+  const hit = fs
+    .readFileSync(ll, "utf8")
+    .split("\n")
+    .find((line) => TARGET_INTRINSIC.test(line))
+  if (hit !== undefined) {
+    fail(`${rel(ll)} is not portable, refusing to time it: its IR has\n  ${hit.trim()}`)
+  }
+}
 console.log(
-  "portability: no target intrinsic in any vector form's source or IR (the x86-64 and AArch64 probes are caught)"
+  "portability: no target intrinsic in any vector form's source or IR, C or nish:simd (the x86-64 and AArch64 probes are caught)"
 )
 
 // ---- Builds ----------------------------------------------------------------------------------
@@ -306,6 +325,8 @@ for (const kernel of KERNELS.filter((k) => only.has(k))) {
       )
     }
     const lines = [
+      `${name}: Nish simd over Nish checked (the bar) ${ratio(byForm.checked, byForm.simd)}`,
+      `${name}: C vector over Nish simd ${ratio(byForm.simd, byForm.vector)}`,
       `${name}: C vector over Nish checked ${ratio(byForm.checked, byForm.vector)}`,
       `${name}: C vector over Nish unchecked ${ratio(byForm.unchecked, byForm.vector)}`,
       `${name}: C vector over C scalar ${ratio(byForm.scalar, byForm.vector)}`,

@@ -112,11 +112,11 @@ function structText(table: TypeTable, info: StructInfo, out: string[]): void -> 
   local +10:14 field: FieldInfo (const)
   local +11:11 parts: string[] (const)
   callee +18:9 FieldInfo.inline -> @FieldInfo.inline
-  local +21:11 extras: string (const)
-  callee +23:33 TypeTable.typeName -> @TypeTable.typeName
-  local +26:9 ctor: FunctionSig | null (const)
-  local +30:7 i: i32 (let)
-  callee +32:26 StringMap.keyAt -> @StringMap.keyAt
+  local +24:11 extras: string (const)
+  callee +26:33 TypeTable.typeName -> @TypeTable.typeName
+  local +29:9 ctor: FunctionSig | null (const)
+  local +33:7 i: i32 (let)
+  callee +35:26 StringMap.keyAt -> @StringMap.keyAt
 function constantSyntax(info: ConstInfo): string -> @constantSyntax
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: jsonQuote nish_str_from_f64 nish_str_from_i64

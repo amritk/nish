@@ -6648,7 +6648,8 @@ program:
   calling any method on it — `push` and `pop` included — keeps today's layout
   (`cls_inline_array_local`, `cls_inline_array_push`, `cls_inline_array_passed`).
 - **Every assignment's length is a literal.** A length the compiler does not
-  know keeps today's layout (`cls_inline_array_dynamic`).
+  know cannot size a slot, and the field is boxed instead (below,
+  `cls_inline_array_dynamic`).
 - **No element access can reassign the field under itself.** `x.f[i]`
   evaluates `x.f` before `i`, and `x.f[i] = v` before `v`; when the index or
   the value calls something that can assign `f` (directly or through its own
@@ -6676,6 +6677,22 @@ program:
   the same at 8 slots as at 64. A field reassigned from a call and read fewer
   than a few dozen times per assignment is therefore slower inline; the
   measurement is in the header of `src/inline-arrays.ts`.
+
+**A field that fails only on its lengths is boxed.** When every condition
+holds except that some assignment's fresh array has a length the compiler does
+not know (`new Array<T>(n)` with a parameter `n`, a fresh-returning call
+passed a non-literal), or except that `K` elements would pass 256 bytes, the
+object holds only the array's length and data pointer, 16 bytes as
+`{ i64, i8* }`, and the elements are one block of their own
+(`tests/cases/cls_boxed_array`). Against the pointer layout this drops the
+separate 24-byte header and its allocation: an object with a boxed field is 8
+bytes larger and its array 24 bytes smaller, and `this.f[i]` loads `data` from
+`this` directly instead of first loading the header's address. A literal or
+`new Array` allocates the data block alone; an assignment from a call takes the
+`len` and `data` of the array the call made. Reference semantics are unchanged
+for the same reason as inline: no one else ever holds the array. A field taken
+as a value anywhere, `push` included, keeps the pointer layout
+(`cls_boxed_array_push`).
 
 Why reference semantics are unchanged: the object is still a pointer, so a
 class holding an inline field can be stored in arrays and passed around as
@@ -6735,7 +6752,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 | `nish:async` | `spawn`, `awaitAll` — **reached only through the import** ([Async functions](#async-functions-async-and-await)) |
-| `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors)) |
+| `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace`; the masks `mask8x16` … `mask64x2`; the lane operations `add` … `asF64x2`, among them `shl`, `shr`, `rotl` and `rotr` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors), [lane operations](#nishsimd-lane-operations-and-masks)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -6946,8 +6963,8 @@ array, write one back and take one lane out or put one in. Nothing here names a
 target: the IR is `insertelement`, `shufflevector`, `extractelement` and a
 vector `load` or `store`, and LLVM picks the instructions (`tests/run.js`'s
 `simd` section greps every `simd_*.ll` for `llvm.x86.` and `llvm.aarch64.`).
-Lane arithmetic is not in the language yet; a vector is built, moved and taken
-apart.
+The lane operations, the masks a compare answers and the shifts are in
+[the next section](#nishsimd-lane-operations-and-masks).
 
 ```ts
 import { i32x4, loadI32x4, store, extract, replace } from "nish:simd";
@@ -7012,13 +7029,14 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
   asserts against the IR's struct and reads lane by lane; an array of vectors
   steps by sixteen. The arena hands out objects aligned to eight, so a field
   access is `align 8`.
-- **A vector has no operators yet, and no comparison.** `+`, unary `-`, a
-  truthiness test, a template hole and `console.log` of a whole vector are
-  refused with the usual operand-type diagnostics (`reject_simd_operators`).
-  `===`, `!==`, `<` and the rest, and the `===` inside an array's `indexOf`,
-  are
-  `` `===` does not compare `nish:simd` vectors (got i32x4): compare the lanes, read with `extract` ``
-  (NL2581, `reject_simd_compare`): a lane-wise compare answers a vector, not a
+- **A vector has no operators, and no comparison.** `+`, unary `-`, a
+  truthiness test, a template hole and `console.log` of a whole vector or a
+  mask are refused with the usual operand-type diagnostics
+  (`reject_simd_operators`); the lane-wise forms are the functions of the next
+  section. `===`, `!==`, `<` and the rest, and the `===` inside an array's
+  `indexOf`, are
+  `` `===` does not compare `nish:simd` vectors or masks (got i32x4): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any` ``
+  (NL2581, `reject_simd_compare`): a lane-wise compare answers a mask, not a
   boolean, and under Node a vector is a typed array whose `===` is identity. A
   vector is not a `Map` key (`reject_simd_map_key`), not `Secret`
   (`reject_simd_secret`) and not nullable (`reject_simd_nullable`).
@@ -7041,6 +7059,91 @@ export const bumpFirst = (xs: i32[], at: i32): i32 => {
   is opaque in the header (`typedef struct Name Name;`), as a `Map` or
   `Secret` holder is: C has no portable vector type to lay it out with. A bare
   pointer to such a class still crosses, as an opaque `struct Name *`.
+
+### `nish:simd`: lane operations and masks
+
+Every operation on a vector is a free function of `nish:simd`, because a
+TypeScript program cannot overload `+`. The operand types pick the lowering,
+and each lowers to LLVM vector IR or a target-independent `llvm.*` intrinsic:
+no golden holds `llvm.x86.` or `llvm.aarch64.` ([wp38-simd.md](wp38-simd.md)
+§3.2).
+
+```ts
+import { u32x4, addWrapping, xor, rotl, extract } from "nish:simd";
+
+// One ChaCha20 quarter-round step on four blocks at once: lane k is block k.
+export const step = (a: u32x4, b: u32x4, d: u32x4): u32 => {
+  const a2 = addWrapping(a, b);
+  return extract(rotl(xor(d, a2), 16), 0);
+};
+```
+
+| Signature | Lowering | Test |
+| --- | --- | --- |
+| `add`, `sub`, `mul`, `div(a, b)` on `f32x4`, `f64x2` | `fadd`, `fsub`, `fmul`, `fdiv`, no fast-math flags | `simd_ops_float`; `reject_simd_op_operands` |
+| `neg`, `abs`, `sqrt(a)` on `f32x4`, `f64x2` | `fneg`, `llvm.fabs`, `llvm.sqrt` | `simd_ops_float`; `reject_simd_op_operands` |
+| `addWrapping`, `subWrapping`, `mulWrapping(a, b)` on `u8x16`, `u16x8`, `i32x4`, `u32x4` | `add`, `sub`, `mul` with no `nsw` or `nuw`: each lane wraps | `simd_ops_int`; `reject_simd_op_operands` |
+| `shl(v, n)`, `shr(v, n)`, `n` a literal below the lane width | `shl`; `shr` is `lshr` on an unsigned lane and `ashr` on `i32x4` | `simd_shifts`; `reject_simd_shift_count` |
+| `rotl(v, n)`, `rotr(v, n)` on the same four | `llvm.fshl`, `llvm.fshr` with `v` as both halves | `simd_shifts`, `simd_chacha_quarter`; `reject_simd_shift_count` |
+| `and`, `or`, `xor(a, b)`, `not(a)` on an integer vector or a mask | `and`, `or`, `xor`; `not` is `xor` with all-ones | `simd_ops_int` |
+| `min`, `max(a, b)` on every vector | `llvm.umin`/`smin`/`umax`/`smax`; floats `llvm.minimum`/`llvm.maximum`, NaN-propagating with -0 below +0, as `Math.min` | `simd_ops_int`, `simd_ops_float` |
+| `eq`, `ne`, `lt`, `le`, `gt`, `ge(a, b)` | `icmp` (unsigned on `u*` lanes) or ordered `fcmp` (`une` for `ne`), answering the lane width's mask | `simd_ops_int`, `simd_ops_float`; `reject_simd_op_operands` |
+| `select(m, a, b)` | `select`: lane `k` of `a` where lane `k` of `m` is set, else of `b` | `simd_ops_int`; `reject_simd_op_operands` |
+| `any(m)`, `all(m)` | `llvm.vector.reduce.or`, `.and` on `<N x i1>` | `simd_ops_int` |
+| `bitmask(m)`, an `i32` with bit `k` lane `k` | `bitcast <N x i1>` to `iN`, `zext` | `simd_ops_int` |
+| `sum(v)` on `u8x16`, `u16x8` (an `i32`, exact) and `f32x4`, `f64x2` (the lane type, lanes added 0 to N-1) | `zext` and `llvm.vector.reduce.add`; floats `llvm.vector.reduce.fadd` without `reassoc` | `simd_ops_int`, `simd_ops_float`; `reject_simd_sum` |
+| `sumWrapping(v)` on `i32x4` (an `i32`) and `u32x4` (a `u32`) | `llvm.vector.reduce.add`, wrapping | `simd_ops_int`; `reject_simd_sum` |
+| `shuffle(a, b, i0, …)`, one literal index per lane, from 0 to 2N-1 | `shufflevector` | `simd_ops_int`; `reject_simd_shuffle` |
+| `asU8x16(v)` … `asF64x2(v)` | `bitcast`: the same sixteen bytes read as other lanes | `simd_ops_int` |
+
+- **Every operand is one vector type.** Two types are
+  `` `min` takes operands of one type, got i32x4 and u32x4; reinterpret the lanes with `asU8x16` and the rest ``,
+  a scalar where a vector goes is
+  `` `eq` takes a `nish:simd` vector, got i32 `` (NL2638), and a vector a
+  family does not take names the family:
+  `` `add` is float lane arithmetic and takes an `f32x4` or an `f64x2`, got i32x4: an integer lane can overflow, so its form is `addWrapping` ``
+  (NL2623, `reject_simd_op_operands`). Integer lane arithmetic wraps, and its
+  name says so: making a lane trap as scalar `+` does would cost the speed the
+  type is for.
+- **A shift count is a literal below the lane width.** `shl`, `shr`, `rotl`
+  and `rotr` take the count as an integer literal from 0 to 7, 15 or 31, so
+  each is one instruction with a splat constant and nothing is shifted by a
+  variable: a variable count is
+  `` `shl` takes a count that is an integer literal below the lane width, from 0 to 31: a lane of u32x4 is 32 bits `` (NL2630),
+  and the width or more is
+  `` `rotl` count 32 is not below the lane width of u32x4, 32 bits: a shift by the width or more moves every bit out, and a rotate by it is a rotate by 0 ``
+  (NL2631, `reject_simd_shift_count`). LLVM gives a shift by the width no
+  meaning, and a rotate by it is a rotate by 0. `shr` is logical on `u8x16`,
+  `u16x8` and `u32x4` and arithmetic (it copies the sign) on `i32x4`; a
+  rotate is the same on either. They are what ChaCha20, SHA-256 and other
+  add-rotate-xor code is built from (`simd_chacha_quarter`).
+- **A mask is a compare's answer, held only as a value.** `eq` and the rest on
+  two vectors answer `mask8x16`, `mask16x8`, `mask32x4` or `mask64x2` by lane
+  width, an `<N x i1>`; there is no constructor
+  (`` `mask32x4` is a mask type and has no constructor: a mask is what a lane-wise compare (`eq`, `lt` and the rest) answers ``,
+  NL2621). `select` takes the mask of its vectors' width
+  (`` `select` between two i32x4 takes the mask their compare answers, mask32x4, got mask64x2 ``,
+  NL2629). A mask lives in a local, a parameter or the return of a function
+  the module keeps, and is
+  `` `mask32x4` cannot be a field: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask` ``
+  (NL2622) as a field, an array element, a `Result` arm, a type argument, a
+  method's parameter or result, or an exported signature
+  (`reject_simd_mask_storage`, `reject_simd_mask_in_body`): it has no size in
+  memory that all three targets share.
+- **A sum says whether it wraps.** `sum` of `u8x16` or `u16x8` adds in an
+  `i32` and cannot overflow; `sum` of `i32x4` or `u32x4` can, and is
+  `` `sum` of i32x4 can overflow its lane type, so its total is `sumWrapping`, which wraps as the lanes do ``
+  (NL2636, `reject_simd_sum`). A float sum adds lane 0 first and lane N-1
+  last, so it is the same bits on every target.
+- **A shuffle names every lane.** `shuffle(a, b, …)` takes one literal per
+  lane of the answer, each from 0 to 2N-1, where N and up are `b`'s lanes;
+  a wrong count, a variable or an index past the end is refused
+  (NL2632 to NL2635, `reject_simd_shuffle`).
+- **Under Node** each operation is a function of `runtime/core.mjs` over the
+  typed arrays: an integer lane wraps through its array type, a float lane
+  rounds through `Float32Array`, a mask is an array of booleans, and a rotate
+  is two shifts and an `or`. `tests/run.js`'s `simd` section holds the native,
+  WASI and Node outputs to one.
 
 ### Constant time: `ctSelect` and `ctEq`
 

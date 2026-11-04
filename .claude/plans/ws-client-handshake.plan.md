@@ -235,7 +235,7 @@ says what a client now calls and that std still draws no randomness inside
 ### Run notes for /feature
 
 - **Targeted test command:** `node tests/run.js <section>`.
-- **Full suite:** CI's four `test` shards on the current head, per
+- **Full suite:** CI's `test` shards on the current head, per
   [CLAUDE.md](../../CLAUDE.md#definition-of-done). Run a local `npm test` only
   for the exceptions it names.
 - **No coverage command.** The owner agreed that the gate is the repo's

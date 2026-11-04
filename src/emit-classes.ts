@@ -25,10 +25,12 @@ import { fieldTbaa } from "./tbaa"
 import {
   emitArrayLength,
   emitArrayMethodCall,
+  emitBoxedArrayAssignment,
   emitInlineArrayAssignment,
   emitNewArray,
   initInlineArrays,
   inlineHeaderPointer,
+  SLICE_TYPE,
 } from "./emit-arrays"
 import {
   compoundFloatOpcode,
@@ -286,6 +288,11 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
     // address; only an element access or a `.length` ever asks for it.
     return inlineHeaderPointer(emitter, info, emitter.emitExpression(expr.children[0]), field)
   }
+  if (field !== null && field.boxed) {
+    process.exit(
+      internalErrorFor(`emitter: boxed field \`${field.name}\` read as a value`, emitter.opts.json)
+    )
+  }
   if (field !== null) {
     return loadField(emitter, info, emitter.emitExpression(expr.children[0]), field)
   }
@@ -380,6 +387,9 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   }
   if (field.inline()) {
     return emitInlineArrayAssignment(emitter, expr, field)
+  }
+  if (field.boxed) {
+    return emitBoxedArrayAssignment(emitter, expr, field)
   }
   const receiver = emitter.emitExpression(target.children[0])
   if (expr.text === "=") {
@@ -508,6 +518,9 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
  * (`src/inline-arrays.ts`).
  */
 const fieldLLVMType = (emitter: Emitter, field: FieldInfo): string => {
+  if (field.boxed) {
+    return SLICE_TYPE
+  }
   if (!field.inline()) {
     return emitter.llvm(field.type)
   }
