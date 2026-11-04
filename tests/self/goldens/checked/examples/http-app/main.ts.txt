@@ -3010,7 +3010,7 @@ function http1WriteResponseHead(out: u8[], at: i32, status: i32, reason: string,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.http1PutStatusLine
   escaping: at bodyLength connection reason status
-  calls: nish.http1BytesAre nish.http1BytesAreFieldText nish.http1BytesAreToken nish.http1DecimalDigits nish.http1IsFieldText nish.http1PutBytes nish.http1PutColonSpace nish.http1PutCrlf nish.http1PutDecimal nish.http1PutFixed nish.http1PutStatusLine nish.http1PutText nish_panic_index nish_panic_overflow
+  calls: nish.http1BytesAre nish.http1BytesAreFieldText nish.http1BytesAreToken nish.http1DecimalDigits nish.http1IsFieldText nish.http1PutBytes nish.http1PutColonSpace nish.http1PutCrlf nish.http1PutDecimal nish.http1PutFixed nish.http1PutStatusLine nish.http1PutText nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.http1PutStatusLine#0 nish.http1PutText#0 nish.http1PutCrlf#0 nish.http1PutBytes#0 nish.http1PutColonSpace#0 nish.http1PutBytes#0 nish.http1PutCrlf#0 nish.http1PutFixed#0 nish.http1PutBytes#0 nish.http1PutCrlf#0 nish.http1PutFixed#0 nish.http1PutDecimal#0 nish.http1PutCrlf#0 nish.http1PutText#0 nish.http1PutFixed#0 nish.http1PutText#0 nish.http1PutCrlf#0 nish.http1PutCrlf#0
   pointer names: size=0 writesThrough=true captured=false
   pointer values: size=0 writesThrough=true captured=false

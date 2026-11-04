@@ -1816,7 +1816,7 @@ export const http1WriteResponseHead = (
   // is written, in 64 bits so that no caller's lengths can wrap the sum.
   let need: i64 = toI64(17) + toI64(reason.length)
   let sendDate: boolean = status >= 200 && toI32(date.length) > 0
-  for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
     const name: u8[] = names[i]
     const value: u8[] = values[i]
     if (!http1BytesAreToken(name) || !http1BytesAreFieldText(value)) {
@@ -1853,7 +1853,7 @@ export const http1WriteResponseHead = (
   let end: i32 = http1PutStatusLine(out, at, limit, status)
   end = http1PutText(out, end, reason)
   end = http1PutCrlf(out, end)
-  for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
     end = http1PutBytes(out, end, names[i])
     end = http1PutColonSpace(out, end)
     end = http1PutBytes(out, end, values[i])
