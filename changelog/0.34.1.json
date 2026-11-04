@@ -1,0 +1,253 @@
+{
+  "version": "0.34.1",
+  "date": "2026-11-04",
+  "tag": "v0.34.1",
+  "range": {
+    "from": "v0.34.0",
+    "to": "c20fd49c"
+  },
+  "entries": [
+    {
+      "id": "measure-s3-s-bar-with-nish-simd-on",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "measure S3's bar with nish:simd on mat-vec and both depth documents",
+      "body": "* test(self): write S3's two bar kernels with nish:simd and time them as form 5\n\nbench/simd-s3a/mat-vec-simd.ts and depth-simd.ts are the C vector forms'\nkernels in nish:simd. bench/simd-s3a.mjs builds them as a fifth column,\nrefuses either untimed if its IR calls an llvm.x86 or llvm.aarch64\nintrinsic, and reports form 5 over form 3, S3's bar.\n\nRefs: docs/wp38-simd.md#s3a-the-bar-kernels-without-a-surface\n\n* docs(self): record S3's bar met by nish:simd on mat-vec and both depth documents\n\nS3a's two kernels written with nish:simd time 1.78x over scalar checked Nish\non mat-vec and 1.62x and 3.81x on the two depth documents, at the median,\nagainst a noise band of 1.00x to 1.03x. They are at C vector's time on\nmat-vec and s0 and 8-9% behind it on the sparse log document.\n\nMeasured: median 5-over-3 mat-vec 1.78x, s0 1.62x, log 3.81x; copy band 1.00-1.03x; Xeon @ 2.30 GHz, 15 runs\nRefs: docs/wp38-simd.md#s3-the-bar-kernels-in-nishsimd-the-bar-met\n\n* docs(self): name the rebased commit the S3 bar was measured at\n\n* docs(self): list mat-vec-simd.ts's Benchmarks Game notice in THIRD_PARTY_NOTICES.md",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a458946"
+      ],
+      "pr": 1182,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-34-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.34.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1d92417"
+      ],
+      "pr": 1184,
+      "author": "github-actions[bot]",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "sha-256-avx2-message-schedule-measured-not-built",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "SHA-256 AVX2 message schedule — measured, not built",
+      "body": "A C kernel that computes SHA-256's message schedule four words at a time in\nAVX2, with the rounds kept scalar, was measured against the Nish body for CPUs\nwith AVX2 and no SHA-NI. It does not clear the bar of more than 10% outside the\nnoise band on two runs. On the single 64-byte block an HS256 verify compresses,\nit is −5.3% and −9.9% in the baseline build and −1.1% and −0.2% at x86-64-v3,\nwhere LLVM already gives the Nish body rorx and andn. The 64 rounds are one\ndependency chain, and that chain sets the time: the kernel runs about 15% fewer\ninstructions in the same time.\n\nThe kernel is kept as bench/sha256-block/avx2.patch, with the numbers, the\nreasons it misses and what shipping it would need (it is 3453 bytes of -Oz\n.text against the file's 512-byte budget). The runtime is unchanged.\nbench/sha256-block/run.mjs gains --avx2 (it refuses a compiler without the\npatched kernel), --cpu for every build, --validate, and a CPU stamp.",
+      "metrics": [
+        "64 B block soft→avx2 −5.3% / −9.9% (bands ±6.2% / ±3.1%) at x86-64, −1.1% / −0.2% at v3; Xeon @ 2.1 GHz (avx2, bmi2, sha_ni, avx512f)"
+      ],
+      "refs": [
+        "bench/sha256-block/README.md"
+      ],
+      "tests": [
+        "node bench/sha256-block/run.mjs --validate"
+      ],
+      "commits": [
+        "043f7d4"
+      ],
+      "pr": 1186,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "take-bcrypt-s-lane-bytes-as-low-and",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "take bcrypt's lane bytes as low-and-second-byte pairs",
+      "body": "The batched bcrypt kernels (bcryptBody3 to bcryptBody6, behind\nbcryptHashN and bcryptCalibrate) now take each lane's four S-box index\nbytes as two pairs: a copy of the word behind the value barrier gives\nbytes 0 and 1, and that copy moved down by 16 gives bytes 2 and 3. LLVM\nreads each pair's second byte with one movzx from ah, bh, ch or dh, so a\nlane takes its bytes in six instructions instead of seven. Only four\nregisters have a second byte, and pairing all six lanes spilled more\nthan it saved, so the sixth lane of six keeps the previous form. The\none-lane and two-lane kernels are unchanged, as are Secret handling,\nwipes, cost and work.\n\nThe idea of reading a second byte from a high-byte register is credited\nto the multicore-server-challenge's leading kernels: theCatWisel's\nrust-epoll-theCatWisel (the challenge's pull request 201),\nzig-iouring-nick-potts and asm-epoll-nickita-khylkouski. No code was\ncopied.\n\nbench/crypto/bcrypt/extract.mjs counts each width's round loop in the\nassembly and times the kernels against the previous form and against a\nbyte-for-byte copy of the module (the noise band).",
+      "metrics": [
+        "Xeon Platinum 8260, cost 10, paired ratio new/old over three runs: 0.962-0.967 at five lanes (21.3 to 20.5 ms a hash), 0.943-0.944 at six, 0.968 at four; noise band 0.995-1.006"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md#cascade-lake-the-ceiling-and-one-copy-for-two-bytes"
+      ],
+      "tests": [
+        "tests/run.js bcrypt (crypt_r differential)",
+        "link/crypto_bcrypt_width"
+      ],
+      "commits": [
+        "da32e57"
+      ],
+      "pr": 1190,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "write-the-http-1-1-response-head-with",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "write the HTTP/1.1 response head with sixteen-byte stores",
+      "body": "http1WriteResponseHead now writes \"HTTP/1.1 NNN \" and the Date, Content-Length\nand Connection field names as one 16-byte store of a constant vector each, with\nthe status digits placed by lane. Each store runs only when the whole head fits\n(at + 16 <= at + need <= out.length) and every byte of the head is written after\nit, so the extra lanes never survive; otherwise the old byte path runs. Field\nvalues and the date are checked as field text sixteen bytes at a time (the last\nvector overlapping the one before), and http1PutText tests the fit once and\ncopies without a per-byte bounds check. The bytes written, the limits and every\nrefusal are unchanged; docs/security/http1-codec.md records why.\n\nbench/http1-request drives one keep-alive Http1Connection as Http1Server does,\nwithout sockets: browser (756 B, 251-byte JWT), API-client (338 B, the server's\n148-byte HS256 JWT), short, pipelined and split heads, and JsonWriter bodies of\n1 to 40 KiB through respond. It reports ns/op against a byte-identical copy and\nper-case instruction counts (cachegrind, NISH_SIMD=base, glibc pinned), and its\nREADME ranks the next cuts on this path from per-line callgrind counts.",
+      "metrics": [
+        "923 instructions fewer a request at x86-64 (996 at v3) on every case — browser −7.0%, api −8.8%, short −19.3%; wall clock repeats outside the copy bands on browser x86-64 (+17.0%, +35.2%), short v3 (+36.6%, +31.8%) and api x86-64 (+13.0%, +9.9%); Xeon @ 2.1 GHz (avx2, bmi2, sha_ni, avx512f), shared cloud host"
+      ],
+      "refs": [
+        "bench/http1-request/README.md",
+        "docs/security/http1-codec.md"
+      ],
+      "tests": [
+        "tests/link/net_http1",
+        "tests/link/net_http1_f64"
+      ],
+      "commits": [
+        "4dc09dc"
+      ],
+      "pr": 1187,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "decode-base64url-four-characters-a-step-1188",
+      "type": "perf",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "decode base64url four characters a step",
+      "body": "base64urlDecode now turns each group of four characters into one 24-bit word\nand splits it into three bytes, instead of feeding an accumulator six bits at\na time. It returns the same bytes, or null, as before for every input: the same\nrefusals of a length of 1 mod 4, of bytes outside the alphabet and of\nnon-canonical trailing bits. It keeps no branch or table load on the text's\ncontents. The constant-time assembly check (tests/cases/ct_asm_k1_base64url)\nnow compiles the shipped group step, so docs/security/crypto-k1.md cites a\ncheck that reads the code that ships.\n\nbench/jwt-verify times an HS256 verify through JwtVerifier and the\nhmacCopySha256 midstate verify on the server's real token (header, sub, iat\nand exp: a 104-byte signing input, so three compressions), with\nNISH_SHA256=soft columns for CPUs without SHA-NI. It also times base64url\ndecode of each segment against a column in the server's own decoder shape.",
+      "metrics": [
+        "base64url decode −52.4% / −56.2% instructions (148 B / 507 B tokens), −39% to −56% ns across runs; std vs the server's decoder shape 14.5% (run A) and 21.7% (run C) faster at 507 B, no difference at 148 B; Xeon @ 2.1 GHz (avx2, bmi2, sha_ni, avx512f), shared cloud host"
+      ],
+      "refs": [
+        "bench/jwt-verify/README.md",
+        "docs/security/crypto-k1.md"
+      ],
+      "tests": [
+        "tests/link/crypto_base64url_groups",
+        "tests/cases/ct_asm_k1_base64url"
+      ],
+      "commits": [
+        "f2493b0"
+      ],
+      "pr": 1188,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "read-postgres-int8-columns-with-one-load-and",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "read Postgres int8 columns with one load and a byte swap",
+      "body": "getU64BE in nish/bytes now reads its eight bytes in one guarded step:\noff >= 0, off < 2147483640 and off + 8 <= length. LLVM lowers it to one load\nand a bswap where the target allows. Any other offset takes the byte loop\nunchanged, so every value, panic and panic message is the same as before for\nevery array and offset. That includes negative offsets, offsets near the i32\nmaximum, a read ending exactly at the end, one byte short and an empty array.\ngetI64BE and getF64BE, which binary int8, timestamptz and float8 columns and\nint8[] elements decode through, inherit it. The capabilities fixture records\nthat the first panic site getU64BE reaches is now an index check the guard\nrules out; docs/security/bytes.md says why no input gains or loses a panic.\n\nbench/pg-decode replays canned backend bytes through PgConnection's receive\npath with no server. It feeds DataRow batches of 1, 20 and 100 with int8, text,\ntimestamptz, NULL and binary int8[] columns of 0 to 8 elements, framed as the\nserver's batches are, and the pool and text-format variants. It reports\nns/row against a byte-identical copy and per-case instruction counts\n(callgrind, NISH_SIMD=base, glibc pinned). Its README ranks the next cuts on\nthis path.",
+      "metrics": [
+        "rows 100 151,436 → 120,986 instructions per batch (−20%), pool cases similar; time repeats outside the copy band on pool 20/100 and on rows 20/100 at x86-64-v3, the claim resting on instruction counts; Xeon @ 2.1 GHz (avx2, bmi2, sha_ni, avx512f), shared cloud host"
+      ],
+      "refs": [
+        "bench/pg-decode/README.md",
+        "docs/security/bytes.md"
+      ],
+      "tests": [
+        "tests/link/std_bytes_read_be_end",
+        "_short",
+        "_empty",
+        "_cap",
+        "_negative"
+      ],
+      "commits": [
+        "119a74c"
+      ],
+      "pr": 1191,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "store-one-byte-parts-of-a-join-instead",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "store one-byte parts of a join instead of calling memcpy",
+      "body": "Array.prototype.join copied every part with llvm.memcpy of a length LLVM could\nnot see, which lowers to a libc call per part. A part of exactly one byte (what\na byte-at-a-time encoder pushes from String.fromCharCode) is now one load and\none store, and longer or empty parts take the same memcpy as before. The bytes\njoined are identical for every part shape: multi-byte UTF-8, empty parts,\nseparators, and arrays of 0, 1 or many parts. The CG-3 length limit still guards\nevery path. tests/cases/str_join_byte_parts pins both arms, and\ndocs/security/codegen.md records the change.\n\nbench/runtime-copies attributes the copies and plain-run scans in this run's\nbenches and in bench/http1-server.ts, by caller and size. It uses cachegrind\nwith NISH_SIMD=base and glibc pinned, plus a counting LD_PRELOAD shim\n(copycount.c) and a server driver (server.mjs). On the server-shaped program,\nlibc copies are 1.3-2.2% of a request, spread over five or more small-copy\ncallers. The largest is the request head that Http1Parser.feed copies into its\nown buffer. The bench reproduces the shapes found (small copies, array growth,\nchecked loops, JSON strings, byte joins), and its README ranks the next cuts.\nbench/README.md gains an index of this run's benches.",
+      "metrics": [
+        "chars (a byte-at-a-time join) 3,960 → 3,061 instructions per iteration (−22.7%) and +44.6% ns (band ±8.9%); sha256-block hs256 −3.69% instructions; other programs 0.0% to −0.18%; bench/instructions.json unchanged; Xeon @ 2.1 GHz (avx2, bmi2, sha_ni, avx512f), shared cloud host"
+      ],
+      "refs": [
+        "bench/runtime-copies/README.md",
+        "docs/security/codegen.md",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/str_join_byte_parts"
+      ],
+      "commits": [
+        "f93a059"
+      ],
+      "pr": 1192,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "lowercase-and-token-check-http-1-1-field",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "lowercase and token-check HTTP/1.1 field names sixteen bytes at a time",
+      "body": "http1LowerName now checks each field name against RFC 9110's token bytes and\nlowercases A-Z sixteen bytes a vector, instead of a byte at a time. The vector\npredicate (unsigned lane compares) refuses exactly what http1IsTokenByte\nrefuses: controls, SP, HTAB, DEL, bytes 0x80 and above, and the 17 delimiters.\nOnly A-Z changes case. The vector runs only while sixteen bytes fit in the held\nhead, masks the lanes past the name, and leaves the tail to the old byte loop,\nso it reads and writes nothing past the name or the buffer. Every accept,\nreject, status and stored name and value is unchanged.\nnet_http1_parse_diff now drives 237,143 heads, with every delimiter at every\nposition, against a frozen copy of the old parser.\n\nThe OWS scan after the name is bounded by buf.length directly. The checker had\nlost that fact after the new call and kept a bounds check (NL9007), which the\nperformance gate caught. The scan's result is the same.",
+      "metrics": [
+        "browser request −781 instructions at x86-64 (−6.8%) and −1,028 at x86-64-v3 (−8.1%); api −544 / −712; wall clock repeats outside both copy bands on api at x86-64 (+11.3%, +22.2%); Xeon @ 2.1 GHz (avx2, bmi2, sha_ni, avx512f), shared cloud host"
+      ],
+      "refs": [
+        "bench/http1-request/README.md",
+        "docs/security/http1-codec.md"
+      ],
+      "tests": [
+        "tests/link/net_http1",
+        "tests/link/net_http1_parse_diff"
+      ],
+      "commits": [
+        "3e736d9"
+      ],
+      "pr": 1193,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "box-fresh-array-fields-of-unknown-length-as",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "box fresh array fields of unknown length as { len, data }",
+      "body": "* perf(codegen): box fresh array fields of unknown length as { len, data }\n\nExperimental. A class array field that the inline rule admits but whose\nassigned lengths are not all constants (or are too long for the slots)\nkeeps only its len and data in the object, a 16-byte slice as Rust's\nBox<[T]> does: no separate 24-byte header, one allocation fewer per\nobject, and one dependent load fewer per element access.\n\n* docs(codegen): document boxed array fields and add their tests\n\nLANGUAGE.md and ARCHITECTURE.md describe the boxed layout, its aliasing\nargument and when a field falls back to it; cls_boxed_array covers every\nfresh right-hand side, cls_boxed_array_push the negative.\n\nTests: tests/cases/cls_boxed_array, tests/cases/cls_boxed_array_push\n\n* test(codegen): regenerate goldens for boxed array fields\n\n* test(self): regenerate checked goldens for boxed array fields\n\n* fix(codegen): name the boxed field's debug type apart and test both boxing reasons\n\nThe DWARF composite of a boxed field is now `<T[]> slice`, so a debugger\ncannot take it for the array header of the same element type. Adds a\nboxed field over the 256-byte inline cap to cls_boxed_array and a CG-1/CG-2\nlink test for `new Array` through a boxed field, and corrects the docs on\nwhen a field is boxed and on who shares the header's TBAA scalars.\n\nTests: tests/cases/cls_boxed_array, tests/link/cg_sec_boxed_new_array\n\n* test(codegen): regenerate goldens for boxed fields across modules\n\nJsonTokenizer's stack is now a boxed field, so the std_json_typed link\ngoldens move with it. cg_sec_boxed_new_array imports its class from a\nsecond module, as every link program must.\n\n* fix(codegen): keep FieldInfo unpadded and the boxed literal loop proven\n\nFieldInfo's boxed flag sits with the other booleans so the record stays 72\nbytes, and the boxed literal's store loop bounds itself on values.length so\nthe performance ratchet sees no new bounds check. One Http3Server slot is\n1,152 bytes smaller now that its unknown-length array fields are boxed.\n\n* test(self): regenerate checked goldens for the FieldInfo reorder\n\n* fix(codegen): keep the boxed field paths clear of new ratchet warnings\n\nThe debug-info branch for boxed and inline array fields now looks up the\nelement type and its name once, and the boxed literal store loop walks its\nvalues with for-of, so neither adds an NL9011 or NL9007 past the baseline.\n\n* docs(codegen): regenerate the IR cookbook and self goldens for boxed fields\n\nThe arr-repeat-check entry's Perm now stores its array as { i64, i8* }.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7ea870c"
+      ],
+      "pr": 1189,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    },
+    {
+      "id": "write-postgres-integer-parameters-digits-once-two-a",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "write Postgres integer parameters' digits once, two a step",
+      "body": "* perf(net): write putDecimal's digits once, two a step, into their places\n\nWork in progress: measurements, goldens and docs follow.\n\n* docs(net): record pgPutDecimal's scope and panic site\n\n* perf(net): write Postgres integer parameters' digits once, two a step\n\nparamInt, paramIntArray and arrayInt write each i64 through putDecimal,\nwhich wrote a digit at a time with a signed % and / and a checked store,\nthen reversed the digits. It now reserves pgDecimalLength(value) bytes and\npgPutDecimal fills them once, right to left, two digits a step from a\n200-byte table, on the magnitude as a u64. One guard proves the window, so\nthe stores carry no per-digit bounds check. The bytes on the wire are the\nsame for every i64; tests/link/std_postgres_decimal checks them against the\nold writer, and with a number ending at the output buffer's last byte.\n\nThe bench README records the result and re-ranks what is left:\narrayElement first, then the rest of putDecimal.\n\nMeasured: params 100 138,193 instr/op against base 149,900 (+8.5%) at x86-64, 138,193 against 148,846 (+7.7%) at x86-64-v3; params 20 +6.7% / +6.0%; every rows, text and pool case 53 instr/op lower\nMeasured: ns/op base vs nish, two runs each, outside the copy band both times: params 100 +17.4% (±1.9%) and +20.8% (±4.0%) at x86-64; params 20 +9.6% (±2.3%) and +13.5% (±1.0%), params 100 +15.8% (±13.1%) and +11.9% (±1.7%) at x86-64-v3; params 1 is noise\nRefs: bench/pg-decode/README.md\nTests: tests/link/std_postgres_decimal\n\n* docs(net): say how the putDecimal cut takes its two digits\n\nThe bench README said a 200-byte table; the writer divides the u64 magnitude by 100 and splits each pair, with no table.\n\n* test(net): name the i64 limits in the decimal test, and check the bytes past it\n\nAnswers review on the putDecimal cut. The decimal test names the i64 limits\ninstead of indexing into its value list, and adds three cases that end the\nnumber three bytes short of the output buffer's end and check those bytes\nare untouched. The bench README and the security record say the reservation\nis now the number's length rather than 20 bytes, so the buffer may grow one\ncall later while the wire bytes stay the same; the README also says the time\ngains are about twice the instruction gains, that params 20 at x86-64 did\nnot repeat, and that rank 2's per-call count covers a different region than\nthe per-integer saving.\n\nTests: tests/link/std_postgres_decimal\n\n* test(self): regenerate the jwt-verify and pg-decode goldens for boxed array fields\n\n#1189 boxes fresh array fields of unknown length as { len, data }, which moves\nstruct sizes and field offsets. The checked goldens for bench/jwt-verify (stale\non main since #1189 landed) and bench/pg-decode still recorded the old layout.\nRegenerated with node tests/self/goldens.js --update; no other golden moved.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c20fd49"
+      ],
+      "pr": 1194,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-04"
+    }
+  ]
+}

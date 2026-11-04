@@ -26,6 +26,32 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-11-04
+
+### Performance
+
+- crypto: Take bcrypt's lane bytes as low-and-second-byte pairs ([#1190](https://github.com/amritk/nish/pull/1190))
+- net: Write the HTTP/1.1 response head with sixteen-byte stores ([#1187](https://github.com/amritk/nish/pull/1187))
+- crypto: Decode base64url four characters a step ([#1188](https://github.com/amritk/nish/pull/1188))
+- net: Read Postgres int8 columns with one load and a byte swap ([#1191](https://github.com/amritk/nish/pull/1191))
+- codegen: Store one-byte parts of a join instead of calling memcpy ([#1192](https://github.com/amritk/nish/pull/1192))
+- net: Lowercase and token-check HTTP/1.1 field names sixteen bytes at a time ([#1193](https://github.com/amritk/nish/pull/1193))
+- codegen: Box fresh array fields of unknown length as { len, data } ([#1189](https://github.com/amritk/nish/pull/1189))
+- net: Write Postgres integer parameters' digits once, two a step ([#1194](https://github.com/amritk/nish/pull/1194))
+
+### Documentation
+
+- runtime: SHA-256 AVX2 message schedule — measured, not built ([#1186](https://github.com/amritk/nish/pull/1186))
+
+### Tests
+
+- self: Measure S3's bar with nish:simd on mat-vec and both depth documents ([#1182](https://github.com/amritk/nish/pull/1182))
+
+### Build
+
+- Regenerate package-lock.json for v0.34.0 ([#1184](https://github.com/amritk/nish/pull/1184))
+
+
 ## [0.34.0] - 2026-11-04
 
 ### Added
@@ -1593,3 +1619,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.32.0]: https://github.com/amritk/nish/releases/tag/v0.32.0
 [0.33.0]: https://github.com/amritk/nish/releases/tag/v0.33.0
 [0.34.0]: https://github.com/amritk/nish/releases/tag/v0.34.0
+[0.34.1]: https://github.com/amritk/nish/releases/tag/v0.34.1
