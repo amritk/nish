@@ -245,21 +245,43 @@ if (validate) {
 if (callgrind) {
   const SHORT = 10
   const LONG = 110
-  const VALGRIND = "valgrind"
+  // The child's environment has no PATH, so valgrind is found here, once.
+  let valgrind = ""
+  try {
+    valgrind = execFileSync("sh", ["-c", "command -v valgrind"], { encoding: "utf8" }).trim()
+  } catch {
+    fail("--callgrind needs valgrind on PATH")
+  }
+  // bench/run.mjs's `PINNED_LIBC` and `PINNED_SIMD`: glibc's SSE2 memcpy and
+  // memset and the runtime's baseline vector path, so the count does not move
+  // with the host's AVX2 or ERMS. The child gets only these variables and runs
+  // from its own directory under a relative argv[0].
+  const PINNED_LIBC = [
+    "glibc.cpu.hwcaps=-AVX_Fast_Unaligned_Load,-AVX2,-AVX512F,-AVX512VL,-ERMS,-FSRM,-SSSE3",
+    "glibc.cpu.x86_non_temporal_threshold=0x0fffffffffffffff",
+    "glibc.cpu.x86_rep_movsb_threshold=0x0fffffffffffffff",
+    "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
+  ].join(":")
   /** Instructions callgrind counts for one run of `col` on `c`. */
   const instructions = (col, c, iterations) => {
-    const out = path.join(outDir, `callgrind.${col.id}.out`)
+    // A `--binary` id without `name=` is a path; its slashes would name a directory.
+    const out = path.join(outDir, `callgrind.${col.id.replace(/[^A-Za-z0-9._-]/g, "_")}.out`)
     const r = spawnSync(
-      VALGRIND,
+      valgrind,
       [
         "--tool=callgrind",
         `--callgrind-out-file=${out}`,
-        col.bin,
+        `./${path.basename(col.bin)}`,
         c.kernel,
         String(c.size),
         String(iterations),
       ],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+      {
+        cwd: path.dirname(col.bin),
+        env: { GLIBC_TUNABLES: PINNED_LIBC, NISH_SIMD: "base" },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }
     )
     const total = /Collected : (\d+)/.exec(r.stderr ?? "")
     if (r.error !== undefined || r.status !== 0 || total === null) {

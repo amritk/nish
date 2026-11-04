@@ -74,9 +74,26 @@ copy's distance from the build, so a change inside it is noise.
 | params 20 | 3422 (3259-3914) | 3563 (3151-3873) | +4.1% | ±0.7% |
 | params 100 | 17609 (16588-19613) | 17922 (16879-20199) | +1.8% | ±5.2% |
 
-In the first run, `pool 20` (+24.3%, band ±3.9%) and `pool 100` (+26.7%,
-±9.6%) repeated outside the band. `rows 100` (+2.8%) fell inside that run's
-±16.3% band, because the run shared the machine with a build.
+The first `--cpu x86-64` run (base vs nish, band):
+
+| case | run 1 |
+| --- | --- |
+| rows 1 | +9.0% (±0.9%) |
+| rows 20 | +18.7% (±0.8%) |
+| rows 100 | +2.8% (±16.3%) |
+| pool 1 | +2.7% (±8.0%) |
+| pool 20 | +24.3% (±3.9%) |
+| pool 100 | +26.7% (±9.6%) |
+| params 1 | +3.4% (±4.6%) |
+| params 20 | -7.9% (±7.6%) |
+| params 100 | -1.7% (±2.2%) |
+
+`rows 100` fell inside run 1's ±16.3% band, because the run shared the
+machine with a build. So at `--cpu x86-64` the gain repeats outside the band
+in time for `rows 1`, `rows 20`, `pool 20` and `pool 100`, but not `rows 100`.
+At `--cpu x86-64-v3` it repeats for `rows 1`, `rows 20`, `rows 100`, `pool 20`
+and `pool 100`. The claim rests on the instruction counts below, which are
+exact and repeat; the times agree with them where the band is narrow.
 
 `text` is the control: its instruction counts are the same with and without
 the cut, so no `text` difference is real. The first `--cpu x86-64` run had
@@ -87,12 +104,15 @@ that one copy's distance can understate the noise of a single run.
 
 | case | run a | run b |
 | --- | --- | --- |
+| rows 1 | +7.3% (±2.0%) | +9.1% (±5.2%) |
 | rows 20 | +19.7% (±0.9%) | +21.4% (±3.7%) |
 | rows 100 | +29.8% (±1.4%) | +20.0% (±6.9%) |
+| pool 1 | +9.8% (±2.4%) | +2.5% (±3.3%) |
 | pool 20 | +28.3% (±1.9%) | +24.4% (±5.8%) |
 | pool 100 | +26.2% (±6.4%) | +25.7% (±1.1%) |
 | text 20 | -8.1% (±8.6%) | +4.7% (±7.8%) |
 | text 100 | +31.7% (±10.1%) | +3.4% (±4.7%) |
+| params 1 | +1.6% (±1.0%) | +3.6% (±6.3%) |
 | params 20 | -0.1% (±3.3%) | +2.8% (±2.1%) |
 | params 100 | +3.6% (±3.9%) | +1.8% (±5.4%) |
 
@@ -100,23 +120,24 @@ that one copy's distance can understate the noise of a single run.
 identical, and that run's spreads were the widest measured (14,027 to
 27,142 ns for `base`).
 
-Instructions an operation (`--callgrind`). The copy column is identical to
-the build in every case:
+Instructions an operation (`--callgrind`, run under the same pinned
+`GLIBC_TUNABLES` and `NISH_SIMD=base` as `bench/run.mjs`). The copy column is
+within one instruction of the build in every case:
 
 | case | x86-64 nish | x86-64 base | | x86-64-v3 nish | x86-64-v3 base | |
 | --- | --- | --- | --- | --- | --- | --- |
-| rows 1 | 3,656 | 3,772 | +3.2% | 3,649 | 3,767 | +3.2% |
-| rows 20 | 26,505 | 32,595 | +23.0% | 26,300 | 32,495 | +23.6% |
-| rows 100 | 120,986 | 151,436 | +25.2% | 119,961 | 150,936 | +25.8% |
-| text 1 | 4,008 | 4,008 | 0.0% | 3,999 | 3,999 | 0.0% |
-| text 20 | 40,363 | 40,375 | 0.0% | 40,183 | 40,195 | 0.0% |
-| text 100 | 196,572 | 196,572 | 0.0% | 195,672 | 195,672 | 0.0% |
-| pool 1 | 4,121 | 4,237 | +2.8% | 4,114 | 4,232 | +2.9% |
-| pool 20 | 27,920 | 34,010 | +21.8% | 27,715 | 33,910 | +22.4% |
-| pool 100 | 126,449 | 156,899 | +24.1% | 125,424 | 156,399 | +24.7% |
-| params 1 | 3,922 | 3,922 | 0.0% | 3,916 | 3,916 | 0.0% |
-| params 20 | 30,747 | 30,747 | 0.0% | 30,554 | 30,554 | 0.0% |
-| params 100 | 148,396 | 148,397 | 0.0% | 147,341 | 147,342 | 0.0% |
+| rows 1 | 3,699 | 3,815 | +3.1% | 3,692 | 3,810 | +3.2% |
+| rows 20 | 26,803 | 32,893 | +22.7% | 26,598 | 32,793 | +23.3% |
+| rows 100 | 122,490 | 152,940 | +24.9% | 121,466 | 152,440 | +25.5% |
+| text 1 | 4,050 | 4,050 | 0.0% | 4,041 | 4,041 | 0.0% |
+| text 20 | 40,598 | 40,598 | 0.0% | 40,418 | 40,418 | 0.0% |
+| text 100 | 197,712 | 197,711 | 0.0% | 196,812 | 196,811 | 0.0% |
+| pool 1 | 4,167 | 4,283 | +2.8% | 4,160 | 4,278 | +2.8% |
+| pool 20 | 28,195 | 34,286 | +21.6% | 27,990 | 34,186 | +22.1% |
+| pool 100 | 127,770 | 158,220 | +23.8% | 126,745 | 157,720 | +24.4% |
+| params 1 | 3,984 | 3,984 | 0.0% | 3,979 | 3,979 | 0.0% |
+| params 20 | 31,074 | 31,074 | 0.0% | 30,882 | 30,882 | 0.0% |
+| params 100 | 149,900 | 149,900 | 0.0% | 148,846 | 148,846 | 0.0% |
 
 **The cut.** `getU64BE` (so `getI64BE` and `getF64BE`) checks the range once
 and reads the eight bytes unchecked. Its ors are grouped in pairs, and its
@@ -124,8 +145,8 @@ byte-by-byte path is a separate function. It now lowers to one `mov` and one
 `bswap` after a two-compare guard: about 16 instructions a call in
 `--profile speed`, down from about 74. `params` reads no `int8`, and `text`
 reads its `int8`s and times as text (`PgText`), so neither moves. The
-`text` rows are the control: the same values as `rows`, and 62% more
-instructions to decode than `rows` after the cut (196,572 against 120,986 at
+`text` rows are the control: the same values as `rows`, and 61% more
+instructions to decode than `rows` after the cut (197,712 against 122,490 at
 100 rows).
 
 **Does `getI64BE` lower to one load and `bswap`?** It does now, and did not
@@ -144,14 +165,24 @@ Callgrind on the `-g` speed build after the cut, 200 iterations of
 `rows 100` (25.1M instructions in all) and `params 100` (29.9M). Here is what
 `pg-decode-2` should take next, largest first. Each estimate is the
 instructions a change would save, from its call count and the cost per call
-measured here.
+measured here. The figures come from:
+
+```sh
+D=build/bench/pg-decode/g && mkdir -p $D
+build/nish bench/pg-decode/main.ts -o $D/ --link $D/pg-decode --profile speed -g
+cd $D
+valgrind --tool=callgrind --callgrind-out-file=cg.rows ./pg-decode rows 100 200
+valgrind --tool=callgrind --callgrind-out-file=cg.params ./pg-decode params 100 200
+callgrind_annotate --inclusive=no cg.rows     # self cost a function
+callgrind_annotate --tree=caller cg.rows      # call counts, by caller
+```
 
 | rank | candidate | where | now | estimate |
 | --- | --- | --- | --- | --- |
 | 1 | `putDecimal` reserves once, but then writes one digit at a time: a signed `i64` `%` and `/` by 10, a bounds-checked store through `this.out`, and a load and store of `this.outEnd`. A second loop reverses the digits, again with checks. Write two digits a step from a 200-byte table into the reserved room from its end (the length is `pgDecimalLength`), with no reversal | `std/net/postgres.ts` `putDecimal` | 375 instr a call (20,200 calls: 7.57M, 25% of `params 100`) | -50 to -60% of it: about -4M of `params 100`, about -13% |
-| 2 | `arrayElement` scans each key a byte at a time for `"` and `\` before it copies the key with `copyBytes`. It also writes the comma and both quotes through `putByte`, which reserves each time (`reserve` costs 2.36M, 7.9%, nearly all from these). A byte-class run for the scan (`nish/bytes`'s runtime kernels), and one reserve covering the comma, the quotes and the key | `std/net/postgres.ts` `arrayElement`, `putByte`, `reserve` (inlined into the bench's `nish_main`) | 11.2M (37.5% of `params 100`), about 110 instr an element of 8 to 64 bytes | -40% of it: about -4M, -13% |
-| 3 | The same fast path on `getU32BE`/`getI32BE`: 140,000 calls (7 a row) at 25 instr each, all from code inlined into `readRow`: the array's header words and its per-element lengths. The column-length read in `readRow` already has its own guard | `std/bytes.ts` `getU32BE` | 3.5M (14% of `rows 100`) | about 10 instr a call: -2.1M, about -8% of `rows 100` |
-| 4 | `PgConnection.readRow` together with the inlined column loop: each column re-reads its length and stores its window into per-column arrays. One bounds proof per message (checking the length words once against the message end) could drop the per-column checks | `std/net/postgres.ts` `readRow`, `reserveColumns` | 11.2M (45% of `rows 100`), about 110 instr a row | uncertain: -10 to -20% of it |
+| 2 | `arrayElement` scans each key a byte at a time for `"` and `\` before it copies the key with `copyBytes`. It also writes the comma and both quotes through `putByte`, which reserves each time (`reserve` costs 2.36M, 7.9%, nearly all from these). A byte-class run for the scan (`nish/bytes`'s runtime kernels), and one reserve covering the comma, the quotes and the key | `std/net/postgres.ts` `arrayElement`, `putByte`, `reserve` (inlined into the bench's `nish_main`) | 11.2M (37.5% of `params 100`) of `std/net/postgres.ts` inlined into `nish_main`, nearly all `arrayElement`: about 560 instr an element of 8 to 64 bytes (20,000 elements) | -40% of it: about -4M, -13% |
+| 3 | The same fast path on `getU32BE`/`getI32BE`: 140,000 calls (7 a row) at about 25 instr each (3.53M), all from code inlined into `readRow`: the array's header words and its per-element lengths. The column-length read in `readRow` already has its own guard | `std/bytes.ts` `getU32BE` | 3.5M (14% of `rows 100`) | from about 25 to about 10 instr a call, so about 15 saved a call: -2.1M, about -8% of `rows 100` |
+| 4 | `PgConnection.readRow` together with the inlined column loop: each column re-reads its length and stores its window into per-column arrays. One bounds proof per message (checking the length words once against the message end) could drop the per-column checks | `std/net/postgres.ts` `readRow`, `reserveColumns` | 11.2M (45% of `rows 100`: 6.73M inlined plus 4.51M in `readRow` itself), about 560 instr a row (20,000 rows) | uncertain: -10 to -20% of it |
 | 5 | `binaryInt` re-checks the column's type, length and NULL on every read before it calls `getI64BE` | `std/net/postgres.ts` `binaryInt` | 37 instr a call (40,000 calls: 1.48M, 5.9%) | -0.6M, about -2% |
 
 The text path (`text 100`, 200 iterations, 40.2M instructions in all) ranks

@@ -544,6 +544,10 @@ const poolLoop = (a: Args): i32 => {
       }
     }
   }
+  if (conn.failure !== PG_ERR_NONE || conn.binary.failed || conn.text.failed) {
+    writeError(`pg-decode: the pool's connection failed (${conn.failure}) or a column did not decode\n`)
+    return 1
+  }
   report(sum, t0)
   return 0
 }

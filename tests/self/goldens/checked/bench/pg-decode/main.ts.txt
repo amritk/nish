@@ -5906,7 +5906,7 @@ function poolLoop(a: Args): i32 -> @poolLoop
   callee +46:15 readRow -> @readRow
   callee +52:16 PgConnection.receive -> @nish.PgConnection.receive
   callee +54:15 mix -> @mix
-  callee +58:3 report -> @report
+  callee +62:3 report -> @report
 function firstGroup(pool: PgPool, conn: PgConnection, stream: u8[], tags: PgBinaryArray): boolean -> @firstGroup
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgPool.dispatch
