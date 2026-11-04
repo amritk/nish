@@ -118,7 +118,11 @@ for (let i = 2; i < argv.length; i++) {
       nish: true,
     })
   } else if (argv[i] === "--cpu") {
-    cpuFlags.push("--cpu", argv[++i] ?? "")
+    const name = argv[++i] ?? ""
+    if (name === "" || name.startsWith("--")) {
+      fail("--cpu needs a CPU name, as x86-64-v3")
+    }
+    cpuFlags.push("--cpu", name)
   } else if (argv[i] === "--avx2") {
     avx2 = true
   } else if (argv[i] === "--validate") {
@@ -206,6 +210,28 @@ const realCompiler = (file) => {
   return shim === null ? file : fs.realpathSync(shim[1])
 }
 
+const cpuinfo = fs.readFileSync("/proc/cpuinfo", "utf8")
+const cpuHas = new Set((/^flags\s*:\s*(.*)$/m.exec(cpuinfo)?.[1] ?? "").split(/\s+/))
+
+// Stock runtime-sha256.c reads only NISH_SHA256=soft, and a patched one gives
+// the Nish body on a CPU without AVX2 and BMI: either way the column would
+// time another body under the avx2 label, with the same checksums. The build
+// is stripped, so the patch is found in the runtime the compiler links.
+if (avx2) {
+  if (nishc.prefix.length > 0) {
+    fail("--avx2 needs a native compiler, which links the runtime beside its binary")
+  }
+  const pkg = path.resolve(path.dirname(realCompiler(fs.realpathSync(nishc.cmd))), "..")
+  const source = path.join(pkg, "runtime", "runtime-sha256.c")
+  if (!(fs.existsSync(source) && fs.readFileSync(source, "utf8").includes("nish_sha256_block_avx2"))) {
+    fail(`--avx2: ${source} has no AVX2 kernel; apply bench/sha256-block/avx2.patch and rebuild (README.md)`)
+  }
+  const missing = ["avx2", "bmi1", "bmi2"].filter((f) => !cpuHas.has(f))
+  if (missing.length > 0) {
+    fail(`--avx2: this CPU lacks ${missing.join(", ")}, so NISH_SHA256=avx2 would run the Nish body`)
+  }
+}
+
 /** Each variant as `{ name, exe, irDir }`, built against its own sha256.ts. */
 const built = variants.map((spec) => {
   if (nishc.prefix.length > 0) {
@@ -239,7 +265,7 @@ const built = variants.map((spec) => {
     [...v.flags, ...cpuFlags],
     `building main.ts against variant ${spec}`
   )
-  return { name: spec, exe: out, irDir, flags: v.flags }
+  return { name: spec, exe: out, irDir, flags: [...v.flags, ...cpuFlags] }
 })
 
 /**
@@ -286,7 +312,7 @@ console.log("sha256Compress, clang -O3 -c of each build's sha256.ll:")
 console.log(
   `${"build".padEnd(28)} ${"insns".padStart(6)} ${"st rsp".padStart(6)} ${"ld rsp".padStart(6)} ${"reg mov".padStart(7)}`
 )
-for (const b of [{ name: "base", irDir: outDir, flags: [] }, ...built]) {
+for (const b of [{ name: "base", irDir: outDir, flags: cpuFlags }, ...built]) {
   const c = codeOf(b.irDir, b.flags)
   console.log(
     `${b.name.padEnd(28)} ${String(c.insns).padStart(6)} ${String(c.stores).padStart(6)} ${String(c.loads).padStart(6)} ${String(c.moves).padStart(7)}`
@@ -367,9 +393,7 @@ const median = (xs) => {
 /** `to` against `from` as a percentage of `from`: + is slower. */
 const pct = (from, to) => `${to >= from ? "+" : ""}${((100 * (to - from)) / from).toFixed(1)}%`
 
-const cpuinfo = fs.readFileSync("/proc/cpuinfo", "utf8")
 const cpu = /^model name\s*:\s*(.*)$/m.exec(cpuinfo)?.[1] ?? os.cpus()[0]?.model
-const cpuHas = new Set((/^flags\s*:\s*(.*)$/m.exec(cpuinfo)?.[1] ?? "").split(/\s+/))
 const stamp = ["avx2", "bmi2", "sha_ni", "avx512f"]
   .map((f) => `${f} ${cpuHas.has(f) ? "yes" : "no"}`)
   .join(", ")
