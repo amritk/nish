@@ -204,9 +204,21 @@ PASS  in any case
 PASS  a head that fits exactly without its date is HTTP1_NO_ROOM with it
 PASS  and fits a buffer exactly its size
 PASS  refused: a date that is not field text
-PASS  refused: an LF at 16 of a 29-byte date
-PASS  refused: an LF at 20 of a 29-byte date
-PASS  refused: an LF at 28 of a 29-byte date
+PASS  refused: byte 0 at 16 of a 29-byte date
+PASS  refused: byte 10 at 16 of a 29-byte date
+PASS  refused: byte 13 at 16 of a 29-byte date
+PASS  refused: byte 31 at 16 of a 29-byte date
+PASS  refused: byte 127 at 16 of a 29-byte date
+PASS  refused: byte 0 at 20 of a 29-byte date
+PASS  refused: byte 10 at 20 of a 29-byte date
+PASS  refused: byte 13 at 20 of a 29-byte date
+PASS  refused: byte 31 at 20 of a 29-byte date
+PASS  refused: byte 127 at 20 of a 29-byte date
+PASS  refused: byte 0 at 28 of a 29-byte date
+PASS  refused: byte 10 at 28 of a 29-byte date
+PASS  refused: byte 13 at 28 of a 29-byte date
+PASS  refused: byte 31 at 28 of a 29-byte date
+PASS  refused: byte 127 at 28 of a 29-byte date
 PASS  but not on a 1xx, which sends no date
 PASS  the smallest head is 17 bytes
 PASS  and the bytes after it are untouched
@@ -215,209 +227,252 @@ PASS  and not one of 16
 PASS  a head with every fixed field, at an offset, leaves the bytes either side of it alone
 PASS  and fits a buffer exactly its size
 PASS  and not one a byte shorter
+PASS  a five-byte date ending the head is written
+PASS  and the bytes after it are untouched
+PASS  and it fits a buffer exactly its size
 PASS  each status digit and a long length land in place
 PASS  a 1-byte value of text, HTAB and obs-text is written
+PASS  obs-text 128 at 0 of a 1-byte value is written
 PASS  refused: byte 0 at 0 of a 1-byte value
 PASS  refused: byte 10 at 0 of a 1-byte value
 PASS  refused: byte 13 at 0 of a 1-byte value
 PASS  refused: byte 31 at 0 of a 1-byte value
 PASS  refused: byte 127 at 0 of a 1-byte value
 PASS  a 15-byte value of text, HTAB and obs-text is written
+PASS  obs-text 128 at 0 of a 15-byte value is written
 PASS  refused: byte 0 at 0 of a 15-byte value
 PASS  refused: byte 10 at 0 of a 15-byte value
 PASS  refused: byte 13 at 0 of a 15-byte value
 PASS  refused: byte 31 at 0 of a 15-byte value
 PASS  refused: byte 127 at 0 of a 15-byte value
+PASS  obs-text 128 at 14 of a 15-byte value is written
 PASS  refused: byte 0 at 14 of a 15-byte value
 PASS  refused: byte 10 at 14 of a 15-byte value
 PASS  refused: byte 13 at 14 of a 15-byte value
 PASS  refused: byte 31 at 14 of a 15-byte value
 PASS  refused: byte 127 at 14 of a 15-byte value
+PASS  obs-text 128 at 13 of a 15-byte value is written
 PASS  refused: byte 0 at 13 of a 15-byte value
 PASS  refused: byte 10 at 13 of a 15-byte value
 PASS  refused: byte 13 at 13 of a 15-byte value
 PASS  refused: byte 31 at 13 of a 15-byte value
 PASS  refused: byte 127 at 13 of a 15-byte value
 PASS  a 16-byte value of text, HTAB and obs-text is written
+PASS  obs-text 128 at 0 of a 16-byte value is written
 PASS  refused: byte 0 at 0 of a 16-byte value
 PASS  refused: byte 10 at 0 of a 16-byte value
 PASS  refused: byte 13 at 0 of a 16-byte value
 PASS  refused: byte 31 at 0 of a 16-byte value
 PASS  refused: byte 127 at 0 of a 16-byte value
+PASS  obs-text 128 at 14 of a 16-byte value is written
 PASS  refused: byte 0 at 14 of a 16-byte value
 PASS  refused: byte 10 at 14 of a 16-byte value
 PASS  refused: byte 13 at 14 of a 16-byte value
 PASS  refused: byte 31 at 14 of a 16-byte value
 PASS  refused: byte 127 at 14 of a 16-byte value
+PASS  obs-text 128 at 15 of a 16-byte value is written
 PASS  refused: byte 0 at 15 of a 16-byte value
 PASS  refused: byte 10 at 15 of a 16-byte value
 PASS  refused: byte 13 at 15 of a 16-byte value
 PASS  refused: byte 31 at 15 of a 16-byte value
 PASS  refused: byte 127 at 15 of a 16-byte value
 PASS  a 17-byte value of text, HTAB and obs-text is written
+PASS  obs-text 128 at 0 of a 17-byte value is written
 PASS  refused: byte 0 at 0 of a 17-byte value
 PASS  refused: byte 10 at 0 of a 17-byte value
 PASS  refused: byte 13 at 0 of a 17-byte value
 PASS  refused: byte 31 at 0 of a 17-byte value
 PASS  refused: byte 127 at 0 of a 17-byte value
+PASS  obs-text 128 at 14 of a 17-byte value is written
 PASS  refused: byte 0 at 14 of a 17-byte value
 PASS  refused: byte 10 at 14 of a 17-byte value
 PASS  refused: byte 13 at 14 of a 17-byte value
 PASS  refused: byte 31 at 14 of a 17-byte value
 PASS  refused: byte 127 at 14 of a 17-byte value
+PASS  obs-text 128 at 15 of a 17-byte value is written
 PASS  refused: byte 0 at 15 of a 17-byte value
 PASS  refused: byte 10 at 15 of a 17-byte value
 PASS  refused: byte 13 at 15 of a 17-byte value
 PASS  refused: byte 31 at 15 of a 17-byte value
 PASS  refused: byte 127 at 15 of a 17-byte value
+PASS  obs-text 128 at 16 of a 17-byte value is written
 PASS  refused: byte 0 at 16 of a 17-byte value
 PASS  refused: byte 10 at 16 of a 17-byte value
 PASS  refused: byte 13 at 16 of a 17-byte value
 PASS  refused: byte 31 at 16 of a 17-byte value
 PASS  refused: byte 127 at 16 of a 17-byte value
 PASS  a 31-byte value of text, HTAB and obs-text is written
+PASS  obs-text 128 at 0 of a 31-byte value is written
 PASS  refused: byte 0 at 0 of a 31-byte value
 PASS  refused: byte 10 at 0 of a 31-byte value
 PASS  refused: byte 13 at 0 of a 31-byte value
 PASS  refused: byte 31 at 0 of a 31-byte value
 PASS  refused: byte 127 at 0 of a 31-byte value
+PASS  obs-text 128 at 14 of a 31-byte value is written
 PASS  refused: byte 0 at 14 of a 31-byte value
 PASS  refused: byte 10 at 14 of a 31-byte value
 PASS  refused: byte 13 at 14 of a 31-byte value
 PASS  refused: byte 31 at 14 of a 31-byte value
 PASS  refused: byte 127 at 14 of a 31-byte value
+PASS  obs-text 128 at 15 of a 31-byte value is written
 PASS  refused: byte 0 at 15 of a 31-byte value
 PASS  refused: byte 10 at 15 of a 31-byte value
 PASS  refused: byte 13 at 15 of a 31-byte value
 PASS  refused: byte 31 at 15 of a 31-byte value
 PASS  refused: byte 127 at 15 of a 31-byte value
+PASS  obs-text 128 at 16 of a 31-byte value is written
 PASS  refused: byte 0 at 16 of a 31-byte value
 PASS  refused: byte 10 at 16 of a 31-byte value
 PASS  refused: byte 13 at 16 of a 31-byte value
 PASS  refused: byte 31 at 16 of a 31-byte value
 PASS  refused: byte 127 at 16 of a 31-byte value
+PASS  obs-text 128 at 17 of a 31-byte value is written
 PASS  refused: byte 0 at 17 of a 31-byte value
 PASS  refused: byte 10 at 17 of a 31-byte value
 PASS  refused: byte 13 at 17 of a 31-byte value
 PASS  refused: byte 31 at 17 of a 31-byte value
 PASS  refused: byte 127 at 17 of a 31-byte value
+PASS  obs-text 128 at 20 of a 31-byte value is written
 PASS  refused: byte 0 at 20 of a 31-byte value
 PASS  refused: byte 10 at 20 of a 31-byte value
 PASS  refused: byte 13 at 20 of a 31-byte value
 PASS  refused: byte 31 at 20 of a 31-byte value
 PASS  refused: byte 127 at 20 of a 31-byte value
+PASS  obs-text 128 at 25 of a 31-byte value is written
 PASS  refused: byte 0 at 25 of a 31-byte value
 PASS  refused: byte 10 at 25 of a 31-byte value
 PASS  refused: byte 13 at 25 of a 31-byte value
 PASS  refused: byte 31 at 25 of a 31-byte value
 PASS  refused: byte 127 at 25 of a 31-byte value
+PASS  obs-text 128 at 29 of a 31-byte value is written
 PASS  refused: byte 0 at 29 of a 31-byte value
 PASS  refused: byte 10 at 29 of a 31-byte value
 PASS  refused: byte 13 at 29 of a 31-byte value
 PASS  refused: byte 31 at 29 of a 31-byte value
 PASS  refused: byte 127 at 29 of a 31-byte value
+PASS  obs-text 128 at 30 of a 31-byte value is written
 PASS  refused: byte 0 at 30 of a 31-byte value
 PASS  refused: byte 10 at 30 of a 31-byte value
 PASS  refused: byte 13 at 30 of a 31-byte value
 PASS  refused: byte 31 at 30 of a 31-byte value
 PASS  refused: byte 127 at 30 of a 31-byte value
 PASS  a 32-byte value of text, HTAB and obs-text is written
+PASS  obs-text 128 at 0 of a 32-byte value is written
 PASS  refused: byte 0 at 0 of a 32-byte value
 PASS  refused: byte 10 at 0 of a 32-byte value
 PASS  refused: byte 13 at 0 of a 32-byte value
 PASS  refused: byte 31 at 0 of a 32-byte value
 PASS  refused: byte 127 at 0 of a 32-byte value
+PASS  obs-text 128 at 14 of a 32-byte value is written
 PASS  refused: byte 0 at 14 of a 32-byte value
 PASS  refused: byte 10 at 14 of a 32-byte value
 PASS  refused: byte 13 at 14 of a 32-byte value
 PASS  refused: byte 31 at 14 of a 32-byte value
 PASS  refused: byte 127 at 14 of a 32-byte value
+PASS  obs-text 128 at 15 of a 32-byte value is written
 PASS  refused: byte 0 at 15 of a 32-byte value
 PASS  refused: byte 10 at 15 of a 32-byte value
 PASS  refused: byte 13 at 15 of a 32-byte value
 PASS  refused: byte 31 at 15 of a 32-byte value
 PASS  refused: byte 127 at 15 of a 32-byte value
+PASS  obs-text 128 at 16 of a 32-byte value is written
 PASS  refused: byte 0 at 16 of a 32-byte value
 PASS  refused: byte 10 at 16 of a 32-byte value
 PASS  refused: byte 13 at 16 of a 32-byte value
 PASS  refused: byte 31 at 16 of a 32-byte value
 PASS  refused: byte 127 at 16 of a 32-byte value
+PASS  obs-text 128 at 17 of a 32-byte value is written
 PASS  refused: byte 0 at 17 of a 32-byte value
 PASS  refused: byte 10 at 17 of a 32-byte value
 PASS  refused: byte 13 at 17 of a 32-byte value
 PASS  refused: byte 31 at 17 of a 32-byte value
 PASS  refused: byte 127 at 17 of a 32-byte value
+PASS  obs-text 128 at 20 of a 32-byte value is written
 PASS  refused: byte 0 at 20 of a 32-byte value
 PASS  refused: byte 10 at 20 of a 32-byte value
 PASS  refused: byte 13 at 20 of a 32-byte value
 PASS  refused: byte 31 at 20 of a 32-byte value
 PASS  refused: byte 127 at 20 of a 32-byte value
+PASS  obs-text 128 at 25 of a 32-byte value is written
 PASS  refused: byte 0 at 25 of a 32-byte value
 PASS  refused: byte 10 at 25 of a 32-byte value
 PASS  refused: byte 13 at 25 of a 32-byte value
 PASS  refused: byte 31 at 25 of a 32-byte value
 PASS  refused: byte 127 at 25 of a 32-byte value
+PASS  obs-text 128 at 29 of a 32-byte value is written
 PASS  refused: byte 0 at 29 of a 32-byte value
 PASS  refused: byte 10 at 29 of a 32-byte value
 PASS  refused: byte 13 at 29 of a 32-byte value
 PASS  refused: byte 31 at 29 of a 32-byte value
 PASS  refused: byte 127 at 29 of a 32-byte value
+PASS  obs-text 128 at 30 of a 32-byte value is written
 PASS  refused: byte 0 at 30 of a 32-byte value
 PASS  refused: byte 10 at 30 of a 32-byte value
 PASS  refused: byte 13 at 30 of a 32-byte value
 PASS  refused: byte 31 at 30 of a 32-byte value
 PASS  refused: byte 127 at 30 of a 32-byte value
+PASS  obs-text 128 at 31 of a 32-byte value is written
 PASS  refused: byte 0 at 31 of a 32-byte value
 PASS  refused: byte 10 at 31 of a 32-byte value
 PASS  refused: byte 13 at 31 of a 32-byte value
 PASS  refused: byte 31 at 31 of a 32-byte value
 PASS  refused: byte 127 at 31 of a 32-byte value
 PASS  a 33-byte value of text, HTAB and obs-text is written
+PASS  obs-text 128 at 0 of a 33-byte value is written
 PASS  refused: byte 0 at 0 of a 33-byte value
 PASS  refused: byte 10 at 0 of a 33-byte value
 PASS  refused: byte 13 at 0 of a 33-byte value
 PASS  refused: byte 31 at 0 of a 33-byte value
 PASS  refused: byte 127 at 0 of a 33-byte value
+PASS  obs-text 128 at 14 of a 33-byte value is written
 PASS  refused: byte 0 at 14 of a 33-byte value
 PASS  refused: byte 10 at 14 of a 33-byte value
 PASS  refused: byte 13 at 14 of a 33-byte value
 PASS  refused: byte 31 at 14 of a 33-byte value
 PASS  refused: byte 127 at 14 of a 33-byte value
+PASS  obs-text 128 at 15 of a 33-byte value is written
 PASS  refused: byte 0 at 15 of a 33-byte value
 PASS  refused: byte 10 at 15 of a 33-byte value
 PASS  refused: byte 13 at 15 of a 33-byte value
 PASS  refused: byte 31 at 15 of a 33-byte value
 PASS  refused: byte 127 at 15 of a 33-byte value
+PASS  obs-text 128 at 16 of a 33-byte value is written
 PASS  refused: byte 0 at 16 of a 33-byte value
 PASS  refused: byte 10 at 16 of a 33-byte value
 PASS  refused: byte 13 at 16 of a 33-byte value
 PASS  refused: byte 31 at 16 of a 33-byte value
 PASS  refused: byte 127 at 16 of a 33-byte value
+PASS  obs-text 128 at 17 of a 33-byte value is written
 PASS  refused: byte 0 at 17 of a 33-byte value
 PASS  refused: byte 10 at 17 of a 33-byte value
 PASS  refused: byte 13 at 17 of a 33-byte value
 PASS  refused: byte 31 at 17 of a 33-byte value
 PASS  refused: byte 127 at 17 of a 33-byte value
+PASS  obs-text 128 at 20 of a 33-byte value is written
 PASS  refused: byte 0 at 20 of a 33-byte value
 PASS  refused: byte 10 at 20 of a 33-byte value
 PASS  refused: byte 13 at 20 of a 33-byte value
 PASS  refused: byte 31 at 20 of a 33-byte value
 PASS  refused: byte 127 at 20 of a 33-byte value
+PASS  obs-text 128 at 25 of a 33-byte value is written
 PASS  refused: byte 0 at 25 of a 33-byte value
 PASS  refused: byte 10 at 25 of a 33-byte value
 PASS  refused: byte 13 at 25 of a 33-byte value
 PASS  refused: byte 31 at 25 of a 33-byte value
 PASS  refused: byte 127 at 25 of a 33-byte value
+PASS  obs-text 128 at 29 of a 33-byte value is written
 PASS  refused: byte 0 at 29 of a 33-byte value
 PASS  refused: byte 10 at 29 of a 33-byte value
 PASS  refused: byte 13 at 29 of a 33-byte value
 PASS  refused: byte 31 at 29 of a 33-byte value
 PASS  refused: byte 127 at 29 of a 33-byte value
+PASS  obs-text 128 at 31 of a 33-byte value is written
 PASS  refused: byte 0 at 31 of a 33-byte value
 PASS  refused: byte 10 at 31 of a 33-byte value
 PASS  refused: byte 13 at 31 of a 33-byte value
 PASS  refused: byte 31 at 31 of a 33-byte value
 PASS  refused: byte 127 at 31 of a 33-byte value
+PASS  obs-text 128 at 32 of a 33-byte value is written
 PASS  refused: byte 0 at 32 of a 33-byte value
 PASS  refused: byte 10 at 32 of a 33-byte value
 PASS  refused: byte 13 at 32 of a 33-byte value
@@ -436,4 +491,4 @@ PASS  and writes only the bytes from the start on
 PASS  http1WriteLastChunk writes the last chunk at its offset
 PASS  and is HTTP1_NO_ROOM four bytes from the end
 PASS  http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter
-http1: 438 passed, 0 failed, 0 skipped
+http1: 493 passed, 0 failed, 0 skipped

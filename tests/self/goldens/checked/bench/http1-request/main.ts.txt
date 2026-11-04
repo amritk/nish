@@ -34808,12 +34808,13 @@ function b64(n: i32, seed: i32): string -> @b64
   local +1:9 parts: string[] (const)
   local +2:7 x: i32 (let)
   local +3:12 k: i32 (let)
-function jwt(): string -> @jwt
+function jwt(claims: i32, seed: i32): string -> @jwt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: claims seed
   calls: b64 nish_str_concat
   stackSites=0 stackLocals=0
-  callee +0:67 b64 -> @b64
-  callee +0:82 b64 -> @b64
+  callee +0:43 b64 -> @b64
+  callee +0:64 b64 -> @b64
 function browserHead(): string -> @browserHead
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: b64 jwt nish_str_concat
@@ -34822,9 +34823,9 @@ function browserHead(): string -> @browserHead
   callee +1:28 jwt -> @jwt
 function apiRequest(): string -> @apiRequest
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: b64 nish_str_concat nish_str_from_i32
+  calls: jwt nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-  callee +0:28 b64 -> @b64
+  callee +0:28 jwt -> @jwt
 function Case.constructor(this: Case, reads: u8[][], requests: i32, jsonBytes: i32): void -> @Case.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: jsonBytes reads requests

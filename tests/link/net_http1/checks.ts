@@ -914,7 +914,6 @@ export const http1Checks = (): i32 => {
   t.eqI32("and not one a byte shorter", http1WriteResponseHead(tailShort, zero, ok, "OK", none, none, zero, "close", date), HTTP1_NO_ROOM);
   // A date of five bytes with nothing after it leaves less than sixteen bytes
   // from Date: to the head's end, so its name takes the byte path.
-  const noContent: i32 = 204;
   const shortDate: u8[] = bytesOf("Fri,1");
   const shortHead: string = "HTTP/1.1 204 No Content\r\nDate: Fri,1\r\n\r\n";
   const shortRoom: u8[] = new Array<u8>(60);

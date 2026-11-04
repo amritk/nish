@@ -50,9 +50,9 @@ same with `--cpu x86-64-v3`:
 | Case | x86-64 nish | x86-64 base | base vs nish | x86-64-v3 nish | x86-64-v3 base | base vs nish |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `browser` | 12,236 | 13,159 | +7.5% | 13,720 | 14,716 | +7.3% |
-| `api` | 9,368 | 10,291 | +9.9% | 9,863 | 10,859 | +10.1% |
+| `api` | 9,584 | 10,507 | +9.6% | 10,248 | 11,244 | +9.7% |
 | `short` | 3,859 | 4,782 | +23.9% | 3,876 | 4,872 | +25.7% |
-| `pipelined` | 10,571 | 11,494 | +8.7% | 11,557 | 12,554 | +8.6% |
+| `pipelined` | 10,669 | 11,593 | +8.7% | 11,741 | 12,737 | +8.5% |
 | `split` | 12,574 | 13,497 | +7.3% | 14,065 | 15,061 | +7.1% |
 | `json1k` | 21,710 | 22,633 | +4.3% | 21,604 | 22,600 | +4.6% |
 | `json4k` | 74,517 | 75,440 | +1.2% | 74,004 | 75,000 | +1.3% |
@@ -156,7 +156,10 @@ offset, untouched either side, exactly fitting and one byte short; values of
 1, 15, 16, 17, 31, 32 and 33 bytes with HTAB and obs-text written, and NUL,
 LF, CR, 0x1f and DEL refused at bytes 0, 14, 15, 16, 17, 20, 25, 29 and the
 last two, each place once (so the overlap of the last two vectors is
-covered); an LF in the date at bytes 16, 20 and 28 refused; `http1PutText`
+covered), and obs-text 128 written at each of those places; NUL, LF, CR, 0x1f
+and DEL in the date at bytes 16, 20 and 28 refused; a five-byte date ending a
+204's head, which leaves `Date: ` the byte path, written with the bytes after
+it untouched and fitting a buffer exactly its size; `http1PutText`
 inside, past the end and before the start of its buffer.
 
 ## Measured time
@@ -165,35 +168,40 @@ Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, a shared cloud host.
 `--profile speed`, 16 rounds of 4 columns, against `--base 1d92417e`. Median
 ns an iteration; "band" is `nish-copy` against `nish`, the same bytes, and
 "base band" `base-copy` against `base`, so a difference inside them is noise.
+The `api` and `pipelined` rows were taken again after `api` took its 148-byte
+JWT; the others are from the round before, whose requests they share. `split`
+and the `json*` cases have instruction counts only, no timing.
 
 | Case | `--cpu` | Run | nish | base | base vs nish | band | base band |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | `browser` | x86-64 | 1 | 974.5 | 1139.8 | +17.0% | ±2.4% | ±11.8% |
 | `browser` | x86-64 | 2 | 1036.7 | 1401.1 | +35.2% | ±3.1% | ±0.3% |
-| `api` | x86-64 | 1 | 869.4 | 804.1 | −7.5% | ±5.6% | ±20.6% |
-| `api` | x86-64 | 2 | 963.7 | 946.1 | −1.8% | ±2.8% | ±10.8% |
+| `api` | x86-64 | 1 | 803.4 | 907.7 | +13.0% | ±3.2% | ±3.8% |
+| `api` | x86-64 | 2 | 826.9 | 908.7 | +9.9% | ±3.4% | ±2.4% |
 | `short` | x86-64 | 1 | 348.5 | 404.5 | +16.1% | ±4.2% | ±10.9% |
 | `short` | x86-64 | 2 | 375.4 | 388.3 | +3.4% | ±4.8% | ±15.1% |
-| `pipelined` | x86-64 | 1 | 1824.0 | 2051.7 | +12.5% | ±12.9% | ±15.3% |
-| `pipelined` | x86-64 | 2 | 1906.5 | 2054.0 | +7.7% | ±7.9% | ±10.9% |
+| `pipelined` | x86-64 | 1 | 1709.8 | 1869.2 | +9.3% | ±4.1% | ±2.4% |
+| `pipelined` | x86-64 | 2 | 1824.8 | 2006.5 | +10.0% | ±12.5% | ±4.7% |
 | `browser` | x86-64-v3 | 1 | 1407.9 | 1566.8 | +11.3% | ±3.6% | ±2.0% |
 | `browser` | x86-64-v3 | 2 | 1291.1 | 1643.3 | +27.3% | ±34.2% | ±10.5% |
-| `api` | x86-64-v3 | 1 | 961.2 | 1030.8 | +7.2% | ±6.7% | ±3.9% |
-| `api` | x86-64-v3 | 2 | 879.1 | 1154.1 | +31.3% | ±3.3% | ±14.8% |
+| `api` | x86-64-v3 | 1 | 1070.1 | 1211.0 | +13.2% | ±1.3% | ±16.1% |
+| `api` | x86-64-v3 | 2 | 942.0 | 1168.7 | +24.1% | ±12.3% | ±16.1% |
 | `short` | x86-64-v3 | 1 | 377.0 | 514.8 | +36.6% | ±5.3% | ±17.7% |
 | `short` | x86-64-v3 | 2 | 412.2 | 543.4 | +31.8% | ±8.6% | ±5.5% |
-| `pipelined` | x86-64-v3 | 1 | 1983.9 | 2511.5 | +26.6% | ±9.2% | ±12.2% |
-| `pipelined` | x86-64-v3 | 2 | 2580.8 | 2444.6 | −5.3% | ±17.4% | ±3.8% |
+| `pipelined` | x86-64-v3 | 1 | 2008.4 | 2287.3 | +13.9% | ±6.5% | ±2.3% |
+| `pipelined` | x86-64-v3 | 2 | 2295.4 | 2339.1 | +1.9% | ±5.4% | ±2.2% |
 
-Read from the table: two gains repeat outside the band on both runs,
-`browser` at x86-64 (+17.0%, +35.2%) and `short` at x86-64-v3 (+36.6%,
-+31.8%). `api` at x86-64 is slower on both runs (−7.5%, −1.8%), inside the
-base's band. The rest move by more than their bands from run to run. Several
-gains are far larger than the 7% to 26% instruction cut, and one case loses
-time while running fewer instructions, so the wall clock here is partly code
-layout and mostly the host's noise. The instruction counts carry the ranking;
-the time table says only that no case got repeatably slower outside its
-bands.
+Read from the table: three gains repeat outside both bands on both runs:
+`browser` at x86-64 (+17.0%, +35.2%), `short` at x86-64-v3 (+36.6%, +31.8%)
+and `api` at x86-64 (+13.0%, +9.9%, against bands of ±3.2/±3.8 and
+±3.4/±2.4). With the 254-byte `api` head, the round before, `api` at
+x86-64-v3 also repeated (+7.2% against ±6.7/±3.9, clearing its band by only
+0.5 points, and +31.3% against ±3.3/±14.8); with the JWT it is inside its
+base's ±16.1% band on both runs. The rest move by more than their bands from
+run to run. Several gains are far larger than the 7% to 26% instruction cut,
+so the wall clock here is partly code layout and mostly the host's noise. The
+instruction counts carry the ranking; the time table says only that no case
+got repeatably slower outside its bands.
 
 ## Candidates for the next cut
 
@@ -207,8 +215,8 @@ cost, not all of it. The next cut takes the first.
 | 2 | Compare a name with the five the parser reads by length first and one 8- or 16-byte compare (`http1HeadIs`, `http1EndOfHead`, `http1ConnectionOptions`) | ~1,510 | `http1HeadIs`, lines 745–757 (~1,060), and the three loops over the fields (~450); shared with `headerIndex` and `methodIs` |
 | 3 | Hold the head without copying each line in `http1HeadAppend` when it is already contiguous in the input | ~885 | the field lines' call at line 1029 (~805) and the request line's (~80), `memcpy` included; the copy exists for H1-5, so this needs the input buffer kept until the response is done, a security-record change |
 | 4 | Trim OWS and walk the target with a vector scan | ~640 | lines 1063 and 1066 (~330), 964–965 (~310) |
-| 5 | Record the method once as a code when the request line is read, so `methodIs` is one compare | not split out | inside candidate 2's `http1HeadIs` lines; grows with the router's calls |
-| 6 | The remaining head-writer stores: CRLF as one 2-byte store, `http1PutBytes` and `http1PutDecimal` | 217 | the function table |
+| 5 | The remaining head-writer stores: CRLF as one 2-byte store, `http1PutBytes` and `http1PutDecimal` | 217 | the function table |
+| 6 | Record the method once as a code when the request line is read, so `methodIs` is one compare | 30–50 | the bench counted with its router's `methodIs` chain replaced by a constant: 30 fewer on `browser` (a GET, one call), 41 on `short`, 50 on `api` (a POST, two calls); a router testing more methods first pays more |
 | — | `JsonWriter.i32` and `jsonWriterPutString` | 388 | the function table; `std/json.ts`, outside this bench's files, for the copies-checks stage |
 
 The per-line counts behind those estimates: exclusive instructions a
