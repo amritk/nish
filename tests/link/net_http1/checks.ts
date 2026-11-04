@@ -779,12 +779,14 @@ export const http1Checks = (): i32 => {
   // first two) is a 400, as is a name with no colon that ends its line.
   const nameLengths: i32[] = [15, 16, 17, 31, 32, 33];
   const mixed: string = "Ab-C_d^E`f|G~h!I#j$K%l&M'n*O+p.Q9rStUvWxYz";
+  const lowered: string = "ab-c_d^e`f|g~h!i#j$k%l&m'n*o+p.q9rstuvwxyz";
+  const raised: string = "AB-C_D^E`F|G~H!I#J$K%L&M'N*O+P.Q9RSTUVWXYZ";
   for (let l: i32 = 0; l < toI32(nameLengths.length); l += 1) {
     const n: i32 = nameLengths[l];
     const name: string = mixed.substring(0, n);
-    const named: Fed = fedWith(`GET / HTTP/1.1\r\nHost: a\r\n${name}:VaL Ue\r\n${name.toUpperCase()}: X\r\n\r\n`);
-    const lower: string = name.toLowerCase();
-    t.eqStr(`a ${n}-byte name is lowered and its value kept`, named.event === HTTP1_HEAD ? describeHead(named.p) : "refused", `GET / 1.1 keep length 0 up= [host=a; ${lower}=VaL Ue; ${lower}=X]`);
+    const named: Fed = fedWith(`GET / HTTP/1.1\r\nHost: a\r\n${name}:VaL Ue\r\n${raised.substring(0, n)}: X\r\n\r\n`);
+    const lower: string = lowered.substring(0, n);
+    t.eqStr(`a ${n}-byte name is lowered and its value kept`, named.event === HTTP1_HEAD ? describeHead(named.p) : "refused", `GET / 1.1 keep length -1 up= [host=a; ${lower}=VaL Ue; ${lower}=X]`);
     let refusals: i32 = 0;
     for (let at: i32 = 0; at < n; at += 1) {
       const bad: string = `${name.substring(0, at)}@${name.substring(at + 1, n)}`;
