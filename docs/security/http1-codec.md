@@ -216,6 +216,37 @@ clock step, with `Arena.used()` flat; a pool's slots share one. Tests:
 each the template `link/${name}: exits with ${wantCode} and stdout matches
 expected.out` in `tests/run.js`.
 
+**A faster head writer writes the same bytes** (`net_http1`, `_f64`,
+2026-11-04, written against `main` at `1d92417e`). `http1WriteResponseHead`
+checks each field value and the date sixteen bytes at a time (`http1BytesAreFieldText`, `http1LanesAreFieldText`): a lane
+below 32 that is not HTAB, or DEL, refuses, exactly `http1IsValueByte`, and
+the last vector ends at the last byte, overlapping the one before it; under
+sixteen bytes it is checked a byte at a time. It writes the status line and
+the `Date: `, `Content-Length: ` and `Connection: ` names as one sixteen-byte
+store each (`http1PutStatusLine`, `http1PutFixed`), only where
+`at + 16` stays inside the head it has already counted (`need`), whose every
+byte from there on is written after, so the lanes past the text are
+overwritten and no byte past the head is touched; anywhere else they are
+written a byte at a time, as before. `http1PutText`, which the head writer,
+`http1WriteLastChunk` and other callers share, tests once that the whole text
+fits (`0 <= at <= out.length - text.length`) and then copies it with no check
+in the loop; a text that does not fit takes the old loop, which writes the
+bytes that land inside `out` and none outside, and both answer `at +
+text.length`. Nothing it accepts or refuses changes.
+Tests: `the smallest head is 17 bytes`, `and the bytes after it are
+untouched`, `it fits a buffer of 17`, `and not one of 16`, `a head with every
+fixed field, at an offset, leaves the bytes either side of it alone`, `and fits
+a buffer exactly its size`, `and not one a byte shorter`, `each status digit
+and a long length land in place`, and, for values of 1, 15, 16, 17, 31, 32 and
+33 bytes, `a <n>-byte value of text, HTAB and obs-text is written` and
+`refused: byte <b> at <k> of a <n>-byte value` for NUL, LF, CR, 0x1f and DEL at
+the first byte, bytes 14, 15, 16, 17, 20, 25 and 29 (the bytes the last
+vector shares with the one before, in a 31- or 33-byte value) and the last two,
+each place once, and `refused: an LF at <k> of a 29-byte date` at bytes 16, 20
+and 28, and `a text past the end still answers at + length`, `and writes only
+the bytes inside the buffer` and their before-the-start twins for `http1PutText`, in `tests/link/net_http1`
+and `_f64` (`link/net_http1: exits with 0 and stdout matches expected.out`).
+
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless
 it asked for keep-alive, which is then answered with `Connection: keep-alive`;

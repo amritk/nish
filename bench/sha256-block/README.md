@@ -16,7 +16,12 @@ proves the same thing by counting calls.
 node bench/sha256-block/run.mjs --compiler build/seed/bin/nish        # 11+ interleaved rounds
 node bench/sha256-block/run.mjs --binary old=<path to an older build of main.ts>
 node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --variant locals+maj+nested --variant v3
+node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --cpu x86-64-v3  # main.ts and variants at v3
+node bench/sha256-block/run.mjs --compiler build/seed/bin/nish --validate       # checksums only, no timing
 ```
+
+`--avx2` adds a `nish (avx2)` column. It needs a compiler built with
+`avx2.patch` ("An AVX2 message schedule" below).
 
 The `old=` comparator is `main.ts` built the way `run.mjs` builds it, by a
 compiler whose `std/` has the old body (a release from before the change):
@@ -31,6 +36,7 @@ tree's. They are the same file until a release changes it.
 | `main.ts` | Runs `main <kernel> <size> <iterations>` under `bench/crypto/README.md`'s contract. The kernels are `block` (`sha256` of a `size`-byte message), `hmac` (`hmacSha256` under a 32-byte key), `hs256` (`jwtSignString` then `JwtVerifier.verifyString`) and `pbkdf2` (`pbkdf2HmacSha256` with `size` iterations, 32 bytes out). |
 | `openssl.c` | `block` and `hmac` against libcrypto, built with `clang -O2`. Its `hmac` is the one-shot `HMAC(EVP_sha256(), …)`, which fetches the digest and keys a context on every call. |
 | `variants.mjs` | The rewrites of `sha256Compress` that "Trying to close the gap" times, as edits to `sha256.ts` that refuse a file of another shape. |
+| `avx2.patch` | The AVX2 message-schedule kernel "An AVX2 message schedule" measures, as a patch to `runtime/runtime-sha256.c`. |
 | `tsc.c` | The TSC's rate: rdtsc around a 500 ms `CLOCK_MONOTONIC` wait, best of five. |
 
 ## The OpenSSL masks
@@ -193,6 +199,141 @@ on this CPU:
 | hmac | `hmacSha256` over the same edges under a 32 B key, keys of 63, 64, 65 and 128 B, then 200 seeded keys 0..200 B and messages 0..1000 B | 2732 | 0 |
 | hs256 | 50 `jwtSignString` + `verifyString` under an HS256 key | 974 | 0 |
 | pbkdf2 | 10 `pbkdf2HmacSha256` runs (`hmacCopySha256` per U_j) | 8774 | 0 |
+
+## An AVX2 message schedule (measured, not built)
+
+The question: does a C kernel pay on a CPU with AVX2 and no SHA-NI? The
+kernel would vectorise the message schedule and keep the rounds scalar. The
+bar was more than 10% over the Nish body, outside the noise band, on two
+runs, and that includes the 64-byte single-block case. **It does not clear
+the bar.** The kernel is kept as `avx2.patch`, and the runtime is unchanged.
+
+### The kernel
+
+`avx2.patch` adds `nish_sha256_block_avx2` to `runtime/runtime-sha256.c`:
+
+- **The schedule.** It computes four schedule words per step in an xmm
+  register, with σ0 and σ1 as shifts and ors. σ1 runs in two halves, because
+  the upper two words of each step depend on the lower two.
+- **The rounds.** They stay scalar (`rorx`, `andn`) and interleave with the
+  schedule steps, so the vector work overlaps the round chain.
+- **No stack buffer.** It writes W[0..63] into the caller's `w`, as the Nish
+  body does. `std/crypto/hmac.ts` already wipes that buffer, so the kernel
+  leaves no schedule on the stack.
+- **Constant time.** It has no branch or memory index that depends on the
+  data.
+- **The CPU check.** CPUID leaf 1 must report AVX and OSXSAVE, `xgetbv` must
+  show XMM and YMM state enabled, and CPUID leaf 7 must report AVX2, BMI1
+  and BMI2.
+- **The resolver.** It answers 3 when the SHA-NI check fails and the AVX2
+  check passes. `NISH_SHA256=avx2` asks for 3 even on a SHA-NI CPU, and gets
+  the Nish body on a CPU without AVX2. `soft` still forces the Nish body, and
+  SHA-NI stays preferred.
+- **Builds.** It is `__attribute__((target("avx2,bmi,bmi2"), noinline))`, so
+  baseline x86-64 builds compile it without `-mavx2`. AArch64 and WASM builds
+  never see it.
+
+With the AVX2 path forced, it passes `tests/simd/sha256.c` (20,020 cases
+agree). It compiles warning-free for x86-64, aarch64-linux-gnu and
+wasm32-wasi.
+
+### The numbers
+
+The CPU: Intel(R) Xeon(R) Processor @ 2.10GHz (avx2 yes, bmi2 yes, sha_ni
+yes, avx512f yes). TSC 2.100 GHz, 4 cores, OpenSSL 3.0.13. Each run is
+`run.mjs --avx2` with 14–16 interleaved rounds. Each cell is a median
+ns / TSC cycles, and "vs soft" is the median against `nish-soft`'s. The band
+is `nish-soft-copy` against `nish-soft`.
+
+`main.ts` built for the default x86-64:
+
+| Case | nish-soft | nish (avx2) | vs soft | band | nish (sha-ni) |
+| --- | --- | --- | --- | --- | --- |
+| block 16 KiB, run 1 | 267.6 / 562 | 201.9 / 424 | −24.6% | ±5.5% | 58.0 / 122 |
+| block 16 KiB, run 2 | 221.7 / 466 | 202.6 / 425 | −8.6% | ±6.9% | 51.3 / 108 |
+| block 64 B, run 1 | 392.3 / 824 | 371.4 / 780 | −5.3% | ±6.2% | 219.7 / 461 |
+| block 64 B, run 2 | 367.3 / 771 | 330.8 / 695 | −9.9% | ±3.1% | 198.3 / 416 |
+| hmac-sha256 64 B, run 1 | 1787.6 | 1559.5 | −12.8% | ±1.4% | 978.9 |
+| hmac-sha256 64 B, run 2 | 1897.5 | 1650.8 | −13.0% | ±6.6% | 953.6 |
+| hs256 sign+verify, run 1 / 2 | 5637.1 / 5192.9 | 5632.7 / 4837.4 | −0.1% / −6.8% | ±4.2% / ±2.5% | 4732.1 / 3992.6 |
+| pbkdf2 1000, run 1 / 2 (µs) | 634.6 / 563.4 | 521.0 / 504.0 | −17.9% / −10.5% | ±4.3% / ±4.1% | 234.3 / 232.1 |
+
+`main.ts` built with `--cpu x86-64-v3`, as a server build would be:
+
+| Case | nish-soft | nish (avx2) | vs soft | band | nish (sha-ni) |
+| --- | --- | --- | --- | --- | --- |
+| block 16 KiB, run 1 | 199.1 / 418 | 201.9 / 424 | +1.4% | ±1.7% | 50.8 / 107 |
+| block 16 KiB, run 2 | 204.4 / 429 | 210.7 / 443 | +3.1% | ±0.3% | 48.4 / 102 |
+| block 64 B, run 1 | 330.4 / 694 | 326.7 / 686 | −1.1% | ±11.4% | 198.4 / 417 |
+| block 64 B, run 2 | 340.9 / 716 | 340.4 / 715 | −0.2% | ±0.8% | 195.6 / 411 |
+| hmac-sha256 64 B, run 1 / 2 | 1709.7 / 1634.0 | 1661.4 / 1653.7 | −2.8% / +1.2% | ±1.2% / ±1.7% | 937.4 / 931.6 |
+| hs256 sign+verify, run 1 / 2 | 5258.5 / 5111.5 | 5641.1 / 4920.6 | +7.3% / −3.7% | ±3.5% / ±3.3% | 4290.1 / 4012.4 |
+| pbkdf2 1000, run 1 / 2 (µs) | 492.1 / 505.6 | 519.4 / 504.8 | +5.5% / −0.2% | ±0.3% / ±0.6% | 230.7 / 229.6 |
+
+OpenSSL on the same runs, as 16 KiB / 64 B median ns a block. `openssl.c` is
+built the same way under both `--cpu` settings, so the v3 rows only re-measure
+the default ones:
+
+| Build | scalar | AVX2 | SHA-NI |
+| --- | --- | --- | --- |
+| default, run 1 | 208.0 / 285.6 | 173.3 / 215.9 | 45.8 / 82.4 |
+| default, run 2 | 192.1 / 225.5 | 155.7 / 203.5 | 42.9 / 78.9 |
+| v3, run 1 | 190.3 / 219.2 | 156.1 / 194.5 | 43.9 / 76.9 |
+| v3, run 2 | 192.1 / 215.3 | 154.9 / 193.1 | 44.4 / 79.0 |
+
+Instructions per block, under `valgrind --tool=callgrind`. Valgrind does not
+report SHA-NI, so the default path there takes the AVX2 kernel:
+
+| Message | default soft | default avx2 | v3 soft | v3 avx2 |
+| --- | --- | --- | --- | --- |
+| 64 B | 3765 | 2729 | 3168 | 2728 |
+| 16 KiB | 3475 | 2439 | 2889 | 2449 |
+
+### Why it misses
+
+- **Fewer instructions, same time.** At v3 the kernel runs about 15% fewer
+  instructions a block than the Nish body, yet takes the same time. The 64
+  rounds are one dependency chain through `a` and `e`, and that chain sets
+  the time. The schedule, the part the kernel vectorises, already ran in the
+  chain's shadow.
+- **The v3 body already has the tricks.** At `--cpu x86-64-v3`, LLVM already
+  gives the Nish body `rorx` and `andn`, the instruction choices that make
+  OpenSSL's AVX2 body fast. That leaves the kernel only the schedule to win.
+- **The default build gains, but not enough.** Against a body built without
+  `rorx`, the kernel wins on the multi-block case (−24.6% and −8.6%) and on
+  HMAC (−13%). The 64-byte case is −5.3% and −9.9%, neither above 10%, and
+  run 1 is inside its band.
+
+### What shipping it would need
+
+The kernel would also have to pass two gates in `tests/`, which this change
+does not own:
+
+- **The `.text` budget.** `tests/runtime-budgets.js` holds
+  `clang -Oz -c runtime/runtime-sha256.c`'s `.text` to 512 bytes. It is 495
+  today, and 3453 with the patch.
+- **The call check.** `tests/ct-asm-runtime.js` refuses a call inside a listed
+  kernel, and `nish_sha256_compress` is listed. The AVX2 body has to be a
+  separate `noinline` function, because inlining it into the compress
+  function would compile the SHA-NI path with AVX enabled. The SSE
+  instructions would then be VEX-encoded and fault on a CPU with SHA and no
+  AVX, such as Goldmont.
+
+### Rerunning it
+
+```bash
+set -o pipefail
+git apply bench/sha256-block/avx2.patch
+npm run build
+node bench/sha256-block/run.mjs --compiler build/nish --avx2 --validate
+node bench/sha256-block/run.mjs --compiler build/nish --avx2 | tee build/sha256-avx2-default.txt
+node bench/sha256-block/run.mjs --compiler build/nish --avx2 --cpu x86-64-v3 | tee build/sha256-avx2-v3.txt
+git apply -R bench/sha256-block/avx2.patch && npm run build
+```
+
+On a CPU without SHA-NI, such as Cascade Lake (target B), `nish (sha-ni)`
+also runs the AVX2 kernel. On target B, the row to read is `nish (avx2)`
+against `nish-soft` on the 64 B row, at `--cpu x86-64-v3`.
 
 ## Multibuffer
 
