@@ -1,0 +1,29 @@
+PASS  0 bytes: round trip, every position refused, one short, stray bits
+PASS  1 bytes: round trip, every position refused, one short, stray bits
+PASS  2 bytes: round trip, every position refused, one short, stray bits
+PASS  3 bytes: round trip, every position refused, one short, stray bits
+PASS  4 bytes: round trip, every position refused, one short, stray bits
+PASS  5 bytes: round trip, every position refused, one short, stray bits
+PASS  6 bytes: round trip, every position refused, one short, stray bits
+PASS  7 bytes: round trip, every position refused, one short, stray bits
+PASS  8 bytes: round trip, every position refused, one short, stray bits
+PASS  9 bytes: round trip, every position refused, one short, stray bits
+PASS  10 bytes: round trip, every position refused, one short, stray bits
+PASS  11 bytes: round trip, every position refused, one short, stray bits
+PASS  0 characters decode to 0 bytes (-1 is refused)
+PASS  1 characters decode to -1 bytes (-1 is refused)
+PASS  2 characters decode to 1 bytes (-1 is refused)
+PASS  3 characters decode to 2 bytes (-1 is refused)
+PASS  4 characters decode to 3 bytes (-1 is refused)
+PASS  5 characters decode to -1 bytes (-1 is refused)
+PASS  6 characters decode to 4 bytes (-1 is refused)
+PASS  7 characters decode to 5 bytes (-1 is refused)
+PASS  8 characters decode to 6 bytes (-1 is refused)
+PASS  9 characters decode to -1 bytes (-1 is refused)
+PASS  10 characters decode to 7 bytes (-1 is refused)
+PASS  11 characters decode to 8 bytes (-1 is refused)
+PASS  12 characters decode to 9 bytes (-1 is refused)
+PASS  13 characters decode to -1 bytes (-1 is refused)
+PASS  14 characters decode to 10 bytes (-1 is refused)
+PASS  15 characters decode to 11 bytes (-1 is refused)
+base64url groups: 28 passed, 0 failed, 0 skipped

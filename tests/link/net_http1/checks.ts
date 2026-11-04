@@ -32,6 +32,7 @@ import {
   http1BytesAre,
   http1Chunk,
   http1LastChunk,
+  http1PutText,
   http1ResponseHead,
   http1WriteChunk,
   http1WriteLastChunk,
@@ -874,8 +875,95 @@ export const http1Checks = (): i32 => {
   const datedExact: u8[] = new Array<u8>(datedEnd);
   t.eqI32("and fits a buffer exactly its size", http1WriteResponseHead(datedExact, zero, ok, "OK", names, values, five, "close", date), datedEnd);
   t.eqI32("refused: a date that is not field text", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "", bytesOf("a\r\nX: y")), HTTP1_REFUSED);
+  const datePlaces: i32[] = [16, 20, 28];
+  const dateBads: i32[] = [0, 10, 13, 31, 127];
+  for (const k of datePlaces) {
+    for (const b of dateBads) {
+      const badDate: u8[] = bytesOf("Fri, 16 Oct 2026 08:11:54 GMT");
+      badDate[k] = toU8(b);
+      t.eqI32(`refused: byte ${b} at ${k} of a 29-byte date`, http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "", badDate), HTTP1_REFUSED);
+    }
+  }
   const badEarlyEnd: i32 = http1WriteResponseHead(out, zero, informational, "Early Hints", none, none, HTTP1_NO_BODY, "", bytesOf("a\r\nX: y"));
   t.eqStr("but not on a 1xx, which sends no date", badEarlyEnd < 0 ? "refused" : textOf(out, zero, badEarlyEnd), "HTTP/1.1 103 Early Hints\r\n\r\n");
+
+  // The fixed text goes out sixteen bytes at a time, overwritten by the head's
+  // next bytes: none lands past the head, at its end or one short of it.
+  const smallest: u8[] = new Array<u8>(40);
+  smallest.fill(toU8(120));
+  const continueStatus: i32 = 100;
+  const smallestEnd: i32 = http1WriteResponseHead(smallest, zero, continueStatus, "", none, none, HTTP1_NO_BODY, "", noDate);
+  t.eqStr("the smallest head is 17 bytes", smallestEnd < 0 ? "refused" : textOf(smallest, zero, smallestEnd), "HTTP/1.1 100 \r\n\r\n");
+  t.eqStr("and the bytes after it are untouched", textOf(smallest, smallestEnd, 23), "xxxxxxxxxxxxxxxxxxxxxxx");
+  const smallestExact: u8[] = new Array<u8>(17);
+  t.eqI32("it fits a buffer of 17", http1WriteResponseHead(smallestExact, zero, continueStatus, "", none, none, HTTP1_NO_BODY, "", noDate), toI32(17));
+  const smallestShort: u8[] = new Array<u8>(16);
+  t.eqI32("and not one of 16", http1WriteResponseHead(smallestShort, zero, continueStatus, "", none, none, HTTP1_NO_BODY, "", noDate), HTTP1_NO_ROOM);
+  const tail: u8[] = new Array<u8>(150);
+  tail.fill(toU8(120));
+  const tailAt: i32 = 50;
+  const tailEnd: i32 = http1WriteResponseHead(tail, tailAt, ok, "OK", none, none, zero, "close", date);
+  t.eqStr(
+    "a head with every fixed field, at an offset, leaves the bytes either side of it alone",
+    tailEnd < 0 ? "refused" : `${textOf(tail, tailAt - 2, 2)}|${textOf(tail, tailAt, tailEnd - tailAt)}|${textOf(tail, tailEnd, toI32(150) - tailEnd)}`,
+    "xx|HTTP/1.1 200 OK\r\nDate: Fri, 16 Oct 2026 08:11:54 GMT\r\nContent-Length: 0\r\nConnection: close\r\n\r\n|xxxxxx"
+  );
+  const tailFit: u8[] = new Array<u8>(tailEnd - tailAt);
+  t.eqI32("and fits a buffer exactly its size", http1WriteResponseHead(tailFit, zero, ok, "OK", none, none, zero, "close", date), tailEnd - tailAt);
+  const tailShort: u8[] = new Array<u8>(tailEnd - tailAt - 1);
+  t.eqI32("and not one a byte shorter", http1WriteResponseHead(tailShort, zero, ok, "OK", none, none, zero, "close", date), HTTP1_NO_ROOM);
+  // A date of five bytes with nothing after it leaves less than sixteen bytes
+  // from Date: to the head's end, so its name takes the byte path.
+  const shortDate: u8[] = bytesOf("Fri,1");
+  const shortHead: string = "HTTP/1.1 204 No Content\r\nDate: Fri,1\r\n\r\n";
+  const shortRoom: u8[] = new Array<u8>(60);
+  shortRoom.fill(toU8(120));
+  const shortEnd: i32 = http1WriteResponseHead(shortRoom, zero, noContent, "No Content", none, none, HTTP1_NO_BODY, "", shortDate);
+  t.eqStr("a five-byte date ending the head is written", shortEnd < 0 ? "refused" : textOf(shortRoom, zero, shortEnd), shortHead);
+  t.eqStr("and the bytes after it are untouched", textOf(shortRoom, shortEnd, toI32(60) - shortEnd), "xxxxxxxxxxxxxxxxxxxx");
+  const shortExact: u8[] = new Array<u8>(toI32(shortHead.length));
+  t.eqI32(
+    "and it fits a buffer exactly its size",
+    http1WriteResponseHead(shortExact, zero, noContent, "No Content", none, none, HTTP1_NO_BODY, "", shortDate),
+    toI32(shortHead.length)
+  );
+  const wide: i32 = 599;
+  const wideEnd: i32 = http1WriteResponseHead(out, zero, wide, "", none, none, toI32(123456789), "", noDate);
+  t.eqStr("each status digit and a long length land in place", textOf(out, zero, wideEnd), "HTTP/1.1 599 \r\nContent-Length: 123456789\r\n\r\n");
+
+  // A field value is checked sixteen bytes at a time, the last vector ending
+  // at its last byte: a bad byte anywhere, the first or the last, is refused.
+  const lengths: i32[] = [1, 15, 16, 17, 31, 32, 33];
+  const bads: i32[] = [0, 10, 13, 31, 127];
+  for (const n of lengths) {
+    const fine: u8[] = new Array<u8>(n);
+    fine.fill(toU8(97));
+    fine[n - 1] = toU8(9);
+    fine[0] = toU8(255);
+    t.ok(`a ${n}-byte value of text, HTAB and obs-text is written`, http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [fine], zero, "", noDate) > 0);
+    // The first byte, both sides of the first vector's end, the overlap the
+    // last vector shares with the one before (17 to 29 of a 31- or 33-byte
+    // value), and the last two; each place once.
+    const wanted: i32[] = [0, 14, 15, 16, 17, 20, 25, 29, n - 2, n - 1];
+    const places: i32[] = [];
+    for (const k of wanted) {
+      if (k >= 0 && k < n && places.indexOf(k) < 0) {
+        places.push(k);
+      }
+    }
+    for (const k of places) {
+      const high: u8[] = new Array<u8>(n);
+      high.fill(toU8(97));
+      high[k] = toU8(128);
+      t.ok(`obs-text 128 at ${k} of a ${n}-byte value is written`, http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [high], zero, "", noDate) > 0);
+      for (const b of bads) {
+        const bad: u8[] = new Array<u8>(n);
+        bad.fill(toU8(97));
+        bad[k] = toU8(b);
+        t.eqI32(`refused: byte ${b} at ${k} of a ${n}-byte value`, http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [bad], zero, "", noDate), HTTP1_REFUSED);
+      }
+    }
+  }
 
   const chunkEnd: i32 = http1WriteChunk(out, toI32(3), digits, one, seventeen);
   t.eqStr("http1WriteChunk writes the chunk at its offset", textOf(out, toI32(3), chunkEnd - 3), "11\r\n123456789abcdefgh\r\n");
@@ -883,6 +971,19 @@ export const http1Checks = (): i32 => {
   const tight: u8[] = new Array<u8>(15);
   t.eqI32("a chunk that just fits is written", http1WriteChunk(tight, zero, digits, zero, ten), toI32(15));
   t.eqI32("one byte further on it is HTTP1_NO_ROOM", http1WriteChunk(tight, one, digits, zero, ten), HTTP1_NO_ROOM);
+
+  // http1PutText copies a text that fits with one test; one that does not
+  // writes only the bytes inside the buffer, and either answers at + length.
+  const put: u8[] = new Array<u8>(6);
+  put.fill(toU8(46));
+  t.eqI32("http1PutText answers the offset after a text that fits", http1PutText(put, toI32(2), "abcd"), toI32(6));
+  t.eqStr("and writes it in place", textOf(put, zero, toI32(6)), "..abcd");
+  put.fill(toU8(46));
+  t.eqI32("a text past the end still answers at + length", http1PutText(put, toI32(4), "abcd"), toI32(8));
+  t.eqStr("and writes only the bytes inside the buffer", textOf(put, zero, toI32(6)), "....ab");
+  put.fill(toU8(46));
+  t.eqI32("a text from before the start answers at + length", http1PutText(put, toI32(-2), "abcd"), toI32(2));
+  t.eqStr("and writes only the bytes from the start on", textOf(put, zero, toI32(6)), "cd....");
 
   const lastEnd: i32 = http1WriteLastChunk(out, toI32(3));
   t.eqStr("http1WriteLastChunk writes the last chunk at its offset", textOf(out, toI32(3), lastEnd - 3), "0\r\n\r\n");

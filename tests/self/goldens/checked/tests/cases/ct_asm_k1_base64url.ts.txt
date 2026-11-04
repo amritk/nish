@@ -10,13 +10,13 @@ unsafe import 31:38 wrappingAdd from "nish:unsafe"
 unsafe call 71:31 uncheckedGet (node 354)
 unsafe call 75:7 uncheckedSet (node 377)
 unsafe call 76:11 wrappingAdd (node 404)
-unsafe call 91:43 uncheckedGet (node 455)
-unsafe call 94:43 uncheckedGet (node 499)
-unsafe call 97:3 uncheckedSet (node 530)
-unsafe call 98:43 uncheckedGet (node 560)
-unsafe call 101:3 uncheckedSet (node 591)
-unsafe call 102:43 uncheckedGet (node 621)
-unsafe call 105:3 uncheckedSet (node 652)
+unsafe call 87:43 uncheckedGet (node 448)
+unsafe call 88:43 uncheckedGet (node 468)
+unsafe call 89:43 uncheckedGet (node 488)
+unsafe call 90:43 uncheckedGet (node 508)
+unsafe call 93:3 uncheckedSet (node 565)
+unsafe call 94:3 uncheckedSet (node 579)
+unsafe call 95:3 uncheckedSet (node 596)
 function base64urlRangeMask(c: i32, lo: i32, hi: i32): i32 -> @base64urlRangeMask
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -64,13 +64,13 @@ function base64urlDecodeGroup(text: u8[], out: u8[]): i32 -> @base64urlDecodeGro
   pointer text: size=0 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -8:7 bad: i32 (let)
-  local -7:7 acc: i32 (let)
-  local -6:9 v0: i32 (const)
+  local -7:7 bad: i32 (let)
+  local -6:9 s0: i32 (const)
   callee -6:19 base64urlSextetOf -> @base64urlSextetOf
-  local -3:9 v1: i32 (const)
+  local -5:9 s1: i32 (const)
+  callee -5:19 base64urlSextetOf -> @base64urlSextetOf
+  local -4:9 s2: i32 (const)
+  callee -4:19 base64urlSextetOf -> @base64urlSextetOf
+  local -3:9 s3: i32 (const)
   callee -3:19 base64urlSextetOf -> @base64urlSextetOf
-  local +1:9 v2: i32 (const)
-  callee +1:19 base64urlSextetOf -> @base64urlSextetOf
-  local +5:9 v3: i32 (const)
-  callee +5:19 base64urlSextetOf -> @base64urlSextetOf
+  local -1:9 word: i32 (const)

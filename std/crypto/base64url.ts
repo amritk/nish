@@ -127,8 +127,9 @@ export const base64urlEncode = (data: u8[]): string => {
  * one canonical spelling of any byte string — see the module comment for the
  * five refusals.
  *
- * The same accumulator as `base64urlEncode`, run the other way: six bits in per
- * character, eight out per byte.
+ * Each group of four characters becomes one 24-bit word, six bits a
+ * character, which splits into three bytes; a short final group of two or
+ * three characters fills the top of the word and gives one or two.
  */
 export const base64urlDecode = (text: string): u8[] | null => {
   // A text past 2^31 - 1 bytes is refused before `toI32`, which would
@@ -148,31 +149,51 @@ export const base64urlDecode = (text: string): u8[] | null => {
   // short final group; `n * 3 / 4` would overflow for a text over 700 MB.
   const out: u8[] = new Array<u8>((n >> 2) * 3 + (tail === 0 ? 0 : tail - 1))
   const outLen: i32 = toI32(out.length)
-  // All ones once any character is outside the alphabet (its sextet of `-1`
+  // All ones once any character is outside the alphabet (a sextet of `-1`
   // shifted right by 31), and non-zero once the text ends on a bit that
   // encodes no byte.
   let bad: i32 = 0
-  let acc: i32 = 0
-  let bits: i32 = 0
+  // Four characters make one 24-bit word and three bytes, so a full group has
+  // no count of waiting bits to test, and its four sextets are independent.
   let j: i32 = 0
-  for (let k: i32 = 0; k < n; k++) {
-    const v: i32 = base64urlSextetOf(toI32(text.charCodeAt(k)))
-    bad = bad | (v >> 31)
-    acc = ((acc << 6) | (v & 63)) & 0xfff
-    bits += 6
-    if (bits >= 8) {
-      bits -= 8
-      // Always true — `out` was sized from the same length — but written out
-      // so that the store keeps no bounds check.
-      if (j >= 0 && j < outLen) {
-        out[j] = toU8((acc >> bits) & 255)
-      }
-      j++
+  for (let k: i32 = 0; k + 3 < n; k += 4) {
+    const s0: i32 = base64urlSextetOf(toI32(text.charCodeAt(k)))
+    const s1: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 1)))
+    const s2: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 2)))
+    const s3: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 3)))
+    bad = bad | ((s0 | s1 | s2 | s3) >> 31)
+    const word: i32 = ((s0 & 63) << 18) | ((s1 & 63) << 12) | ((s2 & 63) << 6) | (s3 & 63)
+    // Always true — `out` was sized from the same length — but written out so
+    // that the three stores keep no bounds check.
+    if (j >= 0 && j + 2 < outLen) {
+      out[j] = toU8(word >> 16)
+      out[j + 1] = toU8((word >> 8) & 255)
+      out[j + 2] = toU8(word & 255)
     }
+    j += 3
   }
-  // The two or four bits left over belong to no byte, and must be zero so that
-  // `AA` is the only spelling of a zero byte and `AB` is refused (RFC 4648 §3.5).
-  bad = bad | (acc & ((1 << bits) - 1))
+  // A short final group of two or three characters: one or two bytes, and the
+  // four or two bits left over belong to no byte, so they must be zero for `AA`
+  // to be the only spelling of a zero byte and `AB` refused (RFC 4648 §3.5).
+  if (tail !== 0) {
+    const k: i32 = n - tail
+    const s0: i32 = base64urlSextetOf(toI32(text.charCodeAt(k)))
+    const s1: i32 = base64urlSextetOf(toI32(text.charCodeAt(k + 1)))
+    // A third character only when the tail has one; a two-character tail reads
+    // its place as `A`, the zero sextet, which adds no bits.
+    const s2: i32 = tail === 3 ? base64urlSextetOf(toI32(text.charCodeAt(k + 2))) : 0
+    bad = bad | ((s0 | s1 | s2) >> 31)
+    const word: i32 = ((s0 & 63) << 18) | ((s1 & 63) << 12) | ((s2 & 63) << 6)
+    if (j >= 0 && j < outLen) {
+      out[j] = toU8(word >> 16)
+    }
+    if (tail === 3 && j + 1 >= 0 && j + 1 < outLen) {
+      out[j + 1] = toU8((word >> 8) & 255)
+    }
+    // The bits under the last byte written: sixteen of the word when one byte
+    // was, eight when two were.
+    bad = bad | (word & (tail === 2 ? 0xffff : 0xff))
+  }
   if (bad !== 0) {
     return null
   }
