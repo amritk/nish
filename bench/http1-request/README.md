@@ -112,7 +112,32 @@ refused.
 
 ## Measured
 
-TIMING
+Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores; avx2, bmi2, sha_ni and
+avx512f all present. `--profile speed`, 16 rounds of 4 columns, against
+`--base 1d92417e`. Median ns an iteration (min–max); "band" is `nish-copy`
+against `nish`, the same bytes, so anything inside it is noise.
+
+| Case | Run | `--cpu` | nish | base | base vs nish | band |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `api` | 1 | x86-64 | 628.3 (598.8–1026.7) | 745.1 (671.0–1121.5) | +18.6% | ±2.8% |
+| `api` | 2 | x86-64 | 630.1 (593.9–1112.8) | 735.8 (674.8–1352.6) | +16.8% | ±1.3% |
+| `api` | 1 | x86-64-v3 | 819.1 (730.5–1425.8) | 926.6 (780.5–2399.5) | +13.1% | ±1.7% |
+| `api` | 2 | x86-64-v3 | 1023.7 (735.7–1404.3) | 936.5 (798.9–1521.5) | −8.5% | ±18.9% |
+| `short` | 1 | x86-64 | 320.2 (286.5–615.2) | 402.5 (355.5–724.8) | +25.7% | ±7.1% |
+| `short` | 2 | x86-64 | 357.8 (284.9–650.7) | 396.3 (361.4–488.5) | +10.8% | ±11.1% |
+| `short` | 1 | x86-64-v3 | 383.0 (318.4–656.4) | 534.3 (378.1–794.6) | +39.5% | ±11.6% |
+| `short` | 2 | x86-64-v3 | 349.7 (297.2–576.9) | 441.1 (374.0–767.5) | +26.1% | ±19.5% |
+| `browser` | 1 | x86-64 | 967.9 (854.8–1406.9) | 974.6 (879.5–1313.2) | +0.7% | ±6.7% |
+| `browser` | 2 | x86-64 | 915.3 (820.3–1098.1) | 1060.0 (886.3–1699.0) | +15.8% | ±0.6% |
+
+Only `api` at x86-64 repeats outside the band on both runs: 16.8% to 18.6%
+faster, against a band of 1.3% to 2.8%. `short` is faster on all four runs,
+but on three of them the band is as wide as the gain. Elsewhere the shared
+cloud host's noise (bands up to ±21%) hides a 7% to 10% instruction cut.
+`browser` gains on one run and not the other, and the `json*` cases, where
+the head is a small share of each request, show no change. The callgrind
+count is the repeatable figure: 946 instructions fewer a request on every
+case, at both `--cpu` levels.
 
 ## Candidates for the next cut
 
