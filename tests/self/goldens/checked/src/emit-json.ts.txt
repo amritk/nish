@@ -247,7 +247,7 @@ function JsonPlace.constructor(this: JsonPlace, info: StructInfo | null, object:
   escaping: field info object slot type
   pointer this: size=40 writesThrough=true captured=false
   pointer info: size=168 writesThrough=true captured=true
-  pointer field: size=80 writesThrough=true captured=true
+  pointer field: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function jsonLoad(emitter: Emitter, place: JsonPlace): string -> @jsonLoad
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
