@@ -30,7 +30,7 @@ inside the band is noise.
 | --- | --- | --- |
 | `chars` | Encodes 48 bytes base64url-style: one `String.fromCharCode` per output byte, pushed to a `string[]`, then `join("")` | `base64urlEncode` (`std/crypto/base64url.ts`), the largest copy caller in `sha256-block hs256` and `jwt-verify` |
 | `small-copies` | `copyBytes` of 1 to 64 bytes between two arrays | `pg-decode params`: 12,800 copies of 1 to 64 bytes a run |
-| `grow` | A `u8[]` grown from empty to 4096 bytes by `push` | `nish_array_grow` in `pg-decode rows` and `hs256` |
+| `grow` | A `u8[]` grown from empty to 4096 bytes by `push` | `nish_array_grow` in `hs256` |
 | `checked` | An indexed read-modify-write over a stride (`at = (at + 389) & 1023`) whose index the prover cannot bound | The checks that stay. It carries its one performance warning on purpose |
 | `json-strings` | A `JsonWriter` object of sixteen 24-byte string members (the mean; 17 to 29 bytes) | `nish_plain_base` in `http1-request json4k`, whose strings average 24 bytes |
 
@@ -84,8 +84,8 @@ how to run it); sizes do not depend on the pinning.
 | `http1-request json4k 300` | `nish_plain_base` 2.51% (about 118 Ir a call); libc 1.35% | the JSON writer's string runs (24 bytes) |
 | `sha256-block hs256 0 2000` | libc 1.66%; `nish_array_grow` 2.19% inclusive (1.21% in itself, 0.98% in its copies) | `base64urlEncode`, 21.09% inclusive |
 | `jwt-verify` | under 1% | the same `base64urlEncode`, on the encode half |
-| `pg-decode rows` | libc 1.15% (not pinned: #1191's branch, not on `main`) | `PgConnection.receive` (4517 bytes, already bulk); `nish_array_grow` |
-| `pg-decode params` | libc 1.03% (not pinned, as above) | 12,800 copies of 1–64 bytes, through `copyBytes` and `String.fromBytes` |
+| `pg-decode rows 64 200` | libc 2.24% | `PgConnection.receive`, nearly all of it (4517 bytes, already bulk); `nish_array_grow` under 0.01% |
+| `pg-decode params 64 200` | libc 1.07% | 12,800 copies of 1–64 bytes, through `copyBytes` and `String.fromBytes` |
 
 Before the cut, `hs256`'s libc share was 5.35% (not pinned), most of it
 `base64urlEncode`'s `join("")`: one call per one-byte part.
@@ -169,9 +169,11 @@ arguments.
 | `http1-request api 2000` | 19,499,507 | 19,498,038 | −0.01% |
 | `http1-request short 2000` | 8,039,735 | 8,039,638 | −0.00% |
 | `http1-request json4k 300` | 22,578,556 | 22,578,459 | −0.00% |
+| `pg-decode params 64 200` | 19,780,391 | 19,749,779 | −0.15% |
+| `pg-decode pool 64 200` | 17,338,943 | 17,308,383 | −0.18% |
+| `pg-decode rows 64 200` | 16,627,481 | 16,596,921 | −0.18% |
 
-`pg-decode` (#1191's branch, not pinned) moved −0.17% to −0.18% on `params`,
-`pool` and `rows`. No program got more instructions.
+No program got more instructions.
 
 `bench/instructions.json` (`node bench/run.mjs --instructions`, which pins the
 same way) moved by about 0.000% on every program. The one exception is the
@@ -214,7 +216,7 @@ would remove; the derivation is in the row. None of them was built here.
 | --- | --- | --- | --- |
 | 1 | `base64urlEncode` writing a `u8[]` and ending in one `String.fromBytes`, instead of a `string` per character and a `join`. The function is still 21.1% of `hs256` `Ir` inclusive after the cut (16.4% in itself, the rest its runtime helpers), mostly allocating, pushing and joining the one-byte strings | `std/crypto/base64url.ts` (the crypto stage; read-only here). It must keep the encoder's constant-time rule: the character byte is stored, never used as an address | about −10 to −13% of `hs256`: the 21.1% less the 6-bit arithmetic and one store a byte that stay, taken as 40–50% of it. The encode half of `jwt-verify` gains the same per byte |
 | 2 | `nish_plain_base` fused scan and copy: the JSON writer scans a string run for bytes to escape, then copies it. One pass would do both | `runtime/runtime-bytes.c` and `std/json.ts` | about −1 to −1.5% of `http1-request json4k` (2.48% today, at about 118 Ir a call) |
-| 3 | `nish_array_grow` from a known final size: `hs256` grows arrays whose length is fixed by the input | the std modules that build them (`std/crypto`, `std/bytes.ts`), or a reserve hint in the emitter | at most −2.2% of `hs256`, its whole inclusive share (1.21% in itself, 0.98% in the copies it makes); one allocation stays, so less in practice. `pg-decode rows`: at most its unpinned 0.5% |
+| 3 | `nish_array_grow` from a known final size: `hs256` grows arrays whose length is fixed by the input | the std modules that build them (`std/crypto`, `std/bytes.ts`), or a reserve hint in the emitter | at most −2.2% of `hs256`, its whole inclusive share (1.21% in itself, 0.98% in the copies it makes); one allocation stays, so less in practice. `pg-decode rows` grows almost nothing (under 0.01%) |
 | 4 | `http1HeadAppend` building the head in place rather than `memmove`-ing it (73 bytes average) | `std/net/http1-codec.ts` (the net stage) | about −1% of `http1-request browser` and −0.7% of `api`: its `memmove` is 2.10% and 1.33%, and the bytes must still be written once, taken as half |
 | 5 | `join`'s separator copy of one byte (`join(",")`): the same test as the cut, on the separator | `src/emit-arrays.ts` | about 16 Ir a part, only where the separator is one byte and not constant. No measured program has one hot |
 | 6 | `pg-decode`'s `receive` copies | `std/net/postgres` | none: they average 4.5 KB, already at libc's bulk rate. Avoiding them needs a zero-copy read, which is a design change |
