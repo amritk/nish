@@ -16,7 +16,7 @@
 //                        under build/bench/jwt-verify/
 //     --binary [name=]<path>
 //                        another build of main.ts as a column (repeatable)
-//     --instructions     after the timing, the baseline build's instructions a
+//     --instructions     after the timing, each column's instructions a
 //                        token under callgrind: (a 12,000-iteration run minus a
 //                        2,000-iteration one) over 10,000
 //
@@ -295,23 +295,28 @@ console.log(
 )
 
 if (instructions) {
-  /** Instructions callgrind counts for one run of `c` at `iterations`. */
-  const counted = (c, iterations) => {
+  /** Instructions callgrind counts for one run of `c` at `iterations` under `col`. */
+  const counted = (col, c, iterations) => {
     const out = path.join(outDir, "callgrind.out")
     const r = spawnSync(
       "valgrind",
-      ["--tool=callgrind", `--callgrind-out-file=${out}`, exe, c.kernel, String(c.shape), String(iterations)],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+      ["--tool=callgrind", `--callgrind-out-file=${out}`, col.bin, c.kernel, String(c.shape), String(iterations)],
+      { encoding: "utf8", env: { ...process.env, ...col.env }, stdio: ["ignore", "pipe", "pipe"] }
     )
     const m = /Collected : (\d+)/.exec(r.stderr ?? "")
     if (r.status !== 0 || m === null) {
-      fail(`callgrind ${c.label}: exit ${r.status}\n${r.stderr}`)
+      fail(`callgrind ${col.id} ${c.label}: exit ${r.status}\n${r.stderr}`)
     }
     fs.rmSync(out, { force: true })
     return Number(m[1])
   }
-  console.log(`\n${"case".padEnd(WIDTHS[0])} instructions/op (nish, under callgrind)`)
+  // The copy has the baseline's bytes, so it would count the same; every other column is counted.
+  const counting = columns.filter((col) => col.id !== "nish-copy")
+  console.log(`\n${"case".padEnd(WIDTHS[0])} instructions/op under callgrind`)
   for (const c of cases) {
-    console.log(`${c.label.padEnd(WIDTHS[0])} ${((counted(c, 12000) - counted(c, 2000)) / 10000).toFixed(1)}`)
+    const cells = columnsOf(c)
+      .filter((col) => counting.includes(col))
+      .map((col) => `${col.id} ${((counted(col, c, 12000) - counted(col, c, 2000)) / 10000).toFixed(1)}`)
+    console.log(`${c.label.padEnd(WIDTHS[0])} ${cells.join("  ")}`)
   }
 }
