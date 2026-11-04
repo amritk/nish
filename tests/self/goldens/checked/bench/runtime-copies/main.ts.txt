@@ -1029,6 +1029,15 @@ const ALPHABET: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01
 function mix(h: u32, b: i32): u32 -> @mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function foldAll(h: u32, bytes: u8[], end: i32): u32 -> @foldAll
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: h
+  calls: mix nish_panic_index
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 out: u32 (let)
+  local +1:12 i: i32 (let)
+  callee +2:11 mix -> @mix
 function source(): u8[] -> @source
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -1053,9 +1062,9 @@ function smallCopies(src: u8[], dst: u8[], seed: i32, sum: u32): u32 -> @smallCo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.copyBytes
   escaping: sum
-  calls: mix nish.copyBytes nish_panic_index nish_panic_overflow
+  calls: foldAll mix nish.copyBytes nish_panic_index nish_panic_overflow
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
-  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0 foldAll#1
   stackSites=0 stackLocals=0
   local +0:7 h: u32 (let)
   local +1:12 len: i32 (let)
@@ -1063,15 +1072,17 @@ function smallCopies(src: u8[], dst: u8[], seed: i32, sum: u32): u32 -> @smallCo
   local +3:11 at: i32 (const)
   callee +4:5 copyBytes -> @nish.copyBytes
   callee +5:9 mix -> @mix
+  callee +5:13 mix -> @mix
+  callee +7:10 foldAll -> @foldAll
 function grow(seed: i32, sum: u32): u32 -> @grow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: sum
-  calls: mix nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow
+  calls: foldAll mix nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow
   stackSites=1 stackLocals=1
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)
-  callee +4:10 mix -> @mix
-  callee +4:14 mix -> @mix
+  callee +4:10 foldAll -> @foldAll
+  callee +4:18 mix -> @mix
 function checked(data: u8[], seed: i32, sum: u32): u32 -> @checked
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1094,9 +1105,9 @@ function jsonStrings(w: JsonWriter, buf: u8[], k: string[], v: string[], seed: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.reset
   escaping: sum
-  calls: mix nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish.JsonWriter.written nish_panic_index nish_panic_overflow
+  calls: foldAll mix nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish.JsonWriter.written nish_panic_index nish_panic_overflow
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.reset#0 nish.JsonWriter.beginObject#0 nish.JsonWriter.key#0 nish.JsonWriter.string#0 nish.JsonWriter.endObject#0 nish.JsonWriter.written#0
-  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.JsonWriter.reset#1
+  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.JsonWriter.reset#1 foldAll#1
   pointer k: size=0 writesThrough=true captured=false
   pointer v: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -1105,12 +1116,12 @@ function jsonStrings(w: JsonWriter, buf: u8[], k: string[], v: string[], seed: i
   local +2:12 i: i32 (let)
   callee +3:5 JsonWriter.key -> @nish.JsonWriter.key
   local +4:11 at: i32 (const)
-  callee +6:7 JsonWriter.string -> @nish.JsonWriter.string
-  callee +9:3 JsonWriter.endObject -> @nish.JsonWriter.endObject
-  local +10:9 end: i32 (const)
-  callee +10:20 JsonWriter.written -> @nish.JsonWriter.written
-  callee +11:10 mix -> @mix
-  callee +11:14 mix -> @mix
+  callee +5:5 JsonWriter.string -> @nish.JsonWriter.string
+  callee +7:3 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  local +8:9 end: i32 (const)
+  callee +8:20 JsonWriter.written -> @nish.JsonWriter.written
+  callee +9:10 foldAll -> @foldAll
+  callee +9:18 mix -> @mix
 function isCase(name: string): boolean -> @isCase
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
