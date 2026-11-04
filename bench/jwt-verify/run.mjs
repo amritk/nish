@@ -111,17 +111,17 @@ for (const b of binaries) {
   }
 }
 
-/** main.ts built from `dir` (a checkout) into `exe`, with `extra` flags. */
-const build = (cmd, prefix, dir, exe, extra) => {
+/** main.ts built from `dir` (a checkout) into `target`, with `extra` flags. */
+const build = (cmd, prefix, dir, target, extra) => {
   const r = spawnSync(
     cmd,
     [
       ...prefix,
       "bench/jwt-verify/main.ts",
       "-o",
-      `${path.relative(dir, exe)}.d/`,
+      `${path.relative(dir, target)}.d/`,
       "--link",
-      path.relative(dir, exe),
+      path.relative(dir, target),
       "--profile",
       "speed",
       ...extra,
@@ -297,10 +297,18 @@ console.log(
 if (instructions) {
   /** Instructions callgrind counts for one run of `c` at `iterations` under `col`. */
   const counted = (col, c, iterations) => {
+    const tool = "valgrind"
     const out = path.join(outDir, "callgrind.out")
     const r = spawnSync(
-      "valgrind",
-      ["--tool=callgrind", `--callgrind-out-file=${out}`, col.bin, c.kernel, String(c.shape), String(iterations)],
+      tool,
+      [
+        "--tool=callgrind",
+        `--callgrind-out-file=${out}`,
+        col.bin,
+        c.kernel,
+        String(c.shape),
+        String(iterations),
+      ],
       { encoding: "utf8", env: { ...process.env, ...col.env }, stdio: ["ignore", "pipe", "pipe"] }
     )
     const m = /Collected : (\d+)/.exec(r.stderr ?? "")

@@ -53,14 +53,38 @@ Every column must print the case's pinned checksum.
 
 ## Last measured
 
-See the PR that added this bench (#1185's base64url stage) for the tables.
-The headline, on an Intel Xeon @ 2.10 GHz (avx2, bmi2, sha_ni, avx512f), at
-the median ns a token:
+Measured on an Intel Xeon @ 2.10 GHz (4 threads; avx2, bmi2, sha_ni and
+avx512f all present), `--profile speed`, with `--base 1d92417`: main before
+the decoder was rewritten. There were two runs, A and B. Each cell gives the
+median ns a token, with the band in brackets:
 
-MEASURED
+| case | nish A | base A | nish B | base B | instructions nish / v3 / base |
+| --- | --- | --- | --- | --- | --- |
+| decode-std 148 B | 349 (±4.5%) | 662 (+89.9%) | 363 (±1.8%) | 735 (+102.3%) | 4,428 / 3,780 / 9,295 |
+| decode-std 507 B | 1,101 (±8.1%) | 2,374 (+115.5%) | 1,405 (±15.2%) | 3,011 (+114.2%) | 13,595 / 11,096 / 31,050 |
+| decode-server 148 B | 403 (±6.1%) | 395 | 429 (±4.6%) | 427 | 5,715 / 5,370 / 5,715 |
+| decode-server 507 B | 1,442 (±2.5%) | 1,553 | 1,481 (±0.5%) | 1,447 | 18,983 / 17,689 / 18,983 |
+| verify 148 B | 1,242 (±3.7%) | 1,353 | 1,329 (±0.5%) | 1,401 | 24,146 / 21,883 / 24,146 |
+| verify 507 B | 3,486 (±11.3%) | 3,816 | 3,985 (±9.2%) | 4,044 | 70,333 / 63,605 / 70,333 |
+| midstate 104 B | 401 (±3.4%) | 413 | | | 12,912 / 10,835 / 12,912 |
+| midstate 463 B | 735 (±1.9%) | 743 | | | 33,396 / 27,803 / 33,396 |
+
+What the numbers say:
+
+- **`base64urlDecode` takes half the time and 52–56% fewer instructions**, on
+  both runs and both shapes. It is now 13–24% under the server's if-chain
+  decoder, though it still allocates its output.
+- **`verify` does not move, and should not.** `JwtVerifier` decodes with its
+  own `jwtDecode`, whose instruction count is the same on both sides.
+- **Without SHA-NI, `verify` 148 B costs 35–56% more**, and `midstate` 104 B
+  2.3× as much: `NISH_SHA256=soft`, the Xeon 8260's path. `--cpu x86-64-v3`
+  takes 1–15% off the soft path.
+- Under callgrind the soft and SHA-NI columns count the same, so read the
+  soft path's cost from the timings alone.
 
 ## Tried and dropped
 
-| idea | why dropped |
-| --- | --- |
-DROPPED
+| idea | measured | why dropped |
+| --- | --- | --- |
+| A `base64urlDecodeInto(src, off, len, out)` into a caller-owned buffer in std | not built | Only `JwtVerifier`'s `jwtDecode` would call it: `std/base64.ts` encodes only. The rule is that both would, so it stays out. |
+| Removing the `sadd.with.overflow` checks on `j` in the group loop | not built | They are two predictable branches on a public counter a group, beside 4 vectorised sextets. The cut already halves the time. |
