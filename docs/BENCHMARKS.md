@@ -786,6 +786,27 @@ The three cases with the Unicode features. Main refuses `\p{…}` and folds no n
 
 Linked size of `bench/regex/size.ts`, which imports `nish/regex` and compiles `[0-9]+`: 92,824 bytes from main and 177,448 from this branch. The 84,624 bytes are mostly the Unicode tables, about 70 KB of packed strings, plus the code that reads them. `regexCompile`'s parser reaches them, so they are linked whether or not a pattern names a property.
 <!-- regex:end -->
+<!-- http-parse:begin -->
+## HTTP/1.1 request parser
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/http1-parse/run.mjs` parses one request a head with the live parser (`new`), main's parser frozen beside it (`old`) and a second frozen copy (`old-copy`, the noise band); [bench/README.md](../bench/README.md#the-http11-request-parser) describes it and has the commands for the Cascade Lake VM. Instructions a head are callgrind's, the difference between 12,000 and 2,000 iterations over 10,000.
+
+| | |
+| --- | --- |
+| Date | 2026-11-03 |
+| nish | this branch against `main` at 96a38347, `--profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores (sse2, avx2, bmi2, avx512bw); baseline x86-64, u8x16 on SSE2 |
+| Runs | 24 interleaved rounds of 3 parsers a head; median (min–max) ns a head |
+| Command | `npm run build && node bench/http1-parse/run.mjs` |
+
+| head | old | old-copy (band) | new | new against old / old-copy | instructions a head | instructions a byte |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| loadgen GET, 337 bytes | 406.9 | 420.3 (±3.3%) | 344.9 (316.1–477.2) | −15.2% / −17.9% | 5,617 → 4,769 | 16.7 → 14.2 |
+| loadgen POST, 447 bytes | 655.0 | 591.8 (±9.6%) | 483.8 (439.3–688.6) | −26.1% / −18.2% | 7,761 → 6,483 | 17.4 → 14.5 |
+| browser GET, 1,028 bytes | 1,299.7 | 1,373.5 (±5.7%) | 1,024.4 (936.9–1,531.5) | −21.2% / −25.4% | 16,335 → 13,667 | 15.9 → 13.3 |
+
+Under `--cpu x86-64-v3`: −18.6%, −17.1%, −24.1% (bands ±2.6%, ±0.4%, ±6.4%). The steps, in instructions a head (loadgen GET / POST / browser GET), each kept because it moved all three: the line scan jumps to the first control byte of a 16-byte block instead of finishing it a byte at a time (5,617/7,761/16,335 → 5,399/7,422/15,757); a branch-free token check against a 128-bit set (→ 5,182/7,098/14,962); a kept field name lowercased while it is scanned in `head` rather than in a second pass (→ 5,113/6,987/14,627); CRLF taken in one step (→ 4,776/6,492/13,685). Results are checked identical to main's parser by `tests/link/net_http1_parse_diff`.
+<!-- http-parse:end -->
 
 <!-- sha-block:begin -->
 ## SHA-256's block function

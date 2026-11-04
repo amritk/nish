@@ -1,0 +1,5 @@
+seed 1175, 190276 cases agree
+  corpus 15214, mutation 72821, limit 2241, grammar 100000
+  events 2176872: head 39517, body 53389, end 38467, upgrade 3217, closed 3580, error 161448
+  refusals: 400 136844, 413 166, 414 4297, 431 5022, 501 29, 505 15090, other 0
+  fingerprint a1c49966
