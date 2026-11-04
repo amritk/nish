@@ -1518,7 +1518,8 @@ const emitArrayIndexOf = (emitter: Emitter, expr: Node, arr: string, elem: i32):
  * shape that replaces it.
  *
  * The separator is copied before every part but the first, with the *length*
- * selected rather than the branch taken, so the copy loop stays one block.
+ * selected rather than the branch taken. A part of one byte is stored rather
+ * than copied, the one branch in the copy loop.
  */
 const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   const fn = emitter.fn
@@ -1605,7 +1606,22 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   )
   const itemLen = stringLength(emitter, item)
   const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`)
+  // A one-byte part, the `String.fromCharCode` a byte-at-a-time encoder
+  // pushes, is one load and one store: as a `memcpy` of a length LLVM cannot
+  // see, it was a call into libc per byte, a quarter of such a join.
+  const byteBlock = fn.newBlock("join.byte")
+  const bulkBlock = fn.newBlock("join.bulk")
+  const nextBlock = fn.newBlock("join.next")
+  const single = fn.emitValue(`icmp eq i64 ${itemLen}, 1`)
+  fn.emit(`br i1 ${single}, label %${byteBlock.label}, label %${bulkBlock.label}`)
+  fn.placeBlock(byteBlock)
+  const byte = fn.emitValue(`load i8, i8* ${itemData}, align 1`)
+  fn.emit(`store i8 ${byte}, i8* ${afterGap}, align 1`)
+  fn.emit(`br label %${nextBlock.label}`)
+  fn.placeBlock(bulkBlock)
   fn.emit(`call void @${MEMCPY}(i8* ${afterGap}, i8* ${itemData}, i64 ${itemLen}, i1 false)`)
+  fn.emit(`br label %${nextBlock.label}`)
+  fn.placeBlock(nextBlock)
   const afterItem = fn.emitValue(`getelementptr inbounds i8, i8* ${afterGap}, i64 ${itemLen}`)
   fn.emit(`store i8* ${afterItem}, i8** ${cursorSlot}, align 8`)
   const copyNext = fn.emitValue(`add i64 ${copyAt}, 1`)
