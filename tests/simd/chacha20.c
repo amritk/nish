@@ -245,7 +245,11 @@ static int edges(void) {
          refuses("at INT32_MIN", 16, 1024, INT32_MIN, 256, 1024, 0, 0) &&
          refuses("windows shifted by one byte", 16, 1024, 0, 256, 1024, 1, 1) &&
          refuses("windows shifted back by one byte", 16, 1024, 1, 256, 1024, 0, 1) &&
-         refuses("windows overlapping by one byte", 16, 1024, 0, 256, 1024, 255, 1);
+         refuses("windows overlapping by one byte", 16, 1024, 0, 256, 1024, 255, 1) &&
+         refuses("a source window past INT32_MAX - 64 in an array past 2^31 bytes, where the Nish sums overflow", 16,
+                 (uint64_t)INT32_MAX + 1024, INT32_MAX - 320, 257, 1024, 0, 0) &&
+         refuses("a destination window past INT32_MAX - 64 in an array past 2^31 bytes", 16, 1024, 0, 257,
+                 (uint64_t)INT32_MAX + 1024, INT32_MAX - 320, 0);
 }
 
 /* ---- The resolver ------------------------------------------------------------- */

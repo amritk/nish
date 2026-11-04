@@ -109,7 +109,11 @@ NISH_CHACHA20_INLINE uint32_t nish_chacha20_rotl(uint32_t x, int n) {
    moved one a block, the last partial block taken byte by byte. */
 NISH_CHACHA20_INLINE void nish_chacha20_tail(uint32_t s[16], const uint8_t *src, uint8_t *dst, size_t len) {
   uint32_t x[16];
-  uint8_t ks[64] __attribute__((aligned(16)));
+  /* The block's words, which on these little-endian targets are its
+     keystream bytes in order: adding into words, not storing byte by byte,
+     keeps every store at a fixed offset of the frame. */
+  uint32_t ks[16];
+  const uint8_t *ks_bytes = (const uint8_t *)ks;
   int ran = len > 0;
   while (len > 0) {
     for (int i = 0; i < 16; i++) x[i] = s[i];
@@ -123,16 +127,10 @@ NISH_CHACHA20_INLINE void nish_chacha20_tail(uint32_t s[16], const uint8_t *src,
       NISH_CHACHA20_QR(x[2], x[7], x[8], x[13]);
       NISH_CHACHA20_QR(x[3], x[4], x[9], x[14]);
     }
-    for (int i = 0; i < 16; i++) {
-      uint32_t w = x[i] + s[i];
-      ks[4 * i] = (uint8_t)w;
-      ks[4 * i + 1] = (uint8_t)(w >> 8);
-      ks[4 * i + 2] = (uint8_t)(w >> 16);
-      ks[4 * i + 3] = (uint8_t)(w >> 24);
-    }
+    for (int i = 0; i < 16; i++) ks[i] = x[i] + s[i];
     s[12] += 1;
     size_t take = len < 64 ? len : 64;
-    for (size_t i = 0; i < take; i++) dst[i] = src[i] ^ ks[i];
+    for (size_t i = 0; i < take; i++) dst[i] = src[i] ^ ks_bytes[i];
     src += take;
     dst += take;
     len -= take;
@@ -284,8 +282,9 @@ NISH_CHACHA20_INLINE void nish_chacha20_blocks(uint32_t s[16], const uint8_t *sr
 
 /* `chacha20XorInto`'s contract, checked rather than trusted: 1 when it ran,
    0, writing nothing, unless `state` has its sixteen words, `len` is four
-   blocks or more, both windows are inside their arrays, and the windows are
-   the same bytes or do not overlap. The Nish function reads and writes byte
+   blocks or more, both windows are inside their arrays and end before
+   INT32_MAX - 64, and the windows are the same bytes or do not overlap.
+   The Nish function reads and writes byte
    by byte in order, so an in-place call (the AEAD's and `chacha20Block`'s)
    agrees with a kernel that loads a vector before it stores it; a shifted
    overlap would not, and is left to the Nish function. */
@@ -293,6 +292,10 @@ NISH_CHACHA20_TARGET int32_t nish_chacha20_xor(nish_array *state, const nish_arr
                                                int32_t len, nish_array *dst, int32_t dst_at) {
   if (state->len < 16 || len < NISH_CHACHA20_MIN || src_at < 0 || dst_at < 0) return 0;
   if ((uint64_t)src_at + (uint64_t)len > src->len || (uint64_t)dst_at + (uint64_t)len > dst->len) return 0;
+  /* The Nish function's i32 sums reach a window's end and its last block's
+     end, so past INT32_MAX - 64 it panics on an overflow; past that the
+     kernel refuses, and the Nish function panics as it would have. */
+  if ((uint64_t)src_at + (uint64_t)len > INT32_MAX - 64 || (uint64_t)dst_at + (uint64_t)len > INT32_MAX - 64) return 0;
   const uint8_t *from = (const uint8_t *)src->data + src_at;
   uint8_t *to = (uint8_t *)dst->data + dst_at;
   uintptr_t f = (uintptr_t)from, t = (uintptr_t)to;

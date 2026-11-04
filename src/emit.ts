@@ -1793,9 +1793,9 @@ export class Emitter {
       return emitJsonPutF64Kernel(this, operandValues)
     }
     // WP38 S5: a seam of `nish/crypto/aes`, `nish/crypto/sha256`'s block
-    // function or `nish/crypto/chacha20poly1305`'s keystream loop (S10) runs the runtime kernel when its resolver says so and the
-    // walker below when not (`src/kernels.ts`). Never on wasm32, which has no
-    // kernel to branch to.
+    // function or `nish/crypto/chacha20poly1305`'s keystream loop (S10) runs
+    // the runtime kernel when its resolver says so and the walker below when
+    // not (`src/kernels.ts`). Never on wasm32, which has no kernel to branch to.
     let kernelJoin: IRBlock | null = null
     if (!isWasmBuild(this.opts)) {
       const aesSeam = isAesSeam(this.program, sig)

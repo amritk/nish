@@ -12,8 +12,8 @@
 //                 multiple of the column count so each column goes first equally often
 //     --check     one short run per column, each checksum against the pinned one; exit 0 when equal
 //
-// The columns. `nish` is the std AEAD built with `--profile speed`, the code
-// that ships; `nish (copy)` is a byte-identical copy of the binary, the noise
+// The columns. `nish` is the std AEAD built with `--profile speed` on its Nish
+// keystream (`NISH_CHACHA20=soft`); `nish (copy)` is a byte-identical copy of the binary, the noise
 // band; `C scalar`, `C vec128`, `C avx2` and `C neon` run bench/chacha20/aead.ts,
 // the std file with ChaCha20's keystream loop handed to kernel.c's path of
 // that name for a buffer of four blocks or more. `vec128` is portable
@@ -22,7 +22,8 @@
 // built with `-O2` and no CPU flag: only `avx2` carries a target attribute.
 // Every run must print the same checksum, or the run stops.
 //
-// The gain at a size is the nish median over the path's median, less one;
+// `shipped` is the std AEAD as a program gets it, with runtime-chacha20.c's
+// kernel behind its CPU check. The gain at a size is the nish median over the path's median, less one;
 // the band is the larger of the copy's distance from nish at the minimum and
 // at the median. Two bars are judged. The runtime kernel's: the widest path
 // the machine has gains 20% or more, above the band. nish:simd's: `vec128`,
@@ -114,10 +115,16 @@ run("bash", [
 const copy = path.join(outDir, "chacha20-copy")
 fs.copyFileSync(exe, copy)
 
-/** The columns, each `{ label, bin, args, env }`: nish first, its copy second, then a C path each. */
+/**
+ * The columns, each `{ label, bin, args, env }`: nish first, its copy second,
+ * then a C path each, then `shipped`. `nish` and its copy pin the std AEAD to
+ * its Nish keystream with `NISH_CHACHA20=soft`; `shipped` is the same binary
+ * with the pin unset, so the compiler's branch takes runtime-chacha20.c's
+ * kernel where the CPU has its vectors (WP38 S10).
+ */
 const columns = [
-  { label: "nish", bin: exe, args: ["std"], env: {} },
-  { label: "nish (copy)", bin: copy, args: ["std"], env: {} },
+  { label: "nish", bin: exe, args: ["std"], env: { NISH_CHACHA20: "soft" } },
+  { label: "nish (copy)", bin: copy, args: ["std"], env: { NISH_CHACHA20: "soft" } },
   ...paths.map((p) => ({
     label: `C ${p}`,
     path: p,
@@ -125,6 +132,7 @@ const columns = [
     args: ["kernel"],
     env: { BENCH_CHACHA20: p },
   })),
+  { label: "shipped", path: "shipped", bin: exe, args: ["std"], env: { NISH_CHACHA20: undefined } },
 ]
 /** The widest path the machine has: the runtime kernel's candidate. */
 const widest = ["avx2", "neon", "vec128"].find((p) => paths.includes(p))
@@ -134,7 +142,7 @@ const runOnce = (c, scale) => {
   const r = spawnSync(c.bin, [...c.args, String(scale)], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, ...c.env },
+    env: Object.fromEntries(Object.entries({ ...process.env, ...c.env }).filter(([, v]) => v !== undefined)),
     stdio: ["ignore", "pipe", "pipe"],
   })
   if (r.status !== 0) {

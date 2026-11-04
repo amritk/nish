@@ -522,7 +522,12 @@ code with loops:
   PCLMULQDQ instructions but `ptest` and the string compares
   (`pcmp[ei]str[im]`, CT-18) leave them, and everything else, the string
   compares among them, still only adds. On aarch64 only compares and `s`-suffixed instructions write the
-  flags, all four at once.
+  flags, all four at once. The carry flag is followed apart from the rest
+  (WP38 S10, [crypto-chacha20-hw.md](crypto-chacha20-hw.md)): x86-64's `inc`
+  and `dec` write ZF, SF, OF and PF and leave CF, so a round counter's
+  `decl; jne` after a secret add reads public, while a `jb`, `setb`, `adc` or
+  any condition that tests CF after it still sees the add's taint. Every other
+  instruction that writes or adds to the flags does so to CF as well.
 
 Each kernel must also show at least one conditional branch, all public, so a
 listing with the loops gone cannot pass vacuously, and the functions the unit
@@ -590,7 +595,7 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | No seed can be deleted, or its `expect=`/`via=` loosened, silently | `SEEDED` in `tests/ct-asm.js`, checked when the module loads |
 | A followed call's leak is found inside the callee, not in inlined code | `via=leakyRow` on `callsLeak` and `tailLeak`; `CALL_CORNERS` `leakVia` / `leakElsewhere` |
 | A chain of calls deeper than `CALL_DEPTH` is refused, not followed for ever | `CALL_CORNERS` `deep` |
-| Each gap in CT-2 to CT-10, CT-17, CT-18 and CT-20 is refused, and the shapes beside it still pass | `AUDIT_CORNERS` (35 rows: 19 for CT-2 to CT-10, 5 for CT-17, 7 for CT-18, 4 for CT-20), checked when the module loads |
+| Each gap in CT-2 to CT-10, CT-17, CT-18 and CT-20 is refused, and the shapes beside it still pass | `AUDIT_CORNERS` (37 rows: 19 for CT-2 to CT-10, 5 for CT-17, 7 for CT-18, 4 for CT-20, and 2 for the carry flag `dec` leaves, a `sete` that must pass and a `setb` that must be refused), checked when the module loads |
 | A spec that makes nothing secret is refused | `seedMisses` in `tests/ct-asm.js` |
 | No existing fixture leaks by the stricter rules | every `ct_asm: … no branch, call, secret-indexed access or secret-dependent latency` check |
 | Each refusal check is named for the kind it expects (CT-14) | `EXPECT_KINDS` and each spec's `promise` in `tests/ct-asm.js` |
@@ -598,6 +603,7 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | The timing harness can see a leak it is shown | the control in `tests/ct-timing.js`; a quiet control is exit 2 |
 | A reading above 4.5 is a finding only when it repeats on a fresh seed, and one that does not is still shown (CT-19) | the verdicts "crossed once, did not repeat" and "**differs**, and again on a fresh seed", the summary's "crossed once and not again: …", and the header's "re-measured on seed" in `tests/ct-timing.js`; `--null`'s "the A/A run: X of N functions above \|t\| = 4.5, Y of them again on a fresh seed". Not in `npm test`: shown by the threshold-1.5 run in [the re-measure rule](#the-re-measure-rule), and run weekly by `ct-timing.yml` |
 | Each timing run names the CPU it ran on and its own runner's null, and the null never changes the verdict | `cpuFingerprint`'s "ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs)" and "ct-timing: CPU from os.cpus() only", "unreadable" for a field the kernel does not give; the A/A pass's "same-runner A/A pass on seed", "the same-runner A/A pass: " and "the same-runner A/A pass crossed on", and `--no-aa`, in `tests/ct-timing.js`; `grep '^ct-timing: CPU'` and `grep 'same-runner A/A pass: '` in `ct-timing.yml`'s report job. Not in `npm test`: shown by the threshold-1.5 run in [the CPU fingerprint and the same-runner null](#the-cpu-fingerprint-and-the-same-runner-null), and run weekly by `ct-timing.yml` |
+| `runtime/runtime-chacha20.c`'s `nish_chacha20_xor`, read the same way, branches only on public values and loads and stores only at public addresses, and the unit exports only it and `nish_chacha20_hw` (WP38 S10) | `ct_asm: runtime-chacha20.c nish_chacha20_xor on ${target}: no branch on a secret, call, secret-indexed access or secret-dependent latency` and `ct_asm: runtime-chacha20.c exports on ${target}: exports exactly the kernels read here and nish_chacha20_hw` (3 checks each) |
 | Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, the `kernel` promise "no branch on a secret, call, secret-indexed access or secret-dependent latency" (12 checks: both targets, and x86-64 at `x86-64-v3`) |
 | The unit exports no function the reading leaves out, so a fifth kernel cannot go unread | the same, the `exports` promise "exports exactly the kernels read here and nish_aes_hw" (3 checks); and `exportMisses` in `tests/ct-asm-runtime.js`, which runs at load and requires a sixth `.globl` to be named unread and a missing kernel to be named missing |
 | The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the `leak` promise `refused for ${r.expect}` (6 checks, `tests/simd/aes-leaky.c`) |

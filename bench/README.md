@@ -674,7 +674,11 @@ The kernel's path is `BENCH_CHACHA20`: `scalar` (a C copy of the Nish loop),
 behind a CPUID check) or `neon` (four, on AArch64). `chacha20.mjs` builds
 them with clang at `-O2` and no CPU flag, holds every path to the scalar
 reference and RFC 8439 §2.4.2's vector, then runs `nish`, `nish (copy)` (the
-noise band) and one column a path in interleaved rounds:
+noise band), one column a path and `shipped` in interleaved rounds. `nish`
+and its copy run the std AEAD under `NISH_CHACHA20=soft`, the Nish loop;
+`shipped` runs it with the variable unset, so the runtime's own kernel
+(`runtime/runtime-chacha20.c`) takes the keystream where the CPU has its
+vectors:
 
 ```bash
 npm run build
