@@ -965,14 +965,15 @@ const nameOf = (n: i32, from: i32, fold: i32): string => {
 /**
  * Field names, which the parser lowercases and token-checks sixteen bytes at
  * a time: every length 1 to 40 (15, 16, 17, 31, 32 and 33 among them) in
- * mixed, lower and upper case, with the value's case kept; each of 21 bytes
- * that end or refuse a name at every place in it, so every lane of every
+ * mixed, lower and upper case, with the value's case kept; each of 25 bytes
+ * that end or refuse a name (all seventeen RFC 9110 delimiters, NUL, HTAB,
+ * LF, CR, SP, DEL, 0x80 and 0xff) at every place in it, so every lane of every
  * vector; and lines that end at every byte around the end of the held head,
  * so the vector's tail and the byte loop after it meet at each place.
  */
 const nameCases = (tally: Tally): void => {
   tally.label = "name"
-  const ends: i32[] = [0, 9, 10, 13, 32, 34, 40, 41, 44, 47, 58, 59, 64, 91, 92, 93, 123, 125, 127, 128, 255]
+  const ends: i32[] = [0, 9, 10, 13, 32, 34, 40, 41, 44, 47, 58, 59, 60, 61, 62, 63, 64, 91, 92, 93, 123, 125, 127, 128, 255]
   const text: Setup = setupOf(0)
   const spans: Setup = setupOf(2)
   for (let n: i32 = 1; n <= 40; n++) {

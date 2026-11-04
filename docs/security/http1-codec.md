@@ -266,14 +266,15 @@ Tests: `a <n>-byte name is lowered and its value kept`, `'@' at each of a
 <n>-byte name's places is a 400` and `a <n>-byte name that ends its line is a
 400` for names of 15, 16, 17, 31, 32 and 33 bytes, and `a name byte of 128 is
 a 400`, in `tests/link/net_http1` and `_f64`; in `net_http1_parse_diff`,
-40,307 name cases against main's parser: every length 1 to 40 in lower, upper
+46,867 name cases against main's parser: every length 1 to 40 in lower, upper
 and mixed case, whole and a byte at a time (the edge lengths also at every
-two-feed split); 21 bytes that end or refuse a name
-(controls, SP, the delimiters, DEL, 0x80, 0xff) at every place of every
+two-feed split); 25 bytes that end or refuse a name
+(all seventeen RFC 9110 delimiters, NUL, HTAB, LF, CR, SP, DEL, 0x80 and
+0xff) at every place of every
 length; names of 15, 16, 17, 31, 32 and 33 bytes after an `X:` line of
 170 to 240 bytes, which puts the name's end on, before and after the held
 head's last byte; and a short name read over a head
-an earlier request's upper-case lines filled. The default run is now 230,583
+an earlier request's upper-case lines filled. The default run is now 237,143
 cases (`expected.out`).
 
 **Connection management** (`net_http1_server`): `Connection: close` in a

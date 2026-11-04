@@ -91,35 +91,37 @@ call's inclusive count and belongs to the source line above it.
 
 | Function | Before | After |
 | --- | ---: | ---: |
-| `http1Next` (the request line, field lines, name lowercasing and token check, the end of the head) | 5,426 | 4,668 |
+| `http1Next` (the request line, field lines, name lowercasing and token check, the end of the head) | 5,426 | 4,630 |
 | `http1TakeLine` (the line scan) | 2,649 | 2,649 |
 | `nish_main` (the bench loop and what LLVM inlined into it) | 1,443 | 1,441 |
 | `http1HeadAppend` (with its `std/bytes.ts` lines) | 630 | 630 |
 | `http1WriteResponseHead` | 577 | 577 |
 | libc `memcpy` (the head copy, the output, the JSON body) | 471 | 471 |
 | `JsonWriter.i32`, `jsonWriterPutString` | 388 | 388 |
-| the head writer's small functions and everything else | 527 | 516 |
-| **Total** | **12,111** | **11,340** |
+| the head writer's small functions and everything else | 527 | 513 |
+| **Total** | **12,111** | **11,299** |
 
 ## What the -O2 code does
 
 Read from the per-line counts of the after build. Line numbers are
 `std/net/http1-codec.ts` at this commit.
 
-- **The field names** now cost about 906 a `browser` request where they cost
-  about 1,860: `http1LowerName` (lines 733–767, 447), `http1NonTokenLanes`
-  (lines 712–720, 351, inlined) and the call (line 1094, 108). Each of the
+- **The field names** now cost about 891 a `browser` request where they cost
+  about 1,860: `http1LowerName` (lines 731–764, 441), `http1NonTokenLanes`
+  (lines 713–721, 351, inlined) and the call (line 1094, 99). Each of the
   nine names is one or two vectors; the per-name cost left is the loop's
   set-up, the lowest set bit of the mask and the store.
-- **`http1HeadIs`** (lines 808–826, about 1,050 a request, inlined into its
+- **`http1HeadIs`** (lines 808–827, about 1,060 a request, inlined into its
   callers) is a length test and a byte loop. At the end of the head
   `http1EndOfHead` compares each name with the five the parser reads
   (`host`, `content-length`, `transfer-encoding`, `connection`, `upgrade`);
   `http1ConnectionOptions` looks for `connection` again; `headerIndex` and
   `methodIs` call it for the router. The three loops over the fields cost
-  about 455 more (lines 340–341, 952–953 and 958–960, 1156–1158).
+  about 454 more (lines 340–341, 157; 952–953, 155; 1161–1163, 142), and
+  `http1ConnectionOptions`' comma scan another 163 (lines 958–960).
 - **The field values' OWS** is trimmed a byte at a time from each end (lines
-  1117 and 1120, 369, and the span stores after them, 108). The request
+  1117–1122 and 1125, 396, and the span stores after them, lines 1128–1136,
+  306). The request
   line's target is walked a byte at a time (lines 1029–1030, 312).
 - **`http1TakeLine`** already jumps to the next control byte sixteen at a
   time; what is left is the per-line call, the CRLF test and the tally.
@@ -141,18 +143,18 @@ Read from the per-line counts of the after build. Line numbers are
   name that fills its line is lowered only to it. Fewer than sixteen bytes
   before the head's end, the old byte loop runs. The answer, the bytes
   written and every refusal are the byte loop's: `net_http1_parse_diff`
-  checks 40,307 names against it.
+  checks 46,867 names against it.
 - The method and a trailer's names keep `http1IsTokenByte`.
 
 Tests: `tests/link/net_http1/checks.ts` (and its `_f64` twin) — names of
 15, 16, 17, 31, 32 and 33 bytes, mixed and upper case, stored lowered with
 their values' case kept; `@` at every place of each, the overlap of a 17- or
 33-byte name's vectors included, refused; each as a line with no colon,
-refused; 0x80 in a name refused. `tests/link/net_http1_parse_diff` — 40,307 cases against the
+refused; 0x80 in a name refused. `tests/link/net_http1_parse_diff` — 46,867 cases against the
 byte-loop parser: every name length 1 to 40 in lower, upper and mixed case,
 whole and a byte at a time (the
-edge lengths also at every two-feed split); each of 21 bytes that end or refuse a name
-(the delimiters, controls, DEL, 0x80, 0xff) at every place in it; names of
+edge lengths also at every two-feed split); each of 25 bytes that end or refuse a name
+(all seventeen RFC 9110 delimiters, NUL, HTAB, LF, CR, SP, DEL, 0x80 and 0xff) at every place in it; names of
 15, 16, 17, 31, 32 and 33 bytes whose line ends at every byte around the end
 of the held head; and a short name read over a head a longer request left
 full. Same answer, same fields.
@@ -167,7 +169,10 @@ Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, a shared cloud host; avx2,
 bmi2, sha_ni and avx512f. `--profile speed`, 16 rounds of 4 columns, against
 `--base 4dc09dcc`, two runs at each `--cpu`. Median ns an iteration; "band"
 is `nish-copy` against `nish`, the same bytes, and "base band" `base-copy`
-against `base`, so a difference inside them is noise.
+against `base`, so a difference inside them is noise. These runs predate the OWS loop's
+`buf.length` bound (`b8035289`), which takes one bounds check out of each
+field value's trim; they were not re-timed, so the instruction counts above,
+taken on the final code, are the measure the ranking uses.
 
 | Case | `--cpu` | Run | nish | base | base vs nish | band | base band |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -213,10 +218,10 @@ cost, not all of it. The next cut takes the first.
 
 | # | Candidate | Cost today | Where it is measured |
 | --- | --- | ---: | --- |
-| 1 | Compare a name with the five the parser reads by length first and one 8- or 16-byte compare (`http1HeadIs`, `http1EndOfHead`, `http1ConnectionOptions`) | ~1,500 | `http1HeadIs`, lines 808–826 (~1,050), and the three loops over the fields (~455); shared with `headerIndex` and `methodIs` |
+| 1 | Compare a name with the five the parser reads by length first and one 8- or 16-byte compare (`http1HeadIs`, `http1EndOfHead`, `http1ConnectionOptions`) | ~1,500 | `http1HeadIs`, lines 808–827 (~1,060), and the three loops over the fields (~454) and the comma scan (~163); shared with `headerIndex` and `methodIs` |
 | 2 | Hold the head without copying each line in `http1HeadAppend` when it is already contiguous in the input | ~630 and its share of 471 | the function table; the copy exists for H1-5, so this needs the input buffer kept until the response is done, a security-record change |
-| 3 | Trim OWS and walk the target with a vector scan | ~680 | lines 1117 and 1120 (~369), 1029–1030 (~312) |
-| 4 | What is left of the name path: lower and check the name on the copy's way into the head, one pass, not a copy then a vector pass | ≤906 | `http1LowerName` and `http1NonTokenLanes` (lines 712–767, ~798) and the call (line 1094, ~108); most of it is the scan itself, so a fused pass saves the reload, not the compares |
+| 3 | Trim OWS and walk the target with a vector scan | ~708 | lines 1117–1122 and 1125 (~396), 1029–1030 (~312) |
+| 4 | What is left of the name path: lower and check the name on the copy's way into the head, one pass, not a copy then a vector pass | ≤891 | `http1LowerName` and `http1NonTokenLanes` (lines 713–764, ~792) and the call (line 1094, ~99); most of it is the scan itself, so a fused pass saves the reload, not the compares |
 | 5 | The remaining head-writer stores: CRLF as one 2-byte store, `http1PutBytes` and `http1PutDecimal` | ~217 | the function table of #1187 |
 | 6 | Record the method once as a code when the request line is read, so `methodIs` is one compare | 30–50 | the bench counted with its router's `methodIs` chain replaced by a constant: 30 fewer on `browser` (a GET, one call), 41 on `short`, 50 on `api` (a POST, two calls); a router testing more methods first pays more |
 | — | `JsonWriter.i32` and `jsonWriterPutString` | 388 | the function table; `std/json.ts`, outside this bench's files, for the copies-checks stage |
@@ -227,13 +232,14 @@ lines of `std/net/http1-codec.ts`, both of its sections summed.
 
 | Lines | Counts | Sum | Candidate |
 | --- | --- | ---: | --- |
-| 810, 813, 814, 815, 816, 819, 822 | 292, 309, 26, 171, 52, 92, 106 | 1,048 | 1 |
-| 340–341, 952–953, 958–960, 1156–1158 | 93 + 64, 92 + 63 + 46 + 97 + 20, 88 + 27 + 27 | 617 | 1 (the `connection` element walk, 958–960, only partly) |
-| 1117, 1120 | 207, 162 | 369 | 3 |
+| 810, 813, 814, 815, 816, 819, 822 | 292, 320, 26, 171, 52, 92, 104 | 1,057 | 1 |
+| 340–341, 952–953, 1161–1163 | 157, 155, 142 | 454 | 1 |
+| 958–960 | 163 | 163 | 1 (the `connection` element walk, only partly) |
+| 1117–1122, 1125 | 234, 162 | 396 | 3 |
 | 1029, 1030 | 269, 43 | 312 | 3 |
-| 712–720 | 45, 54, 45, 45, 45, 45, 72 | 351 | 4 |
-| 735–767 | 90, 36, 18, 81, 18, 9, 45, 63, 54, 9, 18, 6 | 447 | 4 |
-| 1094 | 108 | 108 | 4 |
+| 713–721 | 351 | 351 | 4 |
+| 731–764 | 441 | 441 | 4 |
+| 1094 | 99 | 99 | 4 |
 
 ## Tried and dropped
 
