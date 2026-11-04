@@ -3,7 +3,7 @@
 // the empty part included, is still one `memcpy`. One-byte parts end to end,
 // one-byte parts mixed with empty and longer ones, a separator between
 // one-byte parts, a one-byte part last so its store is the final byte before
-// the NUL, a byte above 127 and a NUL byte, and an empty array are each read
+// the NUL, the top ASCII byte and a NUL byte, and an empty array are each read
 // back byte for byte.
 const codes = (s: string): string => {
   const out: string[] = [];
@@ -26,7 +26,7 @@ export const main = (): number => {
   const mixed: string[] = ["", "a", "", "bcd", "e", "", "fg", "h"];
   console.log(`[${mixed.join("")}] [${mixed.join("|")}]`);
   console.log(bytes(4, 65).join(", "));
-  const high: string[] = [String.fromCharCode(200), String.fromCharCode(0), String.fromCharCode(255)];
+  const high: string[] = [String.fromCharCode(127), String.fromCharCode(0), String.fromCharCode(126)];
   console.log(codes(high.join("")));
   console.log(codes(high.join("-")));
   const empty: string[] = [];

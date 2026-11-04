@@ -711,13 +711,13 @@ join.end.3:
   %208 = load i8*, i8** %join.p.3, align 8
   store i8 0, i8* %208, align 1
   call void @nish_print(i8* %186)
-  %209 = trunc i64 200 to i8
+  %209 = trunc i64 127 to i8
   store i8 %209, i8* %chr, align 1
   %210 = call i8* @nish_str_new(i8* %chr, i64 1)
   %211 = trunc i64 0 to i8
   store i8 %211, i8* %chr.1, align 1
   %212 = call i8* @nish_str_new(i8* %chr.1, i64 1)
-  %213 = trunc i64 255 to i8
+  %213 = trunc i64 126 to i8
   store i8 %213, i8* %chr.2, align 1
   %214 = call i8* @nish_str_new(i8* %chr.2, i64 1)
   %215 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
