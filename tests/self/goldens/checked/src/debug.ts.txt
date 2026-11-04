@@ -267,7 +267,7 @@ function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @Debu
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.reserveMetadata
   calls: DebugInfo.arrayHeader DebugInfo.arraySlice DebugInfo.fileOf DebugInfo.lineOf DebugInfo.member DebugInfo.pointerTo DebugInfo.setTypeRef DebugInfo.typeRef FieldInfo.inline IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata TypeTable.mangle TypeTable.refOf TypeTable.typeName bitsOfIn nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 quote
-  pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.arraySlice#0 DebugInfo.member#0 DebugInfo.arrayHeader#0 DebugInfo.member#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.lineOf#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.member#0 DebugInfo.arraySlice#0 DebugInfo.member#0 DebugInfo.arrayHeader#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.lineOf#0
   pointer info: size=168 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 ref: string (const)
@@ -281,17 +281,15 @@ function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @Debu
   local +4:16 f: FieldInfo (const)
   local +5:13 line: i32 (const)
   callee +5:20 DebugInfo.lineOf -> @DebugInfo.lineOf
-  local +8:15 slice: string (const)
-  callee +8:23 DebugInfo.arraySlice -> @DebugInfo.arraySlice
-  callee +8:39 TypeTable.refOf -> @TypeTable.refOf
-  callee +8:65 TypeTable.typeName -> @TypeTable.typeName
-  callee +9:22 DebugInfo.member -> @DebugInfo.member
-  callee +12:11 FieldInfo.inline -> @FieldInfo.inline
-  local +15:15 header: string (const)
-  callee +15:24 DebugInfo.arrayHeader -> @DebugInfo.arrayHeader
-  callee +15:41 TypeTable.refOf -> @TypeTable.refOf
-  callee +15:67 TypeTable.typeName -> @TypeTable.typeName
-  callee +16:22 DebugInfo.member -> @DebugInfo.member
+  callee +6:22 FieldInfo.inline -> @FieldInfo.inline
+  local +7:15 elem: i32 (const)
+  callee +7:22 TypeTable.refOf -> @TypeTable.refOf
+  local +8:15 name: string (const)
+  callee +8:22 TypeTable.typeName -> @TypeTable.typeName
+  callee +11:24 DebugInfo.member -> @DebugInfo.member
+  callee +11:49 DebugInfo.arraySlice -> @DebugInfo.arraySlice
+  callee +15:24 DebugInfo.member -> @DebugInfo.member
+  callee +15:49 DebugInfo.arrayHeader -> @DebugInfo.arrayHeader
   local +19:13 base: string (const)
   callee +19:20 DebugInfo.typeRef -> @DebugInfo.typeRef
   callee +20:20 DebugInfo.member -> @DebugInfo.member

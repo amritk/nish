@@ -467,6 +467,7 @@ function emitBoxedArrayAssignment(emitter: Emitter, expr: Node, field: FieldInfo
   local +18:13 typed: string (const)
   callee +18:21 IRFunction.emitValue -> @IRFunction.emitValue
   local +19:11 i: i32 (let)
+  local +20:18 value: string (const)
   local +21:15 slot: string (const)
   callee +21:22 IRFunction.emitValue -> @IRFunction.emitValue
   callee +22:9 storeElement -> @storeElement
