@@ -1,20 +1,32 @@
 # pg-decode: Postgres DataRow decode and Bind encode, with no server
 
 `main.ts` builds canned backend bytes once, starts a `PgConnection` on them
-itself (startup, SCRAM nonce and all, with no socket), and then times three
+itself (startup, SCRAM nonce and all, with no socket), and then times four
 kernels. Each one folds every byte written and every value read into a
 checksum:
 
 | kernel | what one operation is |
 | --- | --- |
 | `rows <n>` | a binary-format group on one `PgConnection`: Bind (one `int8` by `paramInt`), Execute and Sync written and drained; then BindComplete, RowDescription, `<n>` DataRows, CommandComplete and ReadyForQuery fed through `receive`/`next` (`readRow`), with every column read |
+| `text <n>` | `rows` with the group in the text format, as a `bindStart` (not `bindStartBinary`) execution is answered: the `int8` by `int`, the `timestamptz` by `text.timestamp`, the `int8[]` by `PgArrayWalker` and `text.int` |
 | `pool <n>` | the same group through a one-slot `PgPool`: `request`, `dispatch`, bind, send, and `PgPool.next` for every event |
 | `params <n>` | a text-format Bind as `PgBatcher`'s `PG_BATCH_TEXT` writes one: an array of `<n>` text keys of 8 to 64 bytes (`arrayElement`), an `int8[]` of `<n>` ids (`paramIntArray`, so `putDecimal`) and one `int8`, then Execute and Sync |
 
 A row is an `int8` id, a text of 8 to 64 bytes, a `timestamptz`, an `int8[]`
 of 0, 1, 4 or 8 elements, and a text that is NULL on two rows in three. The
 `int8` and the `timestamptz` are read by `binaryInt`, so through `getI64BE`;
-the array is read by `PgBinaryArray`.
+the array is read by `PgBinaryArray`. `text` carries the same values in the
+text format: row 1's `timestamptz`, `788918401000003` microseconds after
+PostgreSQL's epoch in binary, is `2025-01-01 00:00:01.000003+00` there.
+
+Each case's label carries the bytes it handles, which `main bytes <n> 1`
+prints and `run.mjs` checks against the label before it times anything:
+
+| rows | `rows`, `pool`: binary answer | `text`: text answer | `params`: Bind, Execute and Sync written |
+| --- | --- | --- | --- |
+| 1 | 214 B | 218 B | 104 B |
+| 20 | 2,892 B | 2,464 B | 1,051 B |
+| 100 | 14,019 B | 12,153 B | 5,179 B |
 
 ```bash
 npm run build
@@ -82,6 +94,9 @@ the build in every case:
 | rows 1 | 3,656 | 3,772 | +3.2% | 3,649 | 3,767 | +3.2% |
 | rows 20 | 26,505 | 32,595 | +23.0% | 26,300 | 32,495 | +23.6% |
 | rows 100 | 120,986 | 151,436 | +25.2% | 119,961 | 150,936 | +25.8% |
+| text 1 | 4,008 | 4,008 | 0.0% | 3,999 | 3,999 | 0.0% |
+| text 20 | 40,363 | 40,375 | 0.0% | 40,183 | 40,195 | 0.0% |
+| text 100 | 196,572 | 196,572 | 0.0% | 195,672 | 195,672 | 0.0% |
 | pool 1 | 4,121 | 4,237 | +2.8% | 4,114 | 4,232 | +2.9% |
 | pool 20 | 27,920 | 34,010 | +21.8% | 27,715 | 33,910 | +22.4% |
 | pool 100 | 126,449 | 156,899 | +24.1% | 125,424 | 156,399 | +24.7% |
@@ -93,8 +108,11 @@ the build in every case:
 and reads the eight bytes unchecked. Its ors are grouped in pairs, and its
 byte-by-byte path is a separate function. It now lowers to one `mov` and one
 `bswap` after a two-compare guard: about 16 instructions a call in
-`--profile speed`, down from about 74. `params` reads no `int8`, so it does
-not move.
+`--profile speed`, down from about 74. `params` reads no `int8`, and `text`
+reads its `int8`s and times as text (`PgText`), so neither moves. The
+`text` rows are the control: the same values as `rows`, and 62% more
+instructions to decode than `rows` after the cut (196,572 against 120,986 at
+100 rows).
 
 **Does `getI64BE` lower to one load and `bswap`?** It does now, and did not
 before. Before, it was an eight-iteration loop with an overflow check and a
