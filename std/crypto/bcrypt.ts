@@ -1021,12 +1021,14 @@ const bcryptLoadSlot = (state: Secret<u32[]>, password: Secret<u8[]>, slot: i32)
 }
 
 // The cost-round kernels, one per width. Each is `bcryptBody4`'s text with
-// the lane count changed (bench/crypto/bcrypt/gen-body.mjs writes them), not
+// the lane count changed, except that six lanes' sixth lane takes its bytes
+// the previous way (see `bcryptBody4`); bench/crypto/bcrypt/gen-body.mjs
+// writes them all, so an edit is made there. They are not
 // one loop over a lane count: the lanes' l and r must live in registers and
 // their loads be scheduled together, which a loop over an array of lanes
 // does not give. Two lanes take each byte by its own shift and write every
 // lane's bytes before any lane's update, the form all widths had before the
-// rotated copy, which measured slower there.
+// copies behind the barrier, which measured slower there.
 
 /** `bcryptBody4`'s interleave on two lanes. */
 const bcryptBody2 = (st: u32[]): void => {
@@ -1091,41 +1093,47 @@ const bcryptBody3 = (st: u32[]): void => {
     l1 ^= st[1042]
     l2 ^= st[2084]
     for (let n: i32 = 1; n < 17; n += 2) {
-      const l0e: u32 = ctSelect((l0 >>> 8) | (l0 << 24), 0xffffffff, 0)
-      const l0a: i32 = toI32(l0 >>> 24) & 0xff
-      const l0b: i32 = toI32(l0e >>> 8) & 0xff
-      const l0c: i32 = toI32(l0e) & 0xff
-      const l0d: i32 = toI32(l0) & 0xff
+      const l0e: u32 = ctSelect(l0, 0xffffffff, 0)
+      const l0d: i32 = toI32(l0e) & 0xff
+      const l0c: i32 = toI32(l0e >>> 8) & 0xff
+      const l0f: u32 = ctSelect(l0e >>> 16, 0xffffffff, 0)
+      const l0b: i32 = toI32(l0f) & 0xff
+      const l0a: i32 = toI32(l0f >>> 8) & 0xff
       r0 ^= st[n] ^ (((st[18 + l0a] + st[274 + l0b]) ^ st[530 + l0c]) + st[786 + l0d])
-      const l1e: u32 = ctSelect((l1 >>> 8) | (l1 << 24), 0xffffffff, 0)
-      const l1a: i32 = toI32(l1 >>> 24) & 0xff
-      const l1b: i32 = toI32(l1e >>> 8) & 0xff
-      const l1c: i32 = toI32(l1e) & 0xff
-      const l1d: i32 = toI32(l1) & 0xff
+      const l1e: u32 = ctSelect(l1, 0xffffffff, 0)
+      const l1d: i32 = toI32(l1e) & 0xff
+      const l1c: i32 = toI32(l1e >>> 8) & 0xff
+      const l1f: u32 = ctSelect(l1e >>> 16, 0xffffffff, 0)
+      const l1b: i32 = toI32(l1f) & 0xff
+      const l1a: i32 = toI32(l1f >>> 8) & 0xff
       r1 ^= st[1042 + n] ^ (((st[1060 + l1a] + st[1316 + l1b]) ^ st[1572 + l1c]) + st[1828 + l1d])
-      const l2e: u32 = ctSelect((l2 >>> 8) | (l2 << 24), 0xffffffff, 0)
-      const l2a: i32 = toI32(l2 >>> 24) & 0xff
-      const l2b: i32 = toI32(l2e >>> 8) & 0xff
-      const l2c: i32 = toI32(l2e) & 0xff
-      const l2d: i32 = toI32(l2) & 0xff
+      const l2e: u32 = ctSelect(l2, 0xffffffff, 0)
+      const l2d: i32 = toI32(l2e) & 0xff
+      const l2c: i32 = toI32(l2e >>> 8) & 0xff
+      const l2f: u32 = ctSelect(l2e >>> 16, 0xffffffff, 0)
+      const l2b: i32 = toI32(l2f) & 0xff
+      const l2a: i32 = toI32(l2f >>> 8) & 0xff
       r2 ^= st[2084 + n] ^ (((st[2102 + l2a] + st[2358 + l2b]) ^ st[2614 + l2c]) + st[2870 + l2d])
-      const r0e: u32 = ctSelect((r0 >>> 8) | (r0 << 24), 0xffffffff, 0)
-      const r0a: i32 = toI32(r0 >>> 24) & 0xff
-      const r0b: i32 = toI32(r0e >>> 8) & 0xff
-      const r0c: i32 = toI32(r0e) & 0xff
-      const r0d: i32 = toI32(r0) & 0xff
+      const r0e: u32 = ctSelect(r0, 0xffffffff, 0)
+      const r0d: i32 = toI32(r0e) & 0xff
+      const r0c: i32 = toI32(r0e >>> 8) & 0xff
+      const r0f: u32 = ctSelect(r0e >>> 16, 0xffffffff, 0)
+      const r0b: i32 = toI32(r0f) & 0xff
+      const r0a: i32 = toI32(r0f >>> 8) & 0xff
       l0 ^= st[n + 1] ^ (((st[18 + r0a] + st[274 + r0b]) ^ st[530 + r0c]) + st[786 + r0d])
-      const r1e: u32 = ctSelect((r1 >>> 8) | (r1 << 24), 0xffffffff, 0)
-      const r1a: i32 = toI32(r1 >>> 24) & 0xff
-      const r1b: i32 = toI32(r1e >>> 8) & 0xff
-      const r1c: i32 = toI32(r1e) & 0xff
-      const r1d: i32 = toI32(r1) & 0xff
+      const r1e: u32 = ctSelect(r1, 0xffffffff, 0)
+      const r1d: i32 = toI32(r1e) & 0xff
+      const r1c: i32 = toI32(r1e >>> 8) & 0xff
+      const r1f: u32 = ctSelect(r1e >>> 16, 0xffffffff, 0)
+      const r1b: i32 = toI32(r1f) & 0xff
+      const r1a: i32 = toI32(r1f >>> 8) & 0xff
       l1 ^= st[1042 + n + 1] ^ (((st[1060 + r1a] + st[1316 + r1b]) ^ st[1572 + r1c]) + st[1828 + r1d])
-      const r2e: u32 = ctSelect((r2 >>> 8) | (r2 << 24), 0xffffffff, 0)
-      const r2a: i32 = toI32(r2 >>> 24) & 0xff
-      const r2b: i32 = toI32(r2e >>> 8) & 0xff
-      const r2c: i32 = toI32(r2e) & 0xff
-      const r2d: i32 = toI32(r2) & 0xff
+      const r2e: u32 = ctSelect(r2, 0xffffffff, 0)
+      const r2d: i32 = toI32(r2e) & 0xff
+      const r2c: i32 = toI32(r2e >>> 8) & 0xff
+      const r2f: u32 = ctSelect(r2e >>> 16, 0xffffffff, 0)
+      const r2b: i32 = toI32(r2f) & 0xff
+      const r2a: i32 = toI32(r2f >>> 8) & 0xff
       l2 ^= st[2084 + n + 1] ^ (((st[2102 + r2a] + st[2358 + r2b]) ^ st[2614 + r2c]) + st[2870 + r2d])
     }
     const t0: u32 = r0
@@ -1153,17 +1161,20 @@ const bcryptBody3 = (st: u32[]): void => {
  * hot loop of the batch: 2^(cost+1) calls of 521 blocks per lane.
  *
  * Each lane's half-round is written whole, its bytes and then its update,
- * before the next lane's. The two middle index bytes come from one copy of the
- * word rotated right by 8 (`e`: byte 1 is its low byte, byte 2 its second),
- * behind the value barrier: `ctSelect(v, 0xffffffff, 0)` is `v`, opaque, so
- * LLVM cannot fold the two bytes back into two shifts of the word, and copies
- * it once instead of twice; on a BMI2 target the copy is one `rorx`. Three
- * and five lanes rotate the copy the same way; six shift it right by 8, which
- * has the same two low bytes and measured faster there. On a
- * Xeon Platinum 8260 that is 6% less time a hash at the best width, 9% under
- * `--cpu x86-64-v3` (docs/security/crypto-bcrypt.md, "Cascade Lake"). The
- * barrier is an identity on a register: it adds no branch and no load, and
- * the round reads the same four S-box words.
+ * before the next lane's. The bytes come in two pairs, each the low and
+ * second byte of a copy behind the value barrier: `ctSelect(v, 0xffffffff, 0)`
+ * is `v`, opaque. A copy of the word (`e`) gives bytes 0 and 1, and that copy
+ * moved down by 16 (`f`) bytes 2 and 3, so a second byte is one `movzx` from
+ * `ah`, `bh`, `ch` or `dh` and a lane takes its four bytes in six
+ * instructions; without the barriers LLVM folds the pairs back into shifts of
+ * the word. Only four registers have a second byte, and with all six lanes
+ * paired the loop spilled more than it saved (counted), so at six lanes the
+ * sixth lane takes bytes 1 and 2 from one copy moved down by 8 and bytes 0
+ * and 3 by shifts of the word, the way every lane had before. On a Xeon Platinum
+ * 8260 the pairs take about 3.5% less time a hash than that way at the best
+ * width, five lanes, and 5.6% less at six (docs/security/crypto-bcrypt.md,
+ * "Cascade Lake"). The barrier is an identity on a register: it adds no
+ * branch and no load, and the round reads the same four S-box words.
  */
 const bcryptBody4 = (st: u32[]): void => {
   if (st.length < 4168) {
@@ -1183,53 +1194,61 @@ const bcryptBody4 = (st: u32[]): void => {
     l2 ^= st[2084]
     l3 ^= st[3126]
     for (let n: i32 = 1; n < 17; n += 2) {
-      const l0e: u32 = ctSelect((l0 >>> 8) | (l0 << 24), 0xffffffff, 0)
-      const l0a: i32 = toI32(l0 >>> 24) & 0xff
-      const l0b: i32 = toI32(l0e >>> 8) & 0xff
-      const l0c: i32 = toI32(l0e) & 0xff
-      const l0d: i32 = toI32(l0) & 0xff
+      const l0e: u32 = ctSelect(l0, 0xffffffff, 0)
+      const l0d: i32 = toI32(l0e) & 0xff
+      const l0c: i32 = toI32(l0e >>> 8) & 0xff
+      const l0f: u32 = ctSelect(l0e >>> 16, 0xffffffff, 0)
+      const l0b: i32 = toI32(l0f) & 0xff
+      const l0a: i32 = toI32(l0f >>> 8) & 0xff
       r0 ^= st[n] ^ (((st[18 + l0a] + st[274 + l0b]) ^ st[530 + l0c]) + st[786 + l0d])
-      const l1e: u32 = ctSelect((l1 >>> 8) | (l1 << 24), 0xffffffff, 0)
-      const l1a: i32 = toI32(l1 >>> 24) & 0xff
-      const l1b: i32 = toI32(l1e >>> 8) & 0xff
-      const l1c: i32 = toI32(l1e) & 0xff
-      const l1d: i32 = toI32(l1) & 0xff
+      const l1e: u32 = ctSelect(l1, 0xffffffff, 0)
+      const l1d: i32 = toI32(l1e) & 0xff
+      const l1c: i32 = toI32(l1e >>> 8) & 0xff
+      const l1f: u32 = ctSelect(l1e >>> 16, 0xffffffff, 0)
+      const l1b: i32 = toI32(l1f) & 0xff
+      const l1a: i32 = toI32(l1f >>> 8) & 0xff
       r1 ^= st[1042 + n] ^ (((st[1060 + l1a] + st[1316 + l1b]) ^ st[1572 + l1c]) + st[1828 + l1d])
-      const l2e: u32 = ctSelect((l2 >>> 8) | (l2 << 24), 0xffffffff, 0)
-      const l2a: i32 = toI32(l2 >>> 24) & 0xff
-      const l2b: i32 = toI32(l2e >>> 8) & 0xff
-      const l2c: i32 = toI32(l2e) & 0xff
-      const l2d: i32 = toI32(l2) & 0xff
+      const l2e: u32 = ctSelect(l2, 0xffffffff, 0)
+      const l2d: i32 = toI32(l2e) & 0xff
+      const l2c: i32 = toI32(l2e >>> 8) & 0xff
+      const l2f: u32 = ctSelect(l2e >>> 16, 0xffffffff, 0)
+      const l2b: i32 = toI32(l2f) & 0xff
+      const l2a: i32 = toI32(l2f >>> 8) & 0xff
       r2 ^= st[2084 + n] ^ (((st[2102 + l2a] + st[2358 + l2b]) ^ st[2614 + l2c]) + st[2870 + l2d])
-      const l3e: u32 = ctSelect((l3 >>> 8) | (l3 << 24), 0xffffffff, 0)
-      const l3a: i32 = toI32(l3 >>> 24) & 0xff
-      const l3b: i32 = toI32(l3e >>> 8) & 0xff
-      const l3c: i32 = toI32(l3e) & 0xff
-      const l3d: i32 = toI32(l3) & 0xff
+      const l3e: u32 = ctSelect(l3, 0xffffffff, 0)
+      const l3d: i32 = toI32(l3e) & 0xff
+      const l3c: i32 = toI32(l3e >>> 8) & 0xff
+      const l3f: u32 = ctSelect(l3e >>> 16, 0xffffffff, 0)
+      const l3b: i32 = toI32(l3f) & 0xff
+      const l3a: i32 = toI32(l3f >>> 8) & 0xff
       r3 ^= st[3126 + n] ^ (((st[3144 + l3a] + st[3400 + l3b]) ^ st[3656 + l3c]) + st[3912 + l3d])
-      const r0e: u32 = ctSelect((r0 >>> 8) | (r0 << 24), 0xffffffff, 0)
-      const r0a: i32 = toI32(r0 >>> 24) & 0xff
-      const r0b: i32 = toI32(r0e >>> 8) & 0xff
-      const r0c: i32 = toI32(r0e) & 0xff
-      const r0d: i32 = toI32(r0) & 0xff
+      const r0e: u32 = ctSelect(r0, 0xffffffff, 0)
+      const r0d: i32 = toI32(r0e) & 0xff
+      const r0c: i32 = toI32(r0e >>> 8) & 0xff
+      const r0f: u32 = ctSelect(r0e >>> 16, 0xffffffff, 0)
+      const r0b: i32 = toI32(r0f) & 0xff
+      const r0a: i32 = toI32(r0f >>> 8) & 0xff
       l0 ^= st[n + 1] ^ (((st[18 + r0a] + st[274 + r0b]) ^ st[530 + r0c]) + st[786 + r0d])
-      const r1e: u32 = ctSelect((r1 >>> 8) | (r1 << 24), 0xffffffff, 0)
-      const r1a: i32 = toI32(r1 >>> 24) & 0xff
-      const r1b: i32 = toI32(r1e >>> 8) & 0xff
-      const r1c: i32 = toI32(r1e) & 0xff
-      const r1d: i32 = toI32(r1) & 0xff
+      const r1e: u32 = ctSelect(r1, 0xffffffff, 0)
+      const r1d: i32 = toI32(r1e) & 0xff
+      const r1c: i32 = toI32(r1e >>> 8) & 0xff
+      const r1f: u32 = ctSelect(r1e >>> 16, 0xffffffff, 0)
+      const r1b: i32 = toI32(r1f) & 0xff
+      const r1a: i32 = toI32(r1f >>> 8) & 0xff
       l1 ^= st[1042 + n + 1] ^ (((st[1060 + r1a] + st[1316 + r1b]) ^ st[1572 + r1c]) + st[1828 + r1d])
-      const r2e: u32 = ctSelect((r2 >>> 8) | (r2 << 24), 0xffffffff, 0)
-      const r2a: i32 = toI32(r2 >>> 24) & 0xff
-      const r2b: i32 = toI32(r2e >>> 8) & 0xff
-      const r2c: i32 = toI32(r2e) & 0xff
-      const r2d: i32 = toI32(r2) & 0xff
+      const r2e: u32 = ctSelect(r2, 0xffffffff, 0)
+      const r2d: i32 = toI32(r2e) & 0xff
+      const r2c: i32 = toI32(r2e >>> 8) & 0xff
+      const r2f: u32 = ctSelect(r2e >>> 16, 0xffffffff, 0)
+      const r2b: i32 = toI32(r2f) & 0xff
+      const r2a: i32 = toI32(r2f >>> 8) & 0xff
       l2 ^= st[2084 + n + 1] ^ (((st[2102 + r2a] + st[2358 + r2b]) ^ st[2614 + r2c]) + st[2870 + r2d])
-      const r3e: u32 = ctSelect((r3 >>> 8) | (r3 << 24), 0xffffffff, 0)
-      const r3a: i32 = toI32(r3 >>> 24) & 0xff
-      const r3b: i32 = toI32(r3e >>> 8) & 0xff
-      const r3c: i32 = toI32(r3e) & 0xff
-      const r3d: i32 = toI32(r3) & 0xff
+      const r3e: u32 = ctSelect(r3, 0xffffffff, 0)
+      const r3d: i32 = toI32(r3e) & 0xff
+      const r3c: i32 = toI32(r3e >>> 8) & 0xff
+      const r3f: u32 = ctSelect(r3e >>> 16, 0xffffffff, 0)
+      const r3b: i32 = toI32(r3f) & 0xff
+      const r3a: i32 = toI32(r3f >>> 8) & 0xff
       l3 ^= st[3126 + n + 1] ^ (((st[3144 + r3a] + st[3400 + r3b]) ^ st[3656 + r3c]) + st[3912 + r3d])
     }
     const t0: u32 = r0
@@ -1277,65 +1296,75 @@ const bcryptBody5 = (st: u32[]): void => {
     l3 ^= st[3126]
     l4 ^= st[4168]
     for (let n: i32 = 1; n < 17; n += 2) {
-      const l0e: u32 = ctSelect((l0 >>> 8) | (l0 << 24), 0xffffffff, 0)
-      const l0a: i32 = toI32(l0 >>> 24) & 0xff
-      const l0b: i32 = toI32(l0e >>> 8) & 0xff
-      const l0c: i32 = toI32(l0e) & 0xff
-      const l0d: i32 = toI32(l0) & 0xff
+      const l0e: u32 = ctSelect(l0, 0xffffffff, 0)
+      const l0d: i32 = toI32(l0e) & 0xff
+      const l0c: i32 = toI32(l0e >>> 8) & 0xff
+      const l0f: u32 = ctSelect(l0e >>> 16, 0xffffffff, 0)
+      const l0b: i32 = toI32(l0f) & 0xff
+      const l0a: i32 = toI32(l0f >>> 8) & 0xff
       r0 ^= st[n] ^ (((st[18 + l0a] + st[274 + l0b]) ^ st[530 + l0c]) + st[786 + l0d])
-      const l1e: u32 = ctSelect((l1 >>> 8) | (l1 << 24), 0xffffffff, 0)
-      const l1a: i32 = toI32(l1 >>> 24) & 0xff
-      const l1b: i32 = toI32(l1e >>> 8) & 0xff
-      const l1c: i32 = toI32(l1e) & 0xff
-      const l1d: i32 = toI32(l1) & 0xff
+      const l1e: u32 = ctSelect(l1, 0xffffffff, 0)
+      const l1d: i32 = toI32(l1e) & 0xff
+      const l1c: i32 = toI32(l1e >>> 8) & 0xff
+      const l1f: u32 = ctSelect(l1e >>> 16, 0xffffffff, 0)
+      const l1b: i32 = toI32(l1f) & 0xff
+      const l1a: i32 = toI32(l1f >>> 8) & 0xff
       r1 ^= st[1042 + n] ^ (((st[1060 + l1a] + st[1316 + l1b]) ^ st[1572 + l1c]) + st[1828 + l1d])
-      const l2e: u32 = ctSelect((l2 >>> 8) | (l2 << 24), 0xffffffff, 0)
-      const l2a: i32 = toI32(l2 >>> 24) & 0xff
-      const l2b: i32 = toI32(l2e >>> 8) & 0xff
-      const l2c: i32 = toI32(l2e) & 0xff
-      const l2d: i32 = toI32(l2) & 0xff
+      const l2e: u32 = ctSelect(l2, 0xffffffff, 0)
+      const l2d: i32 = toI32(l2e) & 0xff
+      const l2c: i32 = toI32(l2e >>> 8) & 0xff
+      const l2f: u32 = ctSelect(l2e >>> 16, 0xffffffff, 0)
+      const l2b: i32 = toI32(l2f) & 0xff
+      const l2a: i32 = toI32(l2f >>> 8) & 0xff
       r2 ^= st[2084 + n] ^ (((st[2102 + l2a] + st[2358 + l2b]) ^ st[2614 + l2c]) + st[2870 + l2d])
-      const l3e: u32 = ctSelect((l3 >>> 8) | (l3 << 24), 0xffffffff, 0)
-      const l3a: i32 = toI32(l3 >>> 24) & 0xff
-      const l3b: i32 = toI32(l3e >>> 8) & 0xff
-      const l3c: i32 = toI32(l3e) & 0xff
-      const l3d: i32 = toI32(l3) & 0xff
+      const l3e: u32 = ctSelect(l3, 0xffffffff, 0)
+      const l3d: i32 = toI32(l3e) & 0xff
+      const l3c: i32 = toI32(l3e >>> 8) & 0xff
+      const l3f: u32 = ctSelect(l3e >>> 16, 0xffffffff, 0)
+      const l3b: i32 = toI32(l3f) & 0xff
+      const l3a: i32 = toI32(l3f >>> 8) & 0xff
       r3 ^= st[3126 + n] ^ (((st[3144 + l3a] + st[3400 + l3b]) ^ st[3656 + l3c]) + st[3912 + l3d])
-      const l4e: u32 = ctSelect((l4 >>> 8) | (l4 << 24), 0xffffffff, 0)
-      const l4a: i32 = toI32(l4 >>> 24) & 0xff
-      const l4b: i32 = toI32(l4e >>> 8) & 0xff
-      const l4c: i32 = toI32(l4e) & 0xff
-      const l4d: i32 = toI32(l4) & 0xff
+      const l4e: u32 = ctSelect(l4, 0xffffffff, 0)
+      const l4d: i32 = toI32(l4e) & 0xff
+      const l4c: i32 = toI32(l4e >>> 8) & 0xff
+      const l4f: u32 = ctSelect(l4e >>> 16, 0xffffffff, 0)
+      const l4b: i32 = toI32(l4f) & 0xff
+      const l4a: i32 = toI32(l4f >>> 8) & 0xff
       r4 ^= st[4168 + n] ^ (((st[4186 + l4a] + st[4442 + l4b]) ^ st[4698 + l4c]) + st[4954 + l4d])
-      const r0e: u32 = ctSelect((r0 >>> 8) | (r0 << 24), 0xffffffff, 0)
-      const r0a: i32 = toI32(r0 >>> 24) & 0xff
-      const r0b: i32 = toI32(r0e >>> 8) & 0xff
-      const r0c: i32 = toI32(r0e) & 0xff
-      const r0d: i32 = toI32(r0) & 0xff
+      const r0e: u32 = ctSelect(r0, 0xffffffff, 0)
+      const r0d: i32 = toI32(r0e) & 0xff
+      const r0c: i32 = toI32(r0e >>> 8) & 0xff
+      const r0f: u32 = ctSelect(r0e >>> 16, 0xffffffff, 0)
+      const r0b: i32 = toI32(r0f) & 0xff
+      const r0a: i32 = toI32(r0f >>> 8) & 0xff
       l0 ^= st[n + 1] ^ (((st[18 + r0a] + st[274 + r0b]) ^ st[530 + r0c]) + st[786 + r0d])
-      const r1e: u32 = ctSelect((r1 >>> 8) | (r1 << 24), 0xffffffff, 0)
-      const r1a: i32 = toI32(r1 >>> 24) & 0xff
-      const r1b: i32 = toI32(r1e >>> 8) & 0xff
-      const r1c: i32 = toI32(r1e) & 0xff
-      const r1d: i32 = toI32(r1) & 0xff
+      const r1e: u32 = ctSelect(r1, 0xffffffff, 0)
+      const r1d: i32 = toI32(r1e) & 0xff
+      const r1c: i32 = toI32(r1e >>> 8) & 0xff
+      const r1f: u32 = ctSelect(r1e >>> 16, 0xffffffff, 0)
+      const r1b: i32 = toI32(r1f) & 0xff
+      const r1a: i32 = toI32(r1f >>> 8) & 0xff
       l1 ^= st[1042 + n + 1] ^ (((st[1060 + r1a] + st[1316 + r1b]) ^ st[1572 + r1c]) + st[1828 + r1d])
-      const r2e: u32 = ctSelect((r2 >>> 8) | (r2 << 24), 0xffffffff, 0)
-      const r2a: i32 = toI32(r2 >>> 24) & 0xff
-      const r2b: i32 = toI32(r2e >>> 8) & 0xff
-      const r2c: i32 = toI32(r2e) & 0xff
-      const r2d: i32 = toI32(r2) & 0xff
+      const r2e: u32 = ctSelect(r2, 0xffffffff, 0)
+      const r2d: i32 = toI32(r2e) & 0xff
+      const r2c: i32 = toI32(r2e >>> 8) & 0xff
+      const r2f: u32 = ctSelect(r2e >>> 16, 0xffffffff, 0)
+      const r2b: i32 = toI32(r2f) & 0xff
+      const r2a: i32 = toI32(r2f >>> 8) & 0xff
       l2 ^= st[2084 + n + 1] ^ (((st[2102 + r2a] + st[2358 + r2b]) ^ st[2614 + r2c]) + st[2870 + r2d])
-      const r3e: u32 = ctSelect((r3 >>> 8) | (r3 << 24), 0xffffffff, 0)
-      const r3a: i32 = toI32(r3 >>> 24) & 0xff
-      const r3b: i32 = toI32(r3e >>> 8) & 0xff
-      const r3c: i32 = toI32(r3e) & 0xff
-      const r3d: i32 = toI32(r3) & 0xff
+      const r3e: u32 = ctSelect(r3, 0xffffffff, 0)
+      const r3d: i32 = toI32(r3e) & 0xff
+      const r3c: i32 = toI32(r3e >>> 8) & 0xff
+      const r3f: u32 = ctSelect(r3e >>> 16, 0xffffffff, 0)
+      const r3b: i32 = toI32(r3f) & 0xff
+      const r3a: i32 = toI32(r3f >>> 8) & 0xff
       l3 ^= st[3126 + n + 1] ^ (((st[3144 + r3a] + st[3400 + r3b]) ^ st[3656 + r3c]) + st[3912 + r3d])
-      const r4e: u32 = ctSelect((r4 >>> 8) | (r4 << 24), 0xffffffff, 0)
-      const r4a: i32 = toI32(r4 >>> 24) & 0xff
-      const r4b: i32 = toI32(r4e >>> 8) & 0xff
-      const r4c: i32 = toI32(r4e) & 0xff
-      const r4d: i32 = toI32(r4) & 0xff
+      const r4e: u32 = ctSelect(r4, 0xffffffff, 0)
+      const r4d: i32 = toI32(r4e) & 0xff
+      const r4c: i32 = toI32(r4e >>> 8) & 0xff
+      const r4f: u32 = ctSelect(r4e >>> 16, 0xffffffff, 0)
+      const r4b: i32 = toI32(r4f) & 0xff
+      const r4a: i32 = toI32(r4f >>> 8) & 0xff
       l4 ^= st[4168 + n + 1] ^ (((st[4186 + r4a] + st[4442 + r4b]) ^ st[4698 + r4c]) + st[4954 + r4d])
     }
     const t0: u32 = r0
@@ -1391,35 +1420,40 @@ const bcryptBody6 = (st: u32[]): void => {
     l4 ^= st[4168]
     l5 ^= st[5210]
     for (let n: i32 = 1; n < 17; n += 2) {
-      const l0e: u32 = ctSelect(l0 >>> 8, 0xffffffff, 0)
-      const l0a: i32 = toI32(l0 >>> 24) & 0xff
-      const l0b: i32 = toI32(l0e >>> 8) & 0xff
-      const l0c: i32 = toI32(l0e) & 0xff
-      const l0d: i32 = toI32(l0) & 0xff
+      const l0e: u32 = ctSelect(l0, 0xffffffff, 0)
+      const l0d: i32 = toI32(l0e) & 0xff
+      const l0c: i32 = toI32(l0e >>> 8) & 0xff
+      const l0f: u32 = ctSelect(l0e >>> 16, 0xffffffff, 0)
+      const l0b: i32 = toI32(l0f) & 0xff
+      const l0a: i32 = toI32(l0f >>> 8) & 0xff
       r0 ^= st[n] ^ (((st[18 + l0a] + st[274 + l0b]) ^ st[530 + l0c]) + st[786 + l0d])
-      const l1e: u32 = ctSelect(l1 >>> 8, 0xffffffff, 0)
-      const l1a: i32 = toI32(l1 >>> 24) & 0xff
-      const l1b: i32 = toI32(l1e >>> 8) & 0xff
-      const l1c: i32 = toI32(l1e) & 0xff
-      const l1d: i32 = toI32(l1) & 0xff
+      const l1e: u32 = ctSelect(l1, 0xffffffff, 0)
+      const l1d: i32 = toI32(l1e) & 0xff
+      const l1c: i32 = toI32(l1e >>> 8) & 0xff
+      const l1f: u32 = ctSelect(l1e >>> 16, 0xffffffff, 0)
+      const l1b: i32 = toI32(l1f) & 0xff
+      const l1a: i32 = toI32(l1f >>> 8) & 0xff
       r1 ^= st[1042 + n] ^ (((st[1060 + l1a] + st[1316 + l1b]) ^ st[1572 + l1c]) + st[1828 + l1d])
-      const l2e: u32 = ctSelect(l2 >>> 8, 0xffffffff, 0)
-      const l2a: i32 = toI32(l2 >>> 24) & 0xff
-      const l2b: i32 = toI32(l2e >>> 8) & 0xff
-      const l2c: i32 = toI32(l2e) & 0xff
-      const l2d: i32 = toI32(l2) & 0xff
+      const l2e: u32 = ctSelect(l2, 0xffffffff, 0)
+      const l2d: i32 = toI32(l2e) & 0xff
+      const l2c: i32 = toI32(l2e >>> 8) & 0xff
+      const l2f: u32 = ctSelect(l2e >>> 16, 0xffffffff, 0)
+      const l2b: i32 = toI32(l2f) & 0xff
+      const l2a: i32 = toI32(l2f >>> 8) & 0xff
       r2 ^= st[2084 + n] ^ (((st[2102 + l2a] + st[2358 + l2b]) ^ st[2614 + l2c]) + st[2870 + l2d])
-      const l3e: u32 = ctSelect(l3 >>> 8, 0xffffffff, 0)
-      const l3a: i32 = toI32(l3 >>> 24) & 0xff
-      const l3b: i32 = toI32(l3e >>> 8) & 0xff
-      const l3c: i32 = toI32(l3e) & 0xff
-      const l3d: i32 = toI32(l3) & 0xff
+      const l3e: u32 = ctSelect(l3, 0xffffffff, 0)
+      const l3d: i32 = toI32(l3e) & 0xff
+      const l3c: i32 = toI32(l3e >>> 8) & 0xff
+      const l3f: u32 = ctSelect(l3e >>> 16, 0xffffffff, 0)
+      const l3b: i32 = toI32(l3f) & 0xff
+      const l3a: i32 = toI32(l3f >>> 8) & 0xff
       r3 ^= st[3126 + n] ^ (((st[3144 + l3a] + st[3400 + l3b]) ^ st[3656 + l3c]) + st[3912 + l3d])
-      const l4e: u32 = ctSelect(l4 >>> 8, 0xffffffff, 0)
-      const l4a: i32 = toI32(l4 >>> 24) & 0xff
-      const l4b: i32 = toI32(l4e >>> 8) & 0xff
-      const l4c: i32 = toI32(l4e) & 0xff
-      const l4d: i32 = toI32(l4) & 0xff
+      const l4e: u32 = ctSelect(l4, 0xffffffff, 0)
+      const l4d: i32 = toI32(l4e) & 0xff
+      const l4c: i32 = toI32(l4e >>> 8) & 0xff
+      const l4f: u32 = ctSelect(l4e >>> 16, 0xffffffff, 0)
+      const l4b: i32 = toI32(l4f) & 0xff
+      const l4a: i32 = toI32(l4f >>> 8) & 0xff
       r4 ^= st[4168 + n] ^ (((st[4186 + l4a] + st[4442 + l4b]) ^ st[4698 + l4c]) + st[4954 + l4d])
       const l5e: u32 = ctSelect(l5 >>> 8, 0xffffffff, 0)
       const l5a: i32 = toI32(l5 >>> 24) & 0xff
@@ -1427,35 +1461,40 @@ const bcryptBody6 = (st: u32[]): void => {
       const l5c: i32 = toI32(l5e) & 0xff
       const l5d: i32 = toI32(l5) & 0xff
       r5 ^= st[5210 + n] ^ (((st[5228 + l5a] + st[5484 + l5b]) ^ st[5740 + l5c]) + st[5996 + l5d])
-      const r0e: u32 = ctSelect(r0 >>> 8, 0xffffffff, 0)
-      const r0a: i32 = toI32(r0 >>> 24) & 0xff
-      const r0b: i32 = toI32(r0e >>> 8) & 0xff
-      const r0c: i32 = toI32(r0e) & 0xff
-      const r0d: i32 = toI32(r0) & 0xff
+      const r0e: u32 = ctSelect(r0, 0xffffffff, 0)
+      const r0d: i32 = toI32(r0e) & 0xff
+      const r0c: i32 = toI32(r0e >>> 8) & 0xff
+      const r0f: u32 = ctSelect(r0e >>> 16, 0xffffffff, 0)
+      const r0b: i32 = toI32(r0f) & 0xff
+      const r0a: i32 = toI32(r0f >>> 8) & 0xff
       l0 ^= st[n + 1] ^ (((st[18 + r0a] + st[274 + r0b]) ^ st[530 + r0c]) + st[786 + r0d])
-      const r1e: u32 = ctSelect(r1 >>> 8, 0xffffffff, 0)
-      const r1a: i32 = toI32(r1 >>> 24) & 0xff
-      const r1b: i32 = toI32(r1e >>> 8) & 0xff
-      const r1c: i32 = toI32(r1e) & 0xff
-      const r1d: i32 = toI32(r1) & 0xff
+      const r1e: u32 = ctSelect(r1, 0xffffffff, 0)
+      const r1d: i32 = toI32(r1e) & 0xff
+      const r1c: i32 = toI32(r1e >>> 8) & 0xff
+      const r1f: u32 = ctSelect(r1e >>> 16, 0xffffffff, 0)
+      const r1b: i32 = toI32(r1f) & 0xff
+      const r1a: i32 = toI32(r1f >>> 8) & 0xff
       l1 ^= st[1042 + n + 1] ^ (((st[1060 + r1a] + st[1316 + r1b]) ^ st[1572 + r1c]) + st[1828 + r1d])
-      const r2e: u32 = ctSelect(r2 >>> 8, 0xffffffff, 0)
-      const r2a: i32 = toI32(r2 >>> 24) & 0xff
-      const r2b: i32 = toI32(r2e >>> 8) & 0xff
-      const r2c: i32 = toI32(r2e) & 0xff
-      const r2d: i32 = toI32(r2) & 0xff
+      const r2e: u32 = ctSelect(r2, 0xffffffff, 0)
+      const r2d: i32 = toI32(r2e) & 0xff
+      const r2c: i32 = toI32(r2e >>> 8) & 0xff
+      const r2f: u32 = ctSelect(r2e >>> 16, 0xffffffff, 0)
+      const r2b: i32 = toI32(r2f) & 0xff
+      const r2a: i32 = toI32(r2f >>> 8) & 0xff
       l2 ^= st[2084 + n + 1] ^ (((st[2102 + r2a] + st[2358 + r2b]) ^ st[2614 + r2c]) + st[2870 + r2d])
-      const r3e: u32 = ctSelect(r3 >>> 8, 0xffffffff, 0)
-      const r3a: i32 = toI32(r3 >>> 24) & 0xff
-      const r3b: i32 = toI32(r3e >>> 8) & 0xff
-      const r3c: i32 = toI32(r3e) & 0xff
-      const r3d: i32 = toI32(r3) & 0xff
+      const r3e: u32 = ctSelect(r3, 0xffffffff, 0)
+      const r3d: i32 = toI32(r3e) & 0xff
+      const r3c: i32 = toI32(r3e >>> 8) & 0xff
+      const r3f: u32 = ctSelect(r3e >>> 16, 0xffffffff, 0)
+      const r3b: i32 = toI32(r3f) & 0xff
+      const r3a: i32 = toI32(r3f >>> 8) & 0xff
       l3 ^= st[3126 + n + 1] ^ (((st[3144 + r3a] + st[3400 + r3b]) ^ st[3656 + r3c]) + st[3912 + r3d])
-      const r4e: u32 = ctSelect(r4 >>> 8, 0xffffffff, 0)
-      const r4a: i32 = toI32(r4 >>> 24) & 0xff
-      const r4b: i32 = toI32(r4e >>> 8) & 0xff
-      const r4c: i32 = toI32(r4e) & 0xff
-      const r4d: i32 = toI32(r4) & 0xff
+      const r4e: u32 = ctSelect(r4, 0xffffffff, 0)
+      const r4d: i32 = toI32(r4e) & 0xff
+      const r4c: i32 = toI32(r4e >>> 8) & 0xff
+      const r4f: u32 = ctSelect(r4e >>> 16, 0xffffffff, 0)
+      const r4b: i32 = toI32(r4f) & 0xff
+      const r4a: i32 = toI32(r4f >>> 8) & 0xff
       l4 ^= st[4168 + n + 1] ^ (((st[4186 + r4a] + st[4442 + r4b]) ^ st[4698 + r4c]) + st[4954 + r4d])
       const r5e: u32 = ctSelect(r5 >>> 8, 0xffffffff, 0)
       const r5a: i32 = toI32(r5 >>> 24) & 0xff

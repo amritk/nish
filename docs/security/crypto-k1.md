@@ -111,14 +111,17 @@ was verified instead, each with the test that now pins it.
 | HKDF-Expand refuses L < 0, L > 255 × HashLen, and the `i32` extremes; L = 0 is empty | the bound is a comparison, not a sum | existing `crypto_hkdf`; new `crypto_hkdf_k1_bounds` and `_f64` |
 | `timingSafeEqualAt`'s window test cannot wrap, and stays sound on an array longer than 2^31 − 1 bytes, where its length saturates | every window it accepts ends at or below 2^31 − 1, which is inside the array | existing `crypto_ct`; new `crypto_ct_long_f64` (a window ending at 2^31 − 1) |
 | The compare loops keep no branch, no call and no secret-addressed load after `clang -O2`, on x86-64 and aarch64 | an `i32` OR-accumulator, read once as `diff === 0` | `tests/cases/ct_asm_k1_ct` (`timingSafeEqual32`, `timingSafeEqual48`, `timingSafeEqualAt16`), held to the module by `tests/link/crypto_ct_k1_copies` |
-| base64url's character maps keep no branch and no table load, and neither does one group of the encoder or the decoder | range masks and an arithmetic shift, no table | `tests/cases/ct_asm_k1_base64url` (`base64urlCharOf`, `base64urlSextetOf` verbatim; `base64urlEncodeGroup`, `base64urlDecodeGroup`), held to the module on every sextet, every byte and 4,000 generated groups by `tests/link/crypto_base64url_k1_copies` |
+| base64url's character maps keep no branch and no table load, and neither does one group of the encoder or the decoder | range masks and an arithmetic shift, no table | `tests/cases/ct_asm_k1_base64url` (`base64urlCharOf`, `base64urlSextetOf` verbatim; `base64urlEncodeGroup`, and `base64urlDecodeGroup`, the decoder's four-sextet, 24-bit-word loop body as it ships), held to the module on every sextet, every byte and 4,000 generated groups by `tests/link/crypto_base64url_k1_copies` |
 
 What the fixtures do not reach, and so remains discipline, verified only by
 the reading above:
 
 - the length tests and the length-driven loops of both compare functions,
   since a trip count is a branch;
-- the decoder's store guard and position test;
+- the decoder's store guard, a test on `j` and the length (its position test
+  is gone; see the addendum on the group-of-four loop);
+- the decoder's short final group, the loop body's word built from two or
+  three sextets, chosen by the length;
 - the encoder's `String.fromCharCode` and `push`, which copy a secret byte
   into a fresh string and so are a call. The byte is stored, never used as an
   address.
@@ -257,3 +260,57 @@ language can name (K1-7).
 The closest upstream is Go's `golang.org/x/crypto/pbkdf2` (BSD-3-Clause),
 which keys the PRF once and runs the same XOR loop. This code is written from
 RFC 8018 and copies none of it; the shared structure is the RFC's.
+
+## Addendum: base64url decode by groups of four (#1185)
+
+`base64urlDecode` no longer runs a bit accumulator a character at a time. It
+reads four characters per step, ORs their sextets into one 24-bit word and
+stores its three bytes. A short final group of two or three characters is
+decoded once after the loop. The old loop's `bits >= 8` position test is gone
+with the accumulator. The measurements are in `bench/jwt-verify/README.md`.
+
+Scope: `std/crypto/base64url.ts`, `base64urlDecode` only. The character maps
+are unchanged, and so is the encoder.
+
+The decoder still answers the same thing for every text:
+
+- `null` for a length of 1 mod 4 (tested first: the length is public);
+- `null` for any character outside the alphabet, since its sextet's sign bit,
+  `>> 31`, is ORed into `bad`;
+- `null` for stray bits under the last byte: 16 bits of a two-character
+  group's word, 8 of a three-character one's.
+
+`bad` is still read once, after the whole text.
+
+The -O2 IR of the linked function, read by hand, has these conditional
+branches and no others:
+
+- the length tests;
+- the loop counter `k + 3 < n`;
+- the store guard on `j` and its overflow checks;
+- the tail's `tail === 3` and its `charCodeAt` bounds checks;
+- the final `bad !== 0`.
+
+Every one depends on the length and none on a character. The four sextets of
+a group are computed as one `<4 x i32>` vector of range masks, with no table
+load.
+
+Tests: `tests/link/crypto_base64url_groups` checks text lengths 0 to 15, i.e.
+every length mod 4 at each group count. For each length it runs:
+
+- a round trip against the encoder;
+- each of 16 characters outside the alphabet at every position;
+- the text one character short;
+- each unused low bit of the final character set;
+- the decoded size checked exactly.
+
+Dropping `s3` from the group's verdict fails 2,016 of its checks, and
+narrowing the two-character tail's stray-bit mask fails 128 of them.
+`crypto_base64url` and `crypto_base64url_k1_copies` pass unchanged.
+
+`ct_asm_k1_base64url`'s `base64urlDecodeGroup` is now the module's loop body
+verbatim (four sextets, `word = s0 << 18 | s1 << 12 | s2 << 6 | s3`, three
+stores), so the assembly check reads the code that ships, and
+`crypto_base64url_k1_copies` holds it to the module on 4,000 generated
+groups. The short final group is not in the fixture; it is listed above with
+what the fixtures do not reach.

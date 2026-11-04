@@ -81,7 +81,21 @@
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
 import { copyBytes } from "nish/bytes"
-import { extract, loadU8x16, u8x16 } from "nish:simd"
+import {
+  and,
+  any,
+  eq,
+  extract,
+  loadU8x16,
+  lt,
+  mask8x16,
+  ne,
+  or,
+  replace,
+  splatU8x16,
+  store,
+  u8x16,
+} from "nish:simd"
 
 /** `next()`: the input so far holds no further event; feed more. */
 export const HTTP1_NEED_MORE: i32 = 0
@@ -1591,14 +1605,39 @@ const http1BytesAreToken = (bytes: u8[]): boolean => {
   return toI32(bytes.length) > 0
 }
 
-/** Whether every byte of `bytes` may stand in a field value. */
+/**
+ * Whether no lane of `v` is a byte a field value may not hold: below 32 and
+ * not HTAB, or DEL. `http1IsValueByte` on sixteen bytes at once, exactly, so
+ * a vector may overlap one already checked.
+ */
+const http1LanesAreFieldText = (v: u8x16): boolean => {
+  const control: mask8x16 = and(lt(v, splatU8x16(32)), ne(v, splatU8x16(9)))
+  return !any(or(control, eq(v, splatU8x16(127))))
+}
+
+/**
+ * Whether every byte of `bytes` may stand in a field value: sixteen at a
+ * time, the last vector ending at the last byte and overlapping the one
+ * before it, and one at a time below sixteen.
+ */
 const http1BytesAreFieldText = (bytes: u8[]): boolean => {
-  for (const b of bytes) {
-    if (!http1IsValueByte(toI32(b))) {
+  const n: i32 = toI32(bytes.length)
+  if (n < 16) {
+    for (let k: i32 = 0; k < n; k += 1) {
+      if (!http1IsValueByte(toI32(bytes[k]))) {
+        return false
+      }
+    }
+    return true
+  }
+  let k: i32 = 0
+  while (k >= 0 && k <= n - 16) {
+    if (!http1LanesAreFieldText(loadU8x16(bytes, k))) {
       return false
     }
+    k += 16
   }
-  return true
+  return k === n || http1LanesAreFieldText(loadU8x16(bytes, n - 16))
 }
 
 /** Whether the octets of `bytes` spell `word`, which is lowercase, in any ASCII case: a field name compared as RFC 9110 §5.1 says. */
@@ -1628,6 +1667,14 @@ const http1DecimalDigits = (n: i32): i32 => {
 /** Writes `text` at `out[at ..)`, which the caller has made sure holds it, and answers where it ends. */
 export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
   const n: i32 = toI32(text.length)
+  if (at >= 0 && at <= toI32(out.length) - n) {
+    // It fits, the case every caller makes sure of: one test, then a loop
+    // with no bounds check in it.
+    for (let k: i32 = 0; k < n; k += 1) {
+      out[at + k] = toU8(text.charCodeAt(k))
+    }
+    return at + n
+  }
   for (let k: i32 = 0; k < n && at + k < toI32(out.length); k += 1) {
     if (at + k >= 0) {
       out[at + k] = toU8(text.charCodeAt(k))
@@ -1667,6 +1714,50 @@ const http1PutBytes = (out: u8[], at: i32, bytes: u8[]): i32 => {
     }
   }
   return at + n
+}
+
+/**
+ * Writes `text`, at most sixteen ASCII bytes, at `out[at ..)`, likewise, as
+ * one sixteen-byte store of `v`, which holds `text` in its first lanes: when
+ * `at + 16` does not pass `limit`, the end of the head being written, whose
+ * every byte from `at` on is written after this one, so the lanes past
+ * `text` are overwritten before the head is done. Byte by byte otherwise.
+ */
+const http1PutFixed = (out: u8[], at: i32, limit: i32, v: u8x16, text: string): i32 => {
+  if (at >= 0 && at <= limit - 16 && limit <= toI32(out.length)) {
+    store(v, out, at)
+    return at + toI32(text.length)
+  }
+  return http1PutText(out, at, text)
+}
+
+/**
+ * Writes `HTTP/1.1 `, the three digits of `status`, which is 100 to 599, and
+ * a space at `out[at ..)`, likewise: one store, the digits replacing three
+ * lanes of the constant.
+ */
+const http1PutStatusLine = (out: u8[], at: i32, limit: i32, status: i32): i32 => {
+  const hundreds: i32 = status / 100
+  const tens: i32 = (status / 10) % 10
+  const ones: i32 = status % 10
+  if (at >= 0 && at <= limit - 16 && limit <= toI32(out.length)) {
+    // "HTTP/1.1 000 ", and three lanes the head's next bytes overwrite.
+    const line: u8x16 = u8x16(72, 84, 84, 80, 47, 49, 46, 49, 32, 48, 48, 48, 32, 32, 32, 32)
+    store(
+      replace(replace(replace(line, 9, toU8(48 + hundreds)), 10, toU8(48 + tens)), 11, toU8(48 + ones)),
+      out,
+      at
+    )
+    return at + 13
+  }
+  const end: i32 = http1PutText(out, at, "HTTP/1.1 ")
+  if (end >= 0 && end < toI32(out.length) - 3) {
+    out[end] = toU8(48 + hundreds)
+    out[end + 1] = toU8(48 + tens)
+    out[end + 2] = toU8(48 + ones)
+    out[end + 3] = 32
+  }
+  return end + 4
 }
 
 /** Writes the decimal digits of `n`, which is not negative, at `out[at ..)`, likewise. */
@@ -1725,7 +1816,7 @@ export const http1WriteResponseHead = (
   // is written, in 64 bits so that no caller's lengths can wrap the sum.
   let need: i64 = toI64(17) + toI64(reason.length)
   let sendDate: boolean = status >= 200 && toI32(date.length) > 0
-  for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
     const name: u8[] = names[i]
     const value: u8[] = values[i]
     if (!http1BytesAreToken(name) || !http1BytesAreFieldText(value)) {
@@ -1757,41 +1848,49 @@ export const http1WriteResponseHead = (
   if (at < 0 || at > toI32(out.length) || need > toI64(toI32(out.length) - at)) {
     return HTTP1_NO_ROOM
   }
-  let end: i32 = http1PutText(out, at, "HTTP/1.1 ")
   // A status is three digits, checked above: no division loop for them.
-  if (end >= 0 && end < toI32(out.length) - 3) {
-    const hundreds: i32 = status / 100
-    const tens: i32 = status / 10
-    const tensDigit: i32 = tens % 10
-    const ones: i32 = status % 10
-    out[end] = toU8(48 + hundreds)
-    out[end + 1] = toU8(48 + tensDigit)
-    out[end + 2] = toU8(48 + ones)
-    out[end + 3] = 32
-  }
-  end = end + 4
+  const limit: i32 = at + toI32(need)
+  let end: i32 = http1PutStatusLine(out, at, limit, status)
   end = http1PutText(out, end, reason)
   end = http1PutCrlf(out, end)
-  for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
+  for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
     end = http1PutBytes(out, end, names[i])
     end = http1PutColonSpace(out, end)
     end = http1PutBytes(out, end, values[i])
     end = http1PutCrlf(out, end)
   }
   if (sendDate) {
-    end = http1PutText(out, end, "Date: ")
+    end = http1PutFixed(
+      out,
+      end,
+      limit,
+      u8x16(68, 97, 116, 101, 58, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32),
+      "Date: "
+    )
     end = http1PutBytes(out, end, date)
     end = http1PutCrlf(out, end)
   }
   if (bodyLength >= 0) {
-    end = http1PutText(out, end, "Content-Length: ")
+    end = http1PutFixed(
+      out,
+      end,
+      limit,
+      u8x16(67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32),
+      "Content-Length: "
+    )
     end = http1PutDecimal(out, end, bodyLength)
     end = http1PutCrlf(out, end)
   } else if (bodyLength === HTTP1_CHUNKED) {
     end = http1PutText(out, end, "Transfer-Encoding: chunked\r\n")
   }
   if (toI32(connection.length) > 0) {
-    end = http1PutText(out, end, "Connection: ")
+    end = http1PutFixed(
+      out,
+      end,
+      limit,
+      u8x16(67, 111, 110, 110, 101, 99, 116, 105, 111, 110, 58, 32, 32, 32, 32, 32),
+      "Connection: "
+    )
     end = http1PutText(out, end, connection)
     end = http1PutCrlf(out, end)
   }
