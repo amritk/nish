@@ -477,11 +477,12 @@ widths take 94 (2), 71 (3), 57 (4), 50 (5) and 46 (6) cycles per block.
 `llc`, from its `objdump`, is one round (two half-rounds) of all four lanes
 in 103 instructions: 40 loads (each lane's 4 S-box words and `P` word per
 half-round), no stores and no spills, and one compare and backward branch,
-the only branch; it runs 8 times per block, not unrolled further. Before the
-paired bytes of
-[Cascade Lake](#cascade-lake-the-ceiling-and-one-copy-for-two-bytes) it was
-112 instructions, 44 loads (4 of them reloads of spilled values) and 4
-stores, and before the rotated copy 123 instructions, 45 loads and 5 stores. Checked against the suspects: no
+the only branch; it runs 8 times per block, not unrolled further. It has
+been shortened twice, both in
+[Cascade Lake](#cascade-lake-the-ceiling-and-one-copy-for-two-bytes): the
+first form was 123 instructions, 45 loads and 5 stores; the rotated copy made
+it 112, 44 (4 of them reloads of spilled values) and 4; the paired bytes made
+it what it is now. Checked against the suspects: no
 bounds check (each S-box index is masked to 0–255 and the state's length is
 checked once, before the loop) and no overflow check (the arithmetic is
 `u32`, which wraps); no `Secret` or wipe work inside the loop, which calls
@@ -1058,9 +1059,12 @@ behind the barrier: a copy of the word gives bytes 0 and 1, and that copy
 moved down by 16, behind a second barrier, gives bytes 2 and 3. LLVM then
 emits `movzx` from the high-byte register for the second of each pair, so a
 lane takes its four bytes in six instructions, where the rotated copy took
-seven. Only `eax`, `ebx`, `ecx` and `edx` have a second byte, so at six lanes
-the sixth lane keeps the rotated copy's way (moved down by 8 there, as
-before); with all six paired the loop spilled more than it saved.
+seven. Each pair's copy must sit, for its second byte, in one of the four
+registers that have one (`eax`, `ebx`, `ecx`, `edx`), which constrains the
+register allocator: up to five lanes it fits, but with all six lanes paired
+the loop spilled more than the pairs saved, so the sixth lane of six keeps
+the rotated copy's way (moved down by 8 there, as before). The cutoff at
+five is counted, not derived.
 `bcryptBody2` is unchanged. `gen-body.mjs --rotated` still writes the
 previous form, and `bench/crypto/bcrypt/extract.mjs` counts and times the
 two against each other and against a byte-for-byte copy of the module, the
@@ -1075,6 +1079,12 @@ stack references a round:
 | 4 | 112, 8 | 103, 0 | 14.00 → 12.88 | −8.0% |
 | 5 | 145, 16 | 132, 9 | 14.50 → 13.20 | −9.0% |
 | 6 | 180, 22 | 169, 19 | 15.00 → 14.08 | −6.1% |
+
+Under `--cpu x86-64-v3`, where the rotated copy is one `rorx`, the two forms
+count about level at three to five lanes and the pairs still win at six:
+78 against 78 at three lanes, 103 (no stack references) against 101 (4) at
+four, 132 (9) against 131 (11) at five, and 169 (19) against 186 (26) at six.
+v3 was not timed; on these counts a v3 build should not be slower.
 
 On G, three runs of `extract.mjs --rounds 15` (the third pinned to one vCPU,
 four to six lanes), ms per cost-10 hash a lane. The ratio is the median of

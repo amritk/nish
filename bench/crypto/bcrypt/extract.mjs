@@ -103,6 +103,7 @@ const roundLoops = (asm) => {
     let count = 0
     let stack = 0
     let words = 0
+    let closed = false
     for (let j = i + 1; j < to; j++) {
       const line = lines[j]
       if (!/^\s+[a-z]/.test(line)) {
@@ -115,10 +116,18 @@ const roundLoops = (asm) => {
         words++
       }
       if (new RegExp(`^j\\w+\\s+\\${label[1]}$`).test(line.trim())) {
+        closed = true
         break
       }
     }
-    loops.set(Math.round(words / 10), { count, stack })
+    const lanes = Math.round(words / 10)
+    if (!closed || loops.has(lanes)) {
+      console.error(
+        `the round loop at ${label[1]} has no back branch or repeats a lane count; the table would be wrong`
+      )
+      process.exit(1)
+    }
+    loops.set(lanes, { count, stack })
   }
   return loops
 }

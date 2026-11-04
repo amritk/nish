@@ -1021,7 +1021,9 @@ const bcryptLoadSlot = (state: Secret<u32[]>, password: Secret<u8[]>, slot: i32)
 }
 
 // The cost-round kernels, one per width. Each is `bcryptBody4`'s text with
-// the lane count changed (bench/crypto/bcrypt/gen-body.mjs writes them), not
+// the lane count changed, except that six lanes' sixth lane takes its bytes
+// the previous way (see `bcryptBody4`); bench/crypto/bcrypt/gen-body.mjs
+// writes them all, so an edit is made there. They are not
 // one loop over a lane count: the lanes' l and r must live in registers and
 // their loads be scheduled together, which a loop over an array of lanes
 // does not give. Two lanes take each byte by its own shift and write every
@@ -1165,9 +1167,10 @@ const bcryptBody3 = (st: u32[]): void => {
  * moved down by 16 (`f`) bytes 2 and 3, so a second byte is one `movzx` from
  * `ah`, `bh`, `ch` or `dh` and a lane takes its four bytes in six
  * instructions; without the barriers LLVM folds the pairs back into shifts of
- * the word. Only four registers have a second byte, so at six lanes the sixth
- * lane takes bytes 1 and 2 from one copy moved down by 8 and bytes 0 and 3 by
- * shifts of the word, the way every lane had before. On a Xeon Platinum
+ * the word. Only four registers have a second byte, and with all six lanes
+ * paired the loop spilled more than it saved (counted), so at six lanes the
+ * sixth lane takes bytes 1 and 2 from one copy moved down by 8 and bytes 0
+ * and 3 by shifts of the word, the way every lane had before. On a Xeon Platinum
  * 8260 the pairs take about 3.5% less time a hash than that way at the best
  * width, five lanes, and 5.6% less at six (docs/security/crypto-bcrypt.md,
  * "Cascade Lake"). The barrier is an identity on a register: it adds no

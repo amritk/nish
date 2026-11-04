@@ -57,10 +57,12 @@ const body = (W, unroll = false, rotated = false) => {
   // down by 16, a second copy, gives bytes 2 and 3. The second byte is one
   // `movzx` from `ah`, `bh`, `ch` or `dh`, so a lane takes its four bytes in
   // six instructions; without the barriers LLVM folds the pairs back into
-  // shifts of the word. A second byte needs its word in one of the four
-  // registers that have one, so at six lanes the sixth lane keeps the
+  // shifts of the word. A second byte needs its copy in one of the four
+  // registers that have one, which constrains the register allocator: up to
+  // five lanes it fits, but all six paired spilled more than they saved
+  // (counted, not derived), so at six lanes the sixth lane keeps the
   // previous way, one copy moved down by 8 for bytes 1 and 2 and two shifts
-  // of the word for 0 and 3: all six paired spill more than they save.
+  // of the word for 0 and 3.
   // `rotated` (`--rotated`) gives every lane that previous way, rotating the
   // copy at three to five lanes, which a BMI2 target does in one `rorx`.
   // Two lanes keep the four shifts of the word itself, every lane's bytes
@@ -174,7 +176,9 @@ if (process.argv[2] === "--check") {
 }
 const width = Number(process.argv[2])
 if (![2, 3, 4, 5, 6].includes(width)) {
-  console.error("usage: node bench/crypto/bcrypt/gen-body.mjs <2|3|4|5|6> | --check")
+  console.error(
+    "usage: node bench/crypto/bcrypt/gen-body.mjs <2|3|4|5|6> [--unroll] [--rotated] | --check | --module <out.ts> [--unroll] [--rotated]"
+  )
   process.exit(2)
 }
 console.log(body(width, process.argv.includes("--unroll"), process.argv.includes("--rotated")).join("\n"))
