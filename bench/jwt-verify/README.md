@@ -107,12 +107,12 @@ What the numbers say:
 - **`base64urlDecode` takes 39–56% less time and 52–56% fewer
   instructions**, on every run and both shapes, each far outside its band.
 - **Against the server's if-chain decoder, std is faster only on the long
-  token.** At 507 B it is 10% (A) and 22% (C) under `decode-server`, outside
-  both columns' bands. Each figure is taken against the slower of `nish` and
-  `base`'s server cell, which run identical code. It counts 24% fewer
-  instructions. At 148 B there is no difference: +3% (A), −14% (B) and −3% (C),
-  with no sign that repeats outside the band, although std counts 18% fewer
-  instructions. The likely cause is the output std allocates on each call,
+  token.** Every figure here sets `nish`'s std cell against `nish`'s server
+  cell from the same run. At 507 B std is 14.5% (A) and 21.7% (C) under
+  `decode-server`, outside both columns' bands; run B's −18.9% sits inside
+  its ±22–26% bands. It counts 24% fewer instructions. At 148 B there is no
+  difference: +2.9% (A), −13.6% (B) and −2.7% (C), with no sign that repeats
+  outside the band, although std counts 18% fewer instructions. The likely cause is the output std allocates on each call,
   which the server's decoder does not. No column isolates that cost.
 - **`verify` does not move, and should not.** `JwtVerifier` decodes with its
   own `jwtDecode`, whose instruction count is the same on both sides. `base`
@@ -121,10 +121,15 @@ What the numbers say:
   this conclusion rests on the instruction count, not the timings.
 - **Without SHA-NI, `verify` costs 29–63% more**, `midstate` 104 B 2.2–2.4×
   as much and `midstate` 463 B 3.7–4.0×, outside the band on both runs.
-- **`--cpu x86-64-v3` takes 13–19% off the soft path only on `midstate`
-  463 B**, outside the band on both runs. Elsewhere its timings change sign
-  between the runs. It counts 9.7% fewer instructions on `verify` and 16–17%
-  fewer on `midstate`.
+- **`--cpu x86-64-v3` takes 13–19% off the soft path outside the band on
+  both runs only on `midstate` 463 B** (−19.0% A, −12.8% B). Row by row:
+  - `verify` 148 B: +6.7% (A), −13.8% (B); the sign changes.
+  - `verify` 507 B: −12.7% (A), −3.5% (B). Faster on both runs, but only run
+    B's is outside its band (±1.7%); run A's ±17.6% covers it.
+  - `midstate` 104 B: +3.1% (A), −13.0% (B); the sign changes.
+
+  It counts 9.7% fewer instructions on `verify` and 16–17% fewer on
+  `midstate`.
 - Under callgrind, the soft and SHA-NI columns count the same, so read the
   soft path's cost from the timings alone.
 

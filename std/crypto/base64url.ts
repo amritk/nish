@@ -127,8 +127,9 @@ export const base64urlEncode = (data: u8[]): string => {
  * one canonical spelling of any byte string — see the module comment for the
  * five refusals.
  *
- * The same accumulator as `base64urlEncode`, run the other way: six bits in per
- * character, eight out per byte.
+ * Each group of four characters becomes one 24-bit word, six bits a
+ * character, which splits into three bytes; a short final group of two or
+ * three characters fills the top of the word and gives one or two.
  */
 export const base64urlDecode = (text: string): u8[] | null => {
   // A text past 2^31 - 1 bytes is refused before `toI32`, which would
@@ -149,7 +150,8 @@ export const base64urlDecode = (text: string): u8[] | null => {
   const out: u8[] = new Array<u8>((n >> 2) * 3 + (tail === 0 ? 0 : tail - 1))
   const outLen: i32 = toI32(out.length)
   // All ones once any character is outside the alphabet (a sextet of `-1`
-  // shifted right by 31), and non-zero once the text ends on a bit that encodes no byte.
+  // shifted right by 31), and non-zero once the text ends on a bit that
+  // encodes no byte.
   let bad: i32 = 0
   // Four characters make one 24-bit word and three bytes, so a full group has
   // no count of waiting bits to test, and its four sextets are independent.

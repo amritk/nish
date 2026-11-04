@@ -49,26 +49,26 @@ function base64urlDecode(text: string): u8[] | null -> @nish.base64urlDecode [ex
   local +1:9 tail: i32 (const)
   local +9:9 out: u8[] (const)
   local +10:9 outLen: i32 (const)
-  local +13:7 bad: i32 (let)
-  local +16:7 j: i32 (let)
-  local +17:12 k: i32 (let)
-  local +18:11 s0: i32 (const)
-  callee +18:21 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +19:11 s1: i32 (const)
+  local +14:7 bad: i32 (let)
+  local +17:7 j: i32 (let)
+  local +18:12 k: i32 (let)
+  local +19:11 s0: i32 (const)
   callee +19:21 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +20:11 s2: i32 (const)
+  local +20:11 s1: i32 (const)
   callee +20:21 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +21:11 s3: i32 (const)
+  local +21:11 s2: i32 (const)
   callee +21:21 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +23:11 word: i32 (const)
-  local +37:11 k: i32 (const)
-  local +38:11 s0: i32 (const)
-  callee +38:21 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +39:11 s1: i32 (const)
+  local +22:11 s3: i32 (const)
+  callee +22:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +24:11 word: i32 (const)
+  local +38:11 k: i32 (const)
+  local +39:11 s0: i32 (const)
   callee +39:21 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +42:11 s2: i32 (const)
-  callee +42:34 base64urlSextetOf -> @nish.base64urlSextetOf
-  local +44:11 word: i32 (const)
+  local +40:11 s1: i32 (const)
+  callee +40:21 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +43:11 s2: i32 (const)
+  callee +43:34 base64urlSextetOf -> @nish.base64urlSextetOf
+  local +45:11 word: i32 (const)
 function base64StdPadCharOf(v: i32): i32 -> @nish.base64StdPadCharOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: v
