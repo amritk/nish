@@ -772,6 +772,33 @@ export const http1Checks = (): i32 => {
   const nothing: u8[] = [];
   t.eqStr("an empty chunked body round-trips", chunkedRoundTrip(nothing, ten), "same");
 
+  // --- Field names, lowered and checked sixteen bytes at a time ---------------------
+  // Mixed-case names of 15, 16, 17, 31, 32 and 33 bytes are stored lowered,
+  // their values keep their case, and a byte that is not a tchar at any place
+  // of a 33-byte name (the third vector's one lane, and every lane of the
+  // first two) is a 400, as is a name with no colon that ends its line.
+  const nameLengths: i32[] = [15, 16, 17, 31, 32, 33];
+  const mixed: string = "Ab-C_d^E`f|G~h!I#j$K%l&M'n*O+p.Q9rStUvWxYz";
+  const lowered: string = "ab-c_d^e`f|g~h!i#j$k%l&m'n*o+p.q9rstuvwxyz";
+  const raised: string = "AB-C_D^E`F|G~H!I#J$K%L&M'N*O+P.Q9RSTUVWXYZ";
+  for (let l: i32 = 0; l < toI32(nameLengths.length); l += 1) {
+    const n: i32 = nameLengths[l];
+    const name: string = mixed.substring(0, n);
+    const named: Fed = fedWith(`GET / HTTP/1.1\r\nHost: a\r\n${name}:VaL Ue\r\n${raised.substring(0, n)}: X\r\n\r\n`);
+    const lower: string = lowered.substring(0, n);
+    t.eqStr(`a ${n}-byte name is lowered and its value kept`, named.event === HTTP1_HEAD ? describeHead(named.p) : "refused", `GET / 1.1 keep length -1 up= [host=a; ${lower}=VaL Ue; ${lower}=X]`);
+    let refusals: i32 = 0;
+    for (let at: i32 = 0; at < n; at += 1) {
+      const bad: string = `${name.substring(0, at)}@${name.substring(at + 1, n)}`;
+      if (statusOf(`GET / HTTP/1.1\r\nHost: a\r\n${bad}: v\r\n\r\n`) === 400) {
+        refusals += 1;
+      }
+    }
+    t.eqI32(`'@' at each of a ${n}-byte name's places is a 400`, refusals, n);
+    t.eqI32(`a ${n}-byte name that ends its line is a 400`, statusOf(`GET / HTTP/1.1\r\nHost: a\r\n${name}\r\n\r\n`), toI32(400));
+  }
+  t.eqI32("a name byte of 128 is a 400", statusOf("GET / HTTP/1.1\r\nHost: a\r\nAbcdefghijklmnop\x80q: v\r\n\r\n"), toI32(400));
+
   // --- The spans, and the writers into a caller's buffer ---------------------------
   const spans: Http1Parser = corpusParserWith(false);
   const asked: u8[] = bytesOf(
