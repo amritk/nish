@@ -935,6 +935,86 @@ const limitCases = (tally: Tally): void => {
   }
 }
 
+/** Tchars for names, the letters next to the bytes that are not: `@` `[` `` ` `` `{` sit either side of the letters. */
+const NAME_CHARS: string = "aZ-^b_Y`c|X~d!W#e$V%f&U'g*T+h.S0i9RjQkPlOmNnMoLpKqJrIsHtGuFvEwDxCyBzA"
+
+/** `xs` as a string, one character a byte. */
+const textOfBytes = (xs: u8[]): string => {
+  const parts: string[] = []
+  for (let i: i32 = 0; i < toI32(xs.length); i++) {
+    parts.push(String.fromCharCode(toI32(xs[i])))
+  }
+  return parts.join("")
+}
+
+/** A name of `n` tchars from `NAME_CHARS`, starting at `from`; `fold` 0 keeps it, 1 lowers it, 2 raises it. */
+const nameOf = (n: i32, from: i32, fold: i32): string => {
+  const out = new Out()
+  for (let i: i32 = 0; i < n; i++) {
+    let c: i32 = NAME_CHARS.charCodeAt((from + i) % toI32(NAME_CHARS.length))
+    if (fold === 1 && c >= 65 && c <= 90) {
+      c += 32
+    } else if (fold === 2 && c >= 97 && c <= 122) {
+      c -= 32
+    }
+    out.byte(c)
+  }
+  return textOfBytes(out.xs)
+}
+
+/**
+ * Field names, which the parser lowercases and token-checks sixteen bytes at
+ * a time: every length 1 to 40 (15, 16, 17, 31, 32 and 33 among them) in
+ * mixed, lower and upper case, with the value's case kept; each of 21 bytes
+ * that end or refuse a name at every place in it, so every lane of every
+ * vector; and lines that end at every byte around the end of the held head,
+ * so the vector's tail and the byte loop after it meet at each place.
+ */
+const nameCases = (tally: Tally): void => {
+  tally.label = "name"
+  const ends: i32[] = [0, 9, 10, 13, 32, 34, 40, 41, 44, 47, 58, 59, 64, 91, 92, 93, 123, 125, 127, 128, 255]
+  const text: Setup = setupOf(0)
+  const spans: Setup = setupOf(2)
+  for (let n: i32 = 1; n <= 40; n++) {
+    for (let fold: i32 = 0; fold < 3; fold++) {
+      const name: string = nameOf(n, n + fold, fold)
+      const whole: u8[] = bytesOf(`GET / HTTP/1.1\r\nHost: h\r\n${name}: Va LUE\r\n${name}:UP\r\n\r\n`)
+      const edge: boolean = n === 15 || n === 16 || n === 17 || n === 31 || n === 32 || n === 33
+      runCut(tally, text, whole, edge)
+      runCut(tally, spans, whole, false)
+    }
+    const name: u8[] = bytesOf(nameOf(n, n, 0))
+    for (let at: i32 = 0; at < n; at++) {
+      for (let e: i32 = 0; e < toI32(ends.length); e++) {
+        const bad: u8[] = sliceBytes(name, 0, n)
+        bad[at] = toU8(ends[e])
+        const xs: u8[] = new Out().text("GET / HTTP/1.1\r\nHost: h\r\n").bytes(bad).text(": vAL\r\n\r\n").xs
+        run(tally, text, xs)
+        run(tally, spans, xs)
+      }
+    }
+  }
+  // The held head starts at 256 bytes and grows only for a line that does
+  // not fit, so a line that ends within it can end at its last byte.
+  const lengths: i32[] = [15, 16, 17, 31, 32, 33]
+  const tails: string[] = ["", ":", ": v", "@"]
+  for (let l: i32 = 0; l < toI32(lengths.length); l++) {
+    const name: string = nameOf(lengths[l], l, 0)
+    for (let pad: i32 = 170; pad <= 240; pad++) {
+      for (let t: i32 = 0; t < toI32(tails.length); t++) {
+        const xs: u8[] = bytesOf(`GET / HTTP/1.1\r\nHost: h\r\nX: ${repeat("v", pad)}\r\n${name}${tails[t]}\r\n\r\n`)
+        run(tally, text, xs)
+        run(tally, spans, xs)
+      }
+    }
+  }
+  // A second request read into a head the first one's long upper-case lines
+  // filled: the bytes past each short name are the first request's.
+  const first: string = `GET / HTTP/1.1\r\nHost: h\r\n${nameOf(40, 0, 2)}: ${repeat("Q", 40)}\r\nX: ${repeat("(", 40)}\r\n\r\n`
+  runCut(tally, text, bytesOf(`${first}GET / HTTP/1.1\r\nA:B\r\nCc: D\r\nE\r\n\r\n`), true)
+  runCut(tally, spans, bytesOf(`${first}GET / HTTP/1.1\r\nA:B\r\nCc: D\r\n\r\n`), true)
+}
+
 /** One drawn grammar case and what runs it: a region's root, freed when the case ends. */
 class Drawn {
   t: Tally
@@ -1041,13 +1121,15 @@ export const main = (): i32 => {
   const afterMutation: i32 = tally.cases
   limitCases(tally)
   const afterLimit: i32 = tally.cases
+  nameCases(tally)
+  const afterName: i32 = tally.cases
   grammarCases(tally, toU32(seed), count)
   if (tally.failed) {
     return 1
   }
   console.log(`seed ${seed}, ${tally.cases} cases agree`)
   console.log(
-    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, grammar ${tally.cases - afterLimit}`
+    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, name ${afterName - afterLimit}, grammar ${tally.cases - afterName}`
   )
   console.log(
     `  events ${tally.events}: head ${tally.heads}, body ${tally.bodies}, end ${tally.ends}, upgrade ${tally.upgrades}, closed ${tally.closes}, error ${tally.errors}`
