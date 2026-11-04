@@ -1,13 +1,14 @@
 // The decoder of std/crypto/base64url.ts, frozen by bench/jwt-verify/freeze.mjs
 // at 1d92417efafbc554c7dcb4d8929143c9fc24160e
-// with every name prefixed `b64a`: the `decode-old` kernel's. Do not edit;
-// rerun freeze.mjs.
+// with its three names prefixed `b64a`: the `decode-old` kernel's. A comment
+// below that names another function or the module comment means
+// std/crypto/base64url.ts's at that commit. Do not edit; rerun freeze.mjs.
 /**
  * All ones when `lo <= c <= hi`, else zero, without a branch. `c` is a byte or
  * a sextet, so neither subtraction could leave `i32`; they are written in
  * `u32`, which wraps by definition, because a signed one would be checked for
  * an overflow it cannot have, and the check is a branch on the secret. The
- * sign bit `>> 31` reads is the same either way. `b64aCharOf` and
+ * sign bit `>> 31` reads is the same either way. `base64urlCharOf` and
  * `b64aSextetOf` do their sums in `u32` for the same reason.
  */
 const b64aRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
@@ -34,11 +35,11 @@ const b64aSextetOf = (c: i32): i32 => {
 }
 
 /**
- * The bytes `text` spells in unpadded b64a, or `null` when it is not the
+ * The bytes `text` spells in unpadded base64url, or `null` when it is not the
  * one canonical spelling of any byte string — see the module comment for the
  * five refusals.
  *
- * The same accumulator as `b64aEncode`, run the other way: six bits in per
+ * The same accumulator as `base64urlEncode`, run the other way: six bits in per
  * character, eight out per byte.
  */
 export const b64aDecode = (text: string): u8[] | null => {

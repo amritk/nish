@@ -53,13 +53,13 @@ const nishc = compilerFrom(process.argv)
  * `known`, the checksum one iteration prints, and whether it hashes.
  */
 const CASES = [
-  { label: "verify 148 B", kernel: "verify", shape: 0, known: "11532f9f", sha: true },
+  { label: "verify 167 B", kernel: "verify", shape: 0, known: "e89346db", sha: true },
   { label: "verify 507 B", kernel: "verify", shape: 1, known: "75794536", sha: true },
-  { label: "midstate 104 B", kernel: "midstate", shape: 0, known: "dc6bc4b9", sha: true },
+  { label: "midstate 123 B", kernel: "midstate", shape: 0, known: "ae1cb7ce", sha: true },
   { label: "midstate 463 B", kernel: "midstate", shape: 1, known: "533aedea", sha: true },
-  { label: "decode-server 148 B", kernel: "decode-server", shape: 0, known: "d8178c1f", sha: false },
-  { label: "decode-std 148 B", kernel: "decode-std", shape: 0, known: "d8178c1f", sha: false },
-  { label: "decode-old 148 B", kernel: "decode-old", shape: 0, known: "d8178c1f", sha: false },
+  { label: "decode-server 167 B", kernel: "decode-server", shape: 0, known: "af7ae5fa", sha: false },
+  { label: "decode-std 167 B", kernel: "decode-std", shape: 0, known: "af7ae5fa", sha: false },
+  { label: "decode-old 167 B", kernel: "decode-old", shape: 0, known: "af7ae5fa", sha: false },
   { label: "decode-server 507 B", kernel: "decode-server", shape: 1, known: "4b9b2110", sha: false },
   { label: "decode-std 507 B", kernel: "decode-std", shape: 1, known: "4b9b2110", sha: false },
   { label: "decode-old 507 B", kernel: "decode-old", shape: 1, known: "4b9b2110", sha: false },
@@ -149,19 +149,27 @@ fs.copyFileSync(exe, `${exe}-copy`)
  * The `base` column: a worktree of `rev` with this bench copied in and the
  * compiler's own binary beside it, so the compiler is this one and the
  * library it reads (the worktree's `std/`, found from where it sits) is rev's.
+ * The worktree is made fresh for each run, since a leftover one may hold
+ * another bench or compiler, and removed once the binary, which is written
+ * outside it, is built.
  */
 const baseColumn = (rev) => {
   const sha = execFileSync("git", ["rev-parse", "--verify", `${rev}^{commit}`], {
     cwd: root,
     encoding: "utf8",
   }).trim()
-  const tree = path.join(outDir, `base-${sha.slice(0, 12)}`)
-  if (!fs.existsSync(tree)) {
-    execFileSync("git", ["worktree", "add", "--detach", tree, sha], { cwd: root, stdio: "ignore" })
-  }
   if (nishc.prefix.length > 0) {
     fail("--base needs a native compiler, which it copies beside the worktree's std/")
   }
+  const tree = path.join(outDir, `base-${sha.slice(0, 12)}`)
+  const dropTree = () => {
+    if (fs.existsSync(tree)) {
+      execFileSync("git", ["worktree", "remove", "--force", tree], { cwd: root, stdio: "ignore" })
+    }
+    execFileSync("git", ["worktree", "prune"], { cwd: root, stdio: "ignore" })
+  }
+  dropTree()
+  execFileSync("git", ["worktree", "add", "--detach", tree, sha], { cwd: root, stdio: "ignore" })
   fs.mkdirSync(path.join(tree, "build"), { recursive: true })
   fs.copyFileSync(nishc.cmd, path.join(tree, "build", "nish"))
   fs.chmodSync(path.join(tree, "build", "nish"), 0o755)
@@ -169,9 +177,12 @@ const baseColumn = (rev) => {
   fs.cpSync(path.join(root, "bench", "crypto", "lib"), path.join(tree, "bench", "crypto", "lib"), {
     recursive: true,
   })
-  const bin = path.join(tree, "build", "bench", "jwt-verify")
-  fs.mkdirSync(path.dirname(bin), { recursive: true })
-  build(path.join(tree, "build", "nish"), [], tree, bin, [])
+  const bin = path.join(outDir, `jwt-verify-base-${sha.slice(0, 12)}`)
+  try {
+    build(path.join(tree, "build", "nish"), [], tree, bin, [])
+  } finally {
+    dropTree()
+  }
   return { id: "base", bin, env: {} }
 }
 

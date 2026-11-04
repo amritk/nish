@@ -13,10 +13,11 @@ that goes. `main.ts` says what each kernel times. In short:
 
 There are two token shapes:
 
-- **148 B:** a 50-byte claims body (`sub`, `iat`, `exp`) and a 104-byte
-  signing input, the size the server profile names.
+- **167 B:** a 64-byte claims body (`sub`, `role`, `iat`, `exp`), as a server
+  issues it, and a 123-byte signing input.
 - **507 B:** 319 bytes of claims (`iss`, `aud`, `jti` and more) and a 463-byte
-  signing input.
+  signing input: the long case, a little over the ~300 B of claims the plan
+  names.
 
 ## Running it
 
@@ -42,9 +43,13 @@ A hashing case adds `nish soft` and `v3 soft`, the same builds under
 `NISH_SHA256=soft`. That is the portable SHA-256 that a CPU without SHA-NI
 runs, such as the Xeon Platinum 8260.
 
-**The band** is `nish-copy` against `nish`: the same binary, so any
-difference between them is noise. A change counts only outside it, and only
-when it repeats on a second run.
+**The band** is `nish-copy` against `nish`: the same bytes, so any
+difference between them is noise. It covers only byte-identical binaries. Two
+builds that differ only in where their code lands can sit further apart than
+the band (the `base` column does, on `verify`, with the same instruction
+count), so a claim that a column did *not* move rests on its instruction
+count. A change counts only outside the band, and only when it repeats on a
+second run.
 
 Every column must print the case's pinned checksum.
 
@@ -82,9 +87,11 @@ What the numbers say:
 - Under callgrind the soft and SHA-NI columns count the same, so read the
   soft path's cost from the timings alone.
 
-## Tried and dropped
+## Not pursued
 
-| idea | measured | why dropped |
-| --- | --- | --- |
-| A `base64urlDecodeInto(src, off, len, out)` into a caller-owned buffer in std | not built | Only `JwtVerifier`'s `jwtDecode` would call it: `std/base64.ts` encodes only. The rule is that both would, so it stays out. |
-| Removing the `sadd.with.overflow` checks on `j` in the group loop | not built | They are two predictable branches on a public counter a group, beside 4 vectorised sextets. The cut already halves the time. |
+Ideas weighed and left unbuilt, so they carry no measurement:
+
+| idea | why not |
+| --- | --- |
+| A `base64urlDecodeInto(src, off, len, out)` into a caller-owned buffer in std | Only `JwtVerifier`'s `jwtDecode` would call it: `std/base64.ts` encodes only. The rule is that both would, so it stays out. |
+| Removing the `sadd.with.overflow` checks on `j` in the group loop | They are two predictable branches on a public counter a group, beside 4 vectorised sextets. The cut already halves the time. |

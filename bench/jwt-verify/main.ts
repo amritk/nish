@@ -20,8 +20,8 @@
 //   decode-old     the same by ./old.ts, `base64urlDecode` as main had it,
 //                  frozen by freeze.mjs
 //
-//   <shape>  0  a session token: `{"sub","iat","exp"}`, 50 bytes of claims,
-//               a 104-byte signing input and a 148-byte token
+//   <shape>  0  a session token: `{"sub","role","iat","exp"}`, 64 bytes of claims,
+//               a 123-byte signing input and a 167-byte token
 //            1  a token with 319 bytes of claims (issuer, audience, scopes),
 //               a 463-byte signing input and a 507-byte token
 //
@@ -64,7 +64,7 @@ const jvFoldTo = (sum: u32, bytes: u8[], len: i32): u32 => {
 const claimsOf = (shape: i32, t: i32): string => {
   const iat: i32 = 1700000000 + t
   if (shape === 0) {
-    return `{"sub":"${123456 + t}","iat":${iat},"exp":${iat + 2592000}}`
+    return `{"sub":"${123456 + t}","role":"user","iat":${iat},"exp":${iat + 2592000}}`
   }
   return (
     `{"iss":"https://auth.example.com/realms/production","sub":"${123456 + t}",` +
@@ -106,9 +106,14 @@ const serverSextet = (c: i32): i32 => {
 /**
  * `src[off .. off + len)` decoded into `out` from 0: the byte count, or -1 for
  * a length of 1 mod 4, a byte outside the alphabet, stray low bits or more
- * bytes than `out` holds. The shape of std/crypto/jwt.ts's `jwtDecode`.
+ * bytes than `out` holds. The loop is std/crypto/jwt.ts's `jwtDecode`; the
+ * range is checked once, up front, as the server checks `off + len` before it
+ * decodes, so that the loop carries no per-character test of its own.
  */
 const serverDecode = (src: u8[], off: i32, len: i32, out: u8[]): i32 => {
+  if (off < 0 || len < 0 || off > toI32(src.length) - len) {
+    return -1
+  }
   const tail: i32 = len & 3
   if (tail === 1) {
     return -1
@@ -120,7 +125,7 @@ const serverDecode = (src: u8[], off: i32, len: i32, out: u8[]): i32 => {
   let acc: i32 = 0
   let bits: i32 = 0
   let at: i32 = 0
-  for (let i: i32 = 0; i < len && off + i < toI32(src.length); i += 1) {
+  for (let i: i32 = 0; i < len; i += 1) {
     const v: i32 = serverSextet(toI32(src[off + i]))
     if (v < 0) {
       return -1

@@ -42,11 +42,14 @@ const kept = KEEP.map((decl) => {
   }
   return block.trim()
 })
-const body = `${kept.join("\n\n")}\n`.replaceAll("base64url", "b64a")
+// Only the kept declarations are renamed, so a comment that names another of
+// the module's functions, or the module comment, still names it there.
+const body = `${kept.join("\n\n")}\n`.replace(/\bbase64url(RangeMask|SextetOf|Decode)\b/g, "b64a$1")
 const header =
   "// The decoder of std/crypto/base64url.ts, frozen by bench/jwt-verify/freeze.mjs\n" +
   `// at ${rev}\n` +
-  "// with every name prefixed `b64a`: the `decode-old` kernel's. Do not edit;\n" +
-  "// rerun freeze.mjs.\n"
+  "// with its three names prefixed `b64a`: the `decode-old` kernel's. A comment\n" +
+  "// below that names another function or the module comment means\n" +
+  "// std/crypto/base64url.ts's at that commit. Do not edit; rerun freeze.mjs.\n"
 fs.writeFileSync(path.join(here, "old.ts"), `${header}${body}`)
 console.log(`bench/jwt-verify/old.ts from ${rev}`)
