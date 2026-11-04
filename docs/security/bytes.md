@@ -102,7 +102,14 @@ audit and are not yet pinned.
 `link/std_bytes_read_max_offset`). `getU64BE` reads the eight bytes without
 a per-byte check only when `off >= 0`, `off < 2147483640` and
 `off + 8 <= toI32(b.length)`. The cap keeps `off + 8` from overflowing, and
-the checker proves each of `b[off]` to `b[off + 7]` from the guard. Any other
+in a program that calls it the checker proves each of `b[off]` to
+`b[off + 7]` from the guard; where nothing calls it (`link/std_dns_caps`), the
+checks on `b[off + 1]` to `b[off + 7]` stay, behind a guard they cannot fail
+under. That is why the capability report now gives `getI64BE`'s and
+`getF64BE`'s call to `getU64BE` `"via": "index"` where it gave `"overflow"`:
+`via` names the first site the callee reaches: once the loop's `off + i`,
+now a fast-path index, and no input panics that did not before or stops
+panicking that did. Any other
 offset goes to `getU64BEByByte`, the earlier loop, which checks each index and
 panics `index` on the first byte not in the array, so the panic text is
 unchanged. An array longer than 2^31-1 (BYTES-1) makes `toI32(b.length)`
