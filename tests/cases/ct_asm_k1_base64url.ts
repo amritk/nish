@@ -9,14 +9,14 @@
 //
 // A golden case compiles to one module, so it cannot import the library.
 // Beside the maps, one group each way: `base64urlEncodeGroup` is the encoder's
-// accumulator run over three bytes, as the module writes it, and
-// `base64urlDecodeGroup` the decoder's over four characters, its steps the
-// module's with the position test resolved by hand (the comment on it says
-// why). What they
-// leave out is what is public or is not arithmetic: the decoder's `j < outLen`
-// store guard, and the encoder's `String.fromCharCode` and `push`, which copy
+// accumulator run over three bytes, and `base64urlDecodeGroup` the decoder's
+// loop body over four characters, each as the module writes it. What they
+// leave out is public or is not arithmetic: the decoder's store guard (on `j`
+// and the length), the encoder's `String.fromCharCode` and `push`, which copy
 // a character into a fresh string (a call this check refuses by rule; the
-// byte is stored, never used as an address). Here a character is a byte of a
+// byte is stored, never used as an address). The decoder's short final group
+// is the same word built from two or three sextets, and the choice between
+// them is on the length, which is public. Here a character is a byte of a
 // `u8[]`, since a `string` does not arrive in a register.
 //
 // Every value below is secret. Every index is an `uncheckedGet` or
@@ -78,30 +78,20 @@ export const base64urlEncodeGroup = (data: u8[], out: u8[]): void => {
   }
 }
 
-// `base64urlDecode`'s loop over one whole group: the four characters
-// `text[0 .. 4)` to `out[0 .. 3)`. Answers the module's `bad`: non-zero when a
-// character is outside the alphabet. Each step is the module's loop body; the
-// loop is unrolled by hand, with its position test resolved (a byte is ready
-// after the second, third and fourth characters, with 4, 2 and 0 bits left),
-// because `clang -O2` keeps that test as a loop branch rather than unrolling
-// four iterations — a branch on the position, which the check refuses anyway.
+// `base64urlDecode`'s loop body over one whole group: the four characters
+// `text[0 .. 4)` to `out[0 .. 3)`, its steps the module's verbatim — four
+// independent sextets, one 24-bit word, three bytes. Answers the module's
+// `bad`: non-zero when a character is outside the alphabet.
 export const base64urlDecodeGroup = (text: u8[], out: u8[]): i32 => {
   let bad: i32 = 0
-  let acc: i32 = 0
-  const v0: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 0)))
-  bad = bad | (v0 >> 31)
-  acc = ((acc << 6) | (v0 & 63)) & 0xfff
-  const v1: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 1)))
-  bad = bad | (v1 >> 31)
-  acc = ((acc << 6) | (v1 & 63)) & 0xfff
-  uncheckedSet(out, 0, toU8((acc >> 4) & 255));
-  const v2: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 2)))
-  bad = bad | (v2 >> 31)
-  acc = ((acc << 6) | (v2 & 63)) & 0xfff
-  uncheckedSet(out, 1, toU8((acc >> 2) & 255));
-  const v3: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 3)))
-  bad = bad | (v3 >> 31)
-  acc = ((acc << 6) | (v3 & 63)) & 0xfff
-  uncheckedSet(out, 2, toU8(acc & 255));
+  const s0: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 0)))
+  const s1: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 1)))
+  const s2: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 2)))
+  const s3: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 3)))
+  bad = bad | ((s0 | s1 | s2 | s3) >> 31)
+  const word: i32 = ((s0 & 63) << 18) | ((s1 & 63) << 12) | ((s2 & 63) << 6) | (s3 & 63)
+  uncheckedSet(out, 0, toU8(word >> 16));
+  uncheckedSet(out, 1, toU8((word >> 8) & 255));
+  uncheckedSet(out, 2, toU8(word & 255));
   return bad
 }
