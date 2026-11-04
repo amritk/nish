@@ -60,30 +60,50 @@ Every column must print the case's pinned checksum.
 
 Measured on an Intel Xeon @ 2.10 GHz (4 threads; avx2, bmi2, sha_ni and
 avx512f all present), `--profile speed`, with `--base 1d92417`: main before
-the decoder was rewritten. There were two runs, A and B. Each cell gives the
-median ns a token, with the band in brackets:
+the decoder was rewritten. There were two runs, A and B, each of 12 rounds
+(the hashing cases) or 16 (the decode cases). Each cell gives the median ns a
+token. `nish` carries that case's band in brackets, and `base` its distance
+from `nish`:
 
 | case | nish A | base A | nish B | base B | instructions nish / v3 / base |
 | --- | --- | --- | --- | --- | --- |
-| decode-std 148 B | 349 (±4.5%) | 662 (+89.9%) | 363 (±1.8%) | 735 (+102.3%) | 4,428 / 3,780 / 9,295 |
-| decode-std 507 B | 1,101 (±8.1%) | 2,374 (+115.5%) | 1,405 (±15.2%) | 3,011 (+114.2%) | 13,595 / 11,096 / 31,050 |
-| decode-server 148 B | 403 (±6.1%) | 395 | 429 (±4.6%) | 427 | 5,715 / 5,370 / 5,715 |
-| decode-server 507 B | 1,442 (±2.5%) | 1,553 | 1,481 (±0.5%) | 1,447 | 18,983 / 17,689 / 18,983 |
-| verify 148 B | 1,242 (±3.7%) | 1,353 | 1,329 (±0.5%) | 1,401 | 24,146 / 21,883 / 24,146 |
-| verify 507 B | 3,486 (±11.3%) | 3,816 | 3,985 (±9.2%) | 4,044 | 70,333 / 63,605 / 70,333 |
-| midstate 104 B | 401 (±3.4%) | 413 | | | 12,912 / 10,835 / 12,912 |
-| midstate 463 B | 735 (±1.9%) | 743 | | | 33,396 / 27,803 / 33,396 |
+| decode-std 167 B | 477 (±13.9%) | 885 (+85.5%) | 448 (±6.9%) | 825 (+84.3%) | 4,879 / 4,121 / 10,434 |
+| decode-std 507 B | 1,190 (±3.2%) | 2,467 (+107.4%) | 1,191 (±7.2%) | 2,269 (+90.4%) | 13,595 / 11,096 / 31,050 |
+| decode-server 167 B | 453 (±1.3%) | 466 (+2.7%) | 479 (±20.9%) | 484 (+1.0%) | 6,097 / 5,694 / 6,097 |
+| decode-server 507 B | 1,659 (±10.0%) | 1,347 (−18.8%) | 1,398 (±2.1%) | 1,309 (−6.4%) | 17,970 / 16,676 / 17,970 |
+| verify 167 B | 1,504 (±4.6%) | 1,473 (−2.1%) | 1,544 (±6.8%) | 1,603 (+3.8%) | 29,309 / 26,402 / 29,309 |
+| verify 507 B | 3,771 (±1.8%) | 4,001 (+6.1%) | 3,913 (±17.3%) | 4,071 (+4.1%) | 70,333 / 63,605 / 70,333 |
+| midstate 123 B | 517 (±1.6%) | 532 (+3.0%) | 533 (±4.9%) | 541 (+1.5%) | 16,643 / 13,980 / 16,643 |
+| midstate 463 B | 730 (±3.0%) | 733 (+0.4%) | 817 (±3.3%) | 844 (+3.2%) | 33,396 / 27,803 / 33,396 |
+
+The hashing cases under `NISH_SHA256=soft`, the portable SHA-256 path, each
+against `nish` on the same run:
+
+| case | nish soft A | v3 soft A | nish soft B | v3 soft B |
+| --- | --- | --- | --- | --- |
+| verify 167 B | 2,368 (+57.4%) | 2,221 (−6.2% of soft) | 2,309 (+49.6%) | 2,625 (+13.7% of soft) |
+| verify 507 B | 5,577 (+47.9%) | 5,288 (−5.2% of soft) | 5,530 (+41.3%) | 6,024 (+8.9% of soft) |
+| midstate 123 B | 1,343 (+159.9%) | 1,255 (−6.5% of soft) | 1,404 (+163.3%) | 1,471 (+4.8% of soft) |
+| midstate 463 B | 2,499 (+242.3%) | 2,454 (−1.8% of soft) | 3,320 (+306.4%) | 2,913 (−12.3% of soft) |
 
 What the numbers say:
 
-- **`base64urlDecode` takes half the time and 52–56% fewer instructions**, on
-  both runs and both shapes. It is now 13–24% under the server's if-chain
-  decoder, though it still allocates its output.
+- **`base64urlDecode` takes 46–52% less time and 52–56% fewer
+  instructions**, on both runs and both shapes, each far outside its band.
+- **Against the server's if-chain decoder, it is faster only on the long
+  token.** At 507 B it is 28% (A) and 15% (B) under `decode-server`, outside
+  both columns' bands on both runs. At 167 B it is +5% (A) and −7% (B), inside
+  the band, although it counts 20% fewer instructions: on a short token the
+  output it allocates costs what the cheaper loop saves.
 - **`verify` does not move, and should not.** `JwtVerifier` decodes with its
-  own `jwtDecode`, whose instruction count is the same on both sides.
-- **Without SHA-NI, `verify` 148 B costs 35–56% more**, and `midstate` 104 B
-  2.3× as much: `NISH_SHA256=soft`, the Xeon 8260's path. `--cpu x86-64-v3`
-  takes 1–15% off the soft path.
+  own `jwtDecode`, whose instruction count is the same on both sides. `base`
+  sits outside the band on verify 507 B in run A (+6.1% against ±1.8%) with
+  that same count: the band covers only byte-identical binaries, so this
+  conclusion rests on the instruction count, not the timings.
+- **Without SHA-NI, `verify` costs 41–57% more** and `midstate` 2.6–4.1× as
+  much, outside the band on both runs.
+- **`--cpu x86-64-v3` shows no repeatable gain on the soft path.** Its
+  timings change sign between the runs; it counts 10–16% fewer instructions.
 - Under callgrind the soft and SHA-NI columns count the same, so read the
   soft path's cost from the timings alone.
 
