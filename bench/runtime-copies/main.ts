@@ -96,14 +96,42 @@ const checked = (data: u8[], seed: i32, sum: u32): u32 => {
 
 /** The keys `json-strings` writes. */
 const keys = (): string[] => [
-  "id", "name", "email", "role", "team", "city", "country", "zip",
-  "plan", "status", "locale", "tz", "theme", "lang", "device", "agent"
+  "id",
+  "name",
+  "email",
+  "role",
+  "team",
+  "city",
+  "country",
+  "zip",
+  "plan",
+  "status",
+  "locale",
+  "tz",
+  "theme",
+  "lang",
+  "device",
+  "agent",
 ]
 
 /** The values `json-strings` writes: short, with nothing to escape. */
 const values = (): string[] => [
-  "u_1849", "Ada Lovelace", "ada@example.com", "admin", "platform", "London", "GB", "NW1",
-  "enterprise", "active", "en-GB", "Europe/London", "dark", "en", "laptop", "nish/0.34"
+  "u_1849",
+  "Ada Lovelace",
+  "ada@example.com",
+  "admin",
+  "platform",
+  "London",
+  "GB",
+  "NW1",
+  "enterprise",
+  "active",
+  "en-GB",
+  "Europe/London",
+  "dark",
+  "en",
+  "laptop",
+  "nish/0.34",
 ]
 
 /** One object of sixteen string members into `w`, its bytes folded. */
@@ -124,7 +152,11 @@ const jsonStrings = (w: JsonWriter, buf: u8[], k: string[], v: string[], seed: i
 
 /** Whether `name` is one of the cases. */
 const isCase = (name: string): boolean =>
-  name === "chars" || name === "small-copies" || name === "grow" || name === "checked" || name === "json-strings"
+  name === "chars" ||
+  name === "small-copies" ||
+  name === "grow" ||
+  name === "checked" ||
+  name === "json-strings"
 
 export const main = (): i32 => {
   const name: string = process.argv.length > 1 ? process.argv[1] : "chars"
