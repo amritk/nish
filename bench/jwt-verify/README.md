@@ -13,8 +13,12 @@ that goes. `main.ts` says what each kernel times. In short:
 
 There are two token shapes:
 
-- **167 B:** a 64-byte claims body (`sub`, `role`, `iat`, `exp`), as a server
-  issues it, and a 123-byte signing input.
+- **148 B:** the token the server issues: a 50-byte claims body (`sub`,
+  `iat`, `exp`) under `{"alg":"HS256","typ":"JWT"}`, and a 104-byte signing
+  input, which `main.ts` asserts. That input is two blocks after the ipad
+  midstate, so a verify takes three compressions with the outer block. A
+  `role` claim does not fit in 104 B. `"role":"user"` makes the input 123 B,
+  which needs a fourth compression.
 - **507 B:** 319 bytes of claims (`iss`, `aud`, `jti` and more) and a 463-byte
   signing input: the long case, a little over the ~300 B of claims the plan
   names.

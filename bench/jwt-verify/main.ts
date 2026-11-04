@@ -20,8 +20,8 @@
 //   decode-old     the same by ./old.ts, `base64urlDecode` as main had it,
 //                  frozen by freeze.mjs
 //
-//   <shape>  0  a session token: `{"sub","role","iat","exp"}`, 64 bytes of claims,
-//               a 123-byte signing input and a 167-byte token
+//   <shape>  0  the server's session token: `{"sub","iat","exp"}`, 50 bytes of
+//               claims, a 104-byte signing input and a 148-byte token
 //            1  a token with 319 bytes of claims (issuer, audience, scopes),
 //               a 463-byte signing input and a 507-byte token
 //
@@ -64,7 +64,7 @@ const jvFoldTo = (sum: u32, bytes: u8[], len: i32): u32 => {
 const claimsOf = (shape: i32, t: i32): string => {
   const iat: i32 = 1700000000 + t
   if (shape === 0) {
-    return `{"sub":"${123456 + t}","role":"user","iat":${iat},"exp":${iat + 2592000}}`
+    return `{"sub":"${123456 + t}","iat":${iat},"exp":${iat + 2592000}}`
   }
   return (
     `{"iss":"https://auth.example.com/realms/production","sub":"${123456 + t}",` +
@@ -180,7 +180,13 @@ const tokensOf = (a: Args, key: JwtKey): Token[] => {
     if (text === null) {
       panic("jwt-verify: a token failed to sign")
     }
-    out.push(new Token(text))
+    const tok: Token = new Token(text)
+    // The server's token hashes 104 bytes: two blocks after the ipad midstate,
+    // three compressions with the outer one. Past 119 bytes it takes four.
+    if (a.size === 0 && tok.d2 !== 104) {
+      panic(`jwt-verify: shape 0 signs ${tok.d2} bytes, not 104`)
+    }
+    out.push(tok)
   }
   return out
 }
@@ -202,6 +208,9 @@ const verifyLoop = (a: Args, key: JwtKey, tokens: Token[]): i32 => {
       writeError(`jwt-verify: a token answered ${verdict}\n`)
       return 1
     }
+    // The signature decoded for the compare is folded too. JwtVerifier keeps
+    // no computed tag, so `midstate` is the case whose checksum rests on one.
+    sum = jvFoldTo(sum, verifier.sig, toI32(32))
     sum = jvStep(jvFoldTo(sum, verifier.claims, verifier.claimsLen), toI32(verifier.iat))
   }
   report(sum, started)

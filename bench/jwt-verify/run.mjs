@@ -53,13 +53,13 @@ const nishc = compilerFrom(process.argv)
  * `known`, the checksum one iteration prints, and whether it hashes.
  */
 const CASES = [
-  { label: "verify 167 B", kernel: "verify", shape: 0, known: "e89346db", sha: true },
-  { label: "verify 507 B", kernel: "verify", shape: 1, known: "75794536", sha: true },
-  { label: "midstate 123 B", kernel: "midstate", shape: 0, known: "ae1cb7ce", sha: true },
+  { label: "verify 148 B", kernel: "verify", shape: 0, known: "9f511a8b", sha: true },
+  { label: "verify 507 B", kernel: "verify", shape: 1, known: "8758b907", sha: true },
+  { label: "midstate 104 B", kernel: "midstate", shape: 0, known: "dc6bc4b9", sha: true },
   { label: "midstate 463 B", kernel: "midstate", shape: 1, known: "533aedea", sha: true },
-  { label: "decode-server 167 B", kernel: "decode-server", shape: 0, known: "af7ae5fa", sha: false },
-  { label: "decode-std 167 B", kernel: "decode-std", shape: 0, known: "af7ae5fa", sha: false },
-  { label: "decode-old 167 B", kernel: "decode-old", shape: 0, known: "af7ae5fa", sha: false },
+  { label: "decode-server 148 B", kernel: "decode-server", shape: 0, known: "d8178c1f", sha: false },
+  { label: "decode-std 148 B", kernel: "decode-std", shape: 0, known: "d8178c1f", sha: false },
+  { label: "decode-old 148 B", kernel: "decode-old", shape: 0, known: "d8178c1f", sha: false },
   { label: "decode-server 507 B", kernel: "decode-server", shape: 1, known: "4b9b2110", sha: false },
   { label: "decode-std 507 B", kernel: "decode-std", shape: 1, known: "4b9b2110", sha: false },
   { label: "decode-old 507 B", kernel: "decode-old", shape: 1, known: "4b9b2110", sha: false },
