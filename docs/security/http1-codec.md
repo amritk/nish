@@ -247,6 +247,35 @@ and 28, and `a text past the end still answers at + length`, `and writes only
 the bytes inside the buffer` and their before-the-start twins for `http1PutText`, in `tests/link/net_http1`
 and `_f64` (`link/net_http1: exits with 0 and stdout matches expected.out`).
 
+**A field name read sixteen bytes at a time is read the same**
+(`net_http1`, `_f64`, `net_http1_parse_diff`, 2026-11-04, written against
+`main` at `4dc09dcc`). A kept field line is copied into the held head as
+before, and `http1LowerName` then reads the copy's name a vector at a time:
+`http1NonTokenLanes` marks each lane outside 33 to 126 or among the
+seventeen delimiters, exactly the bytes `http1IsTokenByte` refuses, and the
+name ends at the lowest marked lane or at the line's end, whichever is first.
+Only the upper-case letters below that point are lowered; the vector is
+stored back with every other lane as it was read, so the colon, the value and
+the held head's bytes past the line (stale bytes of an earlier request
+included) are unchanged. Loads and stores stay inside `head`: the vector
+runs only where `k <= head.length - 16`, and the last bytes before the
+buffer's end are read a byte at a time by the old loop. The method and a
+trailer's names keep the byte test. Nothing accepted or refused changes, and
+no limit, status or reason string moved.
+Tests: `a <n>-byte name is lowered and its value kept`, `'@' at each of a
+<n>-byte name's places is a 400` and `a <n>-byte name that ends its line is a
+400` for names of 15, 16, 17, 31, 32 and 33 bytes, and `a name byte of 128 is
+a 400`, in `tests/link/net_http1` and `_f64`; in `net_http1_parse_diff`,
+40,307 name cases against main's parser: every length 1 to 40 in lower, upper
+and mixed case, whole and a byte at a time (the edge lengths also at every
+two-feed split); 21 bytes that end or refuse a name
+(controls, SP, the delimiters, DEL, 0x80, 0xff) at every place of every
+length; names of 15, 16, 17, 31, 32 and 33 bytes after an `X:` line of
+170 to 240 bytes, which puts the name's end on, before and after the held
+head's last byte; and a short name read over a head
+an earlier request's upper-case lines filled. The default run is now 230,583
+cases (`expected.out`).
+
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless
 it asked for keep-alive, which is then answered with `Connection: keep-alive`;

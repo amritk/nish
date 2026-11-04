@@ -687,8 +687,9 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
  * third (0x57ffffff). No byte below 33 or above 126 is a tchar.
  * `http1IsTokenByte` reads them as two 64-bit masks, one for the bytes 0 to
  * 63 and one for 64 to 127, so the test is a select and a shift with no
- * branch on the byte: a name or method scan is the parser's hottest loop
- * after the line scan (`bench/http1-parse`).
+ * branch on the byte. A field name goes sixteen bytes at a time through
+ * `http1NonTokenLanes`, the same set; this test is for the method, a trailer's
+ * name, and a name's last bytes when fewer than sixteen are left in the head.
  */
 const HTTP1_TCHAR_32: i32 = 67071226
 const HTTP1_TCHAR_64: i32 = -939524098
