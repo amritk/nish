@@ -9,16 +9,20 @@
 // `--check` compares every width's output with the module and exits 1 on a
 // difference, so a kernel edited by hand is caught. `--unroll` writes the 8
 // round pairs out with literal P indexes, freeing the loop counter's register;
+// `--lohi` takes each lane's bytes as two low-and-second-byte pairs: one
+// opaque copy of the word gives bytes 0 and 1, the copy moved down by 16
+// bytes 2 and 3, six instructions where the module's way takes seven;
+// `extract.mjs` counts and times it against the module.
 // `--module <out.ts>` writes a copy of the module with every width's body
-// written again, which `unroll.mjs` times against the module.
+// written again, which `unroll.mjs` and `extract.mjs` time against the module.
 //
-// Usage: node bench/crypto/bcrypt/gen-body.mjs <width> [--unroll] | --check | --module <out.ts> [--unroll]
+// Usage: node bench/crypto/bcrypt/gen-body.mjs <width> [--unroll] [--lohi] | --check | --module <out.ts> [--unroll] [--lohi]
 import fs from "node:fs"
 
 const S = 1042
 const words = ["one", "two", "three", "four", "five", "six"]
 
-const body = (W, unroll = false) => {
+const body = (W, unroll = false, lohi = false) => {
   const L = []
   const p = (s) => L.push(s)
   const lanes = [...Array(W).keys()]
@@ -55,11 +59,25 @@ const body = (W, unroll = false) => {
   // the default target. Two lanes keep the four shifts of the word itself,
   // every lane's bytes before any lane's update: the copy measured slower
   // there (docs/security/crypto-bcrypt.md, "Cascade Lake").
+  // `--lohi`: a second byte (`movzx` from `ah`, `bh`, `ch` or `dh`) needs its
+  // word in one of the four registers that have one, so at six lanes the
+  // sixth keeps the module's way: all six spill more than they save.
   const copied = W >= 3
+  const paired = (k) => lohi && copied && k < Math.min(W, 5)
   const copy = (v) => (W === 6 ? `${v} >>> 8` : `(${v} >>> 8) | (${v} << 24)`)
   const half = (x, y, n, plus, pad, tag) => {
     for (const k of lanes) {
       const v = `${x}${k}`
+      if (paired(k)) {
+        p(`${pad}const ${v}e${tag}: u32 = ctSelect(${v}, 0xffffffff, 0)`)
+        p(`${pad}const ${v}d${tag}: i32 = toI32(${v}e${tag}) & 0xff`)
+        p(`${pad}const ${v}c${tag}: i32 = toI32(${v}e${tag} >>> 8) & 0xff`)
+        p(`${pad}const ${v}f${tag}: u32 = ctSelect(${v}e${tag} >>> 16, 0xffffffff, 0)`)
+        p(`${pad}const ${v}b${tag}: i32 = toI32(${v}f${tag}) & 0xff`)
+        p(`${pad}const ${v}a${tag}: i32 = toI32(${v}f${tag} >>> 8) & 0xff`)
+        update(x, y, n, plus, pad, tag, k)
+        continue
+      }
       if (copied) {
         p(`${pad}const ${v}e${tag}: u32 = ctSelect(${copy(v)}, 0xffffffff, 0)`)
         p(`${pad}const ${v}a${tag}: i32 = toI32(${v} >>> 24) & 0xff`)
@@ -116,7 +134,7 @@ if (process.argv[2] === "--module") {
   // with `--unroll`: the experiment `unroll.mjs` times against the module.
   const to = process.argv[3]
   if (!to || to.startsWith("--")) {
-    console.error("usage: node bench/crypto/bcrypt/gen-body.mjs --module <out.ts> [--unroll]")
+    console.error("usage: node bench/crypto/bcrypt/gen-body.mjs --module <out.ts> [--unroll] [--lohi]")
     process.exit(2)
   }
   const src = fs.readFileSync(module, "utf8").split("\n")
@@ -127,7 +145,8 @@ if (process.argv[2] === "--module") {
       console.error(`bcryptBody${W} differs from the generator; run --check`)
       process.exit(1)
     }
-    src.splice(at, was.length, ...body(W, process.argv.includes("--unroll")).slice(1))
+    const again = body(W, process.argv.includes("--unroll"), process.argv.includes("--lohi"))
+    src.splice(at, was.length, ...again.slice(1))
   }
   fs.writeFileSync(to, src.join("\n"))
   process.exit(0)
@@ -153,4 +172,4 @@ if (![2, 3, 4, 5, 6].includes(width)) {
   console.error("usage: node bench/crypto/bcrypt/gen-body.mjs <2|3|4|5|6> | --check")
   process.exit(2)
 }
-console.log(body(width, process.argv.includes("--unroll")).join("\n"))
+console.log(body(width, process.argv.includes("--unroll"), process.argv.includes("--lohi")).join("\n"))
