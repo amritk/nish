@@ -12,7 +12,8 @@
 //     --instructions     count, instead of timing, the instructions one
 //                        iteration and one request of every case executes in
 //                        each build (the copies left out), under valgrind's
-//                        cachegrind with --cache-sim=no: a run of 2N
+//                        cachegrind with --cache-sim=no, NISH_SIMD=base and
+//                        glibc's string functions pinned: a run of 2N
 //                        iterations less a run of N, over N, so start-up and
 //                        calibration cancel. The figure the ranking rests on;
 //                        the same with --cpu and --base as the timing
@@ -253,6 +254,13 @@ const COUNT_ITERATIONS = 500
 /** The counting tool, looked up on PATH; an optional tool, so not one of the package's binaries. */
 const VALGRIND = "valgrind"
 
+/**
+ * The `nish:simd` dispatch every count runs under, as bench/run.mjs pins it:
+ * the json* answers reach a scan that picks AVX2 or the base path by cpuid,
+ * so without it a count would depend on the host.
+ */
+const PINNED_SIMD = "base"
+
 /** The instructions `main <case> <iterations>` executes under cachegrind, the whole process. */
 const countRun = (column, c, iterations) => {
   const dir = path.dirname(column.bin)
@@ -267,7 +275,12 @@ const countRun = (column, c, iterations) => {
       c.name,
       String(iterations),
     ],
-    { cwd: dir, env: { GLIBC_TUNABLES: PINNED_LIBC }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+    {
+      cwd: dir,
+      env: { GLIBC_TUNABLES: PINNED_LIBC, NISH_SIMD: PINNED_SIMD },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
   )
   if (r.error !== undefined || r.status !== 0) {
     fail(
@@ -288,7 +301,7 @@ if (instructions) {
   }
   const counted = columns.filter((col) => !col.id.endsWith("-copy"))
   console.log(
-    `instructions: cachegrind --cache-sim=no, built --cpu ${cpu}; one iteration is a run of ${2 * COUNT_ITERATIONS}` +
+    `instructions: cachegrind --cache-sim=no, NISH_SIMD=${PINNED_SIMD}, built --cpu ${cpu}; one iteration is a run of ${2 * COUNT_ITERATIONS}` +
       ` iterations less a run of ${COUNT_ITERATIONS}, over ${COUNT_ITERATIONS}` +
       (baseRev !== null ? `; base: std/ at ${baseRev}` : "")
   )

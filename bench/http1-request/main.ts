@@ -9,8 +9,8 @@
 //
 //     browser   a 756-byte browser GET: Accept, Accept-Language, User-Agent,
 //               Cookie and a 251-byte HS256 Bearer token
-//     api       an API client's POST: a 254-byte head with a 64-character
-//               opaque Bearer token, and a 61-byte JSON body
+//     api       an API client's POST: a 338-byte head with a 148-byte HS256
+//               Bearer token, and a 61-byte JSON body
 //     short     `GET / HTTP/1.1` and Host, 37 bytes
 //     pipelined the API POST and the browser GET in one read
 //     split     the browser GET in two reads, cut inside its Cookie line
@@ -86,13 +86,17 @@ const b64 = (n: i32, seed: i32): string => {
 }
 
 /**
- * A 251-byte HS256 JWT: the usual 36-character protected header, a
- * 170-character claims part (about 127 bytes of JSON: sub, name, email, iat,
- * exp) and a 43-character signature.
+ * An HS256 JWT: the usual 36-character protected header, a claims part of
+ * `claims` characters and a 43-character signature, each part filled from
+ * `seed`.
  */
-const jwt = (): string => `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${b64(170, 7)}.${b64(43, 11)}`
+const jwt = (claims: i32, seed: i32): string =>
+  `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${b64(claims, seed)}.${b64(43, seed + 4)}`
 
-/** A browser's GET for a page's data: 756 bytes, the Cookie and Authorization lines the longest. */
+/**
+ * A browser's GET for a page's data: 756 bytes. Its longest lines are
+ * Authorization (273 bytes), User-Agent (113) and Cookie (93).
+ */
 const browserHead = (): string =>
   "GET /api/articles?limit=20&offset=0&tag=dragons HTTP/1.1\r\n" +
   "Host: conduit.example.com\r\n" +
@@ -102,7 +106,7 @@ const browserHead = (): string =>
   "Accept-Encoding: gzip, deflate, br\r\n" +
   "Referer: https://conduit.example.com/\r\n" +
   `Cookie: session=${b64(32, 3)}; theme=dark; _ga=GA1.2.1234567890.1700000000\r\n` +
-  `Authorization: Bearer ${jwt()}\r\n` +
+  `Authorization: Bearer ${jwt(170, 7)}\r\n` +
   "Connection: keep-alive\r\n" +
   "\r\n"
 
@@ -110,8 +114,9 @@ const browserHead = (): string =>
 const API_BODY: string = '{"article":{"title":"How to train your dragon","tagList":[]}}'
 
 /**
- * An API client's POST: a 254-byte head, its Bearer token a 64-character
- * opaque API token, and the JSON body.
+ * An API client's POST: a 338-byte head, its Bearer token the 148-byte HS256
+ * JWT a server issues (a 67-character claims part, about 50 bytes of JSON:
+ * sub, iat, exp), and the JSON body.
  */
 const apiRequest = (): string =>
   "POST /api/articles HTTP/1.1\r\n" +
@@ -120,7 +125,7 @@ const apiRequest = (): string =>
   "Accept: application/json\r\n" +
   "Content-Type: application/json\r\n" +
   `Content-Length: ${API_BODY.length}\r\n` +
-  `Authorization: Bearer ${b64(64, 13)}\r\n` +
+  `Authorization: Bearer ${jwt(67, 13)}\r\n` +
   "\r\n" +
   API_BODY
 
