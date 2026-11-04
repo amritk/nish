@@ -50,19 +50,24 @@ const outDir = path.join(root, "build", "bench", "pg-decode")
 const nishc = compilerFrom(process.argv)
 
 /**
- * What each case runs, as `main <kernel> <size> <iterations>` takes it, and
- * `known`, the checksum one iteration prints.
+ * What each case runs, as `main <kernel> <size> <iterations>` takes it;
+ * `bytes`, the bytes it decodes (`rows`, `text`, `pool`: the answer to one
+ * group) or encodes (`params`: the Bind, Execute and Sync), which the build's
+ * `bytes` kernel must print; and `known`, the checksum one iteration prints.
  */
 const CASES = [
-  { label: "rows 1", kernel: "rows", size: 1, known: "920b9c5f" },
-  { label: "rows 20", kernel: "rows", size: 20, known: "a4a8bc21" },
-  { label: "rows 100", kernel: "rows", size: 100, known: "ee18fb6d" },
-  { label: "pool 1", kernel: "pool", size: 1, known: "920b9c5f" },
-  { label: "pool 20", kernel: "pool", size: 20, known: "a4a8bc21" },
-  { label: "pool 100", kernel: "pool", size: 100, known: "ee18fb6d" },
-  { label: "params 1", kernel: "params", size: 1, known: "8bc76938" },
-  { label: "params 20", kernel: "params", size: 20, known: "ddbfedab" },
-  { label: "params 100", kernel: "params", size: 100, known: "0c2ac44f" },
+  { label: "rows 1 (214 B)", kernel: "rows", size: 1, bytes: 214, known: "920b9c5f" },
+  { label: "rows 20 (2,892 B)", kernel: "rows", size: 20, bytes: 2892, known: "a4a8bc21" },
+  { label: "rows 100 (14,019 B)", kernel: "rows", size: 100, bytes: 14019, known: "ee18fb6d" },
+  { label: "text 1 (218 B)", kernel: "text", size: 1, bytes: 218, known: "7077c787" },
+  { label: "text 20 (2,464 B)", kernel: "text", size: 20, bytes: 2464, known: "06e0cd59" },
+  { label: "text 100 (12,153 B)", kernel: "text", size: 100, bytes: 12153, known: "cd4743fa" },
+  { label: "pool 1 (214 B)", kernel: "pool", size: 1, bytes: 214, known: "920b9c5f" },
+  { label: "pool 20 (2,892 B)", kernel: "pool", size: 20, bytes: 2892, known: "a4a8bc21" },
+  { label: "pool 100 (14,019 B)", kernel: "pool", size: 100, bytes: 14019, known: "ee18fb6d" },
+  { label: "params 1 (104 B)", kernel: "params", size: 1, bytes: 104, known: "8bc76938" },
+  { label: "params 20 (1,051 B)", kernel: "params", size: 20, bytes: 1051, known: "ddbfedab" },
+  { label: "params 100 (5,179 B)", kernel: "params", size: 100, bytes: 5179, known: "0c2ac44f" },
 ]
 /** The nanoseconds a calibrated run aims at. */
 const TARGET_NS = 200e6
@@ -192,7 +197,21 @@ const runOnce = (column, c, iterations) => {
   return { checksum: sum[1], ns: Number(ns[1]) }
 }
 
+/** The bytes the build's `bytes` kernel prints for `size`: what rows, text and params handle, in that order. */
+const sizesOf = (size) => {
+  const r = spawnSync(exe, ["bytes", String(size), "1"], { encoding: "utf8" })
+  const m = /^bytes (\d+) (\d+) (\d+)\n$/.exec(r.stdout ?? "")
+  if (r.status !== 0 || m === null) {
+    fail(`${exe} bytes ${size}: exit ${r.status}\n${r.stdout}${r.stderr}`)
+  }
+  return { rows: Number(m[1]), pool: Number(m[1]), text: Number(m[2]), params: Number(m[3]) }
+}
+
 for (const c of cases) {
+  const bytes = sizesOf(c.size)[c.kernel]
+  if (bytes !== c.bytes) {
+    fail(`${c.label}: the build handles ${bytes} bytes, not the ${c.bytes} its label says`)
+  }
   for (const col of columns) {
     const r = runOnce(col, c, 1)
     if (r.checksum !== c.known) {
@@ -250,7 +269,7 @@ if (callgrind) {
   }
   console.log(`${header}\n`)
   console.log(
-    `${"case".padEnd(12)} ${"column".padEnd(28)} ${"instr/op".padStart(10)} ${"vs nish".padStart(9)}`
+    `${"case".padEnd(22)} ${"column".padEnd(28)} ${"instr/op".padStart(10)} ${"vs nish".padStart(9)}`
   )
   for (const c of cases) {
     let first = null
@@ -262,7 +281,7 @@ if (callgrind) {
           ? ""
           : `${perOp >= first ? "+" : ""}${((100 * (perOp - first)) / first).toFixed(1)}%`
       console.log(
-        `${c.label.padEnd(12)} ${col.id.padEnd(28)} ${perOp.toFixed(0).padStart(10)} ${vs.padStart(9)}`
+        `${c.label.padEnd(22)} ${col.id.padEnd(28)} ${perOp.toFixed(0).padStart(10)} ${vs.padStart(9)}`
       )
     }
   }
@@ -291,7 +310,7 @@ const median = (xs) => {
 const pct = (from, to) => `${to >= from ? "+" : ""}${((100 * (to - from)) / from).toFixed(1)}%`
 
 console.log(`${header}\n`)
-const WIDTHS = [12, 28, 12, 20, 9]
+const WIDTHS = [22, 28, 12, 20, 9]
 const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
 console.log(line(["case", "column", "median ns/op", "min-max ns/op", "vs nish"]))
 

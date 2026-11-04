@@ -12,6 +12,12 @@
 //                receive/next (readRow), every column read: int8 and
 //                timestamptz by binaryInt (getI64BE), the text by its window,
 //                the int8[] by PgBinaryArray, the NULL by isNull
+//   text <n>     rows with the group in the text format, as a bindStart
+//                (not bindStartBinary) execution answers: the int8 by int,
+//                the timestamptz by text.timestamp, the int8[] by
+//                PgArrayWalker and text.int
+//   bytes <n>    not timed: prints the bytes rows and text decode for <n>
+//                rows, and the bytes params <n> encodes
 //   pool <n>     the same group through a one-slot PgPool: request, dispatch,
 //                bind, send, and PgPool.next for every event
 //   params <n>   a text-format Bind as PgBatcher's PG_BATCH_TEXT writes one:
@@ -35,6 +41,7 @@ import {
   PG_NEED_MORE,
   PG_READY,
   PG_ROW,
+  PgArrayWalker,
   PgBinaryArray,
   PgConfig,
   PgConnection,
@@ -160,52 +167,92 @@ const nameOf = (r: i32): string => {
   return out.join("")
 }
 
-/** A RowDescription field: name, table OID, column, type OID, size, modifier, format 1. */
-const field = (w: Bytes, name: string, oid: i32, size: i32): void => {
+/** `v`'s decimal digits, zero-padded to `width`. */
+const padded = (v: i32, width: i32): string => {
+  let s: string = `${v}`
+  while (toI32(s.length) < width) {
+    s = `0${s}`
+  }
+  return s
+}
+
+/** Row `r`'s timestamptz as the text format spells it: `EPOCH_2025` plus `r` times 1000003 microseconds. */
+const stampOf = (r: i32): string => {
+  const seconds: i32 = r + (r * 3) / 1000000
+  const micros: i32 = (r * 3) % 1000000
+  return `2025-01-01 ${padded(seconds / 3600, 2)}:${padded((seconds / 60) % 60, 2)}:${padded(seconds % 60, 2)}.${padded(micros, 6)}+00`
+}
+
+/** A column's value in the text format: its length, then its bytes. */
+const textColumn = (w: Bytes, s: string): void => {
+  w.i32(toI32(s.length))
+  w.text(s)
+}
+
+/** A RowDescription field: name, table OID, column, type OID, size, modifier, and format `format` (0 text, 1 binary). */
+const field = (w: Bytes, name: string, oid: i32, size: i32, format: i32): void => {
   w.cstring(name)
   w.i32(16384)
   w.i16(1)
   w.i32(oid)
   w.i16(size)
   w.i32(-1)
-  w.i16(1)
+  w.i16(format)
 }
 
-/** The answer to one binary group of `rows` rows: BindComplete, RowDescription, the DataRows, CommandComplete, ReadyForQuery. */
-const rowStream = (rows: i32): u8[] => {
+/** Row `r`'s int8[] element `k`. */
+const tagOf = (r: i32, k: i32): i64 => toI64(r * 8 + k) - toI64(3)
+
+/**
+ * The answer to one group of `rows` rows, in the binary format or the text
+ * one: BindComplete, RowDescription, the DataRows, CommandComplete,
+ * ReadyForQuery. Both formats carry the same values.
+ */
+const rowStream = (rows: i32, binary: boolean): u8[] => {
   const w = new Bytes()
+  const format: i32 = binary ? 1 : 0
   w.end(w.start(50))
   const t: i32 = w.start(84)
   w.i16(COLUMNS)
-  field(w, "id", 20, 8)
-  field(w, "name", 25, -1)
-  field(w, "at", 1184, 8)
-  field(w, "tags", 1016, -1)
-  field(w, "note", 25, -1)
+  field(w, "id", 20, 8, format)
+  field(w, "name", 25, -1, format)
+  field(w, "at", 1184, 8, format)
+  field(w, "tags", 1016, -1, format)
+  field(w, "note", 25, -1, format)
   w.end(t)
   for (let r: i32 = 0; r < rows; r++) {
     const d: i32 = w.start(68)
     w.i16(COLUMNS)
-    w.i32(8)
-    w.i64(toI64(r) * GOLDEN + toI64(1))
-    const name: string = nameOf(r)
-    w.i32(toI32(name.length))
-    w.text(name)
-    w.i32(8)
-    w.i64(EPOCH_2025 + toI64(r) * toI64(1000003))
+    const id: i64 = toI64(r) * GOLDEN + toI64(1)
     const tags: i32 = tagCount(r)
-    // array_send's layout: no dimension for an empty array, else one from 1.
-    w.i32(tags === 0 ? 12 : 20 + 12 * tags)
-    w.i32(tags === 0 ? 0 : 1)
-    w.i32(0)
-    w.i32(20)
-    if (tags > 0) {
-      w.i32(tags)
-      w.i32(1)
-      for (let k: i32 = 0; k < tags; k++) {
-        w.i32(8)
-        w.i64(toI64(r * 8 + k) - toI64(3))
+    if (binary) {
+      w.i32(8)
+      w.i64(id)
+      textColumn(w, nameOf(r))
+      w.i32(8)
+      w.i64(EPOCH_2025 + toI64(r) * toI64(1000003))
+      // array_send's layout: no dimension for an empty array, else one from 1.
+      w.i32(tags === 0 ? 12 : 20 + 12 * tags)
+      w.i32(tags === 0 ? 0 : 1)
+      w.i32(0)
+      w.i32(20)
+      if (tags > 0) {
+        w.i32(tags)
+        w.i32(1)
+        for (let k: i32 = 0; k < tags; k++) {
+          w.i32(8)
+          w.i64(tagOf(r, k))
+        }
       }
+    } else {
+      textColumn(w, `${id}`)
+      textColumn(w, nameOf(r))
+      textColumn(w, stampOf(r))
+      const elements: string[] = []
+      for (let k: i32 = 0; k < tags; k++) {
+        elements.push(`${tagOf(r, k)}`)
+      }
+      textColumn(w, `{${elements.join(",")}}`)
     }
     if (r % 3 === 0) {
       w.i32(8)
@@ -318,6 +365,53 @@ const readRow = (conn: PgConnection, tags: PgBinaryArray, h: u32): u32 => {
   return mix(s, conn.isNull(4) ? 1 : 0)
 }
 
+/** What a group's rows are read with: the binary format's array reader, or the text format's walker and the 24 bytes a timestamp is written to. */
+class Readers {
+  tags: PgBinaryArray
+  walker: PgArrayWalker
+  stamp: u8[]
+  /** Whether the rows are in the text format. */
+  text: boolean
+
+  constructor(conn: PgConnection, text: boolean) {
+    this.tags = new PgBinaryArray(conn.binary)
+    this.walker = new PgArrayWalker()
+    this.stamp = new Array<u8>(24)
+    this.text = text
+  }
+}
+
+/** Text-format row `conn` holds folded into `h`, read as the binary one is: the int8 by `int`, the timestamptz by `text.timestamp`, the int8[] by PgArrayWalker and `text.int`. */
+const readTextRow = (conn: PgConnection, r: Readers, h: u32): u32 => {
+  let s: u32 = foldInt(h, conn.int(0))
+  s = mix(s, conn.colLength(1))
+  const name: i32 = conn.colStart(1)
+  const input: u8[] = conn.inputBuffer()
+  if (name >= 0 && name < toI32(input.length)) {
+    s = mix(s, toI32(input[name]))
+  }
+  s = mix(s, conn.text.timestamp(input, conn.colStart(2), conn.colLength(2), r.stamp, 0))
+  for (const b of r.stamp) {
+    s = mix(s, toI32(b))
+  }
+  const walker: PgArrayWalker = r.walker
+  walker.begin(input, conn.colStart(3), conn.colLength(3))
+  while (true) {
+    const e: i32 = walker.next()
+    if (e === PG_ARRAY_ELEMENT) {
+      s = foldInt(s, conn.text.int(input, walker.start, walker.length))
+    } else if (e !== PG_ARRAY_NULL) {
+      s = mix(s, e)
+      break
+    }
+  }
+  return mix(s, conn.isNull(4) ? 1 : 0)
+}
+
+/** The row `conn` holds, in `r`'s format, folded into `h`. */
+const readAny = (conn: PgConnection, r: Readers, h: u32): u32 =>
+  r.text ? readTextRow(conn, r, h) : readRow(conn, r.tags, h)
+
 /** A connection past its startup, ready for groups. */
 const started = (): PgConnection | null => {
   const password = secret(noPassword())
@@ -338,7 +432,7 @@ const started = (): PgConnection | null => {
 }
 
 /** Feeds `stream` to `conn` as reads that fit, answering each event through `next`; the fold of what it read. */
-const answer = (conn: PgConnection, stream: u8[], tags: PgBinaryArray, h: u32): u32 => {
+const answer = (conn: PgConnection, stream: u8[], readers: Readers, h: u32): u32 => {
   let s: u32 = h
   let fed: i32 = 0
   while (true) {
@@ -347,7 +441,7 @@ const answer = (conn: PgConnection, stream: u8[], tags: PgBinaryArray, h: u32): 
       return mix(s, event)
     }
     if (event === PG_ROW) {
-      s = readRow(conn, tags, s)
+      s = readAny(conn, readers, s)
     } else if (event === PG_NEED_MORE) {
       if (fed === toI32(stream.length)) {
         return mix(s, 255)
@@ -359,26 +453,30 @@ const answer = (conn: PgConnection, stream: u8[], tags: PgBinaryArray, h: u32): 
   }
 }
 
-/** `rows`: one binary group a iteration on a PgConnection. */
-const rowsLoop = (a: Args): i32 => {
+/** `rows`, or `text` when `text` is set: one group a iteration on a PgConnection, its rows in the binary format or the text one. */
+const rowsLoop = (a: Args, text: boolean): i32 => {
   const conn: PgConnection | null = started()
   if (conn === null) {
     writeError("pg-decode: the startup failed\n")
     return 1
   }
-  const stream: u8[] = rowStream(a.size)
-  const tags = new PgBinaryArray(conn.binary)
+  const stream: u8[] = rowStream(a.size, !text)
+  const readers = new Readers(conn, text)
   let sum: u32 = foldStart()
   const t0: i64 = now()
   for (let i: i32 = 0; i < a.iterations; i++) {
-    conn.bindStartBinary("rows")
+    if (text) {
+      conn.bindStart("rows")
+    } else {
+      conn.bindStartBinary("rows")
+    }
     conn.paramInt(toI64(i) * toI64(1000003))
     conn.bindEnd()
     conn.sync()
     sum = drain(conn, sum)
-    sum = answer(conn, stream, tags, sum)
+    sum = answer(conn, stream, readers, sum)
   }
-  if (conn.failure !== PG_ERR_NONE || conn.binary.failed) {
+  if (conn.failure !== PG_ERR_NONE || conn.binary.failed || conn.text.failed) {
     writeError(`pg-decode: the connection failed (${conn.failure}) or a column did not decode\n`)
     return 1
   }
@@ -403,7 +501,7 @@ const poolLoop = (a: Args): i32 => {
     return 1
   }
   // The request queued to want the slot; a dispatch now hands it out, and it is answered empty.
-  const stream: u8[] = rowStream(a.size)
+  const stream: u8[] = rowStream(a.size, true)
   const tags = new PgBinaryArray(conn.binary)
   if (!firstGroup(pool, conn, emptyStream(), tags)) {
     writeError("pg-decode: the pool's first group failed\n")
@@ -476,8 +574,14 @@ const firstGroup = (pool: PgPool, conn: PgConnection, stream: u8[], tags: PgBina
   }
 }
 
-/** `params`: one PG_BATCH_TEXT bind a iteration, `n` keys and `n` ids. */
-const paramsLoop = (a: Args): i32 => {
+/**
+ * `params`: one PG_BATCH_TEXT bind a iteration, `n` keys and `n` ids. With
+ * `sizes` set it times nothing: it prints `bytes`, then the bytes of the
+ * binary and the text answer to a group of `n` rows (what `rows`, `pool` and
+ * `text` decode) and of the Bind, Execute and Sync it writes (what `params`
+ * encodes), for run.mjs's labels.
+ */
+const paramsLoop = (a: Args, sizes: boolean): i32 => {
   const conn: PgConnection | null = started()
   if (conn === null) {
     writeError("pg-decode: the startup failed\n")
@@ -496,7 +600,7 @@ const paramsLoop = (a: Args): i32 => {
     ids.push(toI64(k) * GOLDEN - toI64(500000))
   }
   const stream: u8[] = emptyStream()
-  const tags = new PgBinaryArray(conn.binary)
+  const readers = new Readers(conn, false)
   let sum: u32 = foldStart()
   const t0: i64 = now()
   for (let i: i32 = 0; i < a.iterations; i++) {
@@ -510,8 +614,13 @@ const paramsLoop = (a: Args): i32 => {
     conn.paramInt(toI64(i))
     conn.bindEnd()
     conn.sync()
+    if (sizes) {
+      const encoded: i32 = conn.outputEnd() - conn.outputStart()
+      console.log(`bytes ${toI32(rowStream(n, true).length)} ${toI32(rowStream(n, false).length)} ${encoded}`)
+      return 0
+    }
     sum = drain(conn, sum)
-    sum = answer(conn, stream, tags, sum)
+    sum = answer(conn, stream, readers, sum)
   }
   if (conn.failure !== PG_ERR_NONE) {
     writeError(`pg-decode: the connection failed (${conn.failure})\n`)
@@ -526,14 +635,17 @@ export const main = (): i32 => {
   if (a === null) {
     return 2
   }
-  if (a.kernel === "rows") {
-    return rowsLoop(a)
+  if (a.kernel === "rows" || a.kernel === "text") {
+    return rowsLoop(a, a.kernel === "text")
   }
   if (a.kernel === "pool") {
     return poolLoop(a)
   }
   if (a.kernel === "params") {
-    return paramsLoop(a)
+    return paramsLoop(a, false)
+  }
+  if (a.kernel === "bytes") {
+    return paramsLoop(a, true)
   }
   writeError(`pg-decode: no kernel ${a.kernel}\n`)
   return 2
