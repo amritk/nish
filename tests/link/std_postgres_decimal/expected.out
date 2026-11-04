@@ -10,17 +10,35 @@ PASS  an array parameter
 PASS  arrayInt writes the same text
 PASS  one digit: the buffer did not grow
 PASS  one digit: its length word
-PASS  one digit: it ends at the buffer's end
+PASS  one digit: it ends where it should
 PASS  one digit: its text
 PASS  one digit: the bind still ends
 PASS  nineteen digits: the buffer did not grow
 PASS  nineteen digits: its length word
-PASS  nineteen digits: it ends at the buffer's end
+PASS  nineteen digits: it ends where it should
 PASS  nineteen digits: its text
 PASS  nineteen digits: the bind still ends
 PASS  the most negative i64: the buffer did not grow
 PASS  the most negative i64: its length word
-PASS  the most negative i64: it ends at the buffer's end
+PASS  the most negative i64: it ends where it should
 PASS  the most negative i64: its text
 PASS  the most negative i64: the bind still ends
-postgres decimal: 25 passed, 0 failed, 0 skipped
+PASS  one digit, three bytes short: the buffer did not grow
+PASS  one digit, three bytes short: the 3 bytes after it are untouched
+PASS  one digit, three bytes short: its length word
+PASS  one digit, three bytes short: it ends where it should
+PASS  one digit, three bytes short: its text
+PASS  one digit, three bytes short: the bind still ends
+PASS  nineteen digits, three bytes short: the buffer did not grow
+PASS  nineteen digits, three bytes short: the 3 bytes after it are untouched
+PASS  nineteen digits, three bytes short: its length word
+PASS  nineteen digits, three bytes short: it ends where it should
+PASS  nineteen digits, three bytes short: its text
+PASS  nineteen digits, three bytes short: the bind still ends
+PASS  the most negative i64, three bytes short: the buffer did not grow
+PASS  the most negative i64, three bytes short: the 3 bytes after it are untouched
+PASS  the most negative i64, three bytes short: its length word
+PASS  the most negative i64, three bytes short: it ends where it should
+PASS  the most negative i64, three bytes short: its text
+PASS  the most negative i64, three bytes short: the bind still ends
+postgres decimal: 43 passed, 0 failed, 0 skipped

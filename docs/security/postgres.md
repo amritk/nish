@@ -184,7 +184,7 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `received` | a count past `inputRoom()` | — |
 | `receive` | a window outside its source | `link/std_postgres_receive_panic` |
 | `sent` | a count past the bytes queued | — |
-| `pgPutDecimal` | a window outside the output buffer ("a decimal outside its room"); its one caller, `putDecimal`, reserves `pgDecimalLength(value)` bytes first, so no input reaches it | `link/std_postgres_decimal`, which ends a number at the buffer's last byte and never reaches it |
+| `pgPutDecimal` | a window outside the output buffer ("a decimal outside its room"); its one caller, `putDecimal`, reserves `pgDecimalLength(value)` bytes first, so no input reaches it. That reservation was a flat 20 bytes before; the buffer may now grow one call later, and `paramInt`'s `maxOutput` check still counts 20, and the bytes sent are unchanged | `link/std_postgres_decimal`, which ends a number at the buffer's last byte and never reaches it |
 | `pgFind` | a range outside the buffer; every caller passes one inside a framed message, so no input reaches it | the fuzz below, which never reaches it |
 | `pgScramKeys`, `scramFinal` | an HMAC shorter than 32 bytes, keys not 64 bytes; `hmacSha256` always answers 32 | — |
 | `PgPool` constructor | a size outside 1..1024 ("a PgPool size out of range") | `link/std_postgres_pool_size_panic` (1025 slots, after 1024 are taken) |

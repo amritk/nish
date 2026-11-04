@@ -96,6 +96,12 @@ const text = (out: u8[], start: i32, end: i32): string => {
   return parts.join("");
 };
 
+/** The largest i64, 9223372036854775807. */
+const i64Max = (): i64 => (toI64(922337203) * toI64(1000000000) + toI64(685477580)) * toI64(10) + toI64(7);
+
+/** The most negative i64, -9223372036854775808. */
+const i64Min = (): i64 => -i64Max() - 1;
+
 /** 0, ±1, every power of ten and its neighbours on both signs, the i64 limits. */
 const values = (): i64[] => {
   const out: i64[] = [toI64(0), toI64(1), toI64(-1)];
@@ -109,11 +115,11 @@ const values = (): i64[] => {
     out.push(-p);
     out.push(-(p + 1));
   }
-  const max: i64 = (toI64(922337203) * toI64(1000000000) + toI64(685477580)) * toI64(10) + toI64(7);
+  const max: i64 = i64Max();
   out.push(max);
   out.push(max - 1);
   out.push(-max);
-  out.push(-max - 1);
+  out.push(i64Min());
   out.push(toI64(1234567890) * toI64(1000000000) + toI64(123456789));
   out.push(toI64(-987654321) * toI64(1000000000) - toI64(98765432));
   out.push(toI64(42));
@@ -185,8 +191,8 @@ const paramInts = (t: Suite): void => {
     counts += digitCounts[d] ? 1 : 0;
   }
   t.eqI32("every digit count from 1 to 19 is among them", counts, 19);
-  t.eqStr("the most negative i64", viaParamInt(values()[toI32(values().length) - 5]), "-9223372036854775808");
-  t.eqStr("the largest i64", viaParamInt(values()[toI32(values().length) - 8]), "9223372036854775807");
+  t.eqStr("the most negative i64", viaParamInt(i64Min()), "-9223372036854775808");
+  t.eqStr("the largest i64", viaParamInt(i64Max()), "9223372036854775807");
   t.eqStr("zero", viaParamInt(toI64(0)), "0");
   t.eqStr("minus one", viaParamInt(toI64(-1)), "-1");
 };
@@ -215,29 +221,38 @@ const paramIntArrays = (t: Suite): void => {
   t.eqStr("arrayInt writes the same text", parameter(other, s2), `{${parts.join(",")}}`);
 };
 
-/** `value` by `paramInt` with its last digit in the output buffer's last byte. */
-const atTheEnd = (t: Suite, name: string, value: i64): void => {
+/**
+ * `value` by `paramInt` with its last digit `slack` bytes before the output
+ * buffer's end; the `slack` bytes after it must be left as they were.
+ */
+const atTheEnd = (t: Suite, name: string, value: i64, slack: i32): void => {
   const conn = prepared();
   const s: i32 = conn.outputEnd();
   conn.bindStart("q");
   const size: i32 = toI32(conn.outputBuffer().length);
   const want: string = reference(value);
   // The text parameter's length word and bytes, then the integer's length word and digits.
-  const pad: i32 = size - s - PARAM_LENGTH - 4 - 4 - toI32(want.length);
+  const pad: i32 = size - s - PARAM_LENGTH - 4 - 4 - toI32(want.length) - slack;
   const fill: string[] = [];
   for (let i: i32 = 0; i < pad; i++) {
     fill.push("x");
   }
   conn.paramText(fill.join(""));
+  // The bytes past where the number will end, before it is written.
+  const end: i32 = size - slack;
+  const before: string = text(conn.outputBuffer(), end, size);
   conn.paramInt(value);
   t.eqI32(`${name}: the buffer did not grow`, toI32(conn.outputBuffer().length), size);
+  if (slack > 0) {
+    t.eqStr(`${name}: the ${slack} bytes after it are untouched`, text(conn.outputBuffer(), end, size), before);
+  }
   conn.bindEnd();
   // The second parameter follows the first's length word and bytes.
   const at: i32 = s + PARAM_TEXT + pad;
   const out: u8[] = conn.outputBuffer();
   t.eqI32(`${name}: its length word`, i32At(out, at), toI32(want.length));
-  t.eqI32(`${name}: it ends at the buffer's end`, at + 4 + toI32(want.length), size);
-  t.eqStr(`${name}: its text`, text(out, at + 4, size), want);
+  t.eqI32(`${name}: it ends where it should`, at + 4 + toI32(want.length), size - slack);
+  t.eqStr(`${name}: its text`, text(out, at + 4, size - slack), want);
   t.ok(`${name}: the bind still ends`, conn.sync());
 };
 
@@ -245,8 +260,11 @@ export const main = (): number => {
   const t = new Suite("postgres decimal");
   paramInts(t);
   paramIntArrays(t);
-  atTheEnd(t, "one digit", toI64(0));
-  atTheEnd(t, "nineteen digits", values()[toI32(values().length) - 8]);
-  atTheEnd(t, "the most negative i64", values()[toI32(values().length) - 5]);
+  atTheEnd(t, "one digit", toI64(0), 0);
+  atTheEnd(t, "nineteen digits", i64Max(), 0);
+  atTheEnd(t, "the most negative i64", i64Min(), 0);
+  atTheEnd(t, "one digit, three bytes short", toI64(7), 3);
+  atTheEnd(t, "nineteen digits, three bytes short", i64Max(), 3);
+  atTheEnd(t, "the most negative i64, three bytes short", i64Min(), 3);
   return t.done();
 };
