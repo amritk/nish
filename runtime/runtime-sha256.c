@@ -127,93 +127,6 @@ NISH_SHA256_INLINE void nish_sha256_block(char *state, const char *in) {
   _mm_storeu_si128((__m128i *)state, _mm_blend_epi16(feba, dchg, 0xf0));
   _mm_storeu_si128((__m128i *)(state + 16), _mm_alignr_epi8(dchg, feba, 8));
 }
-
-/* One block on AVX2 and BMI2, for an x86-64 without SHA-NI: the message
-   schedule (6.2, step 1) four words at a time in a 128-bit register, the
-   rounds (step 3) on the general registers with BMI2's `rorx` and BMI1's
-   `andn`. The two interleave, each group of four words computed as the four
-   rounds sixteen before it run, so the vector and the integer units work
-   together. The schedule's words go to `w`, which is `sha256Compress`'s own
-   schedule array: after the call it holds W[0 .. 63], as the Nish body leaves
-   it, and the HMAC wipes that clear the Nish body's words clear these. */
-#define NISH_SHA256_AVX2 __attribute__((target("avx2,bmi,bmi2"), NISH_SHA256_NO_LIBC))
-#define NISH_SHA256_AVX2_INLINE static inline __attribute__((always_inline)) NISH_SHA256_AVX2
-
-/* σ0 and σ1 of (4.6) and (4.7) on four words: AVX2 has no 32-bit rotate, so
-   each rotate is its two shifts, the halves of the rotates XORed together
-   since they share no bits. */
-NISH_SHA256_AVX2_INLINE __m128i nish_sha256_sigma0(__m128i x) {
-  return _mm_xor_si128(_mm_xor_si128(_mm_xor_si128(_mm_srli_epi32(x, 7), _mm_slli_epi32(x, 25)),
-                                     _mm_xor_si128(_mm_srli_epi32(x, 18), _mm_slli_epi32(x, 14))),
-                       _mm_srli_epi32(x, 3));
-}
-
-NISH_SHA256_AVX2_INLINE __m128i nish_sha256_sigma1(__m128i x) {
-  return _mm_xor_si128(_mm_xor_si128(_mm_xor_si128(_mm_srli_epi32(x, 17), _mm_slli_epi32(x, 15)),
-                                     _mm_xor_si128(_mm_srli_epi32(x, 19), _mm_slli_epi32(x, 13))),
-                       _mm_srli_epi32(x, 10));
-}
-
-/* W[t .. t + 3] by (6.2) from the sixteen words before them, x0 the oldest
-   four. σ1 of W[t + 2] and W[t + 3] needs W[t] and W[t + 1], so the low half
-   is finished first; the shifts by eight bytes leave zeros in the lanes they
-   do not compute, and σ1(0) is 0. */
-NISH_SHA256_AVX2_INLINE __m128i nish_sha256_next(__m128i x0, __m128i x1, __m128i x2, __m128i x3) {
-  __m128i w = _mm_add_epi32(_mm_add_epi32(x0, nish_sha256_sigma0(_mm_alignr_epi8(x1, x0, 4))),
-                            _mm_alignr_epi8(x3, x2, 4));
-  w = _mm_add_epi32(w, nish_sha256_sigma1(_mm_srli_si128(x3, 8)));
-  return _mm_add_epi32(w, nish_sha256_sigma1(_mm_slli_si128(w, 8)));
-}
-
-NISH_SHA256_AVX2_INLINE uint32_t nish_sha256_rotr(uint32_t x, int n) {
-  return (x >> n) | (x << (32 - n));
-}
-
-/* Round t of step 3, the eight working variables named in their places: `h`
-   becomes T1 + T2 and `d` becomes d + T1, which is the rotation of the eight
-   once the next round names them one place on. */
-#define NISH_SHA256_ROUND(a, b, c, d, e, f, g, h, t)                                                          \
-  do {                                                                                                         \
-    h += (nish_sha256_rotr(e, 6) ^ nish_sha256_rotr(e, 11) ^ nish_sha256_rotr(e, 25)) + ((e & f) ^ (~e & g)) + \
-         nish_sha256_k[t] + ws[t];                                                                             \
-    d += h;                                                                                                    \
-    h += (nish_sha256_rotr(a, 2) ^ nish_sha256_rotr(a, 13) ^ nish_sha256_rotr(a, 22)) +                        \
-         ((a & b) ^ (c & (a ^ b)));                                                                            \
-  } while (0)
-
-#define NISH_SHA256_ROUND4(a, b, c, d, e, f, g, h, t) \
-  NISH_SHA256_ROUND(a, b, c, d, e, f, g, h, t);       \
-  NISH_SHA256_ROUND(h, a, b, c, d, e, f, g, t + 1);   \
-  NISH_SHA256_ROUND(g, h, a, b, c, d, e, f, t + 2);   \
-  NISH_SHA256_ROUND(f, g, h, a, b, c, d, e, t + 3)
-
-static NISH_SHA256_AVX2 __attribute__((noinline)) void nish_sha256_block_avx2(char *state, uint32_t *ws,
-                                                                              const char *in) {
-  const __m128i bswap = _mm_set_epi64x(0x0c0d0e0f08090a0bLL, 0x0405060700010203LL);
-  __m128i x0 = _mm_shuffle_epi8(_mm_loadu_si128((const __m128i *)in), bswap);
-  __m128i x1 = _mm_shuffle_epi8(_mm_loadu_si128((const __m128i *)(in + 16)), bswap);
-  __m128i x2 = _mm_shuffle_epi8(_mm_loadu_si128((const __m128i *)(in + 32)), bswap);
-  __m128i x3 = _mm_shuffle_epi8(_mm_loadu_si128((const __m128i *)(in + 48)), bswap);
-  uint32_t s[8];
-  __builtin_memcpy(s, state, sizeof s);
-  uint32_t a = s[0], b = s[1], c = s[2], d = s[3], e = s[4], f = s[5], g = s[6], h = s[7];
-  _mm_storeu_si128((__m128i *)ws, x0);
-  _mm_storeu_si128((__m128i *)(ws + 4), x1);
-  _mm_storeu_si128((__m128i *)(ws + 8), x2);
-  _mm_storeu_si128((__m128i *)(ws + 12), x3);
-  for (int t = 0; t < 64; t += 16) {
-    NISH_SHA256_ROUND4(a, b, c, d, e, f, g, h, t);
-    if (t < 48) _mm_storeu_si128((__m128i *)(ws + t + 16), x0 = nish_sha256_next(x0, x1, x2, x3));
-    NISH_SHA256_ROUND4(e, f, g, h, a, b, c, d, t + 4);
-    if (t < 48) _mm_storeu_si128((__m128i *)(ws + t + 20), x1 = nish_sha256_next(x1, x2, x3, x0));
-    NISH_SHA256_ROUND4(a, b, c, d, e, f, g, h, t + 8);
-    if (t < 48) _mm_storeu_si128((__m128i *)(ws + t + 24), x2 = nish_sha256_next(x2, x3, x0, x1));
-    NISH_SHA256_ROUND4(e, f, g, h, a, b, c, d, t + 12);
-    if (t < 48) _mm_storeu_si128((__m128i *)(ws + t + 28), x3 = nish_sha256_next(x3, x0, x1, x2));
-  }
-  s[0] += a, s[1] += b, s[2] += c, s[3] += d, s[4] += e, s[5] += f, s[6] += g, s[7] += h;
-  __builtin_memcpy(state, s, sizeof s);
-}
 #else
 /* One block. SHA256H and SHA256H2 run four rounds on ABCD and EFGH together,
    each giving one half of the new state, with W + K for the four in their
@@ -242,10 +155,6 @@ NISH_SHA256_INLINE void nish_sha256_block(char *state, const char *in) {
 }
 #endif
 
-/* The answer: 0 until the first call, then 1 for the kernel or 2 for the Nish
-   path, with runtime-aes.c's relaxed atomics for the same reason. */
-static int32_t nish_sha256_answer;
-
 /* `sha256Compress`'s own guard, then the block. That guard reads the source's
    length through `toI32`, which saturates at 2^31 - 1, so it refuses a block
    ending past that offset whatever the length: `at > INT32_MAX - 64`. */
@@ -253,10 +162,7 @@ NISH_SHA256_TARGET int32_t nish_sha256_compress(nish_array *h, const nish_array 
                                                 int32_t at) {
   if (h->len < 8 || w->len < 64 || at < 0 || at > INT32_MAX - 64 || src->len < 64 || (uint64_t)at > src->len - 64)
     return 0;
-  if (__atomic_load_n(&nish_sha256_answer, __ATOMIC_RELAXED) == 3)
-    nish_sha256_block_avx2(h->data, (uint32_t *)(void *)w->data, src->data + at);
-  else
-    nish_sha256_block(h->data, src->data + at);
+  nish_sha256_block(h->data, src->data + at);
   return 1;
 }
 
@@ -271,18 +177,6 @@ static int32_t nish_sha256_cpu(void) {
   if ((c & bit_SSE4_1) == 0 || (c & bit_SSSE3) == 0) return 0;
   if (!__get_cpuid_count(7, 0, &a, &b, &c, &d)) return 0;
   return (b & bit_SHA) != 0;
-}
-
-static int32_t nish_sha256_cpu_avx2(void) {
-  unsigned a, b, c, d;
-  if (!__get_cpuid(1, &a, &b, &c, &d)) return 0;
-  if ((c & bit_OSXSAVE) == 0 || (c & bit_AVX) == 0) return 0;
-  unsigned lo, hi;
-  __asm__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
-  (void)hi;
-  if ((lo & 6) != 6) return 0;
-  if (!__get_cpuid_count(7, 0, &a, &b, &c, &d)) return 0;
-  return (b & bit_AVX2) != 0 && (b & bit_BMI) != 0 && (b & bit_BMI2) != 0;
 }
 #elif defined(__linux__)
 /* Linux reports the ARMv8 SHA-256 instructions in the auxiliary vector:
@@ -311,6 +205,9 @@ static int32_t nish_sha256_cpu(void) {
 }
 #endif
 
+/* The answer: 0 until the first call, then 1 for the kernel or 2 for the Nish
+   path, with runtime-aes.c's relaxed atomics for the same reason. */
+static int32_t nish_sha256_answer;
 
 int32_t nish_sha256_hw(void) {
   int32_t answer = __atomic_load_n(&nish_sha256_answer, __ATOMIC_RELAXED);
@@ -319,11 +216,10 @@ int32_t nish_sha256_hw(void) {
        nothing, means the best this machine has. */
     const char *pin = getenv("NISH_SHA256");
     int soft = pin != 0 && pin[0] == 's' && pin[1] == 'o' && pin[2] == 'f' && pin[3] == 't' && pin[4] == 0;
-    int avx2 = pin != 0 && pin[0] == 'a' && pin[1] == 'v' && pin[2] == 'x' && pin[3] == '2' && pin[4] == 0;
-    answer = soft ? 2 : !avx2 && nish_sha256_cpu() ? 1 : nish_sha256_cpu_avx2() ? 3 : 2;
+    answer = !soft && nish_sha256_cpu() ? 1 : 2;
     __atomic_store_n(&nish_sha256_answer, answer, __ATOMIC_RELAXED);
   }
-  return answer == 1 || answer == 3;
+  return answer == 1;
 }
 
 #else
