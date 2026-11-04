@@ -41,6 +41,7 @@ import dateRefusal from "./builtins" -> function @dateRefusal
 import isBuiltinFunction from "./builtins" -> function @isBuiltinFunction
 import BuiltinExport from "./nish-modules" -> struct BuiltinExport
 import isSimdExport from "./nish-modules" -> function @isSimdExport
+import isSimdOp from "./nish-modules" -> function @isSimdOp
 import netOption from "./nish-modules" -> function @netOption
 import checkResultConstructor from "./result" -> function @checkResultConstructor
 import isResultConstructor from "./result" -> function @isResultConstructor
@@ -901,7 +902,7 @@ function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   escaping: op
-  calls: CheckContext.errorType TypeTable.isVector TypeTable.typeName booleanAlternative checkEquality checkExpression f64Hint isInteger isNumeric isShift literalHint literalOperand nish_str_concat nish_str_eq peekable simdCompareMessage
+  calls: CheckContext.errorType TypeTable.isMask TypeTable.isVector TypeTable.typeName booleanAlternative checkEquality checkExpression f64Hint isInteger isNumeric isShift literalHint literalOperand nish_str_concat nish_str_eq peekable simdCompareMessage
   pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 checkExpression#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0 checkEquality#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 f64Hint#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkEquality#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer leftNode: size=40 writesThrough=true captured=true passedTo=literalOperand#0 checkExpression#1 checkExpression#1 checkEquality#5
@@ -925,7 +926,8 @@ function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node
   callee +36:94 TypeTable.typeName -> @TypeTable.typeName
   callee +36:126 TypeTable.typeName -> @TypeTable.typeName
   callee +42:12 checkEquality -> @checkEquality
-  callee +45:27 TypeTable.isVector -> @TypeTable.isVector
+  callee +45:28 TypeTable.isVector -> @TypeTable.isVector
+  callee +45:56 TypeTable.isMask -> @TypeTable.isMask
   callee +46:14 CheckContext.errorType -> @CheckContext.errorType
   callee +46:34 simdCompareMessage -> @simdCompareMessage
   callee +46:57 TypeTable.typeName -> @TypeTable.typeName
@@ -965,7 +967,7 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: left op right
-  calls: CheckContext.errorType CheckContext.textOf TypeTable.isNullable TypeTable.isSecret TypeTable.isVector TypeTable.typeName equalityMessage memberSetName memberSetOf membersDisjoint nish_str_concat nish_str_eq simdCompareMessage
+  calls: CheckContext.errorType CheckContext.textOf TypeTable.isMask TypeTable.isNullable TypeTable.isSecret TypeTable.isVector TypeTable.typeName equalityMessage memberSetName memberSetOf membersDisjoint nish_str_concat nish_str_eq simdCompareMessage
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 memberSetOf#0 memberSetOf#0 membersDisjoint#0 CheckContext.errorType#0 CheckContext.textOf#0 memberSetName#0 CheckContext.textOf#0 memberSetName#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer leftNode: size=40 writesThrough=true captured=true passedTo=memberSetOf#1 CheckContext.textOf#1
@@ -986,6 +988,7 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   callee +11:14 CheckContext.errorType -> @CheckContext.errorType
   callee +16:12 CheckContext.errorType -> @CheckContext.errorType
   callee +18:7 TypeTable.isVector -> @TypeTable.isVector
+  callee +18:35 TypeTable.isMask -> @TypeTable.isMask
   callee +19:12 CheckContext.errorType -> @CheckContext.errorType
   callee +19:32 simdCompareMessage -> @simdCompareMessage
   callee +19:55 TypeTable.typeName -> @TypeTable.typeName
@@ -2099,47 +2102,48 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: want
-  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckedProgram.builtinImport FunctionBindings.get Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.typeName checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkResultConstructor dateRefusal fitArguments isBuiltinFunction isResultConstructor isSimdExport isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 outerFunctionMessage refuseForeignNullable refuseOnce refuseSecretArguments simdImportMessage stringCallFix
+  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckedProgram.builtinImport FunctionBindings.get Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.typeName checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkResultConstructor dateRefusal fitArguments isBuiltinFunction isResultConstructor isSimdExport isSimdOp isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 outerFunctionMessage refuseForeignNullable refuseOnce refuseSecretArguments simdImportMessage stringCallFix
   pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 CheckContext.errorType#0 CheckContext.capturesOuter#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 CheckContext.errorType#1 checkDirectCall#1 checkGenericCall#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 CheckContext.errorType#1 stringCallFix#1 fitArguments#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 isValueReceiver#2 checkMethodCall#2 refuseSecretArguments#2 checkBuiltinCall#2 Scope.lookup#0 checkDirectCall#4 checkGenericCall#3 refuseSecretArguments#2 checkImportedBuiltin#2 checkResultConstructor#2 refuseSecretArguments#2 checkBuiltinFunction#2 Scope.typeOf#0 stringCallFix#3 checkExpression#2
   stackSites=0 stackLocals=0
-  local -107:9 callee: Node (const)
-  callee -105:12 checkExpression -> @checkExpression
-  callee -100:9 isValueReceiver -> @isValueReceiver
-  callee -99:14 checkMethodCall -> @checkMethodCall
-  callee -96:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -96:35 neverNullMessage -> @neverNullMessage
-  local -91:11 receiver: Node (const)
-  callee -88:7 refuseSecretArguments -> @refuseSecretArguments
-  callee -84:12 checkBuiltinCall -> @checkBuiltinCall
-  callee -81:12 CheckContext.errorType -> @CheckContext.errorType
-  local -76:9 local: Local | null (const)
-  callee -76:17 Scope.lookup -> @Scope.lookup
-  callee -74:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  callee -73:7 refuseOnce -> @refuseOnce
-  callee -73:31 outerFunctionMessage -> @outerFunctionMessage
-  local -70:11 bound: FunctionSig | null (const)
-  callee -70:19 FunctionBindings.get -> @FunctionBindings.get
-  callee -68:14 checkDirectCall -> @checkDirectCall
-  local -65:9 template: TemplateInfo | null (const)
-  callee -65:20 CheckContext.template -> @CheckContext.template
-  callee -63:12 checkGenericCall -> @checkGenericCall
-  local -61:9 sig: FunctionSig | null (const)
-  callee -61:15 CheckContext.signature -> @CheckContext.signature
-  local -57:11 imported: BuiltinExport | null (const)
-  callee -57:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee -55:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -52:14 checkImportedBuiltin -> @checkImportedBuiltin
-  callee -50:9 isResultConstructor -> @isResultConstructor
-  callee -46:14 checkResultConstructor -> @checkResultConstructor
-  callee -44:9 isBuiltinFunction -> @isBuiltinFunction
-  callee -43:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -40:14 checkBuiltinFunction -> @checkBuiltinFunction
-  callee -36:27 Scope.typeOf -> @Scope.typeOf
-  callee -30:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -30:34 dateRefusal -> @dateRefusal
+  local -109:9 callee: Node (const)
+  callee -107:12 checkExpression -> @checkExpression
+  callee -102:9 isValueReceiver -> @isValueReceiver
+  callee -101:14 checkMethodCall -> @checkMethodCall
+  callee -98:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -98:35 neverNullMessage -> @neverNullMessage
+  local -93:11 receiver: Node (const)
+  callee -90:7 refuseSecretArguments -> @refuseSecretArguments
+  callee -86:12 checkBuiltinCall -> @checkBuiltinCall
+  callee -83:12 CheckContext.errorType -> @CheckContext.errorType
+  local -78:9 local: Local | null (const)
+  callee -78:17 Scope.lookup -> @Scope.lookup
+  callee -76:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  callee -75:7 refuseOnce -> @refuseOnce
+  callee -75:31 outerFunctionMessage -> @outerFunctionMessage
+  local -72:11 bound: FunctionSig | null (const)
+  callee -72:19 FunctionBindings.get -> @FunctionBindings.get
+  callee -70:14 checkDirectCall -> @checkDirectCall
+  local -67:9 template: TemplateInfo | null (const)
+  callee -67:20 CheckContext.template -> @CheckContext.template
+  callee -65:12 checkGenericCall -> @checkGenericCall
+  local -63:9 sig: FunctionSig | null (const)
+  callee -63:15 CheckContext.signature -> @CheckContext.signature
+  local -59:11 imported: BuiltinExport | null (const)
+  callee -59:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee -57:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -54:14 checkImportedBuiltin -> @checkImportedBuiltin
+  callee -52:9 isResultConstructor -> @isResultConstructor
+  callee -48:14 checkResultConstructor -> @checkResultConstructor
+  callee -46:9 isBuiltinFunction -> @isBuiltinFunction
+  callee -45:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -42:14 checkBuiltinFunction -> @checkBuiltinFunction
+  callee -38:27 Scope.typeOf -> @Scope.typeOf
+  callee -32:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -32:34 dateRefusal -> @dateRefusal
   callee -28:27 isSimdExport -> @isSimdExport
+  callee -28:57 isSimdOp -> @isSimdOp
   callee -27:14 CheckContext.errorType -> @CheckContext.errorType
   callee -27:36 simdImportMessage -> @simdImportMessage
   callee -25:5 CheckContext.errorFix -> @CheckContext.errorFix

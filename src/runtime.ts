@@ -1477,7 +1477,69 @@ export class RuntimeTable {
     // `Math.clz32`, with `i1 false` so that a zero answers 32 as JavaScript's
     // does, rather than poison.
     this.addIntrinsic("llvm.ctlz.i32", "i32", "i32, i1")
+    this.buildVectorIntrinsics()
   }
+
+  /**
+   * WP38 S3: the target-independent vector intrinsics behind `nish:simd`'s lane
+   * operations (`src/simd.ts`). Every one is a generic `llvm.*` name that each
+   * backend lowers to its own instructions, so no golden names a target.
+   */
+  buildVectorIntrinsics(): void {
+    // Each type beside its suffix, written out: calling `vectorSuffix` in these
+    // loops would leave its scratch strings behind on every pass (NL9011).
+    const ints: string[] = ["<16 x i8>", "<8 x i16>", "<4 x i32>"]
+    const intSuffixes: string[] = ["v16i8", "v8i16", "v4i32"]
+    const minmax: string[] = ["umin", "umax", "smin", "smax"]
+    for (let k = 0; k < ints.length && k < intSuffixes.length; k++) {
+      const t = ints[k]
+      const s = intSuffixes[k]
+      for (const f of minmax) {
+        this.addIntrinsic(`llvm.${f}.${s}`, t, `${t}, ${t}`)
+      }
+      // A rotate is a funnel shift of a lane with itself.
+      this.addIntrinsic(`llvm.fshl.${s}`, t, `${t}, ${t}, ${t}`)
+      this.addIntrinsic(`llvm.fshr.${s}`, t, `${t}, ${t}, ${t}`)
+    }
+    // `sum` widens a `u8x16` or `u16x8` to `i32` lanes first; `sumWrapping` adds `i32` lanes as they are.
+    this.addIntrinsic("llvm.vector.reduce.add.v16i32", "i32", "<16 x i32>")
+    this.addIntrinsic("llvm.vector.reduce.add.v8i32", "i32", "<8 x i32>")
+    this.addIntrinsic("llvm.vector.reduce.add.v4i32", "i32", "<4 x i32>")
+    const floats: string[] = ["<4 x float>", "<2 x double>"]
+    const floatSuffixes: string[] = ["v4f32", "v2f64"]
+    const floatLanes: string[] = ["float", "double"]
+    for (let k = 0; k < floats.length && k < floatSuffixes.length && k < floatLanes.length; k++) {
+      const t = floats[k]
+      const s = floatSuffixes[k]
+      const lane = floatLanes[k]
+      this.addIntrinsic(`llvm.fabs.${s}`, t, t)
+      this.addIntrinsic(`llvm.sqrt.${s}`, t, t)
+      this.addIntrinsic(`llvm.minimum.${s}`, t, `${t}, ${t}`)
+      this.addIntrinsic(`llvm.maximum.${s}`, t, `${t}, ${t}`)
+      // Without `reassoc` this is the sequential sum, in lane order, from the start value.
+      this.addIntrinsic(`llvm.vector.reduce.fadd.${s}`, lane, `${lane}, ${t}`)
+    }
+    const masks: string[] = ["<16 x i1>", "<8 x i1>", "<4 x i1>", "<2 x i1>"]
+    const maskSuffixes: string[] = ["v16i1", "v8i1", "v4i1", "v2i1"]
+    for (let k = 0; k < masks.length && k < maskSuffixes.length; k++) {
+      const t = masks[k]
+      const s = maskSuffixes[k]
+      this.addIntrinsic(`llvm.vector.reduce.or.${s}`, "i1", t)
+      this.addIntrinsic(`llvm.vector.reduce.and.${s}`, "i1", t)
+    }
+  }
+}
+
+/** An LLVM vector type's intrinsic suffix: `v4i32` for `<4 x i32>`, `v4f32` for `<4 x float>`. */
+export const vectorSuffix = (llvmVector: string): string => {
+  const inner = llvmVector.substring(1, llvmVector.length - 1)
+  const x = inner.indexOf(" x ")
+  const count = inner.substring(0, x)
+  const lane = inner.substring(x + 3)
+  if (lane === "float") {
+    return `v${count}f32`
+  }
+  return lane === "double" ? `v${count}f64` : `v${count}${lane}`
 }
 
 export const inlineAllocatorAttrs = (): string[] => {

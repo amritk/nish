@@ -1,0 +1,7 @@
+`mask32x4` cannot be a field: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+`mask32x4` cannot be a parameter of a method: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+`mask32x4` cannot be the return type of an exported function: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+`mask32x4` cannot be a parameter of an exported function: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+`mask32x4` cannot be an array element: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+`mask32x4` cannot be a `Result` arm: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+6 errors

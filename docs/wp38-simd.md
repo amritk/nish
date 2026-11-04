@@ -1093,6 +1093,7 @@ The type follows from the arguments, except where none carries it.
 | lanes | `extract(v, k)`, `replace(v, k, x)`, `k` a constant in `0..N-1` | `extractelement`, `insertelement` |
 | float arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `abs`, `sqrt` on `f32x4`, `f64x2` | `fadd` … `llvm.fabs`, `llvm.sqrt`, with no `fast` flags and no contraction |
 | integer arithmetic | `addWrapping`, `subWrapping`, `mulWrapping` | `add`, `sub`, `mul` without `nsw` or `nuw` |
+| shifts, rotates | `shl(v, n)`, `shr(v, n)`, `rotl(v, n)`, `rotr(v, n)` on `u8x16`, `u16x8`, `i32x4` and `u32x4`, `n` an integer literal below the lane width (anything else refused, `reject_simd_shift_count`); `shr` is logical on `u*` and arithmetic on `i32x4` | `shl`, `lshr`, `ashr` by a splat constant; `llvm.fshl`, `llvm.fshr` with the vector as both halves |
 | bitwise | `and`, `or`, `xor`, `not` on integer vectors and masks | `and`, `or`, `xor`, `xor` with all-ones |
 | min, max | `min`, `max` on every lane type | `llvm.umin`, `smin`, `umax`, `smax`; floats `llvm.minimum`, `llvm.maximum` (NaN-propagating, -0 below +0, as `Math.min`) |
 | compare | `eq`, `ne`, `lt`, `le`, `gt`, `ge`, into the lane width's mask | `icmp` (unsigned for `u*`), `fcmp` ordered (`une` for `ne`) |
@@ -1108,8 +1109,11 @@ such as `llvm.vector.reduce.add`. None lowers to `llvm.x86.*` or
 `llvm.aarch64.*`; the `simd` section of `tests/run.js` greps every golden for
 both.
 
+**Shifts and rotates by a constant were added to this table** with the ops
+stage: ChaCha20, SHA-256 and other add-rotate-xor code is built from them, and
+a constant count keeps each one a single instruction with no variable shift.
 **Left out, as later work:** conversions between lane types (`sitofp` and the
-like), shifts, saturating arithmetic, widening multiplies, 256-bit vectors (Q4)
+like), shifts by a variable count, saturating arithmetic, widening multiplies, 256-bit vectors (Q4)
 and `Secret<vector>` (§6). The earlier text listed `extract` and `shuffle`
 together; `extract` now has `replace` beside it, and the bitwise operations,
 `not`, `abs`, `sqrt` and the bitcasts are named where the text had only

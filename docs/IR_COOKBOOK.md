@@ -26753,6 +26753,115 @@ attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end simd-load-store -->
 
+Every lane operation is one LLVM instruction or one target-independent
+`llvm.*` intrinsic over the vector: float arithmetic is `fadd` and the rest
+with no fast-math flags, a compare is `icmp` or `fcmp` into `<N x i1>`, the
+mask a `nish:simd` program holds as a value, `any` is
+`llvm.vector.reduce.or` on it and `bitmask` its bitcast to `iN`
+(`docs/LANGUAGE.md` -> `nish:simd`: lane operations and masks).
+
+<!-- cookbook:begin simd-ops -->
+```ts
+import { f32x4, u8x16, splatU8x16, mul, add, eq, any, bitmask } from "nish:simd"
+
+export const axpy = (a: f32x4, x: f32x4, y: f32x4): f32x4 => add(mul(a, x), y)
+
+export const spaces = (block: u8x16): i32 => {
+  const m = eq(block, splatU8x16(32))
+  return any(m) ? bitmask(m) : -1
+}
+```
+
+```llvm
+declare i1 @llvm.vector.reduce.or.v16i1(<16 x i1>) #0
+
+define noundef <4 x float> @axpy(<4 x float> noundef %a, <4 x float> noundef %x, <4 x float> noundef %y) #0 {
+entry:
+  %0 = fmul <4 x float> %a, %x
+  %1 = fadd <4 x float> %0, %y
+  ret <4 x float> %1
+}
+
+define noundef i32 @spaces(<16 x i8> noundef %block) #0 {
+entry:
+  %m.addr = alloca <16 x i1>, align 8
+  %0 = insertelement <16 x i8> undef, i8 32, i32 0
+  %1 = shufflevector <16 x i8> %0, <16 x i8> undef, <16 x i32> zeroinitializer
+  %2 = icmp eq <16 x i8> %block, %1
+  store <16 x i1> %2, <16 x i1>* %m.addr, align 8
+  %3 = load <16 x i1>, <16 x i1>* %m.addr, align 8
+  %4 = call i1 @llvm.vector.reduce.or.v16i1(<16 x i1> %3)
+  br i1 %4, label %cond.true, label %cond.false
+
+cond.true:
+  %5 = load <16 x i1>, <16 x i1>* %m.addr, align 8
+  %6 = bitcast <16 x i1> %5 to i16
+  %7 = zext i16 %6 to i32
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %8 = phi i32 [ %7, %cond.true ], [ -1, %cond.false ]
+  ret i32 %8
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end simd-ops -->
+
+A shift by a constant is `shl`, `lshr` (unsigned lanes) or `ashr` (`i32x4`) by
+a splat constant, and a rotate is `llvm.fshl` or `llvm.fshr` with the vector
+as both halves, which `llc` lowers to the target's rotate or to two shifts and
+an `or`. The checker holds the count below the lane width, so no shift is by
+the width, which LLVM leaves as poison. Integer lane arithmetic carries no
+`nsw` or `nuw`: it wraps.
+
+<!-- cookbook:begin simd-shift-rotate -->
+```ts
+import { u32x4, i32x4, addWrapping, xor, rotl, shr } from "nish:simd"
+
+export const quarterStep = (a: u32x4, b: u32x4, d: u32x4): u32x4 => rotl(xor(d, addWrapping(a, b)), 16)
+
+export const halve = (v: i32x4): i32x4 => shr(v, 1)
+```
+
+```llvm
+declare <4 x i32> @llvm.fshl.v4i32(<4 x i32>, <4 x i32>, <4 x i32>) #0
+
+define noundef <4 x i32> @quarterStep(<4 x i32> noundef %a, <4 x i32> noundef %b, <4 x i32> noundef %d) #0 {
+entry:
+  %0 = add <4 x i32> %a, %b
+  %1 = xor <4 x i32> %d, %0
+  %2 = call <4 x i32> @llvm.fshl.v4i32(<4 x i32> %1, <4 x i32> %1, <4 x i32> <i32 16, i32 16, i32 16, i32 16>)
+  ret <4 x i32> %2
+}
+
+define noundef <4 x i32> @halve(<4 x i32> noundef %v) #0 {
+entry:
+  %0 = ashr <4 x i32> %v, <i32 1, i32 1, i32 1, i32 1>
+  ret <4 x i32> %0
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end simd-shift-rotate -->
+
 ## Optimisation flags
 
 ### Integer overflow: checked by default, `nsw` where proven

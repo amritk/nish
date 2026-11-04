@@ -25,6 +25,7 @@ import {
 } from "./parallel"
 import { CheckContext } from "./context"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
+import { rejectStoredMask } from "./simd"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import {
@@ -644,6 +645,8 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     }
   } else if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return
+  } else if (rejectStoredMask(ctx, type, "a field", decl.children[1])) {
+    return
   }
   // `nish:secret`: a field outlives the function that made the secret, unless
   // it is a holder's `readonly` field, which its `wipe()` ends (`secret.ts`).
@@ -807,6 +810,7 @@ export const collectMethodSignature = (
       "the return type of a function this program defines",
       returnAnnotation
     )
+    rejectStoredMask(ctx, sig.returnType, "the return type of a method", returnAnnotation)
   }
   return sig
 }

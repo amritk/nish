@@ -1,0 +1,3 @@
+`mask32x4` cannot be an array element: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+`mask32x4` cannot be a type argument of `Map`: a `nish:simd` mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`
+2 errors

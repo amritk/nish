@@ -147,6 +147,10 @@ const bitsOfIn = (table: TypeTable, type: i32): i32 => {
   if (table.isVector(type)) {
     return 128
   }
+  // A mask's `<N x i1>` packs one bit a lane.
+  if (table.isMask(type)) {
+    return table.laneCount(type)
+  }
   if (table.isRegion(type)) {
     return 64
   }
@@ -338,6 +342,14 @@ export class DebugInfo {
       const elements = this.module.addMetadata(`!{${range}}`)
       ref = this.module.addMetadata(
         `!DICompositeType(tag: DW_TAG_array_type, baseType: ${this.typeRef(this.table.refOf(type))}, size: 128, flags: DIFlagVector, elements: ${elements})`
+      )
+    } else if (this.table.isMask(type)) {
+      // A mask is a vector of booleans packed a bit a lane, as LLVM stores `<N x i1>`.
+      const lanes = this.table.laneCount(type)
+      const range = this.module.addMetadata(`!DISubrange(count: ${lanes})`)
+      const elements = this.module.addMetadata(`!{${range}}`)
+      ref = this.module.addMetadata(
+        `!DICompositeType(tag: DW_TAG_array_type, baseType: ${this.typeRef(T_BOOL)}, size: ${lanes}, flags: DIFlagVector, elements: ${elements})`
       )
     } else {
       ref = this.module.addMetadata(basicType(type, this.table.json))

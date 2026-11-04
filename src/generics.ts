@@ -30,6 +30,7 @@ import { isCReservedSymbol } from "./c-symbols"
 import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./json-typed"
 import { namesRegion, resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
+import { rejectStoredMask } from "./simd"
 import { rejectForeignPointer, unionArgumentMessage } from "./annotations"
 import { rejectHandleArgument } from "./handles"
 import { CheckContext } from "./context"
@@ -1085,6 +1086,9 @@ const instantiateStructHere = (
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null
     }
+    if (rejectStoredMask(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
     if (rejectHandleArgument(site.asker, arg, at)) {
       return null
     }
@@ -1370,6 +1374,9 @@ const instantiateHere = (
   // message is the same, because it is the same rule.
   for (const arg of args) {
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
+    if (rejectStoredMask(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null
     }
     if (rejectHandleArgument(site.asker, arg, at)) {
