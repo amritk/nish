@@ -201,16 +201,28 @@ join.part:
   %68 = bitcast i8* %67 to i64*
   %69 = load i64, i64* %68, align 8
   %70 = getelementptr inbounds i8, i8* %67, i64 8
+  %71 = icmp eq i64 %69, 1
+  br i1 %71, label %join.byte, label %join.bulk
+
+join.byte:
+  %72 = load i8, i8* %70, align 1
+  store i8 %72, i8* %62, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %62, i8* %70, i64 %69, i1 false)
-  %71 = getelementptr inbounds i8, i8* %62, i64 %69
-  store i8* %71, i8** %join.p, align 8
-  %72 = add i64 %56, 1
-  store i64 %72, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %73 = getelementptr inbounds i8, i8* %62, i64 %69
+  store i8* %73, i8** %join.p, align 8
+  %74 = add i64 %56, 1
+  store i64 %74, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %73 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %73, align 1
+  %75 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %75, align 1
   ret i8* %53
 }
 
@@ -458,16 +470,28 @@ join.part:
   %135 = bitcast i8* %134 to i64*
   %136 = load i64, i64* %135, align 8
   %137 = getelementptr inbounds i8, i8* %134, i64 8
+  %138 = icmp eq i64 %136, 1
+  br i1 %138, label %join.byte, label %join.bulk
+
+join.byte:
+  %139 = load i8, i8* %137, align 1
+  store i8 %139, i8* %129, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %129, i8* %137, i64 %136, i1 false)
-  %138 = getelementptr inbounds i8, i8* %129, i64 %136
-  store i8* %138, i8** %join.p, align 8
-  %139 = add i64 %123, 1
-  store i64 %139, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %140 = getelementptr inbounds i8, i8* %129, i64 %136
+  store i8* %140, i8** %join.p, align 8
+  %141 = add i64 %123, 1
+  store i64 %141, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %140 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %140, align 1
+  %142 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %142, align 1
   call void @nish_print(i8* %120)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0

@@ -203,20 +203,32 @@ join.part:
   %61 = bitcast i8* %60 to i64*
   %62 = load i64, i64* %61, align 8
   %63 = getelementptr inbounds i8, i8* %60, i64 8
+  %64 = icmp eq i64 %62, 1
+  br i1 %64, label %join.byte, label %join.bulk
+
+join.byte:
+  %65 = load i8, i8* %63, align 1
+  store i8 %65, i8* %55, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %55, i8* %63, i64 %62, i1 false)
-  %64 = getelementptr inbounds i8, i8* %55, i64 %62
-  store i8* %64, i8** %join.p, align 8
-  %65 = add i64 %49, 1
-  store i64 %65, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %66 = getelementptr inbounds i8, i8* %55, i64 %62
+  store i8* %66, i8** %join.p, align 8
+  %67 = add i64 %49, 1
+  store i64 %67, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %66 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %66, align 1
-  %67 = bitcast i8* %46 to i64*
-  %68 = load i64, i64* %67, align 8
-  %69 = trunc i64 %68 to i32
-  ret i32 %69
+  %68 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %68, align 1
+  %69 = bitcast i8* %46 to i64*
+  %70 = load i64, i64* %69, align 8
+  %71 = trunc i64 %70 to i32
+  ret i32 %71
 }
 
 define internal noundef nonnull align 8 i8* @find(i32 noundef %n) #1 {
@@ -1224,16 +1236,28 @@ join.part:
   %125 = bitcast i8* %124 to i64*
   %126 = load i64, i64* %125, align 8
   %127 = getelementptr inbounds i8, i8* %124, i64 8
+  %128 = icmp eq i64 %126, 1
+  br i1 %128, label %join.byte, label %join.bulk
+
+join.byte:
+  %129 = load i8, i8* %127, align 1
+  store i8 %129, i8* %119, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %119, i8* %127, i64 %126, i1 false)
-  %128 = getelementptr inbounds i8, i8* %119, i64 %126
-  store i8* %128, i8** %join.p, align 8
-  %129 = add i64 %113, 1
-  store i64 %129, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %130 = getelementptr inbounds i8, i8* %119, i64 %126
+  store i8* %130, i8** %join.p, align 8
+  %131 = add i64 %113, 1
+  store i64 %131, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %130 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %130, align 1
+  %132 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %132, align 1
   call void @nish_print(i8* %110)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
