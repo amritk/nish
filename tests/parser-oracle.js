@@ -614,7 +614,11 @@ const printTypeScriptTree = (source, sf) => {
   }
   const arrowParameter = (node, depth) => parameter(node, depth, false)
 
-  /** A bound name, or the destructuring pattern stage1 passes over unread (NL2191–NL2193). */
+  /**
+   * A bound name, or a destructuring pattern (NL2191–NL2193). Stage1 keeps
+   * the names of a flat `[a, b]` of plain names, the pattern WP49's
+   * `const [a, b] = await awaitAll(...)` reads, and passes over any other.
+   */
   const bindingName = (node, depth) => {
     if (ts.isIdentifier(node)) {
       identifier(node, depth)
@@ -622,6 +626,21 @@ const printTypeScriptTree = (source, sf) => {
     }
     const [s, e] = span(node)
     emit(depth, "BINDING_PATTERN", s, e)
+    const flat =
+      ts.isArrayBindingPattern(node) &&
+      node.elements.length > 0 &&
+      node.elements.every(
+        (el) =>
+          ts.isBindingElement(el) &&
+          ts.isIdentifier(el.name) &&
+          el.initializer === undefined &&
+          el.dotDotDotToken === undefined
+      )
+    if (flat) {
+      for (const el of node.elements) {
+        identifier(el.name, depth + 1)
+      }
+    }
   }
 
   const block = (node, depth) => {

@@ -192,9 +192,6 @@ const forbiddenOperator = (operator: string): string => {
   if (operator === "delete") {
     return "`delete` is forbidden in " + LANGUAGE + " (object layout is fixed)"
   }
-  if (operator === "await") {
-    return "`await` is forbidden in " + LANGUAGE + " (no event loop or promises)"
-  }
   if (operator === "yield") {
     return "`yield` is forbidden in " + LANGUAGE + " (no coroutine runtime)"
   }
@@ -585,9 +582,9 @@ const rejectImportForms = (ctx: CheckContext, node: Node): void => {
 }
 
 /**
- * `async` and the `*` of a generator, on a function, a method or an arrow —
- * and `async` on a field or a constructor, which the parser reads as the
- * modifier it is there too. `async` is written first, so it is the refusal.
+ * `async` on a method, a field or a constructor, which the parser reads as
+ * the modifier it is there too, and the `*` of a generator anywhere: an
+ * `async function*` is refused as the generator it is.
  */
 const rejectFunctionModifiers = (ctx: CheckContext, node: Node): void => {
   const holdsModifiers =
@@ -599,8 +596,15 @@ const rejectFunctionModifiers = (ctx: CheckContext, node: Node): void => {
   if (!holdsModifiers) {
     return
   }
-  if ((node.flags & FLAG_ASYNC) !== 0) {
-    ctx.error(node, "`async` functions are forbidden in " + LANGUAGE + " (no event loop or promises)")
+  // WP49: a top-level function and an arrow may be `async`, and the checker
+  // holds them to the rest of the rule; a method, a field and a constructor
+  // may not, because a method's `this` would be a value its task keeps.
+  const asyncAllowed = node.kind === N_FUNCTION || node.kind === N_ARROW
+  if ((node.flags & FLAG_ASYNC) !== 0 && (node.flags & FLAG_GENERATOR) === 0 && !asyncAllowed) {
+    ctx.error(
+      node,
+      "Only a top-level function or an arrow may be `async`: a method, a field or a constructor cannot, because a task never keeps a `this`"
+    )
   } else if ((node.flags & FLAG_GENERATOR) !== 0) {
     ctx.error(node, "Generators are forbidden in " + LANGUAGE + " (no coroutine runtime)")
   }

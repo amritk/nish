@@ -1,1 +1,1 @@
-`async` functions are forbidden in Nish (no event loop or promises)
+Only a top-level function or an arrow may be `async`

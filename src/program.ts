@@ -22,7 +22,7 @@ import { CheckContext } from "./context"
 import { SourceFile } from "./diagnostics"
 import { BuiltinExport } from "./nish-modules"
 import { StringMap, StringSet } from "./map"
-import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
+import { FLAG_ASYNC, FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
 import { PanicSite } from "./panics"
 import {
@@ -43,6 +43,17 @@ export const ROLE_CONSTRUCTOR: i32 = 2
 
 export const STRUCT_CLASS: i32 = 0
 export const STRUCT_INTERFACE: i32 = 1
+
+/** One `await` in a function's body: the async function it awaits, and the expression that does. */
+export class AwaitEdge {
+  callee: FunctionSig
+  site: Node
+
+  constructor(callee: FunctionSig, site: Node) {
+    this.callee = callee
+    this.site = site
+  }
+}
 
 /**
  * One function, method or constructor.
@@ -110,6 +121,14 @@ export class FunctionSig {
   lifted: boolean
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
+  /**
+   * WP49: the async functions this one's body awaits, spawns or awaits all
+   * of, each beside the call that does it — the await graph, which may not
+   * have a cycle (`src/async-check.ts`, `rejectAwaitCycles`).
+   */
+  awaits: AwaitEdge[]
+  /** WP49: the cycle walk's colour: 0 unvisited, 1 on the path, 2 done. */
+  awaitMark: i32
   /**
    * WP29: on an arrow argument, the locals of the function it is written in
    * that its body reads, in the order it first reads them (docs/LANGUAGE.md,
@@ -237,6 +256,16 @@ export class FunctionSig {
   }
 
   /**
+   * WP49: `async function` or `async (...) =>` — a function a call reaches
+   * only through `await`, `spawn` or `awaitAll` (`src/async-check.ts`).
+   * Derived from the parser's flag, as `foreign` is, so an instantiation and
+   * a lifted arrow answer for the declaration they were made from.
+   */
+  isAsync(): boolean {
+    return (this.decl.flags & FLAG_ASYNC) !== 0
+  }
+
+  /**
    * Whether this module *defines* the function rather than importing it. Pass
    * 1b appends an imported signature to the importer's `functions`, so the
    * emitter and the attribute analysis both need the distinction, and
@@ -264,6 +293,8 @@ export class FunctionSig {
     this.hidden = false
     this.lifted = false
     this.arrowCount = 0
+    this.awaits = []
+    this.awaitMark = 0
     this.captures = []
     this.captureHost = null
     this.capturesForCall = false

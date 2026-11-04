@@ -72,7 +72,8 @@
           "/modules": { "type": "page", "title": "Modules", "filepath": "docs/guide/language/modules.md" },
           "/memory": { "type": "page", "title": "Memory", "filepath": "docs/guide/language/memory.md" },
           "/regions": { "type": "page", "title": "Regions", "filepath": "docs/guide/language/regions.md" },
-          "/simd": { "type": "page", "title": "Vectors (SIMD)", "filepath": "docs/guide/language/simd.md" }
+          "/simd": { "type": "page", "title": "Vectors (SIMD)", "filepath": "docs/guide/language/simd.md" },
+          "/async": { "type": "page", "title": "Async functions", "filepath": "docs/guide/language/async.md" }
         }
       },
       "/using-nish": {

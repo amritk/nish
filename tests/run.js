@@ -7555,7 +7555,7 @@ if (dealtHere("selfHosting")) {
       ["reject_expr_forms_together", ["6:50-6:56 NL1047"]],
       ["reject_expr_sweep_together", ["6:18-6:26 NL2210", "8:40-8:51 NL2254", "10:35-10:41 NL2237"]],
       // The declaration forms, the same two ways.
-      ["reject_decl_forms_together", ["6:1-8:2 NL1015"]],
+      ["reject_decl_forms_together", ["5:1-7:2 NL1044"]],
       ["reject_decl_sweep_together", ["12:18-12:19 NL2292", "17:8-17:15 NL2038", "20:23-20:24 NL2292"]],
       ["reject_type_keyof_constraint", ["14:32-14:41 NL2038", "16:28-16:37 NL2038", "21:20-21:29 NL2038"]],
       // A type parameter list that repeats a name: one diagnostic, on the

@@ -34,6 +34,14 @@ import {
   refuseOnce,
   thisCaptureMessageFor,
 } from "./generics"
+import {
+  asyncBuiltinOf,
+  AWAIT_CALL_MESSAGE,
+  checkAsyncBuiltin,
+  checkAwait,
+  promiseMethodMessage,
+  refuseUnawaitedCall,
+} from "./async-check"
 import { CheckContext } from "./context"
 import {
   CAPTURE_CALL,
@@ -1053,6 +1061,9 @@ const checkUnary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   const operand = expr.children[0]
   if (op === "++" || op === "--") {
     return checkIncrement(ctx, expr, scope)
+  }
+  if (op === "await") {
+    return checkAwait(ctx, expr, scope) // WP49
   }
   if (op === "-" && operand.kind === N_NUMBER) {
     // The negation is part of the literal, which is what makes `-2147483648`
@@ -3242,6 +3253,10 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     return checkExpression(ctx, callee, scope, -1) // WP25: reports on the `super` token
   }
   if (callee.kind === N_MEMBER) {
+    const promised = promiseMethodMessage(ctx, callee, scope)
+    if (promised !== "") {
+      return ctx.errorType(expr, promised)
+    }
     // `value.method(...)` dispatches on the receiver's type; `console.log(...)`
     // is a dotted builtin, told apart by whether the receiver is a value.
     if (isValueReceiver(ctx, callee.children[0], scope)) {
@@ -3289,6 +3304,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     // function of the same name is rejected at the import itself.
     const imported = ctx.program.builtinImport(callee.text)
     if (imported !== null) {
+      if (asyncBuiltinOf(imported) !== "") {
+        return checkAsyncBuiltin(ctx, expr, scope, imported) // WP49: `spawn`, `awaitAll`
+      }
       if (refuseSecretArguments(ctx, expr, scope, imported.canonical)) {
         return T_ERROR
       }
@@ -3313,6 +3331,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     }
     // The global `Date` called as a function; a local of that name is a value
     // like any other, and calling it is the unknown function below.
+    if (callee.text === "await" && local === null) {
+      return ctx.errorType(expr, AWAIT_CALL_MESSAGE)
+    }
     if (callee.text === "Date" && local === null) {
       return ctx.errorType(expr, dateRefusal("Date()"))
     }
@@ -3326,6 +3347,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       `Unknown function \`${callee.text}\``,
       stringCallFix(ctx, expr, local === null, scope)
     )
+    return T_ERROR
+  }
+  if (refuseUnawaitedCall(ctx, expr, sig.isAsync())) {
     return T_ERROR
   }
   const args = expr.children[1]
@@ -3398,6 +3422,9 @@ const checkDirectCall = (
   shown: string,
   scope: Scope
 ): i32 => {
+  if (refuseUnawaitedCall(ctx, expr, sig.isAsync())) {
+    return T_ERROR
+  }
   const args = expr.children[1]
   // WP29: an arrow's captures are parameters the call does not write.
   const arity = sig.writtenArity()

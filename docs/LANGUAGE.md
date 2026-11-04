@@ -1546,7 +1546,9 @@ spelling; the two compile to identical IR, instruction for instruction
   (`tests/cases/reject_fn_after_const`).
 - **A function may be generic**, and each instantiation is compiled on its
   own; see [Generic functions](#generic-functions). Rejected forms:
-  generators (`reject_generator`), `async` (`reject_async_function`),
+  generators (`reject_generator`), an `async` function without its
+  `Promise<T>` ([Async functions](#async-functions-async-and-await),
+  `reject_async_function`),
   destructured parameters (`Destructured parameters are not supported`,
   `reject_param_destructured`), optional parameters (`x?: T`,
   `Optional parameters are not supported`, `reject_param_optional`, which names
@@ -3177,6 +3179,109 @@ export const main = (): i32 => {
   (`tests/link/thread_scope_libc_named_tasks`, #610). The interop sidecars
   describe no instantiation that was given a function, and no lifted arrow:
   neither has a name a host could call.
+
+### Async functions: `async` and `await`
+
+An `async` function is a task the compiler can size: it may wait, and every
+wait is written `await` on a direct call
+([wp49-async-server.md](wp49-async-server.md) §2). No expression ever has a
+promise type, so there is no promise to store, pass or chain, and an awaited
+call's frame nests in its caller's. **This release checks `async` and does
+not yet compile it**: a program that keeps an `async` function after the
+checks is `` `async` function `run` is checked, but not yet compiled `` (NL2653,
+`reject_async_not_lowered`), and the lowering is the next one's. A program
+with no `async` function compiles byte for byte as before.
+
+```ts
+import { awaitAll, spawn } from "nish:async"
+
+async function double(x: i32): Promise<i32> {
+  return x * 2
+}
+
+async function log(x: i32): Promise<void> {
+  console.log(x)
+}
+
+async function run(): Promise<void> {
+  const a = await double(3)
+  let b: i32 = 0
+  b = await double(a)
+  await log(b)
+  const [c, d] = await awaitAll(double(1), double(2))
+  spawn(log(c + d))
+}
+```
+
+- **Who may be `async`.** A top-level `function` or an arrow, top-level or
+  passed to a function-typed parameter. A method, a field or a constructor
+  is `` Only a top-level function or an arrow may be `async` `` (NL1063,
+  `reject_async_method`), because a task never keeps a `this`.
+- **`Promise<T>` is only an `async` function's return type.** An `async`
+  function without it is
+  `` An `async` function's return type is `Promise<T>` `` (NL2655,
+  `reject_async_function`, `reject_async_arrow_declaration`,
+  `reject_async_return_missing`); `T` is written inside it, `Promise<void>` for none. Anywhere else — a parameter, a field,
+  a local, a type alias, an interface member — `Promise<T>` is
+  `` `Promise<T>` is only an `async` function's return type `` (NL2654,
+  `reject_async_promise_parameter`, `_field`, `_local`, `_alias`,
+  `_interface_member`).
+- **`await` is written inside an `async` function**
+  (`` `await` is only written inside an `async` function ``, NL2641,
+  `reject_await`, `reject_await_constant`), **on a direct call to one**: `await x` on a value is NL2643
+  (`reject_async_await_value`), `await` on a plain function's call NL2644
+  (`reject_async_await_plain_call`). Inside an `async` function `await (f(x))`
+  is the operator, as TypeScript reads it; outside one `await(f(x))` is a call
+  to a function named `await`, NL2651 (`reject_async_await_parenthesised`).
+- **`await` stands at the top of a statement**: an expression statement, a
+  declaration's initializer, a `return` or the right side of a plain `=`.
+  Inside another expression — an argument, a condition, an operand, a
+  compound assignment — it would hold a value across the wait, and is NL2642
+  (`reject_async_await_nested`, `_condition`, `_compound`); a `for`
+  initializer is not a declaration statement, for `awaitAll` too
+  (`reject_async_await_all_for`). Bind the answer to a `const` first.
+- **A call to an `async` function is awaited where it is made**, or handed to
+  `spawn` or `awaitAll`. Anything else would make a promise a value:
+  `` `load` is `async`: a call to it is awaited where it is made `` (NL2645,
+  `reject_async_unawaited_call`, `reject_async_unawaited_argument`).
+  `.then` is NL2650 (`reject_async_then`), `Promise.all` NL2649 (`reject_async_promise_all`), and `for await` is
+  `` `for await` is not supported here `` (NL2133,
+  `reject_for_await_template`, `tests/wordings/nl2133_for_await`).
+- **`nish:async` exports `spawn` and `awaitAll`**, reached only through the
+  import. `spawn(f(x))` starts `f` as a task of its own and does not wait for
+  it; it takes a direct call to an `async` function (NL2644), and since
+  nothing reads its answer, `f` answers `void` or a `Result` it reports
+  itself (NL2646, `reject_async_spawn_answer`). `awaitAll(f(x), g(y))` waits
+  for two to eight calls at once and is awaited into one name per call,
+  `const [a, b] = await awaitAll(f(x), g(y))`; one call, or an `awaitAll` not
+  so destructured, is NL2647 (`reject_async_await_all_one`,
+  `reject_async_await_all_bare`).
+- **An `async` arrow is passed only where it is awaited.** The parameter's
+  function type answers `Promise<T>`, and the callee awaits each call to it.
+  An `async` arrow where the type answers a plain `T` is NL2639
+  (`reject_async_arrow`); a plain function where it answers `Promise<T>` is
+  NL2640 (`reject_async_plain_to_promise_parameter`).
+- **No recursion through `await`.** An awaited call's frame is nested in its
+  caller's, so a cycle in the call graph that runs through an `await` has no
+  size: `` recursion through `await` `` is refused at the `await` that closes
+  the cycle, direct or mutual (NL2648,
+  `reject_async_await_self`, `reject_async_await_mutual`). Write it as a loop.
+- **No `async` in a wasm build.** A task is resumed by the native event loop,
+  which a wasm module does not have: under a `wasm32` target or
+  `--profile wasi` an `async` function is NL2652 (`reject_async_wasm`,
+  `reject_async_wasi_profile`).
+
+**Where it is not Node.** The source is TypeScript and runs under Node, but
+the resume order is not Node's, and these are declared differences:
+
+| Node | Nish |
+| --- | --- |
+| Every `await` yields to the microtask queue, even on a value that is already there | An `await` on a call that finishes without waiting returns at once; nothing else runs in between |
+| Microtasks run before I/O callbacks, in a defined order | Tasks resume in the order the kernel reports readiness, then by timer deadline |
+| A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
+
+A program whose output does not depend on how its tasks interleave prints the
+same under both.
 
 ### Data parallelism: `nish/threads`
 
@@ -5780,7 +5885,7 @@ The condition must be `boolean`: there is no truthiness
   (`` `for...of` needs a `const` or `let` declaration ``,
   `tests/cases/reject_arr_forof_expression`); `let x` makes
   it assignable, `const x` does not (`tests/cases/reject_arr_forof_const_assign`).
-  `for await` is not supported (`` `for await` is not supported ``,
+  `for await` is not supported (`` `for await` is not supported here ``,
   `tests/wordings/nl2133_for_await`), and `for...in` is forbidden
   ([Rejected statements](#rejected-statements)).
 - `a` is evaluated once; `a.length` is re-read every iteration, so a `push`
@@ -6000,7 +6105,8 @@ under [Semantics decisions](#semantics-decisions).
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `a?.b ?? d`, `a?.m() ?? d` | `a` a `T \| null`; a chain of `?.` and `.` links, field reads, `length` and method calls, that is the left operand of `??` | the last link's type, as `a ?? d` on a `T \| null` types it | `icmp eq` against `null` at each `?.` link's receiver, then `br` to `nullish.default`; `phi` at `nullish.end` | `optional_chain_field`, `optional_chain_order`, `optional_chain_generic`, `optional_chain_bounds`; `reject_optional_chain`, `reject_optional_chain_never_null` ([Nullable types](#nullable-types)) |
-| `== != ?.[ ?.() in instanceof typeof delete void await yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_await`, `reject_yield` |
+| `await f(x)` | a direct call to an `async` function, at the top of a statement in an `async` function | the call's `T` | not yet lowered (NL2653) | `reject_async_not_lowered`; `reject_await`, `reject_async_await_value`, `reject_async_await_nested` ([Async functions](#async-functions-async-and-await)) |
+| `== != ?.[ ?.() in instanceof typeof delete void yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_yield` |
 | `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
 | `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |
 
@@ -6645,6 +6751,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
+| `nish:async` | `spawn`, `awaitAll` — **reached only through the import** ([Async functions](#async-functions-async-and-await)) |
 | `nish:simd` | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace`; the masks `mask8x16` … `mask64x2`; the lane operations `add` … `asF64x2`, among them `shl`, `shr`, `rotl` and `rotr` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors), [lane operations](#nishsimd-lane-operations-and-masks)) |
 
 ```ts
@@ -11679,7 +11786,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
 | type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
 | generators (`function*`, `*m()`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator`, `reject_generator_method` |
-| `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function`, `reject_async_method`, `reject_async_arrow`, `reject_async_arrow_declaration` |
+| an `async` method, field or constructor ([Async functions](#async-functions-async-and-await) has the rest) | `` Only a top-level function or an arrow may be `async` `` (NL1063) | `reject_async_method` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
 | enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed`; the numeric form compiles ([Enums](#enums)) |
 | `namespace` / `module` blocks, `declare module "m"` | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace`, `reject_module_declared` |
@@ -11731,7 +11838,6 @@ fragment `tests/run.js` matches and the case that proves it.
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
 | `typeof x` | `` `typeof` is forbidden in Nish (no runtime type tags) `` | `reject_typeof_operator` |
 | `delete x.y` | `` `delete` is forbidden in Nish (object layout is fixed) `` | `reject_delete` |
-| `await` | `` `await` is forbidden in Nish (no event loop or promises) `` | `reject_await` |
 | `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | `reject_yield` |
 | regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex`, `reject_regex_class` |
 | `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |

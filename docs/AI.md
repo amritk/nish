@@ -175,7 +175,7 @@ rejects. This table is the highest-value part of the page.
 | `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
 | `<T>(p: T) => p.x` (a member of a type parameter) | `` Cannot read `x` of `T`: an unconstrained type parameter has no members `` | `<T extends Point>(p: T) => p.x`, where `Point` is a class or interface that declares `x` |
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
-| `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
+| a promise in a variable, `.then`, `Promise.all` | forbidden: a promise is never a value | `await` each call where it is made; see [Async functions](#async-functions-checked-not-yet-compiled) |
 | `namespace N { }`, `declare global { }`, `@decorator` | forbidden | one module per file; a plain function in place of a decorator |
 | `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
@@ -583,7 +583,7 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
 - **Parameters are immutable**: `p = 1`, `p++`, `p += 1` are all rejected. Copy
   into a `let` first.
 - A non-`void` function must return on every path.
-- Rejected: generators, `async`, destructured / rest / optional / default
+- Rejected: generators, a method that is `async`, destructured / rest / optional / default
   parameters, overloads, nested function declarations. Type parameters *are*
   allowed — see [Generic functions](#generic-functions).
 
@@ -871,6 +871,45 @@ export const main = (): i32 => {
   k = k + 1;
   return apply((x) => x + k, 1);   // reads the `let` `k`: bind `const kNow = k` before the call
 };
+```
+
+### Async functions: checked, not yet compiled
+
+`async` is checked by this release and refused at the end with `NL2653`
+(`` `async` function `run` is checked, but not yet compiled ``); a program
+without it is untouched. Write it to these rules now and it compiles once the
+lowering ships:
+
+- `async` goes on a top-level `function` or an arrow, never a method
+  (`NL1063`). Its return type is `Promise<T>` (`NL2655`), and `Promise<T>`
+  appears nowhere else — not on a parameter, field, local or alias (`NL2654`).
+- **`await` takes a direct call to an `async` function** (`NL2643` for a value,
+  `NL2644` for a plain function's call), **at the top of a statement**: alone,
+  as a `const`/`let` initializer, after `return`, or right of a plain `=`.
+  Anywhere inside a larger expression is `NL2642`, so bind first:
+  `const n = await load(1); console.log(n);`.
+- An `async` call that is not awaited is `NL2645`: a promise is never a value.
+  No `.then` (`NL2650`), no `Promise.all` (`NL2649`), no `for await`
+  (`NL2133`).
+- Several at once: `import { awaitAll, spawn } from "nish:async"`, then
+  `const [a, b] = await awaitAll(f(x), g(y))` (two to eight calls, one name
+  each, `NL2647`). `spawn(f(x))` starts a task without waiting; `f` answers
+  `void` or a `Result` (`NL2646`).
+- No recursion through `await`, direct or mutual (`NL2648`): write a loop.
+- An `async` arrow goes only to a parameter whose function type answers
+  `Promise<T>` (`NL2639`), and only an `async` one goes there (`NL2640`).
+- No `async` under a wasm target or `--profile wasi` (`NL2652`).
+
+```ts nish:err NL2642
+async function load(id: i32): Promise<i32> {
+  return id;
+}
+
+async function run(): Promise<void> {
+  console.log(await load(1));
+}
+
+export const main = (): i32 => 0;
 ```
 
 ### Data parallelism: `nish/threads`
