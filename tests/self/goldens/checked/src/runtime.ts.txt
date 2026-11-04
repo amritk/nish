@@ -540,38 +540,41 @@ function RuntimeTable.buildIntrinsics(this: RuntimeTable): void -> @RuntimeTable
 function RuntimeTable.buildVectorIntrinsics(this: RuntimeTable): void -> @RuntimeTable.buildVectorIntrinsics [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RuntimeTable.addIntrinsic
-  calls: RuntimeTable.addIntrinsic nish_str_concat nish_str_index_of nish_str_index_of_from vectorSuffix
-  pointer this: size=16 writesThrough=false captured=false passedTo=RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0
-  stackSites=5 stackLocals=5
+  calls: RuntimeTable.addIntrinsic nish_str_concat
+  pointer this: size=16 writesThrough=false captured=false passedTo=RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0
+  stackSites=8 stackLocals=8
   local +0:11 ints: string[] (const)
-  local +1:11 minmax: string[] (const)
-  local +2:16 t: string (const)
-  local +3:13 s: string (const)
-  callee +3:17 vectorSuffix -> @vectorSuffix
-  local +4:18 f: string (const)
-  callee +5:9 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +8:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +9:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  local +12:11 sums: string[] (const)
-  local +13:16 t: string (const)
-  callee +14:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +14:51 vectorSuffix -> @vectorSuffix
-  local +16:11 floats: string[] (const)
-  local +17:16 t: string (const)
-  local +18:13 s: string (const)
-  callee +18:17 vectorSuffix -> @vectorSuffix
-  local +19:13 lane: string (const)
-  callee +20:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +21:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +22:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +23:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  local +1:11 intSuffixes: string[] (const)
+  local +2:11 minmax: string[] (const)
+  local +3:14 k: i32 (let)
+  local +4:13 t: string (const)
+  local +5:13 s: string (const)
+  local +6:18 f: string (const)
+  callee +7:9 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee +10:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee +11:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee +14:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee +15:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee +16:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  local +17:11 floats: string[] (const)
+  local +18:11 floatSuffixes: string[] (const)
+  local +19:11 floatLanes: string[] (const)
+  local +20:14 k: i32 (let)
+  local +21:13 t: string (const)
+  local +22:13 s: string (const)
+  local +23:13 lane: string (const)
+  callee +24:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
   callee +25:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  local +27:11 masks: string[] (const)
-  local +28:16 t: string (const)
+  callee +26:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee +27:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
   callee +29:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +29:50 vectorSuffix -> @vectorSuffix
-  callee +30:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee +30:51 vectorSuffix -> @vectorSuffix
+  local +31:11 masks: string[] (const)
+  local +32:11 maskSuffixes: string[] (const)
+  local +33:14 k: i32 (let)
+  local +34:13 t: string (const)
+  local +35:13 s: string (const)
+  callee +36:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee +37:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
 function vectorSuffix(llvmVector: string): string -> @vectorSuffix [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new

@@ -482,18 +482,19 @@ const checkShuffle = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
     )
   }
   for (let i = 2; i < args.length; i++) {
-    const literal = unwrapParens(args[i])
+    const arg = args[i]
+    const literal = unwrapParens(arg)
     if (literal.kind !== N_NUMBER || literal.text.indexOf(".") >= 0) {
       ctx.error(
-        args[i],
+        arg,
         `\`${name}\` takes lane indices that are integer literals, from 0 to ${count * 2 - 1}: the lanes of both ${shown} in order`
       )
       continue
     }
     const index = parseIntegerLiteral(literal.text)
-    if (index < 0 || index >= toI64(count * 2)) {
+    if (index < 0 || index >= toI64(count) * toI64(2)) {
       ctx.error(
-        args[i],
+        arg,
         `\`${name}\` lane index ${literal.text} is out of range for two ${shown}, whose lanes are 0 to ${count * 2 - 1}`
       )
     }

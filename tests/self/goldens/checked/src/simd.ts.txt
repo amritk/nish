@@ -375,12 +375,13 @@ function checkShuffle(ctx: CheckContext, call: Node, scope: Scope): i32 -> @chec
   callee +17:17 TypeTable.typeName -> @TypeTable.typeName
   callee +19:12 CheckContext.errorType -> @CheckContext.errorType
   local +24:12 i: i32 (let)
-  local +25:11 literal: Node (const)
-  callee +25:21 unwrapParens -> @unwrapParens
-  callee +27:7 CheckContext.error -> @CheckContext.error
-  local +33:11 index: i64 (const)
-  callee +33:19 parseIntegerLiteral -> @parseIntegerLiteral
-  callee +35:7 CheckContext.error -> @CheckContext.error
+  local +25:11 arg: Node (const)
+  local +26:11 literal: Node (const)
+  callee +26:21 unwrapParens -> @unwrapParens
+  callee +28:7 CheckContext.error -> @CheckContext.error
+  local +34:11 index: i64 (const)
+  callee +34:19 parseIntegerLiteral -> @parseIntegerLiteral
+  callee +36:7 CheckContext.error -> @CheckContext.error
 function castTarget(table: TypeTable, name: string): i32 -> @castTarget
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.vectorOf

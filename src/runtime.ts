@@ -1486,10 +1486,14 @@ export class RuntimeTable {
    * backend lowers to its own instructions, so no golden names a target.
    */
   buildVectorIntrinsics(): void {
+    // Each type beside its suffix, written out: calling `vectorSuffix` in these
+    // loops would leave its scratch strings behind on every pass (NL9011).
     const ints: string[] = ["<16 x i8>", "<8 x i16>", "<4 x i32>"]
+    const intSuffixes: string[] = ["v16i8", "v8i16", "v4i32"]
     const minmax: string[] = ["umin", "umax", "smin", "smax"]
-    for (const t of ints) {
-      const s = vectorSuffix(t)
+    for (let k = 0; k < ints.length && k < intSuffixes.length; k++) {
+      const t = ints[k]
+      const s = intSuffixes[k]
       for (const f of minmax) {
         this.addIntrinsic(`llvm.${f}.${s}`, t, `${t}, ${t}`)
       }
@@ -1498,14 +1502,16 @@ export class RuntimeTable {
       this.addIntrinsic(`llvm.fshr.${s}`, t, `${t}, ${t}, ${t}`)
     }
     // `sum` widens a `u8x16` or `u16x8` to `i32` lanes first; `sumWrapping` adds `i32` lanes as they are.
-    const sums: string[] = ["<16 x i32>", "<8 x i32>", "<4 x i32>"]
-    for (const t of sums) {
-      this.addIntrinsic(`llvm.vector.reduce.add.${vectorSuffix(t)}`, "i32", t)
-    }
+    this.addIntrinsic("llvm.vector.reduce.add.v16i32", "i32", "<16 x i32>")
+    this.addIntrinsic("llvm.vector.reduce.add.v8i32", "i32", "<8 x i32>")
+    this.addIntrinsic("llvm.vector.reduce.add.v4i32", "i32", "<4 x i32>")
     const floats: string[] = ["<4 x float>", "<2 x double>"]
-    for (const t of floats) {
-      const s = vectorSuffix(t)
-      const lane = t.indexOf("float") >= 0 ? "float" : "double"
+    const floatSuffixes: string[] = ["v4f32", "v2f64"]
+    const floatLanes: string[] = ["float", "double"]
+    for (let k = 0; k < floats.length && k < floatSuffixes.length && k < floatLanes.length; k++) {
+      const t = floats[k]
+      const s = floatSuffixes[k]
+      const lane = floatLanes[k]
       this.addIntrinsic(`llvm.fabs.${s}`, t, t)
       this.addIntrinsic(`llvm.sqrt.${s}`, t, t)
       this.addIntrinsic(`llvm.minimum.${s}`, t, `${t}, ${t}`)
@@ -1514,9 +1520,12 @@ export class RuntimeTable {
       this.addIntrinsic(`llvm.vector.reduce.fadd.${s}`, lane, `${lane}, ${t}`)
     }
     const masks: string[] = ["<16 x i1>", "<8 x i1>", "<4 x i1>", "<2 x i1>"]
-    for (const t of masks) {
-      this.addIntrinsic(`llvm.vector.reduce.or.${vectorSuffix(t)}`, "i1", t)
-      this.addIntrinsic(`llvm.vector.reduce.and.${vectorSuffix(t)}`, "i1", t)
+    const maskSuffixes: string[] = ["v16i1", "v8i1", "v4i1", "v2i1"]
+    for (let k = 0; k < masks.length && k < maskSuffixes.length; k++) {
+      const t = masks[k]
+      const s = maskSuffixes[k]
+      this.addIntrinsic(`llvm.vector.reduce.or.${s}`, "i1", t)
+      this.addIntrinsic(`llvm.vector.reduce.and.${s}`, "i1", t)
     }
   }
 }
