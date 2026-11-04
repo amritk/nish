@@ -60,7 +60,7 @@ function JsonField.constructor(this: JsonField, field: FieldInfo | null, type: i
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: field kind nullable type
   pointer this: size=56 writesThrough=true captured=false
-  pointer field: size=72 writesThrough=true captured=true
+  pointer field: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function noteJsonOptions(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @noteJsonOptions [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -188,8 +188,8 @@ function jsonPresenceFlagIs(ctx: CheckContext, info: StructInfo, to: Node, field
   pointer ctx: size=288 writesThrough=true captured=false passedTo=jsonPresenceMisuse#0
   pointer info: size=168 writesThrough=false captured=false passedTo=jsonPresenceMisuse#1
   pointer to: size=40 writesThrough=false captured=false passedTo=jsonPresenceMisuse#2
-  pointer field: size=72 writesThrough=false captured=false
-  pointer flag: size=72 writesThrough=false captured=false
+  pointer field: size=80 writesThrough=false captured=false
+  pointer flag: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 what: string (const)
   callee +0:44 TypeTable.typeName -> @TypeTable.typeName
@@ -298,7 +298,7 @@ function jsonValueOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   calls: JsonField.constructor TypeTable.isArray TypeTable.isEnum TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.refOf TypeTable.stripNull jsonClassOf jsonMapOf jsonScalar jsonValueOf nish_alloc_struct nish_panic_index
   pointer program: size=672 writesThrough=false captured=false passedTo=jsonClassOf#0 jsonMapOf#0 jsonValueOf#0 jsonClassOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isEnum#0 TypeTable.isArray#0 TypeTable.isReadonlyArray#0 TypeTable.refOf#0 TypeTable.isEnum#0 jsonClassOf#1 jsonMapOf#1 jsonValueOf#1 jsonClassOf#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
+  pointer field: size=80 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
   stackSites=0 stackLocals=0
   local +0:9 nullable: boolean (const)
   callee +0:20 TypeTable.isNullable -> @TypeTable.isNullable
@@ -342,7 +342,7 @@ function jsonFieldOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   calls: jsonValueOf
   pointer program: size=672 writesThrough=false captured=false passedTo=jsonValueOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonValueOf#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=jsonValueOf#2
+  pointer field: size=80 writesThrough=true captured=true passedTo=jsonValueOf#2
   stackSites=0 stackLocals=0
   callee +0:3 jsonValueOf -> @jsonValueOf
 function jsonValuesOf(f: JsonField, out: JsonField[]): void -> @jsonValuesOf

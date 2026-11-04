@@ -40944,27 +40944,27 @@ struct Order (class) size=80 align=8
   field notes: string | null index=9 offset=64 initialized
   field paid: boolean index=10 offset=72 initialized
   constructor -> @Order.constructor
-struct AppBench (class) size=152 align=8
+struct AppBench (class) size=160 align=8
   field h: HttpHandler index=0 offset=0
   field doc: JsonDocument index=1 offset=8
   field order: Order index=2 offset=16
   field decoder: JsonDecoder index=3 offset=24
-  field seenGen: i32[] index=4 offset=32
-  field textNames: u8[][] index=5 offset=40
-  field textValues: u8[][] index=6 offset=48
-  field jsonNames: u8[][] index=7 offset=56
-  field jsonValues: u8[][] index=8 offset=64
-  field queryNames: u8[][] index=9 offset=72
-  field queryValues: u8[][] index=10 offset=80
-  field plainBody: u8[] index=11 offset=88
-  field hi: u8[] index=12 offset=96
-  field ok: u8[] index=13 offset=104
-  field notFound: u8[] index=14 offset=112
-  field badRequest: u8[] index=15 offset=120
-  field out: u8[] index=16 offset=128
-  field requests: i32 index=17 offset=136 initialized
-  field limit: i32 index=18 offset=140 initialized
-  field quickack: i32 index=19 offset=144 initialized
+  field seenGen: i32[] index=4 offset=32 boxed
+  field textNames: u8[][] index=5 offset=48
+  field textValues: u8[][] index=6 offset=56
+  field jsonNames: u8[][] index=7 offset=64
+  field jsonValues: u8[][] index=8 offset=72
+  field queryNames: u8[][] index=9 offset=80
+  field queryValues: u8[][] index=10 offset=88
+  field plainBody: u8[] index=11 offset=96
+  field hi: u8[] index=12 offset=104
+  field ok: u8[] index=13 offset=112
+  field notFound: u8[] index=14 offset=120
+  field badRequest: u8[] index=15 offset=128
+  field out: u8[] index=16 offset=136
+  field requests: i32 index=17 offset=144 initialized
+  field limit: i32 index=18 offset=148 initialized
+  field quickack: i32 index=19 offset=152 initialized
   constructor -> @AppBench.constructor
   method text -> @AppBench.text
   method answer -> @AppBench.answer
@@ -41004,7 +41004,7 @@ function AppBench.constructor(this: AppBench, listener: i32, slots: i32): void -
   sharedWrite: via appAdd
   escaping: listener slots
   calls: Order.constructor appAdd appBytesOf extraRoutes nish.HandlerLimits.constructor nish.HttpHandler.constructor nish.JsonDecoder.constructor nish.JsonDocument.constructor nish.JsonLimits.constructor nish.Router.constructor nish_alloc_struct nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new routeTable
-  pointer this: size=152 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   stackSites=4 stackLocals=1
   local +0:11 limits: HandlerLimits (const)
   callee +0:35 new HandlerLimits -> @nish.HandlerLimits.constructor
@@ -41060,7 +41060,7 @@ function AppBench.text(this: AppBench, r: HttpRequest, status: i32, body: u8[]):
   sharedWrite: via nish.HttpHandler.sendFields
   escaping: status
   calls: nish.HttpHandler.sendFields
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   pointer r: size=120 writesThrough=true captured=false passedTo=nish.HttpHandler.sendFields#1
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.HttpHandler.sendFields#5
   stackSites=0 stackLocals=0
@@ -41069,7 +41069,7 @@ function AppBench.answer(this: AppBench, r: HttpRequest): void -> @AppBench.answ
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: AppBench.deep AppBench.echo AppBench.echoDoc AppBench.json AppBench.query AppBench.rewrite AppBench.text nish.HttpHandler.json nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.string nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=AppBench.text#0 AppBench.json#0 AppBench.echo#0 AppBench.echoDoc#0 AppBench.rewrite#0 AppBench.text#0 AppBench.query#0 AppBench.deep#0 AppBench.text#0 AppBench.text#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=AppBench.text#0 AppBench.json#0 AppBench.echo#0 AppBench.echoDoc#0 AppBench.rewrite#0 AppBench.text#0 AppBench.query#0 AppBench.deep#0 AppBench.text#0 AppBench.text#0
   pointer r: size=120 writesThrough=true captured=false passedTo=AppBench.text#1 AppBench.json#1 AppBench.echo#1 AppBench.echoDoc#1 AppBench.rewrite#1 AppBench.text#1 AppBench.query#1 AppBench.deep#1 AppBench.text#1 AppBench.text#1
   stackSites=0 stackLocals=0
   callee +3:9 AppBench.text -> @AppBench.text
@@ -41094,7 +41094,7 @@ function AppBench.json(this: AppBench, r: HttpRequest): void -> @AppBench.json [
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via AppBench.text
   calls: AppBench.text nish.HttpHandler.sendFields nish.JsonWriter.complete
-  pointer this: size=152 writesThrough=false captured=false passedTo=AppBench.text#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=AppBench.text#0
   pointer r: size=120 writesThrough=true captured=false passedTo=AppBench.text#1 nish.HttpHandler.sendFields#1
   stackSites=0 stackLocals=0
   local +0:11 w: JsonWriter (const)
@@ -41105,7 +41105,7 @@ function AppBench.echo(this: AppBench, r: HttpRequest): void -> @AppBench.echo [
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: AppBench.json AppBench.text nish.HttpHandler.json nish.JsonDecoder.reset nish.jsonDecode$$Order nish.jsonEncode$$Order nish_panic_overflow
-  pointer this: size=152 writesThrough=false captured=false passedTo=AppBench.text#0 AppBench.json#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=AppBench.text#0 AppBench.json#0
   pointer r: size=120 writesThrough=true captured=false passedTo=AppBench.text#1 AppBench.json#1
   stackSites=0 stackLocals=0
   local -7:11 d: JsonDecoder (const)
@@ -41120,7 +41120,7 @@ function AppBench.echoDoc(this: AppBench, r: HttpRequest): void -> @AppBench.ech
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.parse
   calls: AppBench.json AppBench.text nish.HttpHandler.json nish.JsonDocument.get nish.JsonDocument.i64 nish.JsonDocument.isI64 nish.JsonDocument.newI64 nish.JsonDocument.parse nish.JsonDocument.set nish.JsonDocument.write nish_panic_overflow
-  pointer this: size=152 writesThrough=false captured=false passedTo=AppBench.text#0 AppBench.json#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=AppBench.text#0 AppBench.json#0
   pointer r: size=120 writesThrough=true captured=false passedTo=AppBench.text#1 AppBench.json#1
   stackSites=0 stackLocals=0
   local +0:11 doc: JsonDocument (const)
@@ -41142,7 +41142,7 @@ function AppBench.rewrite(this: AppBench, r: HttpRequest): void -> @AppBench.rew
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.parse
   calls: AppBench.json AppBench.text nish.HttpHandler.json nish.JsonDocument.parse nish.JsonDocument.write
-  pointer this: size=152 writesThrough=false captured=false passedTo=AppBench.text#0 AppBench.json#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=AppBench.text#0 AppBench.json#0
   pointer r: size=120 writesThrough=true captured=false passedTo=AppBench.text#1 AppBench.json#1
   stackSites=0 stackLocals=0
   local +0:11 doc: JsonDocument (const)
@@ -41157,7 +41157,7 @@ function AppBench.put(this: AppBench, r: HttpRequest, at: i32, start: i32, end: 
   sharedWrite: +0:7
   escaping: start
   calls: AppBench.room nish_panic_index nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=AppBench.room#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=AppBench.room#0
   pointer r: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -6:5 AppBench.room -> @AppBench.room
@@ -41167,14 +41167,14 @@ function AppBench.space(this: AppBench, at: i32): i32 -> @AppBench.space [method
   sharedWrite: +0:7
   escaping: at
   calls: AppBench.room nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=AppBench.room#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=AppBench.room#0
   stackSites=0 stackLocals=0
   callee -2:5 AppBench.room -> @AppBench.room
 function AppBench.room(this: AppBench, need: i32): void -> @AppBench.room [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_panic nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -9:9 size: i32 (let)
   local -4:13 grown: u8[] (const)
@@ -41183,7 +41183,7 @@ function AppBench.query(this: AppBench, r: HttpRequest): void -> @AppBench.query
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via AppBench.put
   calls: AppBench.put AppBench.space nish.HttpHandler.sendFields nish.HttpRequest.paramEnd nish.HttpRequest.paramStart nish.HttpRequest.queryIndex
-  pointer this: size=152 writesThrough=true captured=false passedTo=AppBench.put#0 AppBench.space#0 AppBench.put#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=AppBench.put#0 AppBench.space#0 AppBench.put#0
   pointer r: size=120 writesThrough=true captured=false passedTo=AppBench.put#1 nish.HttpRequest.paramStart#0 nish.HttpRequest.paramEnd#0 nish.HttpRequest.queryIndex#0 AppBench.put#1 nish.HttpHandler.sendFields#1
   stackSites=0 stackLocals=0
   local +0:9 end: i32 (let)
@@ -41198,7 +41198,7 @@ function AppBench.deep(this: AppBench, r: HttpRequest): void -> @AppBench.deep [
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via AppBench.put
   calls: AppBench.put AppBench.space nish.HttpHandler.sendFields nish.HttpRequest.paramEnd nish.HttpRequest.paramStart
-  pointer this: size=152 writesThrough=true captured=false passedTo=AppBench.put#0 AppBench.space#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=AppBench.put#0 AppBench.space#0
   pointer r: size=120 writesThrough=true captured=false passedTo=AppBench.put#1 nish.HttpRequest.paramStart#0 nish.HttpRequest.paramEnd#0 nish.HttpHandler.sendFields#1
   stackSites=0 stackLocals=0
   local +0:9 end: i32 (let)
@@ -41212,7 +41212,7 @@ function AppBench.ackOnce(this: AppBench, r: HttpRequest): void -> @AppBench.ack
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1Server.fd nish_net_set_option
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   pointer r: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:11 slot: i32 (const)
@@ -41221,7 +41221,7 @@ function AppBench.run(this: AppBench): void -> @AppBench.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpHandler.wait
   calls: AppBench.ackOnce AppBench.answer nish.Http1Server.fd nish.HttpHandler.ready nish.HttpHandler.take nish.HttpHandler.wait nish_net_set_option
-  pointer this: size=152 writesThrough=true captured=false passedTo=AppBench.ackOnce#0 AppBench.answer#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=AppBench.ackOnce#0 AppBench.answer#0
   stackSites=0 stackLocals=0
   callee +0:7 HttpHandler.wait -> @nish.HttpHandler.wait
   callee +1:14 HttpHandler.ready -> @nish.HttpHandler.ready

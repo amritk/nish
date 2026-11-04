@@ -42,6 +42,7 @@ import TypeTable from "./types" -> struct TypeTable
 import BuildMode from "./visibility" -> struct BuildMode
 import hostVisible from "./visibility" -> function @hostVisible
 const INLINE_SLOT_BYTES: i32 = 256
+const UNSIZED: i32 = -2
 struct Candidate (class) size=64 align=8
   field info: StructInfo index=0 offset=0
   field field: FieldInfo index=1 offset=8
@@ -77,7 +78,7 @@ function Candidate.constructor(this: Candidate, info: StructInfo, field: FieldIn
   escaping: field info
   pointer this: size=64 writesThrough=true captured=false
   pointer info: size=168 writesThrough=true captured=true
-  pointer field: size=72 writesThrough=true captured=true
+  pointer field: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FreshReturn.constructor(this: FreshReturn, param: i32, length: i32): void -> @FreshReturn.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -113,7 +114,7 @@ function InlineWalk.add(this: InlineWalk, info: StructInfo, field: FieldInfo): v
   calls: Candidate.constructor StringMap.set nish_alloc_struct nish_array_grow nish_str_concat
   pointer this: size=80 writesThrough=false captured=false
   pointer info: size=168 writesThrough=true captured=true passedTo=Candidate.constructor#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=Candidate.constructor#2
+  pointer field: size=80 writesThrough=true captured=true passedTo=Candidate.constructor#2
   stackSites=0 stackLocals=0
   callee -2:5 StringMap.set -> @StringMap.set
   callee -1:5 StringMap.set -> @StringMap.set
@@ -139,7 +140,7 @@ function mayInline(table: TypeTable, program: CheckedProgram, mode: BuildMode, i
   pointer program: size=672 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer mode: size=3 writesThrough=false captured=false passedTo=hostVisible#0
   pointer info: size=168 writesThrough=false captured=false
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 hostVisible -> @hostVisible
   callee +0:51 TypeTable.isArray -> @TypeTable.isArray
@@ -195,7 +196,7 @@ function allocationOf(program: CheckedProgram, table: TypeTable, sig: FunctionSi
   callee +13:12 new FreshReturn -> @FreshReturn.constructor
   local +15:9 n: i32 (const)
   callee +15:13 constantLength -> @constantLength
-  callee +16:25 new FreshReturn -> @FreshReturn.constructor
+  callee +16:10 new FreshReturn -> @FreshReturn.constructor
 function declarationOf(program: CheckedProgram, node: Node, local: Local): Node | null -> @declarationOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node
@@ -289,10 +290,14 @@ function freshReturnOf(walk: InlineWalk, sig: FunctionSig): FreshReturn | null -
   local -11:11 one: FreshReturn | null (const)
   callee -11:17 returnedOf -> @returnedOf
   callee -1:5 StringMap.set -> @StringMap.set
+function sized(n: i32): i32 -> @sized
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  stackSites=0 stackLocals=0
 function inlineAssignedLength(walk: InlineWalk, program: CheckedProgram, expr: Node): i32 -> @inlineAssignedLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via freshReturnOf
-  calls: TypeTable.isArray constantLength freshReturnOf nish_panic_index unwrap
+  calls: TypeTable.isArray constantLength freshReturnOf nish_panic_index sized unwrap
   pointer walk: size=80 writesThrough=false captured=false passedTo=freshReturnOf#0
   pointer program: size=672 writesThrough=false captured=false passedTo=constantLength#0 constantLength#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrap#0
@@ -301,12 +306,14 @@ function inlineAssignedLength(walk: InlineWalk, program: CheckedProgram, expr: N
   callee +0:13 unwrap -> @unwrap
   callee +5:10 TypeTable.isArray -> @TypeTable.isArray
   local +8:11 args: Node[] (const)
-  callee +9:32 constantLength -> @constantLength
+  callee +9:32 sized -> @sized
+  callee +9:38 constantLength -> @constantLength
   local +14:9 callee: FunctionSig | null (const)
   local +18:9 fresh: FreshReturn | null (const)
   callee +18:17 freshReturnOf -> @freshReturnOf
   local +25:9 args: Node[] (const)
-  callee +26:38 constantLength -> @constantLength
+  callee +26:38 sized -> @sized
+  callee +26:44 constantLength -> @constantLength
 function judgeUse(walk: InlineWalk, program: CheckedProgram, c: Candidate, node: Node, parent: Node | null, grand: Node | null): void -> @judgeUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -475,9 +482,10 @@ function layoutInlineArrays(contexts: CheckContext[], mode: BuildMode): void -> 
   callee +45:5 checkOrder -> @checkOrder
   local +47:9 changed: StructInfo[] (const)
   local +48:14 c: Candidate (const)
-  local +49:11 stride: i32 (const)
-  callee +49:20 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +49:39 TypeTable.refOf -> @TypeTable.refOf
-  local +57:9 i: i32 (let)
-  local +64:14 info: StructInfo (const)
-  callee +65:5 computeLayout -> @computeLayout
+  local +52:11 stride: i32 (const)
+  callee +52:20 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +52:39 TypeTable.refOf -> @TypeTable.refOf
+  local +53:11 unsized: boolean (const)
+  local +71:9 i: i32 (let)
+  local +78:14 info: StructInfo (const)
+  callee +79:5 computeLayout -> @computeLayout
