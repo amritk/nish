@@ -1572,8 +1572,8 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   // slow path cannot get and fails as every allocation does (`nish: out of
   // memory`, exit 1), so a joined string is held to the length a concatenation
   // is (RT-2) and its `length` never reads back negative under
-  // `--number-mode i32` (docs/security/codegen.md, CG-3). A `select` rather
-  // than a branch keeps the copy loop's blocks as they were.
+  // `--number-mode i32` (docs/security/codegen.md, CG-3). The limit is a
+  // `select`, not a branch: no block of its own.
   fn.placeBlock(copyBlock)
   const size = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`)
   const tooLong = fn.emitValue(`icmp ugt i64 ${size}, ${I32_MAX}`)

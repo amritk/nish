@@ -2394,6 +2394,27 @@ and run them in interleaved rounds with a byte-identical copy of the baseline
 as the noise band. The figures for Zmij against Ryu are in
 [docs/wp15-performance.md §7a](../docs/wp15-performance.md).
 
+## Stdlib microbenchmarks
+
+Each of these programs times one stdlib path on its own, under callgrind for
+`Ir` and in interleaved rounds against a byte-identical copy for wall time.
+Each README holds the measurements and what is left to cut. The three marked
+with a pull request land with it.
+
+- [`sha256-block/`](sha256-block/README.md): SHA-256 compression, HMAC and
+  HS256, against OpenSSL. Its section
+  [An AVX2 message schedule](sha256-block/README.md#an-avx2-message-schedule-measured-not-built)
+  measures the vector schedule (#1186).
+- [`http1-request/`](http1-request/README.md): `std/net/http1`'s request
+  parser on a browser, an API, a short and a 4 KB JSON request (#1187).
+- [`jwt-verify/`](jwt-verify/README.md): decoding and verifying an HS256 JWT
+  (#1188).
+- [`pg-decode/`](pg-decode/README.md): the PostgreSQL wire decoder on
+  parameters, a pooled query and a row set (#1191).
+- [`runtime-copies/`](runtime-copies/README.md): the copies and bounds checks
+  the four above spend their time on, attributed by caller and size, each
+  shape alone in a loop, and the ranked list of what is left to cut.
+
 ## Other files
 
 - `map-keys/`: the global `Map` by integer, enum and string key, against
