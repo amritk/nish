@@ -162,13 +162,12 @@ for.end:
 define noundef i32 @base64urlDecodeGroup(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %text, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out) #2 {
 entry:
   %bad.addr = alloca i32, align 4
-  %acc.addr = alloca i32, align 4
-  %v0.addr = alloca i32, align 4
-  %v1.addr = alloca i32, align 4
-  %v2.addr = alloca i32, align 4
-  %v3.addr = alloca i32, align 4
+  %s0.addr = alloca i32, align 4
+  %s1.addr = alloca i32, align 4
+  %s2.addr = alloca i32, align 4
+  %s3.addr = alloca i32, align 4
+  %word.addr = alloca i32, align 4
   store i32 0, i32* %bad.addr, align 4
-  store i32 0, i32* %acc.addr, align 4
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %text, i64 0, i32 2
   %1 = load i8*, i8** %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = bitcast i8* %1 to i8*
@@ -176,70 +175,67 @@ entry:
   %4 = load i8, i8* %3, align 1, !alias.scope !4, !noalias !3, !tbaa !12
   %5 = zext i8 %4 to i32
   %6 = call i32 @base64urlSextetOf(i32 %5)
-  store i32 %6, i32* %v0.addr, align 4
-  %7 = load i32, i32* %bad.addr, align 4
-  %8 = load i32, i32* %v0.addr, align 4
-  %9 = ashr i32 %8, 31
-  %10 = or i32 %7, %9
-  store i32 %10, i32* %bad.addr, align 4
-  %11 = load i32, i32* %acc.addr, align 4
-  %12 = shl i32 %11, 6
-  %13 = load i32, i32* %v0.addr, align 4
-  %14 = and i32 %13, 63
-  %15 = or i32 %12, %14
-  %16 = and i32 %15, 4095
-  store i32 %16, i32* %acc.addr, align 4
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %text, i64 0, i32 2
-  %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %19 = bitcast i8* %18 to i8*
-  %20 = getelementptr inbounds i8, i8* %19, i64 1
-  %21 = load i8, i8* %20, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %22 = zext i8 %21 to i32
-  %23 = call i32 @base64urlSextetOf(i32 %22)
-  store i32 %23, i32* %v1.addr, align 4
-  %24 = load i32, i32* %bad.addr, align 4
-  %25 = load i32, i32* %v1.addr, align 4
-  %26 = ashr i32 %25, 31
-  %27 = or i32 %24, %26
-  store i32 %27, i32* %bad.addr, align 4
-  %28 = load i32, i32* %acc.addr, align 4
-  %29 = shl i32 %28, 6
-  %30 = load i32, i32* %v1.addr, align 4
-  %31 = and i32 %30, 63
-  %32 = or i32 %29, %31
-  %33 = and i32 %32, 4095
-  store i32 %33, i32* %acc.addr, align 4
-  %34 = load i32, i32* %acc.addr, align 4
-  %35 = ashr i32 %34, 4
-  %36 = and i32 %35, 255
-  %37 = trunc i32 %36 to i8
-  %38 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
-  %39 = load i8*, i8** %38, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %40 = bitcast i8* %39 to i8*
-  %41 = getelementptr inbounds i8, i8* %40, i64 0
-  store i8 %37, i8* %41, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %text, i64 0, i32 2
-  %43 = load i8*, i8** %42, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %44 = bitcast i8* %43 to i8*
-  %45 = getelementptr inbounds i8, i8* %44, i64 2
-  %46 = load i8, i8* %45, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %47 = zext i8 %46 to i32
-  %48 = call i32 @base64urlSextetOf(i32 %47)
-  store i32 %48, i32* %v2.addr, align 4
-  %49 = load i32, i32* %bad.addr, align 4
-  %50 = load i32, i32* %v2.addr, align 4
-  %51 = ashr i32 %50, 31
-  %52 = or i32 %49, %51
-  store i32 %52, i32* %bad.addr, align 4
-  %53 = load i32, i32* %acc.addr, align 4
-  %54 = shl i32 %53, 6
-  %55 = load i32, i32* %v2.addr, align 4
-  %56 = and i32 %55, 63
-  %57 = or i32 %54, %56
-  %58 = and i32 %57, 4095
-  store i32 %58, i32* %acc.addr, align 4
-  %59 = load i32, i32* %acc.addr, align 4
-  %60 = ashr i32 %59, 2
+  store i32 %6, i32* %s0.addr, align 4
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %text, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %9 = bitcast i8* %8 to i8*
+  %10 = getelementptr inbounds i8, i8* %9, i64 1
+  %11 = load i8, i8* %10, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  %12 = zext i8 %11 to i32
+  %13 = call i32 @base64urlSextetOf(i32 %12)
+  store i32 %13, i32* %s1.addr, align 4
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %text, i64 0, i32 2
+  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %16 = bitcast i8* %15 to i8*
+  %17 = getelementptr inbounds i8, i8* %16, i64 2
+  %18 = load i8, i8* %17, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  %19 = zext i8 %18 to i32
+  %20 = call i32 @base64urlSextetOf(i32 %19)
+  store i32 %20, i32* %s2.addr, align 4
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %text, i64 0, i32 2
+  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %23 = bitcast i8* %22 to i8*
+  %24 = getelementptr inbounds i8, i8* %23, i64 3
+  %25 = load i8, i8* %24, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  %26 = zext i8 %25 to i32
+  %27 = call i32 @base64urlSextetOf(i32 %26)
+  store i32 %27, i32* %s3.addr, align 4
+  %28 = load i32, i32* %bad.addr, align 4
+  %29 = load i32, i32* %s0.addr, align 4
+  %30 = load i32, i32* %s1.addr, align 4
+  %31 = or i32 %29, %30
+  %32 = load i32, i32* %s2.addr, align 4
+  %33 = or i32 %31, %32
+  %34 = load i32, i32* %s3.addr, align 4
+  %35 = or i32 %33, %34
+  %36 = ashr i32 %35, 31
+  %37 = or i32 %28, %36
+  store i32 %37, i32* %bad.addr, align 4
+  %38 = load i32, i32* %s0.addr, align 4
+  %39 = and i32 %38, 63
+  %40 = shl i32 %39, 18
+  %41 = load i32, i32* %s1.addr, align 4
+  %42 = and i32 %41, 63
+  %43 = shl i32 %42, 12
+  %44 = or i32 %40, %43
+  %45 = load i32, i32* %s2.addr, align 4
+  %46 = and i32 %45, 63
+  %47 = shl i32 %46, 6
+  %48 = or i32 %44, %47
+  %49 = load i32, i32* %s3.addr, align 4
+  %50 = and i32 %49, 63
+  %51 = or i32 %48, %50
+  store i32 %51, i32* %word.addr, align 4
+  %52 = load i32, i32* %word.addr, align 4
+  %53 = ashr i32 %52, 16
+  %54 = trunc i32 %53 to i8
+  %55 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
+  %56 = load i8*, i8** %55, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %57 = bitcast i8* %56 to i8*
+  %58 = getelementptr inbounds i8, i8* %57, i64 0
+  store i8 %54, i8* %58, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  %59 = load i32, i32* %word.addr, align 4
+  %60 = ashr i32 %59, 8
   %61 = and i32 %60, 255
   %62 = trunc i32 %61 to i8
   %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
@@ -247,36 +243,16 @@ entry:
   %65 = bitcast i8* %64 to i8*
   %66 = getelementptr inbounds i8, i8* %65, i64 1
   store i8 %62, i8* %66, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %67 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %text, i64 0, i32 2
-  %68 = load i8*, i8** %67, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %69 = bitcast i8* %68 to i8*
-  %70 = getelementptr inbounds i8, i8* %69, i64 3
-  %71 = load i8, i8* %70, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %72 = zext i8 %71 to i32
-  %73 = call i32 @base64urlSextetOf(i32 %72)
-  store i32 %73, i32* %v3.addr, align 4
+  %67 = load i32, i32* %word.addr, align 4
+  %68 = and i32 %67, 255
+  %69 = trunc i32 %68 to i8
+  %70 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
+  %71 = load i8*, i8** %70, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %72 = bitcast i8* %71 to i8*
+  %73 = getelementptr inbounds i8, i8* %72, i64 2
+  store i8 %69, i8* %73, align 1, !alias.scope !4, !noalias !3, !tbaa !12
   %74 = load i32, i32* %bad.addr, align 4
-  %75 = load i32, i32* %v3.addr, align 4
-  %76 = ashr i32 %75, 31
-  %77 = or i32 %74, %76
-  store i32 %77, i32* %bad.addr, align 4
-  %78 = load i32, i32* %acc.addr, align 4
-  %79 = shl i32 %78, 6
-  %80 = load i32, i32* %v3.addr, align 4
-  %81 = and i32 %80, 63
-  %82 = or i32 %79, %81
-  %83 = and i32 %82, 4095
-  store i32 %83, i32* %acc.addr, align 4
-  %84 = load i32, i32* %acc.addr, align 4
-  %85 = and i32 %84, 255
-  %86 = trunc i32 %85 to i8
-  %87 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
-  %88 = load i8*, i8** %87, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %89 = bitcast i8* %88 to i8*
-  %90 = getelementptr inbounds i8, i8* %89, i64 2
-  store i8 %86, i8* %90, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %91 = load i32, i32* %bad.addr, align 4
-  ret i32 %91
+  ret i32 %74
 }
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }

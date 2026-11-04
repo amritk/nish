@@ -316,7 +316,7 @@ for.end:
   ret i64 %24
 }
 
-define noundef i64 @nish.getU64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
+define internal noundef i64 @nish.getU64BEByByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
 entry:
   %v.addr = alloca i64, align 8
   %i.addr = alloca i32, align 4
@@ -367,6 +367,130 @@ for.inc:
 for.end:
   %22 = load i64, i64* %v.addr, align 8
   ret i64 %22
+}
+
+define noundef i64 @nish.getU64BE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {
+entry:
+  %0 = icmp sge i32 %off, 0
+  br i1 %0, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %1 = icmp slt i32 %off, 2147483640
+  br label %land.end.1
+
+land.end.1:
+  %2 = phi i1 [ false, %entry ], [ %1, %land.rhs.1 ]
+  br i1 %2, label %land.rhs, label %land.end
+
+land.rhs:
+  %3 = add nsw i32 %off, 8
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = trunc i64 %5 to i32
+  %7 = icmp sle i32 %3, %6
+  br label %land.end
+
+land.end:
+  %8 = phi i1 [ false, %land.end.1 ], [ %7, %land.rhs ]
+  br i1 %8, label %if.then, label %if.end
+
+if.then:
+  %9 = sext i32 %off to i64
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %12 = bitcast i8* %11 to i8*
+  %13 = getelementptr inbounds i8, i8* %12, i64 %9
+  %14 = load i8, i8* %13, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %15 = zext i8 %14 to i64
+  %16 = sext i32 56 to i64
+  %17 = and i64 %16, 63
+  %18 = shl i64 %15, %17
+  %19 = add nsw i32 %off, 1
+  %20 = sext i32 %19 to i64
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %23 = bitcast i8* %22 to i8*
+  %24 = getelementptr inbounds i8, i8* %23, i64 %20
+  %25 = load i8, i8* %24, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %26 = zext i8 %25 to i64
+  %27 = sext i32 48 to i64
+  %28 = and i64 %27, 63
+  %29 = shl i64 %26, %28
+  %30 = or i64 %18, %29
+  %31 = add nsw i32 %off, 2
+  %32 = sext i32 %31 to i64
+  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %35 = bitcast i8* %34 to i8*
+  %36 = getelementptr inbounds i8, i8* %35, i64 %32
+  %37 = load i8, i8* %36, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %38 = zext i8 %37 to i64
+  %39 = sext i32 40 to i64
+  %40 = and i64 %39, 63
+  %41 = shl i64 %38, %40
+  %42 = add nsw i32 %off, 3
+  %43 = sext i32 %42 to i64
+  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %45 = load i8*, i8** %44, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %46 = bitcast i8* %45 to i8*
+  %47 = getelementptr inbounds i8, i8* %46, i64 %43
+  %48 = load i8, i8* %47, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %49 = zext i8 %48 to i64
+  %50 = sext i32 32 to i64
+  %51 = and i64 %50, 63
+  %52 = shl i64 %49, %51
+  %53 = or i64 %41, %52
+  %54 = or i64 %30, %53
+  %55 = add nsw i32 %off, 4
+  %56 = sext i32 %55 to i64
+  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %58 = load i8*, i8** %57, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %59 = bitcast i8* %58 to i8*
+  %60 = getelementptr inbounds i8, i8* %59, i64 %56
+  %61 = load i8, i8* %60, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %62 = zext i8 %61 to i64
+  %63 = sext i32 24 to i64
+  %64 = and i64 %63, 63
+  %65 = shl i64 %62, %64
+  %66 = add nsw i32 %off, 5
+  %67 = sext i32 %66 to i64
+  %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %69 = load i8*, i8** %68, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %70 = bitcast i8* %69 to i8*
+  %71 = getelementptr inbounds i8, i8* %70, i64 %67
+  %72 = load i8, i8* %71, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %73 = zext i8 %72 to i64
+  %74 = sext i32 16 to i64
+  %75 = and i64 %74, 63
+  %76 = shl i64 %73, %75
+  %77 = or i64 %65, %76
+  %78 = add nsw i32 %off, 6
+  %79 = sext i32 %78 to i64
+  %80 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %81 = load i8*, i8** %80, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %82 = bitcast i8* %81 to i8*
+  %83 = getelementptr inbounds i8, i8* %82, i64 %79
+  %84 = load i8, i8* %83, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %85 = zext i8 %84 to i64
+  %86 = sext i32 8 to i64
+  %87 = and i64 %86, 63
+  %88 = shl i64 %85, %87
+  %89 = add nsw i32 %off, 7
+  %90 = sext i32 %89 to i64
+  %91 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %92 = load i8*, i8** %91, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %93 = bitcast i8* %92 to i8*
+  %94 = getelementptr inbounds i8, i8* %93, i64 %90
+  %95 = load i8, i8* %94, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %96 = zext i8 %95 to i64
+  %97 = or i64 %88, %96
+  %98 = or i64 %77, %97
+  %99 = or i64 %54, %98
+  ret i64 %99
+
+if.end:
+  %100 = call i64 @nish.getU64BEByByte(%struct.nish_array* %b, i32 %off)
+  ret i64 %100
 }
 
 define noundef i32 @nish.getI32LE(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %off) #0 {

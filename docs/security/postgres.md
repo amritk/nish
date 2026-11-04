@@ -308,6 +308,11 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   outside the column. Each binary decoder checks the column's window against
   its buffer and its length against the type's (2, 4 or 8 for an integer, 1
   for a `bool`, 8 for a `float8` or a time) before it reads a byte.
+  An 8-byte column's bytes are then read by `nish/bytes`'s `getI64BE` or
+  `getF64BE`, which since `bench/pg-decode` check all eight indices once
+  rather than one at a time: inside the window this decoder has already
+  checked, the read is the same value; outside it, the same panic
+  (`docs/security/bytes.md`).
   `PgBinaryArray` walks a one-dimensional `int2[]`, `int4[]` or `int8[]` the
   same way: its header's `ndim` (0 or 1), `hasnull` and element OID (20, 21 or
   23) are checked, and every element's length word must equal its type's size
