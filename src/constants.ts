@@ -426,7 +426,7 @@ const foldIdentifier = (ctx: CheckContext, info: ConstInfo, expr: Node): ConstVa
 
 const foldUnary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   if (expr.text === "await") {
-    return reject(ctx, info, expr, outsideAsyncMessage("await")) // a constant is no async function (NL2623)
+    return reject(ctx, info, expr, outsideAsyncMessage("await")) // a constant is no async function (NL2641)
   }
   const operand = fold(ctx, info, expr.children[0], expected)
   if (operand.type === T_ERROR) {

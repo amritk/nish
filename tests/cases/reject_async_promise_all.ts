@@ -1,5 +1,5 @@
 // `Promise.all`: a promise is never a value to collect; `awaitAll` from
-// `nish:async` awaits several calls together (NL2631).
+// `nish:async` awaits several calls together (NL2649).
 async function load(x: i32): Promise<i32> {
   return x
 }

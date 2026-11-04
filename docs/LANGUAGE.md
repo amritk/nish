@@ -3188,7 +3188,7 @@ wait is written `await` on a direct call
 promise type, so there is no promise to store, pass or chain, and an awaited
 call's frame nests in its caller's. **This release checks `async` and does
 not yet compile it**: a program that keeps an `async` function after the
-checks is `` `async` function `run` is checked, but not yet compiled `` (NL2635,
+checks is `` `async` function `run` is checked, but not yet compiled `` (NL2653,
 `reject_async_not_lowered`), and the lowering is the next one's. A program
 with no `async` function compiles byte for byte as before.
 
@@ -3219,56 +3219,56 @@ async function run(): Promise<void> {
   `reject_async_method`), because a task never keeps a `this`.
 - **`Promise<T>` is only an `async` function's return type.** An `async`
   function without it is
-  `` An `async` function's return type is `Promise<T>` `` (NL2637,
+  `` An `async` function's return type is `Promise<T>` `` (NL2655,
   `reject_async_function`, `reject_async_arrow_declaration`,
   `reject_async_return_missing`); `T` is written inside it, `Promise<void>` for none. Anywhere else — a parameter, a field,
   a local, a type alias, an interface member — `Promise<T>` is
-  `` `Promise<T>` is only an `async` function's return type `` (NL2636,
+  `` `Promise<T>` is only an `async` function's return type `` (NL2654,
   `reject_async_promise_parameter`, `_field`, `_local`, `_alias`,
   `_interface_member`).
 - **`await` is written inside an `async` function**
-  (`` `await` is only written inside an `async` function ``, NL2623,
-  `reject_await`, `reject_await_constant`), **on a direct call to one**: `await x` on a value is NL2625
-  (`reject_async_await_value`), `await` on a plain function's call NL2626
+  (`` `await` is only written inside an `async` function ``, NL2641,
+  `reject_await`, `reject_await_constant`), **on a direct call to one**: `await x` on a value is NL2643
+  (`reject_async_await_value`), `await` on a plain function's call NL2644
   (`reject_async_await_plain_call`). Inside an `async` function `await (f(x))`
   is the operator, as TypeScript reads it; outside one `await(f(x))` is a call
-  to a function named `await`, NL2633 (`reject_async_await_parenthesised`).
+  to a function named `await`, NL2651 (`reject_async_await_parenthesised`).
 - **`await` stands at the top of a statement**: an expression statement, a
   declaration's initializer, a `return` or the right side of a plain `=`.
   Inside another expression — an argument, a condition, an operand, a
-  compound assignment — it would hold a value across the wait, and is NL2624
+  compound assignment — it would hold a value across the wait, and is NL2642
   (`reject_async_await_nested`, `_condition`, `_compound`); a `for`
   initializer is not a declaration statement, for `awaitAll` too
   (`reject_async_await_all_for`). Bind the answer to a `const` first.
 - **A call to an `async` function is awaited where it is made**, or handed to
   `spawn` or `awaitAll`. Anything else would make a promise a value:
-  `` `load` is `async`: a call to it is awaited where it is made `` (NL2627,
+  `` `load` is `async`: a call to it is awaited where it is made `` (NL2645,
   `reject_async_unawaited_call`, `reject_async_unawaited_argument`).
-  `.then` is NL2632 (`reject_async_then`), `Promise.all` NL2631 (`reject_async_promise_all`), and `for await` is
+  `.then` is NL2650 (`reject_async_then`), `Promise.all` NL2649 (`reject_async_promise_all`), and `for await` is
   `` `for await` is not supported here `` (NL2133,
   `reject_for_await_template`, `tests/wordings/nl2133_for_await`).
 - **`nish:async` exports `spawn` and `awaitAll`**, reached only through the
   import. `spawn(f(x))` starts `f` as a task of its own and does not wait for
-  it; it takes a direct call to an `async` function (NL2626), and since
+  it; it takes a direct call to an `async` function (NL2644), and since
   nothing reads its answer, `f` answers `void` or a `Result` it reports
-  itself (NL2628, `reject_async_spawn_answer`). `awaitAll(f(x), g(y))` waits
+  itself (NL2646, `reject_async_spawn_answer`). `awaitAll(f(x), g(y))` waits
   for two to eight calls at once and is awaited into one name per call,
   `const [a, b] = await awaitAll(f(x), g(y))`; one call, or an `awaitAll` not
-  so destructured, is NL2629 (`reject_async_await_all_one`,
+  so destructured, is NL2647 (`reject_async_await_all_one`,
   `reject_async_await_all_bare`).
 - **An `async` arrow is passed only where it is awaited.** The parameter's
   function type answers `Promise<T>`, and the callee awaits each call to it.
-  An `async` arrow where the type answers a plain `T` is NL2621
+  An `async` arrow where the type answers a plain `T` is NL2639
   (`reject_async_arrow`); a plain function where it answers `Promise<T>` is
-  NL2622 (`reject_async_plain_to_promise_parameter`).
+  NL2640 (`reject_async_plain_to_promise_parameter`).
 - **No recursion through `await`.** An awaited call's frame is nested in its
   caller's, so a cycle in the call graph that runs through an `await` has no
   size: `` recursion through `await` `` is refused at the `await` that closes
-  the cycle, direct or mutual (NL2630,
+  the cycle, direct or mutual (NL2648,
   `reject_async_await_self`, `reject_async_await_mutual`). Write it as a loop.
 - **No `async` in a wasm build.** A task is resumed by the native event loop,
   which a wasm module does not have: under a `wasm32` target or
-  `--profile wasi` an `async` function is NL2634 (`reject_async_wasm`,
+  `--profile wasi` an `async` function is NL2652 (`reject_async_wasm`,
   `reject_async_wasi_profile`).
 
 **Where it is not Node.** The source is TypeScript and runs under Node, but
@@ -6105,7 +6105,7 @@ under [Semantics decisions](#semantics-decisions).
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `a?.b ?? d`, `a?.m() ?? d` | `a` a `T \| null`; a chain of `?.` and `.` links, field reads, `length` and method calls, that is the left operand of `??` | the last link's type, as `a ?? d` on a `T \| null` types it | `icmp eq` against `null` at each `?.` link's receiver, then `br` to `nullish.default`; `phi` at `nullish.end` | `optional_chain_field`, `optional_chain_order`, `optional_chain_generic`, `optional_chain_bounds`; `reject_optional_chain`, `reject_optional_chain_never_null` ([Nullable types](#nullable-types)) |
-| `await f(x)` | a direct call to an `async` function, at the top of a statement in an `async` function | the call's `T` | not yet lowered (NL2635) | `reject_async_not_lowered`; `reject_await`, `reject_async_await_value`, `reject_async_await_nested` ([Async functions](#async-functions-async-and-await)) |
+| `await f(x)` | a direct call to an `async` function, at the top of a statement in an `async` function | the call's `T` | not yet lowered (NL2653) | `reject_async_not_lowered`; `reject_await`, `reject_async_await_value`, `reject_async_await_nested` ([Async functions](#async-functions-async-and-await)) |
 | `== != ?.[ ?.() in instanceof typeof delete void yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_yield` |
 | `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
 | `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |

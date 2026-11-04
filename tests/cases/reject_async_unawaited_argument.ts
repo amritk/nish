@@ -1,5 +1,5 @@
 // A call to an async function passed as an argument: a promise is never
-// passed (NL2627).
+// passed (NL2645).
 async function load(x: i32): Promise<i32> {
   return x
 }

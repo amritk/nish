@@ -1,5 +1,5 @@
 // `+=` of an `await`: only `=` takes one, so the answer is named first
-// (NL2624).
+// (NL2642).
 async function load(x: i32): Promise<i32> {
   return x
 }

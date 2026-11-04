@@ -424,7 +424,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
   collectParams(ctx, sig, decl.children[1], -1, foreign)
   const returnAnnotation = decl.children[2]
   if (returnAnnotation.kind === N_EMPTY) {
-    // The pass 1 sweep has refused it (NL2096, or NL2637 when async; `refuseUnsupportedForms`).
+    // The pass 1 sweep has refused it (NL2096, or NL2655 when async; `refuseUnsupportedForms`).
     sig.returnType = T_ERROR
   } else if (sig.isAsync()) {
     const answer = promiseArgument(returnAnnotation)

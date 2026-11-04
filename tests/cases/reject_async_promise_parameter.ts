@@ -1,5 +1,5 @@
 // A `Promise<T>` parameter: a promise is never a value, so no function takes
-// one; an async callee is awaited where it is called (NL2636).
+// one; an async callee is awaited where it is called (NL2654).
 async function load(x: i32): Promise<i32> {
   return x
 }

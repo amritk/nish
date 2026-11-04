@@ -1,4 +1,4 @@
-// `awaitAll` outside the declaration that names its answers (NL2629).
+// `awaitAll` outside the declaration that names its answers (NL2647).
 import { awaitAll } from "nish:async"
 
 async function load(x: i32): Promise<i32> {

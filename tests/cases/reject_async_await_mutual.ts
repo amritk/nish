@@ -1,5 +1,5 @@
 // Two async functions that await each other: a cycle through `await`
-// (NL2630).
+// (NL2648).
 async function ping(n: i32): Promise<void> {
   await pong(n)
 }

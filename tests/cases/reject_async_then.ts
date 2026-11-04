@@ -1,4 +1,4 @@
-// `.then` on a call to an async function: `await` it instead (NL2632).
+// `.then` on a call to an async function: `await` it instead (NL2650).
 async function load(x: i32): Promise<i32> {
   return x
 }

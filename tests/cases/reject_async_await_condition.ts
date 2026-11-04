@@ -1,4 +1,4 @@
-// An `await` as an `if` condition: name the answer first (NL2624).
+// An `await` as an `if` condition: name the answer first (NL2642).
 async function load(x: i32): Promise<i32> {
   return x
 }

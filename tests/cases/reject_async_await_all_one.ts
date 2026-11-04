@@ -1,5 +1,5 @@
 // `awaitAll` of one call: it joins two to eight, one name per call
-// (NL2629).
+// (NL2647).
 import { awaitAll } from "nish:async"
 
 async function load(x: i32): Promise<i32> {

@@ -11,7 +11,7 @@ memory each waiting task needs. The rules are in the reference under
 > [!NOTE]
 > This release **checks** `async` code but does not yet compile it. A program
 > that passes every rule below stops with
-> `` `async` function `run` is checked, but not yet compiled `` (`NL2635`).
+> `` `async` function `run` is checked, but not yet compiled `` (`NL2653`).
 > A program without `async` is not affected.
 
 ## Writing one
@@ -20,7 +20,7 @@ The return type is `Promise<T>`, with the answer `T` inside it
 (`Promise<void>` for none). Inside, `await` a call to another `async`
 function and use its answer:
 
-```ts nish:err NL2635
+```ts nish:err NL2653
 async function double(x: i32): Promise<i32> {
   return x * 2;
 }
@@ -45,7 +45,7 @@ task never keeps a `this`.
 anything larger — an argument, a condition, an arithmetic operand — it is
 refused, so bind the answer to a name first:
 
-```ts nish:err NL2624
+```ts nish:err NL2642
 async function load(id: i32): Promise<i32> {
   return id;
 }
@@ -65,7 +65,7 @@ A call to an `async` function is awaited where it is made. You cannot keep it
 in a variable to await later, pass it to a function, or chain `.then` on it,
 and `Promise<T>` cannot be the type of a parameter, a field or a local:
 
-```ts nish:err NL2627
+```ts nish:err NL2645
 async function load(id: i32): Promise<i32> {
   return id;
 }
@@ -92,7 +92,7 @@ import:
   Nothing reads its answer, so `f` answers `void`, or a `Result` it reports
   itself.
 
-```ts nish:err NL2635
+```ts nish:err NL2653
 import { awaitAll, spawn } from "nish:async";
 
 async function price(id: i32): Promise<i32> {
@@ -117,7 +117,7 @@ An awaited call's memory sits inside its caller's, so a function that awaits
 itself, directly or through others, would need memory without end. It is
 refused; write it as a loop:
 
-```ts nish:err NL2630
+```ts nish:err NL2648
 async function countdown(n: i32): Promise<void> {
   if (n > 0) {
     await countdown(n - 1);

@@ -1,5 +1,5 @@
 // Part 1 of WP49 stage 4 checks `async` and refuses to compile it: this
-// program passes every rule, and the lowering is the next release's (NL2635).
+// program passes every rule, and the lowering is the next release's (NL2653).
 import { awaitAll, spawn } from "nish:async"
 
 async function double(x: i32): Promise<i32> {

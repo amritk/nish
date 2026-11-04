@@ -1,5 +1,5 @@
 // An `await` inside a larger expression: it stands at the top of a statement,
-// so its answer is named before it is used (NL2624).
+// so its answer is named before it is used (NL2642).
 async function load(x: i32): Promise<i32> {
   return x
 }

@@ -875,32 +875,32 @@ export const main = (): i32 => {
 
 ### Async functions: checked, not yet compiled
 
-`async` is checked by this release and refused at the end with `NL2635`
+`async` is checked by this release and refused at the end with `NL2653`
 (`` `async` function `run` is checked, but not yet compiled ``); a program
 without it is untouched. Write it to these rules now and it compiles once the
 lowering ships:
 
 - `async` goes on a top-level `function` or an arrow, never a method
-  (`NL1063`). Its return type is `Promise<T>` (`NL2637`), and `Promise<T>`
-  appears nowhere else — not on a parameter, field, local or alias (`NL2636`).
-- **`await` takes a direct call to an `async` function** (`NL2625` for a value,
-  `NL2626` for a plain function's call), **at the top of a statement**: alone,
+  (`NL1063`). Its return type is `Promise<T>` (`NL2655`), and `Promise<T>`
+  appears nowhere else — not on a parameter, field, local or alias (`NL2654`).
+- **`await` takes a direct call to an `async` function** (`NL2643` for a value,
+  `NL2644` for a plain function's call), **at the top of a statement**: alone,
   as a `const`/`let` initializer, after `return`, or right of a plain `=`.
-  Anywhere inside a larger expression is `NL2624`, so bind first:
+  Anywhere inside a larger expression is `NL2642`, so bind first:
   `const n = await load(1); console.log(n);`.
-- An `async` call that is not awaited is `NL2627`: a promise is never a value.
-  No `.then` (`NL2632`), no `Promise.all` (`NL2631`), no `for await`
+- An `async` call that is not awaited is `NL2645`: a promise is never a value.
+  No `.then` (`NL2650`), no `Promise.all` (`NL2649`), no `for await`
   (`NL2133`).
 - Several at once: `import { awaitAll, spawn } from "nish:async"`, then
   `const [a, b] = await awaitAll(f(x), g(y))` (two to eight calls, one name
-  each, `NL2629`). `spawn(f(x))` starts a task without waiting; `f` answers
-  `void` or a `Result` (`NL2628`).
-- No recursion through `await`, direct or mutual (`NL2630`): write a loop.
+  each, `NL2647`). `spawn(f(x))` starts a task without waiting; `f` answers
+  `void` or a `Result` (`NL2646`).
+- No recursion through `await`, direct or mutual (`NL2648`): write a loop.
 - An `async` arrow goes only to a parameter whose function type answers
-  `Promise<T>` (`NL2621`), and only an `async` one goes there (`NL2622`).
-- No `async` under a wasm target or `--profile wasi` (`NL2634`).
+  `Promise<T>` (`NL2639`), and only an `async` one goes there (`NL2640`).
+- No `async` under a wasm target or `--profile wasi` (`NL2652`).
 
-```ts nish:err NL2624
+```ts nish:err NL2642
 async function load(id: i32): Promise<i32> {
   return id;
 }

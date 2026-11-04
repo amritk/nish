@@ -1,5 +1,5 @@
 // A call to an async function with no `await`: its promise would be a value
-// (NL2627).
+// (NL2645).
 async function load(x: i32): Promise<i32> {
   return x
 }

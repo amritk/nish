@@ -1,5 +1,5 @@
 // `--profile wasi` builds a wasm module, which has no event loop to resume a
-// task, so an `async` function is refused there too (NL2634).
+// task, so an `async` function is refused there too (NL2652).
 async function double(x: i32): Promise<i32> {
   return x * 2
 }
