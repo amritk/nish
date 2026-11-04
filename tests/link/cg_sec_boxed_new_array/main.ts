@@ -5,13 +5,7 @@
 // anything is allocated, as `cg_sec_new_array_negative` pins for the header
 // path. A length that fits is still taken as it stands.
 // docs/security/codegen.md, CG-1 and CG-2.
-class Buf {
-  bytes: u8[];
-
-  constructor(n: i32) {
-    this.bytes = new Array<u8>(n);
-  }
-}
+import { Buf } from "./lib";
 
 export const main = (): number => {
   const fits = new Buf(toI32(parseInt("5")));
