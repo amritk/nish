@@ -7,24 +7,27 @@
 //
 //   main <case> <iterations>
 //
-//     browser   a 700-byte browser GET: Accept, Accept-Language, User-Agent,
-//               Cookie and an HS256 Bearer token
-//     api       a 290-byte API client's POST with a Bearer token and a
-//               60-byte JSON body
+//     browser   a 756-byte browser GET: Accept, Accept-Language, User-Agent,
+//               Cookie and a 251-byte HS256 Bearer token
+//     api       an API client's POST: a 254-byte head with a 64-character
+//               opaque Bearer token, and a 61-byte JSON body
 //     short     `GET / HTTP/1.1` and Host, 37 bytes
 //     pipelined the API POST and the browser GET in one read
 //     split     the browser GET in two reads, cut inside its Cookie line
 //     json1k, json4k, json16k, json40k
-//               the short GET answered with that much JSON
+//               the short GET answered with up to that much JSON: 1,008,
+//               3,943, 16,193 and 40,760 bytes in the first iteration
 //
 // Each iteration feeds the case's reads, takes every request they hold to
 // its end, answers it, and drains the output. On each request the program
 // does what a router does: `methodIs` for GET, POST, PUT and DELETE, and
 // `headerIndex("authorization")`. It prints `checksum xxxxxxxx` on stdout
 // and the timed loop's nanoseconds as `ns N` on stderr. The checksum folds
-// every response's bytes in the first iteration, and every request's
-// length, status digit, method, field count and body bytes in all of them,
-// so two builds that parse or answer differently disagree on it.
+// every response's bytes in the first iteration, and every iteration's
+// read count and every request's target length, method, field count,
+// Authorization index and body bytes in all of them, so two builds that
+// parse or answer differently disagree on it, and `split` does not share
+// `browser`'s.
 
 import { JsonWriter } from "nish/json"
 import {
@@ -83,13 +86,13 @@ const b64 = (n: i32, seed: i32): string => {
 }
 
 /**
- * A 251-byte HS256 JWT: the usual protected header, a 165-character claims
- * part (about 120 bytes of JSON: sub, name, email, iat, exp) and a 43-character
- * signature.
+ * A 251-byte HS256 JWT: the usual 36-character protected header, a
+ * 170-character claims part (about 127 bytes of JSON: sub, name, email, iat,
+ * exp) and a 43-character signature.
  */
 const jwt = (): string => `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${b64(170, 7)}.${b64(43, 11)}`
 
-/** A browser's GET for a page's data: 700-odd bytes, the Cookie and Authorization lines the longest. */
+/** A browser's GET for a page's data: 756 bytes, the Cookie and Authorization lines the longest. */
 const browserHead = (): string =>
   "GET /api/articles?limit=20&offset=0&tag=dragons HTTP/1.1\r\n" +
   "Host: conduit.example.com\r\n" +
@@ -103,16 +106,21 @@ const browserHead = (): string =>
   "Connection: keep-alive\r\n" +
   "\r\n"
 
-/** The JSON an API client posts. */
+/** The JSON an API client posts: 61 bytes. */
 const API_BODY: string = '{"article":{"title":"How to train your dragon","tagList":[]}}'
 
-/** An API client's POST: about 290 head bytes and a JSON body. */
+/**
+ * An API client's POST: a 254-byte head, its Bearer token a 64-character
+ * opaque API token, and the JSON body.
+ */
 const apiRequest = (): string =>
   "POST /api/articles HTTP/1.1\r\n" +
   "Host: api.example.com\r\n" +
+  "User-Agent: conduit-client/2.4.1\r\n" +
+  "Accept: application/json\r\n" +
   "Content-Type: application/json\r\n" +
   `Content-Length: ${API_BODY.length}\r\n` +
-  `Authorization: Bearer ${jwt()}\r\n` +
+  `Authorization: Bearer ${b64(64, 13)}\r\n` +
   "\r\n" +
   API_BODY
 
@@ -246,6 +254,7 @@ class Bench {
   run(n: i32): void {
     const conn: Http1Connection = this.conn
     let served: i32 = 0
+    this.sum = mix(this.sum, toU32(this.c.reads.length))
     for (const read of this.c.reads) {
       // `Http1Server.readable`: the room, the read, the clocks.
       const len: i32 = toI32(read.length)

@@ -9,6 +9,13 @@
 //   npm run build && node bench/http1-request/run.mjs [options] [--compiler <nish>]
 //     --validate         build, run every case once and check its pinned
 //                        checksum, and stop: no timing
+//     --instructions     count, instead of timing, the instructions one
+//                        iteration and one request of every case executes in
+//                        each build (the copies left out), under valgrind's
+//                        cachegrind with --cache-sim=no: a run of 2N
+//                        iterations less a run of N, over N, so start-up and
+//                        calibration cancel. The figure the ranking rests on;
+//                        the same with --cpu and --base as the timing
 //     --rounds N         timed rounds a case runs at least (default 11); the
 //                        median is reported with the min–max spread
 //     --cpu <cpu>        x86-64, the baseline and the default, or x86-64-v3,
@@ -46,17 +53,20 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
 const nishc = compilerFrom(process.argv)
 
-/** Each case as `main <case> <iterations>` takes it, and the checksum one iteration prints. */
+/**
+ * Each case as `main <case> <iterations>` takes it, the requests one
+ * iteration holds, and the checksum one iteration prints.
+ */
 const CASES = [
-  { name: "browser", known: "3e45cffd" },
-  { name: "api", known: "b0926a5b" },
-  { name: "short", known: "1e2fdca7" },
-  { name: "pipelined", known: "e795f9f5" },
-  { name: "split", known: "3e45cffd" },
-  { name: "json1k", known: "32b39f93" },
-  { name: "json4k", known: "a9b6140d" },
-  { name: "json16k", known: "f1e59043" },
-  { name: "json40k", known: "e5b174f2" },
+  { name: "browser", requests: 1, known: "a9dc71a8" },
+  { name: "api", requests: 1, known: "6b37847a" },
+  { name: "short", requests: 1, known: "f730d88a" },
+  { name: "pipelined", requests: 2, known: "2569067a" },
+  { name: "split", requests: 1, known: "f0a2967d" },
+  { name: "json1k", requests: 1, known: "ce28ee06" },
+  { name: "json4k", requests: 1, known: "4a907f5a" },
+  { name: "json16k", requests: 1, known: "c873f212" },
+  { name: "json40k", requests: 1, known: "e2585b39" },
 ]
 /** The nanoseconds a calibrated run aims at. */
 const TARGET_NS = 200e6
@@ -68,6 +78,7 @@ const fail = (msg) => {
 
 let rounds = 11
 let validate = false
+let instructions = false
 let cpu = "x86-64"
 let baseRev = null
 const only = []
@@ -79,6 +90,8 @@ for (let i = 2; i < argv.length; i++) {
     rounds = Number(argv[++i])
   } else if (a === "--validate") {
     validate = true
+  } else if (a === "--instructions") {
+    instructions = true
   } else if (a === "--cpu") {
     cpu = argv[++i] ?? ""
   } else if (a === "--base") {
@@ -219,6 +232,75 @@ if (validate) {
   console.log(
     `bench/http1-request: ${cases.length} cases, ${columns.length} columns, every checksum as pinned`
   )
+  process.exit(0)
+}
+
+/**
+ * glibc's choice of `memcpy` and `memset`, pinned to the SSE2 baseline as
+ * bench/run.mjs pins it for its counts, so the count does not depend on the
+ * host's AVX2 or ERMS.
+ */
+const PINNED_LIBC = [
+  "glibc.cpu.hwcaps=-AVX_Fast_Unaligned_Load,-AVX2,-AVX512F,-AVX512VL,-ERMS,-FSRM,-SSSE3",
+  "glibc.cpu.x86_non_temporal_threshold=0x0fffffffffffffff",
+  "glibc.cpu.x86_rep_movsb_threshold=0x0fffffffffffffff",
+  "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
+].join(":")
+
+/** The iterations the shorter of an instruction count's two runs takes; the longer takes twice. */
+const COUNT_ITERATIONS = 500
+
+/** The instructions `main <case> <iterations>` executes under cachegrind, the whole process. */
+const countRun = (column, c, iterations) => {
+  const dir = path.dirname(column.bin)
+  const file = path.join(dir, `${path.basename(column.bin)}-${c.name}-${iterations}.cachegrind`)
+  const r = spawnSync(
+    "valgrind",
+    [
+      "--tool=cachegrind",
+      "--cache-sim=no",
+      `--cachegrind-out-file=${file}`,
+      `./${path.basename(column.bin)}`,
+      c.name,
+      String(iterations),
+    ],
+    { cwd: dir, env: { GLIBC_TUNABLES: PINNED_LIBC }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+  )
+  if (r.error !== undefined || r.status !== 0) {
+    fail(`cachegrind ${column.id} ${c.name} ${iterations}: ${r.error?.message ?? `exit ${r.status}`}\n${r.stderr}`)
+  }
+  const m = /^summary: (\d+)$/m.exec(fs.readFileSync(file, "utf8"))
+  fs.rmSync(file)
+  if (m === null) {
+    fail(`cachegrind ${column.id} ${c.name}: no summary line`)
+  }
+  return Number(m[1])
+}
+
+if (instructions) {
+  if (spawnSync("valgrind", ["--version"]).status !== 0) {
+    fail("--instructions needs valgrind on PATH")
+  }
+  const counted = columns.filter((col) => !col.id.endsWith("-copy"))
+  console.log(
+    `instructions: cachegrind --cache-sim=no, built --cpu ${cpu}; one iteration is a run of ${2 * COUNT_ITERATIONS}` +
+      ` iterations less a run of ${COUNT_ITERATIONS}, over ${COUNT_ITERATIONS}` +
+      (baseRev !== null ? `; base: std/ at ${baseRev}` : "")
+  )
+  const W = [10, 10, 16, 14, 9]
+  const row = (cells) => cells.map((x, i) => (i < 2 ? x.padEnd(W[i]) : x.padStart(W[i]))).join(" ")
+  console.log(row(["case", "column", "an iteration", "a request", "vs nish"]))
+  for (const c of cases) {
+    let nish = 0
+    for (const col of counted) {
+      const per = (countRun(col, c, 2 * COUNT_ITERATIONS) - countRun(col, c, COUNT_ITERATIONS)) / COUNT_ITERATIONS
+      if (col.id === "nish") {
+        nish = per
+      }
+      const vs = col.id === "nish" ? "" : `${per >= nish ? "+" : ""}${((100 * (per - nish)) / nish).toFixed(1)}%`
+      console.log(row([c.name, col.id, per.toFixed(0), (per / c.requests).toFixed(0), vs]))
+    }
+  }
   process.exit(0)
 }
 
