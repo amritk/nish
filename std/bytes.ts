@@ -26,7 +26,10 @@
  * inside a call, and after `getU32LE` inlines, LLVM keeps the checks on
  * `off + 1` to `off + 3`, because the guard compares the length truncated to
  * `i32` and the checks compare it unsigned at 64 bits. A loop that needs them
- * gone indexes the bytes itself.
+ * gone indexes the bytes itself. `getU64BE`, and with it `getI64BE` and
+ * `getF64BE`, is the exception: it checks the whole range once and reads the
+ * eight bytes unchecked, which lowers to one load and a byte swap. An offset
+ * outside the range still goes byte by byte, so it panics as the others do.
  *
  * The in-range answers are byte for byte those of the copies `std/` keeps for
  * itself: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
@@ -100,7 +103,12 @@ const getU64BEByByte = (b: u8[], off: i32): u64 => {
   return v
 }
 
-/** The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`. */
+/**
+ * The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`.
+ * The fast path's ors are grouped in pairs: LLVM folds that tree into one load
+ * and a `bswap`, and left a chain of eight `or`s byte by byte. The byte loop
+ * is its own function so its last load is not merged with the fast path's.
+ */
 export const getU64BE = (b: u8[], off: i32): u64 => {
   if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
     return (
@@ -112,6 +120,9 @@ export const getU64BE = (b: u8[], off: i32): u64 => {
   }
   return getU64BEByByte(b, off)
 }
+
+/** `getU32LE`'s bits as a two's-complement `i32`. */
+export const getI32LE = (b: u8[], off: i32): i32 => toI32(getU32LE(b, off))
 
 /** `getU32BE`'s bits as a two's-complement `i32`. */
 export const getI32BE = (b: u8[], off: i32): i32 => toI32(getU32BE(b, off))

@@ -28,6 +28,7 @@ nothing. Two Low findings are recorded, both fixed:
 | --- | --- |
 | `runtime/runtime-bytes.c` | `nish_bytes_skip_blank`, `nish_bytes_skip_digits`, `nish_bytes_skip_json_text`, `nish_bytes_skip_json_plain`; the helpers `nish_run_in`, `nish_run_utf8`, `nish_run_wide`, `nish_run_scalar`, `nish_run_resume`, `nish_plain_scalar`, `nish_plain_base`, the SSE2/AVX2/NEON/wasm block walkers, `nish_cpu_has_avx2`, `nish_run_choose`, `nish_run_settle` and the resolver |
 | `std/bytes.ts` | `bytesRunEnd`, `bytesRunStart`, `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain`, `copyBytes`, and the walkers they lower from |
+| `std/bytes.ts` | `getU64BE` and `getU64BEByByte`: the single range check of an eight-byte big-endian read, which `getI64BE` and `getF64BE` call |
 | `src/kernels.ts`, `src/emit-arrays.ts`, `src/std-modules.ts` | `bytesWalkOf`, `bytesKernelOf`, `emitBytesKernel`, `bytePointer`, `isBytesModule` |
 | `src/runtime.ts`, `runtime/nish.h` | the kernel declarations and their contract |
 | `src/secret.ts` | `isPureRuntime`'s admission of the four kernels |
@@ -94,6 +95,21 @@ most 2^31-1 and `count >= 0`, neither subtraction overflows, so the copy is
 inside both arrays. Overlap is a `memmove`. The fixture pins only a source
 range past the end; the other edges and the overlap order were checked in the
 audit and are not yet pinned.
+
+**An eight-byte big-endian read checks its range once and panics as before**
+(`link/std_bytes_read_be_end`, `link/std_bytes_read_be_short`,
+`link/std_bytes_read_be_empty`, `link/std_bytes_read_be_cap`,
+`link/std_bytes_read_max_offset`). `getU64BE` reads the eight bytes without
+a per-byte check only when `off >= 0`, `off < 2147483640` and
+`off + 8 <= toI32(b.length)`. The cap keeps `off + 8` from overflowing, and
+the checker proves each of `b[off]` to `b[off + 7]` from the guard. Any other
+offset goes to `getU64BEByByte`, the earlier loop, which checks each index and
+panics `index` on the first byte not in the array, so the panic text is
+unchanged. An array longer than 2^31-1 (BYTES-1) makes `toI32(b.length)`
+negative, or smaller than the real length, so the guard can only refuse an
+in-range read, never pass one that is out of range. The fixtures pin a read
+ending on the array's last byte, one byte short, an empty array, the first
+capped offset and `INT32_MAX`.
 
 **Only the CLI's `nish/bytes` lowers to the kernels** (none yet). `isBytesModule`
 matches the module by package as well as path. A `std/bytes.ts` compiled as a
