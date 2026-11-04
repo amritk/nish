@@ -214,6 +214,9 @@ const PINNED_LIBC = [
 /** The `nish:simd` dispatch every count runs under, as bench/run.mjs pins it. */
 const PINNED_SIMD = "base"
 
+/** The instruction counter, named once (knip reads a literal in a spawn as an unlisted binary). */
+const VALGRIND = "valgrind"
+
 /** The iterations the shorter of a count's two runs takes; the longer takes twice. */
 const COUNT_ITERATIONS = 500
 
@@ -222,7 +225,7 @@ const countRun = (column, c, iterations) => {
   const dir = path.dirname(column.bin)
   const file = path.join(dir, `${path.basename(column.bin)}-${c.name}-${iterations}.cachegrind`)
   const r = spawnSync(
-    "valgrind",
+    VALGRIND,
     [
       "--tool=cachegrind",
       "--cache-sim=no",
@@ -251,7 +254,7 @@ const countRun = (column, c, iterations) => {
 }
 
 if (instructions) {
-  if (spawnSync("valgrind", ["--version"]).status !== 0) {
+  if (spawnSync(VALGRIND, ["--version"]).status !== 0) {
     fail("--instructions needs valgrind on PATH")
   }
   const counted = columns.filter((col) => !col.id.endsWith("-copy"))

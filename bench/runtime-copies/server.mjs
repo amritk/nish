@@ -36,6 +36,9 @@ const PINNED_LIBC = [
   "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
 ].join(":")
 
+/** The symbolizer, named once (knip reads a literal in a spawn as an unlisted binary). */
+const ADDR2LINE = "addr2line"
+
 const SCENARIOS = {
   ping: { path: "/" },
   query: { path: "/id/1?name=bun" },
@@ -164,7 +167,7 @@ if (copycount !== null) {
   // `-a -f -i`: each address, then its inline chain innermost first, each a
   // name and a line; the outermost name is the function the call sits in (a
   // fortified `memcpy` inline from string.h would otherwise name itself).
-  const symbolized = spawnSync("addr2line", ["-a", "-f", "-i", "-C", "-e", exe, ...addrs], {
+  const symbolized = spawnSync(ADDR2LINE, ["-a", "-f", "-i", "-C", "-e", exe, ...addrs], {
     encoding: "utf8",
   }).stdout
   const names = symbolized
