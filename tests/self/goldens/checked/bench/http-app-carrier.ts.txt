@@ -2059,13 +2059,20 @@ function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
   stackSites=0 stackLocals=0
   local +0:7 v: u64 (let)
   local +1:12 i: i32 (let)
-function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+function getU64BEByByte(b: u8[], off: i32): u64 -> @nish.getU64BEByByte
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 v: u64 (let)
   local +1:12 i: i32 (let)
+function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BEByByte
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BEByByte#0
+  stackSites=0 stackLocals=0
+  callee +0:10 getU64BEByByte -> @nish.getU64BEByByte
 function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: off
