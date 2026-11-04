@@ -745,8 +745,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * spaces (96), recovery's ECN state and the connection's `ecnMarking` and
  * `datagramEcn` (24 with padding). Whether a packet was marked rides in its state
  * byte, so the sent-packet rings grew by nothing.
+ *
+ * Moved to **110,536 bytes** (-1,152) when array fields of unknown length became
+ * boxed: such a field holds its `len` and `data` in the object, so the 24-byte
+ * header each one used to allocate is gone (`docs/LANGUAGE.md`, "Fixed-length
+ * array fields are stored inline").
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111688
+export const HTTP3_SERVER_SLOT_BYTES = 110536
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

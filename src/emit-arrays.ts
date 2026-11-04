@@ -593,7 +593,7 @@ export const emitBoxedArrayAssignment = (emitter: Emitter, expr: Node, field: Fi
     if (n > 0) {
       const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`)
       let i = 0
-      while (i < n) {
+      while (i < values.length) {
         const slot = emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${i}`)
         storeElement(emitter, slot, elem, values[i])
         i = i + 1
