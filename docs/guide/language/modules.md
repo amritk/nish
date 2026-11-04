@@ -52,8 +52,10 @@ in yours, and what it answers needs no annotation. If `box.ts` exports
 `main.ts` never writes `Box<i32>`.
 
 A declaration without `export` is private to its file, and importing it is an
-error that tells you to add `export`. Modules have no top-level code that
-runs, so two modules may import each other.
+error that tells you to add `export`. An imported module has no top-level
+code that runs, so two modules may import each other. Only the file you
+compile may hold statements at the top level, and only when it declares no
+`main` ([Your first program](../getting-started/first-program.md#without-main)).
 
 ## The one import form
 

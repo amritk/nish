@@ -66,6 +66,7 @@ import {
   N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
+  N_VAR,
   N_IF,
   N_EXPORT_ASSIGNMENT,
   N_EXPORT_DECLARATION,
@@ -104,6 +105,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
+import { declarationName, lateUses, scriptMain } from "./script"
 import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER, SORT_LOCAL, SORT_SPECIFIER } from "./std-modules"
 import {
   AliasInfo,
@@ -876,6 +878,7 @@ export class Checker {
    * `context.ts` is how a language without exceptions reaches it.
    */
   checkBodies(): void {
+    this.checkScript()
     for (const sig of this.program.functions) {
       // WP18 G5: a method of an instantiated class is already in this list —
       // `collectStructMembers` put it where a declared class's method goes —
@@ -885,6 +888,47 @@ export class Checker {
       // of the function this loop is on when it is appended.
       if (sig.instance === null && !sig.lifted && sig.definedIn(this.program.source)) {
         this.checkFunctionBody(sig)
+      }
+    }
+  }
+
+  /**
+   * The rules an entry module's top-level code keeps so that the same source
+   * means the same thing natively and under Node (`src/script.ts`). Natively
+   * the code runs as `main`, after everything is declared; under Node it runs
+   * where it stands, in the module's own scope. So a value the code could
+   * reach must be declared above it, and a variable of the code may not share
+   * a name with anything the module declares or imports.
+   */
+  checkScript(): void {
+    const main = scriptMain(this.program.file)
+    if (main === null) {
+      return
+    }
+    for (const late of lateUses(this.program.file, main)) {
+      const name = declarationName(late.decl)
+      const line = this.program.source.lineOf(late.stmt.start)
+      this.ctx.error(
+        name,
+        `\`${name.text}\` is declared below the top-level code on line ${line} that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line`
+      )
+    }
+    for (const stmt of main.children[3].children) {
+      if (stmt.kind !== N_VAR) {
+        continue
+      }
+      for (const decl of stmt.children[0].children) {
+        const name = decl.children[0]
+        if (name.kind !== N_IDENT) {
+          continue
+        }
+        this.program.scriptLocals.add(name.text)
+        if (this.nameTaken(name.text) || this.program.builtinImport(name.text) !== null) {
+          this.ctx.error(
+            name,
+            `\`${name.text}\` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one`
+          )
+        }
       }
     }
   }

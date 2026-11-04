@@ -140,7 +140,11 @@ everywhere, a template literal instead of `String(n)`.
 - A module is one `.ts` file. At the top level it may hold **only**
   declarations: `const` arrows (functions), `class`, `interface`, module
   `const`s, `type` aliases, numeric `enum`s, and `import`s. There is no
-  top-level code, so there is no initialisation order to think about.
+  top-level code, so there is no initialisation order to think about. The
+  one exception is an entry module with no `main`: its top-level statements
+  run as `main` (`docs/LANGUAGE.md` → "Top-level code"). Declare every
+  function above the first statement, and pass a function what it needs
+  rather than naming a variable of the code.
 - `export const main` lives in the entry module only, takes no parameters, and
   returns `void` or an `i32`-lowered `number` — the process exit code. Under
   `--number-mode f64`, declare it `main(): i32`.

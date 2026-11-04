@@ -476,6 +476,8 @@ cases/rng_generic added after R6: no rewriter to freeze it with
 cases/rng_param added after R6: no rewriter to freeze it with
 cases/rng_widen added after R6: no rewriter to freeze it with
 cases/sandbox_hello added after R6: no rewriter to freeze it with
+cases/script_basic added after R6: no rewriter to freeze it with
+cases/script_exit added after R6: no rewriter to freeze it with
 cases/secret_field added after R6: no rewriter to freeze it with
 cases/secret_field_wipe_o2 added after R6: no rewriter to freeze it with
 cases/secret_field_wipe_o2_plain added after R6: no rewriter to freeze it with

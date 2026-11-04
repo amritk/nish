@@ -1,0 +1,1 @@
+`count` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it

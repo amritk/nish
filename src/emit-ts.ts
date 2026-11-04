@@ -9,7 +9,8 @@
 // `nish:secret`, whose `std/secret.ts` is not written. Last comes
 // `entry.ts`, the launcher: it installs the Node host, calls `main` and exits
 // with what it answered, which a module cannot do for itself because Nish's
-// `main` is called, not run at load.
+// `main` is called, not run at load. An entry written as top-level code is
+// written back as it was, and the launcher only imports it.
 //
 // What a module says is decided by the composer (`src/emit-ts-edits.ts`); this
 // file decides where it goes, what its imports name, and whether it may be
@@ -28,6 +29,7 @@ import { Edit } from "./diagnostics"
 import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
+import { scriptMain } from "./script"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
@@ -200,12 +202,23 @@ const braceList = (names: StringSet): string => {
 const runtimeImport = (keyword: string, names: StringSet): string =>
   names.size() === 0 ? "" : `${keyword} ${braceList(names)} from "${RUNTIME}"\n`
 
-/** The launcher: install the Node host, run `main`, exit with its code. */
-const launcher = (entryOut: string): string => {
+/**
+ * The launcher: install the Node host, run `main`, exit with its code. An
+ * entry written as top-level code (`src/script.ts`) runs as it is imported,
+ * so importing it is the whole run, and a run that ends exits 0, as the
+ * native `main` built around it does.
+ */
+const launcher = (entryOut: string, script: boolean): string => {
   const sb = new StringBuilder()
   sb.add("// Written by `nish --emit-ts`: runs the program's `main` under Node.\n")
   sb.add(`import "${RUNTIME}/node"\n`)
   sb.add(`import { exit } from "${RUNTIME}"\n`)
+  if (script) {
+    sb.add(`import "${relativeSpecifier(ENTRY_FILE, entryOut)}"\n`)
+    sb.add("\n")
+    sb.add("exit(0)\n")
+    return sb.toText()
+  }
   sb.add(`import { main } from "${relativeSpecifier(ENTRY_FILE, entryOut)}"\n`)
   sb.add("\n")
   sb.add("const code = main()\n")
@@ -342,13 +355,15 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     return result
   }
   let entryOut = ""
+  let script = false
   k = 0
   while (k < modules.length && k < outputs.length) {
     if (modules[k].isEntry) {
       entryOut = outputs[k]
+      script = scriptMain(modules[k].file) !== null
     }
     k = k + 1
   }
-  result.files.push(new EmittedFile(ENTRY_FILE, launcher(entryOut)))
+  result.files.push(new EmittedFile(ENTRY_FILE, launcher(entryOut, script)))
   return result
 }

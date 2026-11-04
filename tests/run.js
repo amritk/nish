@@ -1019,7 +1019,10 @@ const runCase = async (name) => {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
     // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
-    const hasEntry = /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
+    // A `script_*` case is one too: its top-level code becomes `main` (src/script.ts).
+    const hasEntry =
+      name.startsWith("script_") ||
+      /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
     const exe = path.join(buildDir, name)
     // WP20 T0: a case compiled with `--threads` references `@nish_arena` as a
     // thread-local global, so runtime.c has to define it as one. The macro is
