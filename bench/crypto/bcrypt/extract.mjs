@@ -1,25 +1,28 @@
 /**
- * The extraction experiment: is `bcryptBodyN` faster when each lane takes its
- * word's bytes as two low-and-second-byte pairs (`gen-body.mjs --lohi`: one
- * opaque copy gives bytes 0 and 1, the copy moved down by 16 bytes 2 and 3)?
- * It issues about 9% fewer instructions a lane half-round at three to five
- * lanes and 6% fewer at six, which can only show on a core that issue width
- * bounds (a 4-wide one, such as Skylake and Cascade Lake Xeons); a 6-wide
- * Emerald Rapids core runs both alike.
+ * The extraction experiment: is `bcryptBodyN` faster taking each lane's bytes
+ * as two low-and-second-byte pairs (the module: one opaque copy gives bytes 0
+ * and 1, the copy moved down by 16 bytes 2 and 3) than the way it had before
+ * (`gen-body.mjs --rotated`: one opaque copy rotated right by 8 gives bytes 1
+ * and 2, shifts of the word bytes 0 and 3)? The pairs issue about 9% fewer
+ * instructions a lane half-round at three to five lanes and 6% fewer at six,
+ * which shows on a core that issue width bounds (a 4-wide one, such as
+ * Skylake and Cascade Lake Xeons); a 6-wide Emerald Rapids core runs both
+ * about alike.
  *
  * Three copies of `std/crypto/bcrypt.ts` are built at each width in
  * `--widths`: the module itself through `nish/crypto/bcrypt`, `copy`, written
  * again by the generator unchanged and so byte for byte the module (checked),
- * and `lohi`. The module against its copy is the noise band. All programs
+ * and `rotated`. The module against its copy is the noise band. All programs
  * must print the same hash. They run in interleaved rounds (common.mjs).
  *
  * It prints two tables. The first counts, without running anything, each
- * width's round loop in the assembly `clang -O3` makes of the module's IR:
+ * width's round loop in the assembly `clang -O3` makes of the IR:
  * instructions, stack references (spills and reloads) and instructions a lane
  * half-round. The second is CPU ms per hash a lane: median and spread, the
- * fastest round, and `lohi` over the module three ways: on fastest rounds, on
- * medians, and the median of the rounds' own ratios (each round runs both,
- * so a slow stretch of the host slows both sides of its ratio).
+ * fastest round, and the module over `rotated` three ways: on fastest rounds,
+ * on medians, and the median of the rounds' own ratios (each round runs both,
+ * so a slow stretch of the host slows both sides of its ratio). Below 1 the
+ * module is faster.
  *
  * Usage: node bench/crypto/bcrypt/extract.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N] [--widths 3,4,5,6]
  * Build products go to build/bench/bcrypt/extract/.
@@ -54,7 +57,7 @@ fs.mkdirSync(dir, { recursive: true })
 const gen = path.join(import.meta.dirname, "gen-body.mjs")
 for (const [name, extra] of [
   ["copy", []],
-  ["lohi", ["--lohi"]],
+  ["rotated", ["--rotated"]],
 ]) {
   const made = run(process.execPath, [gen, "--module", path.join(dir, `bcrypt_${name}.ts`), ...extra])
   if (made.status !== 0) {
@@ -71,7 +74,7 @@ if (fs.readFileSync(path.join(dir, "bcrypt_copy.ts"), "utf8") !== module) {
 const kinds = [
   ["module", "nish/crypto/bcrypt", "bcrypt.ll"],
   ["copy", "./bcrypt_copy", "bcrypt_copy.ll"],
-  ["lohi", "./bcrypt_lohi", "bcrypt_lohi.ll"],
+  ["rotated", "./bcrypt_rotated", "bcrypt_rotated.ll"],
 ]
 const programs = widths.flatMap((w) =>
   kinds.map(([kind, from]) => ({
@@ -132,19 +135,21 @@ for (const [kind, , ll] of kinds.filter(([name]) => name !== "copy")) {
   }
   counted.set(kind, roundLoops(fs.readFileSync(asm, "utf8")))
 }
-console.log("Round loop of `bcryptBodyN` (`clang -O3` of the module's IR): instructions, stack references\n")
-console.log("| Lanes | module | lohi | module a lane half-round | lohi a lane half-round | lohi / module |")
+console.log("Round loop of `bcryptBodyN` (`clang -O3` of the IR): instructions, stack references\n")
+console.log(
+  "| Lanes | rotated | module | rotated a lane half-round | module a lane half-round | module / rotated |"
+)
 console.log("| ---: | ---: | ---: | ---: | ---: | ---: |")
 for (const w of [2, 3, 4, 5, 6]) {
+  const r = counted.get("rotated").get(w)
   const m = counted.get("module").get(w)
-  const l = counted.get("lohi").get(w)
-  if (!m || !l) {
+  if (!r || !m) {
     console.log(`| ${w} | not found | | | | |`)
     continue
   }
   const half = (x) => (x.count / (2 * w)).toFixed(2)
   console.log(
-    `| ${w} | ${m.count}, ${m.stack} | ${l.count}, ${l.stack} | ${half(m)} | ${half(l)} | ${(l.count / m.count).toFixed(3)} |`
+    `| ${w} | ${r.count}, ${r.stack} | ${m.count}, ${m.stack} | ${half(r)} | ${half(m)} | ${(m.count / r.count).toFixed(3)} |`
   )
 }
 
@@ -168,15 +173,15 @@ console.log(
   `\nCPU ms per cost-${cost} hash a lane (${hashes} hashes a round, ${rounds} rounds: median and spread, then fastest)\n`
 )
 console.log(
-  "| Lanes | module | copy | lohi | copy / module, paired | lohi / module, fastest | lohi / module, median | lohi / module, paired |"
+  "| Lanes | module | copy | rotated | copy / module, paired | module / rotated, fastest | module / rotated, median | module / rotated, paired |"
 )
 console.log("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
 for (const w of widths) {
-  const [m, c, l] = kinds.map(([kind]) => samples[programs.findIndex((p) => p.w === w && p.name === kind)])
-  const paired = (xs) => median(xs.map((x, i) => x / m[i])).toFixed(3)
+  const [m, c, r] = kinds.map(([kind]) => samples[programs.findIndex((p) => p.w === w && p.name === kind)])
+  const paired = (xs, ys) => median(xs.map((x, i) => x / ys[i])).toFixed(3)
   const row = (xs) => `${band(xs)}, ${fastest(xs).toFixed(1)}`
   console.log(
-    `| ${w} | ${row(m)} | ${row(c)} | ${row(l)} | ${paired(c)} | ${(fastest(l) / fastest(m)).toFixed(3)} | ${(median(l) / median(m)).toFixed(3)} | ${paired(l)} |`
+    `| ${w} | ${row(m)} | ${row(c)} | ${row(r)} | ${paired(c, m)} | ${(fastest(m) / fastest(r)).toFixed(3)} | ${(median(m) / median(r)).toFixed(3)} | ${paired(m, r)} |`
   )
 }
 console.log(`\nhash: ${[...outputs][0]}`)

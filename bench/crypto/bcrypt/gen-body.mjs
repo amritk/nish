@@ -9,20 +9,20 @@
 // `--check` compares every width's output with the module and exits 1 on a
 // difference, so a kernel edited by hand is caught. `--unroll` writes the 8
 // round pairs out with literal P indexes, freeing the loop counter's register;
-// `--lohi` takes each lane's bytes as two low-and-second-byte pairs: one
-// opaque copy of the word gives bytes 0 and 1, the copy moved down by 16
-// bytes 2 and 3, six instructions where the module's way takes seven;
-// `extract.mjs` counts and times it against the module.
+// `--rotated` writes the extraction the module had before the paired one: one
+// opaque copy of the word rotated right by 8 gives bytes 1 and 2, and bytes 0
+// and 3 are shifted out of the word itself, seven instructions where the
+// paired way takes six; `extract.mjs` counts and times it against the module.
 // `--module <out.ts>` writes a copy of the module with every width's body
 // written again, which `unroll.mjs` and `extract.mjs` time against the module.
 //
-// Usage: node bench/crypto/bcrypt/gen-body.mjs <width> [--unroll] [--lohi] | --check | --module <out.ts> [--unroll] [--lohi]
+// Usage: node bench/crypto/bcrypt/gen-body.mjs <width> [--unroll] [--rotated] | --check | --module <out.ts> [--unroll] [--rotated]
 import fs from "node:fs"
 
 const S = 1042
 const words = ["one", "two", "three", "four", "five", "six"]
 
-const body = (W, unroll = false, lohi = false) => {
+const body = (W, unroll = false, rotated = false) => {
   const L = []
   const p = (s) => L.push(s)
   const lanes = [...Array(W).keys()]
@@ -51,19 +51,23 @@ const body = (W, unroll = false, lohi = false) => {
     )
   }
   // From three lanes up, each lane's half-round is written whole before the
-  // next lane's, and its two middle bytes come from one copy of the word
-  // moved down by 8, behind the value barrier (`ctSelect(v, ~0, 0)` is `v`,
-  // opaque): the copy's low byte is byte 1 and its second byte byte 2, so the
-  // word is copied once for both. Three to five lanes rotate it, which a BMI2
-  // target does in one `rorx`; six shift it, which measured faster there on
-  // the default target. Two lanes keep the four shifts of the word itself,
-  // every lane's bytes before any lane's update: the copy measured slower
-  // there (docs/security/crypto-bcrypt.md, "Cascade Lake").
-  // `--lohi`: a second byte (`movzx` from `ah`, `bh`, `ch` or `dh`) needs its
-  // word in one of the four registers that have one, so at six lanes the
-  // sixth keeps the module's way: all six spill more than they save.
+  // next lane's, and its bytes come in two pairs, each the low and second
+  // byte of a copy behind the value barrier (`ctSelect(v, ~0, 0)` is `v`,
+  // opaque): one copy of the word gives bytes 0 and 1, and that copy moved
+  // down by 16, a second copy, gives bytes 2 and 3. The second byte is one
+  // `movzx` from `ah`, `bh`, `ch` or `dh`, so a lane takes its four bytes in
+  // six instructions; without the barriers LLVM folds the pairs back into
+  // shifts of the word. A second byte needs its word in one of the four
+  // registers that have one, so at six lanes the sixth lane keeps the
+  // previous way, one copy moved down by 8 for bytes 1 and 2 and two shifts
+  // of the word for 0 and 3: all six paired spill more than they save.
+  // `rotated` (`--rotated`) gives every lane that previous way, rotating the
+  // copy at three to five lanes, which a BMI2 target does in one `rorx`.
+  // Two lanes keep the four shifts of the word itself, every lane's bytes
+  // before any lane's update: the copy measured slower there
+  // (docs/security/crypto-bcrypt.md, "Cascade Lake").
   const copied = W >= 3
-  const paired = (k) => lohi && copied && k < Math.min(W, 5)
+  const paired = (k) => !rotated && copied && k < Math.min(W, 5)
   const copy = (v) => (W === 6 ? `${v} >>> 8` : `(${v} >>> 8) | (${v} << 24)`)
   const half = (x, y, n, plus, pad, tag) => {
     for (const k of lanes) {
@@ -131,10 +135,11 @@ const module = new URL("../../../std/crypto/bcrypt.ts", import.meta.url)
 
 if (process.argv[2] === "--module") {
   // A copy of the module with every width's body written again, unrolled
-  // with `--unroll`: the experiment `unroll.mjs` times against the module.
+  // with `--unroll` and in the previous extraction with `--rotated`: the
+  // experiments `unroll.mjs` and `extract.mjs` time against the module.
   const to = process.argv[3]
   if (!to || to.startsWith("--")) {
-    console.error("usage: node bench/crypto/bcrypt/gen-body.mjs --module <out.ts> [--unroll] [--lohi]")
+    console.error("usage: node bench/crypto/bcrypt/gen-body.mjs --module <out.ts> [--unroll] [--rotated]")
     process.exit(2)
   }
   const src = fs.readFileSync(module, "utf8").split("\n")
@@ -145,7 +150,7 @@ if (process.argv[2] === "--module") {
       console.error(`bcryptBody${W} differs from the generator; run --check`)
       process.exit(1)
     }
-    const again = body(W, process.argv.includes("--unroll"), process.argv.includes("--lohi"))
+    const again = body(W, process.argv.includes("--unroll"), process.argv.includes("--rotated"))
     src.splice(at, was.length, ...again.slice(1))
   }
   fs.writeFileSync(to, src.join("\n"))
@@ -172,4 +177,4 @@ if (![2, 3, 4, 5, 6].includes(width)) {
   console.error("usage: node bench/crypto/bcrypt/gen-body.mjs <2|3|4|5|6> | --check")
   process.exit(2)
 }
-console.log(body(width, process.argv.includes("--unroll"), process.argv.includes("--lohi")).join("\n"))
+console.log(body(width, process.argv.includes("--unroll"), process.argv.includes("--rotated")).join("\n"))
