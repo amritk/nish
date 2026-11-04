@@ -1373,18 +1373,35 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoi
   callee +82:19 stringLength -> @stringLength
   local +83:9 itemData: string (const)
   callee +83:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +84:3 IRFunction.emit -> @IRFunction.emit
-  local +85:9 afterItem: string (const)
-  callee +85:21 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +86:3 IRFunction.emit -> @IRFunction.emit
-  local +87:9 copyNext: string (const)
-  callee +87:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +88:3 IRFunction.emit -> @IRFunction.emit
-  callee +89:3 IRFunction.emit -> @IRFunction.emit
-  callee +91:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +92:9 tail: string (const)
-  callee +92:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +93:3 IRFunction.emit -> @IRFunction.emit
+  local +87:9 byteBlock: IRBlock (const)
+  callee +87:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local +88:9 bulkBlock: IRBlock (const)
+  callee +88:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local +89:9 nextBlock: IRBlock (const)
+  callee +89:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local +90:9 single: string (const)
+  callee +90:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +91:3 IRFunction.emit -> @IRFunction.emit
+  callee +92:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +93:9 byte: string (const)
+  callee +93:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +94:3 IRFunction.emit -> @IRFunction.emit
+  callee +95:3 IRFunction.emit -> @IRFunction.emit
+  callee +96:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +97:3 IRFunction.emit -> @IRFunction.emit
+  callee +98:3 IRFunction.emit -> @IRFunction.emit
+  callee +99:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +100:9 afterItem: string (const)
+  callee +100:21 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +101:3 IRFunction.emit -> @IRFunction.emit
+  local +102:9 copyNext: string (const)
+  callee +102:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +103:3 IRFunction.emit -> @IRFunction.emit
+  callee +104:3 IRFunction.emit -> @IRFunction.emit
+  callee +106:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +107:9 tail: string (const)
+  callee +107:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +108:3 IRFunction.emit -> @IRFunction.emit
 function elementBytes(emitter: Emitter, arr: string, elem: i32, idx: string): string -> @elementBytes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via slotType
