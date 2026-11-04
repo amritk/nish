@@ -1021,6 +1021,69 @@ the cores on those rows (20.4 µs to 30.5 µs), the kernel's share of the
 accept path. Peak RSS is the sum over the workers: 4 MB at 1 core, 8 MB at 2,
 13 MB at 4 on plaintext.
 
+## The HTTP/1.1 request parser
+
+`http1-parse/` times `nish/net/http1-codec`'s `Http1Parser` in nanoseconds a
+head, with no socket: one kept-alive parser in the server's mode (`keepText`
+off) is fed one request and asked for events until its `HTTP1_END`. Three
+heads: a loadgen GET (337 bytes: six lines and a 180-byte `Authorization`
+token), the same as a POST with a 60-byte JSON body (447 bytes), and a
+browser's GET (1,028 bytes, sixteen fields of a browser's lengths). Each is
+parsed by three builds in one binary: `new`, the live parser; `old`, main's
+parser frozen beside it by `freeze.mjs`; and `old-copy`, the same frozen code
+again, whose distance from `old` is the noise band. Every column must print
+the head's known checksum of what it parsed, so the three time the same work.
+
+```bash
+npm run build
+node bench/http1-parse/run.mjs                      # baseline x86-64, u8x16 on SSE2
+node bench/http1-parse/run.mjs --cpu x86-64-v3      # AVX2
+node bench/http1-parse/run.mjs --rounds 41          # a tighter median on a noisy box
+```
+
+**On the Cascade Lake VM** (the multicore-server-challenge box, Xeon Platinum
+8260, AVX2 and BMI2), from a checkout of this branch with Node 22 and LLVM 18:
+
+```bash
+bash scripts/fetch-seed.sh --force && npm run build
+lscpu | grep -E 'Model name|Flags' | cut -c1-200     # say which box it was
+taskset -c 2 node bench/http1-parse/run.mjs --rounds 41
+taskset -c 2 node bench/http1-parse/run.mjs --rounds 41 --cpu x86-64-v3
+```
+
+`taskset` keeps every round on one core, so a run does not move between cores
+mid-measure. The table's `ns/byte` is in the same unit as the figure the
+server profile there reported for `http1Next` (about 5 ns a byte), but the two
+do not compare directly. The bench parses one head in a warm loop with no
+socket, about 1 ns a byte, which is a hot-cache lower bound. The profile's
+figure includes the cache misses of a whole server.
+
+Wall time in a cloud container moves by 1 to 12% between identical builds, so
+the instruction count is the steadier verdict. Build `main.ts` with `-g` and
+count what one head retires under callgrind as the difference between two
+iteration counts, which leaves out the set-up:
+
+```bash
+build/nish bench/http1-parse/main.ts -o build/bench/h1g/ --link build/bench/h1g/p --profile speed -g
+for col in old new; do for h in 0 1 2; do
+  a=$(valgrind --tool=callgrind --callgrind-out-file=/dev/null build/bench/h1g/p $col $h 2000 2>&1 | sed -n 's/.*Collected : //p')
+  b=$(valgrind --tool=callgrind --callgrind-out-file=/dev/null build/bench/h1g/p $col $h 12000 2>&1 | sed -n 's/.*Collected : //p')
+  echo "$col head $h: $(( (b - a) / 10000 )) instructions a head"
+done; done
+```
+
+2026-11-03, the container (Xeon @ 2.80GHz, 24 rounds), against main's parser:
+
+| head | old ns | old-copy ns (band) | new ns | new against old / old-copy | instructions a head, old → new |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| loadgen GET, 337 bytes | 406.9 | 420.3 (±3.3%) | 344.9 (316.1–477.2) | −15.2% / −17.9% | 5,617 → 4,769 (−15%) |
+| loadgen POST, 447 bytes | 655.0 | 591.8 (±9.6%) | 483.8 (439.3–688.6) | −26.1% / −18.2% | 7,761 → 6,483 (−16%) |
+| browser GET, 1,028 bytes | 1,299.7 | 1,373.5 (±5.7%) | 1,024.4 (936.9–1,531.5) | −21.2% / −25.4% | 16,335 → 13,667 (−16%) |
+
+With `--cpu x86-64-v3` the three heads are −18.6%, −17.1% and −24.1% (bands
+±2.6%, ±0.4%, ±6.4%). What changed and what was tried and left is in
+`docs/BENCHMARKS.md` under "HTTP/1.1 request parser".
+
 ## Syscall cost
 
 Would io_uring pay for a keep-alive server? It saves syscall entries and exits,

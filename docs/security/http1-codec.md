@@ -124,15 +124,36 @@ first. A refusal once a response has started (a bad chunk size in a body the
 program is echoing) sends no second response and ends the connection.
 
 **A control byte in a field value is refused wherever it falls**
-(`net_http1`, `_f64`): the scan for a line's end reads sixteen bytes at a time
-while a whole block is field text, then a byte at a time, and it is also the
-check of the value: a control byte other than HTAB, or DEL, on a field line
-is a 400, with no second pass over the value. NUL, 0x01, 0x1f, DEL and a bare
+(`net_http1`, `_f64`): the scan for a line's end reads sixteen bytes at a time,
+stops at the first control byte or DEL of a block (the lowest set bit of its
+SWAR mask, exact because a borrow only carries upward from a true match), then
+reads the rest a byte at a time, and it is also the check of the value: a
+control byte other than HTAB, or DEL, on a field line is a 400, with no second
+pass over the value. NUL, 0x01, 0x1f, DEL and a bare
 CR placed at each of the forty bytes of a long value are each refused, and
 HTAB and an obs-text byte at each of them are read. At the block boundaries
 the stream is also cut at every byte, so a CR that ends what has arrived so
 far is read again with the byte after it, never taken as a line end or a
 refusal on its own.
+
+**A faster parser gives the same answers** (`tests/link/net_http1_parse_diff`,
+2026-11-03). The parser's speed work (the line scan that jumps to its control
+byte, CRLF taken in one step, the branch-free token check, a field name
+lowercased while it is scanned in `head`) is checked against main's parser
+frozen beside it in `old.ts`: both are fed the same bytes in the same pieces,
+and after every event they must agree on the event, the status and reason,
+and everything a caller can read. The default run, seed 1175, is 190,276 cases
+(the fuzz corpus and its regressions cut every way, every byte at every
+position of three requests, nine inserted bytes at every position, each limit
+at -1, 0 and +1, and 100,000 grammar requests) and 2,176,872 events, among
+them 161,448 refusals, in about 8 s; it must print the summary in
+`expected.out`. A header section of maxHeaderBytes - 1 or maxHeaderBytes
+bytes, empty line included, as one field or two, reads a head, and one more
+byte is a 431. A soak of seeds 1 to 4 at 250,000 grammar requests each
+(1,361,104 cases) agreed. Shifting the
+byte a block's upper half reports by one makes the default run fail at case
+6,719 (a 400 for a control byte where main gives 431), so the test sees an
+off-by-one in the scan. No limit, status or reason string changed.
 
 **One exchange at a time, in order** (`net_http1_server`): pipelined requests
 are answered in the order they came, because the next head is not read until

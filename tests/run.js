@@ -8051,6 +8051,17 @@ if (irDelegated > 0) {
 // shard 1: it builds every twin of five families, four and a half minutes of
 // a CI shard, and reads nothing another section writes.
 if (dealtHere("cryptoBench")) {
+  // bench/run.mjs carries a section over only when its marker matches
+  // `<!-- ([a-z-]+):begin -->`, so a marker with a digit or a capital is
+  // silently dropped by the next full rewrite of docs/BENCHMARKS.md.
+  const markers = [
+    ...fs.readFileSync(path.join(root, "docs", "BENCHMARKS.md"), "utf8").matchAll(/<!-- (\S+):begin -->/g),
+  ].map((m) => m[1])
+  check(
+    "crypto-bench: every <!-- name:begin --> section of docs/BENCHMARKS.md has a name bench/run.mjs carries over ([a-z-]+)",
+    markers.every((m) => /^[a-z-]+$/.test(m)),
+    `markers: ${markers.join(", ")}`
+  )
   if (HAS_CLANG) {
     const families = fs
       .readdirSync(path.join(root, "bench", "crypto"))
@@ -19341,9 +19352,9 @@ const cpuFeatures = new Set(
 const cpuHasSha =
   (process.arch === "x64" && cpuFeatures.has("sha_ni") && cpuFeatures.has("sse4_1") && cpuFeatures.has("ssse3")) ||
   (process.arch === "arm64" && cpuFeatures.has("sha2"))
-/** The modules of tests/link/<program> compiled into a directory of their own, or none with the reason. */
-const compileLinkModules = (program, dir, flags) => {
-  const r = spawnSync(NISH, [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags], {
+/** The modules of tests/link/<program>, or of `source`, compiled into a directory of their own, or none with the reason. */
+const compileLinkModules = (program, dir, flags, source = path.join("tests", "link", program, "main.ts")) => {
+  const r = spawnSync(NISH, [source, "-o", `${dir}${path.sep}`, ...flags], {
     cwd: root,
     encoding: "utf8",
     env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
@@ -20573,27 +20584,34 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
     )
     const unset = { ...process.env }
     delete unset.NISH_SHA256
+    /** `compiled`'s modules linked into `exe` with the kernel wrapped by the counter; null when nothing compiled. */
+    const linkCounted = (compiled, exe) =>
+      compiled.lls.length > 0
+        ? spawnSync(
+            "bash",
+            [
+              "scripts/build.sh",
+              ...compiled.lls,
+              "runtime/runtime.c",
+              counter,
+              "-Wl,--wrap=nish_sha256_compress",
+              "-o",
+              exe,
+              "--profile",
+              "debug",
+            ],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    /** The count the wrapper printed, or null. */
+    const calls = (r) => {
+      const m = /^sha256 kernel calls: (\d+)$/m.exec(r.stderr)
+      return m === null ? null : Number(m[1])
+    }
     for (const program of programs) {
       const compiled = compileLinkModules(program, path.join(shaDir, program), [])
       const exe = path.join(shaDir, `${program}.counted`)
-      const linked =
-        compiled.lls.length > 0
-          ? spawnSync(
-              "bash",
-              [
-                "scripts/build.sh",
-                ...compiled.lls,
-                "runtime/runtime.c",
-                counter,
-                "-Wl,--wrap=nish_sha256_compress",
-                "-o",
-                exe,
-                "--profile",
-                "debug",
-              ],
-              { cwd: root, encoding: "utf8" }
-            )
-          : null
+      const linked = linkCounted(compiled, exe)
       if (linked === null || linked.status !== 0) {
         check(`sha256 kernel: ${program} links with the kernel counted`, false, linked === null ? compiled.why : linked.stderr)
         continue
@@ -20601,11 +20619,6 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
       const want = expected(program)
       const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
       const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_SHA256: "soft" } })
-      /** The count the wrapper printed, or null. */
-      const calls = (r) => {
-        const m = /^sha256 kernel calls: (\d+)$/m.exec(r.stderr)
-        return m === null ? null : Number(m[1])
-      }
       check(
         `sha256 kernel: ${program} prints the same bytes with NISH_SHA256 unset and with NISH_SHA256=soft, and they are its expected.out`,
         hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
@@ -20624,6 +20637,249 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
           calls(hw) === 0,
           hw.stderr
         )
+      }
+    }
+
+    // The differential: a program hashes each path by argv[1] — sha
+    // (FIPS 180-4's five vectors, the padding-edge lengths, then 200 seeded messages
+    // of 0..1000 bytes), hmac (hmacSha256 over the same edges and the key edges, then
+    // 200 seeded keys of 0..200 bytes and messages of 0..1000), hs256
+    // (jwtSignString and verifyString under an HS256 key, the HmacKey path) and pbkdf2
+    // (pbkdf2HmacSha256, whose every U_j resumes a hasher with hmacCopySha256) — and
+    // Node's OpenSSL-backed crypto, fed the same xorshift32 stream, must print the same
+    // lines under NISH_SHA256 unset and soft, with the kernel counted as above. The
+    // program is written below, as the other sections here write theirs.
+    /** The program's xorshift32 stream: `below` and `bytes` as its Rng has them. */
+    const rng = (() => {
+      let x = 20261103
+      const next = () => {
+        x = (x ^ (x << 13)) >>> 0
+        x = (x ^ (x >>> 17)) >>> 0
+        x = (x ^ (x << 5)) >>> 0
+        return x
+      }
+      return { below: (bound) => next() % bound, bytes: (n) => Buffer.from(Array.from({ length: n }, () => next() & 255)) }
+    })
+    const sha = (b) => crypto.createHash("sha256").update(b).digest("hex")
+    const hmac = (k, m) => crypto.createHmac("sha256", k).update(m).digest()
+    const b64url = (b) => Buffer.from(b).toString("base64url")
+    const fips = [
+      "",
+      "abc",
+      "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+      "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
+    ]
+    // The lengths either side of a padding boundary, forced before the random
+    // draws: 55 is the longest message with its padding in one block, 56 the
+    // shortest that needs a second, and so on a block along. HMAC's inner hash
+    // runs over the 64-byte padded key first, so the same message lengths are
+    // its boundaries too; its key lengths either side of 64 are the hashed key.
+    const edges = [55, 56, 63, 64, 65, 119, 120, 127, 128, 129]
+    const keyEdges = [63, 64, 65, 128]
+    /** Node's lines for each mode, from a fresh stream. */
+    const wants = {
+      sha: (r) => [
+        ...fips.map((t) => sha(Buffer.from(t))),
+        sha(Buffer.alloc(1000000, 97)),
+        ...edges.map((n) => sha(r.bytes(n))),
+        ...Array.from({ length: 200 }, () => sha(r.bytes(r.below(1001)))),
+      ],
+      hmac: (r) => [
+        ...edges.map((n) => {
+          const key = r.bytes(32)
+          return hmac(key, r.bytes(n)).toString("hex")
+        }),
+        ...keyEdges.map((n) => {
+          const key = r.bytes(n)
+          return hmac(key, r.bytes(3)).toString("hex")
+        }),
+        ...Array.from({ length: 200 }, () => {
+          const key = r.bytes(r.below(201))
+          return hmac(key, r.bytes(r.below(1001))).toString("hex")
+        }),
+      ],
+      hs256: (r) => {
+        const key = r.bytes(32)
+        return Array.from({ length: 50 }, () => {
+          const body = `${b64url('{"alg":"HS256","typ":"JWT"}')}.${b64url(
+            `{"sub":"${r.bytes(r.below(300)).toString("hex")}","iat":1700000000,"exp":1700003600}`
+          )}`
+          return `${body}.${b64url(hmac(key, body))}`
+        })
+      },
+      pbkdf2: (r) =>
+        Array.from({ length: 10 }, () => {
+          const password = r.bytes(r.below(100))
+          const salt = r.bytes(16)
+          const iterations = 1 + r.below(500)
+          return crypto.pbkdf2Sync(password, salt, iterations, 1 + r.below(80), "sha256").toString("hex")
+        }),
+    }
+    const diffDir = path.join(shaDir, "differential")
+    const diffSource = path.join(diffDir, "main.ts")
+    fs.mkdirSync(diffDir, { recursive: true })
+    fs.writeFileSync(
+      diffSource,
+      [
+        "import { hmacSha256, pbkdf2HmacSha256 } from \"nish/crypto/hmac\"",
+        "import { JWT_ALG_HS256, JWT_MAX_TOKEN, JWT_OK, JwtKey, JwtVerifier, jwtHmacKey, jwtSignString } from \"nish/crypto/jwt\"",
+        "import { sha256 } from \"nish/crypto/sha256\"",
+        "import { Secret, exposeWith, secret, wipe } from \"nish:secret\"",
+        "",
+        "const HEX_DIGITS: string = \"0123456789abcdef\"",
+        "",
+        "const hexOf = (bytes: u8[]): string => {",
+        "  const parts: string[] = []",
+        "  for (const b of bytes) {",
+        "    const v: i32 = toI32(b)",
+        "    parts.push(HEX_DIGITS.substring(v >> 4, (v >> 4) + 1))",
+        "    parts.push(HEX_DIGITS.substring(v & 15, (v & 15) + 1))",
+        "  }",
+        "  return parts.join(\"\")",
+        "}",
+        "",
+        "/** Marsaglia's xorshift32, the steps tests/run.js mirrors. */",
+        "class Rng {",
+        "  x: u32 = 20261103",
+        "  next(): u32 {",
+        "    let x: u32 = this.x",
+        "    x = x ^ (x << 13)",
+        "    x = x ^ (x >>> 17)",
+        "    x = x ^ (x << 5)",
+        "    this.x = x",
+        "    return x",
+        "  }",
+        "  /** A value in 0 .. bound - 1. */",
+        "  below(bound: i32): i32 {",
+        "    return toI32(this.next() % toU32(bound))",
+        "  }",
+        "  /** `n` bytes, one step a byte. */",
+        "  bytes(n: i32): u8[] {",
+        "    const out: u8[] = new Array<u8>(n)",
+        "    for (let i: i32 = 0; i < toI32(out.length); i += 1) {",
+        "      out[i] = toU8(this.next() & 255)",
+        "    }",
+        "    return out",
+        "  }",
+        "}",
+        "",
+        "const ascii = (text: string): u8[] => {",
+        "  const out: u8[] = []",
+        "  for (let i: i32 = 0; i < toI32(text.length); i += 1) {",
+        "    out.push(toU8(text.charCodeAt(i)))",
+        "  }",
+        "  return out",
+        "}",
+        "",
+        "const hexPlain = (plain: u8[], unused: i32): string => hexOf(plain)",
+        "",
+        "export const main = (): i32 => {",
+        "  const mode: string = process.argv.length > 1 ? process.argv[1] : \"\"",
+        "  const rng: Rng = new Rng()",
+        `  const edges: i32[] = [${edges.join(", ")}]`,
+        `  const keyEdges: i32[] = [${keyEdges.join(", ")}]`,
+        "  if (mode === \"sha\") {",
+        "    console.log(hexOf(sha256(ascii(\"\"))))",
+        "    console.log(hexOf(sha256(ascii(\"abc\"))))",
+        "    console.log(hexOf(sha256(ascii(\"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq\"))))",
+        "    console.log(",
+        "      hexOf(",
+        "        sha256(",
+        "          ascii(",
+        "            \"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu\"",
+        "          )",
+        "        )",
+        "      )",
+        "    )",
+        "    const million: u8[] = new Array<u8>(1000000)",
+        "    for (let i: i32 = 0; i < toI32(million.length); i += 1) {",
+        "      million[i] = toU8(97)",
+        "    }",
+        "    console.log(hexOf(sha256(million)))",
+        "    for (const n of edges) {",
+        "      console.log(hexOf(sha256(rng.bytes(n))))",
+        "    }",
+        "    for (let i: i32 = 0; i < 200; i += 1) {",
+        "      console.log(hexOf(sha256(rng.bytes(rng.below(1001)))))",
+        "    }",
+        "    return 0",
+        "  }",
+        "  if (mode === \"hmac\") {",
+        "    for (const n of edges) {",
+        "      const key: u8[] = rng.bytes(32)",
+        "      console.log(hexOf(hmacSha256(key, rng.bytes(n))))",
+        "    }",
+        "    for (const n of keyEdges) {",
+        "      const key: u8[] = rng.bytes(n)",
+        "      console.log(hexOf(hmacSha256(key, rng.bytes(3))))",
+        "    }",
+        "    for (let i: i32 = 0; i < 200; i += 1) {",
+        "      const key: u8[] = rng.bytes(rng.below(201))",
+        "      console.log(hexOf(hmacSha256(key, rng.bytes(rng.below(1001)))))",
+        "    }",
+        "    return 0",
+        "  }",
+        "  if (mode === \"hs256\") {",
+        "    const raw: Secret<u8[]> = secret(rng.bytes(32))",
+        "    const key: JwtKey | null = jwtHmacKey(JWT_ALG_HS256, raw)",
+        "    wipe(raw)",
+        "    if (key === null) {",
+        "      return 1",
+        "    }",
+        "    const v = new JwtVerifier(JWT_MAX_TOKEN)",
+        "    for (let i: i32 = 0; i < 50; i += 1) {",
+        "      const token: string | null = jwtSignString(key, `{\"sub\":\"${hexOf(rng.bytes(rng.below(300)))}\",\"iat\":1700000000,\"exp\":1700003600}`)",
+        "      if (token === null || v.verifyString(key, token, toI64(1700000000)) !== JWT_OK) {",
+        "        key.wipe()",
+        "        return 1",
+        "      }",
+        "      console.log(token)",
+        "    }",
+        "    key.wipe()",
+        "    return 0",
+        "  }",
+        "  if (mode === \"pbkdf2\") {",
+        "    for (let i: i32 = 0; i < 10; i += 1) {",
+        "      const password: Secret<u8[]> = secret(rng.bytes(rng.below(100)))",
+        "      const dk: Secret<u8[]> | null = pbkdf2HmacSha256(password, rng.bytes(16), 1 + rng.below(500), 1 + rng.below(80))",
+        "      wipe(password)",
+        "      if (dk === null) {",
+        "        return 1",
+        "      }",
+        "      console.log(exposeWith(dk, 0, hexPlain))",
+        "      wipe(dk)",
+        "    }",
+        "    return 0",
+        "  }",
+        "  return 2",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const built = compileLinkModules("differential", diffDir, [], diffSource)
+    const diffExe = path.join(diffDir, "differential.counted")
+    const diffLinked = linkCounted(built, diffExe)
+    if (diffLinked === null || diffLinked.status !== 0) {
+      check(
+        "sha256 kernel: the SHA-256/HMAC differential program builds with the kernel counted",
+        false,
+        diffLinked === null ? built.why : diffLinked.stderr
+      )
+    } else {
+      for (const [mode, want] of Object.entries(wants)) {
+        const expectedLines = `${want(rng()).join("\n")}\n`
+        for (const { setting, env, kernel } of [
+          { setting: "unset", env: unset, kernel: cpuHasSha },
+          { setting: "soft", env: { ...unset, NISH_SHA256: "soft" }, kernel: false },
+        ]) {
+          const r = spawnSync(diffExe, [mode], { encoding: "utf8", env, maxBuffer: 1 << 26 })
+          const n = calls(r)
+          check(
+            `sha256 kernel: the ${mode} differential prints Node's lines with NISH_SHA256 ${setting}, calling the kernel ${kernel ? "at least once" : "never"}`,
+            r.status === 0 && r.stdout === expectedLines && (kernel ? (n ?? 0) > 0 : n === 0),
+            `exit ${r.status}, kernel calls ${n}\n${r.stderr}${r.stdout === expectedLines ? "" : `--- got\n${r.stdout.slice(0, 2000)}--- want\n${expectedLines.slice(0, 2000)}`}`
+          )
+        }
       }
     }
   }
