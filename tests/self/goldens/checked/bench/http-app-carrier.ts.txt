@@ -5178,7 +5178,7 @@ function http1FieldLine(p: Http1Parser, keep: boolean): i32 -> @nish.http1FieldL
   callee +2:12 http1Fail -> @nish.http1Fail
   local +6:9 valueStart: i32 (let)
   local +7:9 valueEnd: i32 (let)
-  callee +8:74 http1IsOws -> @nish.http1IsOws
+  callee +8:90 http1IsOws -> @nish.http1IsOws
   callee +11:58 http1IsOws -> @nish.http1IsOws
   local +14:11 base: i32 (const)
   callee +15:5 http1SpanSet -> @nish.http1SpanSet
