@@ -42,6 +42,14 @@
 // header, a `.d.ts`, an N-API shim, wasm, a declared C function
 // (`BuildMode.layoutsShared`) — inlines nothing.
 //
+// **Boxed when it cannot be sized.** A field that passes all of that but has
+// an assignment of unknown length, or whose `K` slots would pass 256 bytes,
+// is boxed (`FieldInfo.boxed`): the object keeps only `len` and `data` as
+// `{ i64, i8* }`, and the elements are a block of their own. The argument
+// above is the whole of why that is safe too; what it saves against the
+// pointer layout is the 24-byte header and its allocation, and one load per
+// access (`docs/LANGUAGE.md`, `docs/ARCHITECTURE.md`).
+//
 // **What the pass does not try.** A generic class, a class that `implements`
 // an interface (its prefix is another struct's layout), a record element type
 // (an inline record would hand out interior pointers into the object), and a
