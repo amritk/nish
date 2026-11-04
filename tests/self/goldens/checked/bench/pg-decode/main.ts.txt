@@ -5380,6 +5380,7 @@ import PG_GROUP_DONE from "nish/net/postgres" -> const PG_GROUP_DONE
 import PG_NEED_MORE from "nish/net/postgres" -> const PG_NEED_MORE
 import PG_READY from "nish/net/postgres" -> const PG_READY
 import PG_ROW from "nish/net/postgres" -> const PG_ROW
+import PgArrayWalker from "nish/net/postgres" -> struct PgArrayWalker
 import PgBinaryArray from "nish/net/postgres" -> struct PgBinaryArray
 import PgConfig from "nish/net/postgres" -> struct PgConfig
 import PgConnection from "nish/net/postgres" -> struct PgConnection
@@ -5404,6 +5405,12 @@ struct Bytes (class) size=16 align=8
   method start -> @Bytes.start
   method end -> @Bytes.end
   method done -> @Bytes.done
+struct Readers (class) size=32 align=8
+  field tags: PgBinaryArray index=0 offset=0
+  field walker: PgArrayWalker index=1 offset=8
+  field stamp: u8[] index=2 offset=16
+  field text: boolean index=3 offset=24
+  constructor -> @Readers.constructor
 function mix(h: u32, b: i32): u32 -> @mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -5507,10 +5514,34 @@ function nameOf(r: i32): string -> @nameOf
   local +0:9 length: i32 (const)
   local +1:9 out: string[] (const)
   local +2:12 i: i32 (let)
-function field(w: Bytes, name: string, oid: i32, size: i32): void -> @field
+function padded(v: i32, width: i32): string -> @padded
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:7 s: string (let)
+function stampOf(r: i32): string -> @stampOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow nish_str_concat padded
+  stackSites=0 stackLocals=0
+  local +0:9 seconds: i32 (const)
+  local +1:9 micros: i32 (const)
+  callee +2:24 padded -> @padded
+  callee +2:53 padded -> @padded
+  callee +2:87 padded -> @padded
+  callee +2:114 padded -> @padded
+function textColumn(w: Bytes, s: string): void -> @textColumn
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Bytes.i32
+  escaping: s
+  calls: Bytes.i32 Bytes.text
+  pointer w: size=16 writesThrough=true captured=false passedTo=Bytes.i32#0 Bytes.text#0
+  stackSites=0 stackLocals=0
+  callee +0:3 Bytes.i32 -> @Bytes.i32
+  callee +1:3 Bytes.text -> @Bytes.text
+function field(w: Bytes, name: string, oid: i32, size: i32, format: i32): void -> @field
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Bytes.cstring
-  escaping: name oid size
+  escaping: format name oid size
   calls: Bytes.cstring Bytes.i16 Bytes.i32
   pointer w: size=16 writesThrough=true captured=false passedTo=Bytes.cstring#0 Bytes.i32#0 Bytes.i16#0 Bytes.i32#0 Bytes.i16#0 Bytes.i32#0 Bytes.i16#0
   stackSites=0 stackLocals=0
@@ -5521,60 +5552,74 @@ function field(w: Bytes, name: string, oid: i32, size: i32): void -> @field
   callee +4:3 Bytes.i16 -> @Bytes.i16
   callee +5:3 Bytes.i32 -> @Bytes.i32
   callee +6:3 Bytes.i16 -> @Bytes.i16
-function rowStream(rows: i32): u8[] -> @rowStream
+function tagOf(r: i32, k: i32): i64 -> @tagOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function rowStream(rows: i32, binary: boolean): u8[] -> @rowStream
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Bytes.end
-  calls: Bytes.byte Bytes.constructor Bytes.cstring Bytes.done Bytes.end Bytes.i16 Bytes.i32 Bytes.i64 Bytes.start Bytes.text field nameOf nish_panic_overflow nish_str_concat nish_str_from_i32 tagCount
-  stackSites=1 stackLocals=1
+  calls: Bytes.byte Bytes.constructor Bytes.cstring Bytes.done Bytes.end Bytes.i16 Bytes.i32 Bytes.i64 Bytes.start Bytes.text field nameOf nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 stampOf tagCount tagOf textColumn
+  stackSites=2 stackLocals=2
   local +0:9 w: Bytes (const)
   callee +0:13 new Bytes -> @Bytes.constructor
-  callee +1:3 Bytes.end -> @Bytes.end
-  callee +1:9 Bytes.start -> @Bytes.start
-  local +2:9 t: i32 (const)
-  callee +2:18 Bytes.start -> @Bytes.start
-  callee +3:3 Bytes.i16 -> @Bytes.i16
-  callee +4:3 field -> @field
+  local +1:9 format: i32 (const)
+  callee +2:3 Bytes.end -> @Bytes.end
+  callee +2:9 Bytes.start -> @Bytes.start
+  local +3:9 t: i32 (const)
+  callee +3:18 Bytes.start -> @Bytes.start
+  callee +4:3 Bytes.i16 -> @Bytes.i16
   callee +5:3 field -> @field
   callee +6:3 field -> @field
   callee +7:3 field -> @field
   callee +8:3 field -> @field
-  callee +9:3 Bytes.end -> @Bytes.end
-  local +10:12 r: i32 (let)
-  local +11:11 d: i32 (const)
-  callee +11:20 Bytes.start -> @Bytes.start
-  callee +12:5 Bytes.i16 -> @Bytes.i16
-  callee +13:5 Bytes.i32 -> @Bytes.i32
-  callee +14:5 Bytes.i64 -> @Bytes.i64
-  local +15:11 name: string (const)
-  callee +15:26 nameOf -> @nameOf
-  callee +16:5 Bytes.i32 -> @Bytes.i32
-  callee +17:5 Bytes.text -> @Bytes.text
-  callee +18:5 Bytes.i32 -> @Bytes.i32
-  callee +19:5 Bytes.i64 -> @Bytes.i64
-  local +20:11 tags: i32 (const)
-  callee +20:23 tagCount -> @tagCount
-  callee +22:5 Bytes.i32 -> @Bytes.i32
-  callee +23:5 Bytes.i32 -> @Bytes.i32
-  callee +24:5 Bytes.i32 -> @Bytes.i32
-  callee +25:5 Bytes.i32 -> @Bytes.i32
-  callee +27:7 Bytes.i32 -> @Bytes.i32
-  callee +28:7 Bytes.i32 -> @Bytes.i32
-  local +29:16 k: i32 (let)
-  callee +30:9 Bytes.i32 -> @Bytes.i32
-  callee +31:9 Bytes.i64 -> @Bytes.i64
-  callee +35:7 Bytes.i32 -> @Bytes.i32
-  callee +36:7 Bytes.text -> @Bytes.text
-  callee +38:7 Bytes.i32 -> @Bytes.i32
-  callee +40:5 Bytes.end -> @Bytes.end
-  local +42:9 c: i32 (const)
-  callee +42:18 Bytes.start -> @Bytes.start
-  callee +43:3 Bytes.cstring -> @Bytes.cstring
-  callee +44:3 Bytes.end -> @Bytes.end
-  local +45:9 z: i32 (const)
-  callee +45:18 Bytes.start -> @Bytes.start
-  callee +46:3 Bytes.byte -> @Bytes.byte
-  callee +47:3 Bytes.end -> @Bytes.end
-  callee +48:10 Bytes.done -> @Bytes.done
+  callee +9:3 field -> @field
+  callee +10:3 Bytes.end -> @Bytes.end
+  local +11:12 r: i32 (let)
+  local +12:11 d: i32 (const)
+  callee +12:20 Bytes.start -> @Bytes.start
+  callee +13:5 Bytes.i16 -> @Bytes.i16
+  local +14:11 id: i64 (const)
+  local +15:11 tags: i32 (const)
+  callee +15:23 tagCount -> @tagCount
+  callee +17:7 Bytes.i32 -> @Bytes.i32
+  callee +18:7 Bytes.i64 -> @Bytes.i64
+  callee +19:7 textColumn -> @textColumn
+  callee +19:21 nameOf -> @nameOf
+  callee +20:7 Bytes.i32 -> @Bytes.i32
+  callee +21:7 Bytes.i64 -> @Bytes.i64
+  callee +23:7 Bytes.i32 -> @Bytes.i32
+  callee +24:7 Bytes.i32 -> @Bytes.i32
+  callee +25:7 Bytes.i32 -> @Bytes.i32
+  callee +26:7 Bytes.i32 -> @Bytes.i32
+  callee +28:9 Bytes.i32 -> @Bytes.i32
+  callee +29:9 Bytes.i32 -> @Bytes.i32
+  local +30:18 k: i32 (let)
+  callee +31:11 Bytes.i32 -> @Bytes.i32
+  callee +32:11 Bytes.i64 -> @Bytes.i64
+  callee +32:17 tagOf -> @tagOf
+  callee +36:7 textColumn -> @textColumn
+  callee +37:7 textColumn -> @textColumn
+  callee +37:21 nameOf -> @nameOf
+  callee +38:7 textColumn -> @textColumn
+  callee +38:21 stampOf -> @stampOf
+  local +39:13 elements: string[] (const)
+  local +40:16 k: i32 (let)
+  callee +41:26 tagOf -> @tagOf
+  callee +43:7 textColumn -> @textColumn
+  callee +46:7 Bytes.i32 -> @Bytes.i32
+  callee +47:7 Bytes.text -> @Bytes.text
+  callee +49:7 Bytes.i32 -> @Bytes.i32
+  callee +51:5 Bytes.end -> @Bytes.end
+  local +53:9 c: i32 (const)
+  callee +53:18 Bytes.start -> @Bytes.start
+  callee +54:3 Bytes.cstring -> @Bytes.cstring
+  callee +55:3 Bytes.end -> @Bytes.end
+  local +56:9 z: i32 (const)
+  callee +56:18 Bytes.start -> @Bytes.start
+  callee +57:3 Bytes.byte -> @Bytes.byte
+  callee +58:3 Bytes.end -> @Bytes.end
+  callee +59:10 Bytes.done -> @Bytes.done
 function emptyStream(): u8[] -> @emptyStream
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Bytes.end
@@ -5690,6 +5735,60 @@ function readRow(conn: PgConnection, tags: PgBinaryArray, h: u32): u32 -> @readR
   callee +14:11 mix -> @mix
   callee +18:10 mix -> @mix
   callee +18:17 PgConnection.isNull -> @nish.PgConnection.isNull
+function Readers.constructor(this: Readers, conn: PgConnection, text: boolean): void -> @Readers.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: text
+  calls: nish.PgArrayWalker.constructor nish.PgBinaryArray.constructor nish_alloc_struct
+  pointer this: size=32 writesThrough=true captured=false
+  pointer conn: size=216 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:17 new PgBinaryArray -> @nish.PgBinaryArray.constructor
+  callee +1:19 new PgArrayWalker -> @nish.PgArrayWalker.constructor
+function readTextRow(conn: PgConnection, r: Readers, h: u32): u32 -> @readTextRow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.PgConnection.int
+  escaping: h
+  calls: foldInt mix nish.PgArrayWalker.begin nish.PgArrayWalker.next nish.PgConnection.colLength nish.PgConnection.colStart nish.PgConnection.inputBuffer nish.PgConnection.int nish.PgConnection.isNull nish.PgText.int nish.PgText.timestamp
+  pointer conn: size=216 writesThrough=false captured=false passedTo=nish.PgConnection.int#0 nish.PgConnection.colLength#0 nish.PgConnection.colStart#0 nish.PgConnection.inputBuffer#0 nish.PgConnection.colStart#0 nish.PgConnection.colLength#0 nish.PgConnection.colStart#0 nish.PgConnection.colLength#0 nish.PgConnection.isNull#0
+  pointer r: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 s: u32 (let)
+  callee +0:16 foldInt -> @foldInt
+  callee +0:27 PgConnection.int -> @nish.PgConnection.int
+  callee +1:7 mix -> @mix
+  callee +1:14 PgConnection.colLength -> @nish.PgConnection.colLength
+  local +2:9 name: i32 (const)
+  callee +2:21 PgConnection.colStart -> @nish.PgConnection.colStart
+  local +3:9 input: u8[] (const)
+  callee +3:23 PgConnection.inputBuffer -> @nish.PgConnection.inputBuffer
+  callee +5:9 mix -> @mix
+  callee +7:7 mix -> @mix
+  callee +7:14 PgText.timestamp -> @nish.PgText.timestamp
+  callee +7:41 PgConnection.colStart -> @nish.PgConnection.colStart
+  callee +7:59 PgConnection.colLength -> @nish.PgConnection.colLength
+  local +8:14 b: u8 (const)
+  callee +9:9 mix -> @mix
+  local +11:9 walker: PgArrayWalker (const)
+  callee +12:3 PgArrayWalker.begin -> @nish.PgArrayWalker.begin
+  callee +12:23 PgConnection.colStart -> @nish.PgConnection.colStart
+  callee +12:41 PgConnection.colLength -> @nish.PgConnection.colLength
+  local +14:11 e: i32 (const)
+  callee +14:20 PgArrayWalker.next -> @nish.PgArrayWalker.next
+  callee +16:11 foldInt -> @foldInt
+  callee +16:22 PgText.int -> @nish.PgText.int
+  callee +18:11 mix -> @mix
+  callee +22:10 mix -> @mix
+  callee +22:17 PgConnection.isNull -> @nish.PgConnection.isNull
+function readAny(conn: PgConnection, r: Readers, h: u32): u32 -> @readAny
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via readTextRow
+  escaping: h
+  calls: readRow readTextRow
+  pointer conn: size=216 writesThrough=false captured=false passedTo=readTextRow#0 readRow#0
+  pointer r: size=32 writesThrough=false captured=false passedTo=readTextRow#1
+  stackSites=0 stackLocals=0
+  callee +0:12 readTextRow -> @readTextRow
+  callee +0:38 readRow -> @readRow
 function started(): PgConnection | null -> @started
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.constructor
@@ -5711,48 +5810,50 @@ function started(): PgConnection | null -> @started
   callee +5:3 PgConnection.receive -> @nish.PgConnection.receive
   local +7:11 event: i32 (const)
   callee +7:24 PgConnection.next -> @nish.PgConnection.next
-function answer(conn: PgConnection, stream: u8[], tags: PgBinaryArray, h: u32): u32 -> @answer
+function answer(conn: PgConnection, stream: u8[], readers: Readers, h: u32): u32 -> @answer
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.next
   escaping: h
-  calls: mix nish.PgConnection.next nish.PgConnection.receive nish_panic_overflow readRow
-  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.next#0 readRow#0 nish.PgConnection.receive#0
+  calls: mix nish.PgConnection.next nish.PgConnection.receive nish_panic_overflow readAny
+  pointer conn: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.next#0 readAny#0 nish.PgConnection.receive#0
   pointer stream: size=0 writesThrough=false captured=false passedTo=nish.PgConnection.receive#1
-  pointer tags: size=56 writesThrough=true captured=false passedTo=readRow#1
+  pointer readers: size=32 writesThrough=false captured=false passedTo=readAny#1
   stackSites=0 stackLocals=0
   local +0:7 s: u32 (let)
   local +1:7 fed: i32 (let)
   local +3:11 event: i32 (const)
   callee +3:24 PgConnection.next -> @nish.PgConnection.next
   callee +5:14 mix -> @mix
-  callee +8:11 readRow -> @readRow
+  callee +8:11 readAny -> @readAny
   callee +11:16 mix -> @mix
   callee +13:14 PgConnection.receive -> @nish.PgConnection.receive
   callee +15:11 mix -> @mix
-function rowsLoop(a: Args): i32 -> @rowsLoop
+function rowsLoop(a: Args, text: boolean): i32 -> @rowsLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via started
-  calls: answer drain foldStart nish.PgBinaryArray.constructor nish.PgConnection.bindEnd nish.PgConnection.bindStartBinary nish.PgConnection.paramInt nish.PgConnection.sync nish_str_concat nish_str_from_i32 nish_write now report rowStream started
+  escaping: text
+  calls: Readers.constructor answer drain foldStart nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.bindStartBinary nish.PgConnection.paramInt nish.PgConnection.sync nish_str_concat nish_str_from_i32 nish_write now report rowStream started
   pointer a: size=16 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 conn: PgConnection | null (const)
   callee +0:37 started -> @started
   local +5:9 stream: u8[] (const)
   callee +5:24 rowStream -> @rowStream
-  local +6:9 tags: PgBinaryArray (const)
-  callee +6:16 new PgBinaryArray -> @nish.PgBinaryArray.constructor
+  local +6:9 readers: Readers (const)
+  callee +6:19 new Readers -> @Readers.constructor
   local +7:7 sum: u32 (let)
   callee +7:18 foldStart -> @foldStart
   local +8:9 t0: i64 (const)
   callee +8:19 now -> @now
   local +9:12 i: i32 (let)
-  callee +10:5 PgConnection.bindStartBinary -> @nish.PgConnection.bindStartBinary
-  callee +11:5 PgConnection.paramInt -> @nish.PgConnection.paramInt
-  callee +12:5 PgConnection.bindEnd -> @nish.PgConnection.bindEnd
-  callee +13:5 PgConnection.sync -> @nish.PgConnection.sync
-  callee +14:11 drain -> @drain
-  callee +15:11 answer -> @answer
-  callee +21:3 report -> @report
+  callee +11:7 PgConnection.bindStart -> @nish.PgConnection.bindStart
+  callee +13:7 PgConnection.bindStartBinary -> @nish.PgConnection.bindStartBinary
+  callee +15:5 PgConnection.paramInt -> @nish.PgConnection.paramInt
+  callee +16:5 PgConnection.bindEnd -> @nish.PgConnection.bindEnd
+  callee +17:5 PgConnection.sync -> @nish.PgConnection.sync
+  callee +18:11 drain -> @drain
+  callee +19:11 answer -> @answer
+  callee +25:3 report -> @report
 function poolLoop(a: Args): i32 -> @poolLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$$Secret$arr.u8
@@ -5825,10 +5926,10 @@ function firstGroup(pool: PgPool, conn: PgConnection, stream: u8[], tags: PgBina
   callee +9:24 PgPool.next -> @nish.PgPool.next
   callee +14:7 readRow -> @readRow
   callee +19:14 PgConnection.receive -> @nish.PgConnection.receive
-function paramsLoop(a: Args): i32 -> @paramsLoop
+function paramsLoop(a: Args, sizes: boolean): i32 -> @paramsLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via started
-  calls: answer drain emptyStream foldStart nameOf nish.PgBinaryArray.constructor nish.PgConnection.arrayElement nish.PgConnection.arrayEnd nish.PgConnection.arrayStart nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.paramInt nish.PgConnection.paramIntArray nish.PgConnection.sync nish_array_grow nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_write now report started
+  calls: Readers.constructor answer drain emptyStream foldStart nameOf nish.PgConnection.arrayElement nish.PgConnection.arrayEnd nish.PgConnection.arrayStart nish.PgConnection.bindEnd nish.PgConnection.bindStart nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.paramInt nish.PgConnection.paramIntArray nish.PgConnection.sync nish_array_grow nish_panic nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 nish_write now report rowStream started
   pointer a: size=16 writesThrough=false captured=false
   stackSites=3 stackLocals=3
   local +0:9 conn: PgConnection | null (const)
@@ -5843,8 +5944,8 @@ function paramsLoop(a: Args): i32 -> @paramsLoop
   local +11:14 j: i32 (let)
   local +17:9 stream: u8[] (const)
   callee +17:24 emptyStream -> @emptyStream
-  local +18:9 tags: PgBinaryArray (const)
-  callee +18:16 new PgBinaryArray -> @nish.PgBinaryArray.constructor
+  local +18:9 readers: Readers (const)
+  callee +18:19 new Readers -> @Readers.constructor
   local +19:7 sum: u32 (let)
   callee +19:18 foldStart -> @foldStart
   local +20:9 t0: i64 (const)
@@ -5859,9 +5960,14 @@ function paramsLoop(a: Args): i32 -> @paramsLoop
   callee +29:5 PgConnection.paramInt -> @nish.PgConnection.paramInt
   callee +30:5 PgConnection.bindEnd -> @nish.PgConnection.bindEnd
   callee +31:5 PgConnection.sync -> @nish.PgConnection.sync
-  callee +32:11 drain -> @drain
-  callee +33:11 answer -> @answer
-  callee +39:3 report -> @report
+  local +33:13 encoded: i32 (const)
+  callee +33:28 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
+  callee +33:47 PgConnection.outputStart -> @nish.PgConnection.outputStart
+  callee +34:34 rowStream -> @rowStream
+  callee +34:70 rowStream -> @rowStream
+  callee +37:11 drain -> @drain
+  callee +38:11 answer -> @answer
+  callee +44:3 report -> @report
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via parseArgs
@@ -5872,3 +5978,4 @@ function main(): i32 -> @nish_main [exported entry]
   callee +5:12 rowsLoop -> @rowsLoop
   callee +8:12 poolLoop -> @poolLoop
   callee +11:12 paramsLoop -> @paramsLoop
+  callee +14:12 paramsLoop -> @paramsLoop
