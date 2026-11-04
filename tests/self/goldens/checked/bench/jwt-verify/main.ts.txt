@@ -2184,20 +2184,20 @@ struct JwtKey (class) size=40 align=8 exported
   field live: boolean index=6 offset=37
   constructor -> @nish.JwtKey.constructor
   method wipe -> @nish.JwtKey.wipe
-struct JwtJson (class) size=64 align=8
+struct JwtJson (class) size=72 align=8
   field value: i64 index=0 offset=0
   field src: u8[] index=1 offset=8
-  field stack: u8[] index=2 offset=16 readonly
-  field pos: i32 index=3 offset=24
-  field end: i32 index=4 offset=28
-  field depth: i32 index=5 offset=32
-  field want: i32 index=6 offset=36
-  field kind: i32 index=7 offset=40
-  field failed: i32 index=8 offset=44
-  field tokStart: i32 index=9 offset=48
-  field tokEnd: i32 index=10 offset=52
-  field textBytes: i32 index=11 offset=56
-  field integral: boolean index=12 offset=60
+  field stack: u8[] index=2 offset=16 readonly boxed
+  field pos: i32 index=3 offset=32
+  field end: i32 index=4 offset=36
+  field depth: i32 index=5 offset=40
+  field want: i32 index=6 offset=44
+  field kind: i32 index=7 offset=48
+  field failed: i32 index=8 offset=52
+  field tokStart: i32 index=9 offset=56
+  field tokEnd: i32 index=10 offset=60
+  field textBytes: i32 index=11 offset=64
+  field integral: boolean index=12 offset=68
   constructor -> @nish.JwtJson.constructor
   method reset -> @nish.JwtJson.reset
   method at -> @nish.JwtJson.at
@@ -2437,7 +2437,7 @@ function JwtJson.constructor(this: JwtJson, src: u8[], maxDepth: i32): void -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: maxDepth src
   calls: nish_panic
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   pointer src: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function JwtJson.reset(this: JwtJson, src: u8[], off: i32, len: i32): void -> @nish.JwtJson.reset [method]
@@ -2445,24 +2445,24 @@ function JwtJson.reset(this: JwtJson, src: u8[], off: i32, len: i32): void -> @n
   sharedWrite: +0:5
   escaping: off src
   calls: nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   pointer src: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function JwtJson.at(this: JwtJson, i: i32): i32 -> @nish.JwtJson.at [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JwtJson.fail(this: JwtJson): i32 -> @nish.JwtJson.fail [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JwtJson.skipBlanks(this: JwtJson): void -> @nish.JwtJson.skipBlanks [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.JwtJson.at nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0
   stackSites=0 stackLocals=0
   local -2:9 b: i32 (let)
   callee -2:18 JwtJson.at -> @nish.JwtJson.at
@@ -2471,7 +2471,7 @@ function JwtJson.next(this: JwtJson): i32 -> @nish.JwtJson.next [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.JwtJson.at nish.JwtJson.fail nish.JwtJson.readClose nish.JwtJson.readKey nish.JwtJson.readValue nish.JwtJson.skipBlanks nish_panic_index nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.skipBlanks#0 nish.JwtJson.at#0 nish.JwtJson.fail#0 nish.JwtJson.skipBlanks#0 nish.JwtJson.readKey#0 nish.JwtJson.readValue#0 nish.JwtJson.readClose#0 nish.JwtJson.readClose#0 nish.JwtJson.readKey#0 nish.JwtJson.readKey#0 nish.JwtJson.readClose#0 nish.JwtJson.readValue#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.skipBlanks#0 nish.JwtJson.at#0 nish.JwtJson.fail#0 nish.JwtJson.skipBlanks#0 nish.JwtJson.readKey#0 nish.JwtJson.readValue#0 nish.JwtJson.readClose#0 nish.JwtJson.readClose#0 nish.JwtJson.readKey#0 nish.JwtJson.readKey#0 nish.JwtJson.readClose#0 nish.JwtJson.readValue#0
   stackSites=0 stackLocals=0
   callee -7:5 JwtJson.skipBlanks -> @nish.JwtJson.skipBlanks
   local -6:11 want: i32 (const)
@@ -2491,7 +2491,7 @@ function JwtJson.readClose(this: JwtJson, b: i32): i32 -> @nish.JwtJson.readClos
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.JwtJson.afterValue nish.JwtJson.fail nish_panic_index nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.fail#0 nish.JwtJson.fail#0 nish.JwtJson.afterValue#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.fail#0 nish.JwtJson.fail#0 nish.JwtJson.afterValue#0
   stackSites=0 stackLocals=0
   callee -6:14 JwtJson.fail -> @nish.JwtJson.fail
   local -4:11 inObject: boolean (const)
@@ -2500,13 +2500,13 @@ function JwtJson.readClose(this: JwtJson, b: i32): i32 -> @nish.JwtJson.readClos
 function JwtJson.afterValue(this: JwtJson): void -> @nish.JwtJson.afterValue [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function JwtJson.readKey(this: JwtJson): i32 -> @nish.JwtJson.readKey [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.JwtJson.at nish.JwtJson.fail nish.JwtJson.scanString nish.JwtJson.skipBlanks nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.scanString#0 nish.JwtJson.fail#0 nish.JwtJson.skipBlanks#0 nish.JwtJson.at#0 nish.JwtJson.fail#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.scanString#0 nish.JwtJson.fail#0 nish.JwtJson.skipBlanks#0 nish.JwtJson.at#0 nish.JwtJson.fail#0
   stackSites=0 stackLocals=0
   callee -7:9 JwtJson.at -> @nish.JwtJson.at
   callee -7:48 JwtJson.scanString -> @nish.JwtJson.scanString
@@ -2518,7 +2518,7 @@ function JwtJson.readValue(this: JwtJson): i32 -> @nish.JwtJson.readValue [metho
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.JwtJson.afterValue nish.JwtJson.at nish.JwtJson.fail nish.JwtJson.scanNumber nish.JwtJson.scanString nish.JwtJson.scanWord nish_panic_index nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.fail#0 nish.JwtJson.scanString#0 nish.JwtJson.scanNumber#0 nish.JwtJson.scanWord#0 nish.JwtJson.scanWord#0 nish.JwtJson.scanWord#0 nish.JwtJson.fail#0 nish.JwtJson.afterValue#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.fail#0 nish.JwtJson.scanString#0 nish.JwtJson.scanNumber#0 nish.JwtJson.scanWord#0 nish.JwtJson.scanWord#0 nish.JwtJson.scanWord#0 nish.JwtJson.fail#0 nish.JwtJson.afterValue#0
   stackSites=0 stackLocals=0
   local -6:11 b: i32 (const)
   callee -6:20 JwtJson.at -> @nish.JwtJson.at
@@ -2536,7 +2536,7 @@ function JwtJson.scanWord(this: JwtJson, word: string): boolean -> @nish.JwtJson
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.JwtJson.at nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.at#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.at#0
   stackSites=0 stackLocals=0
   local -6:11 n: i32 (const)
   local -5:14 i: i32 (let)
@@ -2545,7 +2545,7 @@ function JwtJson.scanDigits(this: JwtJson, bound: i64): i32 -> @nish.JwtJson.sca
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   calls: nish.JwtJson.at nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0
   stackSites=0 stackLocals=0
   local -7:11 ten: i64 (const)
   local -6:9 n: i32 (let)
@@ -2557,7 +2557,7 @@ function JwtJson.scanNumber(this: JwtJson): boolean -> @nish.JwtJson.scanNumber 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.JwtJson.at nish.JwtJson.scanDigits nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.scanDigits#0 nish.JwtJson.at#0 nish.JwtJson.scanDigits#0 nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.scanDigits#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.scanDigits#0 nish.JwtJson.at#0 nish.JwtJson.scanDigits#0 nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.scanDigits#0
   stackSites=0 stackLocals=0
   local +1:11 negative: boolean (const)
   callee +1:31 JwtJson.at -> @nish.JwtJson.at
@@ -2576,7 +2576,7 @@ function JwtJson.scanNumber(this: JwtJson): boolean -> @nish.JwtJson.scanNumber 
 function JwtJson.escapeCodePoint(this: JwtJson, i: i32): i32 -> @nish.JwtJson.escapeCodePoint [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JwtJson.at nish.JwtJson.hex4 nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.hex4#0 nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.hex4#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.hex4#0 nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.hex4#0
   stackSites=0 stackLocals=0
   local +0:11 c: i32 (const)
   callee +0:20 JwtJson.at -> @nish.JwtJson.at
@@ -2590,7 +2590,7 @@ function JwtJson.escapeCodePoint(this: JwtJson, i: i32): i32 -> @nish.JwtJson.es
 function JwtJson.hex4(this: JwtJson, i: i32): i32 -> @nish.JwtJson.hex4 [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JwtJson.at nish.jwtHexValue nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.at#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.at#0
   stackSites=0 stackLocals=0
   local +0:9 v: i32 (let)
   local +1:14 k: i32 (let)
@@ -2600,14 +2600,14 @@ function JwtJson.hex4(this: JwtJson, i: i32): i32 -> @nish.JwtJson.hex4 [method]
 function JwtJson.escapeLength(this: JwtJson, i: i32, cp: i32): i32 -> @nish.JwtJson.escapeLength [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JwtJson.at nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.at#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.at#0
   stackSites=0 stackLocals=0
   callee +0:9 JwtJson.at -> @nish.JwtJson.at
 function JwtJson.utf8Tail(this: JwtJson, i: i32): i32 -> @nish.JwtJson.utf8Tail [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: nish.JwtJson.at nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.at#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.at#0 nish.JwtJson.at#0
   stackSites=0 stackLocals=0
   local +0:11 b: i32 (const)
   callee +0:20 JwtJson.at -> @nish.JwtJson.at
@@ -2623,7 +2623,7 @@ function JwtJson.scanString(this: JwtJson): boolean -> @nish.JwtJson.scanString 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.JwtJson.at nish.JwtJson.escapeCodePoint nish.JwtJson.escapeLength nish.JwtJson.utf8Tail nish.jwtUtf8Width nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.escapeCodePoint#0 nish.JwtJson.escapeLength#0 nish.JwtJson.utf8Tail#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.at#0 nish.JwtJson.escapeCodePoint#0 nish.JwtJson.escapeLength#0 nish.JwtJson.utf8Tail#0
   stackSites=0 stackLocals=0
   local +1:9 i: i32 (let)
   local +2:9 decoded: i32 (let)
@@ -2637,18 +2637,18 @@ function JwtJson.scanString(this: JwtJson): boolean -> @nish.JwtJson.scanString 
   callee +23:27 JwtJson.utf8Tail -> @nish.JwtJson.utf8Tail
 function JwtJson.isText(this: JwtJson): boolean -> @nish.JwtJson.isText [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JwtJson.stringLength(this: JwtJson): i32 -> @nish.JwtJson.stringLength [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JwtJson.isText
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.isText#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.isText#0
   stackSites=0 stackLocals=0
   callee +0:12 JwtJson.isText -> @nish.JwtJson.isText
 function JwtJson.keyEquals(this: JwtJson, name: string): boolean -> @nish.JwtJson.keyEquals [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JwtJson.at nish.JwtJson.escapeCodePoint nish.JwtJson.escapeLength nish.JwtJson.isText nish.jwtUtf8Byte nish.jwtUtf8Width nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.isText#0 nish.JwtJson.at#0 nish.JwtJson.escapeCodePoint#0 nish.JwtJson.escapeLength#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.isText#0 nish.JwtJson.at#0 nish.JwtJson.escapeCodePoint#0 nish.JwtJson.escapeLength#0
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
   callee +1:10 JwtJson.isText -> @nish.JwtJson.isText
@@ -2669,7 +2669,7 @@ function JwtJson.stringInto(this: JwtJson, out: u8[], at: i32): i32 -> @nish.Jwt
   sharedWrite: +0:11
   escaping: at
   calls: nish.JwtJson.at nish.JwtJson.escapeCodePoint nish.JwtJson.escapeLength nish.JwtJson.isText nish.jwtUtf8Byte nish.jwtUtf8Width nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.isText#0 nish.JwtJson.at#0 nish.JwtJson.escapeCodePoint#0 nish.JwtJson.escapeLength#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.isText#0 nish.JwtJson.at#0 nish.JwtJson.escapeCodePoint#0 nish.JwtJson.escapeLength#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -10:10 JwtJson.isText -> @nish.JwtJson.isText
@@ -2687,12 +2687,12 @@ function JwtJson.stringInto(this: JwtJson, out: u8[], at: i32): i32 -> @nish.Jwt
   callee +14:12 JwtJson.escapeLength -> @nish.JwtJson.escapeLength
 function JwtJson.isInteger(this: JwtJson): boolean -> @nish.JwtJson.isInteger [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function JwtJson.numberI64(this: JwtJson): i64 -> @nish.JwtJson.numberI64 [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JwtJson.at nish.JwtJson.isInteger nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false passedTo=nish.JwtJson.isInteger#0 nish.JwtJson.at#0
+  pointer this: size=72 writesThrough=false captured=false passedTo=nish.JwtJson.isInteger#0 nish.JwtJson.at#0
   stackSites=0 stackLocals=0
   callee +0:10 JwtJson.isInteger -> @nish.JwtJson.isInteger
   callee +3:12 JwtJson.at -> @nish.JwtJson.at
@@ -2700,7 +2700,7 @@ function JwtJson.skipValue(this: JwtJson): i32 -> @nish.JwtJson.skipValue [metho
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JwtJson.next
   calls: nish.JwtJson.next nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.JwtJson.next#0 nish.JwtJson.next#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.JwtJson.next#0 nish.JwtJson.next#0
   stackSites=0 stackLocals=0
   local +0:9 k: i32 (let)
   callee +2:11 JwtJson.next -> @nish.JwtJson.next

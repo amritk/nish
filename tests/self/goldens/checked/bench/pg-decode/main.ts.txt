@@ -336,15 +336,15 @@ struct PgConnection (class) size=216 align=8 exported
   method binaryFloat -> @nish.PgConnection.binaryFloat
   method tagIs -> @nish.PgConnection.tagIs
   method tagRows -> @nish.PgConnection.tagRows
-struct PgPoolSlot (class) size=48 align=8
+struct PgPoolSlot (class) size=64 align=8
   field state: i32 index=0 offset=0 initialized
   field conn: PgConnection | null index=1 offset=8 initialized
   field queued: i32 index=2 offset=16 initialized
   field described: i32 index=3 offset=20 initialized
-  field tickets: i32[] index=4 offset=24 readonly
-  field leads: i32[] index=5 offset=32 readonly
-  field head: i32 index=6 offset=40 initialized
-  field count: i32 index=7 offset=44 initialized
+  field tickets: i32[] index=4 offset=24 readonly boxed
+  field leads: i32[] index=5 offset=40 readonly boxed
+  field head: i32 index=6 offset=56 initialized
+  field count: i32 index=7 offset=60 initialized
   constructor -> @nish.PgPoolSlot.constructor
   method push -> @nish.PgPoolSlot.push
   method pop -> @nish.PgPoolSlot.pop
@@ -388,19 +388,19 @@ struct PgBatchConfig (class) size=56 align=8 exported
   field queueBytes: i32 index=7 offset=40 initialized
   field runs: i32 index=8 offset=44 initialized
   field binary: boolean index=9 offset=48 initialized
-struct PgBatchRun (class) size=48 align=8
-  field tags: i32[] index=0 offset=0
-  field first: i32[] index=1 offset=8
-  field keys: i32 index=2 offset=16 initialized
-  field cur: i32 index=3 offset=20 initialized
-  field curRows: boolean index=4 offset=24 initialized
-  field at: i32 index=5 offset=28 initialized
-  field target: i32 index=6 offset=32 initialized
-  field handle: i32 index=7 offset=36 initialized
-  field uses: i32 index=8 offset=40 initialized
-  field open: boolean index=9 offset=44 initialized
-  field ended: boolean index=10 offset=45 initialized
-  field failed: boolean index=11 offset=46 initialized
+struct PgBatchRun (class) size=64 align=8
+  field tags: i32[] index=0 offset=0 boxed
+  field first: i32[] index=1 offset=16 boxed
+  field keys: i32 index=2 offset=32 initialized
+  field cur: i32 index=3 offset=36 initialized
+  field curRows: boolean index=4 offset=40 initialized
+  field at: i32 index=5 offset=44 initialized
+  field target: i32 index=6 offset=48 initialized
+  field handle: i32 index=7 offset=52 initialized
+  field uses: i32 index=8 offset=56 initialized
+  field open: boolean index=9 offset=60 initialized
+  field ended: boolean index=10 offset=61 initialized
+  field failed: boolean index=11 offset=62 initialized
   constructor -> @nish.PgBatchRun.constructor
   method reset -> @nish.PgBatchRun.reset
 struct PgBatcher (class) size=160 align=8 exported
@@ -1965,21 +1965,21 @@ function PgPoolSlot.constructor(this: PgPoolSlot, ring: i32): void -> @nish.PgPo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: ring
   calls: nish_panic
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgPoolSlot.push(this: PgPoolSlot, ticket: i32, leads: i32): void -> @nish.PgPoolSlot.push [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: leads ticket
   calls: nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 at: i32 (const)
 function PgPoolSlot.pop(this: PgPoolSlot): void -> @nish.PgPoolSlot.pop [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_div nish_panic_overflow
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgPool.constructor(this: PgPool, config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32): void -> @nish.PgPool.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -2126,13 +2126,13 @@ function pgIntHash(key: i64): i32 -> @nish.pgIntHash
   local +2:7 h: u32 (let)
 function PgBatchRun.constructor(this: PgBatchRun): void -> @nish.PgBatchRun.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatchRun.reset(this: PgBatchRun, keys: i32): void -> @nish.PgBatchRun.reset [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: keys
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatcher.constructor(this: PgBatcher, config: PgBatchConfig): void -> @nish.PgBatcher.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -2351,7 +2351,7 @@ function PgBatcher.emit(this: PgBatcher, run: PgBatchRun): boolean -> @nish.PgBa
   sharedWrite: +0:5
   calls: nish_panic_index nish_panic_overflow
   pointer this: size=160 writesThrough=true captured=false
-  pointer run: size=48 writesThrough=true captured=false
+  pointer run: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 at: i32 (const)
 function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [exported method]
