@@ -1,4 +1,4 @@
-%struct.Grid = type { %struct.nish_array* }
+%struct.Grid = type { { i64, i8* } }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -41,7 +41,7 @@ slow:
   ret i8* %grown
 }
 
-define internal void @Grid.constructor(%struct.Grid* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %n) #0 {
+define internal void @Grid.constructor(%struct.Grid* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %n) #0 {
 entry:
   %0 = sext i32 %n to i64
   %1 = icmp ule i64 %0, 2147483647
@@ -52,19 +52,14 @@ len.fail:
   unreachable
 
 len.ok:
-  %2 = call i8* @nish_alloc_struct(i64 24)
-  %3 = bitcast i8* %2 to %struct.nish_array*
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
-  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
-  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %6 = mul i64 %0, 4
-  %7 = call i8* @nish_alloc_struct(i64 %6)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
-  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %9 = getelementptr inbounds %struct.Grid, %struct.Grid* %this, i32 0, i32 0
-  store %struct.nish_array* %3, %struct.nish_array** %9, align 8, !tbaa !15
+  %2 = mul i64 %0, 4
+  %3 = call i8* @nish_alloc_struct(i64 %2)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %3, i8 0, i64 %2, i1 false), !alias.scope !4, !noalias !3
+  %4 = getelementptr inbounds %struct.Grid, %struct.Grid* %this, i32 0, i32 0
+  %5 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 0
+  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 1
+  store i8* %3, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   ret void
 }
 
@@ -73,44 +68,46 @@ entry:
   %g.addr = alloca %struct.Grid*, align 8
   %Grid.obj = alloca %struct.Grid, align 8
   %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.Grid, %struct.Grid* %Grid.obj, i32 0, i32 0
+  %1 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %0, i32 0, i32 0
+  store i64 0, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %0, i32 0, i32 1
+  store i8* null, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   call void @Grid.constructor(%struct.Grid* %Grid.obj, i32 5)
   store %struct.Grid* %Grid.obj, %struct.Grid** %g.addr, align 8
-  %0 = load %struct.Grid*, %struct.Grid** %g.addr, align 8
-  %1 = getelementptr inbounds %struct.Grid, %struct.Grid* %0, i32 0, i32 0
-  %2 = load %struct.nish_array*, %struct.nish_array** %1, align 8, !tbaa !15
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
-  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %5 = icmp ult i64 4, %4
-  br i1 %5, label %bounds.ok, label %bounds.fail
+  %3 = load %struct.Grid*, %struct.Grid** %g.addr, align 8
+  %4 = getelementptr inbounds %struct.Grid, %struct.Grid* %3, i32 0, i32 0
+  %5 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 0
+  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = icmp ult i64 4, %6
+  br i1 %7, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 4, i64 %4)
+  call void @nish_panic_index(i64 4, i64 %6)
   unreachable
 
 bounds.ok:
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %8 = bitcast i8* %7 to i32*
-  %9 = getelementptr inbounds i32, i32* %8, i64 4
-  store i32 9, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !17
-  %10 = load %struct.Grid*, %struct.Grid** %g.addr, align 8
-  %11 = getelementptr inbounds %struct.Grid, %struct.Grid* %10, i32 0, i32 0
-  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !15
-  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
-  %14 = load i64, i64* %13, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %15 = trunc i64 %14 to i32
-  %16 = call i8* @nish_str_from_i32(i32 %15)
-  %17 = call i8* @nish_str_concat(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %18 = load %struct.Grid*, %struct.Grid** %g.addr, align 8
-  %19 = getelementptr inbounds %struct.Grid, %struct.Grid* %18, i32 0, i32 0
-  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !15
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 2
-  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %8 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %4, i32 0, i32 1
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %10 = bitcast i8* %9 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 4
+  store i32 9, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %12 = load %struct.Grid*, %struct.Grid** %g.addr, align 8
+  %13 = getelementptr inbounds %struct.Grid, %struct.Grid* %12, i32 0, i32 0
+  %14 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %13, i32 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %16 = trunc i64 %15 to i32
+  %17 = call i8* @nish_str_from_i32(i32 %16)
+  %18 = call i8* @nish_str_concat(i8* %17, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %19 = load %struct.Grid*, %struct.Grid** %g.addr, align 8
+  %20 = getelementptr inbounds %struct.Grid, %struct.Grid* %19, i32 0, i32 0
+  %21 = getelementptr inbounds { i64, i8* }, { i64, i8* }* %20, i32 0, i32 1
+  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   %23 = bitcast i8* %22 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 4
-  %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !17
+  %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   %26 = call i8* @nish_str_from_i32(i32 %25)
-  %27 = call i8* @nish_str_concat(i8* %17, i8* %26)
+  %27 = call i8* @nish_str_concat(i8* %18, i8* %26)
   call void @nish_print(i8* %27)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
@@ -129,7 +126,7 @@ attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!18, !19, !20, !21, !22}
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -139,17 +136,13 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !6 = !{!"omnipotent char", !5, i64 0}
 !7 = !{!"header i64", !6, i64 0}
 !8 = !{!"header ptr", !6, i64 0}
-!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!9 = !{!"array slice", !7, i64 0, !8, i64 8}
 !10 = !{!9, !7, i64 0}
-!11 = !{!9, !7, i64 8}
-!12 = !{!9, !8, i64 16}
-!13 = !{!"ptr", !6, i64 0}
-!14 = !{!"Grid", !13, i64 0}
-!15 = !{!14, !13, i64 0}
-!16 = !{!"element i32", !6, i64 0}
-!17 = !{!16, !16, i64 0}
-!18 = !{i32 8, !"cf-protection-branch", i32 1}
-!19 = !{i32 8, !"cf-protection-return", i32 1}
-!20 = !{i32 8, !"branch-target-enforcement", i32 1}
-!21 = !{i32 8, !"sign-return-address", i32 1}
-!22 = !{i32 4, !"probe-stack", !"inline-asm"}
+!11 = !{!9, !8, i64 8}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}

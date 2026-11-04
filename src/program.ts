@@ -840,6 +840,14 @@ export class FieldInfo {
    * decoding and read and written by neither route, so it has no key.
    */
   jsonOffWire: boolean
+  /**
+   * Whether the array this field holds is a slice inside the object: its
+   * `len` and `data`, one LLVM member `{ i64, i8* }`, with the elements in a
+   * block of their own and no header (`src/inline-arrays.ts`). For a field
+   * the inline rule admits whose lengths are not all known, or too long for
+   * `inlineCapacity` slots.
+   */
+  boxed: boolean
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null
   decl: Node
@@ -886,6 +894,7 @@ export class FieldInfo {
     this.initializerValue = 0
     this.decl = decl
     this.inlineCapacity = -1
+    this.boxed = false
     this.spelling = ""
     this.wireName = name
     this.jsonOptional = false

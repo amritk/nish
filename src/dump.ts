@@ -202,6 +202,9 @@ const structText = (table: TypeTable, info: StructInfo, out: string[]): void => 
     if (field.inline()) {
       parts.push(`inline=${field.inlineCapacity}`)
     }
+    if (field.boxed) {
+      parts.push("boxed")
+    }
     const extras = parts.length > 0 ? ` ${parts.join(" ")}` : ""
     out.push(
       `  field ${field.name}: ${table.typeName(field.type)} index=${field.index} offset=${field.offset}${extras}`

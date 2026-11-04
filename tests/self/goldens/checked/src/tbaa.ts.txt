@@ -87,3 +87,19 @@ function headerTbaa(emitter: Emitter, index: i32): string -> @headerTbaa [export
   callee +3:18 Emitter.metadata -> @Emitter.metadata
   local +4:9 access: string (const)
   callee +5:21 Emitter.metadata -> @Emitter.metadata
+function sliceTbaa(emitter: Emitter, index: i32): string -> @sliceTbaa [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via charNode
+  calls: Emitter.metadata charNode nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer emitter: size=296 writesThrough=false captured=false passedTo=charNode#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0 Emitter.metadata#0
+  stackSites=0 stackLocals=0
+  local +0:9 omni: string (const)
+  callee +0:16 charNode -> @charNode
+  local +1:9 word: string (const)
+  callee +1:16 Emitter.metadata -> @Emitter.metadata
+  local +2:9 ptr: string (const)
+  callee +2:15 Emitter.metadata -> @Emitter.metadata
+  local +3:9 slice: string (const)
+  callee +3:17 Emitter.metadata -> @Emitter.metadata
+  local +4:9 access: string (const)
+  callee +5:21 Emitter.metadata -> @Emitter.metadata
