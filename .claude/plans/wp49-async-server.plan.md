@@ -233,4 +233,4 @@ node scripts/security-scope.mjs        # a new std/net module or runtime unit
 node docs/check-links.mjs
 ```
 
-A `src/` stage also runs `node tests/run.js wasi` (`WASI_SYSROOT=/usr`) and `node tests/run.js performance`. CI's four `test` shards are the full gate.
+A `src/` stage also runs `node tests/run.js wasi` (`WASI_SYSROOT=/usr`) and `node tests/run.js performance`. CI's `test` shards are the full gate.
