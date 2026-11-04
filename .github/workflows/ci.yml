@@ -24,13 +24,14 @@
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
 # simd-arm64: runtime/runtime-simd.c's, runtime/runtime-bytes.c's,
-#       runtime/runtime-aes.c's, runtime/runtime-sha256.c's and
-#       runtime/runtime-checksum.c's agreement tests on an AArch64 runner,
-#       where their native runs are the NEON, the ARMv8 AES and PMULL, the
-#       ARMv8 SHA-256 and the ARMv8 CRC32 paths no x86-64 job can run, and the
-#       `aes kernel`, `sha256 kernel` and `crc32 kernel` sections,
-#       std/crypto/aes.ts, std/crypto/sha256.ts and std/compress/checksum.ts
-#       lowered onto those kernels.
+#       runtime/runtime-aes.c's, runtime/runtime-sha256.c's,
+#       runtime/runtime-chacha20.c's and runtime/runtime-checksum.c's
+#       agreement tests on an AArch64 runner, where their native runs are the
+#       NEON, the ARMv8 AES and PMULL, the ARMv8 SHA-256 and the ARMv8 CRC32
+#       paths no x86-64 job can run, and the `aes kernel`, `sha256 kernel`,
+#       `chacha20 kernel` and `crc32 kernel` sections, std/crypto/aes.ts,
+#       std/crypto/sha256.ts, std/crypto/chacha20poly1305.ts and
+#       std/compress/checksum.ts lowered onto those kernels.
 # runtime-net: runtime/runtime-net.c's Darwin branch (kqueue, SO_NOSIGPIPE,
 #       errno translated to Linux's numbers) on a macOS runner: the runtime
 #       unit tests, plain and with -DNISH_THREADS, and every `net_` section.
@@ -428,6 +429,15 @@ jobs:
           build/test/simd/sha256 | grep -E '^sha256: [0-9]+ cases agree across sha-ni;'
           grep -E '^PASS  sha256 kernel: sha256_hw_vectors with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs' "$RUNNER_TEMP/test.log"
           grep -E '^PASS  sha256 kernel: sha256_hw_agree with NISH_SHA256 unset calls the kernel, which /proc/cpuinfo says this CPU runs' "$RUNNER_TEMP/test.log"
+
+      # The ChaCha20 kernel, likewise: these runners have AVX2, so the driver
+      # must name that path and the lowered program must have called it.
+      - name: The AVX2 ChaCha20 path ran
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          build/test/simd/chacha20 | grep -E '^chacha20: [0-9]+ cases agree across avx2;'
+          grep -E '^PASS  chacha20 kernel: chacha20_hw_agree with NISH_CHACHA20 unset calls the kernel, whose vectors this CPU has' "$RUNNER_TEMP/test.log"
 
       - name: SHA-256 throughput on each path
         if: matrix.shard == 1
@@ -1140,6 +1150,7 @@ jobs:
           grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base \(plain: scalar base\);' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: sha256 native arm64: [0-9]+ cases agree across armv8-sha2;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: chacha20 native arm64: [0-9]+ cases agree across neon;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: crc32 native arm64: [0-9]+ cases agree across armv8-crc32' "$RUNNER_TEMP/simd.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
@@ -1173,6 +1184,22 @@ jobs:
             $run node bench/sha256/run.mjs --compiler build/nish-test
           done
 
+      # WP38 S10 on AArch64: std/crypto/chacha20poly1305.ts's keystream on the
+      # NEON kernel, with NISH_CHACHA20 unset and set to soft.
+      - name: The lowered ChaCha20 program, natively on AArch64
+        run: |
+          set -o pipefail
+          node tests/run.js "chacha20 kernel" | tee "$RUNNER_TEMP/chacha20-kernel.log"
+          grep -E '^PASS  chacha20 kernel: chacha20_hw_agree with NISH_CHACHA20 unset calls the kernel, whose vectors this CPU has' "$RUNNER_TEMP/chacha20-kernel.log"
+
+      # The figures, not a gate: S10's AArch64 verdict (`NISH_CHACHA20_ARM_ON`
+      # in runtime/runtime-chacha20.c) is read from this table, built with the
+      # stage1 the sections above linked into build/nish-test.
+      - name: ChaCha20-Poly1305 throughput on AArch64
+        run: |
+          node bench/chacha20.mjs --check --compiler build/nish-test
+          node bench/chacha20.mjs --runs 9 --compiler build/nish-test
+
       # WP38's CRC-32 on AArch64: the compiler's branch to the ARMv8 CRC32
       # kernel, run end to end against the Nish walk.
       - name: The lowered CRC-32 programs, natively on AArch64
@@ -1202,6 +1229,16 @@ jobs:
         run: |
           node bench/adler32.mjs --check --compiler build/nish-test
           node bench/adler32.mjs --runs 12 --compiler build/nish-test
+
+      # The figures, not a gate: WP38 S10's ChaCha20 paths (portable 128-bit
+      # and NEON) held to the scalar reference and RFC 8439's vector, then
+      # ChaCha20-Poly1305 seal and open timed on each against the Nish AEAD
+      # with a copy column for the noise band, and the verdict against both
+      # routes' bars (docs/wp38-simd.md §3.1).
+      - name: ChaCha20 throughput on AArch64
+        run: |
+          node bench/chacha20.mjs --check --compiler build/nish-test
+          node bench/chacha20.mjs --runs 10 --compiler build/nish-test
 
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on

@@ -512,6 +512,21 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  */
 const RUNTIME_SHA256_TEXT_BUDGET = 512
 /**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-chacha20.c`
+ * -- ChaCha20's keystream on vectors (WP38 S10): `nish_chacha20_hw`, its CPUID and
+ * XGETBV question and `NISH_CHACHA20` pin, and `nish_chacha20_xor`, the eight-block
+ * AVX2 loop, the four-block 128-bit one and the one-block tail (NEON's four-block
+ * loop on AArch64).
+ *
+ * Measured **3,771 bytes** on 2026-11-03 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the kernel with its two unrolled vector loops and its tail 3,608, the
+ * resolver 163; the rotate masks are `.rodata`. Its own translation unit rather than
+ * more of `runtime-aes.c`: a program that speaks AES-GCM carries no ChaCha20, and the
+ * rule is a new file with its own measured ceiling, never a raised one. The budget is
+ * the next 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+const RUNTIME_CHACHA20_TEXT_BUDGET = 3840
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-checksum.c`
  * -- CRC-32 on the CPU's carry-less multiply (WP38 CRC): `nish_crc32_hw`, its CPUID
  * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel.
@@ -780,6 +795,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
   ["runtime/runtime-sha256.c", RUNTIME_SHA256_TEXT_BUDGET, "RUNTIME_SHA256_TEXT_BUDGET", []],
+  ["runtime/runtime-chacha20.c", RUNTIME_CHACHA20_TEXT_BUDGET, "RUNTIME_CHACHA20_TEXT_BUDGET", []],
   ["runtime/runtime-checksum.c", RUNTIME_CHECKSUM_TEXT_BUDGET, "RUNTIME_CHECKSUM_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],

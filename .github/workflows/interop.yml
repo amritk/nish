@@ -50,6 +50,7 @@ on:
       - "scripts/build.sh"
       - "runtime/runtime-aes.c"
       - "runtime/runtime-sha256.c"
+      - "runtime/runtime-chacha20.c"
       - "runtime/runtime-checksum.c"
       - "runtime/runtime-bytes.c"
       - "runtime/runtime-sandbox.c"

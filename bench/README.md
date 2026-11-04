@@ -660,6 +660,41 @@ at 2.10 GHz, at 9046339. The AArch64 run is CI's `simd-arm64` job on
 | adler-64k | 22,719 | 22,691 | 3,199 | 20,806 | 21,699 | 21,691 | 2,878 | 33,096 |
 | adler-1m | 375,586 | 368,880 | 53,562 | 343,377 | 347,110 | 347,366 | 48,164 | 530,742 |
 
+## ChaCha20 on vectors
+
+`chacha20.ts` times ChaCha20-Poly1305 seal and open at 64 B, 1 KiB, 16 KiB
+and 1 MiB, 32 MiB a workload, and each half alone on 16 KiB, in ns/op. It is
+WP38 S10's measure of a vector ChaCha20
+([docs/wp38-simd.md §3.1](../docs/wp38-simd.md)), not in this suite's
+tables, and has no twins. `chacha20 std` runs the std AEAD;
+`chacha20 kernel` runs `chacha20/aead.ts`, a copy of the std file whose
+keystream loop hands a buffer of four blocks or more to `chacha20/kernel.c`.
+The kernel's path is `BENCH_CHACHA20`: `scalar` (a C copy of the Nish loop),
+`vec128` (four blocks in portable `vector_size(16)` C), `avx2` (eight,
+behind a CPUID check) or `neon` (four, on AArch64). `chacha20.mjs` builds
+them with clang at `-O2` and no CPU flag, holds every path to the scalar
+reference and RFC 8439 §2.4.2's vector, then runs `nish`, `nish (copy)` (the
+noise band), one column a path and `shipped` in interleaved rounds. `nish`
+and its copy run the std AEAD under `NISH_CHACHA20=soft`, the Nish loop;
+`shipped` runs it with the variable unset, so the runtime's own kernel
+(`runtime/runtime-chacha20.c`) takes the keystream where the CPU has its
+vectors:
+
+```bash
+npm run build
+node bench/chacha20.mjs --check          # one short run per column; each checksum against the pinned one
+node bench/chacha20.mjs --runs 10        # every column, minimum and median, then both verdicts
+```
+
+After the table come each size's gains and band, and two verdicts: the
+runtime kernel's (the widest path at least 20% faster than `nish`, above the
+band) and `nish:simd`'s (`vec128` at least 1.5x `nish`), each naming the AEAD
+sizes it clears at. A 64-byte message is under the four blocks the kernel
+takes, so its row runs the Nish loop in every column and shows no loss, not a
+gain.
+The figures and their reading are in
+[docs/wp38-simd.md §3.1](../docs/wp38-simd.md).
+
 ## HTTP
 
 `http1-server.ts` is a program built on `nish/net/http1-server` the way the

@@ -510,16 +510,41 @@ export class Taint {
    */
   taintFlags(secret) {
     if (this.preciseFlags && (this.target.name === "aarch64" || X86_FLAGS_ASSIGN.test(this.mnemonic))) {
-      if (secret) {
-        this.secret.add("flags")
-      } else {
-        this.secret.delete("flags")
-      }
+      this.assignFlag("flags", secret)
+      this.assignFlag("cf", secret)
+      return
+    }
+    // `inc` and `dec` write every flag but CF, which keeps its taint
+    // from whatever wrote it last (a round counter's `decl; jne`).
+    if (this.preciseFlags && X86_FLAGS_KEEP_CF.test(this.mnemonic)) {
+      this.assignFlag("flags", secret)
       return
     }
     if (secret && !(this.preciseFlags && X86_FLAGS_KEEP.test(this.mnemonic))) {
       this.secret.add("flags")
+      this.secret.add("cf")
     }
+  }
+
+  /** Sets or clears the taint of one flags pseudo-register, "flags" (ZF, SF, OF, PF) or "cf". */
+  assignFlag(name, secret) {
+    if (secret) {
+      this.secret.add(name)
+    } else {
+      this.secret.delete(name)
+    }
+  }
+
+  /**
+   * Whether the flags an x86-64 condition reads are secret: every
+   * condition reads "flags" but those that read only ZF, SF, OF or PF
+   * skip "cf". On aarch64 every flag write sets both alike.
+   */
+  flagsSecret(mnemonic) {
+    if (this.secret.has("flags")) {
+      return true
+    }
+    return this.secret.has("cf") && !X86_NO_CF_CONDITION.test(mnemonic)
   }
 
   /** A copy that shares nothing mutable with this state. */
@@ -791,6 +816,10 @@ const X86_FLAGS_ASSIGN = /^(cmp|test|add|sub|and|or|xor|neg|adc|sbb)[bwlq]?$|^v?
  * still only adds its taint. On aarch64 only a compare or an `s`-suffixed
  * instruction writes the flags, all four at once, so there every write sets them.
  */
+/** These write ZF, SF, OF and PF from their operand and leave CF alone. */
+const X86_FLAGS_KEEP_CF = /^(inc|dec)[bwlq]?$/
+/** A jump, set or move whose condition reads no CF: `je`, `jne`, `js`, `jl`, `jg`, `jo`, `jp` and their aliases. */
+const X86_NO_CF_CONDITION = /^(j|set|cmov)(n?[ezsop]|pe|po|n?[lg]e?)[bwlq]?$/
 const X86_FLAGS_KEEP =
   /^(v?mov\w*|lea[wlq]?|bswap[lq]?|not[bwlq]?|set\w+|cmov\w+|cltq|cqto|cltd|cwtl|v?p(?!test|opcnt|cmp[ei]str)\w+|v?aes\w+|v?(shuf|unpck[hl]|xor|andn?|or|blend)p[sd]|v?insertps|v?extractps)$/
 
@@ -895,7 +924,7 @@ const stepX86 = (t, mnemonic, operands) => {
     mnemonic,
     ops.filter((op) => op !== memory)
   )
-  let secret = readsFlags && t.secret.has("flags")
+  let secret = readsFlags && t.flagsSecret(mnemonic)
   let loaded = false
   let stack = false
   let copied = null
@@ -1081,7 +1110,7 @@ const stepArm = (t, mnemonic, operands) => {
     return "unmodelled"
   }
   const readsFlags = ARM_READS_FLAGS.test(mnemonic)
-  const flagSecret = readsFlags && t.secret.has("flags")
+  const flagSecret = readsFlags && t.flagsSecret(mnemonic)
   if (ARM_COMPARE.test(mnemonic)) {
     const regs = ops.flatMap((op) => op.registers)
     t.taintFlags(flagSecret || t.anySecret(regs))
@@ -1438,6 +1467,36 @@ const AUDIT_CORNERS = [
   ],
   // And a string compare on public operands, which leaves %ecx and the flags public.
   ["x86-64", "a", null, ["pcmpistri $0, %xmm1, %xmm2", "movl (%rsi,%rcx,4), %eax"], { preciseFlags: true }],
+  // `dec` (a round counter's `decl; jne`) writes ZF, SF, OF and PF from its public
+  // operand, so a flag read after it is public: but CF is still the secret add's.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "addl %edi, %eax",
+      "movl $10, %ecx",
+      "decl %ecx",
+      "sete %dl",
+      "movzbl %dl, %edx",
+      "movl (%rsi,%rdx,4), %eax",
+    ],
+    { preciseFlags: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "addl %edi, %eax",
+      "movl $10, %ecx",
+      "decl %ecx",
+      "setb %dl",
+      "movzbl %dl, %edx",
+      "movl (%rsi,%rdx,4), %eax",
+    ],
+    { preciseFlags: true },
+  ],
 ]
 
 /** A listing to follow calls through: the callees first, as LLVM lays them out. */

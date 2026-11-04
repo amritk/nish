@@ -532,6 +532,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   link.push("runtime/runtime-simd.c");
   link.push("runtime/runtime-aes.c");
   link.push("runtime/runtime-sha256.c");
+  link.push("runtime/runtime-chacha20.c");
   link.push("runtime/runtime-checksum.c");
   link.push("runtime/runtime-term.c");
   link.push("runtime/runtime-bytes.c");

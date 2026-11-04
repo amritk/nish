@@ -24,6 +24,8 @@ const AES_SEAM_GHASH: i32 = 4
 const AES_HW: string = "nish_aes_hw" [exported]
 const SHA256_HW: string = "nish_sha256_hw" [exported]
 const SHA256_KERNEL: string = "nish_sha256_compress" [exported]
+const CHACHA20_HW: string = "nish_chacha20_hw" [exported]
+const CHACHA20_KERNEL: string = "nish_chacha20_xor" [exported]
 const CRC32_HW: string = "nish_crc32_hw" [exported]
 const CRC32_KERNEL: string = "nish_crc32_update" [exported]
 const BYTES_WALK_NONE: i32 = 0 [exported]
@@ -60,6 +62,13 @@ function aesKernelOf(seam: i32): string -> @aesKernelOf [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function isSha256Seam(program: CheckedProgram, sig: FunctionSig): boolean -> @isSha256Seam [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
+  pointer program: size=672 writesThrough=false captured=false
+  pointer sig: size=160 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:27 stdModuleName -> @stdModuleName
+function isChacha20Seam(program: CheckedProgram, sig: FunctionSig): boolean -> @isChacha20Seam [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   pointer program: size=672 writesThrough=false captured=false

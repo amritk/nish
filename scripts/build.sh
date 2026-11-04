@@ -3,7 +3,7 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is fifteen translation units and is named as one: an input
+# The C runtime is sixteen translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
@@ -14,6 +14,7 @@
 # the SSE4.1 rounding of `Math.floor` and its kin,
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
 # <dir>/runtime-sha256.c, SHA-256 on the CPU's SHA instructions,
+# <dir>/runtime-chacha20.c, ChaCha20's keystream on AVX2 or NEON vectors,
 # <dir>/runtime-checksum.c, CRC-32 on its carry-less multiply or CRC instructions,
 # <dir>/runtime-term.c, stdin and the terminal of `nish:term`,
 # <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`,
@@ -223,14 +224,14 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is fifteen translation units, and a caller names one: whoever passes
+# The runtime is sixteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
-# <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,
+# <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-chacha20.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,
 # <dir>/runtime-bytes.c, <dir>/runtime-sandbox.c, <dir>/runtime-shm.c and <dir>/runtime-region.c compiled beside it, on every profile,
 # wasi included: runtime-simd.c and runtime-bytes.c take their scalar paths there
 # unless the build adds -msimd128,
-# runtime-aes.c, runtime-sha256.c and runtime-checksum.c compile to an answer of 0 and
+# runtime-aes.c, runtime-sha256.c, runtime-chacha20.c and runtime-checksum.c compile to an answer of 0 and
 # stubs that nothing calls, because the compiler emits no call to their kernels for wasm32, and
 # runtime-term.c reads stdin and answers "not a terminal", and runtime-sandbox.c
 # compiles to two functions that refuse to run, which no wasm build calls, and
@@ -244,7 +245,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
+halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-chacha20.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -693,14 +694,16 @@ case "$profile" in
     fi
     # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
     # AES kernels behind `nish_aes_hw`, std/crypto/sha256.ts's block function behind
-    # `nish_sha256_hw` and std/compress/checksum.ts's CRC-32 kernel behind
-    # `nish_crc32_hw` (src/kernels.ts). runtime-aes.c's, runtime-sha256.c's and
-    # runtime-checksum.c's wasm32 builds answer 0 there, so the Nish code runs, and
+    # `nish_sha256_hw`, std/crypto/chacha20poly1305.ts's keystream loop behind
+    # `nish_chacha20_hw` and std/compress/checksum.ts's CRC-32 kernel behind
+    # `nish_crc32_hw` (src/kernels.ts). runtime-aes.c's, runtime-sha256.c's,
+    # runtime-chacha20.c's and runtime-checksum.c's wasm32 builds answer 0 there,
+    # so the Nish code runs, and
     # each is added only for such IR: every other module links the bytes it always did.
     # Each pair is a unit and the kernel its probe names.
     # A caller that names the unit itself is left alone, as `halves` leaves it:
     # one object named twice is a duplicate-symbol error.
-    for pair in aes:aes sha256:sha256 checksum:crc32; do
+    for pair in aes:aes sha256:sha256 chacha20:chacha20 checksum:crc32; do
       unit=${pair%%:*}
       kernel=${pair#*:}
       named=0

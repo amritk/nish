@@ -35,6 +35,11 @@ found, and which test now pins each property.
   contract (AEAD-1's hand-built keys), and its output then depends on the path
   the process runs; the H = 0 guard still holds on both, because
   `ghashLengths`' last multiply by `h[0]:h[1]` = 0 makes S zero either way.
+- Not here: `runtime/runtime-chacha20.c`, the AVX2 and NEON kernel the
+  compiler calls in place of `chacha20XorInto` for four blocks or more (WP38
+  S10), and its lowering, which
+  [crypto-chacha20-hw.md](crypto-chacha20-hw.md) records. The Nish
+  `chacha20XorInto` it stands in for stays this record's.
 
 Out of scope: the constant-time helpers the modules call (`ctEq`,
 `ctSelect`, `std/crypto/ct.ts`), the disassembly checker itself

@@ -63,6 +63,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime-simd.c       vector byte search (C, 0.7 KB)   │
 │    runtime/runtime-aes.c        AES-NI/PMULL AES-GCM (C, 2.5 KB) │
 │    runtime/runtime-sha256.c     SHA-NI/ARMv8 SHA-256 (C, 0.5 KB) │
+│    runtime/runtime-chacha20.c   AVX2/NEON ChaCha20 (C, 3.7 KB)   │
 │    runtime/runtime-term.c       stdin, raw mode (C, 0.7 KB)      │
 │    runtime/runtime-bytes.c      JSON byte-class runs (C, 1.3 KB) │
 │    runtime/runtime-checksum.c   CRC-32 kernels (C, 0.7 KB)       │
@@ -101,6 +102,7 @@ Design rules that every WP must respect:
   | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
   | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
   | `runtime-sha256.c` | 495 (2026-10-30) | 512 |
+  | `runtime-chacha20.c` | 3,771 (2026-11-03) | 3,840 |
   | `runtime-term.c` | 1,825 (2026-10-24) | 2,048 |
   | `runtime-bytes.c` | 1,525 (2026-10-24) | 1,536 |
   | `runtime-checksum.c` | 718 (2026-10-30) | 768 |

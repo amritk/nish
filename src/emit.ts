@@ -155,9 +155,12 @@ import {
   aesKernelOf,
   BYTES_WALK_NONE,
   bytesWalkOf,
+  CHACHA20_HW,
+  CHACHA20_KERNEL,
   CRC32_HW,
   CRC32_KERNEL,
   isAesSeam,
+  isChacha20Seam,
   isCrc32Seam,
   isIndexOfAnyWalk,
   isJsonPutF64Walk,
@@ -1789,10 +1792,10 @@ export class Emitter {
     if (isJsonPutF64Walk(this.program, sig)) {
       return emitJsonPutF64Kernel(this, operandValues)
     }
-    // WP38 S5: a seam of `nish/crypto/aes`, or `nish/crypto/sha256`'s block
-    // function, runs the runtime kernel when its resolver says so and the
-    // walker below when not (`src/kernels.ts`). Never on wasm32, which has no
-    // kernel to branch to.
+    // WP38 S5: a seam of `nish/crypto/aes`, `nish/crypto/sha256`'s block
+    // function or `nish/crypto/chacha20poly1305`'s keystream loop (S10) runs
+    // the runtime kernel when its resolver says so and the walker below when
+    // not (`src/kernels.ts`). Never on wasm32, which has no kernel to branch to.
     let kernelJoin: IRBlock | null = null
     if (!isWasmBuild(this.opts)) {
       const aesSeam = isAesSeam(this.program, sig)
@@ -1800,6 +1803,8 @@ export class Emitter {
         kernelJoin = this.emitKernelArm(AES_HW, aesKernelOf(aesSeam), "aes", operands, false)
       } else if (isSha256Seam(this.program, sig)) {
         kernelJoin = this.emitKernelArm(SHA256_HW, SHA256_KERNEL, "sha256", operands, true)
+      } else if (isChacha20Seam(this.program, sig)) {
+        kernelJoin = this.emitKernelArm(CHACHA20_HW, CHACHA20_KERNEL, "chacha20", operands, true)
       }
     }
     // WP38 CRC: `nish/compress/checksum`'s walk, the same branch, whose arms

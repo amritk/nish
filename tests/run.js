@@ -133,7 +133,8 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, `runtime-sha256.c` the SHA-256 block on its SHA
- * instructions, `runtime-checksum.c` CRC-32 on its carry-less
+ * instructions, `runtime-chacha20.c` ChaCha20's keystream on AVX2 or
+ * NEON, `runtime-checksum.c` CRC-32 on its carry-less
  * multiply or CRC instructions, `runtime-term.c` stdin and the terminal of
  * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes`,
  * `runtime-sandbox.c` the `--sandbox` confinement and `runtime-shm.c` the
@@ -141,7 +142,7 @@ process.env.XDG_CACHE_HOME = suiteCache
  * makes and frees one at a time, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same fifteen:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same sixteen:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -161,6 +162,7 @@ const RUNTIME_C = [
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
   "runtime/runtime-sha256.c",
+  "runtime/runtime-chacha20.c",
   "runtime/runtime-checksum.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
@@ -9171,7 +9173,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's fifteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's sixteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -9227,6 +9229,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-simd.c",
       "runtime-aes.c",
       "runtime-sha256.c",
+      "runtime-chacha20.c",
       "runtime-checksum.c",
       "runtime-term.c",
       "runtime-bytes.c",
@@ -9240,7 +9243,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the fifteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the sixteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -9249,7 +9252,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the fifteen runtime units once",
+      "runtime cache: the miss compiled each of the sixteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -18440,7 +18443,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -19379,7 +19382,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|crc32): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|chacha20|crc32): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -19465,6 +19468,32 @@ if (!only || "simd".includes(only)) {
     )
   }
 
+  // WP38 S10: runtime/runtime-chacha20.c runs ChaCha20's keystream eight blocks at
+  // once on AVX2, or four on NEON, in place of std/crypto/chacha20poly1305.ts's
+  // `chacha20XorInto`. tests/simd/chacha20.c includes the file and holds the kernel to
+  // RFC 8439's block function -- §2.4.2's vector, every length 256..4,096 and some up
+  // to 64 KiB at offsets 0..17 in place and apart, 20,000 fuzzed calls and the guard's
+  // every edge -- and checks `nish_chacha20_hw` under each `NISH_CHACHA20`. Where
+  // /proc/cpuinfo says the x86-64 CPU has AVX2, the line must name the path.
+  const chachaSaid = agree(
+    `chacha20 native ${process.arch}`,
+    [],
+    path.join(simdDir, "chacha20"),
+    native,
+    "tests/simd/chacha20.c"
+  )
+  if (process.arch === "x64" && cpuFeatures.has("avx2")) {
+    check(
+      "simd: chacha20 ran the avx2 path, which /proc/cpuinfo says this CPU has",
+      /cases agree across avx2;/.test(chachaSaid),
+      chachaSaid
+    )
+  } else {
+    skip(
+      `simd: chacha20: /proc/cpuinfo names no AVX2 for ${process.platform}-${process.arch}, so no x86-64 kernel path is required to run`
+    )
+  }
+
   // WP38 §3.1: runtime/runtime-checksum.c runs CRC-32 on PCLMULQDQ folding, or on the
   // ARMv8 CRC32 instructions, and
   // Crc32.update takes that path or std/compress/checksum.ts's tables. tests/simd/crc32.c
@@ -19542,7 +19571,8 @@ if (!only || "simd".includes(only)) {
       )
     } else {
       // The NEON path of the byte search, the ARMv8 AES and PMULL path of
-      // runtime-aes.c and the ARMv8 SHA-256 path of runtime-sha256.c. qemu-user takes
+      // runtime-aes.c, the ARMv8 SHA-256 path of runtime-sha256.c and the NEON path
+      // of runtime-chacha20.c. qemu-user takes
       // its CPU from QEMU_CPU, and `max` has AES, PMULL and SHA2, so those drivers'
       // lines must name their paths: a soft-only run that
       // agreed would otherwise pass as the hardware one.
@@ -19577,6 +19607,13 @@ if (!only || "simd".includes(only)) {
           /cases agree across armv8-sha2;/,
         ],
         [
+          "chacha20 aarch64 through binfmt, the NEON path",
+          "tests/simd/chacha20.c",
+          path.join(simdDir, "chacha20.aarch64"),
+          "the NEON path of ChaCha20",
+          /cases agree across neon;/,
+        ],
+        [
           "crc32 aarch64 through binfmt (QEMU_CPU=max), the ARMv8 CRC32 path",
           "tests/simd/crc32.c",
           path.join(simdDir, "crc32.aarch64"),
@@ -19593,7 +19630,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|crc32:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|chacha20:|crc32:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -19643,7 +19680,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_chacha20\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
@@ -19670,6 +19707,9 @@ if (!only || "simd".includes(only)) {
         : "nish_sha256_hw: 1\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\n"
     const noShaDir = runtimeWithout("runtime-sha256.c")
     const noCrcDir = runtimeWithout("runtime-checksum.c")
+    const chachaControl =
+      process.arch === "x64" && cpuFeatures.has("avx2") ? "nish_chacha20_hw: 1\n10f1e7e4d13b5915500fdd1fa32071c4 5\n" : null
+    const noChachaDir = runtimeWithout("runtime-chacha20.c")
     for (const profile of ["speed", "size"]) {
       const quiet =
         compiled.status === 0
@@ -19775,6 +19815,31 @@ if (!only || "simd".includes(only)) {
           `hello without: ${withoutCrc.bytes?.length ?? "(not linked)"} bytes ${withoutCrc.why}\n` +
           `the control keeps: ${crcCtrl.names.join(" ") || "(none)"} ${crcCtrl.why}\nthe control printed: ${crcPrinted || "(not run)"}`
       )
+
+      // runtime-chacha20.c, the same way, its control giving RFC 8439 §2.3.2's block
+      // where the CPU runs the kernel.
+      const withoutChacha =
+        compiled.status === 0
+          ? kept([helloLl], path.join(simdDir, `hello-no-chacha20.${profile}`), profile, path.join(noChachaDir, "runtime.c"))
+          : { ok: false, names: [], bytes: null, why: compiled.stderr }
+      const chachaExe = path.join(simdDir, `chacha20-calls.${profile}`)
+      const chachaCtrl = kept(["tests/simd/chacha20-calls.c"], chachaExe, profile)
+      const chachaRan = chachaCtrl.ok ? spawnSync(chachaExe, [], { encoding: "utf8" }) : null
+      const chachaPrinted = chachaRan === null ? "" : String(chachaRan.stdout)
+      check(
+        `simd: --profile ${profile} links hello with runtime-chacha20.c to the same bytes as without it, and a program that calls the kernel runs it`,
+        withoutChacha.ok &&
+          quiet.ok &&
+          withoutChacha.bytes.equals(quiet.bytes) &&
+          chachaCtrl.ok &&
+          chachaCtrl.names.includes("nish_chacha20_xor") &&
+          !chachaCtrl.names.includes("__cpu_model") &&
+          chachaRan.status === 0 &&
+          (chachaControl === null ? /^nish_chacha20_hw: [01]\n/.test(chachaPrinted) : chachaPrinted === chachaControl),
+        `hello with runtime-chacha20.c: ${quiet.bytes?.length ?? "(not linked)"} bytes ${quiet.why}\n` +
+          `hello without: ${withoutChacha.bytes?.length ?? "(not linked)"} bytes ${withoutChacha.why}\n` +
+          `the control keeps: ${chachaCtrl.names.join(" ") || "(none)"} ${chachaCtrl.why}\nthe control printed: ${chachaPrinted || "(not run)"}`
+      )
     }
   }
 
@@ -19829,9 +19894,24 @@ if (!only || "simd".includes(only)) {
       crcRan !== null && crcRan.status === 0 && crcRan.stdout === "nish_crc32_hw: 0\n",
       cb.status !== 0 ? cb.stderr : `${crcRan.stdout}${crcRan.stderr}`
     )
+    const chachaWasm = path.join(simdDir, "chacha20-calls.wasm")
+    const chachaB = spawnSync(
+      "bash",
+      ["scripts/build.sh", "tests/simd/chacha20-calls.c", "runtime/runtime.c", "-o", chachaWasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+    )
+    const chachaRan =
+      chachaB.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", chachaWasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      "simd: --profile wasi links runtime-chacha20.c, and nish_chacha20_hw answers 0 there",
+      chachaRan !== null && chachaRan.status === 0 && chachaRan.stdout === "nish_chacha20_hw: 0\n",
+      chachaB.status !== 0 ? chachaB.stderr : `${chachaRan.stdout}${chachaRan.stderr}`
+    )
   } else {
     skip(
-      "simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's, runtime-sha256.c's and runtime-checksum.c's wasm32 builds are not linked"
+      "simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's, runtime-sha256.c's, runtime-chacha20.c's and runtime-checksum.c's wasm32 builds are not linked"
     )
   }
 
@@ -19999,6 +20079,53 @@ if (!only || "simd runtime-aes wipe survives -O2".includes(only)) {
           plainCtr.length > 0 &&
           !/store i64 0,|@llvm\.memset/.test(plainCtr),
         `${real.why}${plain.why}nish_aes_ctr: ${zeros("nish_aes_ctr")}, nish_aes_ghash: ${zeros("nish_aes_ghash")} volatile zeros\n--- the twin's nish_aes_ctr:\n${plainCtr}`
+      )
+    }
+  }
+}
+
+// runtime/runtime-chacha20.c wipes the stack buffers its kernel owns -- each vector
+// loop's working words, input block and keystream, NEON's row buffer, the tail's block
+// and keystream -- with volatile 8-byte stores, as runtime-aes.c does (above). Every
+// buffer is inlined into `nish_chacha20_xor`, and clang keeps some wipes as loops, so
+// the stores are not counted one a buffer: the unit's `clang -O2` IR for each target must
+// hold at least one volatile zero for each wipe the source spells on that target (eight on
+// x86-64, six on aarch64), and a twin of the file without `volatile` must hold fewer zero
+// stores than the real one has volatile ones, the proof the compiler drops plain ones.
+if (!only || "simd runtime-chacha20 wipe survives -O2".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("runtime-chacha20.c: no clang to show its wipes survive -O2")
+  } else {
+    const wipeDir = path.join(buildDir, "chacha20-wipe")
+    fs.rmSync(wipeDir, { recursive: true, force: true })
+    fs.mkdirSync(wipeDir, { recursive: true })
+    const source = fs.readFileSync(path.join(root, "runtime", "runtime-chacha20.c"), "utf8")
+    const volatileWipe = "volatile uint64_t *v = (volatile uint64_t *)p;"
+    const twin = path.join(wipeDir, "runtime-chacha20-plain.c")
+    fs.writeFileSync(twin, source.replace(volatileWipe, "uint64_t *v = (uint64_t *)p;"))
+    /** `nish_chacha20_xor`'s body in the `clang -O2` IR of `file` for `triple`. */
+    const xorBody = (file, triple) => {
+      const o = spawnSync(
+        "clang",
+        ["-O2", "-S", "-emit-llvm", "-ffreestanding", `--target=${triple}`, "-I", path.join(root, "runtime"), file, "-o", "-"],
+        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+      )
+      const m = /^define[^\n]*@nish_chacha20_xor\([\s\S]*?\n\}/m.exec(String(o.stdout))
+      return { ok: o.status === 0 && m !== null, why: o.stderr, body: m === null ? "" : m[0] }
+    }
+    // The wipes the source spells: three in each of x86-64's two vector loops and two in
+    // the tail; four in the NEON loop and two in the tail.
+    const sites = { "x86-64": 8, aarch64: 6 }
+    for (const target of CT_TARGETS) {
+      const real = xorBody("runtime/runtime-chacha20.c", target.triple)
+      const plain = xorBody(twin, target.triple)
+      const volatileZeros = (real.body.match(/store volatile i64 0,/g) ?? []).length
+      const plainZeros = (plain.body.match(/store i64 0,|store <\d+ x i\d+> zeroinitializer|@llvm\.memset/g) ?? []).length
+      const want = sites[target.name] ?? 0
+      check(
+        `runtime-chacha20.c on ${target.name}: the wipes survive clang -O2 (a volatile zero of 8 bytes for each of nish_chacha20_xor's ${want} wipes), where a twin without volatile keeps fewer zero stores`,
+        source.includes(volatileWipe) && real.ok && plain.ok && want > 0 && volatileZeros >= want && plainZeros < volatileZeros,
+        `${real.why}${plain.why}volatile zeros: ${volatileZeros}, the twin's zero stores: ${plainZeros}`
       )
     }
   }
@@ -20869,6 +20996,238 @@ if (!only || "sha256 kernel wasi sha256_hw".includes(only)) {
     )
   } else {
     skip(`sha256 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of sha256_hw_vectors is not checked for kernel references`)
+  }
+}
+
+// ---- WP38 S10: the ChaCha20 kernel against std/crypto/chacha20poly1305.ts --------------
+// The compiler lowers every call of std/crypto/chacha20poly1305.ts's `chacha20XorInto`
+// to a branch on `nish_chacha20_hw`: runtime-chacha20.c's `nish_chacha20_xor` (eight
+// blocks at once on AVX2, four on NEON) on one arm, the Nish loop on the other, and the
+// Nish loop again when the kernel's guard refuses the call (under four blocks, an
+// offset or window it cannot vouch for), so a bad window panics with the Nish message
+// on either path (src/kernels.ts). `tests/link/chacha20_hw_agree` holds both arms to
+// Node's ChaCha20-Poly1305 and raw ChaCha20 over a seeded corpus whose lengths sit at
+// each of the kernel's block boundaries. It is linked with the kernel wrapped
+// (`-Wl,--wrap`) by a counter that reports its calls on exit, then run with
+// `NISH_CHACHA20` unset and set to `soft`: the two stdouts must be each other's and
+// `expected.out`, the soft run must call no kernel, and where the CPU has the vectors
+// (AVX2 by /proc/cpuinfo, or any AArch64) the unset run must call it. The debug
+// profile links it, for the reason the AES section gives.
+//
+// A wasm32 build has no kernel to branch to, so the lowering is skipped there: a
+// `--profile wasi` build must reference no `nish_chacha20_` symbol, in its IR or in the
+// link, where the native IR linked the same way is the trace's control. The
+// freestanding `wasm` profile links IR compiled for the host, so build.sh adds
+// runtime-chacha20.c for it, whose wasm32 build answers 0, and the Nish loop runs.
+if (!only || "chacha20 kernel wasi chacha20_hw".includes(only)) {
+  const ccDir = path.join(buildDir, "chacha20-kernel")
+  fs.rmSync(ccDir, { recursive: true, force: true })
+  fs.mkdirSync(ccDir, { recursive: true })
+  const program = "chacha20_hw_agree"
+  const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+  /** Whether runtime-chacha20.c's resolver picks a vector path on this CPU. */
+  const cpuHasChachaVectors = (process.arch === "x64" && cpuFeatures.has("avx2")) || process.arch === "arm64"
+
+  if (!HAS_CLANG) {
+    skip("chacha20 kernel: no clang to link chacha20_hw_agree against runtime-chacha20.c")
+  } else if (process.platform !== "linux") {
+    skip(
+      `chacha20 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+    )
+  } else {
+    const counter = path.join(ccDir, "count.c")
+    const arr = "struct nish_array"
+    const params = `${arr} *state, const ${arr} *src, int32_t src_at, int32_t len, ${arr} *dst, int32_t dst_at`
+    fs.writeFileSync(
+      counter,
+      [
+        "#include <stdint.h>",
+        "#include <stdio.h>",
+        `${arr};`,
+        "static unsigned long nish_chacha20_calls;",
+        `int32_t __real_nish_chacha20_xor(${params});`,
+        `int32_t __wrap_nish_chacha20_xor(${params}) { nish_chacha20_calls++; return __real_nish_chacha20_xor(state, src, src_at, len, dst, dst_at); }`,
+        "__attribute__((destructor)) static void nish_chacha20_report(void) {",
+        '  fprintf(stderr, "chacha20 kernel calls: %lu\\n", nish_chacha20_calls);',
+        "}",
+        "",
+      ].join("\n")
+    )
+    const unset = { ...process.env }
+    delete unset.NISH_CHACHA20
+    const compiled = compileLinkModules(program, path.join(ccDir, program), [])
+    const exe = path.join(ccDir, `${program}.counted`)
+    const linked =
+      compiled.lls.length > 0
+        ? spawnSync(
+            "bash",
+            [
+              "scripts/build.sh",
+              ...compiled.lls,
+              "runtime/runtime.c",
+              counter,
+              "-Wl,--wrap=nish_chacha20_xor",
+              "-o",
+              exe,
+              "--profile",
+              "debug",
+            ],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    if (linked === null || linked.status !== 0) {
+      check(`chacha20 kernel: ${program} links with the kernel counted`, false, linked === null ? compiled.why : linked.stderr)
+    } else {
+      const hw = spawnSync(exe, [], { encoding: "utf8", env: unset })
+      const soft = spawnSync(exe, [], { encoding: "utf8", env: { ...unset, NISH_CHACHA20: "soft" } })
+      /** The count the wrapper printed, or null. */
+      const calls = (r) => {
+        const m = /^chacha20 kernel calls: (\d+)$/m.exec(r.stderr)
+        return m === null ? null : Number(m[1])
+      }
+      check(
+        `chacha20 kernel: ${program} prints the same bytes with NISH_CHACHA20 unset and with NISH_CHACHA20=soft, and they are its expected.out`,
+        hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+        `--- NISH_CHACHA20 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_CHACHA20=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+      )
+      check(`chacha20 kernel: ${program} under NISH_CHACHA20=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+      if (cpuHasChachaVectors) {
+        check(
+          `chacha20 kernel: ${program} with NISH_CHACHA20 unset calls the kernel, whose vectors this CPU has`,
+          (calls(hw) ?? 0) > 0,
+          hw.stderr
+        )
+      } else {
+        check(
+          `chacha20 kernel: ${program} with NISH_CHACHA20 unset calls no kernel on an x86-64 CPU /proc/cpuinfo names no AVX2 for`,
+          calls(hw) === 0,
+          hw.stderr
+        )
+      }
+    }
+  }
+
+  // The freestanding `wasm` profile: host IR links with runtime-wasm.c, build.sh adds
+  // runtime-chacha20.c once, and the Nish loop's keystream is Node's.
+  if (has("wasm-ld")) {
+    const freeDir = path.join(ccDir, "freestanding")
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "stream.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { chacha20 } from "nish/crypto/chacha20poly1305"',
+        "",
+        "export const streamByte = (n: i32, at: i32): i32 => {",
+        "  const key: u8[] = []",
+        "  for (let i: i32 = 0; i < 32; i += 1) {",
+        "    key.push(toU8(i * 5 + 1))",
+        "  }",
+        "  const nonce: u8[] = []",
+        "  for (let i: i32 = 0; i < 12; i += 1) {",
+        "    nonce.push(toU8(i * 3 + 2))",
+        "  }",
+        "  const msg: u8[] = []",
+        "  for (let i: i32 = 0; i < n; i += 1) {",
+        "    msg.push(toU8(i * 7))",
+        "  }",
+        "  const out: u8[] | null = chacha20(key, 1, nonce, msg)",
+        "  if (out === null || at < 0 || at >= toI32(out.length)) {",
+        "    return -1",
+        "  }",
+        "  return toI32(out[at])",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const ir = path.join(freeDir, "ir")
+    const r = spawnSync(NISH, [source, "-o", `${ir}${path.sep}`], { cwd: root, encoding: "utf8" })
+    const lls = r.status === 0 ? fs.readdirSync(ir).filter((f) => f.endsWith(".ll")).map((f) => path.join(ir, f)) : []
+    const lowered = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_chacha20_hw("))
+    const wasm = path.join(freeDir, "stream.wasm")
+    const linked =
+      lls.length > 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", ...lls, "runtime/runtime-wasm.c", "-Wl,--trace-symbol=nish_chacha20_hw", "-o", wasm, "--profile", "wasm"],
+            { cwd: root, encoding: "utf8" }
+          )
+        : null
+    const definitions =
+      linked === null ? 0 : `${linked.stdout}${linked.stderr}`.split("\n").filter((l) => /definition of nish_chacha20_hw/.test(l)).length
+    const lengths = [0, 63, 256, 520]
+    const key = Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 5 + 1) & 255))
+    const iv = Buffer.concat([Buffer.from([1, 0, 0, 0]), Buffer.from(Array.from({ length: 12 }, (_, i) => (i * 3 + 2) & 255))])
+    const expect = lengths.map((n) =>
+      [...crypto.createCipheriv("chacha20", key, iv).update(Buffer.from(Array.from({ length: n }, (_, i) => (i * 7) & 255)))].join(",")
+    )
+    let got = []
+    let trapped = ""
+    if (linked !== null && linked.status === 0) {
+      try {
+        const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(wasm)), { env: {} })
+        got = lengths.map((n) => Array.from({ length: n }, (_, at) => instance.exports.streamByte(n, at)).join(","))
+      } catch (e) {
+        trapped = `the module trapped: ${e}\n`
+      }
+    }
+    check(
+      "chacha20 kernel: the freestanding --profile wasm link of a ChaCha20 module compiled for the host adds runtime-chacha20.c once, and its keystream is Node's",
+      lowered && linked.status === 0 && definitions === 1 && trapped === "" && got.join(";") === expect.join(";"),
+      `${r.stderr}IR calls nish_chacha20_hw: ${lowered}\n${linked === null ? "(not linked)" : `${linked.stderr}objects defining nish_chacha20_hw: ${definitions}\n`}${trapped}got  ${got.join(";").slice(0, 400)}\nwant ${expect.join(";").slice(0, 400)}`
+    )
+  } else {
+    skip("chacha20 kernel: no wasm-ld, so the freestanding wasm link of a ChaCha20 module is not checked")
+  }
+
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasi = compileLinkModules(program, path.join(ccDir, "wasi"), ["--profile", "wasi"])
+    const native = compileLinkModules(program, path.join(ccDir, "native"), [])
+    const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_chacha20_"))
+    /** The modules linked for wasm32-wasi with both ChaCha20 symbols traced. */
+    const traced = (lls, out) =>
+      spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...lls,
+          "runtime/runtime.c",
+          "-Wl,--trace-symbol=nish_chacha20_hw,--trace-symbol=nish_chacha20_xor",
+          "-o",
+          out,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+    const wasm = path.join(ccDir, `${program}.wasm`)
+    const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+    const control = native.lls.length > 0 ? traced(native.lls, path.join(ccDir, "native.wasm")) : null
+    const refs = (r) =>
+      r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_chacha20_/.test(l))
+    const ran =
+      linked !== null && linked.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : null
+    check(
+      `chacha20 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_chacha20_ symbol, and it prints its expected.out`,
+      wasi.lls.length > 0 &&
+        named.length === 0 &&
+        linked.status === 0 &&
+        refs(linked).length === 0 &&
+        control !== null &&
+        control.status === 0 &&
+        refs(control).length > 0 &&
+        ran !== null &&
+        ran.status === 0 &&
+        ran.stdout === want,
+      `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+        `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+        `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+        `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+    )
+  } else {
+    skip(`chacha20 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of chacha20_hw_agree is not checked for kernel references`)
   }
 }
 
@@ -25273,9 +25632,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all fifteen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all sixteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 15 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 16 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -26033,6 +26392,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-aes.c",
       // And the eleventh: the SHA-256 block on the CPU's SHA instructions.
       "runtime/runtime-sha256.c",
+      // And ChaCha20's keystream on AVX2 or NEON vectors (WP38 S10).
+      "runtime/runtime-chacha20.c",
       // And the tenth (WP38 S6a): the byte-class runs of `nish/bytes`, which
       // std/json's tokenizer calls.
       "runtime/runtime-bytes.c",
