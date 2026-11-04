@@ -91,8 +91,8 @@ export const getU64LE = (b: u8[], off: i32): u64 => {
   return v
 }
 
-/** The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`. */
-export const getU64BE = (b: u8[], off: i32): u64 => {
+/** `getU64BE` a byte at a time, each index checked: the path for an offset whose eight bytes are not all in the array. */
+const getU64BEByByte = (b: u8[], off: i32): u64 => {
   let v = toU64(0)
   for (let i: i32 = 0; i < 8; i++) {
     v = (v << toU64(8)) | toU64(b[off + i])
@@ -100,8 +100,18 @@ export const getU64BE = (b: u8[], off: i32): u64 => {
   return v
 }
 
-/** `getU32LE`'s bits as a two's-complement `i32`. */
-export const getI32LE = (b: u8[], off: i32): i32 => toI32(getU32LE(b, off))
+/** The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`. */
+export const getU64BE = (b: u8[], off: i32): u64 => {
+  if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
+    return (
+      (((toU64(b[off]) << toU64(56)) | (toU64(b[off + 1]) << toU64(48))) |
+        ((toU64(b[off + 2]) << toU64(40)) | (toU64(b[off + 3]) << toU64(32)))) |
+      (((toU64(b[off + 4]) << toU64(24)) | (toU64(b[off + 5]) << toU64(16))) |
+        ((toU64(b[off + 6]) << toU64(8)) | toU64(b[off + 7])))
+    )
+  }
+  return getU64BEByByte(b, off)
+}
 
 /** `getU32BE`'s bits as a two's-complement `i32`. */
 export const getI32BE = (b: u8[], off: i32): i32 => toI32(getU32BE(b, off))
