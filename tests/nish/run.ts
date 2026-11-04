@@ -596,6 +596,41 @@ const speedLinkNames = (): string[] => {
   return names;
 };
 
+/** The most stdout lines a link case that exited wrong prints, and the most bytes of each. */
+const STDOUT_LINES: i32 = 12;
+const STDOUT_LINE_BYTES: i32 = 200;
+
+/**
+ * Prints, under a link case's wrong exit code, its stdout from the first line
+ * that differs from `expected`: a program that tests itself prints the check
+ * that failed there, and a log that named only the exit code left a CI failure
+ * with nothing to read (#1195). At most `STDOUT_LINES` lines of at most
+ * `STDOUT_LINE_BYTES` each, so a program that floods stdout cannot flood the
+ * log.
+ */
+const printStdoutFrom = (stdout: string, expected: string): void => {
+  const got = splitLines(trim(stdout));
+  const wanted = splitLines(trim(expected));
+  let at: i32 = 0;
+  while (at < got.length && at < wanted.length && got[at] === wanted[at]) {
+    at++;
+  }
+  if (at >= got.length) {
+    const short = at < wanted.length ? `, ${wanted.length - at} lines short of expected.out` : "";
+    console.log(`      stdout: ${got.length} lines matching expected.out${short}`);
+    return;
+  }
+  console.log(`      stdout from line ${at + 1}, the first that differs from expected.out:`);
+  let i: i32 = at;
+  for (; i >= 0 && i < got.length && i < at + STDOUT_LINES; i++) {
+    const line = got[i];
+    console.log(`      | ${line.length > STDOUT_LINE_BYTES ? `${line.substring(0, STDOUT_LINE_BYTES)}...` : line}`);
+  }
+  if (i < got.length) {
+    console.log(`      | ... ${got.length - i} more lines`);
+  }
+};
+
 /**
  * One `tests/link/<name>/` program: `main.ts` is the entry, the whole program is
  * compiled to one `.ll` per module and — when clang is here — linked into a
@@ -691,14 +726,18 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
   const stdoutPath = `${work}.run.out`;
   const ran = spawnSyncTo([exe], stdoutPath, `${work}.run.err`);
   const wantedCode = parseInt(trim(expectedCode));
-  // The exit code first: a program that died somewhere else printed something
-  // else too, and reporting both would name the symptom twice.
-  if (!t.eqI32(`${label}: exits with ${wantedCode}`, ran, wantedCode)) {
-    return;
-  }
   // A missing `expected.out` means no output, which is what most of these
   // programs have: they return a number from `main` and print nothing.
-  t.eqStr(`${label}: stdout`, trim(readOrEmpty(stdoutPath)), trim(readOrEmpty(`${dir}/expected.out`)));
+  const stdout = readOrEmpty(stdoutPath);
+  const expected = readOrEmpty(`${dir}/expected.out`);
+  // The exit code first: a program that died somewhere else printed something
+  // else too, so its stdout is printed under that one failure rather than
+  // counted as a second.
+  if (!t.eqI32(`${label}: exits with ${wantedCode}`, ran, wantedCode)) {
+    printStdoutFrom(stdout, expected);
+    return;
+  }
+  t.eqStr(`${label}: stdout`, trim(stdout), trim(expected));
 };
 
 /**
