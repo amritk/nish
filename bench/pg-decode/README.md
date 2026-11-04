@@ -49,7 +49,73 @@ column must print the case's pinned checksum; `--validate` checks only that.
 iterations less the count at 10, over 100, so setup cancels. The header
 stamps the CPU model, its flags and the build flags.
 
-## Result
+## Result: the `putDecimal` cut
+
+`putDecimal` (so `paramInt`, `paramIntArray` and `arrayInt`) now writes each
+integer once, right to left, into the `pgDecimalLength(value)` bytes it
+reserved. Each step takes two digits from the magnitude as a `u64`, by an
+unchecked `% 100` and `/ 100`, with no table. The old writer wrote a digit a
+step, with a checked signed `%` and `/`, and then reversed them. The helper,
+`pgPutDecimal`, checks its window once: `at + n` must fit the buffer, or it
+panics with "a decimal outside its room". Its one caller reserves the room
+first, so no input reaches that panic. The bytes written are the same for
+every `i64`. The reservation is now the number's length rather than a flat 20
+bytes, so the output buffer may grow one call later than before;
+what goes on the wire does not change. `tests/link/std_postgres_decimal`
+checks this against the old writer for every digit count, both signs and both
+`i64` limits. It also checks a number whose last digit lands in the output
+buffer's last byte.
+
+Same machine and compiler as below. `base` is `std/` at `119a74c5` (main
+before this cut). Instructions an operation, from `--callgrind`. The copy
+column is within one instruction of the build in every case:
+
+| case | x86-64 nish | x86-64 base | | x86-64-v3 nish | x86-64-v3 base | |
+| --- | --- | --- | --- | --- | --- | --- |
+| params 1 | 3,917 | 3,984 | +1.7% | 3,917 | 3,979 | +1.6% |
+| params 20 | 29,129 | 31,074 | +6.7% | 29,129 | 30,882 | +6.0% |
+| params 100 | 138,193 | 149,900 | +8.5% | 138,193 | 148,846 | +7.7% |
+| rows 100 | 122,437 | 122,490 | +0.0% | 121,412 | 121,465 | +0.0% |
+| text 100 | 197,658 | 197,711 | +0.0% | 196,758 | 196,811 | +0.0% |
+| pool 100 | 127,717 | 127,770 | +0.0% | 126,692 | 126,745 | +0.0% |
+
+Every `rows`, `text` and `pool` case is 53 instructions an operation lower, at
+1, 20 and 100 rows alike, because each operation binds one `int8` by
+`paramInt`. `params 100` writes 101 integers an operation and saves 11,707
+instructions at `x86-64`, about 116 an integer.
+
+ns/op (`--base 119a74c5`), median and min-max spread. The band is the
+byte-identical copy's distance from the build:
+
+| case | run | nish ns/op (spread) | base ns/op (spread) | base vs nish | band |
+| --- | --- | --- | --- | --- | --- |
+| params 1 | x86-64, 1 | 538.4 (343.9-577.1) | 477.4 (359.7-575.6) | -11.3% | ±10.7% |
+| params 1 | x86-64, 2 | 569.7 (367.3-603.6) | 574.0 (523.9-603.5) | +0.8% | ±2.2% |
+| params 20 | x86-64, 1 | 3701.8 (3008.0-4506.2) | 4212.6 (3412.0-4708.8) | +13.8% | ±3.7% |
+| params 20 | x86-64, 2 | 3284.5 (2999.0-4222.0) | 4019.2 (3415.9-4859.5) | +22.4% | ±23.2% |
+| params 100 | x86-64, 1 | 15744.3 (14422.3-20729.0) | 18478.1 (17394.2-20652.2) | +17.4% | ±1.9% |
+| params 100 | x86-64, 2 | 17362.5 (15266.3-22228.5) | 20968.3 (17147.9-24065.6) | +20.8% | ±4.0% |
+| params 1 | x86-64-v3, 1 | 448.3 (360.2-567.0) | 418.7 (363.4-551.7) | -6.6% | ±11.9% |
+| params 1 | x86-64-v3, 2 | 514.8 (362.0-637.3) | 430.0 (357.8-655.1) | -16.5% | ±15.4% |
+| params 20 | x86-64-v3, 1 | 3336.1 (3042.3-4360.8) | 3657.7 (3249.7-4623.0) | +9.6% | ±2.3% |
+| params 20 | x86-64-v3, 2 | 3239.3 (3056.3-3458.6) | 3677.2 (3365.3-4572.6) | +13.5% | ±1.0% |
+| params 100 | x86-64-v3, 1 | 15869.3 (14695.7-20105.3) | 18382.2 (16836.9-24027.6) | +15.8% | ±13.1% |
+| params 100 | x86-64-v3, 2 | 17512.2 (14939.1-21555.8) | 19604.4 (16871.3-22907.2) | +11.9% | ±1.7% |
+
+The time gain repeats outside the band in both runs for `params 100` at
+`x86-64`, and for `params 20` and `params 100` at `x86-64-v3`. That includes
+v3 run 1's +15.8% against ±13.1%. `params 20` at `x86-64` does not repeat:
+run 2's +22.4% sits inside its ±23.2% band. `params 1`, one key and two
+integers, is noise. The machine was noisy in these runs: controls with
+identical instructions moved outside their bands. `pool 100` went -14.8%
+(±1.2%) and `text 100` -7.7% (±1.7%) in v3 run 2. `rows 100` went -9.6%
+(±2.5%) and `text 20` +36.7% (±5.9%) in x86-64 run 2. `rows 1` went +21.9%
+(±4.8%) in x86-64 run 1. So the claim rests on the instruction counts. The
+times agree with them in sign only: the time gains, 9.6% to 20.8% where they
+repeat, are about twice the instruction gains of 6.0% to 8.5%, and this
+machine's noise is too wide to say why.
+
+## Result: the `getU64BE` cut
 
 An Intel Xeon @ 2.10 GHz virtual machine (4 cores; `avx2`, `bmi2`, `sha_ni` and
 `avx512f` present), LLVM 18.1.3. `base` is `std/` at `1d92417e` (main before
@@ -161,9 +227,11 @@ bounds check on every byte. Two other shapes did not lower either:
 
 ## Where the instructions go
 
-Callgrind on the `-g` speed build after the cut, 200 iterations of
-`rows 100` (25.1M instructions in all) and `params 100` (29.9M). Here is what
-`pg-decode-2` should take next, largest first. Each estimate is the
+Callgrind on the `-g` speed build, 200 iterations of `rows 100` (25.1M
+instructions in all, after the `getU64BE` cut) and `params 100` (27.8M, after
+the `putDecimal` cut, down from 29.9M). The `putDecimal` cut moved `rows 100`
+by 10,600 instructions, so its figures still hold. Here is what the next stage
+should take, largest first. Each estimate is the
 instructions a change would save, from its call count and the cost per call
 measured here. The figures come from:
 
@@ -179,8 +247,8 @@ callgrind_annotate --tree=caller cg.rows      # call counts, by caller
 
 | rank | candidate | where | now | estimate |
 | --- | --- | --- | --- | --- |
-| 1 | `putDecimal` reserves once, but then writes one digit at a time: a signed `i64` `%` and `/` by 10, a bounds-checked store through `this.out`, and a load and store of `this.outEnd`. A second loop reverses the digits, again with checks. Write two digits a step from a 200-byte table into the reserved room from its end (the length is `pgDecimalLength`), with no reversal | `std/net/postgres.ts` `putDecimal` | 375 instr a call (20,200 calls: 7.57M, 25% of `params 100`) | -50 to -60% of it: about -4M of `params 100`, about -13% |
-| 2 | `arrayElement` scans each key a byte at a time for `"` and `\` before it copies the key with `copyBytes`. It also writes the comma and both quotes through `putByte`, which reserves each time (`reserve` costs 2.36M, 7.9%, nearly all from these). A byte-class run for the scan (`nish/bytes`'s runtime kernels), and one reserve covering the comma, the quotes and the key | `std/net/postgres.ts` `arrayElement`, `putByte`, `reserve` (inlined into the bench's `nish_main`) | 11.2M (37.5% of `params 100`) of `std/net/postgres.ts` inlined into `nish_main`, nearly all `arrayElement`: about 560 instr an element of 8 to 64 bytes (20,000 elements) | -40% of it: about -4M, -13% |
+| 1 | `arrayElement` scans each key a byte at a time for `"` and `\` before it copies the key with `copyBytes`. It also writes the comma and both quotes through `putByte`, which reserves each time (`reserve` costs 2.36M, 8.5%, nearly all from these). A byte-class run for the scan (`nish/bytes`'s runtime kernels), and one reserve covering the comma, the quotes and the key | `std/net/postgres.ts` `arrayElement`, `putByte`, `reserve` | 8.95M in `arrayElement` itself (32.2% of `params 100`), about 450 instr an element of 8 to 64 bytes (20,000 elements), plus `reserve` | -40% of it: about -3.6M, -13% |
+| 2 | What is left of `putDecimal` after its cut: `pgDecimalLength` still divides by 100 a step to count the digits before the writer divides again. Comparisons against the powers of ten would count them without dividing. Split the length from the write with `--dump-instr=yes` before taking it | `std/net/postgres.ts` `pgDecimalLength` (inlined into `putDecimal`) | 293 instr a call (20,200 calls: 5.92M, 21.3% of `params 100`), down from 375. These count `putDecimal` with `pgDecimalLength` inlined; `pgDecimalLength` used to sit outside it, so the drop is not the 116 an integer the result above measures over the whole run | uncertain, at most the length's share of it |
 | 3 | The same fast path on `getU32BE`/`getI32BE`: 140,000 calls (7 a row) at about 25 instr each (3.53M), all from code inlined into `readRow`: the array's header words and its per-element lengths. The column-length read in `readRow` already has its own guard | `std/bytes.ts` `getU32BE` | 3.5M (14% of `rows 100`) | from about 25 to about 10 instr a call, so about 15 saved a call: -2.1M, about -8% of `rows 100` |
 | 4 | `PgConnection.readRow` together with the inlined column loop: each column re-reads its length and stores its window into per-column arrays. One bounds proof per message (checking the length words once against the message end) could drop the per-column checks | `std/net/postgres.ts` `readRow`, `reserveColumns` | 11.2M (45% of `rows 100`: 6.73M inlined plus 4.51M in `readRow` itself), about 560 instr a row (20,000 rows) | uncertain: -10 to -20% of it |
 | 5 | `binaryInt` re-checks the column's type, length and NULL on every read before it calls `getI64BE` | `std/net/postgres.ts` `binaryInt` | 37 instr a call (40,000 calls: 1.48M, 5.9%) | -0.6M, about -2% |
