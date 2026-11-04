@@ -84,16 +84,20 @@ import { copyBytes } from "nish/bytes"
 import {
   and,
   any,
+  bitmask,
   eq,
   extract,
+  gt,
   loadU8x16,
   lt,
   mask8x16,
   ne,
   or,
   replace,
+  select,
   splatU8x16,
   store,
+  subWrapping,
   u8x16,
 } from "nish:simd"
 
@@ -683,8 +687,9 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
  * third (0x57ffffff). No byte below 33 or above 126 is a tchar.
  * `http1IsTokenByte` reads them as two 64-bit masks, one for the bytes 0 to
  * 63 and one for 64 to 127, so the test is a select and a shift with no
- * branch on the byte: a name or method scan is the parser's hottest loop
- * after the line scan (`bench/http1-parse`).
+ * branch on the byte. A field name goes sixteen bytes at a time through
+ * `http1NonTokenLanes`, the same set; this test is for the method, a trailer's
+ * name, and a name's last bytes when fewer than sixteen are left in the head.
  */
 const HTTP1_TCHAR_32: i32 = 67071226
 const HTTP1_TCHAR_64: i32 = -939524098
@@ -696,6 +701,66 @@ export const http1IsTokenByte = (c: i32): boolean => {
   const high: u64 = (toU64(toU32(HTTP1_TCHAR_96)) << toU64(32)) | toU64(toU32(HTTP1_TCHAR_64))
   const word: u64 = c < 64 ? low : high
   return c >= 0 && c < 128 && ((word >> toU64(c & 63)) & toU64(1)) !== toU64(0)
+}
+
+/**
+ * Which lanes of `v` are not tchars, as `http1IsTokenByte` answers for each,
+ * bit `k` for lane `k`: a byte outside 33 to 126, or one of the seventeen
+ * delimiters among them, `"` `(` `)` `,` `/` `:` to `@` (seven), `[` `\` `]`
+ * `{` and `}`. A name is mostly one vector, so these compares run once for
+ * the sixteen bytes where the table test ran once for each.
+ */
+const http1NonTokenLanes = (v: u8x16): i32 => {
+  const outside: mask8x16 = gt(subWrapping(v, splatU8x16(33)), splatU8x16(93))
+  const quote: mask8x16 = or(eq(v, splatU8x16(34)), lt(subWrapping(v, splatU8x16(40)), splatU8x16(2)))
+  const comma: mask8x16 = or(eq(v, splatU8x16(44)), eq(v, splatU8x16(47)))
+  const colon: mask8x16 = lt(subWrapping(v, splatU8x16(58)), splatU8x16(7))
+  const bracket: mask8x16 = lt(subWrapping(v, splatU8x16(91)), splatU8x16(3))
+  const brace: mask8x16 = or(eq(v, splatU8x16(123)), eq(v, splatU8x16(125)))
+  return bitmask(or(or(or(outside, quote), or(comma, colon)), or(bracket, brace)))
+}
+
+/**
+ * Lowercases a field name in `head` from `k`, sixteen bytes at a time, and
+ * answers where it ends: the first byte before `stop` that is not a tchar, or
+ * `stop`. Each vector's name lanes are lowered, and every other lane is
+ * stored back as it was, so the value after the name and the bytes past the
+ * line keep their case. A tail of under sixteen bytes before `head`'s end
+ * goes a byte at a time. The answer and the bytes written are the byte loop's.
+ */
+const http1LowerName = (head: u8[], k0: i32, stop: i32): i32 => {
+  // Lane `j` holds `j`: the name's lanes are those below its length.
+  const lanes: u8x16 = u8x16(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+  let k: i32 = k0
+  while (k >= 0 && k < stop && k <= toI32(head.length) - 16) {
+    const v: u8x16 = loadU8x16(head, k)
+    const bad: i32 = http1NonTokenLanes(v)
+    let run: i32 = 16
+    if (bad !== 0) {
+      run = toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+    }
+    if (run > stop - k) {
+      run = stop - k
+    }
+    const upper: mask8x16 = and(
+      lt(subWrapping(v, splatU8x16(65)), splatU8x16(26)),
+      lt(lanes, splatU8x16(toU8(run)))
+    )
+    store(select(upper, or(v, splatU8x16(32)), v), head, k)
+    k += run
+    if (run < 16) {
+      return k
+    }
+  }
+  while (k >= 0 && k < stop && k < toI32(head.length)) {
+    const c: i32 = toI32(head[k])
+    if (!http1IsTokenByte(c)) {
+      break
+    }
+    head[k] = toU8(c >= 65 && c <= 90 ? c + 32 : c)
+    k += 1
+  }
+  return k
 }
 
 /** Whether `c` may appear in a field value (RFC 9110 §5.5): HTAB, SP, VCHAR or obs-text. */
@@ -1026,18 +1091,7 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
   let i: i32 = a
   if (keep) {
     at = http1HeadAppend(p, a, b)
-    const head: u8[] = p.head
-    let k: i32 = at
-    const stop: i32 = at + (b - a)
-    while (k >= 0 && k < stop && k < toI32(head.length)) {
-      const c: i32 = toI32(head[k])
-      if (!http1IsTokenByte(c)) {
-        break
-      }
-      head[k] = toU8(c >= 65 && c <= 90 ? c + 32 : c)
-      k += 1
-    }
-    i = a + (k - at)
+    i = a + (http1LowerName(p.head, at, at + (b - a)) - at)
   } else {
     while (i >= 0 && i < b && i < toI32(buf.length) && http1IsTokenByte(toI32(buf[i]))) {
       i += 1
@@ -1060,7 +1114,12 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
   if (keep) {
     let valueStart: i32 = nameEnd + 1
     let valueEnd: i32 = b
-    while (valueStart >= 0 && valueStart < valueEnd && valueStart < n && http1IsOws(toI32(buf[valueStart]))) {
+    while (
+      valueStart >= 0 &&
+      valueStart < valueEnd &&
+      valueStart < toI32(buf.length) &&
+      http1IsOws(toI32(buf[valueStart]))
+    ) {
       valueStart += 1
     }
     while (valueEnd > valueStart && valueEnd - 1 >= 0 && http1IsOws(toI32(buf[valueEnd - 1]))) {

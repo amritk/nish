@@ -13,8 +13,8 @@ npm run build
 node bench/http1-request/run.mjs --validate                       # checksums only
 node bench/http1-request/run.mjs                                  # x86-64, 11 rounds
 node bench/http1-request/run.mjs --cpu x86-64-v3
-node bench/http1-request/run.mjs --base 1d92417e                  # adds a before column
-node bench/http1-request/run.mjs --instructions --base 1d92417e   # cachegrind counts
+node bench/http1-request/run.mjs --base 4dc09dcc                  # adds a before column
+node bench/http1-request/run.mjs --instructions --base 4dc09dcc   # cachegrind counts
 ```
 
 | Case | What is fed | Answer |
@@ -44,164 +44,171 @@ requests (two for `pipelined`).
 
 ## Instructions a request
 
-`node bench/http1-request/run.mjs --instructions --base 1d92417e`, and the
-same with `--cpu x86-64-v3`:
+`node bench/http1-request/run.mjs --instructions --base 4dc09dcc`, and the
+same with `--cpu x86-64-v3`. `base` is `main` with the head-writer cut
+(#1187); `nish` adds this round's cut, the field names.
 
 | Case | x86-64 nish | x86-64 base | base vs nish | x86-64-v3 nish | x86-64-v3 base | base vs nish |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `browser` | 12,236 | 13,159 | +7.5% | 13,720 | 14,716 | +7.3% |
-| `api` | 9,584 | 10,507 | +9.6% | 10,248 | 11,244 | +9.7% |
-| `short` | 3,859 | 4,782 | +23.9% | 3,876 | 4,872 | +25.7% |
-| `pipelined` | 10,669 | 11,593 | +8.7% | 11,741 | 12,737 | +8.5% |
-| `split` | 12,574 | 13,497 | +7.3% | 14,065 | 15,061 | +7.1% |
-| `json1k` | 21,710 | 22,633 | +4.3% | 21,604 | 22,600 | +4.6% |
-| `json4k` | 74,517 | 75,440 | +1.2% | 74,004 | 75,000 | +1.3% |
-| `json16k` | 294,518 | 295,441 | +0.3% | 292,292 | 293,288 | +0.3% |
-| `json40k` | 734,866 | 735,789 | +0.1% | 729,208 | 730,204 | +0.1% |
+| `browser` | 11,455 | 12,236 | +6.8% | 12,692 | 13,720 | +8.1% |
+| `api` | 9,039 | 9,583 | +6.0% | 9,536 | 10,248 | +7.5% |
+| `short` | 3,872 | 3,859 | −0.3% | 3,858 | 3,876 | +0.5% |
+| `pipelined` | 10,006 | 10,670 | +6.6% | 10,871 | 11,741 | +8.0% |
+| `split` | 11,794 | 12,574 | +6.6% | 13,037 | 14,065 | +7.9% |
+| `json1k` | 21,723 | 21,710 | −0.1% | 21,586 | 21,604 | +0.1% |
+| `json4k` | 74,530 | 74,517 | −0.0% | 73,986 | 74,004 | +0.0% |
+| `json16k` | 294,531 | 294,518 | −0.0% | 292,274 | 292,292 | +0.0% |
+| `json40k` | 734,879 | 734,866 | −0.0% | 729,190 | 729,208 | +0.0% |
 
-The cut saves the same count on every case, 923 a request at x86-64 and 996
-at x86-64-v3, since every response head is the same shape. With
-`NISH_SIMD=base` and `GLIBC_TUNABLES` pinned, as `bench/run.mjs` pins them,
-these counts are deterministic; they rank the change.
+The cut scales with the field names: 781 fewer a `browser` request (nine
+names) at x86-64 and 1,028 at x86-64-v3, 544 and 712 on `api`. `short` and
+the `json*` cases have one name, `Host`, one vector whose set-up costs about
+what four bytes of the byte loop did: 13 more at x86-64, 18 fewer at
+x86-64-v3.
+With `NISH_SIMD=base` and `GLIBC_TUNABLES` pinned, as `bench/run.mjs` pins
+them, these counts are deterministic; they rank the change.
 
 ## Where a request's instructions go
 
 callgrind on `browser`, built `--profile speed -g` at x86-64, exclusive
 instructions a request (a run of 2,000 iterations less a run of 1,000, over
-1,000), on `main` at `1d92417e` (the before) and with this directory's cut
-(the after). A `-g` build lays code out a little differently, so its totals
-sit about 1% under the `--instructions` counts above.
+1,000), on `main` at `4dc09dcc` (the before) and with this round's cut (the
+after). A `-g` build lays code out a little differently, so its totals sit
+about 1% under the `--instructions` counts above.
 
 ```sh
 ./build/nish bench/http1-request/main.ts -o prof/ --link prof/h1 --profile speed -g
-GLIBC_TUNABLES=<as run.mjs pins it> valgrind --tool=callgrind ./prof/h1 browser 1000
-GLIBC_TUNABLES=<as run.mjs pins it> valgrind --tool=callgrind ./prof/h1 browser 2000
+GLIBC_TUNABLES=<as run.mjs pins it> NISH_SIMD=base valgrind --tool=callgrind ./prof/h1 browser 1000
+GLIBC_TUNABLES=<as run.mjs pins it> NISH_SIMD=base valgrind --tool=callgrind ./prof/h1 browser 2000
 callgrind_annotate callgrind.out.<pid>              # per function
-callgrind_annotate --auto=yes callgrind.out.<pid>   # per source line
+callgrind_annotate --auto=yes --show-percs=no --include=$PWD callgrind.out.<pid>   # per source line
 ```
+
+`--auto=yes` prints `std/net/http1-codec.ts` twice, as `./std/...` and as
+`std/...`: the second holds what LLVM inlined into `nish_main` (the bench's
+`headerIndex`), so a line's count is the sum of both. A `=>` line is a
+call's inclusive count and belongs to the source line above it.
 
 | Function | Before | After |
 | --- | ---: | ---: |
-| `http1Next` (the request line, field lines, name lowercasing and token check, the end of the head) | 5,426 | 5,426 |
+| `http1Next` (the request line, field lines, name lowercasing and token check, the end of the head) | 5,426 | 4,630 |
 | `http1TakeLine` (the line scan) | 2,649 | 2,649 |
-| `nish_main` (the bench loop and what LLVM inlined into it) | 1,443 | 1,443 |
-| `http1WriteResponseHead` | 1,178 | 577 |
-| `http1HeadAppend` | 630 | 630 |
+| `nish_main` (the bench loop and what LLVM inlined into it) | 1,443 | 1,441 |
+| `http1HeadAppend` (with its `std/bytes.ts` lines) | 630 | 630 |
+| `http1WriteResponseHead` | 577 | 577 |
 | libc `memcpy` (the head copy, the output, the JSON body) | 471 | 471 |
-| `http1PutText` | 501 | 41 |
 | `JsonWriter.i32`, `jsonWriterPutString` | 388 | 388 |
-| `http1PutStatusLine`, `http1PutFixed` | — | 117 |
-| `http1PutBytes`, `http1PutCrlf`, `http1PutDecimal` | 217 | 217 |
-| everything else | 152 | 152 |
-| **Total** | **13,055** | **12,111** |
+| the head writer's small functions and everything else | 527 | 513 |
+| **Total** | **12,111** | **11,299** |
 
 ## What the -O2 code does
 
-Read from the per-line callgrind counts of the after build and `objdump -d`.
-Line numbers are `std/net/http1-codec.ts` at this commit.
+Read from the per-line counts of the after build. Line numbers are
+`std/net/http1-codec.ts` at this commit.
 
-- **`http1Next`** spends most of its 5,426 on the field lines. Each name is
-  copied into the held head buffer, then lowercased and token-checked there
-  a byte at a time (lines 1031–1040, about 1,130 a request, plus
-  `http1IsTokenByte`'s two 64-bit tchar masks, lines 697–698, about 730).
-  Its OWS is trimmed a byte at a time from each end (lines 1063 and 1066,
-  about 330). The request line's target is walked a byte at a time
-  (lines 964–965, about 310).
-- **`http1HeadIs`** (lines 745–757, about 1,060 a request, inlined into its
+- **The field names** now cost about 891 a `browser` request where they cost
+  about 1,860: `http1LowerName` (lines 731–764, 441), `http1NonTokenLanes`
+  (lines 713–721, 351, inlined) and the call (line 1094, 99). Each of the
+  nine names is one or two vectors; the per-name cost left is the loop's
+  set-up, the lowest set bit of the mask and the store.
+- **`http1HeadIs`** (lines 808–827, about 1,060 a request, inlined into its
   callers) is a length test and a byte loop. At the end of the head
   `http1EndOfHead` compares each name with the five the parser reads
   (`host`, `content-length`, `transfer-encoding`, `connection`, `upgrade`);
   `http1ConnectionOptions` looks for `connection` again; `headerIndex` and
   `methodIs` call it for the router. The three loops over the fields cost
-  about 450 more (lines 336–337, 887–888, 1102–1104).
+  about 454 more (lines 340–341, 157; 952–953, 155; 1161–1163, 142), and
+  `http1ConnectionOptions`' comma scan another 163 (lines 958–960).
+- **The field values' OWS** is trimmed a byte at a time from each end (lines
+  1117–1122 and 1125, 396, and the span stores after them, lines 1128–1136,
+  306). The request
+  line's target is walked a byte at a time (lines 1029–1030, 312).
 - **`http1TakeLine`** already jumps to the next control byte sixteen at a
   time; what is left is the per-line call, the CRLF test and the tally.
 - **`http1HeadAppend`** is called once a line, ten times a `browser`
-  request, each a `copyBytes` (a `memmove`) into the held head: about 805 a
-  request, its share of `memcpy` included, for the nine field lines (the call
-  at line 1029) and about 80 for the request line.
-- **`inputRoom`, `feed`, `park`, `respond`** are small: a window check, a
-  `copyBytes`, a reset. None is above 1% of a request.
-- **`http1WriteResponseHead`** was the largest cost a request could lose
-  without touching the parser's grammar. Each constant (`HTTP/1.1 `, `Date: `,
-  `Content-Length: `, `Connection: `) went through `http1PutText`, whose loop
-  keeps a bounds check on every byte (`at + k < out.length` in the loop
-  condition, then `cmp`/`jae` before each store) and reads each byte back out
-  of the string; and each field value and the date were checked a byte at a
-  time with `http1IsValueByte`. Straight-line constant stores under one
-  guard do not help: the checker cannot carry `at <= out.length - k` to
-  `out[at + j]`, so every store keeps its check and LLVM cannot merge them.
+  request, each a `copyBytes` (a `memmove`) into the held head: 630 a request
+  of its own, and its share of the 471 in `memcpy`.
 
 ## The cut
 
-- **Field text sixteen bytes at a time.** `http1BytesAreFieldText` loads
-  sixteen bytes, compares them with 32, 9 and 127 in three vector compares,
-  and tests the mask once; the last vector ends at the last byte and overlaps
-  the one before. Under sixteen bytes it is the old byte loop.
-- **One store for each constant.** The status line (`HTTP/1.1 `, three digits
-  and a space, the digits put in their lanes with `replace`) and the
-  `Date: `, `Content-Length: ` and `Connection: ` names are each one
-  sixteen-byte `store` of a constant vector, which has one bounds check.
-  The lanes past the text are written over by the head's next bytes: the store
-  is taken only where `at + 16` stays inside the head `need` counted, every
-  byte of which is written after. Elsewhere the old byte path runs.
-- **`http1PutText` tests once.** When the text fits, which every caller makes
-  sure of, the loop has no bounds check; otherwise only the in-bounds bytes
-  are written. Both answer `at + text.length`.
+- **Field names sixteen bytes at a time.** A kept field line is copied into
+  the head as before; `http1LowerName` then loads sixteen bytes of the copy,
+  finds the lanes that are not tchars with `http1NonTokenLanes` (one range
+  compare for bytes outside 33–126 and five for the seventeen delimiters
+  among them, the set `http1IsTokenByte` tests), and takes the name's run as
+  the lowest set bit. The upper-case letters among the run's lanes are
+  lowered with one `select`, and the vector is stored back whole: every other
+  lane is written as it was, so the colon, the value and the head buffer's
+  bytes past the line keep their bytes. The run stops at the line's end, so a
+  name that fills its line is lowered only to it. Fewer than sixteen bytes
+  before the head's end, the old byte loop runs. The answer, the bytes
+  written and every refusal are the byte loop's: `net_http1_parse_diff`
+  checks 46,867 names against it.
+- The method and a trailer's names keep `http1IsTokenByte`.
 
-Tests: `tests/link/net_http1/checks.ts` (and its `_f64` twin) — the smallest
-head (17 bytes) in a buffer of 17, of 16 (`HTTP1_NO_ROOM`) and in a larger one
-whose bytes after the head are untouched; a head with every fixed field at an
-offset, untouched either side, exactly fitting and one byte short; values of
-1, 15, 16, 17, 31, 32 and 33 bytes with HTAB and obs-text written, and NUL,
-LF, CR, 0x1f and DEL refused at bytes 0, 14, 15, 16, 17, 20, 25, 29 and the
-last two, each place once (so the overlap of the last two vectors is
-covered), and obs-text 128 written at each of those places; NUL, LF, CR, 0x1f
-and DEL in the date at bytes 16, 20 and 28 refused; a five-byte date ending a
-204's head, which leaves `Date: ` the byte path, written with the bytes after
-it untouched and fitting a buffer exactly its size; `http1PutText`
-inside, past the end and before the start of its buffer.
+Tests: `tests/link/net_http1/checks.ts` (and its `_f64` twin) — names of
+15, 16, 17, 31, 32 and 33 bytes, mixed and upper case, stored lowered with
+their values' case kept; `@` at every place of each, the overlap of a 17- or
+33-byte name's vectors included, refused; each as a line with no colon,
+refused; 0x80 in a name refused. `tests/link/net_http1_parse_diff` — 46,867 cases against the
+byte-loop parser: every name length 1 to 40 in lower, upper and mixed case,
+whole and a byte at a time (the
+edge lengths also at every two-feed split); each of 25 bytes that end or refuse a name
+(all seventeen RFC 9110 delimiters, NUL, HTAB, LF, CR, SP, DEL, 0x80 and 0xff) at every place in it; names of
+15, 16, 17, 31, 32 and 33 bytes whose line ends at every byte around the end
+of the held head; and a short name read over a head a longer request left
+full. Same answer, same fields.
+
+The round before, #1187, wrote the response head with sixteen-byte stores
+(923 fewer a request at x86-64, 996 at x86-64-v3); its notes are in that
+pull request and in `docs/security/http1-codec.md`.
 
 ## Measured time
 
-Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, a shared cloud host.
-`--profile speed`, 16 rounds of 4 columns, against `--base 1d92417e`. Median
-ns an iteration; "band" is `nish-copy` against `nish`, the same bytes, and
-"base band" `base-copy` against `base`, so a difference inside them is noise.
-The `api` and `pipelined` rows were taken again after `api` took its 148-byte
-JWT; the others are from the round before, whose requests they share. `split`
-and the `json*` cases have instruction counts only, no timing.
+Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, a shared cloud host; avx2,
+bmi2, sha_ni and avx512f. `--profile speed`, 16 rounds of 4 columns, against
+`--base 4dc09dcc`, two runs at each `--cpu`. Median ns an iteration; "band"
+is `nish-copy` against `nish`, the same bytes, and "base band" `base-copy`
+against `base`, so a difference inside them is noise. These runs predate the OWS loop's
+`buf.length` bound (`b8035289`), which takes one bounds check out of each
+field value's trim; they were not re-timed, so the instruction counts above,
+taken on the final code, are the measure the ranking uses.
 
 | Case | `--cpu` | Run | nish | base | base vs nish | band | base band |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `browser` | x86-64 | 1 | 974.5 | 1139.8 | +17.0% | ±2.4% | ±11.8% |
-| `browser` | x86-64 | 2 | 1036.7 | 1401.1 | +35.2% | ±3.1% | ±0.3% |
-| `api` | x86-64 | 1 | 803.4 | 907.7 | +13.0% | ±3.2% | ±3.8% |
-| `api` | x86-64 | 2 | 826.9 | 908.7 | +9.9% | ±3.4% | ±2.4% |
-| `short` | x86-64 | 1 | 348.5 | 404.5 | +16.1% | ±4.2% | ±10.9% |
-| `short` | x86-64 | 2 | 375.4 | 388.3 | +3.4% | ±4.8% | ±15.1% |
-| `pipelined` | x86-64 | 1 | 1709.8 | 1869.2 | +9.3% | ±4.1% | ±2.4% |
-| `pipelined` | x86-64 | 2 | 1824.8 | 2006.5 | +10.0% | ±12.5% | ±4.7% |
-| `browser` | x86-64-v3 | 1 | 1407.9 | 1566.8 | +11.3% | ±3.6% | ±2.0% |
-| `browser` | x86-64-v3 | 2 | 1291.1 | 1643.3 | +27.3% | ±34.2% | ±10.5% |
-| `api` | x86-64-v3 | 1 | 1070.1 | 1211.0 | +13.2% | ±1.3% | ±16.1% |
-| `api` | x86-64-v3 | 2 | 942.0 | 1168.7 | +24.1% | ±12.3% | ±16.1% |
-| `short` | x86-64-v3 | 1 | 377.0 | 514.8 | +36.6% | ±5.3% | ±17.7% |
-| `short` | x86-64-v3 | 2 | 412.2 | 543.4 | +31.8% | ±8.6% | ±5.5% |
-| `pipelined` | x86-64-v3 | 1 | 2008.4 | 2287.3 | +13.9% | ±6.5% | ±2.3% |
-| `pipelined` | x86-64-v3 | 2 | 2295.4 | 2339.1 | +1.9% | ±5.4% | ±2.2% |
+| `browser` | x86-64 | 1 | 1157.3 | 1218.3 | +5.3% | ±10.2% | ±16.0% |
+| `browser` | x86-64 | 2 | 922.2 | 908.1 | −1.5% | ±3.3% | ±3.3% |
+| `browser` | x86-64-v3 | 1 | 1474.6 | 1462.8 | −0.8% | ±16.9% | ±9.4% |
+| `browser` | x86-64-v3 | 2 | 1342.2 | 1310.4 | −2.4% | ±5.6% | ±7.9% |
+| `api` | x86-64 | 1 | 814.0 | 906.2 | +11.3% | ±3.2% | ±0.8% |
+| `api` | x86-64 | 2 | 800.4 | 978.0 | +22.2% | ±11.7% | ±20.5% |
+| `api` | x86-64-v3 | 1 | 881.4 | 1132.9 | +28.5% | ±5.3% | ±20.7% |
+| `api` | x86-64-v3 | 2 | 1059.0 | 1099.0 | +3.8% | ±19.0% | ±9.2% |
+| `short` | x86-64 | 1 | 350.9 | 371.8 | +6.0% | ±47.4% | ±29.3% |
+| `short` | x86-64 | 2 | 364.6 | 356.2 | −2.3% | ±4.9% | ±7.4% |
+| `short` | x86-64-v3 | 1 | 343.6 | 442.7 | +28.8% | ±41.8% | ±7.6% |
+| `short` | x86-64-v3 | 2 | 333.4 | 402.0 | +20.6% | ±0.2% | ±7.7% |
+| `pipelined` | x86-64 | 1 | 1845.0 | 1933.5 | +4.8% | ±3.3% | ±4.6% |
+| `pipelined` | x86-64 | 2 | 1568.9 | 1590.2 | +1.4% | ±1.3% | ±3.8% |
+| `pipelined` | x86-64-v3 | 1 | 2098.4 | 2068.5 | −1.4% | ±1.9% | ±19.6% |
+| `pipelined` | x86-64-v3 | 2 | 2370.6 | 2117.1 | −10.7% | ±8.1% | ±4.5% |
+| `split` | x86-64 | 1 | 1215.0 | 1205.8 | −0.8% | ±3.2% | ±8.5% |
+| `split` | x86-64 | 2 | 985.5 | 902.6 | −8.4% | ±3.2% | ±5.6% |
+| `split` | x86-64-v3 | 1 | 1215.7 | 1450.8 | +19.3% | ±6.3% | ±13.1% |
+| `split` | x86-64-v3 | 2 | 1276.7 | 1169.0 | −8.4% | ±8.9% | ±2.7% |
 
-Read from the table: three gains repeat outside both bands on both runs:
-`browser` at x86-64 (+17.0%, +35.2%), `short` at x86-64-v3 (+36.6%, +31.8%)
-and `api` at x86-64 (+13.0%, +9.9%, against bands of ±3.2/±3.8 and
-±3.4/±2.4). With the 254-byte `api` head, the round before, `api` at
-x86-64-v3 also repeated (+7.2% against ±6.7/±3.9, clearing its band by only
-0.5 points, and +31.3% against ±3.3/±14.8); with the JWT it is inside its
-base's ±16.1% band on both runs. The rest move by more than their bands from
-run to run. Several gains are far larger than the 7% to 26% instruction cut,
-so the wall clock here is partly code layout and mostly the host's noise. The
-instruction counts carry the ranking; the time table says only that no case
-got repeatably slower outside its bands.
+Read from the table: one gain repeats outside both bands on both runs,
+`api` at x86-64 (+11.3% against ±3.2/±0.8, +22.2% against ±11.7/±20.5).
+`short` at x86-64-v3 is above its base band on both runs (+28.8%, +20.6%)
+but inside its own ±41.8% band on the first, and its instruction count did
+not move, so it is layout. `browser`, `pipelined` and `split` do not repeat
+at either `--cpu`: each lands inside its bands on one run. Two single runs
+are slower outside both bands, `pipelined` at x86-64-v3 run 2 (−10.7%) and
+`split` at x86-64 run 2 (−8.4%), and neither again on its other run: nothing
+is repeatably slower. The `json*` cases (not in the table) run the same
+instructions on both sides and move only with the host. The 6% to 8% cut
+is the instruction counts'; on this host the wall clock cannot resolve it
+outside `api`.
 
 ## Candidates for the next cut
 
@@ -211,30 +218,31 @@ cost, not all of it. The next cut takes the first.
 
 | # | Candidate | Cost today | Where it is measured |
 | --- | --- | ---: | --- |
-| 1 | Lowercase a field name and check it is a token sixteen bytes at a time (SWAR or `nish:simd`), instead of a byte at a time | ~1,860 | lines 1031–1040 (~1,130) and `http1IsTokenByte`, lines 697–698 (~730, a little of it the method's check) |
-| 2 | Compare a name with the five the parser reads by length first and one 8- or 16-byte compare (`http1HeadIs`, `http1EndOfHead`, `http1ConnectionOptions`) | ~1,510 | `http1HeadIs`, lines 745–757 (~1,060), and the three loops over the fields (~450); shared with `headerIndex` and `methodIs` |
-| 3 | Hold the head without copying each line in `http1HeadAppend` when it is already contiguous in the input | ~885 | the field lines' call at line 1029 (~805) and the request line's (~80), `memcpy` included; the copy exists for H1-5, so this needs the input buffer kept until the response is done, a security-record change |
-| 4 | Trim OWS and walk the target with a vector scan | ~640 | lines 1063 and 1066 (~330), 964–965 (~310) |
-| 5 | The remaining head-writer stores: CRLF as one 2-byte store, `http1PutBytes` and `http1PutDecimal` | 217 | the function table |
+| 1 | Compare a name with the five the parser reads by length first and one 8- or 16-byte compare (`http1HeadIs`, `http1EndOfHead`, `http1ConnectionOptions`) | ~1,500 | `http1HeadIs`, lines 808–827 (~1,060), and the three loops over the fields (~454) and the comma scan (~163); shared with `headerIndex` and `methodIs` |
+| 2 | Hold the head without copying each line in `http1HeadAppend` when it is already contiguous in the input | ~630 and its share of 471 | the function table; the copy exists for H1-5, so this needs the input buffer kept until the response is done, a security-record change |
+| 3 | Trim OWS and walk the target with a vector scan | ~708 | lines 1117–1122 and 1125 (~396), 1029–1030 (~312) |
+| 4 | What is left of the name path: lower and check the name on the copy's way into the head, one pass, not a copy then a vector pass | ≤891 | `http1LowerName` and `http1NonTokenLanes` (lines 713–764, ~792) and the call (line 1094, ~99); most of it is the scan itself, so a fused pass saves the reload, not the compares |
+| 5 | The remaining head-writer stores: CRLF as one 2-byte store, `http1PutBytes` and `http1PutDecimal` | ~217 | the function table of #1187 |
 | 6 | Record the method once as a code when the request line is read, so `methodIs` is one compare | 30–50 | the bench counted with its router's `methodIs` chain replaced by a constant: 30 fewer on `browser` (a GET, one call), 41 on `short`, 50 on `api` (a POST, two calls); a router testing more methods first pays more |
 | — | `JsonWriter.i32` and `jsonWriterPutString` | 388 | the function table; `std/json.ts`, outside this bench's files, for the copies-checks stage |
 
 The per-line counts behind those estimates: exclusive instructions a
 `browser` request, from `callgrind_annotate --auto=yes` on the after build,
-lines of `std/net/http1-codec.ts`.
+lines of `std/net/http1-codec.ts`, both of its sections summed.
 
 | Lines | Counts | Sum | Candidate |
 | --- | --- | ---: | --- |
-| 1031, 1032, 1033, 1034, 1037, 1038, 1040 | 63, 226, 95, 95, 516, 86, 45 | 1,126 | 1 |
-| 697, 698 | 345, 387 | 732 | 1 |
-| 745, 748, 749, 750, 751, 754, 757 | 292, 320, 26, 171, 52, 92, 104 | 1,057 | 2 |
-| 336–337, 887–888, 1102–1104 | 93 + 64, 92 + 63, 88 + 27 + 27 | 454 | 2 |
-| 1029 | 805 | 805 | 3 |
-| 1063, 1066 | 162, 171 | 333 | 4 |
-| 964, 965 | 269, 43 | 312 | 4 |
+| 810, 813, 814, 815, 816, 819, 822 | 292, 320, 26, 171, 52, 92, 104 | 1,057 | 1 |
+| 340–341, 952–953, 1161–1163 | 157, 155, 142 | 454 | 1 |
+| 958–960 | 163 | 163 | 1 (the `connection` element walk, only partly) |
+| 1117–1122, 1125 | 234, 162 | 396 | 3 |
+| 1029, 1030 | 269, 43 | 312 | 3 |
+| 713–721 | 351 | 351 | 4 |
+| 731–764 | 441 | 441 | 4 |
+| 1094 | 99 | 99 | 4 |
 
 ## Tried and dropped
 
 | Idea | Measured | Why dropped |
 | --- | --- | --- |
-| Constant text written as straight-line `out[at + j] = c` stores under one `at <= out.length - k` guard | −883 a request (callgrind, the inputs before this round), 63 fewer than the vector store | every store keeps its bounds check (see above); superseded by the sixteen-byte store |
+| Constant text written as straight-line `out[at + j] = c` stores under one `at <= out.length - k` guard | −883 a request (callgrind, the inputs before #1187), 63 fewer than the vector store | every store keeps its bounds check; superseded by the sixteen-byte store |
