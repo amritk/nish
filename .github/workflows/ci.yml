@@ -126,14 +126,16 @@ concurrency:
 
 jobs:
   test:
-    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
+    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/8)
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
-    # a 15-minute limit cancelled it. The shards are dealt by cost
-    # (tests/shard-costs.json, regenerated from run 40820090678, where shard 1
-    # took 20 minutes), so each takes about twelve; the limit stays as
-    # headroom while the table drifts.
+    # a 15-minute limit cancelled it. With four shards, shard 1 alone ran the
+    # twelve minutes of sections after the tests/link programs and took 21
+    # minutes (run 41882940444). Those sections are now dealt too, eight ways,
+    # by the costs in tests/shard-costs.json (regenerated from that run), so
+    # each shard takes about nine; the limit stays as headroom while the
+    # table drifts.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -218,14 +220,14 @@ jobs:
         # cancelling the Linux row that says whether it is the platform or the
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the four checks above
-        # `npm test` is split four ways by `--shard` (tests/run.js, "Shards"):
-        # shard 1 runs every section after the tests/link programs but the
-        # dealt ones (`DEALT_SECTIONS`), and the programs and those sections
-        # are dealt by their cost in tests/shard-costs.json so that the four
-        # finish together.
-        # One unsharded run took 25 minutes. The `/4` in the Test step is this
+        # `npm test` is split eight ways by `--shard` (tests/run.js, "Shards"):
+        # shard 1 runs the sections after the tests/link programs that are not
+        # dealt (`DEALT_SECTIONS`), shard 2 the `simd` group the steps below
+        # read, and the programs and the other sections are dealt by their
+        # cost in tests/shard-costs.json so that the eight finish together.
+        # One unsharded run took 25 minutes. The `/8` in the Test step is this
         # list's length, and a check in tests/run.js holds the two together.
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -366,20 +368,23 @@ jobs:
         # The log is kept for the steps below that require a line of it.
         run: |
           set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard "$SHARD/4" | tee "$RUNNER_TEMP/test.log"
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
 
-      # The steps from here on run in shard 1 only: each answers once for the
-      # commit, and every shard built the same compiler. Those that require a
-      # line of the suite read it from the Test step's log rather than run its
-      # section again, which built stage1 anew each time: three minutes of
-      # shard 1, the longest of the four.
+      # The steps from here on run in one shard each: each answers once for
+      # the commit, and every shard built the same compiler. Those that read
+      # the `simd` group's binaries or lines run in shard 2, where the deal
+      # pins that group (`DEALT_SECTIONS.simd.pinned`, which a check in
+      # tests/run.js holds these `if:`s to); the rest in shard 1. Those that
+      # require a line of the suite read it from the Test step's log rather
+      # than run its section again, which built stage1 anew each time: three
+      # minutes of shard 1, then the longest of the four.
 
-      # WP38 S1 and S6a: the `simd` section (shard 1) passes when a kernel's paths
+      # WP38 S1 and S6a: the `simd` section (shard 2) passes when a kernel's paths
       # agree, which they also do when the AVX2 path did not run at all. These
       # runners have AVX2, so here the drivers the suite built must name it, as
       # the `simd-arm64` job's line must name the NEON path.
       - name: The AVX2 path ran
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: |
           set -o pipefail
           build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
@@ -389,18 +394,18 @@ jobs:
       # with the reference alone on a CPU without AES-NI. These runners have it
       # (the section also requires the path wherever /proc/cpuinfo names it).
       - name: The AES-NI path ran
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: |
           set -o pipefail
           build/test/simd/aes-gcm | grep -E '^aes-gcm: [0-9]+ cases agree across aesni-pclmul;'
 
-      # WP38 S5's lowering: the `aes kernel` section (shard 1) checks a natively
+      # WP38 S5's lowering: the `aes kernel` section (shard 2) checks a natively
       # built AES program against its bitsliced walker, and requires the kernels
       # to run wherever /proc/cpuinfo names the instructions. A runner that masked
       # them would take the section's other arm and stay green, so the line that
       # says the kernels ran is required here, where they are known to exist.
       - name: The lowered AES program ran the kernels
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: |
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/test.log"
 
@@ -423,7 +428,7 @@ jobs:
       # other arm there. These runners have it, so the driver must name the
       # SHA-NI path and the lowered programs must have called the kernel.
       - name: The SHA-NI path ran
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: |
           set -o pipefail
           build/test/simd/sha256 | grep -E '^sha256: [0-9]+ cases agree across sha-ni;'
@@ -433,14 +438,14 @@ jobs:
       # The ChaCha20 kernel, likewise: these runners have AVX2, so the driver
       # must name that path and the lowered program must have called it.
       - name: The AVX2 ChaCha20 path ran
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: |
           set -o pipefail
           build/test/simd/chacha20 | grep -E '^chacha20: [0-9]+ cases agree across avx2;'
           grep -E '^PASS  chacha20 kernel: chacha20_hw_agree with NISH_CHACHA20 unset calls the kernel, whose vectors this CPU has' "$RUNNER_TEMP/test.log"
 
       - name: SHA-256 throughput on each path
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: |
           calls=build/test/simd/sha256-calls.speed
           # Each path is named by the resolver's own answer. The bench compiles
@@ -459,7 +464,7 @@ jobs:
       # These runners have both, so the lines that say the kernel ran are
       # required here.
       - name: The PCLMULQDQ CRC-32 path ran
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         run: |
           set -o pipefail
           build/test/simd/crc32 | grep -E '^crc32: [0-9]+ cases agree across pclmul;'
