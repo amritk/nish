@@ -1126,7 +1126,7 @@ and wipes its keystream, state and lanes before it returns; the constant-time
 argument and what a wipe cannot reach are
 [crypto-chacha20-hw.md](security/crypto-chacha20-hw.md)'s. The shipped
 column, one run of twelve interleaved rounds at `98921dcb` on the same
-machine, MB/s at the minimum:
+machine, MB/s at the minimum time; the gain over `nish` and the band are of the medians, so at 64 B the two can differ in sign:
 
 | Size | `nish` (soft) | `nish` copy | `vec128` | AVX2 (bench) | Shipped | Shipped over `nish` | Band |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
