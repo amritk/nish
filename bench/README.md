@@ -2398,7 +2398,7 @@ as the noise band. The figures for Zmij against Ryu are in
 
 Each of these programs times one stdlib path on its own, under callgrind for
 `Ir` and in interleaved rounds against a byte-identical copy for wall time.
-Each README holds the measurements and what is left to cut. The three marked
+Each README holds the measurements and what is left to cut. The four marked
 with a pull request land with it.
 
 - [`sha256-block/`](sha256-block/README.md): SHA-256 compression, HMAC and

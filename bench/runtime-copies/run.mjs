@@ -9,6 +9,13 @@
 //   npm run build && node bench/runtime-copies/run.mjs [options] [--compiler <nish>]
 //     --validate         build, run every case once and check its pinned
 //                        checksum, and stop: no timing
+//     --instructions     count, instead of timing, the instructions one
+//                        iteration of every case executes in each build (the
+//                        copies left out), under valgrind's cachegrind with
+//                        --cache-sim=no, NISH_SIMD=base and glibc's string
+//                        functions pinned: a run of 2N iterations less a run
+//                        of N, over N, so start-up cancels. The figure
+//                        README.md's tables rest on
 //     --rounds N         timed rounds a case runs at least (default 11); the
 //                        median is reported with the min–max spread
 //     --cpu <cpu>        x86-64, the baseline and the default, or x86-64-v3,
@@ -47,10 +54,10 @@ const nishc = compilerFrom(process.argv)
 /** Each case as `main <case> <iterations>` takes it, and the checksum one iteration prints. */
 const CASES = [
   { name: "chars", known: "b6312942" },
-  { name: "small-copies", known: "e161f085" },
-  { name: "grow", known: "6e1e20ca" },
+  { name: "small-copies", known: "97e83805" },
+  { name: "grow", known: "710b1d1f" },
   { name: "checked", known: "2c54b9c5" },
-  { name: "json-strings", known: "7fb1dc1f" },
+  { name: "json-strings", known: "31af7b15" },
 ]
 /** The nanoseconds a calibrated run aims at. */
 const TARGET_NS = 200e6
@@ -62,6 +69,7 @@ const fail = (msg) => {
 
 let rounds = 11
 let validate = false
+let instructions = false
 let cpu = "x86-64"
 let baseCompiler = null
 const only = []
@@ -73,6 +81,8 @@ for (let i = 2; i < argv.length; i++) {
     rounds = Number(argv[++i])
   } else if (a === "--validate") {
     validate = true
+  } else if (a === "--instructions") {
+    instructions = true
   } else if (a === "--cpu") {
     cpu = argv[++i] ?? ""
   } else if (a === "--base-compiler") {
@@ -186,6 +196,86 @@ if (validate) {
   console.log(
     `bench/runtime-copies: ${cases.length} cases, ${columns.length} columns, every checksum as pinned`
   )
+  process.exit(0)
+}
+
+/**
+ * glibc's choice of `memcpy` and `memset`, pinned to the SSE2 baseline as
+ * bench/run.mjs pins it for its counts, so a count does not depend on the
+ * host's AVX2 or ERMS.
+ */
+const PINNED_LIBC = [
+  "glibc.cpu.hwcaps=-AVX_Fast_Unaligned_Load,-AVX2,-AVX512F,-AVX512VL,-ERMS,-FSRM,-SSSE3",
+  "glibc.cpu.x86_non_temporal_threshold=0x0fffffffffffffff",
+  "glibc.cpu.x86_rep_movsb_threshold=0x0fffffffffffffff",
+  "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
+].join(":")
+
+/** The `nish:simd` dispatch every count runs under, as bench/run.mjs pins it. */
+const PINNED_SIMD = "base"
+
+/** The iterations the shorter of a count's two runs takes; the longer takes twice. */
+const COUNT_ITERATIONS = 500
+
+/** The instructions `main <case> <iterations>` executes under cachegrind, the whole process. */
+const countRun = (column, c, iterations) => {
+  const dir = path.dirname(column.bin)
+  const file = path.join(dir, `${path.basename(column.bin)}-${c.name}-${iterations}.cachegrind`)
+  const r = spawnSync(
+    "valgrind",
+    [
+      "--tool=cachegrind",
+      "--cache-sim=no",
+      `--cachegrind-out-file=${file}`,
+      column.bin,
+      c.name,
+      String(iterations),
+    ],
+    {
+      env: { GLIBC_TUNABLES: PINNED_LIBC, NISH_SIMD: PINNED_SIMD },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  )
+  if (r.error !== undefined || r.status !== 0) {
+    fail(
+      `cachegrind ${column.id} ${c.name} ${iterations}: ${r.error?.message ?? `exit ${r.status}`}\n${r.stderr}`
+    )
+  }
+  const m = /^summary: (\d+)$/m.exec(fs.readFileSync(file, "utf8"))
+  fs.rmSync(file)
+  if (m === null) {
+    fail(`cachegrind ${column.id} ${c.name}: no summary line`)
+  }
+  return Number(m[1])
+}
+
+if (instructions) {
+  if (spawnSync("valgrind", ["--version"]).status !== 0) {
+    fail("--instructions needs valgrind on PATH")
+  }
+  const counted = columns.filter((col) => !col.id.endsWith("-copy"))
+  console.log(
+    `instructions: cachegrind --cache-sim=no, NISH_SIMD=${PINNED_SIMD}, glibc pinned, built --cpu ${cpu};` +
+      ` one iteration is a run of ${2 * COUNT_ITERATIONS} less a run of ${COUNT_ITERATIONS}, over ${COUNT_ITERATIONS}` +
+      (baseCompiler !== null ? `; base: built by ${path.relative(root, baseCompiler)}` : "")
+  )
+  const W = [14, 10, 14, 9]
+  const row = (cells) => cells.map((x, i) => (i < 2 ? x.padEnd(W[i]) : x.padStart(W[i]))).join(" ")
+  console.log(row(["case", "column", "an iteration", "vs nish"]))
+  for (const c of cases) {
+    let nish = 0
+    for (const col of counted) {
+      const per =
+        (countRun(col, c, 2 * COUNT_ITERATIONS) - countRun(col, c, COUNT_ITERATIONS)) / COUNT_ITERATIONS
+      if (col.id === "nish") {
+        nish = per
+      }
+      const vs =
+        col.id === "nish" ? "" : `${per >= nish ? "+" : ""}${((100 * (per - nish)) / nish).toFixed(1)}%`
+      console.log(row([c.name, col.id, per.toFixed(0), vs]))
+    }
+  }
   process.exit(0)
 }
 

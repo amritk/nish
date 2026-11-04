@@ -10,6 +10,7 @@ one-byte part, and ranks what is left for the next stage.
 ```bash
 npm run build
 node bench/runtime-copies/run.mjs --validate                     # pinned checksums, no timing
+node bench/runtime-copies/run.mjs --instructions --base-compiler build/nish-base  # pinned counts
 node bench/runtime-copies/run.mjs --base-compiler build/nish-base # before (base) against after (nish)
 node bench/runtime-copies/run.mjs --base-compiler build/nish-base --cpu x86-64-v3
 node bench/runtime-copies/run.mjs --case chars --rounds 21
@@ -31,28 +32,102 @@ inside the band is noise.
 | `small-copies` | `copyBytes` of 1 to 64 bytes between two arrays | `pg-decode params`: 12,800 copies of 1 to 64 bytes a run |
 | `grow` | A `u8[]` grown from empty to 4096 bytes by `push` | `nish_array_grow` in `pg-decode rows` and `hs256` |
 | `checked` | An indexed read-modify-write over a stride (`at = (at + 389) & 1023`) whose index the prover cannot bound | The checks that stay. It carries its one performance warning on purpose |
-| `json-strings` | A `JsonWriter` object of sixteen short string members | `nish_plain_base` in `http1-request json4k` |
+| `json-strings` | A `JsonWriter` object of sixteen 24-byte string members (the mean; 17 to 29 bytes) | `nish_plain_base` in `http1-request json4k`, whose strings average 24 bytes |
 
-Each case folds every byte it produces into an FNV-1a checksum, pinned for one
-iteration in `run.mjs`. A build that skips work fails the pin.
+Each case folds every byte it leaves behind, every iteration, into an FNV-1a
+checksum: the whole destination of `small-copies`, the whole grown array of
+`grow`, the whole JSON object of `json-strings`. The checksum of one iteration
+is pinned in `run.mjs`, so a build that skips or misplaces work fails the pin.
+
+## Pinned counts
+
+Every instruction count in this README runs under the same pinned
+environment, which `run.mjs --instructions` and `server.mjs --callgrind` set
+themselves:
+
+```bash
+GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX_Fast_Unaligned_Load,-AVX2,-AVX512F,-AVX512VL,-ERMS,-FSRM,-SSSE3:glibc.cpu.x86_non_temporal_threshold=0x0fffffffffffffff:glibc.cpu.x86_rep_movsb_threshold=0x0fffffffffffffff:glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff
+NISH_SIMD=base
+NISH_SHA256=soft   # sha256-block and jwt-verify only
+```
+
+The tunables hold glibc to its SSE2 `memmove`, which callgrind then names
+`memcpy@GLIBC_2.2.5` (in `memmove-vec-unaligned-erms.S`) for both `memcpy`
+and `memmove`. Without them the count depends on the host's AVX2 and ERMS.
+Builds are `--profile speed --cpu x86-64`. A count of a whole program is
+
+```bash
+valgrind --tool=cachegrind --cache-sim=no --cachegrind-out-file=out ./prog <args>
+```
+
+read from `out`'s `summary:` line. Shares and callers come from a `-g` build
+of the same source (the speed build is stripped) under
+
+```bash
+valgrind --tool=callgrind --callgrind-out-file=cg ./prog <args>
+callgrind_annotate --inclusive=yes cg     # inclusive shares
+callgrind_annotate --tree=caller cg       # who calls memcpy@GLIBC_2.2.5
+```
 
 ## Attribution
 
-Measured with callgrind (`Ir`) on a build of `main` at `043f7d4d`, with
-`--profile speed`, `--cpu x86-64` and `NISH_SHA256=soft`. The benches are from
-their own branches: `http1-request` (#1187), `jwt-verify` (#1188) and
-`pg-decode` (#1191). `sha256-block` is on `main`. "Copy share" is the program
-`Ir` spent inside the copy routines. Callers and sizes come from callgrind's
-call graph and a counting `LD_PRELOAD` shim.
+Pinned counts (above) of the nish build, after the cut, unless a row says
+otherwise. "Copy share" is the program `Ir` spent inside the copy routines.
+Callers come from `--tree=caller`. Sizes come from `copycount.c`, a counting
+`LD_PRELOAD` shim for `memcpy` and `memmove` (see "`http1-server`" below for
+how to run it); sizes do not depend on the pinning.
 
 | Bench | Copy share of Ir | Largest callers (mean size) |
 | --- | --- | --- |
-| `http1-request browser`, `api` | libc copies up to 2.63% | `http1HeadAppend`'s `memmove` (73 bytes); `http1PutBytes` (19 bytes) |
-| `http1-request json4k` | `nish_plain_base` 2.48% (about 118 Ir a call); libc 0.85% | the JSON writer's string runs (24 bytes) |
-| `pg-decode rows` | libc 1.15% | `PgConnection.receive` (4517 bytes, already bulk); `nish_array_grow` |
-| `pg-decode params` | libc 1.03% | 12,800 copies of 1–64 bytes, through `copyBytes` and `String.fromBytes` |
-| `sha256-block hs256` | `memcpy` 5.35%; `nish_array_grow` 1.14% | `base64urlEncode`'s `join("")`: one call per one-byte part |
-| `jwt-verify` | under 1% | the same `join`, on the encode half |
+| `http1-request browser 2000` | libc 3.88% | `http1HeadAppend`'s `memmove` 2.10% (73 bytes); `nish_main` 1.48%; `http1PutBytes` 0.27% (19 bytes) |
+| `http1-request api 2000` | libc 2.94% | `http1HeadAppend` 1.33%; `nish_main` 1.26%; `http1PutBytes` 0.34% |
+| `http1-request json4k 300` | `nish_plain_base` 2.51% (about 118 Ir a call); libc 1.35% | the JSON writer's string runs (24 bytes) |
+| `sha256-block hs256 0 2000` | libc 1.66%; `nish_array_grow` 2.19% inclusive (1.21% in itself, 0.98% in its copies) | `base64urlEncode`, 21.09% inclusive |
+| `jwt-verify` | under 1% | the same `base64urlEncode`, on the encode half |
+| `pg-decode rows` | libc 1.15% (not pinned: #1191's branch, not on `main`) | `PgConnection.receive` (4517 bytes, already bulk); `nish_array_grow` |
+| `pg-decode params` | libc 1.03% (not pinned, as above) | 12,800 copies of 1–64 bytes, through `copyBytes` and `String.fromBytes` |
+
+Before the cut, `hs256`'s libc share was 5.35% (not pinned), most of it
+`base64urlEncode`'s `join("")`: one call per one-byte part.
+
+### `http1-server`
+
+`bench/http1-server.ts` is the server `bench/http.mjs` drives with `wrk`.
+`server.mjs` drives it without `wrk`, so it can run under callgrind or the
+shim: one keep-alive connection, one request at a time, after which the server
+returns from `main`. Per-request figures are a run of 4000 requests less a run
+of 2000, over 2000, so start-up (about 1.24M `Ir`) cancels.
+
+```bash
+build/nish bench/http1-server.ts -o build/h1/ --link build/h1/h1 --profile speed -g
+node bench/runtime-copies/server.mjs --callgrind cg.2000 build/h1/h1 plaintext 2000
+node bench/runtime-copies/server.mjs --callgrind cg.4000 build/h1/h1 plaintext 4000
+cc -O2 -shared -fPIC -o build/copycount.so bench/runtime-copies/copycount.c -ldl
+node bench/runtime-copies/server.mjs --copycount build/copycount.so build/h1/h1 plaintext 2000
+```
+
+| Scenario | `Ir` a request | libc copy share |
+| --- | ---: | ---: |
+| `ping` | 6,271 | 2.15% |
+| `query` | 7,629 | 2.02% |
+| `body` | 10,711 | 1.91% |
+| `plaintext` | 6,942 | 1.87% |
+| `json` | 7,519 | 1.84% |
+| `post-json` | 49,821 | 1.31% |
+| `post-json-doc` | 69,053 | 2.01% |
+| `deep-route` | 9,732 | 1.58% |
+
+The copies that reach libc are small and few. A GET makes about ten a
+request: five through `http1PutBytes` (12 bytes on average), two through
+`http1HeadAppend` (18 to 40 bytes), and one each in `HttpHandler.drive`,
+`Http1Connection.write` and `Http1Connection.feed` (the request bytes, 41 to
+117). `post-json-doc` adds 50 through `JsonTokenizer.stringInto` (6 bytes on
+average, almost all 8 or fewer) and 10 through `JsonDocument.writeAt` (4
+bytes). The largest single copies are the 545-byte response write and the
+649-byte request read of the POSTs. The JSON string scan (`nish_run_base`)
+costs 1,833 `Ir` a request, 3.68% of `post-json` and 2.65% of
+`post-json-doc`. No copy caller is a candidate of its own: the whole libc
+share is 1.3–2.2% of a request, spread across five or more callers.
 
 **Do small fixed copies reach libc?** A copy whose length is a constant does
 not. LLVM turns `llvm.memcpy` of a constant length into loads and stores, and
@@ -77,25 +152,31 @@ secret character is stored, never used as an address
 
 ### Instruction counts
 
-Callgrind `Ir`, base (before the cut) against nish (after), `--cpu x86-64`:
+Pinned counts (above), base (`build/nish-base`, before the cut) against nish
+(after). `runtime-copies` is `run.mjs --instructions`: one iteration, a run of
+1000 less a run of 500, over 500. The others are whole runs with these
+arguments.
 
 | Program | base | nish | change |
 | --- | ---: | ---: | ---: |
-| `runtime-copies chars`, 10,000 iterations | 40,483,806 | 30,953,678 | **−23.5%** |
-| `sha256-block hs256 0 2000` | 113,762,105 | 108,933,993 | **−4.24%** |
-| `jwt-verify verify 0 2000` | 48,993,875 | 48,956,451 | −0.08% |
-| `jwt-verify verify 1 2000` | 142,259,021 | 142,129,661 | −0.09% |
-| `pg-decode params 64 200` | 19,374,998 | 19,339,698 | −0.18% |
-| `pg-decode pool 64 200` | 21,022,447 | 20,987,179 | −0.17% |
-| `pg-decode rows 64 200` | 20,282,152 | 20,246,898 | −0.17% |
-| `http1-request browser 2000` | 26,113,568 | 26,109,900 | −0.01% |
-| `http1-request api 2000` | 18,880,794 | 18,877,592 | −0.02% |
-| `http1-request short 2000` | 9,924,917 | 9,924,804 | −0.00% |
-| `http1-request json4k 300` | 22,820,501 | 22,820,388 | −0.00% |
-| `sha256-block hmac 64 2000` | 39,413,872 | 39,413,760 | −0.00% |
+| `runtime-copies chars`, an iteration | 3,960 | 3,061 | **−22.7%** |
+| `runtime-copies` `small-copies`, `grow`, `checked`, `json-strings` | | | 0.0% each |
+| `sha256-block hs256 0 2000` | 114,440,131 | 110,216,035 | **−3.69%** |
+| `sha256-block hmac 64 2000` | 39,551,209 | 39,551,113 | −0.00% |
+| `jwt-verify verify 0 2000` | 49,798,339 | 49,765,603 | −0.07% |
+| `jwt-verify verify 1 2000` | 143,550,546 | 143,437,362 | −0.08% |
+| `http1-request browser 2000` | 24,816,468 | 24,813,306 | −0.01% |
+| `http1-request api 2000` | 19,499,507 | 19,498,038 | −0.01% |
+| `http1-request short 2000` | 8,039,735 | 8,039,638 | −0.00% |
+| `http1-request json4k 300` | 22,578,556 | 22,578,459 | −0.00% |
 
-No program got more instructions. The `bench/instructions.json` deltas across
-its programs are in the pull request that landed this.
+`pg-decode` (#1191's branch, not pinned) moved −0.17% to −0.18% on `params`,
+`pool` and `rows`. No program got more instructions.
+
+`bench/instructions.json` (`node bench/run.mjs --instructions`, which pins the
+same way) moved by about 0.000% on every program. The one exception is the
+`Storage` program, +56 instructions, which is drift: `Storage` does not join
+strings, and it moves by that much between runs of the same build.
 
 ### Wall time
 
@@ -113,26 +194,28 @@ sha_ni. Ubuntu clang 18, `--profile speed`.
 | 2 | `x86-64-v3` | 285.9 (216.3–398.3) | 394.3 (319.8–457.0) | +37.9% | ±0.6% |
 
 The base build is 27–39% slower in every run, on both CPUs, and always
-outside the band. The other four cases do not use `join`, and none of them
-moved the same way twice. Where base strayed past a band, it did so once and
-in either direction: `small-copies` −11.1% (run 2, `x86-64-v3`, bands ±4.7%
-and ±4.2%), `checked` −6.0% (run 2, `x86-64`, bands ±1.4% and ±1.3%), `grow`
-+5.8% (run 2, `x86-64-v3`, base band ±5.6%) and `json-strings` +13.3% (run 2,
-`x86-64-v3`, base band ±13.0%). Their code did not change. That is code
-placement, not a gain or a loss.
+outside the band. The other four cases do not use `join`, and their pinned
+instruction counts are identical in both builds. Their wall times sometimes
+strayed past a band, in either direction: `small-copies` −11.1% (run 2,
+`x86-64-v3`, bands ±4.7% and ±4.2%), `checked` −6.0% (run 2, `x86-64`, bands
+±1.4% and ±1.3%), `grow` +5.8% (run 2, `x86-64-v3`, base band ±5.6%) and
+`json-strings` +13.3% (run 2, `x86-64-v3`, base band ±13.0%). With the same
+instructions, that is code placement and machine noise, not a gain or a loss.
+These wall times predate the checksum change in `main.ts`; the work timed is
+the same apart from `json-strings`' longer values.
 
 ## What is left, ranked
 
-These are estimates for the next copies-and-checks stage. Each one is a share
-of program `Ir` measured above, times what the change would plausibly remove.
-None of them was built here.
+These are estimates for the next copies-and-checks stage. Each one is a
+pinned share of program `Ir` measured above, times the part of it the change
+would remove; the derivation is in the row. None of them was built here.
 
 | # | Candidate | Where the fix lives | Estimate |
 | --- | --- | --- | --- |
-| 1 | `base64urlEncode` writing a `u8[]` and ending in one `String.fromBytes`, instead of a `string` per character and a `join`. The function is still 19% of `hs256` `Ir` after the cut (`base64urlEncode` 16.6% plus its runtime helpers 2.5%), mostly allocating and storing the one-byte strings | `std/crypto/base64url.ts` (the crypto stage; read-only here). It must keep the encoder's constant-time rule: the character byte is stored, never used as an address | about −10 to −13% of `hs256`, and the encode half of `jwt-verify` |
+| 1 | `base64urlEncode` writing a `u8[]` and ending in one `String.fromBytes`, instead of a `string` per character and a `join`. The function is still 21.1% of `hs256` `Ir` inclusive after the cut (16.4% in itself, the rest its runtime helpers), mostly allocating, pushing and joining the one-byte strings | `std/crypto/base64url.ts` (the crypto stage; read-only here). It must keep the encoder's constant-time rule: the character byte is stored, never used as an address | about −10 to −13% of `hs256`: the 21.1% less the 6-bit arithmetic and one store a byte that stay, taken as 40–50% of it. The encode half of `jwt-verify` gains the same per byte |
 | 2 | `nish_plain_base` fused scan and copy: the JSON writer scans a string run for bytes to escape, then copies it. One pass would do both | `runtime/runtime-bytes.c` and `std/json.ts` | about −1 to −1.5% of `http1-request json4k` (2.48% today, at about 118 Ir a call) |
-| 3 | `nish_array_grow` from a known final size: `hs256` grows arrays whose length is fixed by the input | the std modules that build them (`std/crypto`, `std/bytes.ts`), or a reserve hint in the emitter | up to −1.2% of `hs256`, −0.5% of `pg-decode rows` |
-| 4 | `http1HeadAppend` building the head in place rather than `memmove`-ing it (73 bytes average) | `std/net/http1.ts` (the net stage) | about −1% of `http1-request browser` and `api` |
+| 3 | `nish_array_grow` from a known final size: `hs256` grows arrays whose length is fixed by the input | the std modules that build them (`std/crypto`, `std/bytes.ts`), or a reserve hint in the emitter | at most −2.2% of `hs256`, its whole inclusive share (1.21% in itself, 0.98% in the copies it makes); one allocation stays, so less in practice. `pg-decode rows`: at most its unpinned 0.5% |
+| 4 | `http1HeadAppend` building the head in place rather than `memmove`-ing it (73 bytes average) | `std/net/http1-codec.ts` (the net stage) | about −1% of `http1-request browser` and −0.7% of `api`: its `memmove` is 2.10% and 1.33%, and the bytes must still be written once, taken as half |
 | 5 | `join`'s separator copy of one byte (`join(",")`): the same test as the cut, on the separator | `src/emit-arrays.ts` | about 16 Ir a part, only where the separator is one byte and not constant. No measured program has one hot |
 | 6 | `pg-decode`'s `receive` copies | `std/net/postgres` | none: they average 4.5 KB, already at libc's bulk rate. Avoiding them needs a zero-copy read, which is a design change |
 

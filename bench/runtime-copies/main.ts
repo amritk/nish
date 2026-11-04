@@ -7,7 +7,9 @@
 //
 // prints `checksum xxxxxxxx` on stdout and the timed loop's nanoseconds as
 // `ns N` on stderr (bench/crypto/lib/gen.ts's contract). The checksum folds
-// every byte each case produces, so a build that skips work fails it.
+// every byte each case leaves behind, every iteration (the whole destination
+// of small-copies, the whole grown array, the whole JSON object), so a build
+// that skips or misplaces work fails it.
 //
 // The cases:
 //   chars         a base64url-shaped encoder: one `String.fromCharCode` per
@@ -15,8 +17,8 @@
 //   small-copies  `copyBytes` of 1 to 64 bytes between two arrays
 //   grow          a `u8[]` grown from empty by `push` to 4096 bytes
 //   checked       an indexed read-modify-write loop, every access checked
-//   json-strings  a `JsonWriter` object of sixteen short string members, the
-//                 shape `nish_plain_base` scans
+//   json-strings  a `JsonWriter` object of sixteen string members of 24 bytes
+//                 on average, the shape `nish_plain_base` scans
 
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
@@ -24,6 +26,15 @@ import { foldStart, now, report } from "../crypto/lib/gen"
 
 /** One FNV-1a step. */
 const mix = (h: u32, b: i32): u32 => (h ^ toU32(b & 255)) * 16777619
+
+/** `h` with every byte of `bytes[0 .. end)` folded in. */
+const foldAll = (h: u32, bytes: u8[], end: i32): u32 => {
+  let out: u32 = h
+  for (let i: i32 = 0; i < end; i++) {
+    out = mix(out, toI32(bytes[i]))
+  }
+  return out
+}
 
 /** The 64 characters of the base64url alphabet. */
 const ALPHABET: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
@@ -63,9 +74,9 @@ const smallCopies = (src: u8[], dst: u8[], seed: i32, sum: u32): u32 => {
     const from: i32 = (seed + len) & 63
     const at: i32 = (seed * 7 + len) & 63
     copyBytes(dst, at, src, from, len)
-    h = mix(h, toI32(dst[at + len - 1]))
+    h = mix(mix(h, toI32(dst[at])), toI32(dst[at + len - 1]))
   }
-  return h
+  return foldAll(h, dst, toI32(dst.length))
 }
 
 /** A fresh `u8[]` pushed to 4096 bytes. */
@@ -74,7 +85,7 @@ const grow = (seed: i32, sum: u32): u32 => {
   for (let i: i32 = 0; i < 4096; i++) {
     out.push(toU8((i + seed) & 255))
   }
-  return mix(mix(sum, toI32(out[toI32(out.length) - 1])), toI32(out.length))
+  return foldAll(mix(sum, toI32(out.length)), out, toI32(out.length))
 }
 
 /**
@@ -114,24 +125,28 @@ const keys = (): string[] => [
   "agent",
 ]
 
-/** The values `json-strings` writes: short, with nothing to escape. */
+/**
+ * The values `json-strings` writes, with nothing to escape: 24 bytes on
+ * average, the mean string `nish_plain_base` scans in the json4k attribution
+ * (README.md).
+ */
 const values = (): string[] => [
-  "u_1849",
-  "Ada Lovelace",
-  "ada@example.com",
-  "admin",
-  "platform",
-  "London",
-  "GB",
-  "NW1",
-  "enterprise",
-  "active",
-  "en-GB",
-  "Europe/London",
-  "dark",
-  "en",
-  "laptop",
-  "nish/0.34",
+  "u_1849_7f3a2c9e41b05d68",
+  "Ada Augusta King-Lovelace",
+  "ada.lovelace@example.com",
+  "administrator,billing-owner",
+  "platform-infrastructure",
+  "London, United Kingdom",
+  "GB / England / Greater London",
+  "NW1 6XE, Marylebone, London",
+  "enterprise-annual-2026",
+  "active-since-2019-03-14",
+  "en-GB-u-ca-gregory-hc-h23",
+  "Europe/London (GMT+00:00)",
+  "dark-high-contrast-reduced",
+  "en-GB,en;q=0.9,fr;q=0.8",
+  "laptop-x86_64-linux-gnu",
+  "nish/0.34 (linux)",
 ]
 
 /** One object of sixteen string members into `w`, its bytes folded. */
@@ -141,13 +156,11 @@ const jsonStrings = (w: JsonWriter, buf: u8[], k: string[], v: string[], seed: i
   for (let i: i32 = 0; i < toI32(k.length); i++) {
     w.key(k[i])
     const at: i32 = (i + seed) & 15
-    if (at < toI32(v.length)) {
-      w.string(v[at])
-    }
+    w.string(v[at])
   }
   w.endObject()
   const end: i32 = w.written()
-  return mix(mix(sum, end), toI32(buf[end - 2]))
+  return foldAll(mix(sum, end), buf, end)
 }
 
 /** Whether `name` is one of the cases. */
