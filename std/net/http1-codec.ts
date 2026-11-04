@@ -599,7 +599,8 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
   while (i < stop) {
     // Most bytes are printable: sixteen at a time while a whole vector is,
     // and the vector that is not answers where its first control byte is.
-    // Only the last fifteen bytes go one at a time.
+    // The bytes after a control byte, and a tail shorter than a vector, go
+    // one at a time.
     let found: boolean = false
     while (!found && i >= 0 && i <= stop - 16 && i <= toI32(buf.length) - 16) {
       const v: u8x16 = loadU8x16(buf, i)

@@ -1017,8 +1017,11 @@ taskset -c 2 node bench/http1-parse/run.mjs --rounds 41 --cpu x86-64-v3
 ```
 
 `taskset` keeps every round on one core, so a run does not move between cores
-mid-measure. The table's `ns/byte` is the figure the server profile there
-reported for `http1Next` (about 5 ns a byte), so the two compare directly.
+mid-measure. The table's `ns/byte` is in the same unit as the figure the
+server profile there reported for `http1Next` (about 5 ns a byte), but the two
+do not compare directly. The bench parses one head in a warm loop with no
+socket, about 1 ns a byte, which is a hot-cache lower bound. The profile's
+figure includes the cache misses of a whole server.
 
 Wall time in a cloud container moves by 1 to 12% between identical builds, so
 the instruction count is the steadier verdict. Build `main.ts` with `-g` and
