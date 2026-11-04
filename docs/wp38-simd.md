@@ -1,6 +1,6 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
-**Status: accepted; S0, S1's kernel and surface, S2, S3a, S5, S6a, S6b and S7 landed; S3 decided and being built (tracking issue #1064); S1's `bench/json` bar missed; S1b superseded by S6c; S4 declined; S6c and S6d measured not reachable.** The owner took the
+**Status: accepted; S0, S1's kernel and surface, S2, S3a, S5, S6a, S6b and S7 landed; S3 built and its bar met (tracking issue #1064; §2.3, S3); S1's `bench/json` bar missed; S1b superseded by S6c; S4 declined; S6c and S6d measured not reachable.** The owner took the
 first four decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
@@ -663,7 +663,7 @@ that question before any surface exists. It writes each kernel in C's portable
 `vector_size(16)` vectors, which lower to the same LLVM vector IR `nish:simd`
 would emit, and times that against scalar Nish.
 [`bench/simd-s3a.mjs`](../bench/simd-s3a.mjs) builds and times four forms of each
-kernel from [`bench/simd-s3a/`](../bench/simd-s3a/):
+kernel from [`bench/simd-s3a/`](../bench/simd-s3a/) (S3 added a fifth, `nish:simd`; see S3 below):
 
 1. **C vector**, the stand-in for `nish:simd`: `clang -O3 -ffp-contract=off`,
    no `-march`, so x86-64's baseline SSE2.
@@ -788,6 +788,60 @@ form 3 as written, so the verdict stands. The depth kernels clear 1.5x
 against form 2 too. By the order decided in §7 (2026-10-16), **S3's design is
 written next**. It is written: Q10 decided on 2026-10-30 to build `nish:simd` (§3.2),
 and S6c's classifier, which might have covered the byte half, was found not reachable. The figures are x86-64's only.
+
+#### S3: the bar kernels in `nish:simd`, the bar met
+
+S3's last stage writes S3a's two kernels with `nish:simd` and times them as
+form 5 in `bench/simd-s3a.mjs`, against the same bar: at least 1.5x over form
+3, scalar Nish with checked indexing. The two files are
+`bench/simd-s3a/mat-vec-simd.ts` and `bench/simd-s3a/depth-simd.ts`.
+
+- **mat-vec** is form 1's kernel written in Nish:
+  - two `f64x2` accumulators over an `i32x4` of indices, which wraps as the
+    scalar forms' `wrappingAdd` does;
+  - the halving is `shr(…, 1)` rather than a division, which is exact
+    because `ij * (ij + 1)` is not negative below N = 2000;
+  - each pair of lanes reaches `f64` through `extract` and `toF64`, because
+    the surface has no lane conversion;
+  - `sum` adds the last pair in lane order, so every form prints checksum
+    901781.
+- **depth** loads sixteen bytes with `loadU8x16`. It ORs four `eq` masks
+  (quote, backslash, and the brackets after folding `[`/`]` into `{`/`}`).
+  A block whose `any` is false is skipped. The others walk `bitmask`'s set
+  bits, lowest first, with `31 - Math.clz32(bits & (0 - bits))`. The state
+  machine stays in locals: in a first draft a heap object carried it, and
+  that draft reached only about 1.4x on log. A byte-wise loop finishes the last partial block.
+  The checksums are form 3's, 680640 and 176206.
+
+Neither IR calls an `llvm.x86.*` or `llvm.aarch64.*` intrinsic. The script
+refuses to time a vector form, C or `nish:simd`, whose source or IR does.
+
+The run was `node bench/simd-s3a.mjs --self --runs 15`: 18 rotating rounds of
+six columns after one warm-up, at `199f5436` (rebased from `3424609a`; `bench/simd-s3a/` and its script are unchanged), on an Intel Xeon Processor @
+2.30 GHz (x64, 4 vCPUs), Ubuntu clang 18.1.3. All times are in ms.
+
+| kernel | 1 C vector | 3 Nish checked | 5 Nish simd | 3's copy | **5 over 3 (the bar)** | 1 over 5 | met |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| mat-vec | 360.0 / 369.7 | 615.0 / 625.0 | 345.6 / 351.1 | 613.9 / 624.0 | **1.78x / 1.78x** | 0.96x / 0.95x | yes |
+| depth s0 | 405.8 / 418.8 | 637.3 / 657.6 | 391.9 / 406.8 | 640.3 / 661.9 | **1.63x / 1.62x** | 0.97x / 0.97x | yes |
+| depth log | 129.6 / 131.6 | 527.6 / 543.7 | 140.6 / 142.9 | 528.7 / 561.4 | **3.75x / 3.81x** | 1.08x / 1.09x | yes |
+
+Each cell is min / median. Form 3 over its copy, the noise band, is 1.00x /
+1.00x on mat-vec, 1.00x / 1.01x on s0 and 1.00x / 1.03x on log.
+
+**The reading.** All three rows meet the bar, at the minimum and at the
+median, by more than the noise band.
+
+- On mat-vec and s0, form 5 is at or a little under form 1's time.
+- On log, the sparse document, it is 8 to 9% behind form 1. There most blocks
+  are skipped, and the cost left is the per-block `any` test and the
+  bit-walk's loop. C's form walks the same mask.
+- C vector over Nish checked is 1.69x, 1.57x and 4.13x at the median on this
+  machine, against S3a's 1.65x, 1.81x and 3.51x on a Xeon @ 2.80 GHz. The
+  ratios move with the machine, and so the bar is read within one run, as
+  here. The figures are x86-64's only.
+
+Since the bar is met, no IR comparison is recorded.
 
 ### 2.4 `JsonTokenizer` after json-parity: the gap S6 is aimed at
 
@@ -1771,7 +1825,8 @@ with load, store, splat and lanes; the masks, arithmetic, comparisons, sums,
 shuffle and bitcasts; and last S3a's two kernels written with `nish:simd` and
 timed against this row's bar. A miss on the bar is recorded with the optimised
 IR beside the C vector form's, and the surface stays; whether to change it is
-the owner's call. `src/` implements the module and does not use it, under the
+the owner's call. The bar is met: 1.78x on mat-vec, 1.62x and 3.81x on the two depth
+documents at the median (§2.3, S3). `src/` implements the module and does not use it, under the
 rolling freeze (§4).
 
 **#662, the S7 and S2 acceptance pass.** Of eight criteria, six were met. The
