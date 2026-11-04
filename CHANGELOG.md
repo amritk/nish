@@ -26,6 +26,31 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-04
+
+### Added
+
+- checker: Add nish:simd lane operations, masks and constant-count shifts and rotates ([#1171](https://github.com/amritk/nish/pull/1171))
+
+### Fixed
+
+- net: Pin and baseline the Http1Connection benchmark ([#1178](https://github.com/amritk/nish/pull/1178))
+
+### Performance
+
+- net: Keep Http1Connection's per-request path on hot fields ([#1176](https://github.com/amritk/nish/pull/1176))
+- net: Scan HTTP/1.1 request heads a vector at a time ([#1179](https://github.com/amritk/nish/pull/1179))
+- runtime: ChaCha20 keystream on AVX2 and NEON behind a CPU check ([#1181](https://github.com/amritk/nish/pull/1181))
+
+### Tests
+
+- self: Measure SHA-256's block function against OpenSSL and hold HMAC to it under both NISH_SHA256 settings ([#1174](https://github.com/amritk/nish/pull/1174))
+
+### Build
+
+- Regenerate package-lock.json for v0.33.0 ([#1170](https://github.com/amritk/nish/pull/1170))
+
+
 ## [0.33.0] - 2026-11-03
 
 ### Added
@@ -1567,3 +1592,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.31.0]: https://github.com/amritk/nish/releases/tag/v0.31.0
 [0.32.0]: https://github.com/amritk/nish/releases/tag/v0.32.0
 [0.33.0]: https://github.com/amritk/nish/releases/tag/v0.33.0
+[0.34.0]: https://github.com/amritk/nish/releases/tag/v0.34.0

@@ -1,0 +1,147 @@
+{
+  "version": "0.34.0",
+  "date": "2026-11-04",
+  "tag": "v0.34.0",
+  "range": {
+    "from": "v0.33.0",
+    "to": "4b97c277"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-33-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.33.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "96a3834"
+      ],
+      "pr": 1170,
+      "author": "github-actions[bot]",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "keep-http1connection-s-per-request-path-on-hot",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "keep Http1Connection's per-request path on hot fields",
+      "body": "Http1Connection's fields are reordered so that the per-request methods (inputRoom, feed, next, respond, write, end, consume, release, park) read the first two cache lines of the object instead of three. A new outputCap field mirrors output.length, so acquire and release no longer read the resting connection's empty output array, which is cold. inputRoom reads ws and config only in the WebSocket state. The object stays 184 bytes with no padding warning, and no limit, rule, status or wire byte changes.\n\nbench/http1-conn times the connection with no socket, comparing old, a byte-identical copy of old as the noise band, and new.\n\nMeasured: hot 0.971x ns/request (noise band 1.012x, 21 rounds); cold 0.988x within noise (0.990x); cachegrind cold D1 misses 35.0 -> 33.4 per request\nTests: tests/link/net_http1_server/conn.ts\nPart of #1175",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "206ad03"
+      ],
+      "pr": 1176,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "pin-and-baseline-the-http1connection-benchmark-1178",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "pin and baseline the Http1Connection benchmark",
+      "body": "bench/http1-conn/run.mjs now runs each timed binary under `taskset -c 1`\nwhen taskset works, and says \"unpinned (no taskset)\" when it does not;\nbefore, it only probed for taskset and reported a pin it never applied.\nThe `--base` default is the commit before the hot-field layout (96a38347),\nso the benchmark compares old against new on main instead of new against\nitself. The header comment's `--requests` default matches the code.",
+      "metrics": [
+        "pinned, 15 rounds, ns/request median: hot old 591.6, old′ 594.9 (1.005), new 568.5 (0.961); cold old 677.5, old′ 663.6 (0.979), new 650.5 (0.960)"
+      ],
+      "refs": [
+        "#1175"
+      ],
+      "tests": [],
+      "commits": [
+        "44dbc25"
+      ],
+      "pr": 1178,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "measure-sha-256-s-block-function-against-openssl",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "measure SHA-256's block function against OpenSSL and hold HMAC to it under both NISH_SHA256 settings",
+      "body": "The scalar body (NISH_SHA256=soft) is 13.9% to 22.1% slower than OpenSSL 3.0's scalar\nsha256_block_data_order on a Xeon @ 2.1 GHz, and ~40% slower than its AVX2 body.\nThe best source rewrite gained 8-9.4%, under the 10% bar, so sha256Compress is\nunchanged. The obstacle is the compiler: module-level constant arrays are refused,\nso the K table cannot drive a rolled round loop. HMAC-SHA256, HS256 and\nhmacCopySha256 (PBKDF2) all reach the SHA-NI kernel by default and the Nish body\nunder NISH_SHA256=soft, and a Node-crypto differential now pins both.\nbench/sha256-block/ reruns the table and the variants on a CPU without SHA-NI.",
+      "metrics": [
+        "soft 208-218 ns/block, OpenSSL scalar 174-183, AVX2 148-151, SHA-NI 47-49 (Nish) / 42 (OpenSSL); copy band 0.7-2.3%"
+      ],
+      "refs": [
+        "docs/security/crypto-sha256-hw.md",
+        "bench/sha256-block/README.md"
+      ],
+      "tests": [
+        "tests/run.js \"sha256 kernel\" differential"
+      ],
+      "commits": [
+        "e54f330"
+      ],
+      "pr": 1174,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "scan-http-1-1-request-heads-a-vector",
+      "type": "perf",
+      "scope": "net",
+      "breaking": false,
+      "title": "scan HTTP/1.1 request heads a vector at a time",
+      "body": "The request parser in nish/net/http1-codec no longer walks a line a byte at\na time.\n\n- The line scan jumps straight to the first control byte or DEL of each\n  16-byte block: the lowest set bit of a SWAR mask, exact because a borrow\n  only carries upward from a true match.\n- A CRLF is taken in one step.\n- The token check is a branch-free lookup in a 128-bit tchar table instead\n  of a chain of comparisons. The client codec shares it.\n- A field name is lowercased while it is scanned in the head copy.\n\nNo limit, status or reason string changed.\n\ntests/link/net_http1_parse_diff proves the parity. It runs main's parser,\nfrozen by bench/http1-parse/freeze.mjs, beside the live one on 190,276\ncases and fails on the first difference in any event, status, reason,\nfield, span or body window:\n- the fuzz corpus;\n- every byte value at every position;\n- every limit at max−1, max and max+1;\n- every split and byte-at-a-time feed;\n- pipelined pairs;\n- 100,000 seeded grammar cases.\nA deliberately broken http1FirstByte fails it.\n\nbench/http1-parse times the parser old against old′ (a byte-identical copy\nthat gives the noise band) against new, interleaved.",
+      "metrics": [
+        "Xeon @ 2.1 GHz container, ns/head median. loadgen GET (337 B) −15.2% vs old, −17.9% vs old′ (band 3.3%); POST (447 B) −26.1% / −18.2% (band 9.6%); browser GET (1,028 B, 16 fields) −21.2% / −25.4% (band 5.7%). Instructions/head −15% to −16% (per byte 16.7→14.2, 17.4→14.5, 15.9→13.3)."
+      ],
+      "refs": [
+        "#1175",
+        "docs/security/http1-codec.md"
+      ],
+      "tests": [
+        "tests/link/net_http1_parse_diff"
+      ],
+      "commits": [
+        "10fd561"
+      ],
+      "pr": 1179,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "add-nish-simd-lane-operations-masks-and-constant",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "add nish:simd lane operations, masks and constant-count shifts and rotates",
+      "body": "* feat(checker): add nish:simd lane operations, masks and constant shifts (wip)\n\nWork in progress on the WP38 S3 ops stage: lane arithmetic, compares\nanswering masks, select, any/all/bitmask, sum, shuffle, and shl/shr/\nrotl/rotr by a constant count below the lane width. Goldens, codes and\ndocs follow.\n\n* wip(simd): ops-stage docs, codes, goldens and the ARX bench\n\nWork in progress on the nish:simd operations stage; the goldens,\nlint and benchmark figures follow before the pull request.\n\n* test(self): register the nish:simd ops cases with the differential goldens\n\n* refactor(codegen): name the shift opcode without a nested ternary\n\n* test(self): regenerate the checked goldens for the nish:simd ops stage\n\n* test(self): regenerate the simd and types goldens after the lint fix\n\n* fix(interop): give addWrapping and subWrapping their own bodies in runtime/core.mjs\n\nknip refuses an export that aliases another as a duplicate.\n\nTests: tests/cases/simd_ops_int\n\n* fix(self): keep nish:simd's checker and intrinsic table under the performance ratchet\n\nThe vector intrinsic table called vectorSuffix inside its loops, which left\nits scratch strings behind on every pass (NL9011, five sites in\nsrc/runtime.ts); the suffixes are now written beside their types. The\nshuffle-index check widened an i32 product after computing it (NL9005) and\nindexed args again inside the loop (NL9007). Declarations are unchanged.\n\nTests: tests/run.js self (performance ratchet), simd, performance",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1457522"
+      ],
+      "pr": 1171,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    },
+    {
+      "id": "chacha20-keystream-on-avx2-and-neon-behind-a",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "ChaCha20 keystream on AVX2 and NEON behind a CPU check",
+      "body": "* test(bench): measure ChaCha20 on vectors against the Nish AEAD\n\nWP38 S10's measure. bench/chacha20.ts times ChaCha20-Poly1305 seal and open\nat 64 B, 1 KiB, 16 KiB and 1 MiB, and each half alone on 16 KiB, against a\ncopy of the std file whose keystream loop hands four blocks or more to\nbench/chacha20/kernel.c: a C scalar copy, four blocks in portable\nvector_size(16) C, eight in AVX2 behind a CPUID check, and four in NEON.\nbench/chacha20.mjs holds every path to the scalar reference and RFC 8439's\nvector, times them in interleaved rounds with a copy column for the noise\nband, and judges both routes' bars. CI's simd-arm64 job prints the NEON\nfigures.\n\nRefs: docs/wp38-simd.md#31-runtime-kernels\n\n* perf(runtime): ChaCha20 keystream kernel, work in progress\n\n* perf(runtime): ChaCha20 keystream on AVX2 and NEON behind a CPU check\n\nChaCha20-Poly1305's keystream now runs in runtime/runtime-chacha20.c\nwhen the message is 256 bytes or more and the CPU has the vectors:\neight blocks at a time in AVX2 on x86-64, then four in 128-bit lanes,\nor four with NEON on little-endian AArch64. The compiler recognises\nstd/crypto/chacha20poly1305.ts's chacha20XorInto seam (src/kernels.ts)\nand calls nish_chacha20_xor. The Nish code stays as the fallback for\nshort messages, other CPUs, wasm32 and NISH_CHACHA20=soft.\n\nWP38 S10 measured both routes first. The runtime kernel cleared its bar\n(at least 20% in two runs beyond the noise band) at every size from\n1 KiB. The portable 128-bit route peaked at 1.26x on the AEAD, short\nof nish:simd's 1.5x bar, so no nish:simd version is planned. Poly1305\nin C was within the noise band and stays in Nish.\n\nThe kernel uses no secret-dependent branch or index. It wipes its\nkeystream and state copies before it returns. The record is\ndocs/security/crypto-chacha20-hw.md.\n\nMeasured: seal 1 MiB 278 -> 635 MB/s (2.30x), band 3.9%; AVX2 gained 39-60% at >=1 KiB in two runs, band 0.7-5.5%\nRefs: docs/wp38-simd.md#s10-chacha20-on-vectors\nTests: tests/simd/chacha20.c, tests/link/chacha20_hw_agree\n\n* docs(self): say which S10 figures are medians\n\n* docs(codegen): regenerate the IR cookbook for the ChaCha20 kernel declarations",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4b97c27"
+      ],
+      "pr": 1181,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-03"
+    }
+  ]
+}
