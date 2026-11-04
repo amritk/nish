@@ -62,7 +62,7 @@ const mix = (h: u32, b: i32): u32 => (h ^ toU32(b & 255)) * 16777619
 const foldInt = (h: u32, v: i64): u32 => {
   let s: u32 = h
   for (let k: i32 = 0; k < 4; k++) {
-    s = mix(s, toI32((v >> toI64(k) * toI64(8)) & toI64(255)))
+    s = mix(s, toI32((v >> (toI64(k) * toI64(8))) & toI64(255)))
   }
   return s
 }
@@ -144,7 +144,10 @@ class Bytes {
 /** The elements row `r`'s int8[] has: 0, 1, 4 or 8. */
 const tagCount = (r: i32): i32 => {
   const k: i32 = r % 4
-  return k === 0 ? 0 : k === 1 ? 1 : k === 2 ? 4 : 8
+  if (k < 2) {
+    return k
+  }
+  return k === 2 ? 4 : 8
 }
 
 /** Row `r`'s name: 8 to 64 lowercase letters. */

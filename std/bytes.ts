@@ -105,16 +105,18 @@ const getU64BEByByte = (b: u8[], off: i32): u64 => {
 
 /**
  * The `u64` whose bytes, most significant first, are `b[off]` to `b[off + 7]`.
- * The fast path's ors are grouped in pairs: LLVM folds that tree into one load
- * and a `bswap`, and left a chain of eight `or`s byte by byte. The byte loop
- * is its own function so its last load is not merged with the fast path's.
+ * The fast path's ors are grouped in pairs, which LLVM folds into one load and
+ * a `bswap`; a flat chain of eight `or`s stayed byte by byte. The byte loop is
+ * its own function so its last load is not merged with the fast path's.
  */
 export const getU64BE = (b: u8[], off: i32): u64 => {
   if (off >= 0 && off < 2147483640 && off + 8 <= toI32(b.length)) {
     return (
-      (((toU64(b[off]) << toU64(56)) | (toU64(b[off + 1]) << toU64(48))) |
-        ((toU64(b[off + 2]) << toU64(40)) | (toU64(b[off + 3]) << toU64(32)))) |
-      (((toU64(b[off + 4]) << toU64(24)) | (toU64(b[off + 5]) << toU64(16))) |
+      (toU64(b[off]) << toU64(56)) |
+      (toU64(b[off + 1]) << toU64(48)) |
+      ((toU64(b[off + 2]) << toU64(40)) | (toU64(b[off + 3]) << toU64(32))) |
+      ((toU64(b[off + 4]) << toU64(24)) |
+        (toU64(b[off + 5]) << toU64(16)) |
         ((toU64(b[off + 6]) << toU64(8)) | toU64(b[off + 7])))
     )
   }

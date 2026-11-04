@@ -133,7 +133,11 @@ Tests:
 `byte-runs wasm32-wasi -msimd128` and
 `byte-runs aarch64 through binfmt, the NEON path`;
 `link/std_bytes_runs: exits with 0 and stdout matches expected.out`,
-`link/std_bytes_copy_outside: exits with 1 and stdout matches expected.out` —
+`link/std_bytes_copy_outside: exits with 1 and stdout matches expected.out`,
+`link/std_bytes_read_be_end: exits with 0 and stdout matches expected.out`,
+`link/std_bytes_read_be_short: exits with 1 and stdout matches expected.out`,
+`link/std_bytes_read_be_empty: exits with 1 and stdout matches expected.out`,
+`link/std_bytes_read_be_cap: exits with 1 and stdout matches expected.out` —
 each the template `link/${name}: exits with ${wantCode} and stdout matches
 expected.out`;
 `link/std_bytes_copy_outside: every one of 50 runs at 2 and 8 threads prints

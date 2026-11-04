@@ -116,8 +116,8 @@ if (cases.length === 0) {
   fail(`--case ${only}: no case's label starts with it`)
 }
 
-/** Builds main.ts with `cmd` (`prefix` first) from `cwd` into `dir`, linked as `exe`. */
-const buildInto = (cmd, prefix, cwd, dir, exe) => {
+/** Builds main.ts with `cmd` (`prefix` first) from `cwd` into `dir`, linked as `bin`. */
+const buildInto = (cmd, prefix, cwd, dir, bin) => {
   fs.mkdirSync(dir, { recursive: true })
   const r = spawnSync(
     cmd,
@@ -127,7 +127,7 @@ const buildInto = (cmd, prefix, cwd, dir, exe) => {
       "-o",
       `${dir}/`,
       "--link",
-      exe,
+      bin,
       "--profile",
       "speed",
       ...(cpu === null ? [] : ["--cpu", cpu]),
@@ -226,11 +226,12 @@ if (validate) {
 if (callgrind) {
   const SHORT = 10
   const LONG = 110
+  const VALGRIND = "valgrind"
   /** Instructions callgrind counts for one run of `col` on `c`. */
   const instructions = (col, c, iterations) => {
     const out = path.join(outDir, `callgrind.${col.id}.out`)
     const r = spawnSync(
-      "valgrind",
+      VALGRIND,
       [
         "--tool=callgrind",
         `--callgrind-out-file=${out}`,
