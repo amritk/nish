@@ -64,6 +64,9 @@ copy's distance from the build, so a change inside it is noise.
 | rows 1 | 277.8 (262.9-335.7) | 284.7 (273.6-418.4) | +2.5% | ±0.6% |
 | rows 20 | 1676 (1514-2292) | 2000 (1785-2763) | +19.3% | ±12.2% |
 | rows 100 | 7346 (6709-8808) | 8756 (8537-12308) | +19.2% | ±0.7% |
+| text 1 | 316.5 (295.9-470.8) | 329.0 (293.8-510.8) | +3.9% | ±6.3% |
+| text 20 | 3165 (2929-3864) | 3220 (2914-4361) | +1.7% | ±14.2% |
+| text 100 | 15560 (14539-18203) | 16667 (14617-21001) | +7.1% | ±0.3% |
 | pool 1 | 345.1 (309.5-457.1) | 317.6 (299.5-388.4) | -8.0% | ±8.7% |
 | pool 20 | 1901 (1693-2888) | 2158 (1989-2725) | +13.5% | ±1.8% |
 | pool 100 | 7782 (7193-8695) | 9454 (8863-11145) | +21.5% | ±0.9% |
@@ -75,6 +78,11 @@ In the first run, `pool 20` (+24.3%, band ±3.9%) and `pool 100` (+26.7%,
 ±9.6%) repeated outside the band. `rows 100` (+2.8%) fell inside that run's
 ±16.3% band, because the run shared the machine with a build.
 
+`text` is the control: its instruction counts are the same with and without
+the cut, so no `text` difference is real. The first `--cpu x86-64` run had
+`text 100` at +1.1% (band ±5.5%). The +7.1% above did not repeat, and it shows
+that one copy's distance can understate the noise of a single run.
+
 `--cpu x86-64-v3`, two runs (base vs nish, band):
 
 | case | run a | run b |
@@ -83,8 +91,14 @@ In the first run, `pool 20` (+24.3%, band ±3.9%) and `pool 100` (+26.7%,
 | rows 100 | +29.8% (±1.4%) | +20.0% (±6.9%) |
 | pool 20 | +28.3% (±1.9%) | +24.4% (±5.8%) |
 | pool 100 | +26.2% (±6.4%) | +25.7% (±1.1%) |
+| text 20 | -8.1% (±8.6%) | +4.7% (±7.8%) |
+| text 100 | +31.7% (±10.1%) | +3.4% (±4.7%) |
 | params 20 | -0.1% (±3.3%) | +2.8% (±2.1%) |
 | params 100 | +3.6% (±3.9%) | +1.8% (±5.4%) |
+
+`text 100`'s +31.7% in run a is noise in the same way: the instructions are
+identical, and that run's spreads were the widest measured (14,027 to
+27,142 ns for `base`).
 
 Instructions an operation (`--callgrind`). The copy column is identical to
 the build in every case:
@@ -139,6 +153,16 @@ measured here.
 | 3 | The same fast path on `getU32BE`/`getI32BE`: 140,000 calls (7 a row) at 25 instr each, all from code inlined into `readRow`: the array's header words and its per-element lengths. The column-length read in `readRow` already has its own guard | `std/bytes.ts` `getU32BE` | 3.5M (14% of `rows 100`) | about 10 instr a call: -2.1M, about -8% of `rows 100` |
 | 4 | `PgConnection.readRow` together with the inlined column loop: each column re-reads its length and stores its window into per-column arrays. One bounds proof per message (checking the length words once against the message end) could drop the per-column checks | `std/net/postgres.ts` `readRow`, `reserveColumns` | 11.2M (45% of `rows 100`), about 110 instr a row | uncertain: -10 to -20% of it |
 | 5 | `binaryInt` re-checks the column's type, length and NULL on every read before it calls `getI64BE` | `std/net/postgres.ts` `binaryInt` | 37 instr a call (40,000 calls: 1.48M, 5.9%) | -0.6M, about -2% |
+
+The text path (`text 100`, 200 iterations, 40.2M instructions in all) ranks
+differently. None of these is taken here:
+
+| rank | candidate | where | now | estimate |
+| --- | --- | --- | --- | --- |
+| 1 | `PgText.int` checks each digit for overflow against `minTenth`. An integer of at most 18 digits cannot overflow, so a length test before the loop could skip that check, keeping the full check for longer input | `std/net/postgres.ts` `PgText.int` | 85,000 calls (65,000 array elements, 20,000 ids) at about 117 instr each: 9.99M, 25% of `text 100` | -25 to -35% of it: about -3M, -6 to -9% |
+| 2 | `PgArrayWalker.next` tests five refused bytes (`{`, `}`, `"`, `\`, space) on every byte of an unquoted element as it scans for the comma | `std/net/postgres.ts` `PgArrayWalker.next` (inlined into the bench's `answer`) | 2.56M on the scan line alone, 6.4% | a byte-class test: about -1.5M, -4% |
+| 3 | `PgText.timestamp` counts non-digits in the fixed 19 bytes with a bounds test per byte, after a guard that already proves them | `std/net/postgres.ts` `PgText.timestamp` (inlined) | 1.32M, 3.3% | about -0.7M, -2% |
+| 4 | `readRow`: the same candidate as rank 4 above | `std/net/postgres.ts` `readRow` | 4.51M, 11.2% | uncertain |
 
 `getU64LE` has the same byte loop as the old `getU64BE`, but no Postgres path
 reads it. Its users (`std/crypto`) keep their own copies.
