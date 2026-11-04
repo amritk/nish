@@ -300,18 +300,30 @@ join.part:
   %62 = bitcast i8* %61 to i64*
   %63 = load i64, i64* %62, align 8
   %64 = getelementptr inbounds i8, i8* %61, i64 8
+  %65 = icmp eq i64 %63, 1
+  br i1 %65, label %join.byte, label %join.bulk
+
+join.byte:
+  %66 = load i8, i8* %64, align 1
+  store i8 %66, i8* %56, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %56, i8* %64, i64 %63, i1 false)
-  %65 = getelementptr inbounds i8, i8* %56, i64 %63
-  store i8* %65, i8** %join.p, align 8
-  %66 = add i64 %50, 1
-  store i64 %66, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %67 = getelementptr inbounds i8, i8* %56, i64 %63
+  store i8* %67, i8** %join.p, align 8
+  %68 = add i64 %50, 1
+  store i64 %68, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %67 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %67, align 1
-  %68 = call i8* @nish_str_concat(i8* %47, i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*))
-  ret i8* %68
+  %69 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %69, align 1
+  %70 = call i8* @nish_str_concat(i8* %47, i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*))
+  ret i8* %70
 }
 
 define internal void @Person.constructor(%struct.Person* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name, i32 noundef %age) #1 {
