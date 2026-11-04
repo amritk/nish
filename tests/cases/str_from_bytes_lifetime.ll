@@ -347,30 +347,42 @@ join.part:
   %103 = bitcast i8* %102 to i64*
   %104 = load i64, i64* %103, align 8
   %105 = getelementptr inbounds i8, i8* %102, i64 8
+  %106 = icmp eq i64 %104, 1
+  br i1 %106, label %join.byte, label %join.bulk
+
+join.byte:
+  %107 = load i8, i8* %105, align 1
+  store i8 %107, i8* %97, align 1
+  br label %join.next
+
+join.bulk:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %97, i8* %105, i64 %104, i1 false)
-  %106 = getelementptr inbounds i8, i8* %97, i64 %104
-  store i8* %106, i8** %join.p, align 8
-  %107 = add i64 %91, 1
-  store i64 %107, i64* %join.at, align 8
+  br label %join.next
+
+join.next:
+  %108 = getelementptr inbounds i8, i8* %97, i64 %104
+  store i8* %108, i8** %join.p, align 8
+  %109 = add i64 %91, 1
+  store i64 %109, i64* %join.at, align 8
   br label %join.copy.body
 
 join.end:
-  %108 = load i8*, i8** %join.p, align 8
-  store i8 0, i8* %108, align 1
-  %109 = call i8* @nish_str_concat(i8* %88, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
-  %110 = load i8*, i8** %last.addr, align 8
-  %111 = call i8* @nish_str_concat(i8* %109, i8* %110)
-  %112 = call i8* @nish_str_concat(i8* %111, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
-  %113 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
-  %114 = getelementptr inbounds %struct.Holder, %struct.Holder* %113, i32 0, i32 0
-  %115 = load i8*, i8** %114, align 8, !tbaa !17
-  %116 = call i8* @nish_str_concat(i8* %112, i8* %115)
-  %117 = call i8* @nish_str_concat(i8* %116, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
-  %118 = load i32, i32* %t.addr, align 4
-  %119 = icmp sgt i32 %118, 0
-  %120 = select i1 %119, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
-  %121 = call i8* @nish_str_concat(i8* %117, i8* %120)
-  call void @nish_print(i8* %121)
+  %110 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %110, align 1
+  %111 = call i8* @nish_str_concat(i8* %88, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %112 = load i8*, i8** %last.addr, align 8
+  %113 = call i8* @nish_str_concat(i8* %111, i8* %112)
+  %114 = call i8* @nish_str_concat(i8* %113, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %115 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
+  %116 = getelementptr inbounds %struct.Holder, %struct.Holder* %115, i32 0, i32 0
+  %117 = load i8*, i8** %116, align 8, !tbaa !17
+  %118 = call i8* @nish_str_concat(i8* %114, i8* %117)
+  %119 = call i8* @nish_str_concat(i8* %118, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %120 = load i32, i32* %t.addr, align 4
+  %121 = icmp sgt i32 %120, 0
+  %122 = select i1 %121, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
+  %123 = call i8* @nish_str_concat(i8* %119, i8* %122)
+  call void @nish_print(i8* %123)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
