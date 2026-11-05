@@ -25,7 +25,7 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import { applyModuleEdits, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
+import { applyModuleEdits, ASYNC_REFUSAL, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
@@ -256,6 +256,14 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
+    // WP49: one refusal per module, at its first async function.
+    for (const fn of unit.checker.program.functions) {
+      const origin = fn.origin
+      if (fn.isAsync() && origin !== null && origin === unit.source) {
+        walk.refuse(fn.decl, ASYNC_REFUSAL)
+        break
+      }
+    }
     for (const stmt of unit.file.children) {
       if (stmt.kind !== N_IMPORT) {
         continue

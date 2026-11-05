@@ -148,6 +148,14 @@ export const SIGNAL_REFUSAL: string =
 export const REGION_REFUSAL: string =
   "--emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native"
 
+/**
+ * The message NL4016 carries. A native `async` function runs as a frame state
+ * machine whose resume order is declared in `docs/LANGUAGE.md`; the runtime
+ * the output imports does not answer that order, nor `awaitAll` and `spawn`.
+ */
+export const ASYNC_REFUSAL: string =
+  "--emit-ts cannot yet write an async function, whose resume order the TypeScript runtime does not answer yet; keep it native"
+
 /** The message NL4013 carries; `src/codes.ts` keys the code on it. */
 const INSTANCES_REFUSAL: string =
   "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"

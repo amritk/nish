@@ -178,7 +178,7 @@ const GATES = ["--deny-panics", "--deny-retention"]
 const readsArena = (file) => /\bArena\.used\(/.test(fs.readFileSync(file, "utf8"))
 
 const hasMain = (file) =>
-  /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(file, "utf8"))
+  /\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(file, "utf8"))
 
 const words = (file) =>
   fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean) : []

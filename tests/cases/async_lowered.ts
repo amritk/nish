@@ -1,5 +1,6 @@
-// Part 1 of WP49 stage 4 checks `async` and refuses to compile it: this
-// program passes every rule, and the lowering is the next release's (NL2653).
+// WP49 stage 4, part 2: the program part 1 checked and refused (NL2653) now
+// compiles. `run` awaits a value, an assignment, two statements and an
+// `awaitAll`, then spawns a task the driver runs once `main` is done.
 import { awaitAll, spawn } from "nish:async"
 
 async function double(x: i32): Promise<i32> {
@@ -20,4 +21,7 @@ async function run(): Promise<void> {
   spawn(log(c + d))
 }
 
-export const main = (): i32 => 0
+export async function main(): Promise<i32> {
+  await run()
+  return 0
+}

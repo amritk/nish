@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 802
+export const RULE_COUNT: i32 = 803
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -413,6 +413,8 @@ const diagnosticRules = (): string[] => [
   "NL3047",
   "` of a `Secret` is read only by `nish:secret` itself: compute with the value inside `expose(key, f)`, which runs `f` with it",
   "NL2436",
+  "--emit-ts cannot yet write an async function, whose resume order the TypeScript runtime does not answer yet; keep it native",
+  "NL4016",
   ": a handle class has no type parameters, no `implements` and no `export`, so no other type and no other module can name it",
   "NL2565",
   ": no target can start a thread on less, and a task that ran on it would overflow before it did any work; ask for at least ",

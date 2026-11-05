@@ -529,7 +529,7 @@ const keepSites = (
  * `"proven","callee"` for a `parallel-length`, `"callee","via"` for a `call`
  * (`via` is the kind of the site the callee reaches) and `"allowed":true` for
  * an `oom` and an `unchecked`. `symbol` is the function's LLVM name, which is how a reader finds
- * it in the IR; `callee` is the callee's name as a diagnostic spells it.
+ * it in the IR (`<name>.resume` for an `async` function that awaits); `callee` is the callee's name as a diagnostic spells it.
  */
 export const panicsJson = (units: AnalysisUnit[], facts: FactsTable): string => {
   const out = new StringBuilder()
@@ -547,7 +547,8 @@ export const panicsJson = (units: AnalysisUnit[], facts: FactsTable): string => 
       out.add('{"name":')
       addJsonQuoted(out, sig.sourceName)
       out.add(',"symbol":')
-      addJsonQuoted(out, sig.name)
+      // WP49: a function that awaits is emitted as `<name>.resume`, its body's only `define`.
+      addJsonQuoted(out, sig.isAsync() && sig.awaits.length > 0 ? `${sig.name}.resume` : sig.name)
       out.add(',"module":')
       addJsonQuoted(out, program.source.path)
       out.add(`,"line":${program.source.lineOf(sig.decl.start)},"panics":[`)
