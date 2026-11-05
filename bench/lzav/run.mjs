@@ -54,12 +54,20 @@ if (libdeflate === undefined) {
   process.exit(1)
 }
 fs.mkdirSync(out, { recursive: true })
-let header = flag("--lzav-h", path.join(out, "lzav.h"))
+const header = flag("--lzav-h", path.join(out, "lzav.h"))
 if (!fs.existsSync(header)) {
   run("curl", ["-sSfL", "-o", header, `https://raw.githubusercontent.com/avaneev/lzav/${LZAV_COMMIT}/lzav.h`])
 }
 run(compiler, [path.join(here, "main.ts"), "-o", `${out}/`, "--link", path.join(out, "lzav-nish")])
-run("clang", ["-O3", "-I", path.dirname(header), path.join(here, "lzav.c"), "-o", path.join(out, "lzav-c"), libdeflate])
+run("clang", [
+  "-O3",
+  "-I",
+  path.dirname(header),
+  path.join(here, "lzav.c"),
+  "-o",
+  path.join(out, "lzav-c"),
+  libdeflate,
+])
 
 // row key -> { lib, codec, op, input, size, ns: [] }
 const rows = new Map()

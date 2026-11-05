@@ -151,7 +151,9 @@ const lzavCtz64 = (x: u64): i32 => {
  * minimum match of 5, two for 6. The caller has checked `b[p .. p + 6)`.
  */
 const lzavWord2 = (b: u8[], p: integer<0, 2147483639>, mref: i32): u32 =>
-  mref === 5 ? toU32(uncheckedGet(b, p + 4)) : toU32(uncheckedGet(b, p + 4)) | (toU32(uncheckedGet(b, p + 5)) << 8)
+  mref === 5
+    ? toU32(uncheckedGet(b, p + 4))
+    : toU32(uncheckedGet(b, p + 4)) | (toU32(uncheckedGet(b, p + 5)) << 8)
 
 /** The index in the `u32` hash table of the pair `(iw1, iw2)` hashes to; `hmask` keeps it 8-byte aligned and inside the table. */
 const lzavHash = (iw1: u32, iw2: u32, hmask: u32): i32 =>
@@ -258,7 +260,8 @@ const lzavCarryShift = (bt: i32): i32 => (LZAV_CARRY_SHIFTS >> ((bt & 7) * 3)) &
  * its short variant, type `bytes + 4`, applies: 2^6, 2^12 or 2^19, the
  * exponents five bits each in one word.
  */
-const lzavShortThreshold = (bytes: i32): i32 => toI32(1) << ((LZAV_MASK_WIDTHS_SHORT >> ((bytes & 3) * 5)) & 31)
+const lzavShortThreshold = (bytes: i32): i32 =>
+  toI32(1) << ((LZAV_MASK_WIDTHS_SHORT >> ((bytes & 3) * 5)) & 31)
 
 /**
  * LZAV's compressor and its hash table, 1 MiB allocated once by the
@@ -349,7 +352,7 @@ export class LzavCompressor {
     let ipa: i32 = off
     let ip: i32 = off + 2
     // The running average, scaled by 2^11, of the match signal times the match length: it falls on misses and speeds the scan up.
-    let mavg: i64 = toI64(LZAV_HT_MAX) * 100 / 8
+    let mavg: i64 = (toI64(LZAV_HT_MAX) * 100) / 8
     let iw1: u32 = 0
     let iw2: u32 = 0
     let hp: i32 = 0
@@ -577,7 +580,15 @@ export const lzavDecompress = (src: u8[], off: i32, len: i32, out: u8[], at: i32
       if (cc > ope - op) {
         return LZAV_ERR_OUTPUT
       }
-      if (cc <= 16 && ope - op >= 16 && ipe - ip >= 16 && op >= 0 && ip >= 0 && op <= 2147483631 && ip <= 2147483631) {
+      if (
+        cc <= 16 &&
+        ope - op >= 16 &&
+        ipe - ip >= 16 &&
+        op >= 0 &&
+        ip >= 0 &&
+        op <= 2147483631 &&
+        ip <= 2147483631
+      ) {
         lzavStore64(out, op, lzavLoad64(src, ip))
         const o8: i32 = op + 8
         const i8: i32 = ip + 8
