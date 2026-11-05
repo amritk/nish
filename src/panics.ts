@@ -548,7 +548,7 @@ export const panicsJson = (units: AnalysisUnit[], facts: FactsTable): string => 
       addJsonQuoted(out, sig.sourceName)
       out.add(',"symbol":')
       // WP49: a function that awaits is emitted as `<name>.resume`, its body's only `define`.
-      addJsonQuoted(out, sig.isAsync() && sig.awaits.length > 0 ? `${sig.name}.resume` : sig.name)
+      addJsonQuoted(out, sig.suspends() ? `${sig.name}.resume` : sig.name)
       out.add(',"module":')
       addJsonQuoted(out, program.source.path)
       out.add(`,"line":${program.source.lineOf(sig.decl.start)},"panics":[`)

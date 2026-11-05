@@ -94,6 +94,7 @@ struct FunctionSig (class) size=176 align=8 exported
   method body -> @FunctionSig.body
   method foreign -> @FunctionSig.foreign
   method isAsync -> @FunctionSig.isAsync
+  method suspends -> @FunctionSig.suspends
   method definedIn -> @FunctionSig.definedIn
 struct FusionTable (class) size=24 align=8 exported
   field ids: i32[] index=0 offset=0
@@ -499,6 +500,12 @@ function FunctionSig.isAsync(this: FunctionSig): boolean -> @FunctionSig.isAsync
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function FunctionSig.suspends(this: FunctionSig): boolean -> @FunctionSig.suspends [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FunctionSig.isAsync
+  pointer this: size=176 writesThrough=false captured=false passedTo=FunctionSig.isAsync#0
+  stackSites=0 stackLocals=0
+  callee +0:12 FunctionSig.isAsync -> @FunctionSig.isAsync
 function FunctionSig.definedIn(this: FunctionSig, source: SourceFile): boolean -> @FunctionSig.definedIn [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=176 writesThrough=false captured=false

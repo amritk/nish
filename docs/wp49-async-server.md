@@ -470,6 +470,21 @@ spawn with a slab per spawned kind, the queue with the executor of §4 in
 stuck queue with a wait on the kernel, and adds what pends for real —
 `nish:async`'s loop, `serve`, async `fetch` and the async Postgres pool.
 
+Three things are sound in this stage only because nothing pends, and stage 5
+owes each of them before a task may wait on the kernel:
+
+- **The arena is a stack.** A suspending function marks and releases the
+  arena as a plain one does, so two tasks interleaving at a real wait would
+  release each other's allocations. Each task needs its own arena, or the
+  frame must hold what it allocated across an `await`.
+- **A spawned task's arguments must outlive the spawner.** `spawn` copies the
+  argument values into the node, not what they point to; a string or array
+  built in the spawner's arena dies when the spawner returns while the task
+  still waits.
+- **A synchronous `main` drains its tasks only at exit.** Today every task
+  has finished before `spawn` returns; once one can pend, the C entry must
+  run the loop after a plain `main` too, not just after an `async` one.
+
 ## Not in this work package
 
 - Promises as values: arrays of them, `Promise.all` over an array, `.then`.

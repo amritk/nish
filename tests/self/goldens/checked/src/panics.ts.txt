@@ -249,7 +249,7 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   local +21:14 site: PanicSite (const)
 function panicsJson(units: AnalysisUnit[], facts: FactsTable): string -> @panicsJson [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: FunctionSig.isAsync SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted listedFacts nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 siteJson
+  calls: FunctionSig.suspends SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted listedFacts nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 siteJson
   pointer units: size=0 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=listedFacts#1 siteJson#2
   stackSites=1 stackLocals=1
@@ -267,7 +267,7 @@ function panicsJson(units: AnalysisUnit[], facts: FactsTable): string -> @panics
   callee +13:7 addJsonQuoted -> @addJsonQuoted
   callee +14:7 StringBuilder.add -> @StringBuilder.add
   callee +16:7 addJsonQuoted -> @addJsonQuoted
-  callee +16:26 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +16:26 FunctionSig.suspends -> @FunctionSig.suspends
   callee +17:7 StringBuilder.add -> @StringBuilder.add
   callee +18:7 addJsonQuoted -> @addJsonQuoted
   callee +19:7 StringBuilder.add -> @StringBuilder.add

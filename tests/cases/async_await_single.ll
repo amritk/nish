@@ -2,11 +2,11 @@
 %frame.nish_main.rest = type { [0 x <2 x i64>], i32 }
 
 declare void @llvm.trap()
-declare void @nish_free_arena() #1
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 
 define internal noundef i32 @answer(i32 noundef %x) #0 {
 entry:
@@ -14,7 +14,7 @@ entry:
   ret i32 %0
 }
 
-define i1 @nish_main.resume(i8* %async.raw) #2 {
+define i1 @nish_main.resume(i8* %async.raw) #1 {
 async.entry:
   %async.frame = bitcast i8* %async.raw to %frame.nish_main*
   %async.state = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.frame, i32 0, i32 0
@@ -47,7 +47,7 @@ async.suspend:
   ret i1 false
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %async.main = alloca %frame.nish_main, align 16
   %0 = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.main, i32 0, i32 0
@@ -76,8 +76,8 @@ async.done:
 }
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
-attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #2 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}

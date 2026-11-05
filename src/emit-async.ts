@@ -57,8 +57,7 @@ const STEP_DECL: string = "declare hidden i1 @nish.async.step()"
 const DRAIN_DECL: string = "declare hidden void @nish.async.drain()"
 
 /** Whether `sig` is lowered to a frame: an async function whose body awaits. */
-export const suspends = (sig: FunctionSig | null): boolean =>
-  sig !== null && sig.isAsync() && sig.awaits.length > 0
+export const suspends = (sig: FunctionSig | null): boolean => sig !== null && sig.suspends()
 
 /**
  * What the modules of one compilation learn about each other's frames,
@@ -253,6 +252,9 @@ export const emitAsyncCall = (
   if (mode === ASYNC_ALL) {
     const base = kidBase(emitter, emitter.asyncGroup, emitter.asyncMember)
     storeHead(emitter, base, head, operandTypes, operandValues)
+    // Each member starts here, in argument order as Node starts them; its
+    // answer is ignored, because the poll re-resumes every member and a
+    // finished frame (state -1) answers true at once.
     fn.emitValue(`call i1 @${sig.name}.resume(i8* ${base})`)
     emitter.asyncHeads.push(head)
     emitter.asyncCounts.push(operandTypes.length)
@@ -1281,7 +1283,18 @@ class Demoter {
       return typeAt(rest, at)
     }
     if (op === "getelementptr") {
-      return "i8*"
+      // The first index steps over the pointer; each later one enters a component.
+      const at = skipFlags(rest, after)
+      const source = typeAt(rest, at)
+      const parts = splitTop(rest.substring(at + source.length))
+      let type = source
+      let k = 2
+      while (k < parts.length) {
+        const index = parts[k]
+        type = this.component(type, leadingNumber(index.substring(index.indexOf(" ") + 1)))
+        k = k + 1
+      }
+      return `${type}*`
     }
     if (op === "extractvalue") {
       const aggregate = typeAt(rest, after)
@@ -1317,7 +1330,7 @@ class Demoter {
     if (t.startsWith("%")) {
       t = this.sizer.body(t)
     }
-    if (t.startsWith("[")) {
+    if (t.startsWith("[") || (t.startsWith("<") && !t.startsWith("<{"))) {
       return t.substring(t.indexOf(" x ") + 3, t.length - 1)
     }
     const packed = t.startsWith("<{")

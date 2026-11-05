@@ -101,11 +101,11 @@ struct AsyncLayout (class) size=32 align=8
   method offset -> @AsyncLayout.offset
   method resolve -> @AsyncLayout.resolve
 function suspends(sig: FunctionSig | null): boolean -> @suspends [exported]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FunctionSig.isAsync
-  pointer sig: size=176 writesThrough=false captured=false passedTo=FunctionSig.isAsync#0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FunctionSig.suspends
+  pointer sig: size=176 writesThrough=false captured=false passedTo=FunctionSig.suspends#0
   stackSites=0 stackLocals=0
-  callee +0:19 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +0:79 FunctionSig.suspends -> @FunctionSig.suspends
 function AsyncRegistry.constructor(this: AsyncRegistry): void -> @AsyncRegistry.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
@@ -247,17 +247,17 @@ function emitAsyncCall(emitter: Emitter, expr: Node, sig: FunctionSig, operandTy
   pointer operandTypes: size=0 writesThrough=false captured=false passedTo=frameHead#0 storeHead#3 emitSpawnedFrame#4 storeHead#3
   pointer operandValues: size=0 writesThrough=false captured=false passedTo=storeHead#4 emitSpawnedFrame#5 storeHead#4
   stackSites=1 stackLocals=1
-  local -9:9 registry: AsyncRegistry (const)
-  local -8:9 fn: IRFunction (const)
-  local -7:9 id: i32 (const)
-  callee -7:14 AsyncRegistry.idOf -> @AsyncRegistry.idOf
-  local -6:9 head: string (const)
-  callee -6:16 frameHead -> @frameHead
-  callee -6:40 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee -5:3 declareResume -> @declareResume
-  local -3:11 base: string (const)
-  callee -3:18 kidBase -> @kidBase
-  callee -2:5 storeHead -> @storeHead
+  local -12:9 registry: AsyncRegistry (const)
+  local -11:9 fn: IRFunction (const)
+  local -10:9 id: i32 (const)
+  callee -10:14 AsyncRegistry.idOf -> @AsyncRegistry.idOf
+  local -9:9 head: string (const)
+  callee -9:16 frameHead -> @frameHead
+  callee -9:40 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee -8:3 declareResume -> @declareResume
+  local -6:11 base: string (const)
+  callee -6:18 kidBase -> @kidBase
+  callee -5:5 storeHead -> @storeHead
   callee -1:5 IRFunction.emitValue -> @IRFunction.emitValue
   callee +6:5 emitSpawnedFrame -> @emitSpawnedFrame
   local +9:9 owner: FunctionSig | null (const)
@@ -846,7 +846,7 @@ function Demoter.typeOfDef(this: Demoter, rest: string, name: string): string ->
   sharedWrite: via Demoter.component
   escaping: rest
   calls: Demoter.component asyncFail isWordIn lastIndexIn leadingNumber nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new skipFlags splitTop topComma typeAt wordAt
-  pointer this: size=136 writesThrough=false captured=false passedTo=Demoter.component#0
+  pointer this: size=136 writesThrough=false captured=false passedTo=Demoter.component#0 Demoter.component#0
   stackSites=0 stackLocals=0
   local +0:11 op: string (const)
   callee +0:16 wordAt -> @wordAt
@@ -873,24 +873,35 @@ function Demoter.typeOfDef(this: Demoter, rest: string, name: string): string ->
   callee +27:11 wordAt -> @wordAt
   callee +28:14 skipFlags -> @skipFlags
   callee +30:14 typeAt -> @typeAt
-  local +36:13 aggregate: string (const)
-  callee +36:25 typeAt -> @typeAt
-  local +37:13 tail: string (const)
-  local +38:13 parts: string[] (const)
-  callee +38:21 splitTop -> @splitTop
-  local +39:11 type: string (let)
-  local +40:11 k: i32 (let)
-  callee +42:16 Demoter.component -> @Demoter.component
-  callee +42:37 leadingNumber -> @leadingNumber
-  local +48:13 vector: string (const)
-  callee +48:22 typeAt -> @typeAt
-  local +52:13 comma: i32 (const)
-  callee +52:21 topComma -> @topComma
-  callee +53:14 typeAt -> @typeAt
-  local +56:13 comma: i32 (const)
-  callee +56:21 topComma -> @topComma
-  callee +57:19 typeAt -> @typeAt
-  callee +59:5 asyncFail -> @asyncFail
+  local +34:13 at: i32 (const)
+  callee +34:18 skipFlags -> @skipFlags
+  local +35:13 source: string (const)
+  callee +35:22 typeAt -> @typeAt
+  local +36:13 parts: string[] (const)
+  callee +36:21 splitTop -> @splitTop
+  local +37:11 type: string (let)
+  local +38:11 k: i32 (let)
+  local +40:15 index: string (const)
+  callee +41:16 Demoter.component -> @Demoter.component
+  callee +41:37 leadingNumber -> @leadingNumber
+  local +47:13 aggregate: string (const)
+  callee +47:25 typeAt -> @typeAt
+  local +48:13 tail: string (const)
+  local +49:13 parts: string[] (const)
+  callee +49:21 splitTop -> @splitTop
+  local +50:11 type: string (let)
+  local +51:11 k: i32 (let)
+  callee +53:16 Demoter.component -> @Demoter.component
+  callee +53:37 leadingNumber -> @leadingNumber
+  local +59:13 vector: string (const)
+  callee +59:22 typeAt -> @typeAt
+  local +63:13 comma: i32 (const)
+  callee +63:21 topComma -> @topComma
+  callee +64:14 typeAt -> @typeAt
+  local +67:13 comma: i32 (const)
+  callee +67:21 topComma -> @topComma
+  callee +68:19 typeAt -> @typeAt
+  callee +70:5 asyncFail -> @asyncFail
 function Demoter.component(this: Demoter, type: string, index: i32): string -> @Demoter.component [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via asyncFail

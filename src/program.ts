@@ -268,6 +268,16 @@ export class FunctionSig {
   }
 
   /**
+   * WP49: an async function whose body awaits. It is lowered to a frame and
+   * `<name>.resume` (`src/emit-async.ts`) rather than a plain call, and its
+   * resume writes that frame and may answer "not yet", so its facts say it
+   * writes and is not sure to return.
+   */
+  suspends(): boolean {
+    return this.isAsync() && this.awaits.length > 0
+  }
+
+  /**
    * Whether this module *defines* the function rather than importing it. Pass
    * 1b appends an imported signature to the importer's `functions`, so the
    * emitter and the attribute analysis both need the distinction, and

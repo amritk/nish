@@ -3989,6 +3989,13 @@ const collectFacts = (
     facts.effect = EFFECT_WRITE
   }
   facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn
+  // WP49: a function that awaits is called through its resume, which stores
+  // its state and answers into the frame and may leave it pending, so a
+  // caller's facts may not treat it as pure or as sure to return.
+  if (sig.suspends()) {
+    facts.effect = EFFECT_WRITE
+    facts.willReturn = false
+  }
   return facts
 }
 

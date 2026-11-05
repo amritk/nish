@@ -10455,7 +10455,6 @@ world in this release, so no program here reaches it.
 
 <!-- cookbook:begin async-await -->
 ```ts
-// biome-ignore lint/suspicious/useAwait: a leaf awaits nothing, so it lowers to a plain call
 const inc = async (x: i32): Promise<i32> => x + 1
 
 const step = async (x: i32): Promise<i32> => {
