@@ -97,7 +97,9 @@ const discoverPrograms = ({ cases = true, corpus = true } = {}) => {
       if (fs.existsSync(path.join(casesDir, `${name}.err`))) {
         continue
       }
-      if (!/\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))) {
+      if (
+        !/\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
+      ) {
         continue
       }
       out.push(program(`cases/${name}`, src, path.join(casesDir, `${name}.args`), "case"))

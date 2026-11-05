@@ -610,7 +610,8 @@ const lastIndexIn = (text: string, needle: string): i32 => {
 /** Whether `word` is one of the space-separated words of `list`. */
 const isWordIn = (list: string, word: string): boolean => word.length > 0 && list.indexOf(` ${word} `) >= 0
 
-const FLAG_WORDS: string = " nuw nsw exact disjoint nneg fast nnan ninf nsz arcp contract afn reassoc volatile atomic tail musttail notail fastcc ccc coldcc tailcc noalias nonnull noundef zeroext signext inreg "
+const FLAG_WORDS: string =
+  " nuw nsw exact disjoint nneg fast nnan ninf nsz arcp contract afn reassoc volatile atomic tail musttail notail fastcc ccc coldcc tailcc noalias nonnull noundef zeroext signext inreg "
 
 /** Skip flag words (and `align N`, `dereferenceable(N)`) from `at`; answer where the next thing starts. */
 const skipFlags = (text: string, at: i32): i32 => {
@@ -673,9 +674,11 @@ const splitTop = (text: string): string[] => {
   return parts
 }
 
-const BINARY_OPS: string = " add sub mul udiv sdiv urem srem shl lshr ashr and or xor fadd fsub fmul fdiv frem fneg "
+const BINARY_OPS: string =
+  " add sub mul udiv sdiv urem srem shl lshr ashr and or xor fadd fsub fmul fdiv frem fneg "
 
-const CAST_OPS: string = " trunc zext sext fptrunc fpext fptoui fptosi uitofp sitofp ptrtoint inttoptr bitcast addrspacecast "
+const CAST_OPS: string =
+  " trunc zext sext fptrunc fpext fptoui fptosi uitofp sitofp ptrtoint inttoptr bitcast addrspacecast "
 
 // ---- Layout ---------------------------------------------------------------
 

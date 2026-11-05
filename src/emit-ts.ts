@@ -25,7 +25,14 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
-import { applyModuleEdits, ASYNC_REFUSAL, emitModule, REGION_REFUSAL, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
+import {
+  applyModuleEdits,
+  ASYNC_REFUSAL,
+  emitModule,
+  REGION_REFUSAL,
+  SIGNAL_REFUSAL,
+  Walk,
+} from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"

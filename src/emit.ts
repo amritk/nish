@@ -44,7 +44,7 @@ import {
   emitSpawn,
   isAwaitAllDeclaration,
   suspends,
-  transformAsync
+  transformAsync,
 } from "./emit-async"
 import { jsonRouteOf } from "./json-typed"
 import {
