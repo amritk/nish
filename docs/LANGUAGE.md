@@ -3186,11 +3186,24 @@ An `async` function is a task the compiler can size: it may wait, and every
 wait is written `await` on a direct call
 ([wp49-async-server.md](wp49-async-server.md) §2). No expression ever has a
 promise type, so there is no promise to store, pass or chain, and an awaited
-call's frame nests in its caller's. **This release checks `async` and does
-not yet compile it**: a program that keeps an `async` function after the
-checks is `` `async` function `run` is checked, but not yet compiled `` (NL2653,
-`reject_async_not_lowered`), and the lowering is the next one's. A program
-with no `async` function compiles byte for byte as before.
+call's frame nests in its caller's. **An `async` function compiles to a frame
+and a resume switch** (`async_lowered`, `async_await_single`,
+`async_await_chain`, `async_await_all`, `async_spawn`, `async_main`,
+`async_result`): one that awaits becomes `i1 @f.resume(i8*)`, which picks up
+at the state its frame records and answers whether it finished; one that
+awaits nothing is a plain function, and awaiting it is a plain call. The
+frames of a program are sized when it is linked, and `export async function
+main` is resumed from the process entry until it finishes and its spawned
+tasks are done (`async_main`). In this release the tasks run on an
+in-process queue and nothing waits on the outside world, so every task runs
+to completion; the event loop that waits on sockets and timers is the next
+stage's ([wp49-async-server.md](wp49-async-server.md), "Stage 4, part 2"). A
+program with no `async` function compiles byte for byte as before, and one
+whose `async` functions are never called keeps them `internal`, as it would a
+plain function (`async_unused`). A function that awaits loses `willreturn`
+and `readonly`; one that does not keeps its attributes (`async_attributes`).
+A failure is the answer's `Result`, `Promise<Result<T, E>>`, read after the
+`await` as any other `Result` (`async_result`).
 
 ```ts
 import { awaitAll, spawn } from "nish:async"
@@ -3279,6 +3292,7 @@ the resume order is not Node's, and these are declared differences:
 | Every `await` yields to the microtask queue, even on a value that is already there | An `await` on a call that finishes without waiting returns at once; nothing else runs in between |
 | Microtasks run before I/O callbacks, in a defined order | Tasks resume in the order the kernel reports readiness, then by timer deadline |
 | A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
+| `spawn(f(x))` queues `f`, which starts after the current task yields | `spawn(f(x))` runs `f` at once until it first waits, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
 
 A program whose output does not depend on how its tasks interleave prints the
 same under both.
@@ -6105,7 +6119,7 @@ under [Semantics decisions](#semantics-decisions).
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `a?.b ?? d`, `a?.m() ?? d` | `a` a `T \| null`; a chain of `?.` and `.` links, field reads, `length` and method calls, that is the left operand of `??` | the last link's type, as `a ?? d` on a `T \| null` types it | `icmp eq` against `null` at each `?.` link's receiver, then `br` to `nullish.default`; `phi` at `nullish.end` | `optional_chain_field`, `optional_chain_order`, `optional_chain_generic`, `optional_chain_bounds`; `reject_optional_chain`, `reject_optional_chain_never_null` ([Nullable types](#nullable-types)) |
-| `await f(x)` | a direct call to an `async` function, at the top of a statement in an `async` function | the call's `T` | not yet lowered (NL2653) | `reject_async_not_lowered`; `reject_await`, `reject_async_await_value`, `reject_async_await_nested` ([Async functions](#async-functions-async-and-await)) |
+| `await f(x)` | a direct call to an `async` function, at the top of a statement in an `async` function | the call's `T` | a call when `f` awaits nothing; otherwise `f`'s frame is laid out in the caller's, `@f.resume` is called, and the caller saves its state and answers `false` while it pends | `async_await_single`, `async_await_chain`, `async_lowered`; `reject_await`, `reject_async_await_value`, `reject_async_await_nested` ([Async functions](#async-functions-async-and-await)) |
 | `== != ?.[ ?.() in instanceof typeof delete void yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_yield` |
 | `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
 | `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |
@@ -11497,7 +11511,10 @@ by the caller.
   without a warning, and the program is written. The sixth is a module that
   imports `nish:region`, whose regions the runtime the output imports
   (`nish/runtime`) does not answer yet, though a program run under Node as it
-  is written does (NL4015, `reject_emit_ts_region`); keep it native.
+  is written does (NL4015, `reject_emit_ts_region`); keep it native. The
+  seventh is a module that declares an `async` function, refused at the first
+  one, whose resume order (see "Async functions: `async` and `await`") the runtime the output
+  imports does not answer yet (NL4016, `reject_emit_ts_async`); keep it native.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

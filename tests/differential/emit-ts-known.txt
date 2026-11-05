@@ -13,6 +13,14 @@
 # listed one that agrees, on one whose row has moved, and on a listed name
 # the corpus no longer has. A build, emit or timeout failure is never listed.
 
+cases/async_attributes refused  # refused: NL4016 under --emit-ts
+cases/async_await_all refused  # refused: NL4016 under --emit-ts
+cases/async_await_chain refused  # refused: NL4016 under --emit-ts
+cases/async_await_single refused  # refused: NL4016 under --emit-ts
+cases/async_lowered refused  # refused: NL4016 under --emit-ts
+cases/async_main refused  # refused: NL4016 under --emit-ts
+cases/async_result refused  # refused: NL4016 under --emit-ts
+cases/async_spawn refused  # refused: NL4016 under --emit-ts
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts

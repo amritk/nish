@@ -873,12 +873,15 @@ export const main = (): i32 => {
 };
 ```
 
-### Async functions: checked, not yet compiled
+### Async functions
 
-`async` is checked by this release and refused at the end with `NL2653`
-(`` `async` function `run` is checked, but not yet compiled ``); a program
-without it is untouched. Write it to these rules now and it compiles once the
-lowering ships:
+`async` compiles natively: a function that awaits becomes a frame and a resume
+switch, one that awaits nothing a plain function, and `export async function
+main` runs to its end, then finishes every task it spawned. Nothing waits on
+sockets or timers in this release, so every task runs to completion.
+`--emit-ts` refuses it for now (`NL4016`); keep such a program native. A call
+that can fail answers `Promise<Result<T, E>>`: test the `Result` after the
+`await`. The rules:
 
 - `async` goes on a top-level `function` or an arrow, never a method
   (`NL1063`). Its return type is `Promise<T>` (`NL2655`), and `Promise<T>`
@@ -899,6 +902,8 @@ lowering ships:
 - An `async` arrow goes only to a parameter whose function type answers
   `Promise<T>` (`NL2639`), and only an `async` one goes there (`NL2640`).
 - No `async` under a wasm target or `--profile wasi` (`NL2652`).
+- `spawn(f(x))` runs `f` at once, up to its first wait, before it returns;
+  Node runs it after the spawning task yields. Do not rely on either order.
 
 ```ts nish:err NL2642
 async function load(id: i32): Promise<i32> {

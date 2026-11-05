@@ -365,6 +365,9 @@ or a builtin call in the same body would have made it a stub. Call it, or write 
 body in the standard library is a stub, and the program is written.
 The sixth (NL4015) is a program that imports `nish:region`: the TypeScript
 runtime has no regions to allocate into yet, so keep that program native.
+The seventh (NL4016) is a module that declares an `async` function: the native
+build runs it as a state machine whose resume order the TypeScript runtime
+does not answer yet, so keep that program native too.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:
 `uncheckedGet`, `uncheckedSet` and the `wrapping*` arithmetic run under Node,

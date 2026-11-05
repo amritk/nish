@@ -7,9 +7,11 @@ async function double(x: i32): Promise<i32> {
 
 async function twice(x: i32): Promise<i32> {
   const a = await double(x)
-  return a + (await double(a))
+  const b = await double(a)
+  return a + b
 }
 
 export async function main(): Promise<void> {
-  console.log(await twice(3))
+  const t = await twice(3)
+  console.log(t)
 }

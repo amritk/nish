@@ -9,30 +9,53 @@ memory each waiting task needs. The rules are in the reference under
 [Async functions](../../LANGUAGE.md#async-functions-async-and-await).
 
 > [!NOTE]
-> This release **checks** `async` code but does not yet compile it. A program
-> that passes every rule below stops with
-> `` `async` function `run` is checked, but not yet compiled `` (`NL2653`).
-> A program without `async` is not affected.
+> In this release the tasks of a program run one after another inside the
+> process and nothing waits on a socket or a timer yet, so every task runs to
+> its end. Waiting on the network comes with a later release.
 
 ## Writing one
 
 The return type is `Promise<T>`, with the answer `T` inside it
 (`Promise<void>` for none). Inside, `await` a call to another `async`
-function and use its answer:
+function and use its answer. `main` may be `async` too: the program runs it to
+its end, then finishes every task it started, and exits with its answer.
 
-```ts nish:err NL2653
+A call that can fail answers `Promise<Result<T, E>>`. There is no `throw` and
+no rejected promise: read the `Result` after the `await`, as you would any
+other ([Errors and `Result`](errors.md)):
+
+```ts nish:ok
+async function parsePort(s: string): Promise<Result<i32, string>> {
+  if (s.length === 0) {
+    return Err("empty");
+  }
+  return Ok(8080);
+}
+
+export async function main(): Promise<i32> {
+  const port = await parsePort("8080");
+  if (port.isErr()) {
+    console.log(port.error);
+    return 1;
+  }
+  console.log(port.value);
+  return 0;
+}
+```
+
+An answer that cannot fail is a plain `Promise<T>`:
+
+```ts nish:ok
 async function double(x: i32): Promise<i32> {
   return x * 2;
 }
 
-async function run(): Promise<void> {
+export async function main(): Promise<void> {
   const a = await double(3);
   let b: i32 = 0;
   b = await double(a);
   console.log(b);
 }
-
-export const main = (): i32 => 0;
 ```
 
 A top-level `function` or an arrow may be `async`. A method may not, because a
@@ -92,7 +115,7 @@ import:
   Nothing reads its answer, so `f` answers `void`, or a `Result` it reports
   itself.
 
-```ts nish:err NL2653
+```ts nish:ok
 import { awaitAll, spawn } from "nish:async";
 
 async function price(id: i32): Promise<i32> {
@@ -103,12 +126,10 @@ async function report(total: i32): Promise<void> {
   console.log(total);
 }
 
-async function run(): Promise<void> {
+export async function main(): Promise<void> {
   const [a, b] = await awaitAll(price(1), price(2));
   spawn(report(a + b));
 }
-
-export const main = (): i32 => 0;
 ```
 
 ## No recursion through `await`
@@ -148,6 +169,9 @@ The same file runs under Node, but tasks resume in a different order:
   Node always yields to its microtask queue first.
 - Waiting tasks resume in the order their sockets and timers become ready, not
   in Node's microtask order.
+- `spawn(f(x))` starts `f` at once and runs it until it first waits before
+  carrying on; Node runs it only after the current task yields. A task that
+  never waits has finished, and printed, before `spawn` returns.
 - There is no `throw`, so nothing is rejected: a call that can fail answers a
   `Result` or `null`, as any other Nish call does
   ([Errors and `Result`](errors.md)).
