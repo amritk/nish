@@ -122,9 +122,11 @@ export class FunctionSig {
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
   /**
-   * WP49: the async functions this one's body awaits, spawns or awaits all
-   * of, each beside the call that does it — the await graph, which may not
-   * have a cycle (`src/async-check.ts`, `rejectAwaitCycles`).
+   * WP49: the async functions this one's body awaits or awaits all of, each
+   * beside the call that does it — the await graph, which may not have a
+   * cycle (`src/async-check.ts`, `rejectAwaitCycles`). A `spawn` is not an
+   * edge: the spawner does not wait for the task, so it cannot close a cycle,
+   * and the lowering does not make the spawner suspend.
    */
   awaits: AwaitEdge[]
   /** WP49: the cycle walk's colour: 0 unvisited, 1 on the path, 2 done. */
