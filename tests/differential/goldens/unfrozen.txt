@@ -104,6 +104,14 @@ cases/arr_sum stale since R6: tests/cases/arr_sum.ts changed since the rewrite w
 cases/arr_typed_push_pop added after R6: no rewriter to freeze it with
 cases/asi_continuation added after R6: no rewriter to freeze it with
 cases/asi_statements added after R6: no rewriter to freeze it with
+cases/async_attributes added after R6: no rewriter to freeze it with
+cases/async_await_all added after R6: no rewriter to freeze it with
+cases/async_await_chain added after R6: no rewriter to freeze it with
+cases/async_await_single added after R6: no rewriter to freeze it with
+cases/async_lowered added after R6: no rewriter to freeze it with
+cases/async_main added after R6: no rewriter to freeze it with
+cases/async_result added after R6: no rewriter to freeze it with
+cases/async_spawn added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
 cases/bytes_fill added after R6: no rewriter to freeze it with
 cases/bytes_offset_float added after R6: no rewriter to freeze it with
