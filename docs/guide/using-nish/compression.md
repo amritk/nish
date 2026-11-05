@@ -4,7 +4,9 @@
 compress and decompress the three formats the web and most file formats use:
 gzip (RFC 1952), zlib (RFC 1950) and the raw DEFLATE stream (RFC 1951) inside
 both. `nish/compress/checksum` holds their checksums, CRC-32 and Adler-32.
-`nish/net/http-compress` puts gzip on an HTTP response. They are written in
+`nish/net/http-compress` puts gzip on an HTTP response, and
+`nish/compress/lzav` is a faster format for data only your own programs read
+([below](#fast-compression-for-your-own-data-lzav)). They are written in
 Nish and imported like any other library module
 ([`export` and `import`](../../LANGUAGE.md#export-and-import)); what they
 write, Node's `zlib`, browsers and `gunzip` read, and what those write, they
@@ -306,6 +308,57 @@ an attacker who can make requests learn the secret from the compressed length,
 a byte at a time (the BREACH attack). Compress responses that carry no secret,
 or none that sits beside attacker-controlled text; the record is
 [docs/security/compress.md](../../security/compress.md).
+
+## Fast compression for your own data: LZAV
+
+`nish/compress/lzav` writes LZAV's format: plain LZ77 matches with no
+Huffman stage, so it compresses about twice as fast as `DEFLATE_FAST` and
+decompresses faster still, for output about a seventh larger on text. Use it
+for bytes that come back to a program you control — a cache entry, a spill
+file, a message between two of your services. Browsers, `curl` and `gunzip`
+do not read it; for anything they see, use gzip.
+
+```ts nish:ok
+import { LzavCompressor, lzavBound, lzavDecompress } from "nish/compress/lzav";
+
+export const main = (): number => {
+  const text: string = "the same words again and again, the same words again and again. ";
+  const data: u8[] = [];
+  for (let k: i32 = 0; k < 50; k++) {
+    for (let i: i32 = 0; i < toI32(text.length); i++) {
+      data.push(toU8(text.charCodeAt(i)));
+    }
+  }
+  const n: i32 = toI32(data.length);
+
+  const lzav = new LzavCompressor(); // once: it holds a 1 MiB table
+  const packed: u8[] = new Array<u8>(lzavBound(n));
+  const end: i32 = lzav.compress(data, 0, n, packed, 0);
+  console.log(`${n} bytes -> ${end}`);
+
+  const back: u8[] = new Array<u8>(n);
+  const got: i32 = lzavDecompress(packed, 0, end, back, 0, n);
+  console.log(got === n ? "back" : `error ${got}`);
+  return 0;
+};
+```
+
+The stream holds no length and no checksum. `lzavDecompress` needs the exact
+decompressed length `n`, and answers `LZAV_ERR_LENGTH` when the stream decodes
+to anything else, so store `n` beside the stream. If you need to tell a
+corrupted stream from a good one, store a `crc32` of the data too and check it
+after decoding: a damaged stream can still decode to `n` bytes of something
+else.
+
+A malformed stream never makes `lzavDecompress` panic or write outside
+`out[at .. at + n)`; it answers a negative `LZAV_ERR_*` code (`TRUNCATED`,
+`OUTPUT`, `DISTANCE`, `LENGTH`, `FORMAT`, `PARAMS`). `compress` answers `-1`
+(`LZAV_NO_ROOM`) when `out` has less than `lzavBound(len)` bytes of room.
+
+The format is upstream LZAV's: `compress` writes what the C library's
+`lzav_compress_default` writes, byte for byte, and `lzavDecompress` reads
+what any of its compressors write. The speed against the C original is in
+`bench/lzav/README.md`.
 
 ## Checksums
 

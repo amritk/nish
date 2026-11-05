@@ -1,7 +1,7 @@
 # Security record: compression and HTTP content coding
 
 The record of `nish/compress/*` — DEFLATE (RFC 1951), its gzip (RFC 1952) and
-zlib (RFC 1950) framings and their checksums — and of `nish/net/http-compress`,
+zlib (RFC 1950) framings and their checksums, and LZAV's format 4 — and of `nish/net/http-compress`,
 the `Accept-Encoding` negotiation and `Content-Encoding: gzip` responses, with
 the two `Http1Connection` methods that use them. A server decompresses bodies
 its clients send and parses the `Accept-Encoding` they send, so both are
@@ -14,7 +14,7 @@ Anchors are function and method names in the files below at the last commit to
 change them on the head that merges this record.
 
 **Result.** Every malformed stream answers a negative `DEFLATE_ERR_*`,
-`GZIP_ERR_*` or `ZLIB_ERR_*` code; none panics, and nothing a stream holds is
+`GZIP_ERR_*`, `ZLIB_ERR_*` or `LZAV_ERR_*` code; none panics, and nothing a stream holds is
 read or written outside the caller's windows. Output is bounded by the
 caller's `limit` and the end of `out`, so a small input cannot expand without
 bound, and a stream's cost is linear in its input and output. A gzip or zlib
@@ -48,6 +48,7 @@ the decoder rebuild its tables for each (COMP-8).
 | `std/compress/gzip.ts` | `GzipDecompressor`, `GzipReader`, `gzipReadHeader`; `GzipCompressor`, `GzipWriter`, `GzipFixedCompressor`, `gzipFixedBound` |
 | `std/compress/zlib.ts` | `ZlibDecompressor`, `ZlibCompressor` |
 | `std/compress/checksum.ts` | `Crc32`, `crc32`, `adler32`, `adler32Update` |
+| `std/compress/lzav.ts` | `lzavDecompress`, `lzavOffsetMask`, `lzavCarryShift`; `LzavCompressor` (`compress`, `writeShort`, `compressLong`, `writeBlock`), `lzavBound`, `lzavWindow`, and the loaders `lzavLoad32`, `lzavLoad64`, `lzavStore64`, `lzavWord2`, `lzavMatchLength`, `lzavMatchBack`, `lzavWriteVarint` |
 | `runtime/runtime-checksum.c` | `nish_crc32_hw`, `nish_crc32_update`, `nish_crc32_path`, `nish_crc32_cpu`, `nish_crc32_sysctl`, `nish_crc32_clmul`, `nish_crc32_fold`, `nish_crc32_bytes`, `nish_crc32_arm`, `nish_crc32_insn`: the CRC-32 kernels `Crc32.update` runs where the CPU has them |
 | `src/kernels.ts`, `src/emit.ts` | `isCrc32Seam`, `emitCrc32KernelArm`: the call that hands `crc32Walk`'s window to the kernel |
 | `std/net/http-compress.ts` | `httpAcceptEncoding`, `httpQValue`, `httpCodingIs`, `httpIdentityRefused`, `httpSegments`, `HttpCompressor` |
@@ -69,7 +70,7 @@ a negative `limit` or a level outside 0 to 9 panics, as caller misuse.
 
 ## Findings
 
-COMP-1 to COMP-7, COMP-10, COMP-14 and COMP-15 are the shapes an attacker's input can take,
+COMP-1 to COMP-7, COMP-10 and COMP-14 to COMP-16 are the shapes an attacker's input can take,
 each checked and found to hold; they are recorded so that an audit can see
 what was tried. COMP-8 and COMP-9 are accepted. COMP-11, COMP-12 and COMP-13 were
 found by a review of the first version and fixed; they are the three counted
@@ -91,6 +92,7 @@ as fixed in the index, and none is open.
 | COMP-13 | Medium | `runtime/runtime-checksum.c` `nish_crc32_insn` | The kernels take `Crc32.update`'s window after `checksumWindow` has checked it, and must read no byte outside it: a read past the end of an array's storage can fault, or fold a neighbouring allocation's bytes into nothing the caller sees but the timing. The x86-64 path loads 16 bytes only while 16 remain and its tail is byte at a time. The AArch64 CRC32 path folded a 4-byte tail with a masked 8-byte load, reading up to four bytes past the window. The answer was right, so every agreement test passed. Nothing a CRC-32 covers is secret, so the kernels are not wiped or held to constant time. | **Fixed.** The tail loads exactly four bytes. `simd: crc32 native ${arch}` now runs every path on every length 0..256 ending against a no-access page; an over-read by one byte in the x86-64 tail made it fail (`the agreement driver`), and it passes on the fixed file. The AArch64 path before the fix was found by review and not run on ARM64 hardware; CI's `simd-arm64` job runs the test there on every push. |
 | COMP-10 | Medium if it failed | `httpAcceptEncoding`, `Http1Connection.acceptEncoding` | A field value must not pick a coding the client refused, nor panic or allocate on any bytes. | **Holds.** `gzip;q=0`, `*;q=0` and `identity;q=0` are honoured; a malformed q-value or parameter skips its element only; the answer for a client that takes nothing offered and refuses identity is `HTTP_CODING_NONE`. One pass over the window, no allocation. A missing field answers identity. |
 | COMP-14 | High if it failed | `FixedDeflater.compress`, `GzipFixedCompressor.compress` | The small-body encoder writes and reads without bounds checks, and is handed incompressible bodies on purpose, with a room smaller than they are, to be abandoned part way. | **Holds.** Every store is a four-byte flush made only after `o <= at + room - 4` is checked, or one of the last bytes made only after they are checked to fit; `room` is inside `out` (`deflateWindow`). An output that does not fit answers `DEFLATE_NO_ROOM` and leaves nothing past `at + room` written; one that fits exactly is accepted. Input loads read eight bytes only at positions up to `off + len - 8`, a candidate is used only when it lies in `[off, p)` within the 16 KB window, and a match is measured to at most `off + len`. The hash table is cleared before each call, so nothing of one body reaches the next. |
+| COMP-16 | High if it failed | `lzavDecompress`, `LzavCompressor.compress` | LZAV's stream (`nish/compress/lzav`) has no checksum and its decoder copies in whole words, without bounds checks, from offsets and lengths the stream states; upstream's C trusts more of them than a hostile stream allows. | **Holds.** Every block's literal count is checked against the stream's end and the output's end, and every reference's distance against the output written so far (`d > op - at` or `d === 0` is `LZAV_ERR_DISTANCE`) and its length against the output's end (`LZAV_ERR_OUTPUT`), before a byte is copied; a header is read only below `ipe - 25`, so its at most nine bytes lie inside the stream. A word copy runs past a reference's end only while eight bytes of output remain past it, into output a later block overwrites. A varint is capped before it is added to, so a length cannot overflow. The prefix byte names the format and minimum match, and any other is `LZAV_ERR_FORMAT`. A stream that ends before `n` bytes is `LZAV_ERR_LENGTH`. With no checksum, a corrupted stream can decode to other bytes of the right length, which the module's header and the guide say. The compressor's loads stay below `off + len - 19` (the scan stops 25 bytes short of the end), its hash slots are masked inside the table, its stores are checked but for each reference header's four bytes, written at once after `op <= out.length - 4` is checked, and the stream it writes fits `lzavBound(len)` as upstream's does. |
 | COMP-15 | Medium if it failed | `Http1Connection.respondEncoded`, `unrespond`, `HttpCompressor.compressAnyway` | The policy must not send a coding the client refused, nor leave the output half-changed when segment mode takes a compressed head back, nor send gzip without the fields that say so. | **Holds.** Every path sends gzip only when `httpAcceptEncoding` chose it; a request that refuses identity and accepts gzip gets gzip whatever the length or saving (`compressAnyway`), since identity is the one form it refused. Segment mode withdraws the gzip head with `unrespond`, which restores the `outputEnd` and `closeAfter` saved after `room()` (so, as for COMP-11, nothing moved under them), and writes the identity head in its place before any body byte is queued. `Vary` follows whether the request decided the form, never the body's contents alone. The one-segment skip (`HttpCompressor.oneSegment`) sends identity without running the encoder only when the client accepts gzip and does not refuse identity, the body is within `minLength` and `maxLength`, and the identity head and body together, as written, fit one segment; a head that turns out longer is withdrawn with `unrespond` the same way and the response goes through the compress-then-compare path. Whether it skips depends on lengths alone, never on the body's bytes. |
 
 ## Properties verified
@@ -98,7 +100,8 @@ as fixed in the index, and none is open.
 Each property is pinned by a test that fails if it stops holding. The
 modules' checks are lines of each program's `expected.out`, compared byte for
 byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
-`link/std_compress_node: exits with 0 and stdout matches expected.out` and
+`link/std_compress_node: exits with 0 and stdout matches expected.out`,
+`link/std_compress_lzav: exits with 0 and stdout matches expected.out` and
 `link/std_http_compress: exits with 0 and stdout matches expected.out`.
 
 - **COMP-1** (`std_compress`): `limit: 64 KB of it is refused`, `limit: an
@@ -164,6 +167,16 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
   kernel: runtime-checksum.c for ${label} is the stub, nish_crc32_hw and
   nish_crc32_update and nothing it asks for` on i686, ARMv7, big-endian
   AArch64, and x86-64 and AArch64 with the intrinsics headers hidden.
+- **COMP-16** (`std_compress_lzav`): `error: a reference before the
+  output's start is LZAV_ERR_DISTANCE`, `error: a reference of distance 0 is
+  LZAV_ERR_DISTANCE`, `error: one byte shorter is LZAV_ERR_OUTPUT`, `error:
+  one byte longer is LZAV_ERR_LENGTH`, `error: the stream cut short is
+  LZAV_ERR_TRUNCATED`, `error: format 3 is LZAV_ERR_FORMAT`, `prefix: every
+  proper prefix is an error, nothing outside the window written`, `corrupt:
+  3000 corrupted streams answer a code or the length, nothing outside the
+  window written`, `round trip: nothing written outside the output window`;
+  and against upstream, `upstream: 33 vectors compress to LZAV 7.1's length
+  and CRC-32` and `upstream: lzav_compress_hi's stream for it decodes`.
 - Interoperability: `link/std_compress_node: each of the ${judged.lines} streams Nish compresses (every level, raw, gzip, zlib and GzipWriter) inflates under Node's zlib to its input`.
 
 Not fuzzed with libFuzzer yet: the corruption and prefix loops above are the

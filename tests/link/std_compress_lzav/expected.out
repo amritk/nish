@@ -1,0 +1,33 @@
+PASS  upstream: 33 vectors compress to LZAV 7.1's length and CRC-32
+PASS  upstream: and decompress to their input
+PASS  upstream: 120 bytes of text, the default stream's length
+PASS  upstream: and its bytes
+PASS  upstream: lzav_compress_hi's stream for it decodes
+PASS  upstream: to the same input
+PASS  bound: of 0
+PASS  bound: of 1
+PASS  bound: of 100
+PASS  bound: of 1000
+PASS  bound: of 65536
+PASS  bound: of 1000000
+PASS  bound: of 100000000
+PASS  bound: 0 when it overflows
+PASS  round trip: 120 inputs, windows off zero, a reused compressor writing what a fresh one does
+PASS  round trip: nothing written outside the output window
+PASS  room: the bound is enough
+PASS  room: one byte less is LZAV_NO_ROOM
+PASS  room: an empty input writes nothing
+PASS  error: an empty stream for a nonzero length
+PASS  error: a stream for a zero length
+PASS  error: nothing to nothing is fine
+PASS  error: one byte longer is LZAV_ERR_LENGTH
+PASS  error: one byte shorter is LZAV_ERR_OUTPUT
+PASS  error: the stream cut short is LZAV_ERR_TRUNCATED
+PASS  error: format 3 is LZAV_ERR_FORMAT
+PASS  error: a minimum match length of 0 is LZAV_ERR_FORMAT
+PASS  error: a reference before the output's start is LZAV_ERR_DISTANCE
+PASS  error: a reference of distance 0 is LZAV_ERR_DISTANCE
+PASS  prefix: every proper prefix is an error, nothing outside the window written
+PASS  corrupt: 3000 corrupted streams answer a code or the length, nothing outside the window written
+PASS  corrupt: most are refused (over 1000)
+lzav: 32 passed, 0 failed, 0 skipped

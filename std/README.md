@@ -177,7 +177,7 @@ Three rules hold across the modules:
   whose one secret, a private key, is base64-decoded by range masks and
   otherwise only copied and handed to `crypto/p256.ts`.
 
-## `nish/compress` — gzip, zlib and DEFLATE
+## `nish/compress` — gzip, zlib, DEFLATE and LZAV
 
 Compression for a server that gzips its responses and reads compressed
 bodies, in pure Nish. Every call takes caller-owned windows and answers where
@@ -186,8 +186,9 @@ allocate their tables once and nothing per call, and a free function
 (`gzipCompress`, ...) builds one for a single call. The inner loops use
 `nish:unsafe`'s unchecked access, each site justified in
 `docs/security/compress.md`, so a program built with `--deny unsafe` cannot
-import them. Written from the RFCs, not ported. Speed against zlib and
-libdeflate: `bench/gzip/`; against Go, Rust, Java, Node, Bun and Python:
+import them. The DEFLATE family is written from the RFCs, not ported;
+`compress/lzav.ts` is ported from LZAV (MIT, `std/LICENSE-lzav`). Speed against zlib and
+libdeflate: `bench/gzip/`; LZAV against its C original: `bench/lzav/`; against Go, Rust, Java, Node, Bun and Python:
 `bench/gzip/compare/`. Guide: [Compression](../docs/guide/using-nish/compression.md).
 
 | Module | What it is | Reproduces |
@@ -195,6 +196,7 @@ libdeflate: `bench/gzip/`; against Go, Rust, Java, Node, Bun and Python:
 | [`compress/deflate.ts`](./compress/deflate.ts) | `Deflater(level)` and `Inflater`, raw DEFLATE. Levels 0 (stored), 1 to 3 (greedy on a four-byte hash, `DEFLATE_FAST` = 1) and 4 to 9 (lazy, `DEFLATE_DEFAULT` = 6); each block is the smallest of dynamic, fixed and stored by its exact size. `compress(src, off, len, out, at)` answers the end or `DEFLATE_NO_ROOM` (-1); `deflateBound(n)` / `compressBound(n)` are the most any level writes. `decompress(src, off, len, out, at, limit)` answers the end or a `DEFLATE_ERR_*` code (truncated, block type, stored length, Huffman, symbol, distance, output limit, trailing) and never panics on a stream; `inflate` is the resumable step under it (`INFLATE_DONE`, `INFLATE_NEED_INPUT`, `INFLATE_NEED_OUTPUT`). `FixedDeflater` is the small-body encoder: one fixed-Huffman block, a 16 KB window, nothing kept between calls, two to four times faster than `DEFLATE_FAST` at about 1.35 times its size; `fixedDeflateBound(n)` is the most it writes | RFC 1951: every level against Node's zlib both ways (`tests/link/std_compress_node`), round trips of empty to 1 MB inputs, a 1,500-input fuzz, every prefix and random corruption refused (`tests/link/std_compress`) |
 | [`compress/gzip.ts`](./compress/gzip.ts) | `GzipCompressor(level)` / `GzipDecompressor` one-shot (the decompressor reads concatenated members, refuses trailing bytes, checks the header CRC, CRC-32 and length: `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE`), `gzipCompress` / `gzipDecompress`; `GzipFixedCompressor`, the same framing round `FixedDeflater` (`gzipFixedBound(n)`); `GzipWriter` (`write`, `flush`, `finish`, `bound`) and `GzipReader` (`feed` or `inputBuffer` / `commit`, `endInput`, `read` answering bytes, `GZIP_NEED_INPUT`, `GZIP_END` or an error, with a total `limit`) for bodies that arrive in pieces | RFC 1952: Node's gzip at every level, strategy and window, through both readers; the writer's output through Node's gunzip (`std_compress_node`, `std_compress`) |
 | [`compress/zlib.ts`](./compress/zlib.ts) | `ZlibCompressor(level)` / `ZlibDecompressor`, `zlibCompress` / `zlibDecompress`: the two-byte header and Adler-32 trailer (`ZLIB_ERR_HEADER`, `ZLIB_ERR_ADLER`, `ZLIB_ERR_DICTIONARY` for `FDICT`) | RFC 1950, against Node's `deflateSync` / `inflateSync` (`std_compress_node`) |
+| [`compress/lzav.ts`](./compress/lzav.ts) | LZAV's stream format 4, a fast LZ77 with no entropy stage, for data your own programs read back: `LzavCompressor` (a 1 MiB hash table built once) `.compress(src, off, len, out, at)` answers the end or `LZAV_NO_ROOM` (-1) with fewer than `lzavBound(len)` bytes of room, and `lzavCompress` builds one for a call; `lzavDecompress(src, off, len, out, at, n)` decodes exactly `n` bytes and answers `at + n` or an `LZAV_ERR_*` code (params, truncated, output, distance, length, format), never panicking on a stream. The stream is raw: no length and no checksum. On text it is about a seventh larger than `DEFLATE_FAST`, compresses about twice as fast and decompresses faster still | Upstream LZAV 7.1: 33 inputs to `lzav_compress_default`'s exact length and CRC-32, a stream byte for byte, `lzav_compress_hi`'s stream decoded; round trips, every prefix and random corruption answered (`tests/link/std_compress_lzav`) |
 | [`compress/checksum.ts`](./compress/checksum.ts) | `Crc32` (slicing-by-8 tables built once; `update(crc, buf, off, len)`), `crc32` for a one-off, `adler32`, `adler32Update`. Natively the compiler sends `update`'s walk to `runtime/runtime-checksum.c` where the CPU has PCLMULQDQ or the ARMv8 CRC32 instructions, chosen once per process; `NISH_CRC32=soft` pins the tables | The check values of "123456789", pieces against the whole, Adler-32's deferred reduction against its definition (`std_compress`); every kernel against a bit-at-a-time reference (`tests/simd/crc32.c`); both paths on the same programs (`tests/link/std_compress_crc_paths`, `std_compress_crc_diff`) |
 
 ## `nish/net` — the protocol stack

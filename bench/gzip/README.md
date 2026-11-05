@@ -190,3 +190,19 @@ small-body path, on its own hardware. Here the fixed encoder takes about 8 µs
 at that size (between the 3,829 and 8,045 rows) and libdeflate -1 takes 12.37
 µs (the first table above), so this machine is slow for this work; the two
 figures cannot be compared without running both on one machine.
+
+## Tried and not kept: LZAV's matcher ideas at level 1
+
+Two ideas from LZAV's compressor were tried in `DEFLATE_FAST`. The port
+itself is `nish/compress/lzav`, benchmarked in `bench/lzav/`. Neither idea
+paid for itself here, so neither shipped. They were measured with `run.mjs`
+on the same machine.
+
+- **A bucket hash table**: several candidates per hash slot, with LZAV's
+  rotating insert in place of one probe per position. On the 5 KB body,
+  level 1 took 1.41 to 1.44 times libdeflate's time, against 1.33 times
+  before, and ran 3 % more instructions. It gained nothing on a 4 MB body,
+  and the output grew 0.5 %.
+- **Backward match extension**: growing each match leftward into the
+  pending literals, as LZAV does. On 4 MB it cut the output by 0.25 % and
+  cost about 4 % more time.

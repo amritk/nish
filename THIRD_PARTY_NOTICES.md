@@ -10,7 +10,7 @@ the tree.
 
 ## What the npm package ships
 
-Ten of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
+Eleven of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
 formatter is adapted from Zmij. The package carries `runtime/LICENSE-zmij` beside
 it, because `package.json`'s `files` names the whole `runtime/` directory, and
 the release tarball and the platform packages copy that directory too. Zmij is
@@ -85,6 +85,11 @@ with all copies of the data or in their associated documentation, and makes
 no exception for object code: a program built with `nish/regex` holds the
 tables, so when distributed it carries the Unicode notice with it, as one
 built with `nish/crypto/aes` carries BearSSL's.
+
+The eleventh is `std/compress/lzav.ts`, ported from LZAV. The package carries
+`std/LICENSE-lzav` beside it. LZAV is under the MIT licence, which, as with
+BearSSL, makes no exception for object code: a program built with
+`nish/compress/lzav` and distributed carries LZAV's notice with it.
 
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
@@ -330,6 +335,17 @@ verbatim.
 Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries it, lib/msun/src/k_tan.c, s_tan.c, e_rem_pio2.c, k_rem_pio2.c, e_atan2.c, s_atan.c and e_hypot.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the fdlibm licence; see std/LICENSE-fdlibm.
 ```
 
+### `std/LICENSE-lzav`
+
+[LZAV](https://github.com/avaneev/lzav), Copyright (c) 2023-2026 Aleksey
+Vaneev, under the MIT licence. The port reads `lzav.h` (version 7.1) at commit
+`ff1a1419da7eb104db973927d7bb7c75f6ff31b2`; the licence text is that commit's
+`LICENSE`, verbatim.
+
+```notice
+Ported from LZAV (https://github.com/avaneev/lzav), lzav.h. Copyright (c) 2023-2026 Aleksey Vaneev. Used under the MIT licence; see std/LICENSE-lzav.
+```
+
 ### `tests/json-suite/LICENSE-jsontestsuite`
 
 [JSONTestSuite](https://github.com/nst/JSONTestSuite)'s parsing corpus,
@@ -484,6 +500,7 @@ Derived from the Unicode Character Database 16.0.0 (https://www.unicode.org/Publ
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-simd.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `s_tan.c` `tan`, `e_rem_pio2.c`'s Cody-Waite reduction (its refinement thresholds widened to 2^-15 and 2^-48 of the argument), `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot` and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `tanLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
+| `std/compress/lzav.ts` | LZAV 7.1 `lzav.h`: `lzav_compress` (with `lzav_compress_default`'s setup) as `LzavCompressor`, `lzav_write_blk_4` and `lzav_write_fin_4` as `writeBlock` and the final block, `lzav_compress_bound` as `lzavBound`, and `lzav_decompress_4` as `lzavDecompress`; the decoder's range checks and error mapping are not derived from it | MIT | `std/LICENSE-lzav` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
 | `std/crypto/bcrypt.ts` | crypt_blowfish 1.3, `crypt_blowfish.c`: `BF_init_state` as `bcryptInitState`, `BF_ENCRYPT`/`BF_ROUND` as `bcryptEncrypt` and the rounds of `bcryptBody`, `BF_body` as `bcryptBody`, `BF_set_key` as `bcryptSetKey`, `BF_decode`/`BF_encode` as `bcryptDecodeSalt`/`bcryptEncode`, and `BF_crypt` as `bcryptParse` and `bcryptExposed` | public domain, fallback permissive | `std/crypto/LICENSE-crypt_blowfish` |

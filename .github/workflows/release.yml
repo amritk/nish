@@ -347,7 +347,7 @@ jobs:
             sed "s#^$NAME/##" | sort > "$RUNNER_TEMP/files.txt"
           required=0
           std="$(node scripts/std-module-paths.mjs)"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-zmij runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/LICENSE-fast-float std/LICENSE-fdlibm std/crypto/LICENSE-bearssl std/crypto/LICENSE-crypt_blowfish std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-fiat-crypto-p384 std/crypto/LICENSE-libsecp256k1 LICENSE INSTALL.md docs/AI.md $std; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-zmij runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/LICENSE-fast-float std/LICENSE-fdlibm std/LICENSE-lzav std/crypto/LICENSE-bearssl std/crypto/LICENSE-crypt_blowfish std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-fiat-crypto-p384 std/crypto/LICENSE-libsecp256k1 LICENSE INSTALL.md docs/AI.md $std; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from $NAME.tar.gz"; exit 1; }
             required=$((required + 1))
           done
@@ -440,7 +440,7 @@ jobs:
           # tarball can see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
           std="$(node scripts/std-module-paths.mjs)"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-zmij runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/LICENSE-fast-float std/LICENSE-fdlibm std/crypto/LICENSE-bearssl std/crypto/LICENSE-crypt_blowfish std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-fiat-crypto-p384 std/crypto/LICENSE-libsecp256k1 docs/AI.md package.json $std; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-zmij runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/LICENSE-fast-float std/LICENSE-fdlibm std/LICENSE-lzav std/crypto/LICENSE-bearssl std/crypto/LICENSE-crypt_blowfish std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-fiat-crypto-p384 std/crypto/LICENSE-libsecp256k1 docs/AI.md package.json $std; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
@@ -588,7 +588,7 @@ jobs:
           # and the two files behind it, and a tarball missing any of them installs
           # a package whose `bin` points at nothing.
           std="$(node scripts/std-module-paths.mjs)"
-          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-zmij runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/LICENSE-fast-float std/LICENSE-fdlibm std/crypto/LICENSE-bearssl std/crypto/LICENSE-crypt_blowfish std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-fiat-crypto-p384 std/crypto/LICENSE-libsecp256k1 $std; do
+          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-zmij runtime/sqlite/sqlite3.c runtime/sqlite/sqlite3.h runtime/sqlite/LICENSE.md runtime/sqlite/nish-sqlite.c runtime/runtime-os.c runtime/nish.h scripts/build.sh std/LICENSE-fast-float std/LICENSE-fdlibm std/LICENSE-lzav std/crypto/LICENSE-bearssl std/crypto/LICENSE-crypt_blowfish std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-fiat-crypto-p384 std/crypto/LICENSE-libsecp256k1 $std; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
