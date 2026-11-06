@@ -20,7 +20,8 @@ export const spawn = (task) => {
 export const awaitAll = (...tasks) => Promise.all(tasks);
 
 export const settleTasks = async () => {
-  while (pending.length > 0) {
-    await pending.shift();
+  for (let i = 0; i < pending.length; i++) {
+    await pending[i];
   }
+  pending.length = 0;
 };

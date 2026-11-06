@@ -260,7 +260,7 @@ const rowOf = (native, node, source) => {
   ) {
     return ["range", ""]
   }
-  if (sameLinesReordered(native, node) && SPAWN.test(source)) {
+  if (SPAWN.test(source) && sameLinesReordered(native, node)) {
     return ["order", ""]
   }
   const [, ours, theirs] = firstDifference(native.stdout, node.stdout)

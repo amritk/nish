@@ -217,6 +217,7 @@ const runtimeImport = (keyword: string, names: StringSet): string =>
  * finish, as the native driver drains its queue after `main` answers.
  */
 const launcher = (entryOut: string, script: boolean, tasks: boolean): string => {
+  const settle = tasks ? "await settleTasks()\n" : ""
   const sb = new StringBuilder()
   sb.add("// Written by `nish --emit-ts`: runs the program's `main` under Node.\n")
   sb.add(`import "${RUNTIME}/node"\n`)
@@ -227,20 +228,14 @@ const launcher = (entryOut: string, script: boolean, tasks: boolean): string => 
   if (script) {
     sb.add(`import "${relativeSpecifier(ENTRY_FILE, entryOut)}"\n`)
     sb.add("\n")
-    if (tasks) {
-      sb.add("await settleTasks()\n")
-    }
+    sb.add(settle)
     sb.add("exit(0)\n")
     return sb.toText()
   }
   sb.add(`import { main } from "${relativeSpecifier(ENTRY_FILE, entryOut)}"\n`)
   sb.add("\n")
-  if (tasks) {
-    sb.add("const code = await main()\n")
-    sb.add("await settleTasks()\n")
-  } else {
-    sb.add("const code = main()\n")
-  }
+  sb.add(tasks ? "const code = await main()\n" : "const code = main()\n")
+  sb.add(settle)
   sb.add('exit(typeof code === "number" ? code : 0)\n')
   return sb.toText()
 }
@@ -305,7 +300,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     // WP49: an async function is written as the TypeScript it already is, and
     // the launcher awaits `main` and every spawned task. Read from the tree,
     // not `program.functions`, which holds no generic nothing instantiates.
-    if (hasAsync(unit.file)) {
+    if (!anyAsync && hasAsync(unit.file)) {
       anyAsync = true
     }
     for (const stmt of unit.file.children) {
