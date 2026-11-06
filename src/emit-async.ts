@@ -43,8 +43,8 @@ import { HARDENING_ATTRS } from "./target"
 
 /** How `emitCall` lowers a call to a suspending function: awaited, spawned, or one of an `awaitAll`. */
 export const ASYNC_AWAIT: i32 = 0
-export const ASYNC_SPAWN: i32 = 1
-export const ASYNC_ALL: i32 = 2
+const ASYNC_SPAWN: i32 = 1
+const ASYNC_ALL: i32 = 2
 
 /** The bytes of a spawned task's node ahead of its frame: the queue link and the task kind. */
 const NODE_HEADER: i32 = 16
