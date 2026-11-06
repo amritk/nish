@@ -3368,6 +3368,8 @@ class PgBatchRun {
   /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added; grown by `take` to the batch. */
   tags: i32[]
   first: i32[]
+  /** Under `sorted` false, whether key `k` has had a row; grown by `take` with `tags`, and empty when sorted. */
+  had: boolean[]
   keys: i32 = 0
   /** The key rows are being read for, whether it has had one, and the next of its requests to answer. */
   cur: i32 = 0
@@ -3375,8 +3377,6 @@ class PgBatchRun {
   at: i32 = 0
   /** The key whose `PG_BATCH_ROW` events are owed for the connection's current row; -1 for none. */
   target: i32 = -1
-  /** Under `sorted` false, whether key `k` has had a row; grown by `take` with `tags`, and empty when sorted. */
-  had: boolean[]
   /** The handle `take` gave for the run's execution, and how many takes it has had, mod `PG_BATCH_USES`. */
   handle: i32 = -1
   uses: i32 = 0
