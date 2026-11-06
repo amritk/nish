@@ -74,7 +74,7 @@ stages:
         status: completed
       - id: goldens-pr
         content: Regenerate tests/self/goldens, read the diff, open the perf(codegen) PR — see Verification
-        status: in_progress
+        status: completed
 ---
 
 # Facts for arrow captures
