@@ -11,7 +11,8 @@
 //                                                pool, visited round-robin, so
 //                                                each request meets a
 //                                                connection out of cache
-//   main idle <requests> <connections> <batches> the same over an
+//   main idle <requests> <connections> <batches> [evict]
+//                                                the same over an
 //                                                `Http1Server`-shaped pool with
 //                                                `Http1Config.idleInput` on:
 //                                                each request is read through
@@ -19,18 +20,33 @@
 //                                                and each connection lends its
 //                                                input and head buffers back
 //                                                when it parks
+//   main direct <requests> <connections> <batches> [evict]
+//                                                the idle shape with the read
+//                                                landing in the lent input
+//                                                buffer itself, no scratch copy:
+//                                                a variant `Http1Server` does
+//                                                not have, measured here only
 //   main rss 0 <connections> 0                   the idle pool's connections
 //                                                each served one request and
 //                                                parked, then nothing timed:
 //                                                prints the peak RSS in KiB
 //                                                (VmHWM) as `<ns>`
 //
+// With `[evict]` MiB (default 0), the idle and direct shapes write one byte
+// of every cache line of an eviction ring that big between requests, a slice
+// per request so that each round over the connections sweeps all of it: with
+// a ring larger than the last-level cache, every request finds its connection
+// in DRAM, as on a server whose kernel and other work run between one
+// connection's requests. Only the requests are timed then, each between two
+// clock reads, and the sweep is not.
+//
 // Times `<batches>` batches of `<requests>` requests (default 5 of 1000000)
 // and prints `<shape> <ns> <requests> <checksum>` for the fastest batch; the
 // checksum adds up every response's length and tenth byte (the status's
-// first digit), and in the idle shape every body byte count and first body
-// byte, over all batches, so two builds that answer differently disagree on
-// it.
+// first digit), and in the idle and direct shapes each request's method,
+// target and `Content-Type` as the handler matches them and every body byte
+// count and first body byte, over all batches, so two builds that answer
+// differently disagree on it.
 
 import { copyBytes } from "nish/bytes"
 import { monotonicNanos } from "nish:process"
@@ -44,6 +60,7 @@ import {
   Http1OutputPool,
   HttpDate,
 } from "nish/net/http1-server"
+import { Http1Parser } from "nish/net/http1-codec"
 
 /** The bytes of an ASCII string. */
 const ascii = (text: string): u8[] => {
@@ -190,8 +207,14 @@ class IdlePool {
   values: u8[][]
   now: i64 = 0
   sum: i64 = 0
+  /** Read into the lent input buffer, not the scratch: the `direct` shape. */
+  direct: boolean = false
+  /** The eviction ring, the slice of it each request sweeps, and where the next slice starts. */
+  ring: u8[]
+  slice: i32 = 0
+  ringAt: i32 = 0
 
-  constructor(count: i32) {
+  constructor(count: i32, direct: boolean, evictMib: i32) {
     const config: Http1Config = new Http1Config()
     config.idleInput = true
     this.config = config
@@ -207,6 +230,16 @@ class IdlePool {
     this.body = ascii('{"id":42,"name":"widget","price":1999,"tags":["a","b"],"ok":true}')
     this.names = [ascii("content-type")]
     this.values = [ascii("application/json")]
+    this.direct = direct
+    this.ring = new Array<u8>(evictMib * 1048576)
+    if (evictMib > 0) {
+      // A whole number of lines per request, at least one round's worth of
+      // slices to the ring.
+      this.slice = ((evictMib * 1048576) / count / 64) * 64
+      if (this.slice < 64) {
+        panic("bench: the eviction ring is smaller than a line per connection")
+      }
+    }
     for (let i: i32 = 0; i < count; i += 1) {
       const conn: Http1Connection = new Http1Connection(config)
       conn.pool = this.outputs
@@ -244,10 +277,24 @@ class IdlePool {
       if (n <= 0) {
         break
       }
-      copyBytes(this.scratch, 0, req, at, n)
+      if (this.direct) {
+        // The read into the parser's own buffer when the room `inputRoom`
+        // gave fits in it: what `feed` does after the read, without the copy.
+        conn.unpark()
+        const p: Http1Parser = conn.parser
+        if (toI32(p.buf.length) - p.end >= n) {
+          copyBytes(p.buf, p.end, req, at, n)
+          p.end = p.end + n
+        } else {
+          copyBytes(this.scratch, 0, req, at, n)
+          conn.feed(this.scratch, 0, n)
+        }
+      } else {
+        copyBytes(this.scratch, 0, req, at, n)
+        conn.feed(this.scratch, 0, n)
+      }
       at = at + n
       moved = true
-      conn.feed(this.scratch, 0, n)
       if (n < want) {
         break
       }
@@ -323,7 +370,18 @@ class IdlePool {
     let event: i32 = this.next(slot)
     while (event !== H1_NEED_MORE) {
       if (event === H1_REQUEST) {
-        // The handler runs at the end of the body.
+        // The handler's routing, on the head; it answers at the end of the body.
+        const p: Http1Parser = conn.parser
+        if (p.methodIs("GET") && p.targetIs("/api/v1/items/42")) {
+          this.sum = this.sum + toI64(1)
+        } else if (p.methodIs("POST") && p.targetIs("/api/v1/orders")) {
+          this.sum = this.sum + toI64(2)
+        } else {
+          panic("bench: the request was routed nowhere")
+        }
+        if (p.headerIs("content-type", "application/json")) {
+          this.sum = this.sum + toI64(4)
+        }
       } else if (event === H1_BODY) {
         this.sum = this.sum + toI64(conn.dataLength) + toI64(conn.data[conn.dataStart])
       } else if (event === H1_END) {
@@ -340,6 +398,16 @@ class IdlePool {
     if (this.flush(slot) !== 1) {
       panic("bench: the connection does not want to read")
     }
+  }
+
+  /** Writes a byte of every line of the ring's next slice. */
+  sweep(): void {
+    const ring: u8[] = this.ring
+    const end: i32 = this.ringAt + this.slice
+    for (let k: i32 = this.ringAt; k < end; k += 64) {
+      ring[k] = toU8(ring[k] + 1)
+    }
+    this.ringAt = end + this.slice <= toI32(ring.length) ? end : 0
   }
 }
 
@@ -387,12 +455,21 @@ const peakKib = (): i64 => {
 const IDLE_FIRST_INPUT: i32 = 1024
 const IDLE_FIRST_HEAD: i32 = 256
 
-/** The idle and rss shapes: `count` slots of an `IdlePool`, a GET and a POST in turn. */
-const idle = (shape: string, requests: i32, count: i32, batches: i32): i32 => {
-  const b: IdlePool = new IdlePool(count)
+/**
+ * The idle, direct and rss shapes: `count` slots of an `IdlePool`. Slot `i`
+ * serves the GET on even rounds over the slots and the POST on odd ones when
+ * `i` is even, the other way round when it is odd.
+ */
+const idle = (shape: string, requests: i32, count: i32, batches: i32, evictMib: i32): i32 => {
+  const b: IdlePool = new IdlePool(count, shape === "direct", evictMib)
+  const evicting: boolean = b.slice > 0
   // One untimed pass, as for the other shapes: every slot's connection has
-  // served a request and parked, its buffers lent back to the pools.
+  // served a request and parked, its buffers lent back to the pools, and the
+  // whole ring has been written once.
   for (let i: i32 = 0; i < count; i += 1) {
+    if (evicting) {
+      b.sweep()
+    }
     const pick: i32 = i & 1
     b.serve(i, b.requests[pick])
   }
@@ -403,20 +480,28 @@ const idle = (shape: string, requests: i32, count: i32, batches: i32): i32 => {
   b.sum = 0
   let best: i64 = 0
   let at: i32 = 0
-  let turn: i32 = 0
+  let round: i32 = 1
   for (let batch: i32 = 0; batch < batches; batch += 1) {
+    let timed: i64 = 0
     const started: i64 = monotonicNanos()
     for (let k: i32 = 0; k < requests; k += 1) {
-      b.serve(at, b.requests[turn])
-      // The GET and the POST alternate across the round, and the round's
-      // length is even or odd, so each slot sees both over the batches.
-      turn = turn ^ 1
+      const pick: i32 = (at + round) & 1
+      const req: u8[] = b.requests[pick]
+      if (evicting) {
+        b.sweep()
+        const before: i64 = monotonicNanos()
+        b.serve(at, req)
+        timed = timed + (monotonicNanos() - before)
+      } else {
+        b.serve(at, req)
+      }
       at += 1
       if (at === count) {
         at = 0
+        round += 1
       }
     }
-    const ns: i64 = monotonicNanos() - started
+    const ns: i64 = evicting ? timed : monotonicNanos() - started
     if (batch === 0 || ns < best) {
       best = ns
     }
@@ -430,8 +515,9 @@ export const main = (): i32 => {
   const requests: i32 = process.argv.length > 2 ? parseInt(process.argv[2]) : 1000000
   let count: i32 = process.argv.length > 3 ? parseInt(process.argv[3]) : 50000
   const batches: i32 = process.argv.length > 4 ? parseInt(process.argv[4]) : 5
-  if (shape === "idle" || shape === "rss") {
-    return idle(shape, requests, count, batches)
+  const evictMib: i32 = process.argv.length > 5 ? parseInt(process.argv[5]) : 0
+  if (shape === "idle" || shape === "direct" || shape === "rss") {
+    return idle(shape, requests, count, batches, evictMib)
   }
   if (shape === "hot") {
     count = 1

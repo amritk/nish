@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Http1Connection's per-request cost, an old std/net/ against the working tree's.
 //
-//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|all] [--rounds N]
-//                                 [--requests N] [--connections N]
+//   node bench/http1-conn/run.mjs [--shape hot|cold|idle|direct|idle-dram|direct-dram|all]
+//                                 [--rounds N] [--requests N] [--connections N]
+//                                 [--evict MiB] [--dram-requests N]
 //                                 [--base <rev>] [--compiler path] [--rss N]
 //
 // Builds bench/http1-conn/main.ts twice at `--profile speed` with `--compiler`
@@ -16,7 +17,14 @@
 // many spread round-robin over `--connections` connections of one pool
 // (default 50000); and `idle`, the same spread over an `Http1Server`-shaped
 // pool with `Http1Config.idleInput` on, read through the server's scratch
-// buffer, a GET and a POST with a JSON body in turn. It reports the median and
+// buffer, a GET and a POST with a JSON body in turn; `direct`, the idle shape
+// reading into the lent input buffer instead of the scratch, a variant
+// `Http1Server` does not have; and `idle-dram` and `direct-dram`, those two
+// with an eviction ring of `--evict` MiB (default 1024) swept between
+// requests so each finds its connection in DRAM, `--dram-requests` requests a
+// batch (default 20000), timed per request. The idle shapes must report one
+// input, one head and one output buffer made by the pools, or the run fails.
+// It reports the median and
 // the min–max of ns per request over `--rounds` rounds (default 15) and the
 // CPU it ran on. Every run is pinned to core 1 with `taskset` when there is
 // one, and the header says whether it was. A checksum that differs between
@@ -44,6 +52,8 @@ const rounds = Number(flag("--rounds", "15"))
 const requests = flag("--requests", "200000")
 const connections = flag("--connections", "50000")
 const batches = flag("--batches", "5")
+const evict = flag("--evict", "1024")
+const dramRequests = flag("--dram-requests", "20000")
 const built = path.join(root, "build", "nish")
 const compiler = path.resolve(
   flag("--compiler", fs.existsSync(built) ? built : path.join(root, "build", "seed", "bin", "nish"))
@@ -100,10 +110,14 @@ fs.copyFileSync(binaries[0].exe, copy)
 fs.chmodSync(copy, 0o755)
 binaries.splice(1, 0, { label: "old′", exe: copy })
 
+// [table row, main.ts shape, its arguments]
 const shapes = [
-  ["hot", [requests, "1", batches]],
-  ["cold", [requests, connections, batches]],
-  ["idle", [requests, connections, batches]],
+  ["hot", "hot", [requests, "1", batches]],
+  ["cold", "cold", [requests, connections, batches]],
+  ["idle", "idle", [requests, connections, batches]],
+  ["direct", "direct", [requests, connections, batches]],
+  ["idle-dram", "idle", [dramRequests, connections, batches, evict]],
+  ["direct-dram", "direct", [dramRequests, connections, batches, evict]],
 ].filter(([s]) => shapeFlag === "all" || shapeFlag.split(",").includes(s))
 if (shapes.length === 0) {
   process.stderr.write(`bench/http1-conn: no shape called ${shapeFlag}\n`)
@@ -116,12 +130,20 @@ const bench = (exe, args) => (pin ? run("taskset", ["-c", "1", exe, ...args]) : 
 const times = new Map(binaries.map((b) => [b.label, new Map(shapes.map(([s]) => [s, []]))]))
 const sums = new Map()
 for (let r = 0; r < rounds; r++) {
-  for (const [shape, args] of shapes) {
+  for (const [shape, mode, args] of shapes) {
     for (let k = 0; k < binaries.length; k++) {
       const { label, exe } = binaries[(r + k) % binaries.length]
-      const [, ns, count, sum] = bench(exe, [shape, ...args])
+      const [, ns, count, sum, ...made] = bench(exe, [mode, ...args])
         .trim()
         .split(" ")
+      // The lending pools are LIFO: one connection at a time borrows, so
+      // each makes one buffer however many connections there are.
+      if (mode !== "hot" && mode !== "cold" && made.join(" ") !== "1 1 1") {
+        process.stderr.write(
+          `bench/http1-conn: ${label} ${shape} made ${made.join(" ")} input, head and output buffers, expected 1 1 1\n`
+        )
+        process.exit(1)
+      }
       if (sums.has(shape) && sums.get(shape) !== sum) {
         process.stderr.write(
           `bench/http1-conn: ${label} ${shape} checksum ${sum}, expected ${sums.get(shape)}\n`
@@ -144,7 +166,7 @@ const peak = (exe, count) =>
       .trim()
       .split(" ")[1]
   )
-const rssRuns = Number(flag("--rss", shapes.some(([s]) => s === "idle") ? "5" : "0"))
+const rssRuns = Number(flag("--rss", shapes.some(([, m]) => m === "idle" || m === "direct") ? "5" : "0"))
 // label -> bytes per idle connection, one per run
 const rss = new Map()
 for (let r = 0; r < rssRuns; r++) {
@@ -165,7 +187,8 @@ console.log(
 console.log(`old: std/ at ${base.slice(0, 12)}; new: the working tree`)
 console.log(
   `${rounds} rounds, each the fastest of ${batches} batches of ${requests} requests` +
-    `${pin ? " pinned to core 1" : " unpinned (no taskset)"}; cold and idle spread them over ${connections} connections`
+    `${pin ? " pinned to core 1" : " unpinned (no taskset)"}; cold and idle spread them over ${connections} connections` +
+    `; the dram shapes run ${dramRequests} a batch with a ${evict} MiB eviction ring`
 )
 console.log("ns per request: median (min–max), ratio of medians to old\n")
 console.log(`| shape | ${binaries.map((b) => b.label).join(" | ")} |`)
