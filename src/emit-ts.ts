@@ -220,12 +220,6 @@ const launcher = (entryOut: string): string => {
   return sb.toText()
 }
 
-/**
- * The program written out as TypeScript: every root-package module, every
- * standard-library module it reaches, and `entry.ts`. A refusal is reported
- * through the compilation's sink, every one of them before it answers, so a
- * program refused twice says so twice.
- */
 /** The first function, method or arrow under `node` declared `async`, in source order, or null. */
 const firstAsync = (node: Node): Node | null => {
   if ((node.flags & FLAG_ASYNC) !== 0) {
@@ -240,6 +234,12 @@ const firstAsync = (node: Node): Node | null => {
   return null
 }
 
+/**
+ * The program written out as TypeScript: every root-package module, every
+ * standard-library module it reaches, and `entry.ts`. A refusal is reported
+ * through the compilation's sink, every one of them before it answers, so a
+ * program refused twice says so twice.
+ */
 export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   const result = new EmittedProgram()
   const modules = compilation.modules

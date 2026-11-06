@@ -39,6 +39,7 @@ import { StringMap } from "./map"
 import { N_UNARY, Node } from "./nodes"
 import { FunctionSig } from "./program"
 import { StringBuilder } from "./strings"
+import { roundUpTo } from "./structs"
 import { HARDENING_ATTRS } from "./target"
 
 /** How `emitCall` lowers a call to a suspending function: awaited, spawned, or one of an `awaitAll`. */
@@ -133,9 +134,12 @@ export class AsyncRegistry {
   }
 }
 
-const asyncFail = (emitter: Emitter, message: string): void => {
-  process.exit(internalErrorFor(`async lowering: ${message}`, emitter.opts.json))
+/** Stop with an internal error (exit 70): the checker admitted what the lowering cannot write. */
+const failWith = (json: boolean, message: string): void => {
+  process.exit(internalErrorFor(`async lowering: ${message}`, json))
 }
+
+const asyncFail = (emitter: Emitter, message: string): void => failWith(emitter.opts.json, message)
 
 /** `{ i32, <operands...>, <answer> }`: what a caller writes of a callee's frame, and where it reads the answer. */
 const frameHead = (operandTypes: string[], answer: string): string => {
@@ -179,13 +183,14 @@ const kidBase = (emitter: Emitter, group: i32, member: i32): string => {
   )
 }
 
-/** The attribute group of every resume function, its `define` and each `declare` of it alike. */
+/** The attribute group of every resume function, its `define` and each `declare` of it alike; "" for none. */
 const resumeGroup = (emitter: Emitter): string =>
-  emitter.opts.optimizeAttributes ? ` ${emitter.module.attrGroupFor(["nounwind"])}` : ""
+  emitter.opts.optimizeAttributes ? emitter.module.attrGroupFor(["nounwind"]) : ""
 
 const declareResume = (emitter: Emitter, sig: FunctionSig): void => {
   if (!sig.definedIn(emitter.program.source)) {
-    emitter.declare(`declare i1 @${sig.name}.resume(i8*)${resumeGroup(emitter)}`)
+    const group = resumeGroup(emitter)
+    emitter.declare(`declare i1 @${sig.name}.resume(i8*)${group === "" ? "" : ` ${group}`}`)
   }
 }
 
@@ -746,7 +751,7 @@ class TypeSizer {
 
   unknown(type: string): void {
     if (!this.soft) {
-      process.exit(internalErrorFor(`async lowering: no size for \`${type}\``, this.json))
+      failWith(this.json, `no size for \`${type}\``)
     }
     this.size = -1
     this.align = -1
@@ -864,17 +869,13 @@ class TypeSizer {
         return
       }
       const align = packed ? 1 : this.align
-      while (offset % align !== 0) {
-        offset = offset + 1
-      }
+      offset = roundUpTo(offset, align)
       offset = offset + this.size
       if (align > most) {
         most = align
       }
     }
-    while (offset % most !== 0) {
-      offset = offset + 1
-    }
+    offset = roundUpTo(offset, most)
     this.size = offset
     this.align = most
   }
@@ -890,7 +891,6 @@ class TypeSizer {
  */
 class Demoter {
   emitter: Emitter
-  fn: IRFunction
   blocks: IRBlock[]
   labels: StringMap
   succs: i32[][]
@@ -913,7 +913,6 @@ class Demoter {
 
   constructor(emitter: Emitter, polls: string[], sizer: TypeSizer) {
     this.emitter = emitter
-    this.fn = emitter.fn
     this.blocks = emitter.fn.blocks
     this.sizer = sizer
     this.labels = new StringMap()
@@ -1486,8 +1485,9 @@ export const transformAsync = (emitter: Emitter, sig: FunctionSig): void => {
   fn.params = params
   fn.returnType = "i1"
   fn.returnAttrs = []
-  if (emitter.opts.optimizeAttributes) {
-    fn.attrGroup = emitter.module.attrGroupFor(["nounwind"])
+  const group = resumeGroup(emitter)
+  if (group !== "") {
+    fn.attrGroup = group
   }
   head.push(rest)
   emitter.module.addTypeDecl(`${frame} = type { ${head.join(", ")} }`)
@@ -1538,7 +1538,7 @@ class AsyncLayout {
   }
 
   asyncFail(message: string): void {
-    process.exit(internalErrorFor(`async lowering: ${message}`, this.registry.json))
+    failWith(this.registry.json, message)
   }
 
   /** The 16-byte units frame `id`'s kids area takes: the widest group it owns. */
@@ -1604,6 +1604,9 @@ class AsyncLayout {
     const out = new StringBuilder()
     let copied = 0
     let at = text.indexOf(MARK_START)
+    if (at < 0) {
+      return text
+    }
     while (at >= 0) {
       if (writtenFromPaths(text, at)) {
         const lineEnd = text.indexOf("\n", at)
