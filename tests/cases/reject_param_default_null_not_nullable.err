@@ -1,0 +1,1 @@
+Parameter `p` is `Point`, which has no `null`, so `null` cannot be its default

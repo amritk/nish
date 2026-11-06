@@ -1526,6 +1526,112 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end fn-default-rest -->
 
+### A `null` default, a typed null at the call
+
+A `T | null` parameter may default to `null`
+([Default and rest parameters](LANGUAGE.md#default-and-rest-parameters)), the
+shape of an options argument. `greet("a")` passes `%struct.Options* null`, the
+same argument `greet("a", null)` writes: nothing is allocated for the missing
+argument and `@greet` tests `opts` as it would any nullable.
+
+<!-- cookbook:begin fn-default-null -->
+```ts
+class Options {
+  loud: boolean = true
+}
+
+const greet = (name: string, opts: Options | null = null): string => {
+  if (opts !== null && opts.loud) {
+    return `${name}!`
+  }
+  return name
+}
+
+export const main = (): i32 => {
+  console.log(greet("a"))
+  console.log(greet("b", new Options()))
+  return 0
+}
+```
+
+```llvm
+%struct.Options = type { i1 }
+
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"!\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"a\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
+
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+
+define internal noundef nonnull align 8 i8* @greet(i8* noundef nonnull noalias readonly align 8 %name, %struct.Options* noundef readonly align 8 nocapture %opts) #0 {
+entry:
+  %0 = icmp ne %struct.Options* %opts, null
+  br i1 %0, label %land.rhs, label %land.end
+
+land.rhs:
+  %1 = getelementptr inbounds %struct.Options, %struct.Options* %opts, i32 0, i32 0
+  %2 = load i1, i1* %1, align 1, !tbaa !4
+  br label %land.end
+
+land.end:
+  %3 = phi i1 [ false, %entry ], [ %2, %land.rhs ]
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  %4 = call i8* @nish_str_concat(i8* %name, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  ret i8* %4
+
+if.end:
+  ret i8* %name
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %Options.obj = alloca %struct.Options, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i64 @nish_arena_mark()
+  %1 = call i8* @greet(i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*), %struct.Options* null)
+  %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
+  call void @nish_print(i8* %2)
+  %3 = getelementptr inbounds %struct.Options, %struct.Options* %Options.obj, i32 0, i32 0
+  store i1 true, i1* %3, align 1, !tbaa !4
+  %4 = call i64 @nish_arena_mark()
+  %5 = call i8* @greet(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), %struct.Options* %Options.obj)
+  %6 = call i8* @nish_arena_keep(i64 %4, i8* %5)
+  call void @nish_print(i8* %6)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!5, !6, !7, !8, !9}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i1", !1, i64 0}
+!3 = !{!"Options", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{i32 8, !"cf-protection-branch", i32 1}
+!6 = !{i32 8, !"cf-protection-return", i32 1}
+!7 = !{i32 8, !"branch-target-enforcement", i32 1}
+!8 = !{i32 8, !"sign-return-address", i32 1}
+!9 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end fn-default-null -->
+
 ### `nish/threads`: a map and a reduce over the partitioner
 
 `parallelMapInto` and `parallelReduce` are templates in `std/threads.ts`, so the

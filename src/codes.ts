@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 806
+export const RULE_COUNT: i32 = 808
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -223,6 +223,8 @@ const diagnosticRules = (): string[] => [
   "NL2485",
   "` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release may see or move the mark",
   "NL2417",
+  "`, and the one default a `T | null` parameter may have is `null`, which each call that leaves the argument out passes as a constant; any other value would be built by every such call",
+  "NL2660",
   "`secret` takes a value only it will hold: a fresh value (a call, `new`, a literal) or a local it moves, not a parameter, a field or an element, whose owner would keep the plain bytes",
   "NL2447",
   "`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version",
@@ -517,6 +519,8 @@ const diagnosticRules = (): string[] => [
   "NL2569",
   "` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself",
   "NL2573",
+  "`, which has no `null`, so `null` cannot be its default: only a `T | null` parameter defaults to `null`",
+  "NL2659",
   "`extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `",
   "NL2278",
   "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",

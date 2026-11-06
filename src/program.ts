@@ -168,10 +168,11 @@ export class FunctionSig {
   /**
    * Per parameter, parallel to `paramNames` (`this` included for a member),
    * the default a call that omits the argument passes, or `null`; empty when
-   * no parameter has one. A default is a literal or an enum member, kept as
-   * a field initializer is so that the caller's emitter writes it as the same
-   * constant (`initializerConstant` in `src/emit-classes.ts`), or the name of
-   * an earlier parameter of the same scalar type, whose position is the
+   * no parameter has one. A default is a literal, an enum member or the
+   * `null` of a `T | null` parameter, kept as a field initializer is so that
+   * the caller's emitter writes it as the same constant
+   * (`initializerConstant` in `src/emit-classes.ts`), or the name of an
+   * earlier parameter of the same scalar type, whose position is the
    * entry's `index`. Every parameter after the first with a default has one.
    */
   defaults: (FieldInfo | null)[]

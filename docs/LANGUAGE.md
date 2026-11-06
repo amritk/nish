@@ -1648,12 +1648,25 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
 
 - **A default is a constant or an earlier parameter**: a numeric literal (a
   negative one too), `true`/`false`, a string literal, an enum member, or the
-  name of a parameter written before it. Anything else is refused
+  name of a parameter written before it, or `null` for a `T | null`
+  parameter (next rule). Anything else is refused
   (`reject_param_default_expression`, `reject_param_default_later`,
   `reject_param_default_array`, `reject_param_default_fraction`).
+- **A `T | null` parameter defaults to `null`, and only to `null`**:
+  `opts: Options | null = null` makes a call that leaves `opts` out pass a
+  typed null pointer, the same IR as passing `null` itself
+  (`tests/cases/param_default_null`, across modules
+  `tests/link/param_modules`). This is how an options argument is written
+  without `undefined`: `fetch(url)` and `fetch(url, init)` are one function.
+  `null` is refused as the default of a type with no `null`
+  (`reject_param_default_null_not_nullable`), any other default of a
+  `T | null` is refused, since every call that omits it would build the value
+  (`reject_param_default_object`), and `T | null` of a type parameter takes no
+  default (`reject_param_default_null_generic`).
 - **A default's parameter is annotated**, `n: i32 = 1`, never `n = 1`
   (`reject_param_default_untyped`), and its type is a number, `boolean`,
-  `string` or enum (`reject_param_default_parameter_type`), not a type
+  `string`, enum or a `T | null` defaulting to `null`
+  (`reject_param_default_parameter_type`), not a type
   parameter (`reject_param_default_generic`). Every parameter after one with a
   default has one too (`reject_param_default_order`).
 - **A rest parameter is last, has an array type and no default**

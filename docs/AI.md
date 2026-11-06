@@ -185,7 +185,7 @@ rejects. This table is the highest-value part of the page.
 | `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
-| `const [a, b] = xs`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default; `...ns: i32[]` as the last parameter, or pass the array itself |
+| `const [a, b] = xs`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
 | `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, `declare class`, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class` is not supported `` / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
@@ -2907,9 +2907,10 @@ export const main = (): i32 => {
 
 **Optional parameters** — write a default instead: `(n: i32 = 1)`. A default
 is a literal, an enum member or an earlier parameter, and the call site fills
-it in. `x?: T` is refused. A variable count of one type is a rest parameter,
-`(...ns: i32[])`, last in the list; a call never spreads (`f(...xs)`), it passes
-`xs` to an array parameter.
+it in. An options argument is `(opts: Options | null = null)`: `null` is the
+one default of a `T | null` parameter. `x?: T` is refused. A variable count
+of one type is a rest parameter, `(...ns: i32[])`, last in the list; a call
+never spreads (`f(...xs)`), it passes `xs` to an array parameter.
 
 **A calendar, regex, JSON, threads of your own** — not in the language (the
 wall clock is `Date.now()`, and that is all of `Date`). Say so rather than
