@@ -4988,6 +4988,35 @@ export const main = (): i32 => {
   offset 4 is not a multiple of 8, the slot's width`). `read` and `write` copy
   a byte window, checked against both the region and the buffer. No offset
   reaches outside the mapping, whatever a peer wrote into it.
+- **Windows: a `u8[]` that is the region's bytes.** `region.lend(at, len)`
+  answers a `u8[]` of length `len` whose data is bytes `[at, at + len)` of the
+  mapping, checked as `read`'s window is (`nish/sync/shm: byte window at 60 is
+  outside the region of 64 bytes`). An index store, `copyBytes` into it or
+  `netRead` into it writes the region itself, and every process mapping it
+  sees the bytes, with no copy. The window is not atomic: order it with a slot
+  (`storeI32(.., RELEASE)` after the bytes, `loadI32(.., ACQUIRE)` before
+  reading them), as a ring does. `region.giveBack(window)` answers its length
+  and empties it, and `close()` empties every window the region lent, so an
+  index after either is `index out of range: 0 >= 0`, never a read of an
+  unmapped page. A `pop` or a shorter `length` keeps a window; a **push past
+  its length moves it** off the region into the program's memory, as any push
+  past capacity does, and `giveBack` then panics (`window of length 17 is no
+  longer the region's bytes: a push moved it`), as it does for a window
+  given back twice or lent by another region.
+- **The reuse rule.** Each `lend` without `reuse` takes a header of 48 bytes
+  that lasts until the process exits, since the program may hold the array
+  past any `giveBack` or `close`. A loop that lends again passes the window it
+  gave back, `region.lend(at, len, window)`, which re-points that header and
+  takes no memory; a `reuse` that is still lent, or not this region's, panics.
+  Windows belong to the thread that lent them, as the region does.
+- **Why an intrinsic, not FFI.** `lend` and `giveBack` are the module's two
+  compiler-known functions (`src/shm-window.ts`), whose bodies the compiler
+  writes as a call of `nishshm_lend` / `nishshm_give_back`: a foreign function
+  may take a `u8[]` but answers no array, and a window must be one the program
+  indexes. Known by its package and path, as `nish:region` is, the call is
+  marked as writing through and keeping its array and as possibly changing
+  any array's length, so no length the bounds proof knew survives it, and a
+  region's `close()` is marked the same way.
 - **Orderings are C11's**: `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL`,
   `SEQ_CST`, plus `fence(order)`. Each access is one LLVM `load atomic`,
   `store atomic`, `atomicrmw` or `cmpxchg` with that ordering; an ordering an
@@ -5015,8 +5044,8 @@ export const main = (): i32 => {
   `--emit-ts` refuses them, since Node's `SharedArrayBuffer` is shared between
   threads of one process, not between processes. A region belongs to the
   thread that mapped it. A program that imports neither module is unchanged.
-  Tested by `tests/link/sync_shm`, `tests/link/sync_ring` and
-  `tests/link/sync_shm_deny_ffi`; the design, its measurements and the threads
+  Tested by `tests/link/sync_shm`, `tests/link/sync_shm_window`,
+  `tests/link/sync_ring` and `tests/link/sync_shm_deny_ffi`; the design, its measurements and the threads
   it was weighed against are `docs/wp47-shared-memory.md`, and the threat model
   is [`docs/security/shm.md`](security/shm.md).
 
@@ -6831,7 +6860,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:region` | `Region`, `region`, `regionWith`, `enter`, `enterWith`, `free` — source behind it too ([Regions](#regions-nishregion)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netWrite2`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 | `nish:async` | `spawn`, `awaitAll` — **reached only through the import** ([Async functions](#async-functions-async-and-await)) |
@@ -8292,6 +8321,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
+| `netWrite2(fd: i32, a: readonly u8[], aOff: i32, aLen: i32, b: readonly u8[], bOff: i32, bLen: i32): i32` | `a[aOff, aOff + aLen)` and then `b[bOff, bOff + bLen)` in **one system call** (`sendmsg` with two `iovec`s), so a header and a body leave together with no copy into one buffer: the count of bytes taken, which may be fewer than `aLen + bLen` and may end inside `a`, or `-11` when the send buffer is full. The program sends the rest, as after a short `netWrite`. A gone peer is `-32`, never SIGPIPE. Both ranges are [checked](#bounds), `a`'s first, and either may be empty. As for every call here, a `wasm32` build refuses it and Node throws | write | `net_write2`, `net_write2_bounds`; `reject_net_write2_element` |
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
 | `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one socket option from a whitelist, named by the ids below: `0`, or the failure, such as `-9` for a closed descriptor and `-88` for one that is not a socket. Any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `value` is `0` or `1` for the switches and a byte count for the buffer sizes. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
@@ -8632,10 +8662,10 @@ mac. CI does not run them on a mac yet.
 
 #### Bounds
 
-`netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` check `0 <= off <= off +
+`netRead`, `netWrite`, `netWrite2` (each of its two ranges), `udpSendTo` and `udpRecvFrom` check `0 <= off <= off +
 len <= buf.length` **in the compiled code**, before the call, the way `dst.set(src, at)` checks the range it
 writes, and a range outside it panics with the same words, `slice out of range:
-[4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`). A negative
+[4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`, `net_write2_bounds`). A negative
 `off` or `len` fails it. A `peer`, `out`, `to` or `from`
 array shorter than 18 bytes, or a `meta` shorter than 2, is not a panic but
 `-22`, from the runtime, because the length is the argument's
@@ -8675,7 +8705,7 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly`,
   `reject_net_unix_peer_readonly`), a parameter one of
   them fills is never `readonly` in the IR, and `netWrite`'s `buf`,
-  `udpSendTo`'s `buf` and `to` and `sendFd`'s `buf` may be `readonly` (`net_udp_calls`).
+  `netWrite2`'s `a` and `b`, `udpSendTo`'s `buf` and `to` and `sendFd`'s `buf` may be `readonly` (`net_udp_calls`, `net_write2_bounds`).
 - **Threads.** Every call changes the kernel's state of a socket, which is a
   write its caller can see, and a loop is a socket's state as much as its
   bytes, so none may be made in a `scope()` task
@@ -11615,7 +11645,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | --- | --- | --- |
 | `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
 | `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
-| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`) |
+| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`, `net_write2_bounds`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
 | `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). A `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not a site |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |

@@ -5,6 +5,42 @@ declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
+define internal noundef i32 @send$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %aOff, i32 noundef %aLen, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %bOff, i32 noundef %bLen) #0 {
+entry:
+  %0 = sext i32 %aOff to i64
+  %1 = sext i32 %aLen to i64
+  %2 = sext i32 %bOff to i64
+  %3 = sext i32 %bLen to i64
+  %4 = add i64 %0, %1
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8
+  %7 = icmp ule i64 %0, %4
+  %8 = icmp ule i64 %4, %6
+  %9 = and i1 %7, %8
+  br i1 %9, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 %0, i64 %4, i64 %6)
+  unreachable
+
+net.ok:
+  %10 = add i64 %2, %3
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 0
+  %12 = load i64, i64* %11, align 8
+  %13 = icmp ule i64 %2, %10
+  %14 = icmp ule i64 %10, %12
+  %15 = and i1 %13, %14
+  br i1 %15, label %net.ok.1, label %net.fail.1
+
+net.fail.1:
+  call void @nish_panic_slice(i64 %2, i64 %10, i64 %12)
+  unreachable
+
+net.ok.1:
+  %16 = call i32 @nish_net_write2(i32 -1, %struct.nish_array* %a, i64 %0, i64 %1, %struct.nish_array* %b, i64 %2, i64 %3)
+  ret i32 %16
+}
+
 define internal noundef i32 @writeAt(i32 noundef %aOff, i32 noundef %aLen, i32 noundef %bOff, i32 noundef %bLen) #0 {
 entry:
   %a.addr = alloca %struct.nish_array*, align 8
@@ -52,39 +88,9 @@ entry:
   store i8 10, i8* %19, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %b.addr, align 8
   %20 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
-  %21 = sext i32 %aOff to i64
-  %22 = sext i32 %aLen to i64
-  %23 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
-  %24 = sext i32 %bOff to i64
-  %25 = sext i32 %bLen to i64
-  %26 = add i64 %21, %22
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
-  %28 = load i64, i64* %27, align 8
-  %29 = icmp ule i64 %21, %26
-  %30 = icmp ule i64 %26, %28
-  %31 = and i1 %29, %30
-  br i1 %31, label %net.ok, label %net.fail
-
-net.fail:
-  call void @nish_panic_slice(i64 %21, i64 %26, i64 %28)
-  unreachable
-
-net.ok:
-  %32 = add i64 %24, %25
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
-  %34 = load i64, i64* %33, align 8
-  %35 = icmp ule i64 %24, %32
-  %36 = icmp ule i64 %32, %34
-  %37 = and i1 %35, %36
-  br i1 %37, label %net.ok.1, label %net.fail.1
-
-net.fail.1:
-  call void @nish_panic_slice(i64 %24, i64 %32, i64 %34)
-  unreachable
-
-net.ok.1:
-  %38 = call i32 @nish_net_write2(i32 -1, %struct.nish_array* %20, i64 %21, i64 %22, %struct.nish_array* %23, i64 %24, i64 %25)
-  ret i32 %38
+  %21 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %22 = call i32 @send$(%struct.nish_array* %20, i32 %aOff, i32 %aLen, %struct.nish_array* %21, i32 %bOff, i32 %bLen)
+  ret i32 %22
 }
 
 define noundef i32 @firstPastEnd() #0 {

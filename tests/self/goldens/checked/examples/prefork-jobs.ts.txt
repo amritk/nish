@@ -1152,6 +1152,8 @@ struct SharedRegion (class) size=4 align=4 exported
   method write -> @nish.SharedRegion.write
   method waitI32 -> @nish.SharedRegion.waitI32
   method wake -> @nish.SharedRegion.wake
+  method lend -> @nish.SharedRegion.lend
+  method giveBack -> @nish.SharedRegion.giveBack
   method close -> @nish.SharedRegion.close
 function nishshm_create(name: string, bytes: i32): i32 -> @nishshm_create
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -1239,6 +1241,18 @@ function strerror(errnum: i32): string -> @strerror
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
+function shmLend(h: i32, at: i32, len: i32, reuse: u8[] | null): u8[] -> @nish.shmLend
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer reuse: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee +0:74 shmLend -> @nish.shmLend
+function shmGiveBack(h: i32, window: u8[]): i32 -> @nish.shmGiveBack
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer window: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee +0:52 shmGiveBack -> @nish.shmGiveBack
 function ShmError.constructor(this: ShmError, code: i32): void -> @nish.ShmError.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via strerror
@@ -1414,6 +1428,23 @@ function SharedRegion.wake(this: SharedRegion, at: i32, count: i32): i32 -> @nis
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 nishshm_wake -> @nishshm_wake
+function SharedRegion.lend(this: SharedRegion, at: i32, len: i32, reuse: u8[] | null): u8[] -> @nish.SharedRegion.lend [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.shmLend
+  escaping: at len
+  calls: nish.shmLend
+  pointer this: size=4 writesThrough=false captured=false
+  pointer reuse: size=0 writesThrough=true captured=true passedTo=nish.shmLend#3
+  stackSites=0 stackLocals=0
+  callee +0:12 shmLend -> @nish.shmLend
+function SharedRegion.giveBack(this: SharedRegion, window: u8[]): i32 -> @nish.SharedRegion.giveBack [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.shmGiveBack
+  calls: nish.shmGiveBack
+  pointer this: size=4 writesThrough=false captured=false
+  pointer window: size=0 writesThrough=true captured=true passedTo=nish.shmGiveBack#1
+  stackSites=0 stackLocals=0
+  callee +0:12 shmGiveBack -> @nish.shmGiveBack
 function SharedRegion.close(this: SharedRegion): Result<void, ShmError> -> @nish.SharedRegion.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via nish.shmDone

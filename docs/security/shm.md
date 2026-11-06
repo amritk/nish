@@ -17,14 +17,18 @@ the size the mapping was made with, in the runtime, not against anything
 stored in the region. A name another user planted is refused, never adopted.
 A corrupt ring is a panic that names the record. What remains is the
 mapping's own size: a same-user peer that shrinks the object makes a later
-access a `SIGBUS` (SHM-3, open). Three findings: two fixed, one open.
+access a `SIGBUS` (SHM-3, open). A window, a `u8[]` lent over the region's
+bytes, is emptied by `giveBack` and by `close`, so no index through it
+outlives the mapping (SHM-4). Six findings: four fixed, one open, one
+decided.
 
 ## Scope
 
 | File | What |
 | --- | --- |
-| `runtime/runtime-shm.c` | the region table and its handles (`region_of`, `region_checked`, `slot_take`, `adopt`); the checks (`slot_at`, `window`, `order_check`); `nishshm_create`, `nishshm_open`, `nishshm_unlink`, `nishshm_close`, `name_ok`, `path_of`; the atomics, `nishshm_read`, `nishshm_write`, `nishshm_wait_i32`, `nishshm_wake` |
-| `std/sync/shm.ts` | `createRegion`, `openRegion`, `unlinkRegion`, `SharedRegion` and its accessors |
+| `runtime/runtime-shm.c` | the region table and its handles (`region_of`, `region_checked`, `slot_take`, `adopt`); the checks (`slot_at`, `window`, `order_check`); `nishshm_create`, `nishshm_open`, `nishshm_unlink`, `nishshm_close`, `name_ok`, `path_of`; the atomics, `nishshm_read`, `nishshm_write`, `nishshm_wait_i32`, `nishshm_wake`; the windows, `window_of`, `nishshm_lend`, `nishshm_give_back` and the emptying in `nishshm_close` |
+| `std/sync/shm.ts` | `createRegion`, `openRegion`, `unlinkRegion`, `SharedRegion` and its accessors, `lend` and `giveBack` |
+| `src/shm-window.ts`, `src/emit-shm-window.ts` | the compiler-known `shmLend` / `shmGiveBack`, whose bodies the compiler writes as the runtime calls, and their facts in `src/attributes.ts` (`markShmWindow`) |
 | `std/sync/ring.ts` | `SpscRing`, `MpscRing`: `tryPush`, `tryPop`, `popBatch`, `popWait`, `lengthAt`; `initSpscRing`, `attachSpscRing`, `initMpscRing`, `attachMpscRing`, `ringCheckPlace` |
 
 Out of scope: `examples/prefork-jobs.ts` and `bench/ring-latency/`, which are
@@ -64,6 +68,9 @@ memory safety, and a supervisor recovers by making a fresh ring.
 | SHM-1 | Low | `std/sync/ring.ts` (`SpscRing.lengthAt`) | A record length a peer wrote near 2^31 overflowed the rounding `(len + 3) & ~3` before the check against the ring's capacity, so the consumer panicked on the integer overflow, not with the ring's own message. No access left the region: the overflow panic is checked arithmetic. | **Fixed** in this change: the length is checked against `capacity - 4` first. Before: the child panicked on the overflow. After: "a record of length 2147483645 at position 0: the ring is corrupt". |
 | SHM-2 | Low | `runtime/runtime-shm.c` (`nishshm_open`) | `openRegion` checked the object's owner and mode, not what it is. On a host with `fs.protected_hardlinks` set to 0, another user can hard-link one of our 0600 regions under a name we will later open, and we would map the wrong region with no error; a FIFO of ours at the name was refused only by its size. | **Fixed** in this change: on Linux, an object that is not a regular file or has more than one link is `SHM_ACCESS`. Before: the second link opened and mapped the first region. After: "a region with a second link is SHM_ACCESS", "a FIFO is SHM_ACCESS". |
 | SHM-3 | Low | `runtime/runtime-shm.c` (`adopt`) | A region's size is read once, when it is mapped. A same-user peer that shrinks the object with `ftruncate` leaves the mapping in place, and an access past the new end raises `SIGBUS`, which the runtime does not catch, so the process dies by the signal rather than by a checked panic. | **Open.** Only a peer that already has the user's privileges can do it, and the process stops rather than reading or writing past the object. File seals (`F_SEAL_SHRINK`) would close it but apply only to `memfd` objects, which have no name a later process can open; a `SIGBUS` handler that turns the fault into a panic is the alternative. |
+| SHM-4 | Medium | `runtime/runtime-shm.c` (`nishshm_close`, `nishshm_give_back`) | `lend` answers a `u8[]` whose data pointer is inside the mapping, and the program may keep the array after it gives it back or closes the region. Left as it was, an index through it after `close` reads or writes an unmapped page, or, once a later `createRegion` or `malloc` reuses the address, someone else's memory: a use after free that no bounds check sees, since the length still says the bytes are there. | **Fixed before landing.** Every window is recorded on its mapping; `giveBack` empties it (length and capacity 0, data NULL) and `close` empties every window still lent over the region's bytes before the `munmap` (one a push moved is the program's array and is left alone), so the next index is the ordinary `index out of range: 0 >= 0` panic. The header itself is never freed (SHM-6), so emptying it is always a write to memory the runtime owns. Before (with the emptying taken out of `nishshm_close`): the "closed" child read the unmapped page and died by `SIGSEGV`. After: "closed: the child exits 1", "closed: and says why"; "given-back: the child exits 1", "given-back: and says why". |
+| SHM-5 | Low | `runtime/runtime-shm.c` (`window_of`, `nishshm_lend`, `nishshm_give_back`) | `giveBack(window)` and `lend(at, len, reuse)` are handed a `u8[]` the program chose. Taken on trust, an array the region never lent would be read as a window record (its bytes past the header taken for the record's fields), and a `reuse` still lent would move a window the program is using; an array a `push` moved off the region would be emptied as if it were the region's, losing the program's own bytes. | **Fixed before landing.** A header is found by walking the mapping's own list and comparing pointers, so an array the region did not lend is never read as a record. `giveBack` panics for one not lent or already given back ("twice"), for one another region lent, and for one whose data or length moved ("pushed", `a push moved it`); `reuse` panics unless it is this region's and given back ("reuse-lent"). These checks were written with the calls, so there is no before run; each case is pinned: "twice: the child exits 1", "pushed: the child exits 1", "reuse-lent: the child exits 1", each with "and says why". |
+| SHM-6 | Low | `runtime/runtime-shm.c` (`nishshm_lend`) | Each `lend` without `reuse` mallocs a 48-byte header that is never freed, because the program may hold the array past any `giveBack` or `close`, and freeing it would turn SHM-4 back into a use after free of the header. A program that lends in a loop without `reuse` grows without bound. | **Decided.** The leak is the program's own and bounded by its own calls; no peer can cause it. The reuse rule (LANGUAGE.md, "The reuse rule"; the guide's "Pass the window you gave back") is the remedy, and a reused header takes no memory: "a window given back lends again", "in the same header". |
 
 ## Properties verified
 
@@ -102,6 +109,18 @@ says why", where `${what}` is the case named below.
   against the program's buffer ("buffer", "buffer window at 1 is outside the
   buffer of 1 bytes"), and copied once, so a writer can tear it but cannot
   move the bounds after the check: "a byte window round-trips".
+- **A window is checked when it is lent and holds its bounds itself.**
+  `lend` checks `[at, at + len)` against the mapping as `read`'s window is
+  ("outside", "byte window at 60 is outside the region of 64 bytes"), and the
+  window's length is in the program's own header, not in the region, so a
+  peer that writes the bytes can change what an index reads but not how far
+  it reaches. The bytes are not atomic and are as untrusted as `read`'s copy.
+  The compiler marks both calls (and `close`) as possibly changing any
+  array's length, so no length the bounds proof knew survives them
+  (`tests/link/sync_shm_window/expected.ir` pins the calls). These run in
+  `tests/link/sync_shm_window`, "link/sync_shm_window: exits with 0 and stdout
+  matches expected.out", with the panics in a child each as above. Not
+  exercised by a test: the `malloc` failure in `nishshm_lend`, a panic.
 - **A closed handle is a panic, never a stale mapping**: a handle carries its
   slot's generation, bumped by every close ("closed", "names no open
   region"). Closing one mapping of a name leaves the others: "closing the

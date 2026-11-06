@@ -22881,6 +22881,37 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end mem-region -->
 
+### A shared region's window: `SharedRegion.lend` and `giveBack`
+
+`std/sync/shm.ts` declares two functions whose source body is a call of
+itself, `shmLend` and `shmGiveBack`, as `nish:region` does; the compiler knows
+them by package and path (`src/shm-window.ts`) and writes each body as one
+call into `runtime/runtime-shm.c`. `nishshm_lend` answers a `u8[]` header the
+runtime owns, whose `data` points into the mapping, and `nishshm_give_back`
+empties it, so the program's array reads as length 0 afterwards. The method
+`region.lend(at, len)` is an ordinary call of `@nish.shmLend`:
+
+```llvm
+declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*) #0
+declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull) #0
+
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.shmLend(i32 noundef %h, i32 noundef %at, i32 noundef %len, %struct.nish_array* noundef align 8 %reuse) #0 {
+  %0 = call %struct.nish_array* @nishshm_lend(i32 %h, i32 %at, i32 %len, %struct.nish_array* %reuse)
+
+define internal noundef i32 @nish.shmGiveBack(i32 noundef %h, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %window) #0 {
+  %0 = call i32 @nishshm_give_back(i32 %h, %struct.nish_array* %window)
+```
+
+Neither array parameter is `readonly` or `nocapture`: the runtime keeps the
+header to empty it at `giveBack` or `close()`, and writes its length. So the
+facts for both (and for `nishshm_close`) say they may change any array's
+length, and the bounds proof forgets every length it knew across the call,
+which is what makes `w[0]` after `region.giveBack(w)` a checked index, not a
+proven one. The lines are pinned by `tests/link/sync_shm_window/expected.ir`;
+a program using a window imports `nish/sync/shm`, so it is a link program and
+has no single-module listing here
+([LANGUAGE.md](LANGUAGE.md#shared-memory-between-processes-nishsyncshm-and-nishsyncring)).
+
 ### `T | null` and narrowing
 
 A nullable value is the same pointer type as `T`; `null` is the constant
@@ -24426,6 +24457,96 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !15 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-net -->
+
+### `nish:net`: `netWrite2`, two buffers in one system call
+
+`netWrite2(fd, a, aOff, aLen, b, bOff, bLen)` is `netWrite` with a second
+range: one call of `nish_net_write2`, which sends both with one `sendmsg` and
+two `iovec`s (`MSG_NOSIGNAL`), so a frame header and its body leave together
+without being copied into one buffer. Each range gets the `slice` check
+`netWrite`'s has, `a`'s first, so the IR has two `net.fail` blocks before the
+call. Both buffers are `nocapture readonly`
+([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+
+<!-- cookbook:begin builtin-net-write2 -->
+```ts
+// `netWrite2`: two buffers in one `sendmsg`. Each range is checked in the IR
+// first, `a`'s then `b`'s, through the slice panic `netWrite` uses; both
+// buffers are `readonly` and `nocapture`, and the call is not `willreturn`.
+import { netWrite2 } from "nish:net"
+
+export const sendFramed = (fd: i32, head: readonly u8[], body: readonly u8[]): i32 =>
+  netWrite2(fd, head, 0, head.length, body, 0, body.length)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i32 @nish_net_write2(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #0
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #1
+
+define noundef i32 @sendFramed(i32 noundef %fd, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %head, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %body) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %head, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = sext i32 %2 to i64
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %body, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = trunc i64 %5 to i32
+  %7 = sext i32 %6 to i64
+  %8 = add i64 0, %3
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %head, i64 0, i32 0
+  %10 = load i64, i64* %9, align 8
+  %11 = icmp ule i64 0, %8
+  %12 = icmp ule i64 %8, %10
+  %13 = and i1 %11, %12
+  br i1 %13, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %8, i64 %10)
+  unreachable
+
+net.ok:
+  %14 = add i64 0, %7
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %body, i64 0, i32 0
+  %16 = load i64, i64* %15, align 8
+  %17 = icmp ule i64 0, %14
+  %18 = icmp ule i64 %14, %16
+  %19 = and i1 %17, %18
+  br i1 %19, label %net.ok.1, label %net.fail.1
+
+net.fail.1:
+  call void @nish_panic_slice(i64 0, i64 %14, i64 %16)
+  unreachable
+
+net.ok.1:
+  %20 = call i32 @nish_net_write2(i32 %fd, %struct.nish_array* %head, i64 0, i64 %3, %struct.nish_array* %body, i64 0, i64 %7)
+  ret i32 %20
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-net-write2 -->
 
 ### `nish:net`: `udpBind`, `udpSendTo` and `udpRecvFrom`
 
@@ -27634,6 +27755,8 @@ declare noundef i64 @nish_region_new() #2
 declare i8* @nish_region_enter(i64 noundef) #2
 declare void @nish_region_leave(i64 noundef, i8*) #2
 declare void @nish_region_free(i64 noundef) #2
+declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*) #3
+declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull) #3
 declare noundef i64 @nish_arena_used() #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
@@ -27712,6 +27835,7 @@ declare noundef i32 @nish_tcp_listen_flags(i8* noundef nonnull readonly align 8 
 declare noundef i32 @nish_tcp_accept(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #3
 declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
+declare noundef i32 @nish_net_write2(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_set_option(i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_mss(i32 noundef) #2

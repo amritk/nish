@@ -2304,6 +2304,9 @@ To fetch a URL from a CLI, skip all of this: `nish/net/fetch`'s
 response's head is in and answers it with `body.readAll(limit)`, or null on a
 failure (a `FetchSyncClient` keeps the connection and says why in `error`).
 `netRead` / `netWrite` panic on a range outside the buffer.
+`netWrite2(fd, a, aOff, aLen, b, bOff, bLen)` writes two ranges in one
+`sendmsg` (a header and a body without a copy) and answers the bytes written,
+which may stop inside either range; it checks both ranges, the first one first.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
 spreads the connections), and flag 2 `TCP_NODELAY` on every socket `tcpAccept`
