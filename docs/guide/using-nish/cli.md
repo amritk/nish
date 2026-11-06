@@ -322,7 +322,7 @@ Some constructs JavaScript spells differently are rewritten too:
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 
-Six kinds of module cannot be written. In each case `nish` exits 1 and
+Seven kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
@@ -332,6 +332,7 @@ app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target
 app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
 app.ts:12:15: error: --emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type
 app.ts:1:1: error: --emit-ts cannot yet write a module that imports nish:region, whose regions the TypeScript runtime does not answer; keep it native
+app.ts:3:1: error: --emit-ts cannot yet write an async function, whose resume order the TypeScript runtime does not answer yet; keep it native
 ```
 
 The second is reported at each `nish:net` import and at each call to a

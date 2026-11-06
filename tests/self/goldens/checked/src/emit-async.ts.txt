@@ -9,6 +9,7 @@ import IRBlock from "./ir" -> struct IRBlock
 import IRFunction from "./ir" -> struct IRFunction
 import IRParam from "./ir" -> struct IRParam
 import paramValue from "./ir" -> function @paramValue
+import isDigit from "./lexer" -> function @isDigit
 import StringMap from "./map" -> struct StringMap
 import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
@@ -16,12 +17,14 @@ import FunctionSig from "./program" -> struct FunctionSig
 import StringBuilder from "./strings" -> struct StringBuilder
 import HARDENING_ATTRS from "./target" -> const HARDENING_ATTRS
 const ASYNC_AWAIT: i32 = 0 [exported]
-const ASYNC_SPAWN: i32 = 1 [exported]
-const ASYNC_ALL: i32 = 2 [exported]
+const ASYNC_SPAWN: i32 = 1
+const ASYNC_ALL: i32 = 2
 const NODE_HEADER: i32 = 16
-const KIDS_MARK: string = "@@async.kids:"
-const OFF_MARK: string = "@@async.off:"
-const BYTES_MARK: string = "@@async.bytes:"
+const MARK_END: string = "\u0001"
+const MARK_START: string = "\u0001async."
+const KIDS_MARK: string = "\u0001async.kids:"
+const OFF_MARK: string = "\u0001async.off:"
+const BYTES_MARK: string = "\u0001async.bytes:"
 const ENQUEUE_DECL: string = "declare hidden void @nish.async.enqueue(i8*)"
 const STEP_DECL: string = "declare hidden i1 @nish.async.step()"
 const DRAIN_DECL: string = "declare hidden void @nish.async.drain()"
@@ -44,19 +47,21 @@ struct AsyncRegistry (class) size=64 align=8 exported
   method idOf -> @AsyncRegistry.idOf
   method spawnKindOf -> @AsyncRegistry.spawnKindOf
   method addGroup -> @AsyncRegistry.addGroup
-struct TypeSizer (class) size=32 align=8
+struct TypeSizer (class) size=40 align=8
   field text: string index=0 offset=0
-  field layout: AsyncLayout | null index=1 offset=8
-  field soft: boolean index=2 offset=16
-  field json: boolean index=3 offset=17
-  field size: i32 index=4 offset=20
-  field align: i32 index=5 offset=24
+  field bodies: StringMap index=1 offset=8
+  field layout: AsyncLayout | null index=2 offset=16
+  field soft: boolean index=3 offset=24
+  field json: boolean index=4 offset=25
+  field size: i32 index=5 offset=28
+  field align: i32 index=6 offset=32
   constructor -> @TypeSizer.constructor
   method unknown -> @TypeSizer.unknown
   method body -> @TypeSizer.body
   method measure -> @TypeSizer.measure
+  method vector -> @TypeSizer.vector
   method measureStruct -> @TypeSizer.measureStruct
-struct Demoter (class) size=136 align=8
+struct Demoter (class) size=144 align=8
   field emitter: Emitter index=0 offset=0
   field fn: IRFunction index=1 offset=8
   field blocks: IRBlock[] index=2 offset=16
@@ -68,13 +73,14 @@ struct Demoter (class) size=136 align=8
   field defBlock: StringMap index=8 offset=64
   field defIndex: StringMap index=9 offset=72
   field defTexts: string[] index=10 offset=80
-  field spilled: StringMap index=11 offset=88
-  field spillTypes: string[] index=12 offset=96
-  field pending: string[] index=13 offset=104
-  field endReloads: string[][] index=14 offset=112
-  field reloads: i32 index=15 offset=120
-  field rewriting: boolean index=16 offset=124
-  field sizer: TypeSizer index=17 offset=128
+  field defSlots: StringMap index=11 offset=88
+  field spilled: StringMap index=12 offset=96
+  field spillTypes: string[] index=13 offset=104
+  field pending: string[] index=14 offset=112
+  field endReloads: string[][] index=15 offset=120
+  field reloads: i32 index=16 offset=128
+  field rewriting: boolean index=17 offset=132
+  field sizer: TypeSizer index=18 offset=136
   constructor -> @Demoter.constructor
   method edge -> @Demoter.edge
   method dominators -> @Demoter.dominators
@@ -84,16 +90,17 @@ struct Demoter (class) size=136 align=8
   method defName -> @Demoter.defName
   method pass -> @Demoter.pass
   method reach -> @Demoter.reach
-  method defOrdinal -> @Demoter.defOrdinal
   method uses -> @Demoter.uses
   method phiUses -> @Demoter.phiUses
   method typeOfDef -> @Demoter.typeOfDef
   method component -> @Demoter.component
-struct AsyncLayout (class) size=32 align=8
+struct AsyncLayout (class) size=48 align=8
   field registry: AsyncRegistry index=0 offset=0
   field texts: string[] index=1 offset=8
   field kidsMemo: i32[] index=2 offset=16
   field unitsMemo: i32[] index=3 offset=24
+  field typeIndexes: StringMap[] index=4 offset=32
+  field typeIndexed: boolean[] index=5 offset=40
   constructor -> @AsyncLayout.constructor
   method asyncFail -> @AsyncLayout.asyncFail
   method kids -> @AsyncLayout.kids
@@ -177,15 +184,23 @@ function kidBase(emitter: Emitter, group: i32, member: i32): string -> @kidBase
   pointer emitter: size=352 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:10 IRFunction.emitValue -> @IRFunction.emitValue
+function resumeGroup(emitter: Emitter): string -> @resumeGroup
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRModule.attrGroupFor
+  calls: IRModule.attrGroupFor nish_str_concat
+  pointer emitter: size=352 writesThrough=false captured=false
+  stackSites=1 stackLocals=0
+  callee +0:41 IRModule.attrGroupFor -> @IRModule.attrGroupFor
 function declareResume(emitter: Emitter, sig: FunctionSig): void -> @declareResume
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declare
-  calls: Emitter.declare FunctionSig.definedIn nish_str_concat
-  pointer emitter: size=352 writesThrough=false captured=false passedTo=Emitter.declare#0
+  calls: Emitter.declare FunctionSig.definedIn nish_str_concat resumeGroup
+  pointer emitter: size=352 writesThrough=false captured=false passedTo=Emitter.declare#0 resumeGroup#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee +0:8 FunctionSig.definedIn -> @FunctionSig.definedIn
   callee +1:5 Emitter.declare -> @Emitter.declare
+  callee +1:59 resumeGroup -> @resumeGroup
 function emitPoll(emitter: Emitter, group: i32, names: string[]): void -> @emitPoll
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -460,9 +475,6 @@ function emitAsyncMain(emitter: Emitter, fn: IRFunction, userMain: FunctionSig):
 function isNameByte(c: i32): boolean -> @isNameByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function isAsyncDigit(c: i32): boolean -> @isAsyncDigit
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function irNameEnd(text: string, at: i32): i32 -> @irNameEnd
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isNameByte nish_panic_overflow
@@ -471,12 +483,12 @@ function irNameEnd(text: string, at: i32): i32 -> @irNameEnd
   callee +1:29 isNameByte -> @isNameByte
 function leadingNumber(text: string): i32 -> @leadingNumber
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: isAsyncDigit nish_panic_index nish_panic_overflow
+  calls: isDigit nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
-  callee +0:29 isAsyncDigit -> @isAsyncDigit
+  callee +0:29 isDigit -> @isDigit
   local +3:7 value: i32 (let)
   local +4:7 i: i32 (let)
-  callee +5:29 isAsyncDigit -> @isAsyncDigit
+  callee +5:29 isDigit -> @isDigit
 function withoutMetadata(instr: string): string -> @withoutMetadata
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: instr
@@ -553,67 +565,91 @@ function splitTop(text: string): string[] -> @splitTop
   local +4:11 end: i32 (const)
   local +5:9 from: i32 (let)
   local +9:9 to: i32 (let)
-function TypeSizer.constructor(this: TypeSizer, text: string, layout: AsyncLayout | null, soft: boolean, json: boolean): void -> @TypeSizer.constructor [constructor]
+function pow2Ceil(n: i32): i32 -> @pow2Ceil
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 p: i32 (let)
+function indexTypes(text: string): StringMap -> @indexTypes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
+  calls: StringMap.constructor StringMap.set nish_alloc_struct nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:9 out: StringMap (const)
+  callee +0:15 new StringMap -> @StringMap.constructor
+  local +1:7 at: i32 (let)
+  local +3:11 end: i32 (const)
+  local +4:11 line: string (const)
+  local +5:11 eq: i32 (const)
+  callee +7:7 StringMap.set -> @StringMap.set
+function TypeSizer.constructor(this: TypeSizer, text: string, bodies: StringMap, layout: AsyncLayout | null, soft: boolean, json: boolean): void -> @TypeSizer.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: json layout soft text
-  pointer this: size=32 writesThrough=true captured=false
-  pointer layout: size=32 writesThrough=true captured=true
+  escaping: bodies json layout soft text
+  pointer this: size=40 writesThrough=true captured=false
+  pointer bodies: size=40 writesThrough=true captured=true
+  pointer layout: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function TypeSizer.unknown(this: TypeSizer, type: string): void -> @TypeSizer.unknown [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -2:20 internalErrorFor -> @internalErrorFor
 function TypeSizer.body(this: TypeSizer, name: string): string -> @TypeSizer.body [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=32 writesThrough=false captured=false
+  escaping: name
+  calls: StringMap.get nish_str_index_of nish_str_index_of_from nish_str_new
+  pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 key: string (const)
-  local +1:11 at: i32 (const)
-  local +5:11 from: i32 (const)
-  local +6:9 to: i32 (let)
-function TypeSizer.measure(this: TypeSizer, type: string): void -> @TypeSizer.measure [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  local +0:11 from: i32 (const)
+  callee +0:18 StringMap.get -> @StringMap.get
+  local +4:9 to: i32 (let)
+function TypeSizer.measure(this: TypeSizer, t: string): void -> @TypeSizer.measure [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: type
-  calls: AsyncLayout.kids TypeSizer.body TypeSizer.measure TypeSizer.measureStruct TypeSizer.unknown isAsyncDigit leadingNumber nish_panic_overflow nish_str_at nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=32 writesThrough=true captured=false passedTo=TypeSizer.body#0 TypeSizer.unknown#0 TypeSizer.measure#0 TypeSizer.measureStruct#0 TypeSizer.measureStruct#0 TypeSizer.unknown#0 TypeSizer.unknown#0 TypeSizer.measure#0 TypeSizer.unknown#0
+  escaping: t
+  calls: AsyncLayout.kids TypeSizer.body TypeSizer.measure TypeSizer.measureStruct TypeSizer.unknown TypeSizer.vector isDigit leadingNumber nish_panic_overflow nish_str_at nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new pow2Ceil
+  pointer this: size=40 writesThrough=true captured=false passedTo=TypeSizer.vector#0 TypeSizer.body#0 TypeSizer.unknown#0 TypeSizer.measure#0 TypeSizer.measureStruct#0 TypeSizer.measureStruct#0 TypeSizer.unknown#0 TypeSizer.unknown#0 TypeSizer.vector#0 TypeSizer.measure#0 TypeSizer.vector#0 TypeSizer.unknown#0
   stackSites=0 stackLocals=0
-  local -2:11 t: string (const)
-  callee +4:52 isAsyncDigit -> @isAsyncDigit
-  local +5:13 bits: i32 (const)
-  callee +5:20 leadingNumber -> @leadingNumber
-  local +6:11 bytes: i32 (let)
-  local +35:13 body: string (const)
-  callee +35:20 TypeSizer.body -> @TypeSizer.body
-  callee +37:9 TypeSizer.unknown -> @TypeSizer.unknown
-  callee +40:7 TypeSizer.measure -> @TypeSizer.measure
-  callee +44:7 TypeSizer.measureStruct -> @TypeSizer.measureStruct
-  callee +48:7 TypeSizer.measureStruct -> @TypeSizer.measureStruct
-  local +52:13 inner: string (const)
-  local +53:13 x: i32 (const)
-  callee +55:9 TypeSizer.unknown -> @TypeSizer.unknown
-  local +58:13 countText: string (const)
-  local +59:11 count: i32 (let)
-  callee +59:19 leadingNumber -> @leadingNumber
-  local +60:13 layout: AsyncLayout | null (const)
-  callee +62:17 AsyncLayout.kids -> @AsyncLayout.kids
-  callee +62:29 leadingNumber -> @leadingNumber
-  callee +65:9 TypeSizer.unknown -> @TypeSizer.unknown
-  local +68:13 element: string (const)
-  local +70:13 bytes: i32 (let)
-  callee +78:7 TypeSizer.measure -> @TypeSizer.measure
-  local +86:11 bytes: i32 (let)
-  callee +94:5 TypeSizer.unknown -> @TypeSizer.unknown
+  callee +4:52 isDigit -> @isDigit
+  callee +5:7 TypeSizer.vector -> @TypeSizer.vector
+  callee +5:19 pow2Ceil -> @pow2Ceil
+  callee +5:29 leadingNumber -> @leadingNumber
+  local +29:13 body: string (const)
+  callee +29:20 TypeSizer.body -> @TypeSizer.body
+  callee +31:9 TypeSizer.unknown -> @TypeSizer.unknown
+  callee +34:7 TypeSizer.measure -> @TypeSizer.measure
+  callee +38:7 TypeSizer.measureStruct -> @TypeSizer.measureStruct
+  callee +42:7 TypeSizer.measureStruct -> @TypeSizer.measureStruct
+  local +46:13 inner: string (const)
+  local +47:13 x: i32 (const)
+  callee +49:9 TypeSizer.unknown -> @TypeSizer.unknown
+  local +52:13 countText: string (const)
+  local +53:11 count: i32 (let)
+  callee +53:19 leadingNumber -> @leadingNumber
+  local +54:13 layout: AsyncLayout | null (const)
+  callee +56:17 AsyncLayout.kids -> @AsyncLayout.kids
+  callee +56:29 leadingNumber -> @leadingNumber
+  callee +59:9 TypeSizer.unknown -> @TypeSizer.unknown
+  local +62:13 element: string (const)
+  callee +64:9 TypeSizer.vector -> @TypeSizer.vector
+  callee +64:21 pow2Ceil -> @pow2Ceil
+  callee +67:7 TypeSizer.measure -> @TypeSizer.measure
+  callee +75:7 TypeSizer.vector -> @TypeSizer.vector
+  callee +75:19 pow2Ceil -> @pow2Ceil
+  callee +78:5 TypeSizer.unknown -> @TypeSizer.unknown
+function TypeSizer.vector(this: TypeSizer, bytes: i32): void -> @TypeSizer.vector [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: bytes
+  pointer this: size=40 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function TypeSizer.measureStruct(this: TypeSizer, fields: string, packed: boolean): void -> @TypeSizer.measureStruct [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: fields
   calls: TypeSizer.measure nish_panic_div nish_panic_overflow splitTop
-  pointer this: size=32 writesThrough=true captured=false passedTo=TypeSizer.measure#0
+  pointer this: size=40 writesThrough=true captured=false passedTo=TypeSizer.measure#0
   stackSites=0 stackLocals=0
   local -19:9 offset: i32 (let)
   local -18:9 most: i32 (let)
@@ -626,46 +662,47 @@ function Demoter.constructor(this: Demoter, emitter: Emitter, polls: string[], s
   sharedWrite: via Demoter.edge
   escaping: emitter sizer
   calls: Demoter.dominators Demoter.edge StringMap.constructor StringMap.get StringMap.set irNameEnd nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new withoutMetadata
-  pointer this: size=136 writesThrough=true captured=false passedTo=Demoter.edge#0 Demoter.edge#0 Demoter.edge#0 Demoter.dominators#0
+  pointer this: size=144 writesThrough=true captured=false passedTo=Demoter.edge#0 Demoter.edge#0 Demoter.edge#0 Demoter.dominators#0
   pointer emitter: size=352 writesThrough=true captured=true
   pointer polls: size=0 writesThrough=false captured=false
-  pointer sizer: size=32 writesThrough=true captured=true
+  pointer sizer: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:19 new StringMap -> @StringMap.constructor
   callee +5:21 new StringMap -> @StringMap.constructor
   callee +6:21 new StringMap -> @StringMap.constructor
-  callee +8:20 new StringMap -> @StringMap.constructor
-  local +14:11 n: i32 (const)
-  local +15:9 b: i32 (let)
-  callee +17:7 StringMap.set -> @StringMap.set
-  local +22:13 none: i32[] (const)
-  local +23:13 nonePreds: i32[] (const)
-  local +30:13 instrs: string[] (const)
-  local +32:15 last: string (const)
-  callee +32:22 withoutMetadata -> @withoutMetadata
-  local +33:13 at: i32 (let)
-  local +35:17 end: i32 (const)
-  callee +35:23 irNameEnd -> @irNameEnd
-  local +36:17 target: i32 (const)
-  callee +36:26 StringMap.get -> @StringMap.get
-  callee +38:13 Demoter.edge -> @Demoter.edge
-  callee +45:5 Demoter.edge -> @Demoter.edge
-  local +46:16 poll: string (const)
-  callee +47:7 Demoter.edge -> @Demoter.edge
-  callee +47:20 StringMap.get -> @StringMap.get
-  callee +49:5 Demoter.dominators -> @Demoter.dominators
+  callee +8:21 new StringMap -> @StringMap.constructor
+  callee +9:20 new StringMap -> @StringMap.constructor
+  local +15:11 n: i32 (const)
+  local +16:9 b: i32 (let)
+  callee +18:7 StringMap.set -> @StringMap.set
+  local +23:13 none: i32[] (const)
+  local +24:13 nonePreds: i32[] (const)
+  local +31:13 instrs: string[] (const)
+  local +33:15 last: string (const)
+  callee +33:22 withoutMetadata -> @withoutMetadata
+  local +34:13 at: i32 (let)
+  local +36:17 end: i32 (const)
+  callee +36:23 irNameEnd -> @irNameEnd
+  local +37:17 target: i32 (const)
+  callee +37:26 StringMap.get -> @StringMap.get
+  callee +39:13 Demoter.edge -> @Demoter.edge
+  callee +46:5 Demoter.edge -> @Demoter.edge
+  local +47:16 poll: string (const)
+  callee +48:7 Demoter.edge -> @Demoter.edge
+  callee +48:20 StringMap.get -> @StringMap.get
+  callee +50:5 Demoter.dominators -> @Demoter.dominators
 function Demoter.edge(this: Demoter, from: i32, to: i32): void -> @Demoter.edge [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: from to
   calls: nish_array_grow nish_panic_index
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Demoter.dominators(this: Demoter): void -> @Demoter.dominators [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: Demoter.intersect nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=136 writesThrough=false captured=false passedTo=Demoter.intersect#0
+  pointer this: size=144 writesThrough=false captured=false passedTo=Demoter.intersect#0
   stackSites=5 stackLocals=5
   local -5:11 n: i32 (const)
   local -4:11 visited: boolean[] (const)
@@ -687,7 +724,7 @@ function Demoter.intersect(this: Demoter, a: i32, b: i32): i32 -> @Demoter.inter
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: nish_panic_index
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 x: i32 (let)
   local +1:9 y: i32 (let)
@@ -695,7 +732,7 @@ function Demoter.dominates(this: Demoter, a: i32, b: i32): boolean -> @Demoter.d
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
   calls: nish_panic_index
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
   local +1:9 x: i32 (let)
@@ -703,13 +740,14 @@ function Demoter.run(this: Demoter): void -> @Demoter.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   calls: Demoter.defName Demoter.pass StringMap.set nish_array_grow nish_panic_index nish_panic_overflow nish_str_new withoutMetadata
-  pointer this: size=136 writesThrough=true captured=false passedTo=Demoter.defName#0 Demoter.pass#0 Demoter.pass#0
+  pointer this: size=144 writesThrough=true captured=false passedTo=Demoter.defName#0 Demoter.pass#0 Demoter.pass#0
   stackSites=0 stackLocals=0
-  local -9:9 b: i32 (let)
-  local -7:13 instrs: string[] (const)
-  local -6:11 i: i32 (let)
-  local -4:15 def: string (const)
-  callee -4:21 Demoter.defName -> @Demoter.defName
+  local -10:9 b: i32 (let)
+  local -8:13 instrs: string[] (const)
+  local -7:11 i: i32 (let)
+  local -5:15 def: string (const)
+  callee -5:21 Demoter.defName -> @Demoter.defName
+  callee -3:11 StringMap.set -> @StringMap.set
   callee -2:11 StringMap.set -> @StringMap.set
   callee -1:11 StringMap.set -> @StringMap.set
   callee +0:30 withoutMetadata -> @withoutMetadata
@@ -720,7 +758,7 @@ function Demoter.defName(this: Demoter, instr: string): string -> @Demoter.defNa
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: instr
   calls: irNameEnd nish_panic_index nish_panic_overflow nish_str_eq nish_str_new
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 end: i32 (const)
   callee +0:17 irNameEnd -> @irNameEnd
@@ -728,7 +766,7 @@ function Demoter.pass(this: Demoter): void -> @Demoter.pass [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: Demoter.defName Demoter.phiUses Demoter.uses StringMap.get StringMap.has nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=136 writesThrough=true captured=false passedTo=Demoter.defName#0 Demoter.phiUses#0 Demoter.uses#0
+  pointer this: size=144 writesThrough=true captured=false passedTo=Demoter.defName#0 Demoter.phiUses#0 Demoter.uses#0
   stackSites=1 stackLocals=1
   local -11:9 b: i32 (let)
   local -9:13 block: IRBlock (const)
@@ -760,38 +798,22 @@ function Demoter.reach(this: Demoter, name: string, dominated: boolean, endOf: i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: endOf name
-  calls: Demoter.defOrdinal Demoter.typeOfDef StringMap.get StringMap.set nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer this: size=136 writesThrough=true captured=false passedTo=Demoter.typeOfDef#0 Demoter.defOrdinal#0
+  calls: Demoter.typeOfDef StringMap.get StringMap.set nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=144 writesThrough=true captured=false passedTo=Demoter.typeOfDef#0
   stackSites=0 stackLocals=0
   local -4:9 k: i32 (let)
   callee -4:13 StringMap.get -> @StringMap.get
   callee -1:7 StringMap.set -> @StringMap.set
   callee +0:28 Demoter.typeOfDef -> @Demoter.typeOfDef
-  callee +0:57 Demoter.defOrdinal -> @Demoter.defOrdinal
+  callee +0:57 StringMap.get -> @StringMap.get
   local +5:11 reload: string (const)
   local +7:11 line: string (const)
-function Demoter.defOrdinal(this: Demoter, name: string): i32 -> @Demoter.defOrdinal [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  escaping: name
-  calls: Demoter.defName StringMap.get nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
-  pointer this: size=136 writesThrough=false captured=false passedTo=Demoter.defName#0 Demoter.defName#0
-  stackSites=0 stackLocals=0
-  local +0:11 block: i32 (const)
-  callee +0:19 StringMap.get -> @StringMap.get
-  local +1:11 index: i32 (const)
-  callee +1:19 StringMap.get -> @StringMap.get
-  local +2:9 ordinal: i32 (let)
-  local +3:9 b: i32 (let)
-  local +5:18 instr: string (const)
-  callee +6:13 Demoter.defName -> @Demoter.defName
-  local +12:9 i: i32 (let)
-  callee +14:11 Demoter.defName -> @Demoter.defName
 function Demoter.uses(this: Demoter, instr: string, from: i32, b: i32, i: i32): string -> @Demoter.uses [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Demoter.reach
   escaping: b from instr
   calls: Demoter.dominates Demoter.reach StringBuilder.add StringBuilder.constructor StringBuilder.toText StringMap.get StringMap.has irNameEnd nish_panic_index nish_str_eq nish_str_new
-  pointer this: size=136 writesThrough=true captured=false passedTo=Demoter.dominates#0 Demoter.reach#0
+  pointer this: size=144 writesThrough=true captured=false passedTo=Demoter.dominates#0 Demoter.reach#0
   stackSites=1 stackLocals=1
   local +0:11 out: StringBuilder (const)
   callee +0:17 new StringBuilder -> @StringBuilder.constructor
@@ -818,7 +840,7 @@ function Demoter.phiUses(this: Demoter, instr: string, from: i32): string -> @De
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Demoter.reach
   calls: Demoter.dominates Demoter.reach StringBuilder.add StringBuilder.constructor StringBuilder.toText StringMap.get StringMap.has lastIndexIn nish_panic_overflow nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=136 writesThrough=true captured=false passedTo=Demoter.reach#0 Demoter.dominates#0
+  pointer this: size=144 writesThrough=true captured=false passedTo=Demoter.reach#0 Demoter.dominates#0
   stackSites=1 stackLocals=1
   local +0:11 out: StringBuilder (const)
   callee +0:17 new StringBuilder -> @StringBuilder.constructor
@@ -846,7 +868,7 @@ function Demoter.typeOfDef(this: Demoter, rest: string, name: string): string ->
   sharedWrite: via Demoter.component
   escaping: rest
   calls: Demoter.component asyncFail isWordIn lastIndexIn leadingNumber nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new skipFlags splitTop topComma typeAt wordAt
-  pointer this: size=136 writesThrough=false captured=false passedTo=Demoter.component#0 Demoter.component#0
+  pointer this: size=144 writesThrough=false captured=false passedTo=Demoter.component#0 Demoter.component#0
   stackSites=0 stackLocals=0
   local +0:11 op: string (const)
   callee +0:16 wordAt -> @wordAt
@@ -907,7 +929,7 @@ function Demoter.component(this: Demoter, type: string, index: i32): string -> @
   sharedWrite: via asyncFail
   escaping: index type
   calls: TypeSizer.body asyncFail nish_panic_overflow nish_str_at nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new splitTop
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 t: string (let)
   callee +2:11 TypeSizer.body -> @TypeSizer.body
@@ -918,7 +940,7 @@ function Demoter.component(this: Demoter, type: string, index: i32): string -> @
 function transformAsync(emitter: Emitter, sig: FunctionSig): void -> @transformAsync [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: AsyncRegistry.idOf Demoter.constructor Demoter.run IRBlock.constructor IRModule.addTypeDecl IRModule.attrGroupFor IRParam.constructor TypeSizer.constructor TypeSizer.measure asyncFail leadingNumber metadataOf nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new paramValue typeAt withoutMetadata
+  calls: AsyncRegistry.idOf Demoter.constructor Demoter.run IRBlock.constructor IRModule.addTypeDecl IRModule.attrGroupFor IRParam.constructor TypeSizer.constructor TypeSizer.measure asyncFail indexTypes leadingNumber metadataOf nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new paramValue typeAt withoutMetadata
   pointer emitter: size=352 writesThrough=true captured=true passedTo=asyncFail#0 Demoter.constructor#1
   pointer sig: size=176 writesThrough=false captured=false
   stackSites=7 stackLocals=6
@@ -942,66 +964,70 @@ function transformAsync(emitter: Emitter, sig: FunctionSig): void -> @transformA
   callee +23:21 withoutMetadata -> @withoutMetadata
   local +25:15 type: string (const)
   callee +25:22 typeAt -> @typeAt
-  local +35:9 sizer: TypeSizer (const)
-  callee +35:17 new TypeSizer -> @TypeSizer.constructor
-  local +36:9 restFields: string[] (const)
-  local +37:9 slotLines: string[] (const)
-  local +38:14 line: string (const)
-  local +39:11 eq: i32 (const)
-  local +40:11 slot: string (const)
-  local +41:11 typeFrom: i32 (const)
-  local +42:11 type: string (const)
-  callee +42:18 typeAt -> @typeAt
-  local +43:11 alignAt: i32 (const)
-  local +44:11 align: i32 (const)
-  callee +44:37 leadingNumber -> @leadingNumber
-  callee +46:7 asyncFail -> @asyncFail
-  callee +48:5 TypeSizer.measure -> @TypeSizer.measure
-  local +49:11 field: i32 (const)
-  local +51:13 pad: string (const)
-  local +63:9 demoter: Demoter (const)
-  callee +63:19 new Demoter -> @Demoter.constructor
-  callee +64:3 Demoter.run -> @Demoter.run
-  local +65:9 spillLines: string[] (const)
-  local +66:7 k: i32 (let)
-  local +75:9 bad: IRBlock (const)
-  callee +75:15 new IRBlock -> @IRBlock.constructor
-  local +77:9 finished: IRBlock (const)
-  callee +77:20 new IRBlock -> @IRBlock.constructor
-  local +79:9 suspend: IRBlock (const)
-  callee +79:19 new IRBlock -> @IRBlock.constructor
-  local +85:9 entry: IRBlock (const)
-  callee +85:17 new IRBlock -> @IRBlock.constructor
-  local +86:9 e: string[] (const)
-  local +89:7 p: i32 (let)
-  local +91:11 param: IRParam (const)
-  local +92:11 value: string (const)
-  callee +92:19 paramValue -> @paramValue
-  local +104:14 line: string (const)
-  local +107:14 line: string (const)
-  local +111:9 cases: string[] (const)
-  local +112:7 state: i32 (let)
-  local +118:9 blocks: IRBlock[] (const)
-  local +119:14 block: IRBlock (const)
-  local +125:9 params: IRParam[] (const)
-  callee +125:30 new IRParam -> @IRParam.constructor
-  callee +130:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  callee +133:3 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  local +35:9 typeText: string (const)
+  local +36:9 sizer: TypeSizer (const)
+  callee +36:17 new TypeSizer -> @TypeSizer.constructor
+  callee +36:41 indexTypes -> @indexTypes
+  local +37:9 restFields: string[] (const)
+  local +38:9 slotLines: string[] (const)
+  local +39:14 line: string (const)
+  local +40:11 eq: i32 (const)
+  local +41:11 slot: string (const)
+  local +42:11 typeFrom: i32 (const)
+  local +43:11 type: string (const)
+  callee +43:18 typeAt -> @typeAt
+  local +44:11 alignAt: i32 (const)
+  local +45:11 align: i32 (const)
+  callee +45:37 leadingNumber -> @leadingNumber
+  callee +47:7 asyncFail -> @asyncFail
+  callee +49:5 TypeSizer.measure -> @TypeSizer.measure
+  local +50:11 field: i32 (const)
+  local +52:13 pad: string (const)
+  local +64:9 demoter: Demoter (const)
+  callee +64:19 new Demoter -> @Demoter.constructor
+  callee +65:3 Demoter.run -> @Demoter.run
+  local +66:9 spillLines: string[] (const)
+  local +67:7 k: i32 (let)
+  local +76:9 bad: IRBlock (const)
+  callee +76:15 new IRBlock -> @IRBlock.constructor
+  local +78:9 finished: IRBlock (const)
+  callee +78:20 new IRBlock -> @IRBlock.constructor
+  local +80:9 suspend: IRBlock (const)
+  callee +80:19 new IRBlock -> @IRBlock.constructor
+  local +86:9 entry: IRBlock (const)
+  callee +86:17 new IRBlock -> @IRBlock.constructor
+  local +87:9 e: string[] (const)
+  local +90:7 p: i32 (let)
+  local +92:11 param: IRParam (const)
+  local +93:11 value: string (const)
+  callee +93:19 paramValue -> @paramValue
+  local +105:14 line: string (const)
+  local +108:14 line: string (const)
+  local +112:9 cases: string[] (const)
+  local +113:7 state: i32 (let)
+  local +119:9 blocks: IRBlock[] (const)
+  local +120:14 block: IRBlock (const)
+  local +126:9 params: IRParam[] (const)
+  callee +126:30 new IRParam -> @IRParam.constructor
+  callee +131:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
   callee +134:3 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  callee +135:3 IRModule.addTypeDecl -> @IRModule.addTypeDecl
 function AsyncLayout.constructor(this: AsyncLayout, registry: AsyncRegistry, texts: string[]): void -> @AsyncLayout.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: registry texts
-  calls: nish_array_grow
-  pointer this: size=32 writesThrough=true captured=false
+  calls: StringMap.constructor nish_alloc_struct nish_array_grow
+  pointer this: size=48 writesThrough=true captured=false
   pointer registry: size=64 writesThrough=true captured=true
   pointer texts: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:16 _: string (const)
+  callee +1:29 new StringMap -> @StringMap.constructor
+  local +4:16 _: string (const)
 function AsyncLayout.asyncFail(this: AsyncLayout, message: string): void -> @AsyncLayout.asyncFail [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:18 internalErrorFor -> @internalErrorFor
 function AsyncLayout.kids(this: AsyncLayout, id: i32): i32 -> @AsyncLayout.kids [method]
@@ -1009,7 +1035,7 @@ function AsyncLayout.kids(this: AsyncLayout, id: i32): i32 -> @AsyncLayout.kids 
   sharedWrite: +0:5
   escaping: id
   calls: AsyncLayout.asyncFail AsyncLayout.units nish_panic_index nish_panic_overflow nish_str_concat
-  pointer this: size=32 writesThrough=true captured=true passedTo=AsyncLayout.asyncFail#0 AsyncLayout.units#0
+  pointer this: size=48 writesThrough=true captured=true passedTo=AsyncLayout.asyncFail#0 AsyncLayout.units#0
   stackSites=0 stackLocals=0
   callee -2:7 AsyncLayout.asyncFail -> @AsyncLayout.asyncFail
   local +1:9 most: i32 (let)
@@ -1019,23 +1045,24 @@ function AsyncLayout.kids(this: AsyncLayout, id: i32): i32 -> @AsyncLayout.kids 
   callee +7:23 AsyncLayout.units -> @AsyncLayout.units
 function AsyncLayout.units(this: AsyncLayout, id: i32): i32 -> @AsyncLayout.units [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: id
-  calls: AsyncLayout.asyncFail TypeSizer.constructor TypeSizer.measure nish_panic_index nish_panic_overflow nish_str_concat
-  pointer this: size=32 writesThrough=true captured=true passedTo=AsyncLayout.asyncFail#0 TypeSizer.constructor#2
+  calls: AsyncLayout.asyncFail TypeSizer.constructor TypeSizer.measure indexTypes nish_panic_index nish_panic_overflow nish_str_concat
+  pointer this: size=48 writesThrough=true captured=true passedTo=AsyncLayout.asyncFail#0 TypeSizer.constructor#3
   stackSites=1 stackLocals=1
-  local -7:11 module: i32 (const)
-  callee -5:7 AsyncLayout.asyncFail -> @AsyncLayout.asyncFail
-  local -3:11 sizer: TypeSizer (const)
-  callee -3:19 new TypeSizer -> @TypeSizer.constructor
-  callee -2:5 TypeSizer.measure -> @TypeSizer.measure
-  local -1:11 units: i32 (const)
+  local -5:11 module: i32 (const)
+  callee -3:7 AsyncLayout.asyncFail -> @AsyncLayout.asyncFail
+  callee +0:34 indexTypes -> @indexTypes
+  local +3:11 sizer: TypeSizer (const)
+  callee +3:19 new TypeSizer -> @TypeSizer.constructor
+  callee +4:5 TypeSizer.measure -> @TypeSizer.measure
+  local +5:11 units: i32 (const)
 function AsyncLayout.offset(this: AsyncLayout, group: i32, member: i32): i32 -> @AsyncLayout.offset [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via AsyncLayout.units
   escaping: group
   calls: AsyncLayout.units nish_panic_index nish_panic_overflow
-  pointer this: size=32 writesThrough=true captured=true passedTo=AsyncLayout.units#0
+  pointer this: size=48 writesThrough=true captured=true passedTo=AsyncLayout.units#0
   stackSites=0 stackLocals=0
   local +0:9 bytes: i32 (let)
   local +1:9 j: i32 (let)
@@ -1044,7 +1071,7 @@ function AsyncLayout.resolve(this: AsyncLayout, text: string): string -> @AsyncL
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via AsyncLayout.kids
   calls: AsyncLayout.kids AsyncLayout.offset AsyncLayout.units StringBuilder.add StringBuilder.constructor StringBuilder.toText leadingNumber nish_panic_overflow nish_str_at nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=32 writesThrough=true captured=true passedTo=AsyncLayout.kids#0 AsyncLayout.units#0 AsyncLayout.offset#0
+  pointer this: size=48 writesThrough=true captured=true passedTo=AsyncLayout.kids#0 AsyncLayout.units#0 AsyncLayout.offset#0
   stackSites=1 stackLocals=1
   local +0:11 out: StringBuilder (const)
   callee +0:17 new StringBuilder -> @StringBuilder.constructor

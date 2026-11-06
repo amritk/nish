@@ -49,9 +49,15 @@ const ASYNC_ALL: i32 = 2
 /** The bytes of a spawned task's node ahead of its frame: the queue link and the task kind. */
 const NODE_HEADER: i32 = 16
 
-const KIDS_MARK: string = "@@async.kids:"
-const OFF_MARK: string = "@@async.off:"
-const BYTES_MARK: string = "@@async.bytes:"
+/**
+ * A placeholder opens and closes with a byte `irEscape` always writes as `\01`,
+ * so no string constant, name or path of the program can spell one.
+ */
+const MARK_END: string = "\x01"
+const MARK_START: string = "\x01async."
+const KIDS_MARK: string = "\x01async.kids:"
+const OFF_MARK: string = "\x01async.off:"
+const BYTES_MARK: string = "\x01async.bytes:"
 
 const ENQUEUE_DECL: string = "declare hidden void @nish.async.enqueue(i8*)"
 const STEP_DECL: string = "declare hidden i1 @nish.async.step()"
@@ -168,13 +174,17 @@ const kidBase = (emitter: Emitter, group: i32, member: i32): string => {
     return "%async.kids"
   }
   return emitter.fn.emitValue(
-    `getelementptr inbounds i8, i8* %async.kids, i64 ${OFF_MARK}${group}.${member}@@`
+    `getelementptr inbounds i8, i8* %async.kids, i64 ${OFF_MARK}${group}.${member}${MARK_END}`
   )
 }
 
+/** The attribute group of every resume function, its `define` and each `declare` of it alike. */
+const resumeGroup = (emitter: Emitter): string =>
+  emitter.opts.optimizeAttributes ? ` ${emitter.module.attrGroupFor(["nounwind"])}` : ""
+
 const declareResume = (emitter: Emitter, sig: FunctionSig): void => {
   if (!sig.definedIn(emitter.program.source)) {
-    emitter.declare(`declare i1 @${sig.name}.resume(i8*)`)
+    emitter.declare(`declare i1 @${sig.name}.resume(i8*)${resumeGroup(emitter)}`)
   }
 }
 
@@ -303,7 +313,7 @@ const emitSpawnedFrame = (
   emitter.module.addRawDefinition(
     `define weak_odr hidden i1 @nish.async.task.${kind}(i8* %frame) nounwind${attrs} {\nentry:\n  %done = call i1 @${sig.name}.resume(i8* %frame)\n  ret i1 %done\n}`
   )
-  const node = fn.emitValue(`call noalias i8* @malloc(i64 ${BYTES_MARK}${id}@@)`)
+  const node = fn.emitValue(`call noalias i8* @malloc(i64 ${BYTES_MARK}${id}${MARK_END})`)
   const none = fn.emitValue(`icmp eq i8* ${node}, null`)
   const oom = fn.newBlock("spawn.oom")
   const go = fn.newBlock("spawn.go")
@@ -1382,7 +1392,7 @@ export const transformAsync = (emitter: Emitter, sig: FunctionSig): void => {
   // The allocas become fields of the frame, aligned as they asked.
   const typeText = `\n${emitter.module.typeDecls.join("\n")}\n`
   const sizer = new TypeSizer(typeText, indexTypes(typeText), null, true, emitter.opts.json)
-  const restFields: string[] = [`[${KIDS_MARK}${id}@@ x <2 x i64>]`]
+  const restFields: string[] = [`[${KIDS_MARK}${id}${MARK_END} x <2 x i64>]`]
   const slotLines: string[] = []
   for (const line of fn.entryPrelude) {
     const eq = line.indexOf(" = alloca ")
@@ -1578,9 +1588,9 @@ class AsyncLayout {
   resolve(text: string): string {
     const out = new StringBuilder()
     let copied = 0
-    let at = text.indexOf("@@async.")
+    let at = text.indexOf(MARK_START)
     while (at >= 0) {
-      const end = text.indexOf("@@", at + 2)
+      const end = text.indexOf(MARK_END, at + 1)
       const mark = text.substring(at, end)
       let value = 0
       if (mark.startsWith(KIDS_MARK)) {
@@ -1594,8 +1604,8 @@ class AsyncLayout {
       }
       out.add(text.substring(copied, at))
       out.add(`${value}`)
-      copied = end + 2
-      at = text.indexOf("@@async.", copied)
+      copied = end + 1
+      at = text.indexOf(MARK_START, copied)
     }
     out.add(text.substring(copied))
     return out.toText()

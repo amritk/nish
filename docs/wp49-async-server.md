@@ -457,8 +457,9 @@ writes the same IR as before, byte for byte, over every positive case.
   so a task runs until it finishes when it is first resumed, and a queue
   that still holds tasks but makes no progress traps.
 - **The declared resume-order difference this adds**: `spawn` runs its task
-  at once, up to its first real wait, where Node runs it after the spawning
-  task yields (`async_spawn`, `docs/LANGUAGE.md`, "Where it is not Node").
+  at once, up to its first real wait, where Node runs it only to its first
+  `await` and the rest after the spawning task yields (`async_spawn`,
+  `docs/LANGUAGE.md`, "Where it is not Node").
 - **`--emit-ts` refuses an `async` function for now** (NL4016,
   `reject_emit_ts_async`): the runtime the output imports does not answer the
   resume order, `awaitAll` or `spawn` yet. Writing it is the follow-up to

@@ -36,7 +36,7 @@ import {
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
 import { isBuiltinSpecifier, REGION_SPECIFIER, SECRET_SPECIFIER } from "./nish-modules"
-import { N_IMPORT } from "./nodes"
+import { FLAG_ASYNC, N_IMPORT, Node } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
 import { StringBuilder } from "./strings"
@@ -226,6 +226,20 @@ const launcher = (entryOut: string): string => {
  * through the compilation's sink, every one of them before it answers, so a
  * program refused twice says so twice.
  */
+/** The first function, method or arrow under `node` declared `async`, in source order, or null. */
+const firstAsync = (node: Node): Node | null => {
+  if ((node.flags & FLAG_ASYNC) !== 0) {
+    return node
+  }
+  for (const child of node.children) {
+    const found = firstAsync(child)
+    if (found !== null) {
+      return found
+    }
+  }
+  return null
+}
+
 export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   const result = new EmittedProgram()
   const modules = compilation.modules
@@ -263,13 +277,11 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
-    // WP49: one refusal per module, at its first async function.
-    for (const fn of unit.checker.program.functions) {
-      const origin = fn.origin
-      if (fn.isAsync() && origin !== null && origin === unit.source) {
-        walk.refuse(fn.decl, ASYNC_REFUSAL)
-        break
-      }
+    // WP49: one refusal per module, at its first async function. Read from the
+    // tree, not `program.functions`, which holds no generic nothing instantiates.
+    const asyncDecl = firstAsync(unit.file)
+    if (asyncDecl !== null) {
+      walk.refuse(asyncDecl, ASYNC_REFUSAL)
     }
     for (const stmt of unit.file.children) {
       if (stmt.kind !== N_IMPORT) {

@@ -3292,7 +3292,7 @@ the resume order is not Node's, and these are declared differences:
 | Every `await` yields to the microtask queue, even on a value that is already there | An `await` on a call that finishes without waiting returns at once; nothing else runs in between |
 | Microtasks run before I/O callbacks, in a defined order | Tasks resume in the order the kernel reports readiness, then by timer deadline |
 | A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
-| `spawn(f(x))` queues `f`, which starts after the current task yields | `spawn(f(x))` runs `f` at once until it first waits, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
+| `spawn(f(x))` runs `f` to its first `await`, and the rest of `f` after the current task yields | `spawn(f(x))` runs `f` at once until it first waits on the outside world, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
 
 A program whose output does not depend on how its tasks interleave prints the
 same under both.
@@ -11475,7 +11475,7 @@ by the caller.
   is the `: string` on an unannotated `const` bound to a string literal.
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Six kinds of module are refused, and then nothing is written** (exit 1):
+- **Seven kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -11513,8 +11513,9 @@ by the caller.
   (`nish/runtime`) does not answer yet, though a program run under Node as it
   is written does (NL4015, `reject_emit_ts_region`); keep it native. The
   seventh is a module that declares an `async` function, refused at the first
-  one, whose resume order (see "Async functions: `async` and `await`") the runtime the output
-  imports does not answer yet (NL4016, `reject_emit_ts_async`); keep it native.
+  one, whose resume order (see "Async functions: `async` and `await`") the
+  runtime the output imports does not answer yet (NL4016,
+  `reject_emit_ts_async`); keep it native.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

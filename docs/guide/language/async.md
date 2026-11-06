@@ -169,9 +169,10 @@ The same file runs under Node, but tasks resume in a different order:
   Node always yields to its microtask queue first.
 - Waiting tasks resume in the order their sockets and timers become ready, not
   in Node's microtask order.
-- `spawn(f(x))` starts `f` at once and runs it until it first waits before
-  carrying on; Node runs it only after the current task yields. A task that
-  never waits has finished, and printed, before `spawn` returns.
+- `spawn(f(x))` starts `f` at once and runs it until it first waits on a
+  socket or a timer before carrying on; Node runs `f` only to its first
+  `await` and the rest after the current task yields. A task that never waits
+  has finished, and printed, before `spawn` returns.
 - There is no `throw`, so nothing is rejected: a call that can fail answers a
   `Result` or `null`, as any other Nish call does
   ([Errors and `Result`](errors.md)).
