@@ -145,6 +145,7 @@ import { CheckContext } from "./context"
 import { Diagnostic } from "./diagnostics"
 import { N_ARROW, N_BINARY, N_CALL, N_INDEX, N_MEMBER, N_NEW, N_UNARY, Node } from "./nodes"
 import { CheckedProgram, FunctionSig, Instantiation, ROLE_CONSTRUCTOR, ROLE_FUNCTION } from "./program"
+import { isShmWindowIntrinsic } from "./shm-window"
 import { Local } from "./symbols"
 import { T_I32, T_I64 } from "./types"
 import { BuildMode, hostVisible } from "./visibility"
@@ -223,6 +224,11 @@ class RangeBody {
     this.body = body
     this.instance = instance
     this.scan = new StoreScan(ctx, tables, callees)
+    // A window intrinsic's source body calls itself, and C empties the window
+    // it is handed (`src/shm-window.ts`), so its summary promises nothing.
+    if (isShmWindowIntrinsic(ctx.program, sig)) {
+      this.scan.opaque = true
+    }
     this.entering = null
     this.joined = null
     this.sites = null

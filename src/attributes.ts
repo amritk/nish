@@ -39,6 +39,7 @@
 import { WIPE_MEMSET } from "./emit-secret"
 import { isPureRuntime, SECRET_MAKE, SECRET_WIPE, secretRoleOf } from "./secret"
 import { isRegionIntrinsic } from "./region-check"
+import { isShmSource, isShmWindowIntrinsic } from "./shm-window"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
 import { openedHandle } from "./handles"
 import {
@@ -3857,6 +3858,12 @@ const collectFacts = (
     return facts
   }
 
+  // One of `std/sync/shm.ts`'s window intrinsics, whose body the emitter writes.
+  if (isShmWindowIntrinsic(program, sig)) {
+    markShmWindow(facts)
+    return facts
+  }
+
   // WP27 S1: a `declare function` has no body, and `FunctionFacts` starts from
   // the *pure* defaults because purity here is discovered by walking a body and
   // finding nothing impure in it. An absent body is not an empty one: leaving
@@ -3900,9 +3907,11 @@ const collectFacts = (
     // it calls back reaches no array the caller holds, because a module has no
     // `let`, no array `const` and no `static` field to keep one in. It holds
     // only while no header crosses: a stage that hands C a `nish_array *` sets
-    // it back to `true` here. The checker's index proof does not read it, and
-    // still forgets every length at a foreign call (§10, Q15).
-    facts.resizesArray = false
+    // it back to `true` here, as `std/sync/shm.ts`'s `nishshm_close` does,
+    // because closing a region empties every window it lent (`markShmWindow`).
+    // The checker's index proof does not read it, and still forgets every
+    // length at a foreign call (§10, Q15).
+    facts.resizesArray = sig.sourceName === "nishshm_close" && isShmSource(program)
     // WP27 S3.2: a `string` result is a fresh arena copy at every call
     // (`emitForeignStringResult`), so the call allocates and answers what it
     // allocated, as a body that returns `s.substring(...)` does. Every caller
@@ -4195,6 +4204,31 @@ const markRegionIntrinsic = (facts: FunctionFacts): void => {
   facts.writesPastParams = true
   facts.writesElsewhere = true
   for (const pp of facts.pointerParams) {
+    pp.captured = true
+    pp.outlives = true
+  }
+}
+
+/**
+ * One of `std/sync/shm.ts`'s window intrinsics (`src/emit-shm-window.ts`), each
+ * a call of itself in source, so the facts are the runtime call's. `shmLend`
+ * answers a header the region keeps and `shmGiveBack` empties one, setting its
+ * `len`, `cap` and `data` from C, so both resize an array and write through
+ * every pointer they take, which the region holds past the call. Either stops
+ * the program on a bad handle, range or window, so neither is `willreturn`.
+ */
+const markShmWindow = (facts: FunctionFacts): void => {
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.willReturn = false
+  facts.sharedWrite = true
+  facts.writesPastParams = true
+  facts.writesElsewhere = true
+  facts.resizesArray = true
+  for (const pp of facts.pointerParams) {
+    pp.writesThrough = true
+    pp.writesShared = true
+    pp.writesReach = true
     pp.captured = true
     pp.outlives = true
   }

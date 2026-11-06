@@ -714,8 +714,10 @@ bool nish_is_executable(const nish_str *path);
  * `nish_tcp_accept(fd, peer)`: a new descriptor and the peer's address.
  * `nish_net_read` / `nish_net_write(fd, buf, off, len)`: bytes `[off, off +
  * len)` of `buf`, which the compiled call has range-checked; a write to a
- * gone peer is -32, never SIGPIPE. `nish_net_shutdown(fd, how)`: 0 read, 1
- * write, 2 both. `nish_net_close(fd)`.
+ * gone peer is -32, never SIGPIPE. `nish_net_write2(fd, a, aoff, alen, b,
+ * boff, blen)`: both ranges in one `sendmsg`, `a`'s bytes first, answering the
+ * count written (short when the socket buffer fills) or the same errors.
+ * `nish_net_shutdown(fd, how)`: 0 read, 1 write, 2 both. `nish_net_close(fd)`.
  * `nish_net_set_option(fd, option, value)`: one socket option from a
  * whitelist, by the runtime's own id (1 `TCP_NODELAY`, 2 `TCP_QUICKACK`, 3
  * `SO_KEEPALIVE`, 4 `SO_SNDBUF`, 5 `SO_RCVBUF`); any other id is -22, and
@@ -784,6 +786,8 @@ int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlo
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
 int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
+int32_t nish_net_write2(int32_t fd, const nish_array *a, int64_t aoff, int64_t alen, const nish_array *b,
+                        int64_t boff, int64_t blen);
 int32_t nish_net_shutdown(int32_t fd, int32_t how);
 int32_t nish_net_close(int32_t fd);
 int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value);

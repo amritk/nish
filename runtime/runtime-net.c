@@ -417,6 +417,28 @@ int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t l
   return n < 0 ? nish_net_fail() : (int32_t)n;
 }
 
+/* `netWrite2(fd, a, aoff, alen, b, boff, blen)`: `netWrite` of two ranges in
+   one `sendmsg`, so a response head and its body leave in one system call
+   without being copied together first. Both ranges are checked by the
+   compiled call. The count is at most `alen + blen`; a sum past `INT32_MAX`
+   is offered only up to it, so the answer always fits, and a short write is a
+   count, as `netWrite`'s is. */
+int32_t nish_net_write2(int32_t fd, const nish_array *a, int64_t aoff, int64_t alen, const nish_array *b,
+                        int64_t boff, int64_t blen) {
+  struct iovec iov[2];
+  struct msghdr msg;
+  if (blen > (int64_t)INT32_MAX - alen) blen = (int64_t)INT32_MAX - alen;
+  iov[0].iov_base = a->data + aoff;
+  iov[0].iov_len = (size_t)alen;
+  iov[1].iov_base = b->data + boff;
+  iov[1].iov_len = (size_t)blen;
+  memset(&msg, 0, sizeof msg);
+  msg.msg_iov = iov;
+  msg.msg_iovlen = 2;
+  ssize_t n = sendmsg(fd, &msg, NISH_NOSIGNAL);
+  return n < 0 ? nish_net_fail() : (int32_t)n;
+}
+
 /* `netShutdown(fd, how)`: 0 the read side, 1 the write side, 2 both, which
    are `SHUT_RD`, `SHUT_WR` and `SHUT_RDWR` on both platforms. */
 int32_t nish_net_shutdown(int32_t fd, int32_t how) {

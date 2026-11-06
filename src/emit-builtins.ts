@@ -42,6 +42,7 @@ import {
   NET_RANGE,
   NET_STRING,
   netOption,
+  isNetRangeBuffer,
   netRangeBuffer,
   netSymbol,
 } from "./nish-modules"
@@ -1471,7 +1472,7 @@ export const identifierBuiltinCalleesNamed = (
  * number mode.
  *
  * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom`, `readStdin` and `writeBytes` take the range `[off,
- * off + len)` of the buffer before their first `n`, checked here the way
+ * off + len)` of the buffer before their first `n`, and `netWrite2` two such ranges, each checked here the way
  * `dst.set(src, at)` checks the range it writes, through the same panic and
  * with the same words: `0 <= off <= off + len <= buf.length`. Both are
  * `i32`s, so their sum cannot wrap an `i64`, and the unsigned compares refuse
@@ -1508,14 +1509,16 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   if (buffers) {
     emitter.declareType(ARRAY_TYPE)
   }
-  const at = netRangeBuffer(name)
-  if (at >= 0 && values.length === params.length) {
-    const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
-    const field = fn.emitValue(
-      `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[at]}, i64 0, i32 0`
-    )
-    const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
-    emitSliceCheck(emitter, values[at + 1], end, size, true, "net")
+  // Every triple, in argument order: `netWrite2` has two.
+  for (let at = 0; at < values.length && values.length === params.length; at++) {
+    if (isNetRangeBuffer(name, at)) {
+      const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
+      const field = fn.emitValue(
+        `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[at]}, i64 0, i32 0`
+      )
+      const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
+      emitSliceCheck(emitter, values[at + 1], end, size, true, "net")
+    }
   }
   // A wasm build has no socket to ask, so its answer is the "no MSS" `-1`,
   // once the descriptor has been evaluated for its effects.

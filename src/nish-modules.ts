@@ -252,7 +252,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -304,6 +304,9 @@ export const netSignature = (name: string): string => {
   }
   if (name === "netWrite") {
     return "irnn"
+  }
+  if (name === "netWrite2") {
+    return "irnnrnn"
   }
   if (name === "tcpConnect") {
     return "r"
@@ -397,14 +400,30 @@ export const bufferSignature = (name: string): string => {
 }
 
 /**
- * Where a `nish:net` call's range-checked `(buf, off, len)` triple starts, or
- * -1: the buffer is the argument before the first `n`. `netRead`, `netWrite`,
- * `udpSendTo` and `udpRecvFrom` have one, at 1, and `readStdin` and
- * `writeBytes` at 0.
+ * Where a `nish:net` call's first range-checked `(buf, off, len)` triple
+ * starts, or -1: the buffer is the argument before the first `n`. `netRead`,
+ * `netWrite`, `udpSendTo` and `udpRecvFrom` have one, at 1, `netWrite2` a
+ * second at 4 (`isNetRangeBuffer` finds every one), and `readStdin` and
+ * `writeBytes` one at 0.
  */
 export const netRangeBuffer = (name: string): i32 => {
   const at = bufferSignature(name).indexOf("n")
   return at < 0 ? -1 : at - 1
+}
+
+/**
+ * Whether argument `at` of `name` is the buffer of a range-checked triple: a
+ * buffer letter followed by two `n`s. The emitter checks each such triple.
+ */
+export const isNetRangeBuffer = (name: string, at: i32): boolean => {
+  const params = bufferSignature(name)
+  return (
+    at >= 0 &&
+    at + 2 < params.length &&
+    isNetBufferLetter(params.charCodeAt(at)) &&
+    params.charCodeAt(at + 1) === NET_RANGE &&
+    params.charCodeAt(at + 2) === NET_RANGE
+  )
 }
 
 /**
