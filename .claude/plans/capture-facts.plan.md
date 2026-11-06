@@ -21,10 +21,10 @@ stages:
     todos:
       - id: element-decide
         content: Run decideElementParams over a capturesForCall arrow's capture parameters only, its written ones unchanged — see Probe result
-        status: in_progress
+        status: completed
       - id: element-carrier
         content: storedIntoReturnedArray refuses a carrier any arrow captures, since isCarrierUse never sees the arrow's uses — see Probe result
-        status: pending
+        status: completed
   - id: attributes
     title: Attributes pass reads the arrow
     goal: A captured parameter of the host inherits the arrow's facts for its capture parameter through the existing passedTo fixpoint
@@ -32,10 +32,10 @@ stages:
     todos:
       - id: capture-target
         content: Add captureTarget(call, arrow, k) answering the arrow and parameter index, or null when the chain is not ordinary — see The capture target
-        status: pending
+        status: completed
       - id: attrs-note-captured
         content: Route noteCaptured in src/attributes.ts through the USE_ARGUMENT bookkeeping for that target, keeping escapeParam as the null fallback — see Attributes pass
-        status: pending
+        status: completed
   - id: escape
     title: Escape analysis reads the arrow
     goal: A captured local gets the outcome an argument to the arrow would get, element hand-outs included
@@ -43,10 +43,10 @@ stages:
     todos:
       - id: escape-argument-outcome
         content: Extract the USE_ARGUMENT branch of useOutcome in src/escape.ts into argumentOutcome(callee, index, …) — see Escape analysis
-        status: pending
+        status: completed
       - id: escape-local-outcome
         content: Replace the isCaptured short-circuit in localOutcome with argumentOutcome over each capture target, FLOW_LEAKS on null — see Escape analysis
-        status: pending
+        status: completed
   - id: cap-params
     title: Attributes on the instance's capture parameters
     goal: The %cap.N parameters an instance forwards carry the attributes the arrow's own parameter earns
@@ -54,7 +54,7 @@ stages:
     todos:
       - id: emit-cap-attrs
         content: Give captureParamTypes' parameters in src/emit.ts paramAttributes from the arrow's facts, noundef alone when captureTarget is null — see Instance capture parameters
-        status: pending
+        status: completed
   - id: ship
     title: Tests, docs, record, PR
     goal: Land it with the negatives that would catch a use-after-free, the rules rewritten, and its security record
@@ -62,13 +62,13 @@ stages:
     todos:
       - id: tests-positive
         content: Add the three positive cases with .ll goldens and register them with the differential goldens — see Tests
-        status: pending
+        status: completed
       - id: tests-negative
         content: Add the four negative cases, each reading a kept value back after churn — see Tests
-        status: pending
+        status: completed
       - id: docs-rules
         content: Rewrite LANGUAGE.md's capture paragraph, ARCHITECTURE.md's capture row and IR_COOKBOOK.md's capture note — see Docs
-        status: pending
+        status: in_progress
       - id: security-record
         content: Add a CG row to docs/security/codegen.md and a Properties verified row — see Docs
         status: pending

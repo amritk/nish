@@ -119,6 +119,8 @@ import {
   PAR_SPAWN,
   PAR_TASK,
   ParallelCall,
+  JSON_NONE,
+  MAP_NONE,
   ROLE_CONSTRUCTOR,
   ROLE_FUNCTION,
   STRUCT_CLASS,
@@ -1201,6 +1203,148 @@ export const capturesOf = (sig: FunctionSig): CaptureSlot[] => {
   const out: CaptureSlot[] = []
   collectCaptures(sig, out)
   return out
+}
+
+/** Where a capture arrives: the arrow, and its parameter at `writtenArity() + k`. */
+export class CaptureTarget {
+  sig: FunctionSig
+  index: i32
+
+  constructor(sig: FunctionSig, index: i32) {
+    this.sig = sig
+    this.index = index
+  }
+}
+
+/** Whether a call of `sig` passes capture `k` of `arrow` (`capturesOf`). */
+const carriesCapture = (sig: FunctionSig, arrow: FunctionSig, k: i32): boolean => {
+  for (const slot of capturesOf(sig)) {
+    if (slot.arrow === arrow && slot.index === k) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether every function a call of `sig` hands capture `k` of `arrow` to,
+ * and every function those hand it to in turn, only forwards it until it
+ * reaches the arrow. That holds for an ordinary instance: its source cannot
+ * name the capture, so all it can do with one is pass it on (`captureValue`).
+ * Any other instance on the way fails it. A data-parallel form, a chunk loop,
+ * a `spawn` or a task carries the value in a context its own facts describe
+ * (`markParallelEntry`). An async instance may run the arrow after the call
+ * that passed the value has returned. A `std/collections` or
+ * `nish/json-typed` intrinsic has a body the emitter writes. Every callee
+ * that carries the capture is walked, not only the arrow, because an
+ * ordinary instance may forward the arrow into a parallel one
+ * (`tests/link/fnarg_capture_forward`). `seen` holds the instances already
+ * walked: each answered true, or the walk would have stopped there.
+ */
+const forwardsOnly = (sig: FunctionSig, arrow: FunctionSig, k: i32, seen: FunctionSig[]): boolean => {
+  if (sig === arrow) {
+    return true
+  }
+  for (const done of seen) {
+    if (done === sig) {
+      return true
+    }
+  }
+  const instance = sig.instance
+  if (
+    instance === null ||
+    sig.lifted ||
+    sig.foreign() ||
+    sig.isAsync() ||
+    instance.parallel !== PAR_NONE ||
+    instance.mapIntrinsic !== MAP_NONE ||
+    instance.jsonRoute !== JSON_NONE
+  ) {
+    return false
+  }
+  const body = sig.body()
+  if (body === null) {
+    return false
+  }
+  seen.push(sig)
+  return bodyForwardsOnly(instance.nodeCallees, body, arrow, k, seen)
+}
+
+/** `forwardsOnly` for every call under `node`, read through the instance's own callee table. */
+const bodyForwardsOnly = (
+  callees: (FunctionSig | null)[],
+  node: Node,
+  arrow: FunctionSig,
+  k: i32,
+  seen: FunctionSig[]
+): boolean => {
+  const next: FunctionSig | null = node.id < callees.length ? callees[node.id] : null
+  if (next !== null && carriesCapture(next, arrow, k) && !forwardsOnly(next, arrow, k, seen)) {
+    return false
+  }
+  for (const child of node.children) {
+    if (!bodyForwardsOnly(callees, child, arrow, k, seen)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * The parameter capture `k` of `arrow` arrives at from a call of `callee`,
+ * or null when something other than an ordinary instance is on the way
+ * (`forwardsOnly`). Only an arrow given to an ordinary function parameter
+ * (`capturesForCall`), and one that is not itself async, has a target: the
+ * function that wrote the arrow then reads the capture as an argument to it,
+ * by that parameter's facts. A null answer keeps the capture an escape.
+ */
+export const captureTarget = (callee: FunctionSig, arrow: FunctionSig, k: i32): CaptureTarget | null => {
+  if (!arrow.lifted || !arrow.capturesForCall || arrow.isAsync() || k < 0 || k >= arrow.captures.length) {
+    return null
+  }
+  if (!carriesCapture(callee, arrow, k)) {
+    return null
+  }
+  const seen: FunctionSig[] = []
+  return forwardsOnly(callee, arrow, k, seen) ? new CaptureTarget(arrow, arrow.writtenArity() + k) : null
+}
+
+/**
+ * The function called by the call an arrow argument is written in, which the
+ * arrow's captures are handed to, or null. The arrow is an argument of a
+ * call or a `new`, inside its argument list.
+ */
+export const arrowCallee = (
+  program: CheckedProgram,
+  parents: ParentTable,
+  arrow: Node
+): FunctionSig | null => {
+  let at = arrow
+  let parent = parents.parentOf(at)
+  while (parent !== null && parent.kind === N_PAREN) {
+    at = parent
+    parent = parents.parentOf(at)
+  }
+  if (parent === null || parent.kind !== N_LIST) {
+    return null
+  }
+  const call = parents.parentOf(parent)
+  if (call === null || (call.kind !== N_CALL && call.kind !== N_NEW)) {
+    return null
+  }
+  return program.nodeCallees[call.id]
+}
+
+/** The index of the capture `local` is in `arrow`, or -1. */
+export const captureIndexOf = (arrow: FunctionSig, local: Local): i32 => {
+  let k = 0
+  while (k < arrow.captures.length) {
+    if (arrow.captures[k] === local) {
+      return k
+    }
+    k = k + 1
+  }
+  return -1
 }
 
 /** The refusal for a `let` an arrow reads. */

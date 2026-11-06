@@ -97,9 +97,16 @@ import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
 import { Options } from "./options"
-import { chunkDstIndex, isMapEntry, isSpawnEntry } from "./parallel"
+import {
+  CaptureTarget,
+  arrowCallee,
+  captureTarget,
+  chunkDstIndex,
+  isMapEntry,
+  isSpawnEntry,
+} from "./parallel"
 import { CheckedProgram, elementStride, FunctionSig, ROLE_FUNCTION } from "./program"
-import { Local, STORAGE_LOCAL, STORAGE_PARAM, sourceLocal } from "./symbols"
+import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
@@ -370,8 +377,13 @@ class EscapeAnalysis {
   outcomeValues: Outcome[]
   /** The signature being analysed; WP17 reads its parameter list. */
   sig: FunctionSig
-  /** The locals an arrow argument captures (WP29), which escape. */
+  /**
+   * The locals an arrow argument captures (WP29), once per capture, and
+   * beside each the arrow parameter it reaches (`captureTarget`), or null
+   * when it is an escape.
+   */
   captured: Local[]
+  captureTargets: (CaptureTarget | null)[]
 
   constructor(
     unit: AnalysisUnit,
@@ -401,6 +413,7 @@ class EscapeAnalysis {
     this.outcomeValues = []
     this.listing = false
     this.captured = []
+    this.captureTargets = []
   }
 
   // ---- Collection -------------------------------------------------------------------
@@ -465,7 +478,7 @@ class EscapeAnalysis {
     if (node.kind === N_ARROW) {
       const lifted = program.nodeCallees[node.id]
       if (lifted !== null && lifted.capturesForCall) {
-        this.noteCaptures(node)
+        this.noteCaptures(node, lifted)
       }
       return
     }
@@ -509,15 +522,15 @@ class EscapeAnalysis {
     }
   }
 
-  /** Each local of this function an arrow under `node` captures (`captured`). */
-  noteCaptures(node: Node): void {
-    const local: Local | null = node.kind === N_IDENT ? this.unit.program.nodeLocals[node.id] : null
-    const source: Local | null = local === null || local.captureOf === null ? null : sourceLocal(local)
-    if (source !== null && !this.isCaptured(source)) {
-      this.captured.push(source)
-    }
-    for (const child of node.children) {
-      this.noteCaptures(child)
+  /** Each local of this function `arrow` captures, and the arrow parameter it reaches (`captured`). */
+  noteCaptures(arrow: Node, lifted: FunctionSig): void {
+    const callee = arrowCallee(this.unit.program, this.unit.parents, arrow)
+    let k = 0
+    while (k < lifted.captures.length) {
+      this.captured.push(lifted.captures[k])
+      const target: CaptureTarget | null = callee === null ? null : captureTarget(callee, lifted, k)
+      this.captureTargets.push(target)
+      k = k + 1
     }
   }
 
@@ -827,35 +840,7 @@ class EscapeAnalysis {
       return new Outcome(FLOW_LOCAL, true, false)
     }
     if (found.kind === USE_ARGUMENT) {
-      const callee = found.callee
-      // WP17: a by-value `Result` argument is packed into a register, so the
-      // callee gets a copy and never sees this object at all.
-      if (
-        callee !== null &&
-        found.index < callee.paramTypes.length &&
-        this.table.resultByValue(callee.paramTypes[found.index])
-      ) {
-        return new Outcome(FLOW_LOCAL, true, false)
-      }
-      // WP27 S3.1 and WP40 B1.2: a `string` or a `u8[]` handed to a `declare
-      // function` is borrowed for the length of the call, and the C function
-      // may not keep its address (`docs/wp27-ffi.md` §8b,
-      // `docs/wp40-ffi-buffers-handles.md` §5). Nothing about a C body can be
-      // proved, so this is the decision read as a fact: the argument does not
-      // escape, and the arena scope may release once the call has returned.
-      // What C writes through a `u8[]` is recorded as a write by the foreign
-      // facts, not here.
-      if (callee !== null && callee.foreign()) {
-        return new Outcome(FLOW_LOCAL, true, false)
-      }
-      // WP29 P2: held by the scope until it joins, inside this frame. Not a
-      // fixed binding: a stack slot a later pass reuses could be overwritten
-      // before the join, so the arena keeps it (`spawnCaptures`).
-      if (callee !== null && isSpawnEntry(callee) && !this.spawnCaptures(callee, found.index)) {
-        return new Outcome(FLOW_LOCAL, false, false)
-      }
-      const captures = callee === null ? true : this.calleeCaptures(callee, found.index)
-      return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true, captures)
+      return this.argumentOutcome(found.callee, found.index)
     }
     // Held by a local of this frame, as `x = <expr>` is below: not a fixed
     // binding, and kept past the pass that pushed it, but not reachable by
@@ -870,6 +855,83 @@ class EscapeAnalysis {
     const target = this.assignedLocal(expr)
     const escapes = target === null ? true : this.localOutcome(target, visiting).escapes
     return new Outcome(FLOW_LEAKS, true, escapes)
+  }
+
+  /**
+   * The value handed to `callee` as its parameter `index`: an argument, or
+   * a capture read as one (`captureOutcome`).
+   */
+  argumentOutcome(callee: FunctionSig | null, index: i32): Outcome {
+    // WP17: a by-value `Result` argument is packed into a register, so the
+    // callee gets a copy and never sees this object at all.
+    if (
+      callee !== null &&
+      index < callee.paramTypes.length &&
+      this.table.resultByValue(callee.paramTypes[index])
+    ) {
+      return new Outcome(FLOW_LOCAL, true, false)
+    }
+    // WP27 S3.1 and WP40 B1.2: a `string` or a `u8[]` handed to a `declare
+    // function` is borrowed for the length of the call, and the C function
+    // may not keep its address (`docs/wp27-ffi.md` §8b,
+    // `docs/wp40-ffi-buffers-handles.md` §5). Nothing about a C body can be
+    // proved, so this is the decision read as a fact: the argument does not
+    // escape, and the arena scope may release once the call has returned.
+    // What C writes through a `u8[]` is recorded as a write by the foreign
+    // facts, not here.
+    if (callee !== null && callee.foreign()) {
+      return new Outcome(FLOW_LOCAL, true, false)
+    }
+    // WP29 P2: held by the scope until it joins, inside this frame. Not a
+    // fixed binding: a stack slot a later pass reuses could be overwritten
+    // before the join, so the arena keeps it (`spawnCaptures`).
+    if (callee !== null && isSpawnEntry(callee) && !this.spawnCaptures(callee, index)) {
+      return new Outcome(FLOW_LOCAL, false, false)
+    }
+    const captures = callee === null ? true : this.calleeCaptures(callee, index)
+    return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true, captures)
+  }
+
+  /**
+   * What the arrows that capture `v` do with it, joined: each capture is an
+   * argument to its arrow at the parameter `captureTarget` names, judged by
+   * `argumentOutcome` as `f(v)` would be. A listing captured by an arrow is
+   * an argument in front of which an element may be handed on
+   * (`handsOutElements` answers so for every array argument), unless the
+   * arrow proved it keeps none (`elementsFreeAt`). Null when some capture
+   * has no target, which is an escape.
+   *
+   * An object this answers `local` for may be an alloca: the call that hands
+   * it over is never a tail call while it passes captures (`emitCall`), and
+   * the arrow runs before that call returns, because every instance on the
+   * way is an ordinary one that only forwards the value.
+   */
+  captureOutcome(v: Local): Outcome | null {
+    let flow = FLOW_LOCAL
+    let stable = true
+    let escapes = false
+    let i = 0
+    while (i < this.captured.length && i < this.captureTargets.length) {
+      if (this.captured[i] === v) {
+        const target = this.captureTargets[i]
+        if (target === null) {
+          return null
+        }
+        let step = this.argumentOutcome(target.sig, target.index)
+        if (
+          this.listing &&
+          this.table.isArray(this.table.stripNull(v.type)) &&
+          !this.elementsFreeAt(target.sig, target.index)
+        ) {
+          step = new Outcome(FLOW_LEAKS, true, true)
+        }
+        flow = worse(flow, step.flow)
+        stable = stable && step.stable
+        escapes = escapes || step.escapes
+      }
+      i = i + 1
+    }
+    return new Outcome(flow, stable, escapes)
   }
 
   /**
@@ -972,8 +1034,10 @@ class EscapeAnalysis {
     // Only a string is carried. A string is one flat block, so the caller
     // follows all of it by following the array's elements; an array or an
     // object holds pointers of its own, which no caller follows a second
-    // level down, so it keeps escaping as it always did.
-    if (v === null || this.table.stripNull(this.table.refOf(v.type)) !== T_STRING) {
+    // level down, so it keeps escaping as it always did. An array an arrow
+    // captures is never a carrier: the arrow's reads are not among `refsOf`,
+    // so `isCarrierUse` would pass an element the arrow keeps.
+    if (v === null || this.table.stripNull(this.table.refOf(v.type)) !== T_STRING || this.isCaptured(v)) {
       return null
     }
     for (const ref of this.refsOf(v)) {
@@ -1237,14 +1301,16 @@ class EscapeAnalysis {
    */
   passesToFreeElements(found: ParamUse): boolean {
     const callee = found.callee
-    if (found.kind !== USE_ARGUMENT || callee === null) {
-      return false
-    }
+    return found.kind === USE_ARGUMENT && callee !== null && this.elementsFreeAt(callee, found.index)
+  }
+
+  /** Whether `callee` proved it keeps no element of its parameter `index` (`elementsFree`). */
+  elementsFreeAt(callee: FunctionSig, index: i32): boolean {
     const g = this.facts.get(callee.name)
-    if (g === null || found.index < 0 || found.index >= g.paramNames.length) {
+    if (g === null || index < 0 || index >= g.paramNames.length) {
       return false
     }
-    const pointer = g.pointerParam(g.paramNames[found.index])
+    const pointer = g.pointerParam(g.paramNames[index])
     return pointer !== null && pointer.elementsFree
   }
 
@@ -1264,9 +1330,13 @@ class EscapeAnalysis {
     if (known !== null) {
       return known
     }
+    // What the arrows that capture it do with it (`captureOutcome`), joined
+    // with its other uses below. A capture with no target is an escape.
+    let captures: Outcome | null = new Outcome(FLOW_LOCAL, true, false)
     if (this.isCaptured(v)) {
-      // Handed to an instantiation's capture parameter, which no fact
-      // describes: the arrow may keep it, so it is an escape.
+      captures = this.captureOutcome(v)
+    }
+    if (captures === null) {
       return new Outcome(FLOW_LEAKS, false, true)
     }
     for (const seen of visiting) {
@@ -1279,9 +1349,9 @@ class EscapeAnalysis {
       }
     }
     visiting.push(v)
-    let flow = FLOW_LOCAL
-    let stable = true
-    let escapes = false
+    let flow = captures.flow
+    let stable = captures.stable
+    let escapes = captures.escapes
     for (const ref of this.refsOf(v)) {
       const parent = this.unit.parents.parentOf(ref)
       if (
@@ -1334,15 +1404,16 @@ class EscapeAnalysis {
    * argument to a callee that is not itself proved free (`passesToFreeElements`,
    * settled by the fixpoint in `analyzeFunctions`), and any other method all
    * keep it. `analyzeEscapes` asks only of a body that writes no arrow or
-   * nested function, whose captures the walk does not follow.
+   * nested function, whose captures the walk does not follow, and of a lifted
+   * arrow only about its captures, from `from` on.
    *
    * Only `string[]`: an element of a `string[][]` is an array whose own
    * strings this walk does not follow, so that parameter keeps the
    * conservative answer.
    */
-  decideElementParams(body: Node): void {
+  decideElementParams(body: Node, from: i32): void {
     const program = this.unit.program
-    let i = 0
+    let i = from
     while (i < this.sig.paramNames.length && i < this.sig.paramTypes.length) {
       const type = this.table.stripNull(this.sig.paramTypes[i])
       if (
@@ -1839,8 +1910,14 @@ export const analyzeEscapes = (
   }
   analysis.visit(body)
   analysis.decide()
+  // An arrow's written parameters keep the conservative answer. Its captures
+  // are decided, because the function that wrote the arrow reads each one as
+  // an argument to it (`captureTarget`), and a capture this proves nothing
+  // about would read as kept anyway.
   if (!sig.lifted && !namesNestedFunction(body)) {
-    analysis.decideElementParams(body)
+    analysis.decideElementParams(body, 0)
+  } else if (sig.lifted && sig.capturesForCall && !namesNestedFunction(body)) {
+    analysis.decideElementParams(body, sig.writtenArity())
   }
   return analysis.result
 }

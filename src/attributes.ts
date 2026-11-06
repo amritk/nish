@@ -136,6 +136,9 @@ import {
 } from "./nodes"
 import { Options } from "./options"
 import {
+  CaptureTarget,
+  arrowCallee,
+  captureTarget,
   isAtomicMethod,
   isChannelReader,
   isChannelSend,
@@ -1974,33 +1977,56 @@ class FactCollector {
 
   /**
    * What an arrow argument captures from this function (WP29) is handed, at
-   * the call, to a parameter of the instantiation that no fact describes, and
-   * the arrow may store it or write through it. So each capture is an escape
-   * of what it names here: a parameter loses `readonly` and `nocapture`, and
-   * an object of this call's own is dirt below it, as an escape is anywhere.
+   * the call, to a parameter of the instance it is given to. That instance
+   * and every one it forwards the value through only pass it on, so the one
+   * function that can do anything with it is the arrow, at its own parameter
+   * for the capture (`captureTarget`). Each capture is therefore read as an
+   * argument to the arrow at that index, by the same two routes `f(x)` takes:
+   * a parameter inherits the arrow parameter's facts through the fixpoint
+   * (`passedToCallees`), and its writes, pollution and an object of this
+   * call's own compose with the arrow's facts (`ArgEdge`). With no target (a
+   * parallel form, a task or an async instance on the way) the capture is an
+   * escape of what it names: a parameter loses `readonly` and `nocapture`,
+   * and an object of this call's own is dirt below it.
    */
-  noteCaptures(node: Node): void {
-    if (node.kind === N_IDENT) {
-      const local: Local | null = this.unit.program.nodeLocals[node.id]
-      const source: Local | null = local === null || local.captureOf === null ? null : sourceLocal(local)
-      if (source !== null) {
-        this.noteCaptured(source)
-      }
-    }
-    for (const child of node.children) {
-      this.noteCaptures(child)
+  noteCaptures(arrow: Node, lifted: FunctionSig): void {
+    const callee = arrowCallee(this.unit.program, this.unit.parents, arrow)
+    let k = 0
+    while (k < lifted.captures.length) {
+      this.noteCaptured(lifted.captures[k], callee === null ? null : captureTarget(callee, lifted, k))
+      k = k + 1
     }
   }
 
-  noteCaptured(source: Local): void {
+  noteCaptured(source: Local, target: CaptureTarget | null): void {
     if (source.storage === STORAGE_PARAM) {
-      this.escapeParam(source.name)
+      const pointer = this.facts.pointerParam(source.name)
+      if (target === null || pointer === null) {
+        // A string is an escape handed to any user function, as `noteUse` has it.
+        this.escapeParam(source.name)
+        return
+      }
+      pointer.passedToCallees.push(target.sig.name)
+      pointer.passedToIndices.push(target.index)
+      const edge = new ArgEdge(
+        target.sig.name,
+        target.index,
+        pointer.name,
+        null,
+        new MemPath(ROOT_PARAM, pointer.name, "")
+      )
+      this.facts.argEdges.push(edge)
       return
     }
     const path = this.localPathAt(source, 0)
     if (path.kind === ROOT_OWN) {
-      this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
+      if (target === null) {
+        this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
+      } else {
+        this.facts.argEdges.push(this.ownEdge(new ArgEdge(target.sig.name, target.index, "", null, path)))
+      }
     } else if (path.kind === ROOT_PARAM) {
+      // An alias of a parameter, or of memory one reaches, keeps the escape.
       this.escapeParam(path.name)
     }
   }
@@ -2929,7 +2955,7 @@ class FactCollector {
     if (node.kind === N_ARROW) {
       const lifted = program.nodeCallees[node.id]
       if (lifted !== null && lifted.capturesForCall) {
-        this.noteCaptures(node)
+        this.noteCaptures(node, lifted)
       }
       return
     }

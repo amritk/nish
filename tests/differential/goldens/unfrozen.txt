@@ -201,6 +201,7 @@ cases/fnarg_capture added after R6: no rewriter to freeze it with
 cases/fnarg_capture_escape added after R6: no rewriter to freeze it with
 cases/fnarg_capture_local added after R6: no rewriter to freeze it with
 cases/fnarg_capture_narrow added after R6: no rewriter to freeze it with
+cases/fnarg_capture_readonly added after R6: no rewriter to freeze it with
 cases/fnarg_forward added after R6: no rewriter to freeze it with
 cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
@@ -313,6 +314,12 @@ cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_nested added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_return added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_tree added after R6: no rewriter to freeze it with
+cases/mem_capture_async added after R6: no rewriter to freeze it with
+cases/mem_capture_callee_keep added after R6: no rewriter to freeze it with
+cases/mem_capture_element_keep added after R6: no rewriter to freeze it with
+cases/mem_capture_forward_keep added after R6: no rewriter to freeze it with
+cases/mem_capture_read_scope added after R6: no rewriter to freeze it with
+cases/mem_capture_read_stack added after R6: no rewriter to freeze it with
 cases/mem_join_parts_alias added after R6: no rewriter to freeze it with
 cases/mem_join_parts_captured added after R6: no rewriter to freeze it with
 cases/mem_join_parts_forof added after R6: no rewriter to freeze it with
