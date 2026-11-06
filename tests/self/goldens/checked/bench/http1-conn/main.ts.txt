@@ -34072,6 +34072,7 @@ import Http1Config from "nish/net/http1-server" -> struct Http1Config
 import Http1Connection from "nish/net/http1-server" -> struct Http1Connection
 import Http1OutputPool from "nish/net/http1-server" -> struct Http1OutputPool
 import HttpDate from "nish/net/http1-server" -> struct HttpDate
+import Http1Parser from "nish/net/http1-codec" -> struct Http1Parser
 const IDLE_FIRST_INPUT: i32 = 1024
 const IDLE_FIRST_HEAD: i32 = 256
 struct Bench (class) size=56 align=8
@@ -34084,7 +34085,7 @@ struct Bench (class) size=56 align=8
   field sum: i64 index=6 offset=48 initialized
   constructor -> @Bench.constructor
   method serve -> @Bench.serve
-struct IdlePool (class) size=112 align=8
+struct IdlePool (class) size=136 align=8
   field config: Http1Config index=0 offset=0
   field connections: Http1Connection[] index=1 offset=8
   field date: HttpDate index=2 offset=16
@@ -34099,6 +34100,10 @@ struct IdlePool (class) size=112 align=8
   field values: u8[][] index=11 offset=88
   field now: i64 index=12 offset=96 initialized
   field sum: i64 index=13 offset=104 initialized
+  field direct: boolean index=14 offset=112 initialized
+  field ring: u8[] index=15 offset=120
+  field slice: i32 index=16 offset=128 initialized
+  field ringAt: i32 index=17 offset=132 initialized
   constructor -> @IdlePool.constructor
   method holds -> @IdlePool.holds
   method readable -> @IdlePool.readable
@@ -34107,6 +34112,7 @@ struct IdlePool (class) size=112 align=8
   method settle -> @IdlePool.settle
   method send -> @IdlePool.send
   method serve -> @IdlePool.serve
+  method sweep -> @IdlePool.sweep
 function ascii(text: string): u8[] -> @ascii
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
@@ -34179,11 +34185,12 @@ function Bench.serve(this: Bench, conn: Http1Connection): void -> @Bench.serve [
   callee +27:5 Http1Connection.park -> @nish.Http1Connection.park
   callee +28:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
   callee +28:34 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
-function IdlePool.constructor(this: IdlePool, count: i32): void -> @IdlePool.constructor [constructor]
+function IdlePool.constructor(this: IdlePool, count: i32, direct: boolean, evictMib: i32): void -> @IdlePool.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.Http1Connection.constructor
-  calls: ascii nish.Http1Connection.constructor nish.Http1OutputPool.constructor nish.HttpDate.constructor nish.HttpDate.pin nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow post request
-  pointer this: size=112 writesThrough=true captured=false
+  escaping: direct
+  calls: ascii nish.Http1Connection.constructor nish.Http1OutputPool.constructor nish.HttpDate.constructor nish.HttpDate.pin nish_alloc_struct nish_array_grow nish_panic nish_panic_div nish_panic_overflow post request
+  pointer this: size=136 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 config: Http1Config (const)
   callee +5:20 new Http1OutputPool -> @nish.Http1OutputPool.constructor
@@ -34196,42 +34203,47 @@ function IdlePool.constructor(this: IdlePool, count: i32): void -> @IdlePool.con
   callee +12:17 ascii -> @ascii
   callee +13:19 ascii -> @ascii
   callee +14:20 ascii -> @ascii
-  local +15:14 i: i32 (let)
-  local +16:13 conn: Http1Connection (const)
-  callee +16:37 new Http1Connection -> @nish.Http1Connection.constructor
+  local +25:14 i: i32 (let)
+  local +26:13 conn: Http1Connection (const)
+  callee +26:37 new Http1Connection -> @nish.Http1Connection.constructor
 function IdlePool.holds(this: IdlePool, slot: i32): boolean -> @IdlePool.holds [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IdlePool.readable(this: IdlePool, slot: i32, req: u8[]): i32 -> @IdlePool.readable [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:11
   escaping: slot
-  calls: IdlePool.holds IdlePool.settle nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.HttpDate.hold nish.copyBytes nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=112 writesThrough=true captured=false passedTo=IdlePool.holds#0 IdlePool.settle#0
-  pointer req: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
+  calls: IdlePool.holds IdlePool.settle nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Connection.unpark nish.HttpDate.hold nish.copyBytes nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.holds#0 IdlePool.settle#0
+  pointer req: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2 nish.copyBytes#2 nish.copyBytes#2
   stackSites=0 stackLocals=0
-  callee -31:10 IdlePool.holds -> @IdlePool.holds
-  callee -28:5 HttpDate.hold -> @nish.HttpDate.hold
-  local -27:11 conn: Http1Connection (const)
-  local -26:9 at: i32 (let)
-  local -25:9 moved: boolean (let)
-  local -23:13 room: i32 (const)
-  callee -23:25 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
-  local -22:13 want: i32 (const)
-  local -17:13 left: i32 (const)
-  local -16:13 n: i32 (const)
-  callee -12:7 copyBytes -> @nish.copyBytes
-  callee -9:7 Http1Connection.feed -> @nish.Http1Connection.feed
-  callee +2:7 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
-  callee +4:12 IdlePool.settle -> @IdlePool.settle
+  callee -26:10 IdlePool.holds -> @IdlePool.holds
+  callee -23:5 HttpDate.hold -> @nish.HttpDate.hold
+  local -22:11 conn: Http1Connection (const)
+  local -21:9 at: i32 (let)
+  local -20:9 moved: boolean (let)
+  local -18:13 room: i32 (const)
+  callee -18:25 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
+  local -17:13 want: i32 (const)
+  local -12:13 left: i32 (const)
+  local -11:13 n: i32 (const)
+  callee -4:9 Http1Connection.unpark -> @nish.Http1Connection.unpark
+  local -3:15 p: Http1Parser (const)
+  callee -1:11 copyBytes -> @nish.copyBytes
+  callee +2:11 copyBytes -> @nish.copyBytes
+  callee +3:11 Http1Connection.feed -> @nish.Http1Connection.feed
+  callee +6:9 copyBytes -> @nish.copyBytes
+  callee +7:9 Http1Connection.feed -> @nish.Http1Connection.feed
+  callee +21:7 Http1Connection.headArrived -> @nish.Http1Connection.headArrived
+  callee +23:12 IdlePool.settle -> @IdlePool.settle
 function IdlePool.next(this: IdlePool, slot: i32): i32 -> @IdlePool.next [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IdlePool.send
   escaping: slot
   calls: IdlePool.holds IdlePool.send nish.Http1Connection.next nish_panic_index
-  pointer this: size=112 writesThrough=true captured=false passedTo=IdlePool.holds#0 IdlePool.send#0
+  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.holds#0 IdlePool.send#0
   stackSites=0 stackLocals=0
   callee +0:10 IdlePool.holds -> @IdlePool.holds
   local +3:11 conn: Http1Connection (const)
@@ -34242,7 +34254,7 @@ function IdlePool.flush(this: IdlePool, slot: i32): i32 -> @IdlePool.flush [meth
   sharedWrite: via nish.HttpDate.unhold
   escaping: slot
   calls: IdlePool.settle nish.HttpDate.unhold
-  pointer this: size=112 writesThrough=true captured=false passedTo=IdlePool.settle#0
+  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.settle#0
   stackSites=0 stackLocals=0
   callee +0:5 HttpDate.unhold -> @nish.HttpDate.unhold
   callee +1:12 IdlePool.settle -> @IdlePool.settle
@@ -34251,7 +34263,7 @@ function IdlePool.settle(this: IdlePool, slot: i32): i32 -> @IdlePool.settle [me
   sharedWrite: via IdlePool.send
   escaping: slot
   calls: IdlePool.holds IdlePool.send nish.Http1Connection.inputRoom nish.Http1Connection.isDone nish.Http1Connection.park nish.Http1Connection.wantsWrite nish_panic_index
-  pointer this: size=112 writesThrough=true captured=false passedTo=IdlePool.holds#0 IdlePool.send#0
+  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.holds#0 IdlePool.send#0
   stackSites=0 stackLocals=0
   callee +0:10 IdlePool.holds -> @IdlePool.holds
   local +3:11 conn: Http1Connection (const)
@@ -34266,7 +34278,7 @@ function IdlePool.send(this: IdlePool, slot: i32): void -> @IdlePool.send [metho
   sharedWrite: +0:7
   escaping: slot
   calls: nish.Http1Connection.consume nish.Http1Connection.release nish_panic_index nish_panic_overflow
-  pointer this: size=112 writesThrough=true captured=false
+  pointer this: size=136 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -3:11 conn: Http1Connection (const)
   local -2:11 pending: i32 (const)
@@ -34274,22 +34286,37 @@ function IdlePool.send(this: IdlePool, slot: i32): void -> @IdlePool.send [metho
   callee +4:5 Http1Connection.release -> @nish.Http1Connection.release
 function IdlePool.serve(this: IdlePool, slot: i32, req: u8[]): void -> @IdlePool.serve [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+  sharedWrite: +0:11
   escaping: slot
-  calls: IdlePool.flush IdlePool.next IdlePool.readable nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer this: size=112 writesThrough=true captured=false passedTo=IdlePool.readable#0 IdlePool.next#0 IdlePool.next#0 IdlePool.flush#0
+  calls: IdlePool.flush IdlePool.next IdlePool.readable nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.Http1Parser.headerIs nish.Http1Parser.methodIs nish.Http1Parser.targetIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=136 writesThrough=true captured=false passedTo=IdlePool.readable#0 IdlePool.next#0 IdlePool.next#0 IdlePool.flush#0
   pointer req: size=0 writesThrough=false captured=false passedTo=IdlePool.readable#2
   stackSites=0 stackLocals=0
-  callee -9:9 IdlePool.readable -> @IdlePool.readable
-  local -6:11 conn: Http1Connection (const)
-  local -5:9 event: i32 (let)
-  callee -5:22 IdlePool.next -> @IdlePool.next
-  local +2:15 n: i32 (const)
-  callee +3:13 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee +3:68 Http1Connection.write -> @nish.Http1Connection.write
-  callee +6:9 Http1Connection.end -> @nish.Http1Connection.end
-  callee +10:15 IdlePool.next -> @IdlePool.next
-  callee +12:9 IdlePool.flush -> @IdlePool.flush
+  callee -10:9 IdlePool.readable -> @IdlePool.readable
+  local -7:11 conn: Http1Connection (const)
+  local -6:9 event: i32 (let)
+  callee -6:22 IdlePool.next -> @IdlePool.next
+  local -2:15 p: Http1Parser (const)
+  callee -1:13 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee -1:34 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  callee +1:20 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee +1:42 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  callee +6:13 Http1Parser.headerIs -> @nish.Http1Parser.headerIs
+  local +12:15 n: i32 (const)
+  callee +13:13 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee +13:68 Http1Connection.write -> @nish.Http1Connection.write
+  callee +16:9 Http1Connection.end -> @nish.Http1Connection.end
+  callee +20:15 IdlePool.next -> @IdlePool.next
+  callee +22:9 IdlePool.flush -> @IdlePool.flush
+function IdlePool.sweep(this: IdlePool): void -> @IdlePool.sweep [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish_panic_index nish_panic_overflow
+  pointer this: size=136 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -3:11 ring: u8[] (const)
+  local -2:11 end: i32 (const)
+  local -1:14 k: i32 (let)
 function open(path: string, flags: i32): i32 -> @open
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
@@ -34321,26 +34348,34 @@ function peakKib(): i64 -> @peakKib
   local +10:14 k: i32 (let)
   local +17:11 v: i64 (let)
   local +18:16 k: i32 (let)
-function idle(shape: string, requests: i32, count: i32, batches: i32): i32 -> @idle
+function idle(shape: string, requests: i32, count: i32, batches: i32, evictMib: i32): i32 -> @idle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via IdlePool.constructor
-  escaping: count
-  calls: IdlePool.constructor IdlePool.serve nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 peakKib
+  escaping: count evictMib
+  calls: IdlePool.constructor IdlePool.serve IdlePool.sweep nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 peakKib
   stackSites=1 stackLocals=1
   local +0:9 b: IdlePool (const)
   callee +0:23 new IdlePool -> @IdlePool.constructor
-  local +3:12 i: i32 (let)
-  local +4:11 pick: i32 (const)
-  callee +5:5 IdlePool.serve -> @IdlePool.serve
-  callee +8:29 peakKib -> @peakKib
-  local +12:7 best: i64 (let)
-  local +13:7 at: i32 (let)
-  local +14:7 turn: i32 (let)
-  local +15:12 batch: i32 (let)
-  local +16:11 started: i64 (const)
-  local +17:14 k: i32 (let)
-  callee +18:7 IdlePool.serve -> @IdlePool.serve
-  local +27:11 ns: i64 (const)
+  local +1:9 evicting: boolean (const)
+  local +5:12 i: i32 (let)
+  callee +7:7 IdlePool.sweep -> @IdlePool.sweep
+  local +9:11 pick: i32 (const)
+  callee +10:5 IdlePool.serve -> @IdlePool.serve
+  callee +13:29 peakKib -> @peakKib
+  local +17:7 best: i64 (let)
+  local +18:7 at: i32 (let)
+  local +19:7 round: i32 (let)
+  local +20:12 batch: i32 (let)
+  local +21:9 timed: i64 (let)
+  local +22:11 started: i64 (const)
+  local +23:14 k: i32 (let)
+  local +24:13 pick: i32 (const)
+  local +25:13 req: u8[] (const)
+  callee +27:9 IdlePool.sweep -> @IdlePool.sweep
+  local +28:15 before: i64 (const)
+  callee +29:9 IdlePool.serve -> @IdlePool.serve
+  callee +32:9 IdlePool.serve -> @IdlePool.serve
+  local +40:11 ns: i64 (const)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via idle
@@ -34350,15 +34385,16 @@ function main(): i32 -> @nish_main [exported entry]
   local +1:9 requests: i32 (const)
   local +2:7 count: i32 (let)
   local +3:9 batches: i32 (const)
-  callee +5:12 idle -> @idle
-  local +10:9 b: Bench (const)
-  callee +10:20 new Bench -> @Bench.constructor
-  local +13:12 i: i32 (let)
-  callee +14:5 Bench.serve -> @Bench.serve
-  local +19:7 best: i64 (let)
-  local +20:7 at: i32 (let)
-  local +21:12 batch: i32 (let)
-  local +22:11 started: i64 (const)
-  local +23:14 k: i32 (let)
-  callee +24:7 Bench.serve -> @Bench.serve
-  local +30:11 ns: i64 (const)
+  local +4:9 evictMib: i32 (const)
+  callee +6:12 idle -> @idle
+  local +11:9 b: Bench (const)
+  callee +11:20 new Bench -> @Bench.constructor
+  local +14:12 i: i32 (let)
+  callee +15:5 Bench.serve -> @Bench.serve
+  local +20:7 best: i64 (let)
+  local +21:7 at: i32 (let)
+  local +22:12 batch: i32 (let)
+  local +23:11 started: i64 (const)
+  local +24:14 k: i32 (let)
+  callee +25:7 Bench.serve -> @Bench.serve
+  local +31:11 ns: i64 (const)
