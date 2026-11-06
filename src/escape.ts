@@ -902,7 +902,7 @@ class EscapeAnalysis {
    * has no target, which is an escape.
    *
    * An object this answers `local` for may be an alloca: the call that hands
-   * it over is never a tail call while it passes captures (`emitCall`), and
+   * it over is never a tail call while it passes captures (`planTailCall`), and
    * the arrow runs before that call returns, because every instance on the
    * way is an ordinary one that only forwards the value.
    */

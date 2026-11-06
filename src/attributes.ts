@@ -539,6 +539,13 @@ export class ArgEdge {
    */
   heldBy: string
   index: i32
+  /**
+   * For a capture read as an argument to its arrow (`noteCaptured`), the
+   * instance this function called to hand it over, or "": the write the edge
+   * carries is that call's, so it is the callee a shared write is named by
+   * (`writesAnArgument`).
+   */
+  via: string
 
   constructor(callee: string, index: i32, param: string, owner: PrivateArray | null, path: MemPath) {
     this.callee = callee
@@ -548,6 +555,7 @@ export class ArgEdge {
     this.dirt = null
     this.heldBy = ""
     this.index = index
+    this.via = ""
   }
 
   /** Whether the argument is memory only the caller reaches: a private array no callee keeps. */
@@ -1993,12 +2001,13 @@ class FactCollector {
     const callee = arrowCallee(this.unit.program, this.unit.parents, arrow)
     let k = 0
     while (k < lifted.captures.length) {
-      this.noteCaptured(lifted.captures[k], callee === null ? null : captureTarget(callee, lifted, k))
+      const target: CaptureTarget | null = callee === null ? null : captureTarget(callee, lifted, k)
+      this.noteCaptured(lifted.captures[k], target, callee === null ? "" : callee.name)
       k = k + 1
     }
   }
 
-  noteCaptured(source: Local, target: CaptureTarget | null): void {
+  noteCaptured(source: Local, target: CaptureTarget | null, via: string): void {
     if (source.storage === STORAGE_PARAM) {
       const pointer = this.facts.pointerParam(source.name)
       if (target === null || pointer === null) {
@@ -2015,6 +2024,7 @@ class FactCollector {
         null,
         new MemPath(ROOT_PARAM, pointer.name, "")
       )
+      edge.via = via
       this.facts.argEdges.push(edge)
       return
     }
@@ -2023,7 +2033,9 @@ class FactCollector {
       if (target === null) {
         this.facts.dirt.push(new DirtMark(DIRT_ESCAPE, path.name, path.steps, true))
       } else {
-        this.facts.argEdges.push(this.ownEdge(new ArgEdge(target.sig.name, target.index, "", null, path)))
+        const edge = this.ownEdge(new ArgEdge(target.sig.name, target.index, "", null, path))
+        edge.via = via
+        this.facts.argEdges.push(edge)
       }
     } else if (path.kind === ROOT_PARAM) {
       // An alias of a parameter, or of memory one reaches, keeps the escape.
@@ -5629,10 +5641,13 @@ const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): 
     }
   }
   for (const edge of f.argEdges) {
-    if (edge.callee === callee && pastBelow(facts, f, edge) !== PAST_NONE) {
+    // A capture's edge is to the arrow, which this function never calls: the
+    // instance it called to hand the capture over is the one to name.
+    const named = edge.callee === callee || edge.via === callee
+    if (named && pastBelow(facts, f, edge) !== PAST_NONE) {
       return true
     }
-    if (edge.callee !== callee || !edgeWrites(facts, edge)) {
+    if (!named || !edgeWrites(facts, edge)) {
       continue
     }
     // An object of the caller's own is a shared write only where it may hold
@@ -5641,7 +5656,7 @@ const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): 
     if (edge.path.kind !== ROOT_OWN) {
       return true
     }
-    const g = facts.get(callee)
+    const g = facts.get(edge.callee)
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     if (reachesForeign(f, edge.path.name, edge.path.steps, target === null || target.writesDeep)) {
       return true
